@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Badge, ProgressBar, Sparkline, Switch, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Badge, ProgressBar, Sparkline, Switch, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
@@ -19,7 +19,7 @@ export function Scene3DFrameworkCubeStory() {
   });
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
+    <S.FullSize style={{ padding: 16, gap: 12 }}>
       <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         Framework Canvas Cube
       </Text>
@@ -27,46 +27,36 @@ export function Scene3DFrameworkCubeStory() {
         g3d cube textured with a 2D framework-style canvas, mounted on a rotating display
       </Text>
 
-      <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1, width: '100%', minHeight: 340 }}>
-        <Box
-          style={{
-            width: 260,
-            padding: 10,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.bgElevated,
-            gap: 8,
-          }}
-        >
+      <S.RowG12 style={{ flexGrow: 1, width: '100%', minHeight: 340 }}>
+        <S.Bordered style={{ width: 260, padding: 10, borderRadius: 10, backgroundColor: c.bgElevated, gap: 8 }}>
           <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>
             2D Framework Components
           </Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+          <S.SecondaryBody>
             Badge + ProgressBar + Sparkline + Switch
-          </Text>
+          </S.SecondaryBody>
 
-          <Box style={{ flexDirection: 'row', gap: 6 }}>
+          <S.RowG6>
             <Badge label="LIVE" variant="success" />
             <Badge label="NATIVE" variant="info" />
             <Badge label="G3D" variant="warning" />
-          </Box>
+          </S.RowG6>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Texture Pipeline</Text>
+            <S.SecondaryBody>Texture Pipeline</S.SecondaryBody>
             <ProgressBar value={0.88} color="#4cc2ff" height={12} showLabel />
           </Box>
 
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Frame Trend</Text>
+            <S.SecondaryBody>Frame Trend</S.SecondaryBody>
             <Sparkline data={SPARK_DATA} width={220} height={34} color="#c099ff" />
           </Box>
 
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8>
             <Text style={{ color: c.textSecondary, fontSize: 10 }}>Cube Rotation</Text>
             <Switch value={cubeEnabled} onValueChange={setCubeEnabled} />
-          </Box>
-        </Box>
+          </S.RowCenterG8>
+        </S.Bordered>
 
         <Scene style={{ flexGrow: 1, minHeight: 340 }} backgroundColor="#050811" stars>
           <Camera position={[0, -4, 2.3]} lookAt={[0, 0, 0.15]} fov={0.92} />
@@ -111,11 +101,11 @@ export function Scene3DFrameworkCubeStory() {
             unlit
           />
         </Scene>
-      </Box>
+      </S.RowG12>
 
-      <Text style={{ fontSize: 10, color: c.textSecondary }}>
+      <S.SecondaryBody>
         Texture source: procedural 2D canvas (`framework-canvas`) mapped to a g3d cube
-      </Text>
-    </Box>
+      </S.SecondaryBody>
+    </S.FullSize>
   );
 }

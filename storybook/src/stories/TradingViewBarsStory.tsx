@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Text, Tabs, Switch, Badge, BarChart, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Tabs, Switch, Badge, BarChart, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -95,7 +95,7 @@ function TradingBars2D({
   }));
 
   return (
-    <Box style={{ width: '100%', height: '100%', gap: 10 }}>
+    <S.FullSize style={{ gap: 10 }}>
       <Box style={{ gap: 6 }}>
         <Text style={{ color: '#9fb3cc', fontSize: 11, fontWeight: 'normal' }}>
           Price Bars
@@ -113,7 +113,7 @@ function TradingBars2D({
       <Text style={{ color: '#6f85a0', fontSize: 10 }}>
         {`Range ${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}`}
       </Text>
-    </Box>
+    </S.FullSize>
   );
 }
 
@@ -269,7 +269,7 @@ export function TradingViewBarsStory() {
   const isUp = delta >= 0;
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 16, gap: 12 }}>
+    <S.FullSize style={{ padding: 16, gap: 12 }}>
       <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>
         TradingView Hybrid
       </Text>
@@ -277,42 +277,31 @@ export function TradingViewBarsStory() {
         Toggle between 2D and g3d 3D trading bars using the same live candle stream
       </Text>
 
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <S.RowCenter style={{ gap: 10, flexWrap: 'wrap' }}>
         <Box style={{ width: 190 }}>
           <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
         </Box>
         <Box style={{ width: 210 }}>
           <Tabs tabs={TIMEFRAME_TABS} activeId={timeframe} onSelect={(id) => setTimeframe(id as Timeframe)} variant="pill" />
         </Box>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ color: c.textSecondary, fontSize: 10 }}>Live</Text>
+        <S.RowCenterG6>
+          <S.SecondaryBody>Live</S.SecondaryBody>
           <Switch value={live} onValueChange={setLive} />
-        </Box>
+        </S.RowCenterG6>
         <Badge label={`$${last.close.toFixed(2)}`} variant={isUp ? 'success' : 'error'} />
         <Badge
           label={`${delta >= 0 ? '+' : ''}${delta.toFixed(2)} (${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%)`}
           variant={isUp ? 'success' : 'error'}
         />
-      </Box>
+      </S.RowCenter>
 
-      <Box
-        style={{
-          flexGrow: 1,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 10,
-          backgroundColor: '#0a1020',
-          padding: 12,
-          gap: 8,
-          minHeight: 360,
-        }}
-      >
-        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <S.Bordered style={{ flexGrow: 1, borderRadius: 10, backgroundColor: '#0a1020', padding: 12, gap: 8, minHeight: 360 }}>
+        <S.RowG6 style={{ flexWrap: 'wrap' }}>
           <Badge label={`Open ${last.open.toFixed(2)}`} variant="default" />
           <Badge label={`High ${last.high.toFixed(2)}`} variant="info" />
           <Badge label={`Low ${last.low.toFixed(2)}`} variant="warning" />
           <Badge label={`Volume ${last.volume}`} variant="default" />
-        </Box>
+        </S.RowG6>
 
         <Box style={{ flexGrow: 1, minHeight: 300 }}>
           {viewMode === '2d' ? (
@@ -321,7 +310,7 @@ export function TradingViewBarsStory() {
             <TradingBars3D candles={candles} minPrice={minPrice} maxPrice={maxPrice} spin={spin} />
           )}
         </Box>
-      </Box>
-    </Box>
+      </S.Bordered>
+    </S.FullSize>
   );
 }

@@ -37,7 +37,7 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── Static data ──────────────────────────────────────────
@@ -140,8 +140,8 @@ function PressableDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PRESSABLE'}</Text>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'PRESSABLE'}</S.StoryTiny>
+      <S.RowCenterG8 style={{ justifyContent: 'center' }}>
         <Pressable
           onPress={() => setPressCount(v => v + 1)}
           style={({ pressed, hovered }) => ({
@@ -163,10 +163,10 @@ function PressableDemo() {
             borderRadius: 6,
           }}
         >
-          <Text style={{ color: c.muted, fontSize: 11 }}>{'Disabled'}</Text>
+          <S.DimBody11>{'Disabled'}</S.DimBody11>
         </Pressable>
         <S.StoryCap>{`count: ${pressCount}`}</S.StoryCap>
-      </Box>
+      </S.RowCenterG8>
     </>
   );
 }
@@ -177,8 +177,8 @@ function SliderDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'SLIDER'}</Text>
-      <Box style={{ alignItems: 'center', gap: 4 }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'SLIDER'}</S.StoryTiny>
+      <S.CenterG4>
         <Slider
           style={{ width: 240 }}
           value={sliderVal}
@@ -186,7 +186,7 @@ function SliderDemo() {
           activeTrackColor={c.primary}
         />
         <S.StoryCap>{`value: ${sliderVal.toFixed(2)}`}</S.StoryCap>
-      </Box>
+      </S.CenterG4>
     </>
   );
 }
@@ -198,18 +198,18 @@ function SwitchCheckboxDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'SWITCH + CHECKBOX'}</Text>
-      <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center', justifyContent: 'center' }}>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'SWITCH + CHECKBOX'}</S.StoryTiny>
+      <S.RowCenter style={{ gap: 16, justifyContent: 'center' }}>
+        <S.RowCenterG6>
           <Switch value={switchOn} onValueChange={setSwitchOn} />
           <S.StoryBody>{switchOn ? 'ON' : 'OFF'}</S.StoryBody>
-        </Box>
+        </S.RowCenterG6>
         <Checkbox
           value={checkVal}
           onValueChange={setCheckVal}
           label="Check"
         />
-      </Box>
+      </S.RowCenter>
     </>
   );
 }
@@ -221,8 +221,8 @@ function RadioSelectDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'RADIO + SELECT'}</Text>
-      <Box style={{ flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'center' }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'RADIO + SELECT'}</S.StoryTiny>
+      <S.RowCenter style={{ gap: 20, justifyContent: 'center' }}>
         <RadioGroup value={radioVal} onValueChange={setRadioVal}>
           <Radio value="a" label="Alpha" />
           <Radio value="b" label="Beta" />
@@ -234,7 +234,7 @@ function RadioSelectDemo() {
           options={SELECT_FRUIT_OPTIONS}
           placeholder="Pick..."
         />
-      </Box>
+      </S.RowCenter>
     </>
   );
 }
@@ -245,8 +245,8 @@ function TextInputDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'TEXT INPUT'}</Text>
-      <Box style={{ alignItems: 'center', gap: 4 }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'TEXT INPUT'}</S.StoryTiny>
+      <S.CenterG4>
         <TextInput
           value={inputText}
           onChangeText={setInputText}
@@ -257,7 +257,7 @@ function TextInputDemo() {
         <S.StoryCap>
           {inputText ? `"${inputText}"` : '(empty)'}
         </S.StoryCap>
-      </Box>
+      </S.CenterG4>
     </>
   );
 }
@@ -268,7 +268,7 @@ function ModalDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'MODAL'}</Text>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'MODAL'}</S.StoryTiny>
       <Box style={{ alignItems: 'center' }}>
         <Pressable
           onPress={() => setModalOpen(true)}
@@ -283,17 +283,9 @@ function ModalDemo() {
         </Pressable>
       </Box>
       <Modal visible={modalOpen} onRequestClose={() => setModalOpen(false)}>
-        <Box style={{
-          width: 280,
-          backgroundColor: c.surface,
-          borderRadius: 10,
-          borderWidth: 1,
-          borderColor: c.border,
-          padding: 16,
-          gap: 10,
-        }}>
-          <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{'Hello'}</Text>
-          <Text style={{ color: c.muted, fontSize: 11 }}>{'This is a modal overlay.'}</Text>
+        <S.Bordered style={{ width: 280, backgroundColor: c.surface, borderRadius: 10, padding: 16, gap: 10 }}>
+          <S.BoldText style={{ fontSize: 14 }}>{'Hello'}</S.BoldText>
+          <S.DimBody11>{'This is a modal overlay.'}</S.DimBody11>
           <Box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
             <Pressable
               onPress={() => setModalOpen(false)}
@@ -302,7 +294,7 @@ function ModalDemo() {
               <Text style={{ color: '#fff', fontSize: 11 }}>{'Close'}</Text>
             </Pressable>
           </Box>
-        </Box>
+        </S.Bordered>
       </Modal>
     </>
   );
@@ -319,10 +311,10 @@ function HotkeyClipboardDemo() {
 
   return (
     <>
-      <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'HOTKEY + CLIPBOARD'}</Text>
-      <Box style={{ alignItems: 'center', gap: 4 }}>
+      <S.StoryTiny style={{ fontWeight: 'bold' }}>{'HOTKEY + CLIPBOARD'}</S.StoryTiny>
+      <S.CenterG4>
         <S.StoryCap>{`Last hotkey: ${lastHotkey} (try Ctrl+Z or Esc)`}</S.StoryCap>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Pressable
             onPress={() => copy('Hello from Input!')}
             style={({ hovered }) => ({
@@ -346,8 +338,8 @@ function HotkeyClipboardDemo() {
             <S.StoryBody>{'Paste'}</S.StoryBody>
           </Pressable>
           {pastedText ? <S.StoryCap>{`"${pastedText}"`}</S.StoryCap> : null}
-        </Box>
-      </Box>
+        </S.RowCenterG8>
+      </S.CenterG4>
     </>
   );
 }
@@ -388,57 +380,35 @@ export function InputStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="mouse-pointer-click" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="mouse-pointer-click" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Input'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'<'}</Text>
           <Text style={{ color: SYN.component, fontSize: 10 }}>{'Pressable'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' '}</Text>
+          <S.StoryMuted>{' '}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'onPress'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{'='}</Text>
+          <S.StoryMuted>{'='}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'{fn}'}</Text>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'>'}</Text>
-        </Box>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'I like to be handled'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -450,7 +420,7 @@ export function InputStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -473,96 +443,84 @@ export function InputStory() {
 
             {/* ── Right: API Reference (centered) ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* ── Overview ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'OVERVIEW'}
-                </Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                </S.StoryTiny>
+                <S.StoryBody>
                   {'ReactJIT provides a full set of input primitives: Pressable for touch/click targets, Slider and Switch for continuous and boolean values, Checkbox and Radio for selection, Select for dropdown pickers, TextInput and TextEditor for text entry, and Modal for overlay dialogs. Global hotkeys and clipboard access are available via hooks.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
                 {/* ── Usage ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'USAGE'}
-                </Text>
+                </S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
                 {/* ── Behavior ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'BEHAVIOR'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* ── Components ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'COMPONENTS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {COMPONENTS.map(([name, desc, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{desc}</Text>
-                    </Box>
+                      <S.StoryCap>{desc}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
                 {/* ── Hooks ── */}
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>
                   {'HOOKS'}
-                </Text>
+                </S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {HOOKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.tag} />
                       <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="mouse-pointer-click" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Input'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="mouse-pointer-click" />
+        <S.StoryBreadcrumbActive>{'Input'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -580,11 +538,7 @@ export function InputStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -594,8 +548,8 @@ export function InputStory() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

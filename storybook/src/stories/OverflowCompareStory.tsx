@@ -54,9 +54,9 @@ function CardRow({ wrap, scaleToFit }: { wrap?: boolean; scaleToFit?: boolean })
 function Panel({ label, subtitle, children }: { label: string; subtitle: string; children: React.ReactNode }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexGrow: 1, flexBasis: 0, gap: 12, padding: 16 }}>
+    <S.Half style={{ gap: 12, padding: 16 }}>
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{label}</Text>
+        <S.BoldText style={{ fontSize: 14 }}>{label}</S.BoldText>
         <S.StoryMuted>{subtitle}</S.StoryMuted>
       </Box>
       {/* Container — deliberately narrower than card row content */}
@@ -77,13 +77,13 @@ function Panel({ label, subtitle, children }: { label: string; subtitle: string;
         </S.StoryCap>
         <S.StoryCap>{'Container: fills panel width'}</S.StoryCap>
       </Box>
-    </Box>
+    </S.Half>
   );
 }
 
 function Divider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, backgroundColor: c.border, alignSelf: 'stretch' }} />;
+  return <S.VertDivider style={{ alignSelf: 'stretch' }} />;
 }
 
 export function OverflowCompareStory() {
@@ -92,24 +92,14 @@ export function OverflowCompareStory() {
   return (
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
       {/* Header */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20,
-        paddingTop: 12, paddingBottom: 12,
-        gap: 12,
-      }}>
-        <Text style={{ color: c.text, fontSize: 18, fontWeight: 'bold' }}>{'Overflow Strategies'}</Text>
-        <Box style={{ backgroundColor: 'rgba(99,102,241,0.15)', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 12 }}>
+        <S.BoldText style={{ fontSize: 18 }}>{'Overflow Strategies'}</S.BoldText>
+        <S.StoryBtnSm style={{ backgroundColor: 'rgba(99,102,241,0.15)' }}>
           <Text style={{ color: '#6366f1', fontSize: 10 }}>{'Layouts'}</Text>
-        </Box>
+        </S.StoryBtnSm>
         <Box style={{ flexGrow: 1 }} />
         <S.StoryMuted>{'Same cards, same container, three different answers'}</S.StoryMuted>
-      </Box>
+      </S.RowCenterBorder>
 
       {/* Three panels */}
       <Box style={{ flexShrink: 0, flexDirection: 'row' }}>
@@ -144,10 +134,10 @@ export function OverflowCompareStory() {
 
       {/* Scale to fit — full width */}
       <Box style={{ flexShrink: 0, gap: 10, paddingLeft: 20, paddingRight: 20, paddingTop: 14, paddingBottom: 14, backgroundColor: c.bgElevated }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <S.RowCenter style={{ gap: 10 }}>
           <S.StoryHeadline>{'Scale to Fit'}</S.StoryHeadline>
           <S.StoryMuted>{'full width — all cards visible, proportional, one row'}</S.StoryMuted>
-        </Box>
+        </S.RowCenter>
         <Box style={{ width: '100%', paddingLeft: 10, paddingRight: 10, paddingTop: 10, paddingBottom: 10, overflow: 'hidden' }}>
           <CardRow scaleToFit />
         </Box>

@@ -131,12 +131,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -151,10 +151,10 @@ function Tag({ text, color }: { text: string; color: string }) {
 function Label({ label, value, color }: { label: string; value: string; color?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.RowCenterG8>
       <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
-    </Box>
+    </S.RowCenterG8>
   );
 }
 
@@ -208,12 +208,12 @@ function VectorDemo() {
   }, [math, angle]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+    <S.StackG8W100>
+      <S.RowG8 style={{ flexWrap: 'wrap' }}>
         <Tag text="Vec2" color={C.vec} />
         <Tag text="Vec3" color={C.vec} />
         <Tag text="Vec4" color={C.vec} />
-      </Box>
+      </S.RowG8>
       <Label label="a" value={'[3, 1]'} />
       {r && <>
         <Label label="b = fromAngle" value={`[${r.b[0].toFixed(3)}, ${r.b[1].toFixed(3)}]`} color={C.vec} />
@@ -222,14 +222,14 @@ function VectorDemo() {
         <Label label="cross(a, b)" value={r.cross.toFixed(4)} />
         <Label label="distance(a, a+2b)" value={r.dist.toFixed(4)} />
       </>}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={'\u2190 Rotate'} color={C.vec} onPress={() => setAngle(p => p - 0.3)} />
         <ActionBtn label={'Rotate \u2192'} color={C.vec} onPress={() => setAngle(p => p + 0.3)} />
-      </Box>
+      </S.RowG8>
       <S.StoryTiny>
         {`angle: ${(angle * 180 / Math.PI).toFixed(1)}\u00B0`}
       </S.StoryTiny>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -257,7 +257,7 @@ function MatrixDemo() {
   }, [math, rx]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Tag text="Mat4" color={C.mat} />
       <Label label="rotateX" value={`${(rx * 180 / Math.PI).toFixed(1)}\u00B0`} color={C.mat} />
       {r && <>
@@ -265,11 +265,11 @@ function MatrixDemo() {
         <Label label="determinant" value={r.det.toFixed(6)} />
         <Label label="decompose.scale" value={`[${r.decomposed.scale.map((v: number) => v.toFixed(2)).join(', ')}]`} />
       </>}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={`Rotate +12\u00B0`} color={C.mat} onPress={() => setRx(p => p + Math.PI / 15)} />
         <ActionBtn label="Reset" color={c.textDim} onPress={() => setRx(0)} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -298,18 +298,18 @@ function QuaternionDemo() {
   const clampT = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Tag text="Quat" color={C.quat} />
       <Label label="slerp t" value={t.toFixed(2)} color={C.quat} />
       {r && <>
         <Label label="euler (deg)" value={`[${r.euler.map((v: number) => (v * 180 / Math.PI).toFixed(1)).join(', ')}]`} />
         <Label label="rotateVec3([1,0,0])" value={`[${r.rotated.map((v: number) => v.toFixed(3)).join(', ')}]`} color={C.quat} />
       </>}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={'\u2190 t'} color={C.quat} onPress={() => setT(p => clampT(p - 0.1))} />
         <ActionBtn label={'t \u2192'} color={C.quat} onPress={() => setT(p => clampT(p + 0.1))} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -358,7 +358,7 @@ function InterpolationDemo() {
   }, [math]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       {curves ? curves.map(curve => (
         <Box key={curve.name} style={{ gap: 4 }}>
           <Text style={{ color: curve.color, fontSize: 8, fontFamily: 'monospace' }}>{curve.name}</Text>
@@ -375,7 +375,7 @@ function InterpolationDemo() {
         <Label label="inverseLerp(10, 20, 15)" value={extras.inverseLerp.toFixed(2)} />
         <Label label="wrap(370, 0, 360)" value={extras.wrap.toFixed(1)} />
       </>}
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -406,32 +406,32 @@ function GeometryDemo() {
   }, [math, px]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Label label="BBox A" value={'[0,0] \u2192 [4,4]'} />
       <Label label="BBox B" value={`[${px},1] \u2192 [${px + 3},5]`} color={C.geo} />
       {r && <>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: r.intersects ? C.geo : C.pool }} />
           <Text style={{ fontSize: 9, color: r.intersects ? C.geo : C.pool }}>
             {r.intersects ? 'Intersects' : 'No intersection'}
           </Text>
-        </Box>
+        </S.RowCenterG6>
         {r.overlap && <Label label="overlap" value={`[${r.overlap.min[0]},${r.overlap.min[1]}] \u2192 [${r.overlap.max[0]},${r.overlap.max[1]}]`} />}
         <Label label="union" value={`[${r.union.min[0]},${r.union.min[1]}] \u2192 [${r.union.max[0]},${r.union.max[1]}]`} />
         <Label label="dist to segment" value={r.segDist.toFixed(3)} />
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: r.inCircle ? C.geo : C.pool }} />
           <Text style={{ fontSize: 9, color: r.inCircle ? C.geo : C.pool }}>
             {r.inCircle ? 'Inside circle(r=3)' : 'Outside circle(r=3)'}
           </Text>
-        </Box>
+        </S.RowCenterG6>
         {r.lineHit && <Label label="line \u2229" value={`[${r.lineHit[0].toFixed(1)}, ${r.lineHit[1].toFixed(1)}]`} />}
       </>}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={'\u2190 Move B'} color={C.geo} onPress={() => setPx(p => p - 1)} />
         <ActionBtn label={'Move B \u2192'} color={C.geo} onPress={() => setPx(p => p + 1)} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -467,7 +467,7 @@ function NoiseFieldDemo() {
   }, [math, seed, scale]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       {rows ? (
         <Box style={{ gap: 0 }}>
           {rows.map((colors, row) => (
@@ -484,11 +484,11 @@ function NoiseFieldDemo() {
       <Label label="seed" value={String(seed)} color={C.noise} />
       <Label label="scale" value={scale.toFixed(2)} color={C.noise} />
       <Label label="grid" value={`${SIZE}\u00D7${SIZE}`} />
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={`Seed ${seed + 1}`} color={C.noise} onPress={() => setSeed(p => p + 1)} />
         <ActionBtn label={`Scale ${scale === 0.1 ? '0.2' : scale === 0.2 ? '0.05' : '0.1'}`} color={C.noise} onPress={() => setScale(p => p === 0.1 ? 0.2 : p === 0.2 ? 0.05 : 0.1)} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -524,17 +524,17 @@ function FFTDemo() {
   const maxSpectrum = spectrumSlice ? Math.max(...spectrumSlice) : 0;
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Text style={{ color: c.textSecondary, fontSize: 9 }}>
         {`sin(${freq}x) + 0.5\u00B7sin(${freq * 3}x)  \u2014  ${N} samples`}
       </Text>
       <Box style={{ gap: 2 }}>
         <S.StoryTiny>Waveform</S.StoryTiny>
-        <Box style={{ flexDirection: 'row', gap: 0, height: 32, alignItems: 'center' }}>
+        <S.RowCenter style={{ gap: 0, height: 32 }}>
           {samples.map((v, i) => (
             <Box key={i} style={{ flexGrow: 1, height: Math.max(1, Math.abs(v) * 14), backgroundColor: C.fft + '88', borderRadius: 1 }} />
           ))}
-        </Box>
+        </S.RowCenter>
       </Box>
       {spectrumSlice ? (
         <Box style={{ gap: 2 }}>
@@ -549,11 +549,11 @@ function FFTDemo() {
       ) : (
         <S.StoryMuted>Computing FFT...</S.StoryMuted>
       )}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={`freq ${freq - 1}`} color={C.fft} onPress={() => setFreq(p => Math.max(1, p - 1))} />
         <ActionBtn label={`freq ${freq + 1}`} color={C.fft} onPress={() => setFreq(p => Math.min(16, p + 1))} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -576,7 +576,7 @@ function BezierDemo() {
   }, [math, controlPoints]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       {controlPoints.map((p, i) => (
         <Label key={i} label={`P${i}`} value={`[${p[0]}, ${p[1]}]`} color={i === 1 || i === 2 ? C.bezier : undefined} />
       ))}
@@ -593,11 +593,11 @@ function BezierDemo() {
       ) : (
         <S.StoryMuted>Computing bezier...</S.StoryMuted>
       )}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={'\u2190 Flatten'} color={C.bezier} onPress={() => setCy(p => Math.max(0, p - 30))} />
         <ActionBtn label={'Curve \u2192'} color={C.bezier} onPress={() => setCy(p => Math.min(300, p + 30))} />
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG8W100>
   );
 }
 
@@ -608,11 +608,11 @@ function FeatureCatalog() {
   return (
     <>
       {FEATURE_LIST.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ fontWeight: 'normal', width: 100 }}>{f.label}</S.StoryBody>
+          <S.SecondaryBody>{f.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
     </>
   );
@@ -627,23 +627,11 @@ export function MathStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="package" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Math'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -655,10 +643,10 @@ export function MathStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/math'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {"All math in Lua. One hook."}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -673,12 +661,12 @@ export function MathStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'All math runs in Lua via LuaJIT. React gets one hook: useMath().'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Vectors, matrices, quaternions, interpolation, geometry, noise, FFT, and bezier — all computed by LuaJIT and accessed through a single math:call RPC. Batch multiple ops in one bridge round-trip.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -687,9 +675,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One hook, one RPC endpoint. Pass { op, ...args } for a single call, or { batch: [...] } for multiple ops in one bridge round-trip.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
@@ -703,9 +691,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="code">{'VECTORS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Vec2, Vec3, Vec4 as arrays. All operations run in LuaJIT — add, sub, mul, dot, cross, normalize, lerp, smoothstep, rotate, fromAngle, reflect, slerp.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={VECTOR_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -716,9 +704,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="layers">{'MATRICES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'4\u00D74 matrix as 16-element array. Multiply, invert, transpose, decompose into translation + rotation + scale. Includes lookAt, perspective, and ortho projection builders.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={MATRIX_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
@@ -735,9 +723,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="zap">{'QUATERNIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'[x, y, z, w] array. Slerp for smooth rotation interpolation without gimbal lock. Convert to/from Euler angles, axis-angle, and Mat4.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={QUAT_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -748,9 +736,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="sliders">{'INTERPOLATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Scalar easing and mapping. lerp, smoothstep (Hermite cubic), smootherstep (Perlin quintic), damp, remap, clamp, wrap, pingPong, moveTowards, smoothDamp.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={INTERP_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
@@ -767,9 +755,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="globe">{'GEOMETRY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'BBox2 and BBox3 axis-aligned bounding boxes. Point-to-segment distance, circle-point containment, circle-rect intersection, line-line intersection.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={GEOMETRY_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -789,10 +777,10 @@ export function MathStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Everything runs in LuaJIT. The bridge is an in-process FFI call, not a network hop. Use batch mode to send multiple ops in a single round-trip when you need several results at once.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -801,9 +789,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="gauge">{'NOISE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Perlin noise via LuaJIT. Noise field returns a flat grid of values for terrain, textures, and procedural generation. Configurable seed, scale, octaves, lacunarity, and persistence.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={NOISE_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
@@ -820,9 +808,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <SectionLabel icon="zap">{'FFT ANALYSIS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Cooley-Tukey radix-2 FFT via Lua. Pass time-domain samples, get back magnitude spectrum.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={FFT_CODE} style={{ width: '100%' }} />
           </Box>
         </Box>
@@ -833,9 +821,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="code">{'BEZIER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'De Casteljau curve evaluation via Lua. Pass control points and segment count, get back evaluated points along the curve.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={BEZIER_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
@@ -849,9 +837,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="layers">{'BATCH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Batch multiple math operations into a single bridge call. Pass { batch: [...] } instead of { op: ... }. All ops execute in Lua and return as an array.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} code={POOL_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Box>
@@ -868,12 +856,12 @@ export function MathStory() {
           paddingBottom: 14,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'LaTeX Typesetting'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Render real math notation with <Math tex="..." />. Parsed and typeset entirely in Lua \u2014 recursive descent parser, heuristic box layout, Latin Modern Math font.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -882,9 +870,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <SectionLabel icon="code">{'USAGE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One-liner LaTeX math rendering. Supports fractions, roots, superscripts, subscripts, Greek letters, big operators, matrices, accents, and delimiters.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={TYPESET_CODE} style={{ width: '100%' }} />
           </Box>
           <Box style={HALF}>
@@ -902,9 +890,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <Tag text={TYPESET_FORMULAS[0].label} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'The most beautiful equation in mathematics \u2014 connects five fundamental constants: e, i, \u03C0, 1, and 0.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
         </Box>
 
@@ -914,9 +902,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <Tag text={TYPESET_FORMULAS[1].label} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'Solutions to ax\u00B2 + bx + c = 0. Nested fraction with square root.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
           <Box style={HALF}>
             <MathBlock tex={TYPESET_FORMULAS[1].tex} fontSize={20} color={c.text} />
@@ -933,9 +921,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <Tag text={'Infinite Series & Integrals'} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'Big operators with limits above and below. Sum and integral signs scale to match their content.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
         </Box>
 
@@ -945,9 +933,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <Tag text={'Taylor Series & Euler'} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'Function names render upright (not italic). Greek letters use Latin Modern Math glyphs.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
           <Box style={HALF}>
             <MathBlock tex={TYPESET_FORMULAS[4].tex} fontSize={20} color={c.text} />
@@ -964,9 +952,9 @@ export function MathStory() {
           </Box>
           <Box style={HALF}>
             <Tag text={TYPESET_FORMULAS[6].label} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'Matrix environments with auto-sized parentheses. Supports pmatrix, bmatrix, vmatrix, and cases.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
         </Box>
 
@@ -976,9 +964,9 @@ export function MathStory() {
         <Box style={BAND_STYLE}>
           <Box style={HALF}>
             <Tag text={'More Formulas'} color={C.accent} />
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+            <S.SecondaryBody>
               {'Accents (hat, vec), partial derivatives, binomial coefficients, and simple expressions.'}
-            </Text>
+            </S.SecondaryBody>
           </Box>
           <Box style={HALF}>
             <MathBlock tex={TYPESET_FORMULAS[7].tex} fontSize={18} color={c.text} />
@@ -990,41 +978,23 @@ export function MathStory() {
         <Divider />
 
         {/* ── Feature catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="terminal">{'API SURFACE'}</SectionLabel>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Math'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="package" />
+        <S.StoryBreadcrumbActive>{'Math'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.2.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.2.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

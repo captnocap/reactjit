@@ -183,12 +183,12 @@ function LabeledSlider({
   const c = useThemeColors();
   return (
     <Box style={{ gap: 4 }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ color: c.textSecondary, fontSize: 10 }}>{label}</Text>
+      <S.RowSpaceBetween>
+        <S.SecondaryBody>{label}</S.SecondaryBody>
         <S.StoryMuted>
           {value.toFixed(step < 1 ? 1 : 0)}
         </S.StoryMuted>
-      </Box>
+      </S.RowSpaceBetween>
       <Slider
         value={value}
         minimumValue={min}
@@ -235,10 +235,10 @@ function BookPanel({
               borderRadius: 3,
             }}
           />
-          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 6, paddingRight: 6 }}>
+          <S.RowSpaceBetween style={{ paddingLeft: 6, paddingRight: 6 }}>
             <Text style={{ color: '#c7d8ec', fontSize: 10 }}>{level.price.toFixed(2)}</Text>
             <Text style={{ color: '#96adc8', fontSize: 10 }}>{Math.round(level.size)}</Text>
-          </Box>
+          </S.RowSpaceBetween>
         </Box>
       ))}
     </Box>
@@ -543,7 +543,7 @@ export function TradingPerfLabStory() {
           gap: compact ? 6 : 8,
         }}
       >
-        <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 8 }}>
+        <S.RowCenterG8 style={{ justifyContent: 'space-between', width: '100%', flexWrap: 'wrap' }}>
           <Box style={{ gap: 2 }}>
             <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: 'normal' }}>
               Trading Workstation
@@ -552,18 +552,18 @@ export function TradingPerfLabStory() {
               Synthetic venue feed with depth, tape, and renderer telemetry
             </Text>
           </Box>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <S.RowCenterG8>
             <Box style={{ width: 180 }}>
               <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
             </Box>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
+            <S.RowCenterG6 style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
               <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>LIVE</Text>
               <Switch value={live} onValueChange={setLive} />
-            </Box>
-          </Box>
-        </Box>
+            </S.RowCenterG6>
+          </S.RowCenterG8>
+        </S.RowCenterG8>
 
-        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+        <S.RowG6 style={{ flexWrap: 'wrap', width: '100%' }}>
           <Badge label={selected ? `${selected.symbol} ${selected.last.toFixed(2)}` : 'No symbol'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
           <Badge label={selected ? `${selectedDelta >= 0 ? '+' : ''}${selectedDelta.toFixed(2)} (${selectedDeltaPct >= 0 ? '+' : ''}${selectedDeltaPct.toFixed(2)}%)` : 'Change --'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
           <Badge label={selected ? `Spread ${spread.toFixed(2)}` : 'Spread --'} variant="default" />
@@ -574,7 +574,7 @@ export function TradingPerfLabStory() {
           <Badge label={`Nodes ${nodeCount || '--'}`} variant="default" />
           <Badge label={`x${simScale.toFixed(2).replace(/\.00$/, '')}`} variant="default" />
           <Badge label={`Profile ${loadProfile.toUpperCase()}`} variant={loadProfile === 'turbo' ? 'success' : loadProfile === 'balanced' ? 'warning' : 'default'} />
-        </Box>
+        </S.RowG6>
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: frameGap, flexGrow: 1, minHeight: 0, minWidth: 0, width: '100%', flexWrap: 'nowrap' }}>
@@ -592,7 +592,7 @@ export function TradingPerfLabStory() {
           }}
         >
           <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>WATCHLIST</Text>
-          <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingLeft: 6, paddingRight: 6 }}>
+          <S.RowSpaceBetween style={{ width: '100%', paddingLeft: 6, paddingRight: 6 }}>
             <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
             {/* rjit-ignore-next-line */}
             <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
@@ -600,7 +600,7 @@ export function TradingPerfLabStory() {
             <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>%</Text></Box>
             {/* rjit-ignore-next-line */}
             <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>VOL</Text></Box>
-          </Box>
+          </S.RowSpaceBetween>
           <ScrollView style={{ flexGrow: 1, width: '100%' }}>
             <Box style={{ gap: 2, paddingRight: 2 }}>
               {watchlistRows.map((row) => {
@@ -655,14 +655,14 @@ export function TradingPerfLabStory() {
             }}
           >
             {selected && (
-              <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <S.RowG6 style={{ flexWrap: 'wrap' }}>
                 <Badge label={selected.symbol} variant="default" />
                 <Badge label={`Last ${selected.last.toFixed(2)}`} variant="info" />
                 <Badge label={`Best Bid ${bestBid.toFixed(2)}`} variant="success" />
                 <Badge label={`Best Ask ${bestAsk.toFixed(2)}`} variant="error" />
                 <Badge label={`Vol ${Math.round(selected.volume).toLocaleString()}`} variant="default" />
                 <Badge label={`Frame max ${snapshot.maxFrameMs.toFixed(2)}ms`} variant="warning" />
-              </Box>
+              </S.RowG6>
             )}
           </Box>
 
@@ -726,15 +726,15 @@ export function TradingPerfLabStory() {
               gap: compact ? 6 : 8,
             }}
           >
-            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+            <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
               <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ORDER BOOK</Text>
               <Text style={{ color: '#6f8daf', fontSize: 10 }}>{`Spread ${spread.toFixed(2)}`}</Text>
-            </Box>
+            </S.RowCenter>
             {selected && (
-              <Box style={{ flexDirection: 'row', gap: 8, flexGrow: 1 }}>
+              <S.RowG8 style={{ flexGrow: 1 }}>
                 <BookPanel title="Bids" levels={selected.bids} color="#22c55e" descending />
                 <BookPanel title="Asks" levels={selected.asks} color="#ef4444" descending={false} />
-              </Box>
+              </S.RowG8>
             )}
           </Box>
 
@@ -753,11 +753,11 @@ export function TradingPerfLabStory() {
             <ScrollView style={{ width: '100%', flexGrow: 1 }}>
               <Box style={{ gap: 3 }}>
                 {tapeRows.map((row) => (
-                  <Box key={`tape-${row.id}`} style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#0a1628', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}>
+                  <S.RowSpaceBetween key={`tape-${row.id}`} style={{ width: '100%', backgroundColor: '#0a1628', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}>
                     <Text style={{ fontSize: 10, color: row.side === 'BUY' ? '#34d399' : '#f87171' }}>{row.side}</Text>
                     <Text style={{ fontSize: 10, color: '#c7d8ec' }}>{row.price.toFixed(2)}</Text>
                     <Text style={{ fontSize: 10, color: '#7f9bc0' }}>{row.size}</Text>
-                  </Box>
+                  </S.RowSpaceBetween>
                 ))}
               </Box>
             </ScrollView>

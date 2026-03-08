@@ -96,12 +96,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -145,10 +145,10 @@ function ColorDemo() {
     <Box style={{ gap: 8 }}>
       <S.StoryCap>{'hex -> rgb -> hsl (Lua math, zero JS compute)'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <Box style={{ width: 24, height: 24, borderRadius: 4, backgroundColor: hex }} />
         <S.StoryBody>{hex}</S.StoryBody>
-      </Box>
+      </S.RowCenterG8>
 
       {rgb && hsl && (
         <Box style={{ gap: 2 }}>
@@ -158,7 +158,7 @@ function ColorDemo() {
         </Box>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         {COLOR_PRESETS.map(col => (
           <Pressable key={col} onPress={() => setHex(col)}>
             <Box style={{
@@ -167,7 +167,7 @@ function ColorDemo() {
             }} />
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
     </Box>
   );
 }
@@ -204,7 +204,7 @@ function UnitDemo() {
         </Box>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <Pressable onPress={() => setMiles(m => Math.max(1, m - 1))}>
           <Box style={{ backgroundColor: C.units + '33', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
             <Text style={{ color: C.units, fontSize: 10 }}>{'- mile'}</Text>
@@ -215,7 +215,7 @@ function UnitDemo() {
             <Text style={{ color: C.units, fontSize: 10 }}>{'+ mile'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -250,7 +250,7 @@ function EncodingDemo() {
       {enc && (
         <>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: c.textSecondary }}>{`Input: "${ENC_INPUT}"`}</Text>
+            <S.SecondaryBody>{`Input: "${ENC_INPUT}"`}</S.SecondaryBody>
             <Text style={{ fontSize: 10, color: C.encoding }}>{`Base64: ${enc.b64}`}</Text>
             <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: "${enc.roundtrip}" \u2713`}</Text>
           </Box>
@@ -291,7 +291,7 @@ function NumberBaseDemo() {
           <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> hex:    ${bases[2]}`}</Text>
         </Box>
       )}
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <Pressable onPress={() => setNum(n => Math.max(0, n - 16))}>
           <Box style={{ backgroundColor: C.numbers + '33', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
             <Text style={{ color: C.numbers, fontSize: 10 }}>{'- 16'}</Text>
@@ -302,7 +302,7 @@ function NumberBaseDemo() {
             <Text style={{ color: C.numbers, fontSize: 10 }}>{'+ 16'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -329,7 +329,7 @@ function PipelineStage({ label, value, color, bg }: { label: string; value: stri
   const c = useThemeColors();
   return (
     <Box style={{ alignItems: 'center', gap: 2 }}>
-      <Text style={{ fontSize: 7, color: c.muted }}>{label}</Text>
+      <S.DimMicro>{label}</S.DimMicro>
       <Box style={{ backgroundColor: bg, borderRadius: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
         <Text style={{ fontSize: 10, color, fontFamily: 'monospace' }}>{value}</Text>
       </Box>
@@ -366,7 +366,7 @@ function PipelineDemo() {
         <PipelineStage label="result" value={result !== null ? `${result} ${preset.to}` : '…'} color={C.accent} bg={C.accentDim} />
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+      <S.RowG6 style={{ justifyContent: 'center' }}>
         {PIPELINE_PRESETS.map((p, i) => (
           <Pressable key={i} onPress={() => setIdx(i)}>
             <Box style={{
@@ -379,7 +379,7 @@ function PipelineDemo() {
             </Box>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
     </Box>
   );
 }
@@ -419,11 +419,11 @@ function RegistryCatalog() {
       {catalog.map(({ cat, units }) => {
         const catColor = CAT_COLORS[cat] || c.text;
         return (
-          <Box key={cat} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8 key={cat}>
             <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: catColor }} />
-            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 90 }}>{cat}</Text>
+            <S.StoryBody style={{ fontWeight: 'normal', width: 90 }}>{cat}</S.StoryBody>
             <S.StoryCap>{units.join(', ')}</S.StoryCap>
-          </Box>
+          </S.RowCenterG8>
         );
       })}
     </Box>
@@ -438,30 +438,26 @@ export function ConversionsStory() {
   return (
     <S.StoryRoot>
 
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14,
-      }}>
-        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Convert'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="package" tintColor={C.accent} />
+        <S.StoryTitle>{'Convert'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/convert'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'Lua-backed unit, color, encoding & number-base conversions'}</Text>
-      </Box>
+        <S.StoryMuted>{'Lua-backed unit, color, encoding & number-base conversions'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero ── */}
         <Box style={{ borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24, gap: 8 }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'All conversion math runs in Lua. React side: one hook.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'useConvert() returns an async RPC caller. Pass { from, to, value } — Lua handles every transform: units, colors, encodings, number bases.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -470,9 +466,9 @@ export function ConversionsStory() {
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One hook for everything. No registry to import, no helper functions. The Lua backend handles all conversions.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={INSTALL_CODE} />
         </Box>
@@ -484,16 +480,16 @@ export function ConversionsStory() {
           <Box style={HALF}><ColorDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="palette">{'COLOR SPACES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Hex, RGB, HSL, HSV, named colors. Pure Lua math — no JS compute, no bridge overhead beyond the RPC call.'}
-            </Text>
-            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            </S.StoryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap' }}>
               <Tag text="hex" tagColor={C.color} />
               <Tag text="rgb" tagColor={C.color} />
               <Tag text="hsl" tagColor={C.color} />
               <Tag text="hsv" tagColor={C.color} />
               <Tag text="named" tagColor={C.color} />
-            </Box>
+            </S.RowG6>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COLOR_CODE} />
           </Box>
         </Box>
@@ -504,17 +500,17 @@ export function ConversionsStory() {
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="gauge">{'UNIT CONVERSION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Distance, weight, temperature, volume, speed, area, time, data, pressure, energy, angle — all registered in Lua.'}
-            </Text>
-            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            </S.StoryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap' }}>
               <Tag text="length" tagColor={C.units} />
               <Tag text="temp" tagColor={C.units} />
               <Tag text="weight" tagColor={C.units} />
               <Tag text="volume" tagColor={C.units} />
               <Tag text="pressure" tagColor={C.units} />
               <Tag text="angle" tagColor={C.units} />
-            </Box>
+            </S.RowG6>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={UNIT_CODE} />
           </Box>
           <Box style={HALF}><UnitDemo /></Box>
@@ -527,15 +523,15 @@ export function ConversionsStory() {
           <Box style={HALF}><EncodingDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="type">{'TEXT ENCODING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Base64 via love.data.encode, hex, URL percent-encoding, HTML entity escaping — all in Lua.'}
-            </Text>
-            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            </S.StoryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap' }}>
               <Tag text="base64" tagColor={C.encoding} />
               <Tag text="hex" tagColor={C.encoding} />
               <Tag text="url" tagColor={C.encoding} />
               <Tag text="html" tagColor={C.encoding} />
-            </Box>
+            </S.RowG6>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={ENCODING_CODE} />
           </Box>
         </Box>
@@ -546,15 +542,15 @@ export function ConversionsStory() {
         <Box style={BAND}>
           <Box style={HALF}>
             <SectionLabel icon="binary">{'NUMBER BASES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Decimal, binary, octal, hex — all 12 cross-conversions. Lua string.format and tonumber(s, base) do the work.'}
-            </Text>
-            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            </S.StoryBody>
+            <S.RowG6 style={{ flexWrap: 'wrap' }}>
               <Tag text="decimal" tagColor={C.numbers} />
               <Tag text="binary" tagColor={C.numbers} />
               <Tag text="octal" tagColor={C.numbers} />
               <Tag text="hex" tagColor={C.numbers} />
-            </Box>
+            </S.RowG6>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NUMBER_CODE} />
           </Box>
           <Box style={HALF}><NumberBaseDemo /></Box>
@@ -568,10 +564,10 @@ export function ConversionsStory() {
           paddingLeft: 25, paddingRight: 28, paddingTop: 14, paddingBottom: 14,
           flexDirection: 'row', gap: 8, alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Zero JS compute. Every conversion runs in LuaJIT. React never touches the math — it just reads { result }.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -581,9 +577,9 @@ export function ConversionsStory() {
           <CodeBlock language="tsx" fontSize={9} style={{ flexGrow: 1, flexBasis: 0 }} code={FLUENT_CODE} />
           <Box style={HALF}>
             <SectionLabel icon="code">{'ONE HOOK'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useConvert() is the entire API. No helpers, no registry imports, no type gymnastics. One RPC call, one result.'}
-            </Text>
+            </S.StoryBody>
           </Box>
         </Box>
 
@@ -594,12 +590,12 @@ export function ConversionsStory() {
           <Box style={HALF}><PipelineDemo /></Box>
           <Box style={HALF}>
             <SectionLabel icon="git-merge">{'PIPELINE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Every conversion follows the same path: React fires an RPC call, Lua looks up the converter by from->to key, runs the transform, returns { result }. Click a preset to trace different conversions.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The result field is nil on error — check for { error } to handle unknown unit pairs gracefully.'}
-            </Text>
+            </S.StoryCap>
           </Box>
         </Box>
 
@@ -609,28 +605,24 @@ export function ConversionsStory() {
         <Box style={{ ...BAND, paddingBottom: 24 }}>
           <Box style={HALF}>
             <SectionLabel icon="layers">{'REGISTRY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'All registered converters live in Lua. Use convert:categories, convert:units, and convert:size RPCs to introspect at runtime.'}
-            </Text>
+            </S.StoryBody>
           </Box>
           <Box style={HALF}><RegistryCatalog /></Box>
         </Box>
 
       </ScrollView>
 
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Convert'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="package" />
+        <S.StoryBreadcrumbActive>{'Convert'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v1.0.0 — Lua backend'}</Text>
-      </Box>
+        <S.StoryCap>{'v1.0.0 — Lua backend'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

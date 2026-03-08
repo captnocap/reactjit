@@ -161,11 +161,11 @@ function ScreenCaptureDemo() {
   const [active, setActive] = useState(false);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Tag text="screen:0" color={C.screen} />
         <Tag text="XShm" color={C.accent} />
-      </Box>
+      </S.RowG6>
 
       {active ? (
         <Box style={{ width: 280, height: 180, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.screen + '44' }}>
@@ -186,13 +186,13 @@ function ScreenCaptureDemo() {
         </Pressable>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
         <Text style={{ fontSize: 9, color: active ? C.webcam : c.textDim }}>
           {active ? 'Capturing at 15 fps' : 'Tap to start capture'}
         </Text>
-      </Box>
-    </Box>
+      </S.RowCenterG6>
+    </S.CenterW100>
   );
 }
 
@@ -211,28 +211,28 @@ function WindowCaptureDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
       <Tag text="window:Title" color={C.window} />
 
       {active ? (
-        <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+        <S.CenterW100 style={{ gap: 6 }}>
           <Box style={{ width: 280, height: 160, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: C.window + '44' }}>
             <Render source={`window:${target}`} fps={10} objectFit="contain" style={{ flexGrow: 1 }} />
           </Box>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6>
             <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.window }} />
             <Text style={{ fontSize: 9, color: C.window }}>{`Capturing window: ${target}`}</Text>
-          </Box>
+          </S.RowCenterG6>
           <Pressable onPress={() => setActive(false)}>
             <Box style={{ backgroundColor: C.vm + '33', paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
               <Text style={{ fontSize: 9, color: C.vm }}>{'Stop'}</Text>
             </Box>
           </Pressable>
-        </Box>
+        </S.CenterW100>
       ) : (
-        <Box style={{ gap: 6, width: '100%' }}>
+        <S.StackG6W100>
           <S.StoryCap>{'Pick a window to capture:'}</S.StoryCap>
-          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          <S.RowG6 style={{ flexWrap: 'wrap' }}>
             {titles.map(t => (
               <Pressable key={t} onPress={() => startCapture(t)}>
                 <Box style={{ backgroundColor: C.window + '22', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
@@ -240,11 +240,11 @@ function WindowCaptureDemo() {
                 </Box>
               </Pressable>
             ))}
-          </Box>
+          </S.RowG6>
           <S.StoryTiny>{'Matches by partial window title via X11'}</S.StoryTiny>
-        </Box>
+        </S.StackG6W100>
       )}
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -271,14 +271,14 @@ function LibretroDemo() {
   }, []);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Tag text="Libretro" color={C.libretro} />
         <Tag text="FFI" color={C.accent} />
-      </Box>
+      </S.RowG6>
 
       {/* Core + ROM inputs */}
-      <Box style={{ gap: 4, width: '100%' }}>
+      <S.StackG4W100>
         <S.StoryTiny>{'Core .so path'}</S.StoryTiny>
         <Input
           value={corePath}
@@ -293,7 +293,7 @@ function LibretroDemo() {
           onChangeText={(t: string) => setRomPath(t)}
           style={{ height: 22, fontSize: 9, backgroundColor: c.surface, borderRadius: 4, paddingLeft: 6, paddingRight: 6, color: c.text, borderWidth: 1, borderColor: c.border }}
         />
-      </Box>
+      </S.StackG4W100>
 
       {/* Viewport */}
       {hasInputs ? (
@@ -320,7 +320,7 @@ function LibretroDemo() {
         </Box>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
         <Text style={{ fontSize: 9, color: active ? C.libretro : c.textDim }}>{status}</Text>
         {active && (
@@ -330,8 +330,8 @@ function LibretroDemo() {
             </Box>
           </Pressable>
         )}
-      </Box>
-    </Box>
+      </S.RowCenterG6>
+    </S.CenterW100>
   );
 }
 
@@ -353,12 +353,12 @@ function CartridgeOSDemo() {
   const onError = useCallback((e: any) => setStatus(`Error: ${e.message}`), []);
 
   return (
-    <Box style={{ gap: 8, alignItems: 'center', width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+    <S.CenterW100 style={{ gap: 8 }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Tag text="QEMU" color={C.vm} />
         <Tag text="virtio-vga" color={C.vm} />
         <Tag text="VNC" color={C.vm} />
-      </Box>
+      </S.RowG6>
 
       {/* VM Render — always in the same tree position when active */}
       {active && (
@@ -392,12 +392,12 @@ function CartridgeOSDemo() {
           backgroundColor: '#1a0a0a',
           justifyContent: 'center', alignItems: 'center', gap: 6,
         }}>
-          <Image src="external-link" style={{ width: 20, height: 20 }} tintColor={C.vm} />
+          <S.Icon20 src="external-link" tintColor={C.vm} />
           <Text style={{ fontSize: 10, color: C.vm }}>{'Popped out to own window'}</Text>
         </Box>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? C.webcam : c.textDim }} />
         <Text style={{ fontSize: 9, color: active ? C.vm : c.textDim }}>{status}</Text>
         {active && vncPort > 0 && (
@@ -414,18 +414,18 @@ function CartridgeOSDemo() {
             </Box>
           </Pressable>
         )}
-      </Box>
+      </S.RowCenterG6>
 
       {poppedOut && vncPort > 0 && (
         <Box style={{ width: 0, height: 0, overflow: 'hidden' }}>
           <Window title="CartridgeOS" width={1280} height={720} onClose={() => setPoppedOut(false)}>
-            <Box style={{ width: '100%', height: '100%', backgroundColor: '#000' }}>
+            <S.FullSize style={{ backgroundColor: '#000' }}>
               <Render source={`vnc:localhost:${vncPort}`} interactive objectFit="contain" style={{ flexGrow: 1 }} />
-            </Box>
+            </S.FullSize>
           </Window>
         </Box>
       )}
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -434,15 +434,15 @@ function CartridgeOSDemo() {
 function SourceCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {SOURCES.map(s => (
-        <Box key={s.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={s.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: s.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 10, color: c.text, width: 110, flexShrink: 0 }}>{s.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{s.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ width: 110, flexShrink: 0 }}>{s.label}</S.StoryBody>
+          <S.SecondaryBody>{s.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -451,15 +451,15 @@ function SourceCatalog() {
 function PropsCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {PROPS.map(p => (
-        <Box key={p.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={p.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: p.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 10, color: c.text, width: 100, flexShrink: 0 }}>{p.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{p.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ width: 100, flexShrink: 0 }}>{p.label}</S.StoryBody>
+          <S.SecondaryBody>{p.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -482,23 +482,11 @@ export function RenderStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="monitor" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="monitor" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Render'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -510,22 +498,22 @@ export function RenderStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'I cant find anything this cant render tbh'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Capture screens, webcams, windows, and HDMI. Boot VMs from ISO. Create virtual displays. Run emulator cores. One component family.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'<Render> wraps FFmpeg, XShm, v4l2, QEMU, and Xephyr into a single declarative component. <Libretro> loads any libretro-compatible emulator core via LuaJIT FFI. Pass a source string and get live video. Interactive mode forwards mouse and keyboard. VMs use VNC, screen capture uses XShm, emulator cores run at native framerate.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -534,9 +522,9 @@ export function RenderStory() {
         <Band>
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One import. The source prop determines the capture backend. Everything runs in Lua — React just declares the layout.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
@@ -552,12 +540,12 @@ export function RenderStory() {
           </Half>
           <Half>
             <SectionLabel icon="monitor">{'SCREEN CAPTURE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Full screen capture via XShm shared memory — sub-millisecond latency on Linux. Falls back to x11grab (FFmpeg) on systems without XShm. Pass "screen:N" where N is the display index.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The XShm fast path maps the X11 framebuffer directly into Love2D texture memory. No pixel copies, no format conversion.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SCREEN_CODE} />
           </Half>
         </Band>
@@ -568,16 +556,16 @@ export function RenderStory() {
         <Band>
           <Half>
             <SectionLabel icon="camera">{'WEBCAM'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Webcam feed via v4l2. Pass "cam:N" for device index or a direct path like "/dev/video2". Defaults to 30fps at 1280x720. Multiple cameras supported simultaneously.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Uses the same FFmpeg pipeline as HDMI but auto-negotiates resolution with the camera driver.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WEBCAM_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+            <S.CenterW100 style={{ gap: 6 }}>
               <Tag text="cam:0" color={C.webcam} />
               <Box style={{
                 width: 200, height: 130, borderRadius: 6,
@@ -585,11 +573,11 @@ export function RenderStory() {
                 borderWidth: 1, borderColor: C.webcam + '33',
                 justifyContent: 'center', alignItems: 'center', gap: 6,
               }}>
-                <Image src="camera" style={{ width: 20, height: 20 }} tintColor={C.webcam} />
+                <S.Icon20 src="camera" tintColor={C.webcam} />
                 <Text style={{ fontSize: 9, color: C.webcam }}>{'v4l2 device feed'}</Text>
               </Box>
-              <Text style={{ fontSize: 8, color: c.textDim }}>{'Default: 30fps @ 1280x720'}</Text>
-            </Box>
+              <S.StoryTiny>{'Default: 30fps @ 1280x720'}</S.StoryTiny>
+            </S.CenterW100>
           </Half>
         </Band>
 
@@ -598,7 +586,7 @@ export function RenderStory() {
         {/* ── HDMI: code | text ── */}
         <Band>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+            <S.CenterW100 style={{ gap: 6 }}>
               <Tag text="hdmi:0" color={C.hdmi} />
               <Box style={{
                 width: 200, height: 130, borderRadius: 6,
@@ -606,17 +594,17 @@ export function RenderStory() {
                 borderWidth: 1, borderColor: C.hdmi + '33',
                 justifyContent: 'center', alignItems: 'center', gap: 6,
               }}>
-                <Image src="tv" style={{ width: 20, height: 20 }} tintColor={C.hdmi} />
+                <S.Icon20 src="tv" tintColor={C.hdmi} />
                 <Text style={{ fontSize: 9, color: C.hdmi }}>{'Capture card input'}</Text>
               </Box>
-              <Text style={{ fontSize: 8, color: c.textDim }}>{'Same v4l2 pipeline as webcam'}</Text>
-            </Box>
+              <S.StoryTiny>{'Same v4l2 pipeline as webcam'}</S.StoryTiny>
+            </S.CenterW100>
           </Half>
           <Half>
             <SectionLabel icon="tv">{'HDMI CAPTURE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'HDMI capture card input. Uses the same v4l2 pipeline as webcam but targets capture card devices. Pass "hdmi:N" for device index. Supports 1080p60 and 4K30 depending on hardware.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={HDMI_CODE} />
           </Half>
         </Band>
@@ -630,9 +618,9 @@ export function RenderStory() {
           </Half>
           <Half>
             <SectionLabel icon="layout">{'WINDOW CAPTURE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Capture a specific window by its title. Uses X11 window matching — pass "window:Title" where Title is a substring of the target window name. Great for embedding other apps inside your ReactJIT layout.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
           </Half>
         </Band>
@@ -641,10 +629,10 @@ export function RenderStory() {
 
         {/* ── Callout: everything runs in Lua ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All capture, VM management, and input forwarding runs in Lua. React never touches frame data or event queues — the capability tick function blits frames directly to Love2D textures. Zero bridge overhead per frame.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -653,12 +641,12 @@ export function RenderStory() {
         <Band>
           <Half>
             <SectionLabel icon="server">{'VIRTUAL MACHINES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Boot a QEMU VM from an ISO or disk image. Framebuffer streamed over VNC, input forwarded automatically. KVM auto-detected for near-native speed. Supports .iso, .img, .qcow2, .vmdk, .vdi, .vhd.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'VMs default to interactive=true. Mouse clicks and keyboard input are forwarded via VNC protocol with zero additional latency.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={VM_CODE} />
           </Half>
           <Half>
@@ -675,12 +663,12 @@ export function RenderStory() {
           </Half>
           <Half>
             <SectionLabel icon="airplay">{'VIRTUAL DISPLAY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Create a virtual monitor that other apps can render to. Your ReactJIT window becomes Display :N. Launch apps targeting that display and see their output live. Requires Xephyr or Xvfb.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The onReady callback receives the display number so you can launch apps targeting it. When your Render component unmounts, the virtual monitor disconnects cleanly.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -690,16 +678,16 @@ export function RenderStory() {
         <Band>
           <Half>
             <SectionLabel icon="mouse-pointer">{'INTERACTIVE MODE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'When interactive is true, mouse clicks and keyboard input are forwarded to the source. VMs use VNC protocol (zero-latency). Screen and window capture use xdotool. VMs and displays default to interactive=true.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Input forwarding coordinates are transformed from the Render element bounds to the source resolution — clicks land exactly where you expect regardless of objectFit scaling.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INTERACTIVE_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+            <S.CenterW100 style={{ gap: 6 }}>
               <Tag text="interactive" color={C.interactive} />
               <Box style={{
                 width: 200, height: 120, borderRadius: 6,
@@ -707,22 +695,22 @@ export function RenderStory() {
                 borderWidth: 1, borderColor: C.interactive + '33',
                 justifyContent: 'center', alignItems: 'center', gap: 8,
               }}>
-                <Image src="mouse-pointer" style={{ width: 20, height: 20 }} tintColor={C.interactive} />
+                <S.Icon20 src="mouse-pointer" tintColor={C.interactive} />
                 <Text style={{ fontSize: 9, color: C.interactive }}>{'Mouse + keyboard forwarding'}</Text>
               </Box>
               <Box style={{ gap: 3 }}>
-                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <S.RowCenterG6>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.vm }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'VM/Display'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'interactive=true by default'}</Text>
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.StoryBreadcrumbActive>{'VM/Display'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'interactive=true by default'}</S.StoryCap>
+                </S.RowCenterG6>
+                <S.RowCenterG6>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.screen }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'Screen/Window'}</Text>
-                  <Text style={{ fontSize: 9, color: c.muted }}>{'interactive=false by default'}</Text>
-                </Box>
+                  <S.StoryBreadcrumbActive>{'Screen/Window'}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{'interactive=false by default'}</S.StoryCap>
+                </S.RowCenterG6>
               </Box>
-            </Box>
+            </S.CenterW100>
           </Half>
         </Band>
 
@@ -735,16 +723,16 @@ export function RenderStory() {
           </Half>
           <Half>
             <SectionLabel icon="cpu">{'LIBRETRO CORES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Run any libretro-compatible emulator core as a React component. NES, SNES, GBA, Genesis, N64, PS1 — hundreds of cores available. Loads .so dynamically via LuaJIT FFI. Video, audio, input, save states, and SRAM persistence all handled automatically.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Cores run at their native framerate via a time accumulator. Pixel format conversion (XRGB8888, RGB565, 0RGB1555) happens in a tight LuaJIT loop. Audio streams through a QueueableSource. Gamepads work out of the box.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={LIBRETRO_CODE} />
-            <Text style={{ color: c.muted, fontSize: 9, marginTop: 4 }}>
+            <S.StoryCap style={{ marginTop: 4 }}>
               {'Controls: Arrows=D-Pad, Z/X=A/B, A/S=X/Y, Enter=Start, RShift=Select, Q/W=L/R. F5=Save, F9=Load, F6=Reset. Gamepads mapped automatically.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -754,9 +742,9 @@ export function RenderStory() {
         <Band>
           <Half>
             <SectionLabel icon="zap">{'EVENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three lifecycle events. onReady fires when the first frame arrives — for VMs this includes vmInfo with PID and VNC port, for displays it includes displayNumber. onError fires on capture failure. onFrame fires per frame (throttled).'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={EVENTS_CODE} />
@@ -774,58 +762,40 @@ export function RenderStory() {
           gap: 8,
         }}>
           <SectionLabel icon="list">{'SOURCE TYPES'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Every source string <Render> accepts:'}</Text>
+          <S.StoryCap>{'Every source string <Render> accepts:'}</S.StoryCap>
           <SourceCatalog />
         </Box>
 
         <Divider />
 
         {/* ── Props catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="settings">{'PROPS & EVENTS'}</SectionLabel>
           <PropsCatalog />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* ── Callout: one-liner philosophy ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Screen capture, webcam feed, HDMI input, window grab, VM boot, virtual display, emulator cores — all declarative, all one-liners. The source string or core path is the only thing that changes.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="monitor" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Render'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="monitor" />
+        <S.StoryBreadcrumbActive>{'Render'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

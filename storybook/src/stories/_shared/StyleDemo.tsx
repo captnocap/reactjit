@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Box, Text } from '../../../../packages/core/src';
+import { Box, Text, classifiers as S} from '../../../../packages/core/src';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -79,13 +79,13 @@ export function StyleDemo({ properties, children }: StyleDemoProps) {
           }}>
             {properties.map((p, i) => (
               <React.Fragment key={i}>
-                <Text style={{ color: '#61a6fa', fontSize: 10, fontWeight: 'bold' }}>{p.property}</Text>
+                <S.StoryBtnText style={{ color: '#61a6fa' }}>{p.property}</S.StoryBtnText>
                 {p.ways.map((w, j) => (
                   // rjit-ignore-next-line
-                  <Box key={j} style={{ flexDirection: 'row', gap: 6, alignItems: 'baseline' }}>
+                  <S.RowG6 key={j} style={{ alignItems: 'baseline' }}>
                     <Text style={{ color: '#61a6fa', fontSize: 9, minWidth: 60 }}>{w.label}</Text>
                     <Text style={{ color: '#c4cad8', fontSize: 9 }}>{w.code}</Text>
-                  </Box>
+                  </S.RowG6>
                 ))}
                 {i < properties.length - 1 ? (
                   <Box style={{ height: 3 }} />

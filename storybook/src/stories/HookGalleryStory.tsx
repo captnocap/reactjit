@@ -51,7 +51,7 @@ const CATEGORIES = ['All', 'State', 'UI', 'Animation', 'Time', 'Text', 'Data', '
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 // ── HookGalleryStory ─────────────────────────────────────
@@ -86,25 +86,17 @@ export function HookGalleryStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, gap: 14,
-      }}>
-        <Image src="cpu" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Hooks'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, gap: 14 }}>
+        <S.StoryHeaderIcon src="cpu" tintColor={C.accent} />
+        <S.StoryTitle>{'Hooks'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'Gallery'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
 
         {/* Search */}
-        <Box style={{
-          flexDirection: 'row', alignItems: 'center', gap: 6,
-          backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border,
-          paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, width: 200,
-        }}>
-          <Image src="search" style={{ width: 10, height: 10 }} tintColor={c.muted} />
+        <S.RowCenterG6 style={{ backgroundColor: c.surface, borderRadius: 4, borderWidth: 1, borderColor: c.border, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, width: 200 }}>
+          <S.StorySectionIcon src="search" tintColor={c.muted} />
           <Input
             placeholder="Filter hooks..."
             value={searchQuery}
@@ -113,18 +105,14 @@ export function HookGalleryStory() {
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery('')}>
-              <Image src="x" style={{ width: 8, height: 8 }} tintColor={c.muted} />
+              <S.DimIcon8 src="x" />
             </Pressable>
           )}
-        </Box>
-      </Box>
+        </S.RowCenterG6>
+      </S.RowCenterBorder>
 
       {/* ── Category tabs ── */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 4,
-      }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
         {CATEGORIES.map(cat => {
           const active = cat === activeCat;
           const count = cat === 'All' ? HOOKS.length : HOOKS.filter(h => h.cat === cat).length;
@@ -137,22 +125,19 @@ export function HookGalleryStory() {
                 borderRadius: 4, borderWidth: active ? 1 : 0, borderColor: C.accent,
               }}>
                 <Text style={{ color: active ? c.text : c.muted, fontSize: 9 }}>{cat}</Text>
-                <Text style={{ color: c.muted, fontSize: 7 }}>{`${count}`}</Text>
+                <S.DimMicro>{`${count}`}</S.DimMicro>
               </Box>
             </Pressable>
           );
         })}
-      </Box>
+      </S.RowCenterBorder>
 
       {/* ── Main area: grid + detail panel ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
 
         {/* Grid */}
         <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-          <Box style={{
-            flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
-            paddingLeft: 12, paddingRight: 12, paddingTop: 12, paddingBottom: 12, gap: 8,
-          }}>
+          <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 12, paddingRight: 12, paddingTop: 12, paddingBottom: 12 }}>
             {filtered.map(h => {
               const active = h.id === activeId;
               const hPkgColor = PKG[h.pkg] || c.muted;
@@ -184,10 +169,10 @@ export function HookGalleryStory() {
             })}
             {filtered.length === 0 && (
               <Box style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ color: c.muted, fontSize: 11 }}>{`No hooks match "${searchQuery}"`}</Text>
+                <S.DimBody11>{`No hooks match "${searchQuery}"`}</S.DimBody11>
               </Box>
             )}
-          </Box>
+          </S.RowG8>
         </ScrollView>
 
         <VerticalDivider />
@@ -198,65 +183,61 @@ export function HookGalleryStory() {
 
             {/* Hook name + package */}
             <Box style={{ gap: 6 }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>{hook.id}</Text>
-              <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <S.BoldText style={{ fontSize: 16 }}>{hook.id}</S.BoldText>
+              <S.RowCenterG6>
                 <Box style={{ backgroundColor: `${pkgColor}22`, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
                   <Text style={{ color: pkgColor, fontSize: 8 }}>{`@reactjit/${hook.pkg}`}</Text>
                 </Box>
                 <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
                   <Text style={{ color: C.accent, fontSize: 8 }}>{hook.cat}</Text>
                 </Box>
-              </Box>
+              </S.RowCenterG6>
             </Box>
 
             {/* Description */}
             <Box style={{ gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'DESCRIPTION'}</Text>
-              <Text style={{ color: c.text, fontSize: 10 }}>{hook.desc}</Text>
+              <S.StoryLabelText>{'DESCRIPTION'}</S.StoryLabelText>
+              <S.StoryBody>{hook.desc}</S.StoryBody>
             </Box>
 
             {/* Signature */}
             <Box style={{ gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'SIGNATURE'}</Text>
-              <Box style={{ backgroundColor: c.surface, borderRadius: 4, padding: 8, borderWidth: 1, borderColor: c.border }}>
+              <S.StoryLabelText>{'SIGNATURE'}</S.StoryLabelText>
+              <S.Bordered style={{ backgroundColor: c.surface, borderRadius: 4, padding: 8 }}>
                 <Text style={{ color: C.accent, fontSize: 9 }}>{`${hook.id}${hook.sig}`}</Text>
-              </Box>
+              </S.Bordered>
             </Box>
 
             {/* Returns */}
             <Box style={{ gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'RETURNS'}</Text>
-              <Box style={{ backgroundColor: c.surface, borderRadius: 4, padding: 8, borderWidth: 1, borderColor: c.border }}>
-                <Text style={{ color: c.text, fontSize: 9 }}>{hook.returns}</Text>
-              </Box>
+              <S.StoryLabelText>{'RETURNS'}</S.StoryLabelText>
+              <S.Bordered style={{ backgroundColor: c.surface, borderRadius: 4, padding: 8 }}>
+                <S.StoryBreadcrumbActive>{hook.returns}</S.StoryBreadcrumbActive>
+              </S.Bordered>
             </Box>
 
             {/* Usage */}
             <Box style={{ gap: 4 }}>
-              <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold', letterSpacing: 1 }}>{'USAGE'}</Text>
+              <S.StoryLabelText>{'USAGE'}</S.StoryLabelText>
               <CodeBlock language="tsx" fontSize={8} code={hook.usage} />
             </Box>
 
           </Box>
         </ScrollView>
 
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Hooks'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{hook.cat}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Text style={{ color: c.text, fontSize: 9 }}>{hook.id}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Hooks'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.StoryCap>{hook.cat}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.StoryBreadcrumbActive>{hook.id}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{`${filtered.indexOf(hook) + 1} of ${filtered.length}`}</Text>
-      </Box>
+        <S.StoryCap>{`${filtered.indexOf(hook) + 1} of ${filtered.length}`}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

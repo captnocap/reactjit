@@ -182,12 +182,12 @@ function HotStateDemo() {
   const [plainCount, setPlainCount] = React.useState(0);
 
   return (
-    <Box style={{ width: '100%', gap: 8 }}>
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
+    <S.StackG8W100>
+      <S.RowG12>
         {/* useHotState counter */}
         <Box style={{ flexGrow: 1, backgroundColor: 'rgba(166, 227, 161, 0.08)', borderRadius: 6, padding: 10, gap: 6, borderWidth: 1, borderColor: 'rgba(166, 227, 161, 0.2)' }}>
           <Text style={{ fontSize: 8, color: C.green }}>{'useHotState'}</Text>
-          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>{`${hotCount}`}</Text>
+          <S.BoldText style={{ fontSize: 24 }}>{`${hotCount}`}</S.BoldText>
           <Pressable onPress={() => setHotCount(hotCount + 1)}>
             <Box style={{ backgroundColor: C.green, borderRadius: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
               <Text style={{ fontSize: 9, color: '#000', fontWeight: 'bold' }}>{'+ Increment'}</Text>
@@ -199,7 +199,7 @@ function HotStateDemo() {
         {/* useState counter */}
         <Box style={{ flexGrow: 1, backgroundColor: 'rgba(243, 139, 168, 0.08)', borderRadius: 6, padding: 10, gap: 6, borderWidth: 1, borderColor: 'rgba(243, 139, 168, 0.2)' }}>
           <Text style={{ fontSize: 8, color: C.red }}>{'useState'}</Text>
-          <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>{`${plainCount}`}</Text>
+          <S.BoldText style={{ fontSize: 24 }}>{`${plainCount}`}</S.BoldText>
           <Pressable onPress={() => setPlainCount(plainCount + 1)}>
             <Box style={{ backgroundColor: C.red, borderRadius: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
               <Text style={{ fontSize: 9, color: '#000', fontWeight: 'bold' }}>{'+ Increment'}</Text>
@@ -207,12 +207,12 @@ function HotStateDemo() {
           </Pressable>
           <Text style={{ fontSize: 7, color: C.red }}>{'Resets on reload'}</Text>
         </Box>
-      </Box>
+      </S.RowG12>
 
       <S.StoryTiny>
         {'Increment both, then press F5 to hot reload. The left counter survives. The right resets to 0.'}
       </S.StoryTiny>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -249,7 +249,7 @@ function WireframePreview() {
           {/* Header */}
           <Box style={{ height: 8, borderWidth: 1, borderColor: C.wfDepth1 }} />
           {/* Body row */}
-          <Box style={{ flexGrow: 1, flexDirection: 'row', gap: 2 }}>
+          <S.RowGrow style={{ gap: 2 }}>
             <Box style={{
               width: '30%',
               borderWidth: 1,
@@ -269,16 +269,16 @@ function WireframePreview() {
             }}>
               <Text style={{ fontSize: 5, color: C.wfSelected, paddingLeft: 2, paddingTop: 1 }}>{'MainContent'}</Text>
             </Box>
-          </Box>
+          </S.RowGrow>
           {/* Footer */}
           <Box style={{ height: 6, borderWidth: 1, borderColor: C.wfDepth1 }} />
         </Box>
       </Box>
-      <Box style={{ flexDirection: 'row', marginTop: 4, gap: 8 }}>
+      <S.RowG8 style={{ marginTop: 4 }}>
         <Text style={{ fontSize: 6, color: C.perfGreen }}>{'Flex'}</Text>
         <Box style={{ flexGrow: 1 }} />
         <Text style={{ fontSize: 6, color: C.dtTabText }}>{'42%'}</Text>
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -308,7 +308,7 @@ function ColorizerPreview() {
         gap: 2,
       }}>
         <Box style={{ height: 8, backgroundColor: C.colorizerHue2, borderWidth: 1, borderColor: C.colorizerBorder2 }} />
-        <Box style={{ flexGrow: 1, flexDirection: 'row', gap: 2 }}>
+        <S.RowGrow style={{ gap: 2 }}>
           <Box style={{
             width: '35%',
             backgroundColor: C.colorizerHue3,
@@ -332,7 +332,7 @@ function ColorizerPreview() {
             <Box style={{ height: 3, backgroundColor: C.colorizerHue2, borderWidth: 1, borderColor: C.colorizerBorder2 }} />
             <Box style={{ height: 3, backgroundColor: C.colorizerHue3, borderWidth: 1, borderColor: C.colorizerBorder3 }} />
           </Box>
-        </Box>
+        </S.RowGrow>
       </Box>
       <Text style={{ fontSize: 6, color: C.dtTabText }}>{'Golden-angle hue rotation — siblings always distinguishable'}</Text>
     </Box>
@@ -355,7 +355,7 @@ function ContextMenuPreview() {
   ];
 
   return (
-    <Box style={{ alignItems: 'center', width: '100%' }}>
+    <S.CenterW100>
       <Box style={{
         width: 170,
         backgroundColor: 'rgba(31, 31, 41, 0.95)',
@@ -402,7 +402,7 @@ function ContextMenuPreview() {
           );
         })}
       </Box>
-    </Box>
+    </S.CenterW100>
   );
 }
 
@@ -421,15 +421,15 @@ const DEV_FEATURES = [
 function FeatureCatalog({ items }: { items: typeof DEV_FEATURES }) {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {items.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 120, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{f.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -442,31 +442,27 @@ export function DevToolsStory() {
     <S.StoryRoot>
 
       {/* Header */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14,
-      }}>
-        <Image src="terminal" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'DevTools'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="terminal" tintColor={C.accent} />
+        <S.StoryTitle>{'DevTools'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'built-in'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'the only way I could get some of you to look'}</Text>
-      </Box>
+        <S.StoryMuted>{'the only way I could get some of you to look'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* Content */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* Hero */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'F12 inspector. Hot reload that keeps your state. Layout debugging you can see.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'A Chrome-style devtools panel with six tabs (Elements, Wireframe, Perf, Network, Console, Logs), HMR that preserves useState across reloads, a layout colorizer overlay, GIF recording, headless screenshots, a memory watchdog, and a built-in test runner. Everything runs in Lua \u2014 zero browser dependencies.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -478,12 +474,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.blue}>{'DEVTOOLS PANEL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'F12 opens a Chrome-style bottom panel with six tabs. The panel is draggable-resizable, dockable, and can pop out into a separate OS window via Ctrl+Shift+D. Canvas overlays (hover highlight, selected outline, perf bar) always render on the main canvas regardless of which tab is active.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'All rendering is Lua-native \u2014 the devtools draw themselves using Love2D primitives, not React components. This means they work even when the React tree is broken.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -496,12 +492,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="grid" accentColor={C.green}>{'WIREFRAME TAB'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'A scaled minimap of the entire instance tree. Every node is an outlined rectangle, colored by depth. Nodes with high render counts glow warm. Click a flex container to see the flex pressure overlay \u2014 basis bars, grow/shrink deltas, and free space distribution.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Selected nodes get a bright fill + label. The Flex toggle (bottom-left pill) enables the pressure overlay. Scale percentage shown bottom-right.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -509,10 +505,10 @@ export function DevToolsStory() {
 
         {/* Callout: Lua-native */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'The devtools panel, layout colorizer, context menu, and all overlays are rendered entirely in Lua. They work even when the JS bridge is dead, the React tree is empty, or the app is in crash recovery mode.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -524,12 +520,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="zap" accentColor={C.green}>{'HOT MODULE REPLACEMENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Save a file and the app reloads in place. The Lua process never restarts \u2014 only the QuickJS JS context is destroyed and recreated. esbuild watches for changes, Lua polls the bundle mtime, and the reload path injects all hotstate atoms into the new context before evaluation.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Lua modules get their own HMR: when .lua files change on disk, the reload path re-requires core modules (measure, layout, painter, events, tree, textinput, codeblock, devtools). A bad module is caught by pcall and retried on the next reload.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -542,12 +538,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="database" accentColor={C.yellow}>{'useHotState'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Drop-in replacement for useState. State lives in a Lua memory table that persists across hot reloads. On HMR, the reload path injects all atoms as globalThis.__hotstateCache before the new bundle evaluates. Hooks read from the cache synchronously on first render \u2014 zero flash, zero async delay.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Unlike useLocalStore (SQLite-backed, survives app restarts), useHotState lives purely in memory. It survives HMR but NOT app restarts. Use it for ephemeral UI state: sidebar open, scroll position, selected tab.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={8} code={HOT_STATE_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -561,12 +557,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="shield" accentColor={C.yellow}>{'AUTO STATE PRESERVATION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'When enabled, React.useState is monkey-patched so every call automatically syncs to Lua hotstate atoms. Keys are auto-generated from component name + hook call index. Toggle it in DevTools > Logs > HMR Settings.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The patched useState calls exactly one hook (the original). No useRef, no useEffect \u2014 adding hooks would change the hook count and break React. Lua sync happens via microtask. Opt out per-call with useState.volatile().'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -579,12 +575,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="eye" accentColor={C.peach}>{'LAYOUT COLORIZER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Ctrl+Shift+L (or right-click > Layout Colors) paints every node with a semi-transparent color overlay. Each depth level gets a different hue via golden-angle rotation (\u22480.618 x 360\u00b0), so siblings are always visually distinguishable. Instantly reveals flex boundaries, overflow, and sizing issues.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'12% alpha fill + 50% alpha border. Walks the full instance tree recursively. Toggle is persistent across frames.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -594,12 +590,12 @@ export function DevToolsStory() {
         <Band>
           <Half>
             <SectionLabel icon="menu" accentColor={C.mauve}>{'CONTEXT MENU'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Right-click anywhere to get a context-aware menu. Built-in items include Inspect (opens Elements tab on the clicked node), Copy (when text is selected), Refresh, Screenshot, Theme Menu, and Layout Colors. Custom items come from ContextMenu React ancestors.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Lua-owned singleton. Keyboard navigation (arrow keys, Enter, Escape). Hover highlight. Viewport clamping. All interaction state lives in Lua \u2014 JS only receives boundary events.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <ContextMenuPreview />
@@ -615,12 +611,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="video" accentColor={C.red}>{'GIF RECORDER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useGifRecorder captures frames from the Love2D framebuffer at a configurable FPS, saves them as numbered PNGs, then shells out to ffmpeg for two-pass palette generation. Returns recording state, frame count, and the output path.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Requires ffmpeg on PATH. Frames are stored in Love2D\'s save directory and cleaned up after assembly. Polls status at 500ms intervals while recording.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -630,9 +626,9 @@ export function DevToolsStory() {
         <Band>
           <Half>
             <SectionLabel icon="camera" accentColor={C.teal}>{'HEADLESS SCREENSHOT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'rjit screenshot captures the app without a visible window. Waits 3 frames for tree mutations, layout pass, and paint to settle, then captures the framebuffer as PNG and exits. Used by CI pipelines and the lint workflow to visually verify layouts.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="bash" fontSize={9} code={SCREENSHOT_CODE} style={{ width: '100%' }} />
@@ -648,12 +644,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="filter" accentColor={C.teal}>{'DEBUG LOG CHANNELS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'10 named channels (layout, tree, events, paint, bridge, recon, dispatch, focus, animate, capsync), each with its own color. All off by default. Toggle at runtime via the Logs tab (pill switches) or the console (:log command). Enable at startup via REACTJIT_DEBUG env var.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Output goes to both terminal (stdout) and the Console tab. Frame-numbered for correlation: [F:142 layout] layoutNode id=7 type=View avail=800x600.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -663,9 +659,9 @@ export function DevToolsStory() {
         <Band>
           <Half>
             <SectionLabel icon="activity" accentColor={C.peach}>{'EVENT TRAIL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'A 60-entry ring buffer of semantic events for crash diagnostics. Records clicks (with component ancestry), keypresses (with modifier keys), and focus changes. Mutes noisy events (mousemoved, mousedragged). On crash, the trail freezes and is displayed in the BSOD and crash reporter.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="lua" fontSize={8} code={EVENT_TRAIL_CODE} style={{ width: '100%' }} />
@@ -681,12 +677,12 @@ export function DevToolsStory() {
           </Half>
           <Half>
             <SectionLabel icon="shield" accentColor={C.red}>{'MEMORY WATCHDOG'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'An external bash process monitors /proc/PID/statm for sustained RSS growth. Three consecutive spikes above the threshold (default 50MB per 100ms sample) trigger a three-strike escalation: warning, panic snapshot (20ms sampling + /proc diagnostics + Lua subsystem dump), kill + crash reporter spawn.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Also detects frozen processes via heartbeat: Lua writes os.time() to a tmp file every ~1 second. If stale for 5 seconds, the process is frozen and gets killed with a crash report.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -696,12 +692,12 @@ export function DevToolsStory() {
         <Band>
           <Half>
             <SectionLabel icon="check-circle" accentColor={C.green}>{'TEST RUNNER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'rjit test runs specs inside the Love2D process with direct access to the instance tree, layout results, and event system. No browser automation, no ports, no sockets. Selectors use page.find(componentName, props). Actions include click, type, key. Matchers include toBeVisible, toHaveText, toHaveRect.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Each await is one frame. click() and type() add an extra wait for React to re-render. Timing is deterministic \u2014 no flaky async waits.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={8} code={TEST_RUNNER_CODE} style={{ width: '100%' }} />
@@ -711,38 +707,34 @@ export function DevToolsStory() {
         <Divider />
 
         {/* Full-width: keyboard shortcuts catalog */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="command" accentColor={C.accent}>{'KEYBOARD SHORTCUTS'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Every dev shortcut built into the runtime:'}</Text>
+          <S.StoryCap>{'Every dev shortcut built into the runtime:'}</S.StoryCap>
           <FeatureCatalog items={DEV_FEATURES} />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* Callout: hotstate snapshots */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Hotstate atoms can be snapshot to a JSON file (hotstate:snapshot RPC) and preloaded on reload (state_preset.json). This lets Claude \u2014 or any tool \u2014 reproduce exact app states for testing without clicking through the UI.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
       </ScrollView>
 
       {/* Footer */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="terminal" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'DevTools'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="terminal" />
+        <S.StoryBreadcrumbActive>{'DevTools'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

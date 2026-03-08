@@ -63,16 +63,7 @@ function SectionBlock({
 }) {
   const c = useThemeColors();
   return (
-    <Box
-      style={{
-        width: '100%',
-        backgroundColor: c.bgElevated,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: c.border,
-        overflow: 'hidden',
-      }}
-    >
+    <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 10, overflow: 'hidden' }}>
       <Box
         style={{
           borderBottomWidth: 1,
@@ -98,38 +89,20 @@ function SectionBlock({
       >
         {children}
       </Box>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function ReachColumn({ title, subtitle, color, rows }: ReachColumnProps) {
   const c = useThemeColors();
   return (
-    <Box
-      style={{
-        flexGrow: 1,
-        borderWidth: 1,
-        borderColor: c.border,
-        borderRadius: 8,
-        overflow: 'hidden',
-        backgroundColor: c.surface,
-      }}
-    >
-      <Box
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: c.border,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 6,
-          paddingBottom: 6,
-        }}
-      >
+    <S.Bordered style={{ flexGrow: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: c.surface }}>
+      <S.PadV6 style={{ borderBottomWidth: 1, borderBottomColor: c.border, paddingLeft: 8, paddingRight: 8 }}>
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
         <S.StoryMuted>{subtitle}</S.StoryMuted>
-      </Box>
+      </S.PadV6>
       <ScrollView style={{ flexGrow: 1 }}>
-        <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
+        <S.PadV6 style={{ paddingLeft: 6, paddingRight: 6, gap: 4 }}>
           <ReachTag label="TOP REACHABLE" color={color} />
           {rows.map((line, i) => (
             <Box
@@ -148,41 +121,22 @@ function ReachColumn({ title, subtitle, color, rows }: ReachColumnProps) {
             </Box>
           ))}
           <ReachTag label="BOTTOM REACHABLE" color={color} />
-        </Box>
+        </S.PadV6>
       </ScrollView>
-    </Box>
+    </S.Bordered>
   );
 }
 
 function WideLane({ title, color, packets }: WideLaneProps) {
   const c = useThemeColors();
   return (
-    <Box
-      style={{
-        width: 280,
-        height: '100%',
-        backgroundColor: c.surface,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: c.border,
-        overflow: 'hidden',
-      }}
-    >
-      <Box
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: c.border,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 6,
-          paddingBottom: 6,
-        }}
-      >
+    <S.Bordered style={{ width: 280, height: '100%', backgroundColor: c.surface, borderRadius: 8, overflow: 'hidden' }}>
+      <S.PadV6 style={{ borderBottomWidth: 1, borderBottomColor: c.border, paddingLeft: 8, paddingRight: 8 }}>
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
         <S.StoryMuted>Vertical and horizontal pressure in one lane</S.StoryMuted>
-      </Box>
+      </S.PadV6>
       <ScrollView style={{ flexGrow: 1 }}>
-        <Box style={{ gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}>
+        <S.PadV6 style={{ gap: 4, paddingLeft: 6, paddingRight: 6 }}>
           <ReachTag label="LANE TOP" color={color} />
           {packets.map((packet, i) => (
             <Box
@@ -208,9 +162,9 @@ function WideLane({ title, color, packets }: WideLaneProps) {
             </Box>
           ))}
           <ReachTag label="LANE BOTTOM" color={color} />
-        </Box>
+        </S.PadV6>
       </ScrollView>
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -225,44 +179,16 @@ function ClipProbePanel({
 }) {
   const c = useThemeColors();
   return (
-    <Box
-      style={{
-        flexGrow: 1,
-        borderWidth: 1,
-        borderColor: c.border,
-        borderRadius: 8,
-        overflow: 'hidden',
-        backgroundColor: c.surface,
-      }}
-    >
-      <Box
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: c.border,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 6,
-          paddingBottom: 6,
-        }}
-      >
+    <S.Bordered style={{ flexGrow: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: c.surface }}>
+      <S.PadV6 style={{ borderBottomWidth: 1, borderBottomColor: c.border, paddingLeft: 8, paddingRight: 8 }}>
         <Text style={{ fontSize: 12, color, fontWeight: 'normal' }}>{title}</Text>
         <S.StoryMuted>Rounded clipping with nested scroll and long labels</S.StoryMuted>
-      </Box>
+      </S.PadV6>
       <ScrollView style={{ flexGrow: 1 }}>
-        <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 6 }}>
+        <S.PadV6 style={{ paddingLeft: 6, paddingRight: 6, gap: 6 }}>
           <ReachTag label="CLIP TOP" color={color} />
           {rows.map((row, i) => (
-            <Box
-              key={`${title}-clip-${i}`}
-              style={{
-                height: 56,
-                borderRadius: 6,
-                overflow: 'hidden',
-                borderWidth: 1,
-                borderColor: c.border,
-                backgroundColor: c.bgElevated,
-              }}
-            >
+            <S.Bordered key={`${title}-clip-${i}`} style={{ height: 56, borderRadius: 6, overflow: 'hidden', backgroundColor: c.bgElevated }}>
               <Box
                 style={{
                   height: 4,
@@ -286,12 +212,12 @@ function ClipProbePanel({
                   </Box>
                 </ScrollView>
               </Box>
-            </Box>
+            </S.Bordered>
           ))}
           <ReachTag label="CLIP BOTTOM" color={color} />
-        </Box>
+        </S.PadV6>
       </ScrollView>
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -313,49 +239,27 @@ export function OverflowStressStory() {
   return (
     <S.StoryRoot>
       <ScrollView style={{ width: '100%', height: '100%' }}>
-        <Box
-          style={{
-            width: '100%',
-            gap: 10,
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 12,
-            paddingBottom: 24,
-          }}
-        >
-          <Box
-            style={{
-              width: '100%',
-              backgroundColor: c.bgElevated,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: c.border,
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 8,
-              paddingBottom: 8,
-              gap: 2,
-            }}
-          >
+        <S.StackG10W100 style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 12, paddingBottom: 24 }}>
+          <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 10, paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, gap: 2 }}>
             <Text style={{ fontSize: 14, color: c.text, fontWeight: 'normal' }}>Overflow Stress Harness</Text>
-            <Text style={{ fontSize: 11, color: c.textDim }}>
+            <S.DimBody11>
               This scenario is heavy on purpose. Every panel includes top and bottom reachable markers.
-            </Text>
-            <Text style={{ fontSize: 11, color: c.textDim }}>
+            </S.DimBody11>
+            <S.DimBody11>
               If any marker cannot be brought into view, overflow behavior has regressed.
-            </Text>
-          </Box>
+            </S.DimBody11>
+          </S.Bordered>
 
           <SectionBlock
             title="1) Vertical reachability under heavy row pressure"
             subtitle="Three independent columns with dense content and wrapped text"
             height={280}
           >
-            <Box style={{ width: '100%', height: '100%', flexDirection: 'row', gap: 8 }}>
+            <S.RowG8 style={{ width: '100%', height: '100%' }}>
               <ReachColumn title="Event Feed" subtitle={`${feedRows.length} rows`} color={c.primary} rows={feedRows} />
               <ReachColumn title="Task Queue" subtitle={`${taskRows.length} rows`} color={c.success} rows={taskRows} />
               <ReachColumn title="Metrics" subtitle={`${metricRows.length} rows`} color={c.warning} rows={metricRows} />
-            </Box>
+            </S.RowG8>
           </SectionBlock>
 
           <SectionBlock
@@ -364,12 +268,12 @@ export function OverflowStressStory() {
             height={300}
           >
             <ScrollView horizontal style={{ width: '100%', height: '100%' }}>
-              <Box style={{ flexDirection: 'row', gap: 8, height: '100%', paddingRight: 12 }}>
+              <S.RowG8 style={{ height: '100%', paddingRight: 12 }}>
                 <WideLane title="Primary Lane" color={c.primary} packets={primaryPackets} />
                 <WideLane title="Warning Lane" color={c.warning} packets={warningPackets} />
                 <WideLane title="Error Lane" color={c.error} packets={errorPackets} />
                 <WideLane title="Accent Lane" color={c.accent} packets={accentPackets} />
-              </Box>
+              </S.RowG8>
             </ScrollView>
           </SectionBlock>
 
@@ -378,12 +282,12 @@ export function OverflowStressStory() {
             subtitle="Clip boundaries should stay correct while inner content remains scroll-reachable"
             height={280}
           >
-            <Box style={{ width: '100%', height: '100%', flexDirection: 'row', gap: 8 }}>
+            <S.RowG8 style={{ width: '100%', height: '100%' }}>
               <ClipProbePanel title="Clip Probe A" color={c.accent} rows={clipRowsA} />
               <ClipProbePanel title="Clip Probe B" color={c.error} rows={clipRowsB} />
-            </Box>
+            </S.RowG8>
           </SectionBlock>
-        </Box>
+        </S.StackG10W100>
       </ScrollView>
     </S.StoryRoot>
   );

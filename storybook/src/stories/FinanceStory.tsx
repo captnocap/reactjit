@@ -322,19 +322,19 @@ function CandlestickDemo() {
   }, [ta.sma20, ta.sma50, ta.bollinger, showBB]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <TickerTape items={ticker} style={{ borderRadius: 4 }} />
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
+      <S.RowCenterG8>
+        <S.BoldText style={{ fontSize: 14 }}>{formatPrice(last.close)}</S.BoldText>
         <Text style={{ fontSize: 11, color: up ? C.green : C.red }}>{formatPercent((delta / (prev.close || 1)) * 100)}</Text>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <S.RowCenterG4>
           <S.StoryCap>BB</S.StoryCap>
           <Switch value={showBB} onValueChange={setShowBB} />
-        </Box>
-      </Box>
+        </S.RowCenterG4>
+      </S.RowCenterG8>
       <IndicatorLegend items={legendItems} />
       <CandlestickChart data={candleData} overlays={overlays} height={200} bullColor="#22c55e" bearColor="#ef4444" />
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -350,13 +350,13 @@ function DepthChartDemo() {
   const book = useMemo(() => makeBook(last.close, Math.floor(last.time * 7)), [last.close, last.time]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
+    <S.StackG6W100>
+      <S.RowCenterG8>
+        <S.BoldText style={{ fontSize: 11 }}>{formatPrice(last.close)}</S.BoldText>
         <S.StoryCap>Cumulative depth visualization</S.StoryCap>
-      </Box>
+      </S.RowCenterG8>
       <DepthChart bids={book.bids} asks={book.asks} height={140} />
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -378,7 +378,7 @@ function SecurePortfolioDemo() {
 
   if (locked) {
     return (
-      <Box style={{ gap: 8, width: '100%', alignItems: 'center', paddingTop: 10 }}>
+      <S.CenterW100 style={{ gap: 8, paddingTop: 10 }}>
         <Text style={{ color: C.red, fontSize: 12 }}>Portfolio Locked</Text>
         <Pressable onPress={() => unlock('demo123')}>
           {({ pressed }) => (
@@ -387,14 +387,14 @@ function SecurePortfolioDemo() {
             </Box>
           )}
         </Pressable>
-      </Box>
+      </S.CenterW100>
     );
   }
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>{formatCurrency(snapshot.totalValue)}</Text>
+    <S.StackG6W100>
+      <S.RowCenter style={{ justifyContent: 'space-between' }}>
+        <S.BoldText style={{ fontSize: 11 }}>{formatCurrency(snapshot.totalValue)}</S.BoldText>
         <Pressable onPress={lock}>
           {({ pressed }) => (
             <Box style={{ backgroundColor: pressed ? C.red : 'rgba(239,68,68,0.12)', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 3 }}>
@@ -402,12 +402,12 @@ function SecurePortfolioDemo() {
             </Box>
           )}
         </Pressable>
-      </Box>
+      </S.RowCenter>
       <Text style={{ color: snapshot.pnl >= 0 ? C.green : C.red, fontSize: 10 }}>
         {`P&L: ${formatCurrency(snapshot.pnl)} (${formatPercent(snapshot.pnlPercent)})`}
       </Text>
       <S.StoryCap>{`${holdings.length} holdings, encrypted at rest`}</S.StoryCap>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -430,7 +430,7 @@ function RSIMACDDemo() {
   const bbLast = bbValid[bbValid.length - 1];
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <RSIGauge value={rsiValue} />
 
       <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 4 }}>
@@ -441,39 +441,39 @@ function RSIMACDDemo() {
       {stochLast && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
           <S.StoryMuted>Stochastic (14, 3)</S.StoryMuted>
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+          <S.RowG12>
+            <S.RowG4>
               <S.StoryMuted>%K</S.StoryMuted>
               <Text style={{ color: stochLast.k >= 80 ? C.red : stochLast.k <= 20 ? C.green : c.text, fontSize: 10, fontWeight: 'bold' }}>{stochLast.k.toFixed(1)}</Text>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+            </S.RowG4>
+            <S.RowG4>
               <S.StoryMuted>%D</S.StoryMuted>
               <S.StoryMuted>{stochLast.d.toFixed(1)}</S.StoryMuted>
-            </Box>
-          </Box>
+            </S.RowG4>
+          </S.RowG12>
         </Box>
       )}
 
       {bbLast && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
           <S.StoryMuted>Bollinger Bands (20, 2)</S.StoryMuted>
-          <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+          <S.RowWrap style={{ gap: 12 }}>
+            <S.RowG4>
               <Text style={{ color: C.purple, fontSize: 10 }}>Upper</Text>
               <S.StoryBody>{bbLast.upper.toFixed(2)}</S.StoryBody>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+            </S.RowG4>
+            <S.RowG4>
               <Text style={{ color: C.accent, fontSize: 10 }}>Mid</Text>
               <S.StoryBody>{bbLast.middle.toFixed(2)}</S.StoryBody>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+            </S.RowG4>
+            <S.RowG4>
               <Text style={{ color: C.purple, fontSize: 10 }}>Lower</Text>
               <S.StoryBody>{bbLast.lower.toFixed(2)}</S.StoryBody>
-            </Box>
-          </Box>
+            </S.RowG4>
+          </S.RowWrap>
         </Box>
       )}
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -499,13 +499,13 @@ function PortfolioDemo() {
   [snapshot.allocation]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <PortfolioCard snapshot={snapshot} />
       <Box style={{ gap: 2 }}>
         <S.StoryMuted>Allocation</S.StoryMuted>
         <BarChart data={allocationBars} height={50} gap={4} showLabels interactive={false} />
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -522,13 +522,13 @@ function OrderBookDemo() {
   const spread = book.asks[0] ? spreadBps(book.bids[0]?.price ?? 0, book.asks[0].price) : 0;
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{formatPrice(last.close)}</Text>
+    <S.StackG6W100>
+      <S.RowCenterG8>
+        <S.BoldText style={{ fontSize: 11 }}>{formatPrice(last.close)}</S.BoldText>
         <S.StoryCap>{`Spread: ${formatBps(spread)}`}</S.StoryCap>
-      </Box>
+      </S.RowCenterG8>
       <OrderBookPanel bids={book.bids} asks={book.asks} depth={8} />
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -544,7 +544,7 @@ function PatternDemo() {
   const patterns = useMemo(() => ta.patterns.slice(-8), [ta.patterns]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       <S.StoryCap>{`Scanning ${candles.length} candles...`}</S.StoryCap>
 
       {patterns.length === 0 ? (
@@ -552,12 +552,12 @@ function PatternDemo() {
       ) : (
         <Box style={{ gap: 3 }}>
           {patterns.map((p, i) => (
-            <Box key={`${p.type}-${p.index}-${i}`} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <S.RowCenterG6 key={`${p.type}-${p.index}-${i}`}>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: patternColor(p.type), flexShrink: 0 }} />
-              <Text style={{ color: c.text, fontSize: 10, width: 120 }}>{patternLabel(p.type)}</Text>
+              <S.StoryBody style={{ width: 120 }}>{patternLabel(p.type)}</S.StoryBody>
               <S.StoryCap>{`@${p.index}`}</S.StoryCap>
               <Text style={{ color: C.yellow, fontSize: 9 }}>{`${Math.round(p.confidence * 100)}%`}</Text>
-            </Box>
+            </S.RowCenterG6>
           ))}
         </Box>
       )}
@@ -565,23 +565,23 @@ function PatternDemo() {
       {ta.pivots && (
         <Box style={{ borderTopWidth: 1, borderColor: c.border, paddingTop: 6, gap: 2 }}>
           <S.StoryMuted>Pivot Points</S.StoryMuted>
-          <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+          <S.RowWrap style={{ gap: 12 }}>
+            <S.RowG4>
               <Text style={{ color: C.red, fontSize: 9 }}>R1</Text>
               <S.StoryBreadcrumbActive>{ta.pivots.r1.toFixed(2)}</S.StoryBreadcrumbActive>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+            </S.RowG4>
+            <S.RowG4>
               <Text style={{ color: C.accent, fontSize: 9, fontWeight: 'bold' }}>P</Text>
               <S.StoryBreadcrumbActive>{ta.pivots.pivot.toFixed(2)}</S.StoryBreadcrumbActive>
-            </Box>
-            <Box style={{ flexDirection: 'row', gap: 4 }}>
+            </S.RowG4>
+            <S.RowG4>
               <Text style={{ color: C.green, fontSize: 9 }}>S1</Text>
               <S.StoryBreadcrumbActive>{ta.pivots.s1.toFixed(2)}</S.StoryBreadcrumbActive>
-            </Box>
-          </Box>
+            </S.RowG4>
+          </S.RowWrap>
         </Box>
       )}
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -603,14 +603,14 @@ function FormatDemo() {
   ];
 
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {examples.map(e => (
-        <Box key={e.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Text style={{ fontSize: 9, color: c.muted, width: 180 }}>{e.label}</Text>
+        <S.RowCenterG8 key={e.label}>
+          <S.StoryCap style={{ width: 180 }}>{e.label}</S.StoryCap>
           <Text style={{ fontSize: 10, color: e.color, fontWeight: 'bold' }}>{e.result}</Text>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -619,15 +619,15 @@ function FormatDemo() {
 function IndicatorCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {INDICATORS.map(ind => (
-        <Box key={ind.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={ind.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: ind.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 80, flexShrink: 0 }}>{ind.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 80, flexShrink: 0 }}>{ind.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{ind.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -640,23 +640,11 @@ export function FinanceStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="trending-up" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="trending-up" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Finance'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -668,10 +656,10 @@ export function FinanceStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/finance'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Technical analysis + portfolio management'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -686,12 +674,12 @@ export function FinanceStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Wall Street in one import.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'13 technical indicators, candlestick pattern detection, portfolio P&L, order book visualization, and price formatting. Runtime computation paths are Lua-owned for low-latency updates. useTechnicalAnalysis() computes from OHLCV candles and usePortfolio() tracks holdings with live price updates.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -700,9 +688,9 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three hooks, 13 indicator functions, 7 display components, 7 formatters. Everything re-exports from a single entry point.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ width: '100%' }} />
@@ -718,12 +706,12 @@ export function FinanceStory() {
           </Half>
           <Half>
             <SectionLabel icon="bar-chart-2" accentColor={C.accent}>{'CANDLESTICK CHART'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Live synthetic OHLCV data streaming at 1.1s intervals. useSyntheticCandles() generates realistic price action with configurable volatility. useTechnicalAnalysis() recomputes all indicators in the Lua runtime on every new candle.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'TickerTape scrolls market data. CandlestickChart renders bull/bear candles with configurable colors. IndicatorLegend shows overlay values.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={TA_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -734,12 +722,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="activity" accentColor={C.accent}>{'OSCILLATORS & BANDS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'RSI gauge with overbought/oversold zones. MACD histogram with signal crossovers. Stochastic %K/%D oscillator. Bollinger Bands with upper/middle/lower channels. All update live as new candles arrive.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'RSIGauge and MACDPanel are ready-made components — pass the indicator values and they handle the visualization. Or use the raw indicator arrays for custom rendering.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={INDICATORS_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -762,10 +750,10 @@ export function FinanceStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All indicator functions are pure — no state, no side effects, no network calls. Pass in numbers, get numbers back. NaN for warmup periods. The React hooks are thin Lua-RPC wrappers.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
@@ -777,12 +765,12 @@ export function FinanceStory() {
           </Half>
           <Half>
             <SectionLabel icon="briefcase" accentColor={C.accent}>{'PORTFOLIO TRACKING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'usePortfolio() manages holdings with live P&L through Lua-owned mutation logic. Prices jitter every 2.3s in this demo. PortfolioCard shows total value, P&L, and per-holding breakdown. BarChart renders allocation weights.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Pure functions available: portfolioSnapshot, holdingPnL, sharpeRatio, maxDrawdown, equityToReturns. Use them outside React if you prefer.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={PORTFOLIO_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -793,12 +781,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'ORDER BOOK'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'OrderBookPanel renders bid/ask depth with horizontal size bars. Bids sorted descending, asks ascending. Spread displayed in basis points. Pass depth prop to control visible levels.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The spread calculation uses spreadBps() — a pure function that returns basis points from bid and ask prices.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <OrderBookDemo />
@@ -814,12 +802,12 @@ export function FinanceStory() {
           </Half>
           <Half>
             <SectionLabel icon="search" accentColor={C.accent}>{'PATTERN DETECTION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'detectPatterns() scans OHLCV candles for 9 candlestick patterns: doji, hammer, shooting star, bullish/bearish engulfing, double top/bottom, higher high, lower low. Each signal includes an index and confidence score (0-1).'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'pivotPoints() computes classic S1-S3 / R1-R3 support and resistance levels from the last candle.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={PATTERN_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -830,9 +818,9 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="type" accentColor={C.accent}>{'FORMATTING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Seven formatting functions for currencies, percentages, compact numbers, adaptive price decimals, volume, and basis points. All pure, all synchronous.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={FORMAT_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -846,12 +834,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="list" accentColor={C.accent}>{'INDICATOR CATALOG'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'13 indicators computed in a single useTechnicalAnalysis() call. All functions are also available standalone — import sma, ema, rsi, etc. directly for use outside React.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Every indicator returns arrays aligned to the input index. NaN values mark the warmup period before enough data points exist.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <IndicatorCatalog />
@@ -864,12 +852,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="layout" accentColor={C.accent}>{'DISPLAY COMPONENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Seven ready-made components for financial data. TickerTape for market scrollers. PortfolioCard + HoldingRow for portfolio views. OrderBookPanel for depth. RSIGauge + MACDPanel for oscillators. IndicatorLegend for chart overlays.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'All components use useThemeColors() — they adapt to your theme automatically.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={COMPONENTS_CODE} style={{ width: '100%' }} />
@@ -885,12 +873,12 @@ export function FinanceStory() {
           </Half>
           <Half>
             <SectionLabel icon="calculator" accentColor={C.accent}>{'PORTFOLIO MATH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Pure functions for portfolio analytics. portfolioSnapshot computes total value, P&L, and allocation weights. holdingPnL for per-position P&L. sharpeRatio and maxDrawdown for risk metrics. equityToReturns converts an equity curve to period returns.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'These are standalone functions — use them with or without React. The usePortfolio hook now routes state mutations and snapshot computation through Lua RPC handlers.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -900,12 +888,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers" accentColor={C.purple}>{'CHART OVERLAYS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Indicator lines rendered natively in Lua on top of candlestick charts. SMA, EMA as solid/dashed lines. Bollinger Bands as a filled region between upper and lower channels. All overlays share the candlestick price axis — no separate chart needed.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Toggle the BB switch above to see Bollinger Bands appear as a translucent band overlay. Each overlay supports: color, lineWidth, opacity, style (solid/dashed), and band mode (upper/lower/fillColor).'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={OVERLAY_CODE} style={{ width: '100%' }} />
@@ -918,12 +906,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="bar-chart-2" accentColor={C.teal}>{'DEPTH CHART'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Cumulative bid/ask depth chart rendered natively in Lua. Bids accumulate right-to-left (green), asks left-to-right (red). The midpoint line marks the current spread. Fully GPU-accelerated area fills.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Pass the same bid/ask arrays you use for OrderBookPanel. The chart auto-ranges to fit all price levels and normalizes cumulative volume.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={DEPTH_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -940,12 +928,12 @@ export function FinanceStory() {
           </Half>
           <Half>
             <SectionLabel icon="lock" accentColor={C.orange}>{'ENCRYPTED STORAGE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useSecurePortfolio() persists holdings to SQLite, encrypted at rest. Lock/unlock with a password. Plug in @reactjit/crypto\'s encrypt/decrypt for real cryptographic security, or use the built-in obfuscation for local dev.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Holdings are encrypted before write and decrypted on read. Price updates stay in memory (no disk I/O per tick). Only structural changes (add/remove holdings) trigger persistence.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={SECURE_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -956,12 +944,12 @@ export function FinanceStory() {
         <Band>
           <Half>
             <SectionLabel icon="wifi" accentColor={C.green}>{'LIVE PRICE FEEDS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'usePriceFeed() aggregates CoinGecko REST polling with Binance WebSocket streams into a unified reactive price map. 50+ crypto symbols mapped automatically. useOHLCVHistory() fetches candlestick history from CoinGecko.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Polling runs on Lua-side timers (useLuaInterval). WebSocket reconnects automatically. Manual pushPrice() for custom data sources. All quotes include: price, 24h change, volume, high, low, timestamp, and source tag.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={FEED_CODE} style={{ width: '100%' }} />
@@ -983,36 +971,24 @@ export function FinanceStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Full stack: live feeds (CoinGecko + Binance WS) → OHLCV candles → 13 technical indicators → native chart overlays + depth chart → portfolio tracking with encrypted storage. One import, zero configuration.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="trending-up" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Finance'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="trending-up" />
+        <S.StoryBreadcrumbActive>{'Finance'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

@@ -72,13 +72,13 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 function SectionLabel({ label }: { label: string }) {
   const c = useThemeColors();
   return (
-    <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{label}</Text>
+    <S.StoryTiny style={{ fontWeight: 'bold' }}>{label}</S.StoryTiny>
   );
 }
 
@@ -276,7 +276,7 @@ function NavPanelDemo() {
           onSelect={setActivePage}
           header={
             <Box style={{ width: '100%', gap: 2 }}>
-              <Text style={{ color: c.text, fontSize: 11, fontWeight: 'bold' }}>Studio</Text>
+              <S.BoldText style={{ fontSize: 11 }}>Studio</S.BoldText>
               <S.StoryCap>Navigation</S.StoryCap>
             </Box>
           }
@@ -285,9 +285,9 @@ function NavPanelDemo() {
         />
         <Box style={{ flexGrow: 1, minHeight: 200, ...containerStyle, gap: 8, alignItems: 'center', justifyContent: 'center' }} tooltip={styleTooltip(containerStyle)}>
           <Text style={{ color: c.text, fontSize: 13 }}>{PAGE_LABELS[activePage] ?? 'Home'}</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 10, textAlign: 'center' }}>
+          <S.SecondaryBody style={{ textAlign: 'center' }}>
             Select a route from the sidebar.
-          </Text>
+          </S.SecondaryBody>
         </Box>
       </Box>
     </Box>
@@ -309,9 +309,9 @@ function TabsDemo() {
           variant="pill"
           style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}
         />
-        <Text style={{ color: c.textSecondary, fontSize: 10 }}>
+        <S.SecondaryBody>
           {TAB_DESCRIPTIONS[activeTab] ?? TAB_DESCRIPTIONS.overview}
-        </Text>
+        </S.SecondaryBody>
       </Box>
     </Box>
   );
@@ -335,7 +335,7 @@ function BreadcrumbsDemo() {
           onSelect={(id) => { if (BREADCRUMB_MAP[id]) setActivePage(id); }}
           style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}
         />
-        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        <S.RowG6 style={{ flexWrap: 'wrap' }}>
           {Object.entries(PAGE_LABELS).map(([id, label]) => (
             <Pressable
               key={id}
@@ -354,7 +354,7 @@ function BreadcrumbsDemo() {
               <Text style={{ color: activePage === id ? c.text : c.textSecondary, fontSize: 9 }}>{label}</Text>
             </Pressable>
           ))}
-        </Box>
+        </S.RowG6>
       </Box>
     </Box>
   );
@@ -387,10 +387,10 @@ function SearchBarDemo() {
         color={c.text}
         borderColor={c.border}
       />
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
+      <S.RowG12>
         <Text style={{ color: c.textSecondary, fontSize: 11 }}>{`query: "${barQuery}"`}</Text>
         {barSubmit ? <Text style={{ color: c.success, fontSize: 11 }}>{`submitted: "${barSubmit}"`}</Text> : null}
-      </Box>
+      </S.RowG12>
     </Box>
   );
 }
@@ -528,7 +528,7 @@ function CommandPaletteDemo() {
           backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
         })}
       >
-        <Text style={{ color: '#fff', fontSize: 12 }}>Open Command Palette</Text>
+        <S.WhiteMedText>Open Command Palette</S.WhiteMedText>
       </Pressable>
       {lastCmd ? <Text style={{ color: c.success, fontSize: 11 }}>{`Last command: ${lastCmd}`}</Text> : null}
       <CommandPalette
@@ -553,13 +553,13 @@ function HighlightedText({ text, query, color, matchColor }: {
 }) {
   const parts = useSearchHighlight(text, query);
   return (
-    <Box style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+    <S.RowWrap>
       {parts.map((p, i) => (
         <Text key={i} style={{ fontSize: 11, color: p.match ? matchColor : color, fontWeight: p.match ? 'bold' : 'normal' }}>
           {p.text}
         </Text>
       ))}
-    </Box>
+    </S.RowWrap>
   );
 }
 
@@ -590,10 +590,10 @@ function FuzzySearchDemo() {
             onPointerLeave={() => setFuzzyOpen(false)}
           >
             {fuzzyResults.length === 0 ? (
-              <Text style={{ color: c.textDim, fontSize: 11 }}>No fuzzy matches</Text>
+              <S.DimBody11>No fuzzy matches</S.DimBody11>
             ) : (
               <ScrollView style={{ width: '100%', height: Math.min(200, fuzzyResults.length * 36 + 8) }}>
-                <Box style={{ width: '100%', gap: 3 }}>
+                <S.StackG3W100>
                   {fuzzyResults.map(({ item, score }) => {
                     const rowStyle = { backgroundColor: c.surface, borderRadius: 6, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5 };
                     return (
@@ -606,7 +606,7 @@ function FuzzySearchDemo() {
                       </Box>
                     );
                   })}
-                </Box>
+                </S.StackG3W100>
               </ScrollView>
             )}
           </Box>
@@ -623,9 +623,9 @@ function SearchSchemaDemo() {
   const explicitSchema = useSearchSchema(OPAQUE_DATA, EXPLICIT_SCHEMA_OPTIONS);
   const allFields = detectSearchableFields(OPAQUE_DATA);
   return (
-    <Box style={{ width: '100%', gap: 10 }}>
+    <S.StackG10W100>
       <S.StoryMuted>useSearchSchema — auto-detects searchable fields, shows them to the user:</S.StoryMuted>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+      <S.RowWrap style={{ gap: 4 }}>
         {allFields.map(String).map((f) => {
           const chipStyle = { backgroundColor: c.bgElevated, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderWidth: 1, borderColor: c.border };
           return (
@@ -634,7 +634,7 @@ function SearchSchemaDemo() {
             </Box>
           );
         })}
-      </Box>
+      </S.RowWrap>
       <SearchCombo
         items={OPAQUE_DATA.map((u) => ({ id: u.id, label: u.name, description: `${u.role} · ${u.department}`, meta: String(u.joined), data: u }))}
         onSelect={(item) => setSelected((item.data as any).name)}
@@ -650,7 +650,7 @@ function SearchSchemaDemo() {
         borderColor={c.border}
       />
       {selected ? <Text style={{ color: c.success, fontSize: 11 }}>{`Selected: ${selected}`}</Text> : null}
-      <Box style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
+      <S.RowG8 style={{ width: '100%' }}>
         <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 8, padding: 8, gap: 4 }}>
           <S.StoryCap>No key (auto)</S.StoryCap>
           <SearchSchemaHint schema={autoSchema} color={c.textDim} fieldColor={c.text} />
@@ -659,8 +659,8 @@ function SearchSchemaDemo() {
           <S.StoryCap>key="name"</S.StoryCap>
           <SearchSchemaHint schema={explicitSchema} color={c.textDim} fieldColor={c.text} />
         </Box>
-      </Box>
-    </Box>
+      </S.RowG8>
+    </S.StackG10W100>
   );
 }
 
@@ -684,31 +684,27 @@ function SearchHistoryDemo() {
           borderColor={c.border}
         />
         {historyOpen && history.length > 0 && historyQuery.trim().length > 0 ? (
-          <Box
-            style={{ width: '100%', position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 40, gap: 4, backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 }}
-            onPointerEnter={() => setHistoryOpen(true)}
-            onPointerLeave={() => setHistoryOpen(false)}
-          >
-            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+          <S.Bordered style={{ width: '100%', position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 40, gap: 4, backgroundColor: c.bgElevated, borderRadius: 8, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 }} onPointerEnter={() => setHistoryOpen(true)} onPointerLeave={() => setHistoryOpen(false)}>
+            <S.RowSpaceBetween style={{ width: '100%' }}>
               <S.StoryMuted>Recent searches</S.StoryMuted>
               <Pressable onPress={clearHistory}>
                 <Text style={{ color: c.error, fontSize: 10 }}>Clear all</Text>
               </Pressable>
-            </Box>
+            </S.RowSpaceBetween>
             <ScrollView style={{ width: '100%', height: Math.min(160, history.length * 32 + 8) }}>
-              <Box style={{ width: '100%', gap: 3 }}>
+              <S.StackG3W100>
                 {history.map((h) => (
-                  <Box key={h} style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 6, backgroundColor: c.surface }}>
-                    <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary, marginRight: 8 }} />
+                  <S.RowCenter key={h} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 6, backgroundColor: c.surface }}>
+                    <S.Dot6 style={{ width: 6, backgroundColor: c.primary, marginRight: 8 }} />
                     <Text style={{ color: c.text, fontSize: 11, flexGrow: 1 }}>{h}</Text>
-                  </Box>
+                  </S.RowCenter>
                 ))}
-              </Box>
+              </S.StackG3W100>
             </ScrollView>
-          </Box>
+          </S.Bordered>
         ) : null}
       </Box>
-      {history.length === 0 ? <Text style={{ color: c.textDim, fontSize: 11 }}>No history yet. Submit a search above.</Text> : null}
+      {history.length === 0 ? <S.DimBody11>No history yet. Submit a search above.</S.DimBody11> : null}
     </Box>
   );
 }
@@ -726,12 +722,12 @@ function AppSearchSection() {
   return (
     <Searchable id="nav-story-app-search" style={{ width: '100%', gap: 10 }}>
       <S.StoryMuted>AppSearch — hot (live tree) + cold (compile-time) dual-tier:</S.StoryMuted>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <Pressable onPress={() => setOpen(true)} style={btnStyle} tooltip={styleTooltip(btnStyle)}>
-          <Text style={{ color: '#fff', fontSize: 12 }}>Open AppSearch</Text>
+          <S.WhiteMedText>Open AppSearch</S.WhiteMedText>
         </Pressable>
-        <Text style={{ color: c.textDim, fontSize: 11 }}>or ⌘K / Ctrl+K</Text>
-      </Box>
+        <S.DimBody11>or ⌘K / Ctrl+K</S.DimBody11>
+      </S.RowCenterG8>
       <Box style={{ width: '100%', position: 'relative' }}>
         <SearchBar
           onSearch={(q) => { setHotQuery(q); search(q); setHotOpen(q.trim().length > 0); }}
@@ -743,13 +739,9 @@ function AppSearchSection() {
           borderColor={c.border}
         />
         {hotOpen && hotQuery.trim().length > 0 ? (
-          <Box
-            style={{ width: '100%', position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 40, gap: 4, backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 }}
-            onPointerEnter={() => setHotOpen(true)}
-            onPointerLeave={() => setHotOpen(false)}
-          >
+          <S.Bordered style={{ width: '100%', position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 40, gap: 4, backgroundColor: c.bgElevated, borderRadius: 8, paddingLeft: 4, paddingRight: 4, paddingTop: 4, paddingBottom: 4 }} onPointerEnter={() => setHotOpen(true)} onPointerLeave={() => setHotOpen(false)}>
             {loading ? (
-              <Text style={{ color: c.textDim, fontSize: 11 }}>Searching live tree...</Text>
+              <S.DimBody11>Searching live tree...</S.DimBody11>
             ) : results.length > 0 ? (
               <ScrollView style={{ width: '100%', height: Math.min(200, results.length * 36 + 8) }}>
                 <Box style={{ gap: 3 }}>
@@ -767,9 +759,9 @@ function AppSearchSection() {
                 </Box>
               </ScrollView>
             ) : (
-              <Text style={{ color: c.textDim, fontSize: 11 }}>No live matches</Text>
+              <S.DimBody11>No live matches</S.DimBody11>
             )}
-          </Box>
+          </S.Bordered>
         ) : null}
       </Box>
       {open ? (
@@ -822,37 +814,25 @@ export function NavigationStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="menu" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="menu" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Navigation'}
-        </Text>
+        </S.StoryTitle>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Getting from here to not here'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -864,7 +844,7 @@ export function NavigationStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -920,81 +900,69 @@ export function NavigationStory() {
 
             {/* ── Right: API reference ── */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'OVERVIEW'}</Text>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'OVERVIEW'}</S.StoryTiny>
+                <S.StoryBody>
                   {'Navigation & Search is two suites that answer the same question — where can I go, and what can I find. NavPanel, Tabs, Breadcrumbs, and Toolbar cover page-level wayfinding: where you are in a hierarchy, what views are available, and what actions are contextually relevant. SearchBar, SearchResults, SearchCombo, CommandPalette, and AppSearch cover item-level discovery: matching text against datasets, ranking results, persisting history, and launching commands by name. ReactJIT is not a traditional browser/DOM runtime, but it still has internal routing that behaves like a standard app router. All navigation components are fully controlled: pass activeId and onSelect. All search components compose from the same base hooks (useSearch, useFuzzySearch) and can be assembled into custom UIs.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'USAGE'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'USAGE'}</S.StoryTiny>
                 <CodeBlock language="tsx" fontSize={9} code={USAGE_CODE} />
 
                 <HorizontalDivider />
 
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'BEHAVIOR'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'BEHAVIOR'}</S.StoryTiny>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'PROPS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'PROPS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
                 <HorizontalDivider />
 
-                <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{'CALLBACKS'}</Text>
+                <S.StoryTiny style={{ fontWeight: 'bold' }}>{'CALLBACKS'}</S.StoryTiny>
                 <Box style={{ gap: 3 }}>
                   {CALLBACKS.map(([name, sig, icon]) => (
-                    <Box key={name} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.tag} />
+                    <S.RowCenterG5 key={name}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.tag} />
                       <Text style={{ color: SYN.tag, fontSize: 9, fontWeight: 'bold' }}>{name}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{sig}</Text>
-                    </Box>
+                      <S.StoryCap>{sig}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="menu" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Navigation'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="menu" />
+        <S.StoryBreadcrumbActive>{'Navigation'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -1012,18 +980,14 @@ export function NavigationStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{ color: playground ? 'white' : c.text, fontSize: 9, fontWeight: 'bold' }}>
             {playground ? 'Exit Playground' : 'Playground'}
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

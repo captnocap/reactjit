@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
+import { Box, Text, Pressable, ScrollView, classifiers as S} from '@reactjit/core';
 import {
   MapContainer, TileLayer, Marker, Popup, Tooltip,
   Polyline, Polygon, Circle, CircleMarker, Rectangle,
@@ -190,9 +190,9 @@ function SectionBox({ title, children }: { title: string; children: React.ReactN
 
 function Row({ children }: { children: React.ReactNode }) {
   return (
-    <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+    <S.RowG6 style={{ flexWrap: 'wrap' }}>
       {children}
-    </Box>
+    </S.RowG6>
   );
 }
 

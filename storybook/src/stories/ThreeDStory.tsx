@@ -108,10 +108,10 @@ function Tag({ text, color }: { text: string; color: string }) {
 function Label({ label, value, color }: { label: string; value: string; color?: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.RowCenterG8>
       <S.StoryCap>{label}</S.StoryCap>
       <Text style={{ color: color || c.text, fontSize: 9, fontFamily: 'monospace' }}>{value}</Text>
-    </Box>
+    </S.RowCenterG8>
   );
 }
 
@@ -142,11 +142,11 @@ function GeometryDemo() {
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Tag text="Scene" color={C.scene} />
         <Tag text="Camera" color={C.camera} />
         <Tag text="Mesh" color={C.mesh} />
-      </Box>
+      </S.RowG6>
 
       <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#12121b" orbitControls>
         <Camera position={[0, -3, 1.5]} lookAt={[0, 0, 0]} fov={1.05} />
@@ -164,9 +164,9 @@ function GeometryDemo() {
       <Label label="geometry" value={geo} color={GEO_COLORS[geo]} />
       <S.StoryCap>{'Drag to orbit — rotation handled in Lua'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label="Next Shape" color={C.mesh} onPress={cycleGeo} />
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -187,11 +187,11 @@ function LightingDemo() {
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Tag text="DirectionalLight" color={C.light} />
         <Tag text="AmbientLight" color={C.light} />
         <Tag text="specular" color={C.material} />
-      </Box>
+      </S.RowG6>
 
       <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#0a0a14" orbitControls>
         <Camera position={[0, -3.5, 1.5]} lookAt={[0, 0, 0]} fov={1.0} />
@@ -223,15 +223,15 @@ function LightingDemo() {
       <Label label="light angle" value={`${(lightAngle * 180 / Math.PI).toFixed(0)}\u00B0`} color={C.light} />
       <Label label="specular" value={String(specular)} color={C.material} />
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={'\u2190 Light'} color={C.light} onPress={() => setLightAngle(p => p - 0.4)} />
         <ActionBtn label={'Light \u2192'} color={C.light} onPress={() => setLightAngle(p => p + 0.4)} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      </S.RowG8>
+      <S.RowG8>
         <ActionBtn label="Spec 16" color={C.material} onPress={() => setSpecular(16)} />
         <ActionBtn label="Spec 64" color={C.material} onPress={() => setSpecular(64)} />
         <ActionBtn label="Spec 128" color={C.material} onPress={() => setSpecular(128)} />
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -252,12 +252,12 @@ function PlanetDemo() {
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Tag text="texture" color={C.material} />
         <Tag text="fresnel" color={C.material} />
         <Tag text="stars" color={C.scene} />
         <Tag text="orbitControls" color={C.scene} />
-      </Box>
+      </S.RowG6>
 
       <Scene style={{ width: 240, height: 180, borderRadius: 6 }} backgroundColor="#020208" stars orbitControls>
         <Camera position={[0, -3.5, 1.5]} lookAt={[0, 0, 0]} fov={1.0} />
@@ -291,10 +291,10 @@ function PlanetDemo() {
       <Label label="moon pos" value={`[${moonX.toFixed(1)}, ${moonY.toFixed(1)}, ${moonZ.toFixed(1)}]`} color={C.camera} />
       <S.StoryCap>{'Drag to orbit. Each seed generates unique terrain.'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label={`Seed ${seed + 1}`} color={C.material} onPress={() => setSeed(p => p + 1)} />
         <ActionBtn label={`Seed ${seed + 10}`} color={C.material} onPress={() => setSeed(p => p + 10)} />
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -309,11 +309,11 @@ function EdgeDemo() {
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Tag text="edgeColor" color={C.edge} />
         <Tag text="edgeWidth" color={C.edge} />
         <Tag text="wireframe" color={C.edge} />
-      </Box>
+      </S.RowG6>
 
       <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#12121b" orbitControls>
         <Camera position={[0, -4, 2]} lookAt={[0, 0, 0]} fov={1.0} />
@@ -338,19 +338,19 @@ function EdgeDemo() {
       </Scene>
 
       <Label label="edgeWidth" value={edgeWidth.toFixed(2)} color={C.edge} />
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: wireframe ? C.scene : c.textDim }} />
         <Text style={{ fontSize: 9, color: wireframe ? C.scene : c.textDim }}>
           {wireframe ? 'Wireframe on' : 'Wireframe off'}
         </Text>
-      </Box>
+      </S.RowCenterG6>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label="Thin" color={C.edge} onPress={() => setEdgeWidth(0.02)} />
         <ActionBtn label="Medium" color={C.edge} onPress={() => setEdgeWidth(0.04)} />
         <ActionBtn label="Thick" color={C.edge} onPress={() => setEdgeWidth(0.08)} />
         <ActionBtn label="Wire" color={C.scene} onPress={() => setWireframe(w => !w)} />
-      </Box>
+      </S.RowG8>
     </Box>
   );
 }
@@ -365,11 +365,11 @@ function FresnelDemo() {
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <Tag text="fresnel" color={C.material} />
         <Tag text="opacity" color={C.material} />
         <Tag text="unlit" color={C.material} />
-      </Box>
+      </S.RowG6>
 
       <Scene style={{ width: 240, height: 160, borderRadius: 6 }} backgroundColor="#020208" stars orbitControls>
         <Camera position={[0, -3, 1.2]} lookAt={[0, 0, 0]} fov={1.0} />
@@ -394,16 +394,16 @@ function FresnelDemo() {
       <Label label="fresnel" value={fresnel.toFixed(1)} color={C.material} />
       <Label label="opacity" value={opacity.toFixed(2)} color={C.material} />
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      <S.RowG8>
         <ActionBtn label="F 0" color={C.material} onPress={() => setFresnel(0)} />
         <ActionBtn label="F 3" color={C.material} onPress={() => setFresnel(3)} />
         <ActionBtn label="F 6" color={C.material} onPress={() => setFresnel(6)} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
+      </S.RowG8>
+      <S.RowG8>
         <ActionBtn label="Op 0.2" color={C.camera} onPress={() => setOpacity(0.2)} />
         <ActionBtn label="Op 0.5" color={C.camera} onPress={() => setOpacity(0.5)} />
         <ActionBtn label="Op 0.8" color={C.camera} onPress={() => setOpacity(0.8)} />
-      </Box>
+      </S.RowG8>
       <S.StoryCap>{'Outer shell: unlit + fresnel for atmosphere glow'}</S.StoryCap>
     </Box>
   );
@@ -433,11 +433,11 @@ function FeatureCatalog() {
   return (
     <>
       {features.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: f.color }} />
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 120 }}>{f.label}</Text>
-          <Text style={{ fontSize: 10, color: c.textSecondary }}>{f.desc}</Text>
-        </Box>
+          <S.StoryBody style={{ fontWeight: 'normal', width: 120 }}>{f.label}</S.StoryBody>
+          <S.SecondaryBody>{f.desc}</S.SecondaryBody>
+        </S.RowCenterG8>
       ))}
     </>
   );
@@ -452,23 +452,11 @@ export function ThreeDStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="package" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="package" tintColor={C.accent} />
+        <S.StoryTitle>
           {'3D'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -480,22 +468,22 @@ export function ThreeDStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/3d'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Declarative 3D scenes in JSX via g3d'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'One-liner 3D. React declares the scene, Lua renders it with OpenGL.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Each <Scene> is a 3D viewport in the 2D layout tree. Meshes, lights, and cameras are JSX children. The Lua renderer handles projection, Blinn-Phong shading, edge wireframes, procedural textures, and orbit controls \u2014 all at 60fps with zero bridge overhead per frame.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -504,9 +492,9 @@ export function ThreeDStory() {
         <Band>
           <Half>
             <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Five components. Scene is the viewport, Camera sets the view, Mesh renders geometry, DirectionalLight and AmbientLight handle Blinn-Phong shading. Everything lives in the same tree as your 2D layout.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
         </Band>
@@ -520,9 +508,9 @@ export function ThreeDStory() {
           </Half>
           <Half>
             <SectionLabel icon="code" accentColor={C.accent}>{'GEOMETRY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Four built-in geometry types: box (unit cube), cube (alias), sphere (UV sphere, 48 segments), and plane (flat quad). Pass position, rotation, and scale as props. Color is a hex string. Add edgeColor for visible face borders.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={MESH_CODE} />
           </Half>
         </Band>
@@ -533,9 +521,9 @@ export function ThreeDStory() {
         <Band>
           <Half>
             <SectionLabel icon="zap" accentColor={C.accent}>{'LIGHTING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Blinn-Phong shading with directional and ambient lights. Direction points TO the light source (normalized internally). Specular power controls highlight tightness \u2014 16 for matte, 64 for plastic, 128 for metal. Multiple lights supported.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={LIGHTING_CODE} />
           </Half>
           <Half>
@@ -547,10 +535,10 @@ export function ThreeDStory() {
 
         {/* ── Callout ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'3D rendering runs entirely in Lua. Each Scene renders to an off-screen Love2D Canvas with a depth buffer. The 2D painter composites the Canvas at the node\u2019s computed position. React never touches the GL context \u2014 zero bridge overhead per frame.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -562,9 +550,9 @@ export function ThreeDStory() {
           </Half>
           <Half>
             <SectionLabel icon="globe" accentColor={C.accent}>{'PROCEDURAL TEXTURES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The texture prop activates procedural generation. "planet" creates terrain with continents and oceans \u2014 each seed produces a unique world. "framework-canvas" maps a 2D UI rendering onto the surface. Stars and orbitControls are Scene-level props for immersive viewports.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={TEXTURE_CODE} />
           </Half>
         </Band>
@@ -575,9 +563,9 @@ export function ThreeDStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'EDGES & WIREFRAME'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'edgeColor draws borders on face edges \u2014 makes cubes look cell-shaded or architectural. edgeWidth controls line thickness as a fraction of UV space (0.02 thin, 0.08 thick). wireframe draws longitude/latitude grid lines on spheres, making them visibly 3D even without lighting.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={MATERIAL_CODE} />
           </Half>
           <Half>
@@ -594,9 +582,9 @@ export function ThreeDStory() {
           </Half>
           <Half>
             <SectionLabel icon="shield" accentColor={C.accent}>{'FRESNEL & TRANSPARENCY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Fresnel controls alpha at glancing angles \u2014 the classic atmosphere glow effect. Combine with unlit (skip lighting, flat color only) and opacity for glass, force fields, and planetary atmospheres. Layer an outer shell over a solid inner sphere for the full planet look.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
@@ -606,9 +594,9 @@ export function ThreeDStory() {
         <Band>
           <Half>
             <SectionLabel icon="settings" accentColor={C.accent}>{'CAMERA'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One Camera per Scene. Position is where the eye sits in world space. lookAt is the target point. fov is in radians (default \u03C0/3 = 60\u00B0). near/far control the clipping planes. When orbitControls is enabled on the Scene, mouse drag rotates the view at Lua speed with no React re-renders.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={CAMERA_CODE} />
         </Band>
@@ -620,50 +608,32 @@ export function ThreeDStory() {
           <CodeBlock language="tsx" fontSize={9} code={SCENE_CODE} />
           <Half>
             <SectionLabel icon="terminal" accentColor={C.accent}>{'MINIMAL SCENE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'A complete 3D scene in 7 lines of JSX. The Scene takes standard style props (width, height, flexGrow) since it participates in the 2D layout. backgroundColor fills the viewport before any 3D content. Stars and orbitControls are boolean toggles.'}
-            </Text>
+            </S.StoryBody>
           </Half>
         </Band>
 
         <Divider />
 
         {/* ── Feature catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="terminal" accentColor={C.accent}>{'API SURFACE'}</SectionLabel>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="package" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'3D'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="package" />
+        <S.StoryBreadcrumbActive>{'3D'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

@@ -118,12 +118,12 @@ function Divider() {
 function SectionLabel({ icon, children }: { icon: string; children: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <S.RowCenterG6>
       <S.StorySectionIcon src={icon} tintColor={C.accent} />
       <S.StoryLabelText>
         {children}
       </S.StoryLabelText>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -163,20 +163,20 @@ function StopwatchDemo() {
         {formatDuration(sw.elapsed, { ms: true })}
       </Text>
       <S.StoryCap>{formatDurationLong(sw.elapsed)}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         {!sw.running ? (
           <Pressable onPress={sw.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
+            <S.StoryBtnText style={{ color: '#000' }}>{'Start'}</S.StoryBtnText>
           </Pressable>
         ) : (
           <Pressable onPress={sw.stop} style={{ backgroundColor: C.orange, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Stop'}</Text>
+            <S.StoryBtnText style={{ color: '#000' }}>{'Stop'}</S.StoryBtnText>
           </Pressable>
         )}
         <Pressable onPress={sw.reset} style={{ backgroundColor: C.dim, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
           <S.StoryBody>{'Reset'}</S.StoryBody>
         </Pressable>
-      </Box>
+      </S.RowG6>
     </Box>
   );
 }
@@ -202,20 +202,20 @@ function CountdownDemo() {
       <S.StoryCap>
         {`${(cd.progress * 100).toFixed(1)}% elapsed`}
       </S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         {!cd.running ? (
           <Pressable onPress={cd.start} style={{ backgroundColor: C.green, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Start'}</Text>
+            <S.StoryBtnText style={{ color: '#000' }}>{'Start'}</S.StoryBtnText>
           </Pressable>
         ) : (
           <Pressable onPress={cd.stop} style={{ backgroundColor: C.orange, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-            <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Pause'}</Text>
+            <S.StoryBtnText style={{ color: '#000' }}>{'Pause'}</S.StoryBtnText>
           </Pressable>
         )}
         <Pressable onPress={cd.restart} style={{ backgroundColor: C.blue, borderRadius: 5, paddingTop: 5, paddingBottom: 5, paddingLeft: 12, paddingRight: 12 }}>
-          <Text style={{ fontSize: 10, color: '#000', fontWeight: 'bold' }}>{'Restart'}</Text>
+          <S.StoryBtnText style={{ color: '#000' }}>{'Restart'}</S.StoryBtnText>
         </Pressable>
-      </Box>
+      </S.RowG6>
     </Box>
   );
 }
@@ -227,11 +227,11 @@ function TickerDemo() {
   return (
     <Box style={{ gap: 6 }}>
       <Ticker interval={500} onTick={() => setTicks(n => n + 1)} />
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <S.RowCenterG8>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ticks % 2 === 0 ? C.accent : c.muted }} />
         <Text style={{ fontSize: 14, fontWeight: 'bold', color: C.accent }}>{String(ticks)}</Text>
         <S.StoryMuted>{'ticks @ 500ms'}</S.StoryMuted>
-      </Box>
+      </S.RowCenterG8>
     </Box>
   );
 }
@@ -245,11 +245,11 @@ function IntervalDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <S.RowCenterG12>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.accent }}>{String(count)}</Text>
         <S.StoryMuted>{'ticks'}</S.StoryMuted>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      </S.RowCenterG12>
+      <S.RowG6>
         {[250, 500, 1000, 2000].map(ms => (
           <Pressable
             key={ms}
@@ -259,7 +259,7 @@ function IntervalDemo() {
             <Text style={{ fontSize: 9, color: rate === ms ? '#000' : c.text }}>{`${ms}ms`}</Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
     </Box>
   );
 }
@@ -273,11 +273,11 @@ function FrameIntervalDemo() {
 
   return (
     <Box style={{ gap: 8 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <S.RowCenterG12>
         <Text style={{ fontSize: 20, fontWeight: 'bold', color: C.teal }}>{String(frameCount)}</Text>
         <S.StoryMuted>{'fires'}</S.StoryMuted>
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      </S.RowCenterG12>
+      <S.RowG6>
         {[1, 10, 60, 120].map(n => (
           <Pressable
             key={n}
@@ -287,7 +287,7 @@ function FrameIntervalDemo() {
             <Text style={{ fontSize: 9, color: every === n ? '#000' : c.text }}>{`${n}f`}</Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
       <S.StoryTiny>{`every ${every} frame${every > 1 ? 's' : ''} \u2248 ${(every / 60).toFixed(1)}s at 60fps`}</S.StoryTiny>
     </Box>
   );
@@ -312,7 +312,7 @@ function UtilsDemo() {
     <Box style={{ gap: 3 }}>
       {samples.map(([expr, result]) => (
         <Box key={expr} style={{ flexDirection: 'row', gap: 10, paddingTop: 2, paddingBottom: 2 }}>
-          <Text style={{ fontSize: 9, color: c.muted, flexShrink: 1 }}>{expr}</Text>
+          <S.StoryCap style={{ flexShrink: 1 }}>{expr}</S.StoryCap>
           <Text style={{ fontSize: 9, color: C.teal, fontWeight: 'bold' }}>{result}</Text>
         </Box>
       ))}
@@ -329,23 +329,11 @@ export function TimeStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="clock" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="clock" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Time'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -357,10 +345,10 @@ export function TimeStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/time'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Clocks, stopwatches, countdowns, scheduling, and date utilities'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -375,92 +363,68 @@ export function TimeStory() {
           paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Frame-accurate time for everything.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'Drop-in widgets for clocks and timers. Hooks that run in Lua\u2019s update loop for precision scheduling. Pure utilities for formatting, parsing, and date math \u2014 no bridge required.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
 
         {/* ── Band: text | code — Install ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Everything in one import \u2014 widgets, hooks, and pure utilities. Pick what you need.'}
-            </Text>
-          </Box>
+            </S.StoryBody>
+          </S.HalfCenter>
           <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} />
-        </Box>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band: demo | text — Widgets (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
-            <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 10 }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter>
+            <S.StoryWell>
               <WorldClockDemo />
-              <Box style={{ height: 1, backgroundColor: c.border }} />
+              <S.HorzDivider />
               <TickerDemo />
-            </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+            </S.StoryWell>
+          </S.HalfCenter>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="clock">{'WIDGETS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'One-liner components \u2014 no hooks, no wiring. Clock shows local or any IANA timezone. Stopwatch and Countdown have built-in controls. Ticker is invisible \u2014 just fires callbacks.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={WIDGET_CODE} />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band: text | demo — Stopwatch ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="timer">{'STOPWATCH'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Lua-driven elapsed timer with start, stop, reset, and restart. Accumulates dt in the Love2D update loop \u2014 immune to JS garbage collection pauses.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={STOPWATCH_CODE} />
             </Box>
-          </Box>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
               <StopwatchDemo />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
@@ -477,150 +441,106 @@ export function TimeStory() {
           gap: 8,
           alignItems: 'center',
         }}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'All timing hooks (useStopwatch, useCountdown, useOnTime, useInterval, useFrameInterval) run in Lua\u2019s update loop. Time-based hooks fire in the exact frame that crosses the threshold. useFrameInterval counts frames directly \u2014 no JS event-loop jitter either way.'}
-          </Text>
+          </S.StoryBody>
         </Box>
 
         <Divider />
 
         {/* ── Band: demo | text — Countdown (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14 }}>
               <CountdownDemo />
             </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="hourglass">{'COUNTDOWN'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Count down from a duration in milliseconds. Tracks remaining time, progress (0\u20131), and fires onComplete when it hits zero. Progress bar turns red below 3 seconds.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={COUNTDOWN_CODE} />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band: text | demo — Scheduling ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="zap">{'SCHEDULING'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useOnTime fires once after a delay. useInterval repeats. Both run frame-perfect in Lua \u2014 not the JS event loop. Use for audio cues, game events, or data polling.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={SCHEDULING_CODE} />
             </Box>
-          </Box>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 12 }}>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{'useInterval \u2014 pick a rate:'}</Text>
+              <S.StoryCap>{'useInterval \u2014 pick a rate:'}</S.StoryCap>
               <IntervalDemo />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band: demo | text — Frame Interval (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 20,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 20, gap: 24 }}>
+          <S.HalfCenter>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 14, gap: 12 }}>
-              <Text style={{ color: c.muted, fontSize: 9 }}>{'useFrameInterval \u2014 pick a cadence:'}</Text>
+              <S.StoryCap>{'useFrameInterval \u2014 pick a cadence:'}</S.StoryCap>
               <FrameIntervalDemo />
             </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="film">{'FRAME INTERVAL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Count rendered frames instead of wall-clock time. useFrameInterval fires every N Love2D frames \u2014 stays locked to the render loop even when the framerate drops. Use for animation steps, physics ticks, or any logic that should be frame-synced.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={FRAME_INTERVAL_CODE} />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
         <Divider />
 
         {/* ── Band: demo | text — Utilities (zigzag) ── */}
-        <Box style={{
-          flexDirection: 'row',
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 24,
-          alignItems: 'center',
-        }}>
-          <Box style={{ flexBasis: 0, flexGrow: 1, justifyContent: 'center' }}>
+        <S.RowCenter style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 24 }}>
+          <S.HalfCenter>
             <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12 }}>
               <UtilsDemo />
             </Box>
-          </Box>
-          <Box style={{ flexGrow: 1, flexBasis: 0, gap: 8, justifyContent: 'center' }}>
+          </S.HalfCenter>
+          <S.HalfCenter style={{ gap: 8 }}>
             <SectionLabel icon="code">{'UTILITIES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Pure functions \u2014 no hooks, no bridge. Format durations, parse time strings, do date arithmetic, check day boundaries. Works anywhere.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ paddingTop: 4 }}>
               <CodeBlock language="tsx" fontSize={8} code={UTILS_CODE} />
             </Box>
-          </Box>
-        </Box>
+          </S.HalfCenter>
+        </S.RowCenter>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="clock" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Time'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="clock" />
+        <S.StoryBreadcrumbActive>{'Time'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

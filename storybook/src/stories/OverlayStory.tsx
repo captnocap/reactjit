@@ -152,7 +152,7 @@ function OverlayStateDemo() {
   const overlay = useOverlay();
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>{'Live overlay:state RPC (polls every 500ms)'}</S.StoryCap>
 
       <Box style={{ gap: 4 }}>
@@ -164,30 +164,30 @@ function OverlayStateDemo() {
       </Box>
 
       {overlay.enabled ? (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.passthrough }} />
           <Text style={{ fontSize: 9, color: C.passthrough }}>{'Overlay active — use hook methods to control'}</Text>
-        </Box>
+        </S.RowCenterG6>
       ) : (
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.hidden }} />
           <S.StoryCap>{'Overlay not active (run rjit overlay to enable)'}</S.StoryCap>
-        </Box>
+        </S.RowCenterG6>
       )}
-    </Box>
+    </S.StackG8W100>
   );
 }
 
 function StateRow({ label, value, color }: { label: string; value: string; color: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.RowCenterG8>
       <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
-      <Text style={{ fontSize: 10, color: c.text, width: 70, flexShrink: 0 }}>{label}</Text>
-      <Box style={{ backgroundColor: c.surface, borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+      <S.StoryBody style={{ width: 70, flexShrink: 0 }}>{label}</S.StoryBody>
+      <S.PadH6 style={{ backgroundColor: c.surface, borderRadius: 4, paddingTop: 2, paddingBottom: 2 }}>
         <Text style={{ fontSize: 10, color }}>{value}</Text>
-      </Box>
-    </Box>
+      </S.PadH6>
+    </S.RowCenterG8>
   );
 }
 
@@ -196,9 +196,9 @@ function StateRow({ label, value, color }: { label: string; value: string; color
 function ModeCycleDiagram() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 6, alignItems: 'center', width: '100%' }}>
+    <S.CenterW100 style={{ gap: 6 }}>
       <S.StoryCap>{'F6 hotkey cycle'}</S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <ModeBox label="passthrough" color={C.passthrough} />
         <Text style={{ fontSize: 12, color: c.muted }}>{'>'}</Text>
         <ModeBox label="interactive" color={C.interactive} />
@@ -206,8 +206,8 @@ function ModeCycleDiagram() {
         <ModeBox label="hidden" color={C.hidden} />
         <Text style={{ fontSize: 12, color: c.muted }}>{'>'}</Text>
         <S.StoryTiny>{'(repeat)'}</S.StoryTiny>
-      </Box>
-    </Box>
+      </S.RowCenterG8>
+    </S.CenterW100>
   );
 }
 
@@ -231,14 +231,14 @@ function ModeBox({ label, color }: { label: string; color: string }) {
 function TransportDiagram() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       {/* Window mode */}
       <Box style={{ gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.window }} />
           <Text style={{ fontSize: 10, color: C.window, fontWeight: 'normal' }}>{'Transparent Window'}</Text>
           <S.StoryTiny>{'(default)'}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG6>
         <Box style={{
           backgroundColor: c.surface, borderRadius: 4, padding: 8, gap: 3,
           borderLeftWidth: 2, borderColor: C.window,
@@ -251,11 +251,11 @@ function TransportDiagram() {
 
       {/* SHM mode */}
       <Box style={{ gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.shm }} />
           <Text style={{ fontSize: 10, color: C.shm, fontWeight: 'normal' }}>{'Shared Memory'}</Text>
           <S.StoryTiny>{'--attach'}</S.StoryTiny>
-        </Box>
+        </S.RowCenterG6>
         <Box style={{
           backgroundColor: c.surface, borderRadius: 4, padding: 8, gap: 3,
           borderLeftWidth: 2, borderColor: C.shm,
@@ -266,7 +266,7 @@ function TransportDiagram() {
           <S.StoryCap>{'17-var GL state save/restore (battle-tested)'}</S.StoryCap>
         </Box>
       </Box>
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -278,10 +278,10 @@ function FeatureCatalog() {
     <Box style={{ gap: 5, width: '100%' }}>
       {FEATURES.map(f => (
         <Box key={f.label} style={{ gap: 1 }}>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{f.label}</Text>
-          </Box>
+            <S.StoryBody style={{ fontWeight: 'bold' }}>{f.label}</S.StoryBody>
+          </S.RowCenterG6>
           <Text style={{ fontSize: 9, color: c.textSecondary, paddingLeft: 11 }}>{f.desc}</Text>
         </Box>
       ))}
@@ -294,7 +294,7 @@ function FeatureCatalog() {
 /** Fake game background used by overlay previews */
 function FakeGameScene({ label }: { label?: string }) {
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#1a1a2e' }}>
+    <S.FullSize style={{ backgroundColor: '#1a1a2e' }}>
       {/* Stars */}
       <Box style={{ position: 'absolute', top: 8, left: 12, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff66' }} />
       <Box style={{ position: 'absolute', top: 22, left: 45, width: 2, height: 2, borderRadius: 1, backgroundColor: '#ffffff44' }} />
@@ -314,7 +314,7 @@ function FakeGameScene({ label }: { label?: string }) {
           <Text style={{ fontSize: 6, color: '#ffffff33' }}>{label}</Text>
         </Box>
       )}
-    </Box>
+    </S.FullSize>
   );
 }
 
@@ -336,13 +336,10 @@ function PassthroughPreview() {
         <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'CPU: 34%  |  RAM: 4.2G'}</Text>
       </Box>
       {/* Passthrough indicator dot */}
-      <Box style={{
-        position: 'absolute', top: 6, left: 6,
-        flexDirection: 'row', gap: 4, alignItems: 'center',
-      }}>
+      <S.RowCenterG4 style={{ position: 'absolute', top: 6, left: 6 }}>
         <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.passthrough }} />
         <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'F6 to toggle'}</Text>
-      </Box>
+      </S.RowCenterG4>
     </Box>
   );
 }
@@ -354,7 +351,7 @@ function InteractivePreview() {
     <Box style={{ width: '100%', height: 120, borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
       <FakeGameScene label="game.exe" />
       {/* Semi-transparent backdrop */}
-      <Box style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.35)' }} />
+      <S.FullSize style={{ position: 'absolute', top: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.35)' }} />
       {/* Interactive overlay panel — centered */}
       <Box style={{
         position: 'absolute', top: 12, left: 20, right: 20, bottom: 12,
@@ -362,33 +359,33 @@ function InteractivePreview() {
         borderRadius: 6, borderWidth: 1, borderColor: C.interactive + '44',
         padding: 8, gap: 4,
       }}>
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <S.RowCenterG6>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.interactive }} />
           <Text style={{ fontSize: 8, color: C.interactive, fontWeight: 'bold' }}>{'INTERACTIVE'}</Text>
           <Box style={{ flexGrow: 1 }} />
           <Text style={{ fontSize: 6, color: '#ffffff66' }}>{'F6 to cycle'}</Text>
-        </Box>
+        </S.RowCenterG6>
         <Box style={{ height: 1, backgroundColor: '#ffffff11' }} />
         {/* Fake settings rows */}
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8>
           <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Opacity'}</Text>
-          <Box style={{ flexGrow: 1, height: 4, backgroundColor: '#ffffff22', borderRadius: 2 }}>
+          <S.StoryFill style={{ flexGrow: 1, backgroundColor: '#ffffff22' }}>
             <Box style={{ width: '70%', height: 4, backgroundColor: C.accent, borderRadius: 2 }} />
-          </Box>
+          </S.StoryFill>
           <Text style={{ fontSize: 6, color: '#ffffffaa' }}>{'0.70'}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        </S.RowCenterG8>
+        <S.RowCenterG8>
           <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Hotkey'}</Text>
-          <Box style={{ backgroundColor: '#ffffff11', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+          <S.PadH6 style={{ backgroundColor: '#ffffff11', borderRadius: 3, paddingTop: 2, paddingBottom: 2 }}>
             <Text style={{ fontSize: 7, color: C.accent }}>{'F6'}</Text>
-          </Box>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          </S.PadH6>
+        </S.RowCenterG8>
+        <S.RowCenterG8>
           <Text style={{ fontSize: 7, color: '#ffffffcc', width: 50 }}>{'Transport'}</Text>
           <Box style={{ backgroundColor: C.window + '22', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
             <Text style={{ fontSize: 7, color: C.window }}>{'Window'}</Text>
           </Box>
-        </Box>
+        </S.RowCenterG8>
       </Box>
     </Box>
   );
@@ -432,29 +429,29 @@ function SHMPipelinePreview() {
       alignItems: 'center', gap: 2,
     }}>
       <Text style={{ fontSize: 8, color: s.color, fontWeight: 'bold' }}>{s.label}</Text>
-      <Text style={{ fontSize: 7, color: c.muted }}>{s.sub}</Text>
+      <S.DimMicro>{s.sub}</S.DimMicro>
     </Box>
   );
-  const arrow = <Text style={{ fontSize: 10, color: c.muted, flexShrink: 0 }}>{'\u2192'}</Text>;
+  const arrow = <S.StoryMuted style={{ flexShrink: 0 }}>{'\u2192'}</S.StoryMuted>;
   return (
-    <Box style={{ width: '100%', gap: 6 }}>
+    <S.StackG6W100>
       <S.StoryLabelText>{'SHM COMPOSITING PIPELINE'}</S.StoryLabelText>
-      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      <S.RowCenterG4>
         {renderStage(row1[0])}
         {arrow}
         {renderStage(row1[1])}
         {arrow}
         {renderStage(row1[2])}
-      </Box>
+      </S.RowCenterG4>
       <Box style={{ alignItems: 'center' }}>
         <S.StoryMuted>{'\u2193'}</S.StoryMuted>
       </Box>
-      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      <S.RowCenterG4>
         {renderStage(row2[0])}
         {arrow}
         {renderStage(row2[1])}
-      </Box>
-    </Box>
+      </S.RowCenterG4>
+    </S.StackG6W100>
   );
 }
 
@@ -462,14 +459,14 @@ function SHMPipelinePreview() {
 function ModeTriplePreview() {
   const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', gap: 6 }}>
+    <S.StackG6W100>
       <S.StoryLabelText>{'VISIBILITY MODES — LIVE PREVIEW'}</S.StoryLabelText>
       <Box style={{ gap: 8 }}>
         <PassthroughPreview />
         <InteractivePreview />
         <HiddenPreview />
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -492,23 +489,11 @@ export function OverlayStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="layers" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="layers" tintColor={C.accent} />
+        <S.StoryTitle>
           {'Overlay'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -520,22 +505,22 @@ export function OverlayStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Now you see it, now you don\'t'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Transparent window or shared memory compositing. One hotkey to toggle. React declares the HUD, Lua owns the transport.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'The overlay system turns any ReactJIT app into a game overlay. Two transport modes: a transparent always-on-top SDL2 window with X11 XFixes input passthrough (for borderless-windowed games), or a POSIX shared memory segment with an LD_PRELOAD hook that intercepts glXSwapBuffers to composite onto true fullscreen games. Three visibility modes — passthrough, interactive, hidden — cycled by a single hotkey.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -545,9 +530,9 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Already in the box'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useOverlay() is part of @reactjit/core — no extra package needed. The hook polls overlay:state RPC every 500ms and returns the current mode, opacity, hotkey, and control methods.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
@@ -565,9 +550,9 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="code">{'useOverlay() HOOK'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'One hook to rule them all'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Returns current overlay state and control methods. Polls the Lua overlay module via RPC. When overlay mode is not active (no REACTJIT_OVERLAY env var), enabled is false and controls are no-ops.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={HOOK_CODE} />
           </Half>
         </Band>
@@ -579,17 +564,17 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="toggle-left">{'VISIBILITY MODES'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Three faces, one hotkey'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three modes, cycled by hotkey (default F6). The cycle is deterministic: passthrough, interactive, hidden, repeat. Each mode changes both visibility and input routing.'}
-            </Text>
+            </S.StoryBody>
             <Box style={{ gap: 6 }}>
               {MODES.map(m => (
                 <Box key={m.label} style={{ gap: 2 }}>
-                  <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <S.RowCenterG6>
                     <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: m.color, flexShrink: 0 }} />
                     <Text style={{ fontSize: 10, color: m.color, fontWeight: 'bold' }}>{m.label}</Text>
-                  </Box>
-                  <Text style={{ fontSize: 9, color: c.muted, paddingLeft: 11 }}>{m.desc}</Text>
+                  </S.RowCenterG6>
+                  <S.StoryCap style={{ paddingLeft: 11 }}>{m.desc}</S.StoryCap>
                 </Box>
               ))}
             </Box>
@@ -605,10 +590,10 @@ export function OverlayStory() {
 
         {/* ── Callout: X11 ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'Input passthrough uses X11 XFixes to set an empty input region on the overlay window. When the region is empty, all mouse and keyboard events fall through to the window underneath. This is the same technique Steam and MangoHud use. Gracefully degrades on non-X11 systems (Wayland, macOS) — overlay still works, just without click-through.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -622,12 +607,12 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="layers">{'TRANSPORT MODES'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Window or wormhole'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two ways to get your overlay onto the screen. Transparent window mode is the default — works for any borderless-windowed game with zero setup. Shared memory mode is for true fullscreen games where a separate window can\'t float on top.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The shm transport renders to a Love2D Canvas (FBO), reads pixels via glReadPixels, and writes them to a POSIX shared memory segment. The LD_PRELOAD hook in the game process reads that segment and composites it onto the game\'s framebuffer every frame.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -638,12 +623,12 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="terminal">{'WINDOW MODE (CLI)'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Float like a butterfly'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The default mode. Launches your ReactJIT app as a borderless, always-on-top, transparent SDL2 window. esbuild watch + HMR included — edit your overlay code and see it update in real time over the game.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Uses SDL_SetWindowBordered(false), SDL_SetWindowAlwaysOnTop(true), and love.graphics.setBackgroundColor(0,0,0,0) for transparency.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="bash" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
@@ -660,12 +645,12 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="hard-drive">{'ATTACH MODE (CLI)'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Inject directly into the vein'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'For true fullscreen games. Builds your app, launches Love2D in shm mode, waits for the RJIT_SHM_READY signal, then launches your game with the LD_PRELOAD hook. The hook intercepts glXSwapBuffers and composites the overlay.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The GL state save/restore in overlay_hook.c saves 17 GL variables plus pixel store state before drawing. Direct C translation of the battle-tested pattern from lua/videos.lua.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -676,9 +661,9 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="layout">{'HUD PATTERN'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Heads up, heads down'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Build your overlay like any ReactJIT app. Check overlay.mode to decide what to render — minimal stats bar in passthrough, full settings panel in interactive, nothing expensive in hidden. The mode changes instantly on hotkey press.'}
-            </Text>
+            </S.StoryBody>
             <InteractivePreview />
           </Half>
           <Half>
@@ -696,12 +681,12 @@ export function OverlayStory() {
           <Half>
             <SectionLabel icon="database">{'SHM PROTOCOL'}</SectionLabel>
             <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'32 bytes of trust'}</Text>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The shared memory segment has a 32-byte header followed by raw RGBA pixel data. The magic number 0x524A4954 ("RJIT") identifies valid segments. frame_seq increments each frame so the hook can detect stale data. Flags control visibility and input routing.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Segment name is /rjit-overlay-{pid}. Created by overlay_shm.lua via shm_open(), read by overlay_hook.c via the same name passed in RJIT_OVERLAY_SHM env var.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -709,51 +694,33 @@ export function OverlayStory() {
 
         {/* ── Callout: architecture ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'React never touches SDL2, X11, or GL state. The Lua overlay module owns the window configuration and input routing. The C hook owns the framebuffer compositing. React just reads state via useOverlay() and declares the UI.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
 
         {/* ── Feature catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="list">{'API SURFACE'}</SectionLabel>
           <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'The whole arsenal'}</Text>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="layers" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Overlay'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="layers" />
+        <S.StoryBreadcrumbActive>{'Overlay'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

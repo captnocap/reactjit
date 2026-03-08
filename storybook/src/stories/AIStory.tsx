@@ -411,23 +411,19 @@ function ConversationDemo() {
   const visible = DEMO_MESSAGES.slice(0, visibleCount);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.StackG6W100>
+      <S.RowCenterG8>
         <S.StoryCap>useChat() message flow</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.blue, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
       <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 6, minHeight: 80 }}>
         {visible.map((msg, i) => (
-          <Box key={i} style={{
-            flexDirection: 'row',
-            gap: 6,
-            alignItems: 'start',
-          }}>
+          <S.RowG6 key={i} style={{ alignItems: 'start' }}>
             <Box style={{
               width: 6, height: 6, borderRadius: 3, marginTop: 3, flexShrink: 0,
               backgroundColor: msg.role === 'user' ? C.blue : C.mauve,
@@ -438,17 +434,17 @@ function ConversationDemo() {
               </Text>
               <S.StoryBreadcrumbActive>{msg.content}</S.StoryBreadcrumbActive>
             </Box>
-          </Box>
+          </S.RowG6>
         ))}
         {visibleCount < DEMO_MESSAGES.length && (
-          <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', paddingLeft: 12 }}>
+          <S.RowCenterG4 style={{ paddingLeft: 12 }}>
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent }} />
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent, opacity: 0.6 }} />
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent, opacity: 0.3 }} />
-          </Box>
+          </S.RowCenterG4>
         )}
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -482,19 +478,19 @@ function AgenticLoopDemo() {
   useEffect(() => { replay(); }, []);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.StackG6W100>
+      <S.RowCenterG8>
         <S.StoryCap>Agentic tool execution loop</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.yellow, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
       <Box style={{ gap: 4 }}>
         {TOOL_STEPS.slice(0, step).map((s, i) => (
-          <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8 key={i}>
             <Box style={{
               width: 14, height: 14, borderRadius: 7,
               backgroundColor: s.color, alignItems: 'center', justifyContent: 'center',
@@ -505,17 +501,17 @@ function AgenticLoopDemo() {
               <Text style={{ fontSize: 8, color: s.color }}>{s.label}</Text>
               <S.StoryBreadcrumbActive>{s.text}</S.StoryBreadcrumbActive>
             </Box>
-          </Box>
+          </S.RowCenterG8>
         ))}
         {step > 0 && step < TOOL_STEPS.length && (
-          <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', paddingLeft: 22 }}>
+          <S.RowCenterG4 style={{ paddingLeft: 22 }}>
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent }} />
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent, opacity: 0.6 }} />
             <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.accent, opacity: 0.3 }} />
-          </Box>
+          </S.RowCenterG4>
         )}
       </Box>
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -524,18 +520,18 @@ function AgenticLoopDemo() {
 function ProviderCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
+    <S.StackG6W100>
       {PROVIDERS.map(p => (
         <Box key={p.label} style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 4 }}>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6>
             <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color, flexShrink: 0 }} />
             <Text style={{ fontSize: 10, color: p.color }}>{p.label}</Text>
-          </Box>
-          <Text style={{ fontSize: 9, color: c.text, paddingLeft: 14 }}>{p.desc}</Text>
-          <Text style={{ fontSize: 8, color: c.muted, paddingLeft: 14 }}>{p.models}</Text>
+          </S.RowCenterG6>
+          <S.StoryBreadcrumbActive style={{ paddingLeft: 14 }}>{p.desc}</S.StoryBreadcrumbActive>
+          <S.StoryTiny style={{ paddingLeft: 14 }}>{p.models}</S.StoryTiny>
         </Box>
       ))}
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -570,15 +566,15 @@ function StreamingPipelineDemo() {
   useEffect(() => { replay(); }, []);
 
   return (
-    <Box style={{ gap: 4, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+    <S.StackG4W100>
+      <S.RowCenterG8>
         <S.StoryCap>SSE streaming pipeline</S.StoryCap>
         <Pressable onPress={replay}>
           <Box style={{ backgroundColor: C.teal, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
             <Text style={{ fontSize: 9, color: '#1e1e2e' }}>Replay</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowCenterG8>
 
       {STREAM_STEPS.map((s, i) => (
         <Box key={i} style={{
@@ -595,7 +591,7 @@ function StreamingPipelineDemo() {
           </Box>
         </Box>
       ))}
-    </Box>
+    </S.StackG4W100>
   );
 }
 
@@ -604,15 +600,15 @@ function StreamingPipelineDemo() {
 function ComponentCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {COMPONENTS.map(comp => (
-        <Box key={comp.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={comp.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: comp.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 160, flexShrink: 0 }}>{comp.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 160, flexShrink: 0 }}>{comp.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{comp.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -645,26 +641,26 @@ const TEMPLATES = [
 function TemplateTierDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       {TEMPLATES.map(t => (
         <Box key={t.name} style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 4 }}>
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8>
             <Box style={{ backgroundColor: t.color, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
               <Text style={{ fontSize: 8, color: '#1e1e2e' }}>{t.tier}</Text>
             </Box>
             <Text style={{ fontSize: 10, color: t.color }}>{t.name}</Text>
-          </Box>
-          <Text style={{ fontSize: 9, color: c.text, paddingLeft: 2 }}>{t.desc}</Text>
-          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', paddingLeft: 2 }}>
+          </S.RowCenterG8>
+          <S.StoryBreadcrumbActive style={{ paddingLeft: 2 }}>{t.desc}</S.StoryBreadcrumbActive>
+          <S.RowWrap style={{ gap: 4, paddingLeft: 2 }}>
             {t.parts.map(p => (
-              <Box key={p} style={{ backgroundColor: c.bg, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
+              <S.PadH6 key={p} style={{ backgroundColor: c.bg, paddingTop: 2, paddingBottom: 2, borderRadius: 3 }}>
                 <S.StoryTiny>{p}</S.StoryTiny>
-              </Box>
+              </S.PadH6>
             ))}
-          </Box>
+          </S.RowWrap>
         </Box>
       ))}
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -673,15 +669,15 @@ function TemplateTierDemo() {
 function MCPFeatureList() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {MCP_FEATURES.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 120, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{f.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -690,15 +686,15 @@ function MCPFeatureList() {
 function BrowserFeatureList() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {BROWSER_FEATURES.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 120, flexShrink: 0 }}>{f.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 120, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{f.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -707,15 +703,15 @@ function BrowserFeatureList() {
 function FeatureCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {FEATURES.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 150, flexShrink: 0 }}>{f.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 150, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{f.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -728,23 +724,11 @@ export function AIStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="cpu" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="cpu" tintColor={C.accent} />
+        <S.StoryTitle>
           {'AI'}
-        </Text>
+        </S.StoryTitle>
         <Box style={{
           backgroundColor: C.accentDim,
           borderRadius: 4,
@@ -756,22 +740,22 @@ export function AIStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/ai'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'LLMs, tools, agents, browsers'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Multi-provider LLM integration in one hook call.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'useChat() streams conversations with automatic tool execution loops. useCompletion() handles one-shots. useMCPServer() connects to any Model Context Protocol server. useBrowser() controls a stealth Firefox session for autonomous web agents. OpenAI, Anthropic, and any compatible endpoint — same API.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -786,9 +770,9 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="download" accentColor={C.accent}>{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Core hooks for chat and completion. Provider context for app-wide defaults. MCP integration for tool servers. Browser automation for web agents.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
@@ -804,12 +788,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="message-circle" accentColor={C.accent}>{'useChat'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'The main hook. Returns messages, send(), streaming state, and stop(). Streams tokens via SSE with per-chunk callbacks. Handles both Anthropic and OpenAI streaming formats transparently.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Messages are updated in-place during streaming — no flicker, no rebatching. System prompt injection, partial updates, and cancellation via AbortController.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={CHAT_CODE} />
           </Half>
         </Band>
@@ -820,12 +804,12 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="terminal" accentColor={C.accent}>{'TOOL EXECUTION'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Define tools with JSON Schema parameters and an execute function. useChat runs the agentic loop automatically — LLM calls tools, results go back, LLM responds. Up to maxToolRounds iterations.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'All tool calls in a single response execute concurrently via Promise.all. Results are formatted as tool-role messages and appended to history before the next LLM call.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TOOLS_CODE} />
           </Half>
           <Half>
@@ -837,10 +821,10 @@ export function AIStory() {
 
         {/* ── Callout: agentic loop ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'The agentic loop is fully automatic. User sends a message, LLM responds, if the response includes tool calls they execute concurrently, results feed back to the LLM, and it continues until no more tool calls or maxToolRounds (default 10). No manual orchestration needed.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -852,12 +836,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="repeat" accentColor={C.accent}>{'LOOP INTERNALS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three utility functions power the loop. executeToolCalls() runs all calls concurrently against a tool map. formatToolResults() wraps execution results as tool-role messages. shouldContinueLoop() checks for remaining tool calls and round limits.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Refs over useState for synchronization — messagesRef, optionsRef, and abortRef track current values without triggering re-renders during the loop.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -870,12 +854,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="globe" accentColor={C.accent}>{'PROVIDERS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Two built-in providers: Anthropic (Messages API) and OpenAI (Chat Completions). Any OpenAI-compatible endpoint works with a custom baseURL — Groq, Together, Ollama, vLLM, LM Studio.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Each provider implements formatRequest(), parseResponse(), parseStreamChunk(), and formatToolResult(). Streaming format differences (Anthropic events vs OpenAI deltas) are abstracted away.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={PROVIDER_CODE} />
           </Half>
         </Band>
@@ -886,12 +870,12 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="zap" accentColor={C.accent}>{'STREAMING PIPELINE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Raw HTTP bytes flow through the SSEParser into provider-specific parsers that yield StreamDelta objects. Deltas carry content tokens and incremental tool call arguments. useChat assembles them into messages in real-time.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'startStream() uses globalThis.fetchStream — the Lua bridge handles HTTP for both Love2D and WASM targets. SSEParser handles \\n\\n and \\r\\n\\r\\n delimiters, multi-line data fields, and comment lines.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={SSE_CODE} />
           </Half>
           <Half>
@@ -905,12 +889,12 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="edit" accentColor={C.accent}>{'useCompletion'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Single-turn text completion. No conversation history, no tool loop. Call complete() with a prompt, get a string back. Streaming with per-chunk callbacks, same as useChat.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Ideal for translation, summarization, code generation — anything where you don\'t need multi-turn context.'}
-            </Text>
+            </S.StoryCap>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COMPLETION_CODE} />
@@ -926,12 +910,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'AIProvider CONTEXT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Wrap your app in AIProvider to set default config for all hooks. Provider, model, API key, temperature, maxTokens, and systemPrompt propagate down. Individual hooks can override any field.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'useAIConfig() reads the current context value — useful for settings panels that need to display the active configuration.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -939,10 +923,10 @@ export function AIStory() {
 
         {/* ── Callout: MCP ── */}
         <CalloutBand borderColor={'rgba(167, 139, 250, 0.25)'} bgColor={'rgba(167, 139, 250, 0.08)'}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.accent} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.accent} />
+          <S.StoryBody>
             {'MCP (Model Context Protocol) lets any LLM call external tools — file systems, databases, APIs, code execution. useMCPServer() handles the protocol handshake, tool discovery, and permission filtering. Tools slot directly into useChat().'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -954,12 +938,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="plug" accentColor={C.accent}>{'useMCPServer'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Connect to any MCP server. Three transports: stdio for local CLI tools, SSE for remote servers, streamable-http for bidirectional HTTP. Permissions filter which tools are exposed. Optional confirm gate for user approval.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Returns ToolDefinition[] that plug directly into useChat\'s tools array. MCPClient handles the protocol — connect, list tools, call tool, close.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MCP_CODE} />
           </Half>
         </Band>
@@ -970,32 +954,32 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="wifi" accentColor={C.accent}>{'MCP TRANSPORTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'stdio spawns a local process and communicates over stdin/stdout — perfect for CLI tools. SSE connects to a remote server and reads events. streamable-http uses bidirectional HTTP POST for both sending and receiving.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'estimateToolTokens() calculates token budget per tool definition. estimateToolBudget() sums all tools and reports context window usage percentage.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={MCP_TRANSPORTS_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
-              <Text style={{ fontSize: 9, color: c.muted }}>Token estimation</Text>
+            <S.StackG6W100>
+              <S.StoryCap>Token estimation</S.StoryCap>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 4 }}>
-                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <S.RowCenterG6>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.yellow }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'estimateToolTokens(tool)'}</Text>
-                </Box>
-                <Text style={{ fontSize: 8, color: c.muted, paddingLeft: 13 }}>{'JSON.stringify(tool).length / 4 + 20 overhead'}</Text>
+                  <S.StoryBreadcrumbActive>{'estimateToolTokens(tool)'}</S.StoryBreadcrumbActive>
+                </S.RowCenterG6>
+                <S.StoryTiny style={{ paddingLeft: 13 }}>{'JSON.stringify(tool).length / 4 + 20 overhead'}</S.StoryTiny>
               </Box>
               <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 4 }}>
-                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <S.RowCenterG6>
                   <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.peach }} />
-                  <Text style={{ fontSize: 9, color: c.text }}>{'estimateToolBudget(tools)'}</Text>
-                </Box>
-                <Text style={{ fontSize: 8, color: c.muted, paddingLeft: 13 }}>{'{ total: number, note: "~X% of 128K context" }'}</Text>
+                  <S.StoryBreadcrumbActive>{'estimateToolBudget(tools)'}</S.StoryBreadcrumbActive>
+                </S.RowCenterG6>
+                <S.StoryTiny style={{ paddingLeft: 13 }}>{'{ total: number, note: "~X% of 128K context" }'}</S.StoryTiny>
               </Box>
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1008,12 +992,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="monitor" accentColor={C.accent}>{'useBrowser'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Control a stealth Firefox session over TCP. Navigate, click, type, screenshot, execute JS, manage tabs. Returns parsed PageContent with title, text, links, and forms.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Connects via globalThis.browseRequest to a Lua worker thread. Default port 7331. Page text truncated to 8000 chars, links to 50 for LLM context efficiency.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={BROWSER_CODE} />
           </Half>
         </Band>
@@ -1024,26 +1008,26 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="compass" accentColor={C.accent}>{'BROWSER TOOLS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'createBrowserTools() returns 9 ToolDefinition objects — navigate, click, type, extract, back, tabs, use_tab, open_tab, execute_js. Wire them into useChat and the AI controls the browser autonomously.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'The AI sees page content as structured text (title, text, links[], forms[]) — not raw HTML. This keeps token usage efficient while giving the model enough context to navigate.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={BROWSER_TOOLS_CODE} />
           </Half>
           <Half>
-            <Box style={{ gap: 6, width: '100%' }}>
-              <Text style={{ fontSize: 9, color: c.muted }}>Browser tool names</Text>
+            <S.StackG6W100>
+              <S.StoryCap>Browser tool names</S.StoryCap>
               {['browser_navigate', 'browser_click', 'browser_type', 'browser_extract', 'browser_back', 'browser_tabs', 'browser_use_tab', 'browser_open_tab', 'browser_execute_js'].map((name, i) => (
-                <Box key={name} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <S.RowCenterG6 key={name}>
                   <Text style={{ fontSize: 8, color: C.accent }}>{`${i + 1}.`}</Text>
                   <Box style={{ backgroundColor: c.surface1, borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
                     <Text style={{ fontSize: 9, color: C.peach }}>{name}</Text>
                   </Box>
-                </Box>
+                </S.RowCenterG6>
               ))}
-            </Box>
+            </S.StackG6W100>
           </Half>
         </Band>
 
@@ -1051,10 +1035,10 @@ export function AIStory() {
 
         {/* ── Callout: components ── */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'6 composable components build any chat interface. 3 drop-in templates go from zero to working UI in one JSX tag. MinimalChat for prototypes, SimpleChatUI for clean apps, PowerChatUI for full-featured products.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -1066,12 +1050,12 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="box" accentColor={C.accent}>{'COMPONENTS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Six composable building blocks. AIMessageList renders conversations with automatic code block extraction. AIChatInput wires to useChat.send(). AIModelSelector fetches live model lists. AISettingsPanel controls temperature, tokens, and system prompts.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'AIConversationSidebar manages multiple conversations with search. AIMessageWithActions adds copy, delete, and regenerate to each message bubble.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={COMPONENTS_CODE} />
           </Half>
         </Band>
@@ -1082,12 +1066,12 @@ export function AIStory() {
         <Band>
           <Half>
             <SectionLabel icon="layout" accentColor={C.accent}>{'TEMPLATES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three tiers of drop-in chat UIs. MinimalChat is messages + input — nothing else. SimpleChatUI adds a header, error banner, and stop button. PowerChatUI adds a conversation sidebar, settings panel, and message actions.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'All templates accept ChatOptions — they call useChat() internally. Customize via props: title, placeholder, accentColor, renderMessage, callbacks for sidebar events.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={TEMPLATES_CODE} />
           </Half>
           <Half>
@@ -1104,64 +1088,46 @@ export function AIStory() {
           </Half>
           <Half>
             <SectionLabel icon="key" accentColor={C.accent}>{'API KEY MANAGEMENT'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useAPIKeys() persists API keys via the @reactjit/storage adapter (SQLite). Set, get, and delete keys by provider. Each key record includes provider type, label, optional baseURL, and model list.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Keys are stored in the ai_keys collection. Falls back to in-memory storage if no storage adapter is available. Key IDs are generated as {provider}_{timestamp36}.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
         <Divider />
 
         {/* ── Full-width: Feature Catalog ── */}
-        <Box style={{
-          paddingLeft: 28,
-          paddingRight: 28,
-          paddingTop: 20,
-          paddingBottom: 24,
-          gap: 8,
-        }}>
+        <S.StoryFullBand>
           <SectionLabel icon="list" accentColor={C.accent}>{'FULL API SURFACE'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Every export from @reactjit/ai:'}</Text>
+          <S.StoryCap>{'Every export from @reactjit/ai:'}</S.StoryCap>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* ── Final callout ── */}
         <CalloutBand borderColor={'rgba(167, 139, 250, 0.25)'} bgColor={'rgba(167, 139, 250, 0.08)'}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.accent} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.accent} />
+          <S.StoryBody>
             {'One hook to chat. One hook to browse. One hook to connect tool servers. Same API for OpenAI and Anthropic. Templates go from zero to production UI in a single JSX tag. The AI doesn\'t need to know about SSE parsing, provider differences, or protocol handshakes — just useChat() and send().'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="cpu" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'AI'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="cpu" />
+        <S.StoryBreadcrumbActive>{'AI'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

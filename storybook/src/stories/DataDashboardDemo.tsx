@@ -168,19 +168,19 @@ export function DataDashboardDemoStory() {
     <Box style={{ padding: 16, gap: 12 }}>
 
       {/* Header */}
-      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+      <S.RowCenter style={{ width: '100%', justifyContent: 'space-between' }}>
         <Text style={{ color: BRIGHT, fontSize: 18, fontWeight: 'normal' }}>Dashboard</Text>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
+        <S.RowCenterG6>
+          <S.Dot6 style={{ width: 6, backgroundColor: '#22c55e' }} />
           <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
           <S.StoryMuted>{`(${timeLabel})`}</S.StoryMuted>
-        </Box>
-      </Box>
+        </S.RowCenterG6>
+      </S.RowCenter>
 
       <Divider color={BORDER} />
 
       {/* KPI Row */}
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
+      <S.StackG10W100 style={{ flexDirection: 'row' }}>
         {kpiCards.map((kpi) => (
           <Box key={kpi.label} style={{
             flexGrow: 1,
@@ -192,7 +192,7 @@ export function DataDashboardDemoStory() {
             gap: 6,
           }}>
             <Text style={{ color: DIM, fontSize: 10 }}>{kpi.label}</Text>
-            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+            <S.RowCenter style={{ width: '100%', justifyContent: 'space-between' }}>
               <Box style={{ gap: 2, width: 80, height: 30 }}>
                 <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'normal' }}>
                   {`${kpi.prefix}${formatNum(kpi.raw)}${kpi.suffix || ''}`}
@@ -202,13 +202,13 @@ export function DataDashboardDemoStory() {
                 </Text>
               </Box>
               <Sparkline data={kpi.data} width={60} height={20} color={kpi.color} />
-            </Box>
+            </S.RowCenter>
           </Box>
         ))}
-      </Box>
+      </S.StackG10W100>
 
       {/* Chart + Targets row */}
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 12 }}>
+      <S.RowG12 style={{ width: '100%' }}>
         <Box style={{
           flexGrow: 1,
           backgroundColor: CARD,
@@ -239,17 +239,17 @@ export function DataDashboardDemoStory() {
           <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'normal' }}>Targets</Text>
           {targets.map((metric) => (
             <Box key={metric.label} style={{ gap: 3 }}>
-              <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
+              <S.RowSpaceBetween style={{ width: '100%' }}>
                 <Text style={{ color: DIM, fontSize: 10 }}>{metric.label}</Text>
                 <Text style={{ color: BRIGHT, fontSize: 10, fontWeight: 'normal' }}>
                   {`${Math.round(metric.value * 100)}%`}
                 </Text>
-              </Box>
+              </S.RowSpaceBetween>
               <ProgressBar value={metric.value} color={metric.color} height={6} animated />
             </Box>
           ))}
         </Box>
-      </Box>
+      </S.RowG12>
 
       {/* Table */}
       <Box style={{

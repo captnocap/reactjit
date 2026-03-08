@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
+import { Box, Text, Pressable, ScrollView, classifiers as S} from '@reactjit/core';
 import {
   GeoScene, TerrainLayer, BuildingLayer,
   GeoPath3D, GeoMarker3D, Sky,
@@ -176,7 +176,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>{children}</Box>;
+  return <S.RowWrap style={{ gap: 5 }}>{children}</S.RowWrap>;
 }
 
 // ---------------------------------------------------------------------------

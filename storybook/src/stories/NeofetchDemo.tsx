@@ -3,8 +3,7 @@ import {
   Box, Text, Divider, Spacer, Pressable, ScrollView,
   useSystemInfo, useSystemMonitor, usePorts,
   formatUptime, formatMemory, formatRate, formatTotalBytes,
-  useWindowDimensions,
-} from '../../../packages/core/src';
+  useWindowDimensions, classifiers as S} from '../../../packages/core/src';
 import type { CoreInfo, ProcessInfo, NetworkInterface, DiskDevice, GpuInfo, PortInfo } from '../../../packages/core/src';
 
 /* ── heart pixel grid (13 wide x 10 tall) ──────────────────── */
@@ -91,34 +90,25 @@ function CpuPanel({ cores, total, loadAvg }: { cores: CoreInfo[]; total: number;
   const chipBarW = 30;
   return (
     <Section title="CPU">
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <S.RowG4>
         <Label text={`${total.toFixed(0)}%`} color={total > 80 ? ACCENT : total > 50 ? YELLOW : GREEN} />
         <Label text={`load ${loadAvg[0].toFixed(2)} ${loadAvg[1].toFixed(2)} ${loadAvg[2].toFixed(2)}`} />
-      </Box>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%', justifyContent: 'center' }}>
+      </S.RowG4>
+      <S.RowG6 style={{ flexWrap: 'wrap', width: '100%', justifyContent: 'center' }}>
         {cores.map((c) => (
-          <Box key={c.id} style={{
-            width: 58,
-            backgroundColor: '#1a1a2a',
-            borderRadius: 4,
-            paddingLeft: 6,
-            paddingRight: 6,
-            paddingTop: 4,
-            paddingBottom: 4,
-            gap: 3,
-          }}>
+          <S.PadH6 key={c.id} style={{ width: 58, backgroundColor: '#1a1a2a', borderRadius: 4, paddingTop: 4, paddingBottom: 4, gap: 3 }}>
             <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
               <Label text={`c${c.id}`} />
               <Box style={{ width: 26 }}>
                 <Label text={`${c.usage.toFixed(0)}%`} color={BRIGHT} />
               </Box>
             </Box>
-            <Box style={{ alignItems: 'center', width: '100%' }}>
+            <S.CenterW100>
               <Bar value={c.usage} max={100} width={chipBarW} color={c.usage > 80 ? ACCENT : c.usage > 50 ? YELLOW : GREEN} height={4} />
-            </Box>
-          </Box>
+            </S.CenterW100>
+          </S.PadH6>
         ))}
-      </Box>
+      </S.RowG6>
     </Section>
   );
 }
@@ -133,20 +123,20 @@ function MemoryPanel({ mem }: { mem: { total: number; used: number; buffers: num
   const pctSwap = mem.swap.total > 0 ? (mem.swap.used / mem.swap.total * 100) : 0;
   return (
     <Section title="MEMORY">
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <S.RowCenterG6>
         <Box style={{ width: STAT_LABEL_W }}><Label text="RAM" /></Box>
         <Bar value={mem.used} max={mem.total} width={STAT_BAR_W} color={pctUsed > 80 ? ACCENT : pctUsed > 60 ? YELLOW : BLUE} height={8} />
         <Val text={`${mem.used.toFixed(1)}/${mem.total.toFixed(1)} ${mem.unit}`} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      </S.RowCenterG6>
+      <S.RowCenterG6>
         <Box style={{ width: STAT_LABEL_W }}><Label text="SWP" /></Box>
         <Bar value={mem.swap.used} max={mem.swap.total || 1} width={STAT_BAR_W} color={pctSwap > 50 ? ACCENT : PURPLE} height={8} />
         <Val text={`${mem.swap.used.toFixed(1)}/${mem.swap.total.toFixed(1)} ${mem.unit}`} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
+      </S.RowCenterG6>
+      <S.RowG12>
         <Label text={`buf ${mem.buffers.toFixed(2)}`} />
         <Label text={`cache ${mem.cached.toFixed(2)}`} />
-      </Box>
+      </S.RowG12>
     </Section>
   );
 }
@@ -183,20 +173,20 @@ function GpuPanel({ gpus }: { gpus: GpuInfo[] }) {
       {gpus.map((g, i) => (
         <Box key={i} style={{ gap: 4 }}>
           <Label text={g.name} color={BRIGHT} />
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6>
             <Box style={{ width: STAT_LABEL_W }}><Label text="util" /></Box>
             <Bar value={g.utilization} max={100} width={STAT_BAR_W} color={g.utilization > 80 ? ACCENT : GREEN} height={8} />
             <Val text={`${g.utilization}%`} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          </S.RowCenterG6>
+          <S.RowCenterG6>
             <Box style={{ width: STAT_LABEL_W }}><Label text="vram" /></Box>
             <Bar value={g.memUsed} max={g.memTotal} width={STAT_BAR_W} color={PURPLE} height={8} />
             <Val text={`${g.memUsed}/${g.memTotal} ${g.memUnit}`} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 12 }}>
+          </S.RowCenterG6>
+          <S.RowG12>
             <Label text={`${g.temperature}C`} color={g.temperature > 80 ? ACCENT : BRIGHT} />
             {g.power > 0 && <Label text={`${g.power.toFixed(0)}W`} />}
-          </Box>
+          </S.RowG12>
         </Box>
       ))}
     </Section>
@@ -249,7 +239,7 @@ function PortsPanel({ ports, onKill }: { ports: PortInfo[]; onKill: (pid: number
         <Box style={{ width: 40 }}><Label text="" color={DIM} /></Box>
       </Box>
       {ports.map((p, i) => (
-        <Box key={i} style={{ flexDirection: 'row', gap: 0, alignItems: 'center' }}>
+        <S.RowCenter key={i} style={{ gap: 0 }}>
           <Box style={{ width: 50 }}><Val text={`${p.port}`} color={CYAN} /></Box>
           <Box style={{ width: 40 }}><Val text={p.protocol} color={MID} /></Box>
           <Box style={{ width: 50 }}><Val text={`${p.pid || '-'}`} color={MID} /></Box>
@@ -263,7 +253,7 @@ function PortsPanel({ ports, onKill }: { ports: PortInfo[]; onKill: (pid: number
               </Pressable>
             </Box>
           )}
-        </Box>
+        </S.RowCenter>
       ))}
     </Section>
   );
@@ -297,7 +287,7 @@ export function NeofetchDemoStory() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 12, gap: 10 }}>
       {/* Header row: heart + identity + tabs */}
-      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+      <S.RowG12 style={{ width: '100%' }}>
         {/* Mini heart */}
         <Box style={{ width: HEART_COLS * HEART_PX, height: HEART_ROWS * HEART_PX }}>
           {HEART_GRID.map((row, r) => (
@@ -312,26 +302,26 @@ export function NeofetchDemoStory() {
         {/* Identity + system summary */}
         <Box style={{ gap: 3 }}>
           <Text style={{ color: ACCENT, fontSize: 16, fontWeight: 'normal' }}>{title}</Text>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          <S.RowG8>
             <Label text={info.os || '...'} color={BRIGHT} />
             <Label text={info.kernel || ''} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Label text={info.cpu || '...'} color={MID} />
             <Label text={info.arch || ''} />
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Label text={info.loading ? '...' : formatUptime(info.uptime)} color={GREEN} />
             <Label text={info.shell || ''} />
             <Label text={info.loading ? '' : formatMemory(info.memory)} />
-          </Box>
+          </S.RowG8>
         </Box>
-      </Box>
+      </S.RowG12>
 
       <Divider color={BORDER} />
 
       {/* Tab bar */}
-      <Box style={{ flexDirection: 'row', gap: 2, width: '100%' }}>
+      <S.RowG2 style={{ width: '100%' }}>
         {(['overview', 'processes', 'ports'] as const).map((t) => (
           <Pressable key={t} onPress={() => setTab(t)}>
             <Box style={{
@@ -352,7 +342,7 @@ export function NeofetchDemoStory() {
             <Box key={i} style={{ width: 14, height: 10, backgroundColor: color, borderRadius: 1 }} />
           ))}
         </Box>
-      </Box>
+      </S.RowG2>
 
       {/* Tab content */}
       <ScrollView style={{ width: '100%', height: Math.max(0, vpH - 180) }}>
@@ -362,7 +352,7 @@ export function NeofetchDemoStory() {
 
             {/* Single row: CPU | GPU+Memory | Network+Disk */}
             {/* rjit-ignore-next-line */}
-            <Box style={{ flexDirection: 'row', gap: 16, width: '100%', justifyContent: 'space-around', alignItems: 'flex-start' }}>
+            <S.RowW100 style={{ gap: 16, justifyContent: 'space-around', alignItems: 'flex-start' }}>
               {/* CPU with wrapping cores */}
               <Box style={{
                 width: 280,
@@ -395,7 +385,7 @@ export function NeofetchDemoStory() {
                 {!sys.loading && <NetworkPanel interfaces={sys.network} />}
                 {!sys.loading && <DiskPanel devices={sys.disk} />}
               </Box>
-            </Box>
+            </S.RowW100>
           </Box>
         )}
 

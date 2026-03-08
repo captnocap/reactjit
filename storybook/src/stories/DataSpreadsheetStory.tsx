@@ -155,21 +155,10 @@ function ensureScaleCells(seed: SpreadsheetCellMap, rows: number, cols: number):
 function StatCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{
-      width: 150,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surface,
-      paddingLeft: 10,
-      paddingRight: 10,
-      paddingTop: 8,
-      paddingBottom: 8,
-      gap: 4,
-    }}>
-      <Text style={{ fontSize: 8, color: c.textDim, letterSpacing: 1 }}>{label}</Text>
+    <S.Bordered style={{ width: 150, borderRadius: 8, backgroundColor: c.surface, paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, gap: 4 }}>
+      <S.StoryTiny style={{ letterSpacing: 1 }}>{label}</S.StoryTiny>
       <Text style={{ fontSize: 14, color: tone, fontWeight: 'bold' }}>{value}</Text>
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -198,82 +187,55 @@ export function DataSpreadsheetStory() {
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
       <Box style={{ paddingLeft: 20, paddingRight: 20, paddingTop: 20, paddingBottom: 26, gap: 14 }}>
         <Box style={{ gap: 4 }}>
-          <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
+          <S.BoldText style={{ fontSize: 18 }}>
             {'Data Spreadsheet: Excel Replacement Case'}
-          </Text>
+          </S.BoldText>
           <S.StoryMuted>
             {'Grid editor + formula graph + built-in convert/math packs in one runtime component.'}
           </S.StoryMuted>
         </Box>
 
-        <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        <S.RowG8 style={{ flexWrap: 'wrap' }}>
           <StatCard label="Formula Cells" value={String(summary.formulaCount)} tone={c.primary} />
           <StatCard label="CONVERT Calls" value={String(summary.conversionCount)} tone={c.success} />
           <StatCard label="Math Calls" value={String(summary.mathCount)} tone={c.warning} />
           <StatCard label="Evaluation Errors" value={String(summary.errorCount)} tone={summary.errorCount > 0 ? c.error : c.success} />
           <StatCard label="Grid Size" value={`${scalePreset.rows} x ${scalePreset.cols}`} tone={c.accent} />
           <StatCard label="Selected Cell" value={selectedAddress} tone={c.primary} />
-        </Box>
+        </S.RowG8>
 
-        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 10 }}>
           <Pressable onPress={() => {
             setCells(ensureScaleCells(LOGISTICS_PRESET, scalePreset.rows, scalePreset.cols));
             setSelectedAddress('B2');
           }}>
-            <Box style={{
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: c.border,
-              backgroundColor: c.surface,
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 6,
-              paddingBottom: 6,
-            }}>
+            <S.SurfaceBordered style={{ borderRadius: 6, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
               <S.StoryBody>{'Load Logistics Preset'}</S.StoryBody>
-            </Box>
+            </S.SurfaceBordered>
           </Pressable>
 
           <Pressable onPress={() => {
             setCells(ensureScaleCells(LAB_PRESET, scalePreset.rows, scalePreset.cols));
             setSelectedAddress('B2');
           }}>
-            <Box style={{
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: c.border,
-              backgroundColor: c.surface,
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 6,
-              paddingBottom: 6,
-            }}>
+            <S.SurfaceBordered style={{ borderRadius: 6, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
               <S.StoryBody>{'Load Lab Preset'}</S.StoryBody>
-            </Box>
+            </S.SurfaceBordered>
           </Pressable>
 
           <Pressable onPress={() => {
             setColumnWidths(createColumnWidths(scalePreset.cols));
             setSelectedAddress('B2');
           }}>
-            <Box style={{
-              borderRadius: 6,
-              borderWidth: 1,
-              borderColor: c.border,
-              backgroundColor: c.surface,
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 6,
-              paddingBottom: 6,
-            }}>
+            <S.SurfaceBordered style={{ borderRadius: 6, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
               <S.StoryBody>{'Reset Column Widths'}</S.StoryBody>
-            </Box>
+            </S.SurfaceBordered>
           </Pressable>
-        </Box>
+        </S.RowWrap>
 
         <Box style={{ gap: 8 }}>
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Workflow Focus'}</Text>
-          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Workflow Focus'}</S.StoryBody>
+          <S.RowG8 style={{ flexWrap: 'wrap' }}>
             {FOCUS_CELLS.map((cell) => (
               <Pressable key={cell} onPress={() => setSelectedAddress(cell)}>
                 <Box style={{
@@ -290,15 +252,15 @@ export function DataSpreadsheetStory() {
                 </Box>
               </Pressable>
             ))}
-          </Box>
+          </S.RowG8>
           <S.StoryCap>
             {'Status bar shows live input/value/error context for the active cell. This keeps edits auditable in app workflows.'}
           </S.StoryCap>
         </Box>
 
         <Box style={{ gap: 8 }}>
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Scale Presets'}</Text>
-          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Scale Presets'}</S.StoryBody>
+          <S.RowG8 style={{ flexWrap: 'wrap' }}>
             {SCALE_PRESETS.map((preset) => (
               <Pressable
                 key={preset.id}
@@ -325,14 +287,14 @@ export function DataSpreadsheetStory() {
                 </Box>
               </Pressable>
             ))}
-          </Box>
+          </S.RowG8>
           <S.StoryCap>
             {'Drag any header separator to resize columns. Shift + wheel or drag in the grid to pan horizontally.'}
           </S.StoryCap>
         </Box>
 
         <Box style={{ gap: 8 }}>
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Live Sheet'}</Text>
+          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Live Sheet'}</S.StoryBody>
           <Spreadsheet
             rows={scalePreset.rows}
             cols={scalePreset.cols}
@@ -352,11 +314,11 @@ export function DataSpreadsheetStory() {
         </Box>
 
         <Box style={{ gap: 8 }}>
-          <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Embed Sizes: Mini + Medium'}</Text>
+          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Embed Sizes: Mini + Medium'}</S.StoryBody>
           <S.StoryCap>
             {'Same dataset, same formulas, same jump behavior. These are constrained component containers, not full-screen views.'}
           </S.StoryCap>
-          <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+          <S.RowWrap style={{ gap: 12 }}>
             <Box style={{
               width: MINI_SIZE.width,
               maxWidth: '100%',
@@ -407,24 +369,12 @@ export function DataSpreadsheetStory() {
                 showStatusBar
               />
             </Box>
-          </Box>
+          </S.RowWrap>
         </Box>
 
-        <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'start' }}>
-          <Box style={{
-            flexGrow: 1,
-            minWidth: 260,
-            gap: 8,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: c.border,
-            backgroundColor: c.surface,
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 10,
-            paddingBottom: 10,
-          }}>
-            <Text style={{ fontSize: 10, color: c.text, fontWeight: 'bold' }}>{'Why teams would choose this over Excel in-app'}</Text>
+        <S.RowG12 style={{ alignItems: 'start' }}>
+          <S.SurfaceBordered style={{ flexGrow: 1, minWidth: 260, gap: 8, borderRadius: 8, paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10 }}>
+            <S.StoryBody style={{ fontWeight: 'bold' }}>{'Why teams would choose this over Excel in-app'}</S.StoryBody>
             <S.StoryBreadcrumbActive>{'Excel pain: file handoffs, hidden macros, and no runtime guarantees.'}</S.StoryBreadcrumbActive>
             <S.StoryCap>{'Runtime answer: formulas execute in the same app runtime as the UI and business logic.'}</S.StoryCap>
             <S.StoryBreadcrumbActive>{'Excel pain: conversion logic scattered across tabs and helper sheets.'}</S.StoryBreadcrumbActive>
@@ -433,13 +383,13 @@ export function DataSpreadsheetStory() {
             <S.StoryCap>{'Runtime answer: spreadsheet UI is a composable component with controlled state and events.'}</S.StoryCap>
             <S.StoryBreadcrumbActive>{'Excel pain: context is lost during edits.'}</S.StoryBreadcrumbActive>
             <S.StoryCap>{'Runtime answer: selection-aware headers + status bar keep input/value/error visible at all times.'}</S.StoryCap>
-          </Box>
+          </S.SurfaceBordered>
 
-          <Box style={{ flexGrow: 1, minWidth: 260, gap: 8 }}>
+          <S.GrowG8 style={{ minWidth: 260 }}>
             <CodeBlock code={INSTALL_CODE} language="typescript" maxHeight={120} />
             <CodeBlock code={EXAMPLE_FORMULAS} language="typescript" maxHeight={140} />
-          </Box>
-        </Box>
+          </S.GrowG8>
+        </S.RowG12>
       </Box>
     </ScrollView>
   );

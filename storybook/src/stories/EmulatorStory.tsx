@@ -21,30 +21,30 @@ export default function EmulatorStory() {
   const [romName, setRomName] = useState<string | null>(null);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
+    <S.StoryRoot style={{ padding: 16, gap: 12 }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 18, color: c.text, fontWeight: 'normal' }}>NES Emulator</Text>
-        <Text style={{ fontSize: 11, color: c.textDim }}>
+        <S.DimBody11>
           {romName
             ? `Playing: ${romName}`
             : 'Drag and drop a .nes ROM file to play'
           }
-        </Text>
+        </S.DimBody11>
       </Box>
 
       {/* Emulator viewport */}
-      <Box style={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <S.GrowCenterAlign>
         {/* // rjit-ignore-next-line */}
         <Emulator
           playing={playing}
           style={{ width: 512, height: 480 }}
           onROMLoaded={(e) => setRomName(e.filename)}
         />
-      </Box>
+      </S.GrowCenterAlign>
 
       {/* Controls bar */}
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+      <S.RowCenterG8 style={{ width: '100%', justifyContent: 'center' }}>
         <Pressable onPress={() => setPlaying(!playing)}>
           <Box style={{
             backgroundColor: playing ? c.error : c.success,
@@ -65,7 +65,7 @@ export default function EmulatorStory() {
             Arrows=D-pad  Z=A  X=B  Enter=Start  Shift=Select
           </S.StoryCap>
         </Box>
-      </Box>
-    </Box>
+      </S.RowCenterG8>
+    </S.StoryRoot>
   );
 }

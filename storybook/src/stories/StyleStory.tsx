@@ -64,30 +64,18 @@ function HorizontalDivider() {
 
 function VerticalDivider() {
   const c = useThemeColors();
-  return <Box style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', backgroundColor: c.border }} />;
+  return <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />;
 }
 
 function SectionLabel({ children }: { children: string }) {
   const c = useThemeColors();
-  return <Text style={{ color: c.muted, fontSize: 8, fontWeight: 'bold' }}>{children}</Text>;
+  return <S.StoryTiny style={{ fontWeight: 'bold' }}>{children}</S.StoryTiny>;
 }
 
 function ColorSwatch({ color, label }: { color: string; label: string }) {
   const c = useThemeColors();
   return (
-    <Box style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingLeft: 8,
-      paddingRight: 8,
-      paddingTop: 5,
-      paddingBottom: 5,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surface,
-    }}>
+    <S.RowCenterG6 style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, borderRadius: 6, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
       <Box style={{
         width: 14,
         height: 14,
@@ -97,7 +85,7 @@ function ColorSwatch({ color, label }: { color: string; label: string }) {
         borderColor: c.border,
       }} />
       <S.StoryCap>{label}</S.StoryCap>
-    </Box>
+    </S.RowCenterG6>
   );
 }
 
@@ -130,7 +118,7 @@ function ThemeCard({
       backgroundColor: tc.bg,
       gap: 3,
     }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <S.RowCenterG4>
         <Text style={{ color: tc.text, fontSize: 8, flexGrow: 1 }}>
           {theme.displayName}
         </Text>
@@ -140,8 +128,8 @@ function ThemeCard({
         }}>
           <Text style={{ color: tc.bg, fontSize: 6 }}>{'A'}</Text>
         </Box>
-      </Box>
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 1 }}>
+      </S.RowCenterG4>
+      <S.RowWrap style={{ gap: 1 }}>
         {swatches.map((color, i) => (
           <Box key={i} style={{
             width: 8, height: 8,
@@ -149,7 +137,7 @@ function ThemeCard({
             borderRadius: 1,
           }} />
         ))}
-      </Box>
+      </S.RowWrap>
     </Pressable>
   );
 }
@@ -454,56 +442,34 @@ export function StyleStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 12,
-        paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="palette" style={{ width: 20, height: 20 }} tintColor={c.primary} />
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.PrimaryIcon20 src="palette" />
 
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
+        <S.StoryTitle>
           {'Style'}
-        </Text>
+        </S.StoryTitle>
 
-        <Box style={{
-          flexDirection: 'row',
-          backgroundColor: c.surface,
-          borderWidth: 1,
-          borderColor: c.border,
-          borderRadius: 4,
-          paddingLeft: 8,
-          paddingRight: 8,
-          paddingTop: 3,
-          paddingBottom: 3,
-        }}>
+        <S.StoryBtnSm style={{ flexDirection: 'row', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }}>
           <Text style={{ color: SYN.tag, fontSize: 10 }}>{'style'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{`={{ `}</Text>
+          <S.StoryMuted>{`={{ `}</S.StoryMuted>
           <Text style={{ color: SYN.prop, fontSize: 10 }}>{'opacity'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{': '}</Text>
+          <S.StoryMuted>{': '}</S.StoryMuted>
           <Text style={{ color: SYN.value, fontSize: 10 }}>{'0.8'}</Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>{' }}'}</Text>
-        </Box>
+          <S.StoryMuted>{' }}'}</S.StoryMuted>
+        </S.StoryBtnSm>
 
         <Box style={{ flexGrow: 1 }} />
 
-        <Text style={{ color: c.muted, fontSize: 10 }}>
+        <S.StoryMuted>
           {'Making rectangles feel feelings'}
-        </Text>
-      </Box>
+        </S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Center ── */}
-      <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+      <S.RowGrow>
         {playground ? (
           <>
-            <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+            <S.Half>
               <TextEditor
                 initialValue={code}
                 onChange={handleCodeChange}
@@ -515,7 +481,7 @@ export function StyleStory() {
                 style={{ flexGrow: 1, width: '100%' }}
                 textStyle={{ fontSize: 13, fontFamily: 'monospace' }}
               />
-            </Box>
+            </S.Half>
             <VerticalDivider />
             <Preview UserComponent={UserComponent} errors={errors} />
           </>
@@ -536,7 +502,7 @@ export function StyleStory() {
                     const custom = { backgroundGradient: { direction: dir, colors: [...colors] }, borderRadius: 8 };
                     return (
                       <Box key={dir} style={{ ...custom, height: 36, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: '#fff', fontSize: 9 }}>{dir}</Text>
+                        <S.WhiteCaption>{dir}</S.WhiteCaption>
                       </Box>
                     );
                   })}
@@ -544,17 +510,17 @@ export function StyleStory() {
 
                 {/* ── Borders ── */}
                 <SectionLabel>{'BORDERS'}</SectionLabel>
-                <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+                <S.RowG6 style={{ justifyContent: 'center' }}>
                   {([1, 2, 4] as const).map(w => {
                     const custom = { borderWidth: w, borderColor: P.blue, borderRadius: 6 };
                     return (
                       <Box key={w} style={{ ...custom, padding: 10, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: c.text, fontSize: 9 }}>{`${w}px`}</Text>
+                        <S.StoryBreadcrumbActive>{`${w}px`}</S.StoryBreadcrumbActive>
                       </Box>
                     );
                   })}
-                </Box>
-                <Box style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+                </S.RowG6>
+                <S.RowG6 style={{ justifyContent: 'center' }}>
                   {([
                     ['borderTopWidth', P.red, 'T'],
                     ['borderRightWidth', P.blue, 'R'],
@@ -564,11 +530,11 @@ export function StyleStory() {
                     const custom = { [side]: 3, borderColor: color };
                     return (
                       <Box key={side} style={{ ...custom, width: 52, height: 52, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: c.muted, fontSize: 9 }}>{label}</Text>
+                        <S.StoryCap>{label}</S.StoryCap>
                       </Box>
                     );
                   })}
-                </Box>
+                </S.RowG6>
 
                 {/* ── Shadows ── */}
                 <SectionLabel>{'SHADOW'}</SectionLabel>
@@ -590,16 +556,16 @@ export function StyleStory() {
 
                 {/* ── Opacity ── */}
                 <SectionLabel>{'OPACITY'}</SectionLabel>
-                <Box style={{ flexDirection: 'row', gap: 4 }}>
+                <S.RowG4>
                   {([1.0, 0.75, 0.5, 0.25, 0.1] as const).map(op => {
                     const custom = { backgroundColor: P.blue, opacity: op };
                     return (
                       <Box key={op} style={{ ...custom, flexGrow: 1, height: 36, borderRadius: 6, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: '#fff', fontSize: 8 }}>{`${op}`}</Text>
+                        <S.WhiteTiny>{`${op}`}</S.WhiteTiny>
                       </Box>
                     );
                   })}
-                </Box>
+                </S.RowG4>
 
                 {/* ── Transforms ── */}
                 <SectionLabel>{'TRANSFORM \u2014 ROTATE'}</SectionLabel>
@@ -608,7 +574,7 @@ export function StyleStory() {
                     const custom = { backgroundColor: P.blue, transform: { rotate: deg } };
                     return (
                       <Box key={deg} style={{ ...custom, width: 40, height: 40, borderRadius: 6, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: '#fff', fontSize: 8 }}>{`${deg}\u00b0`}</Text>
+                        <S.WhiteTiny>{`${deg}\u00b0`}</S.WhiteTiny>
                       </Box>
                     );
                   })}
@@ -620,7 +586,7 @@ export function StyleStory() {
                     const custom = { backgroundColor: P.green, transform: { scaleX: s, scaleY: s } };
                     return (
                       <Box key={s} style={{ ...custom, width: 40, height: 40, borderRadius: 6, justifyContent: 'center', alignItems: 'center' }} tooltip={styleTooltip(custom)}>
-                        <Text style={{ color: '#fff', fontSize: 8 }}>{`${s}x`}</Text>
+                        <S.WhiteTiny>{`${s}x`}</S.WhiteTiny>
                       </Box>
                     );
                   })}
@@ -653,21 +619,21 @@ export function StyleStory() {
                       borderRadius: 8, backgroundColor: P.red, zIndex: 1,
                       justifyContent: 'center', alignItems: 'center',
                     }} tooltip={{ content: 'position: absolute\ntop: 0 / left: 0\nzIndex: 1', layout: 'table', type: 'cursor' }}>
-                      <Text style={{ color: '#fff', fontSize: 9 }}>{'z:1'}</Text>
+                      <S.WhiteCaption>{'z:1'}</S.WhiteCaption>
                     </Box>
                     <Box style={{
                       position: 'absolute', top: 18, left: 30, width: 70, height: 70,
                       borderRadius: 8, backgroundColor: P.blue, zIndex: 3,
                       justifyContent: 'center', alignItems: 'center',
                     }} tooltip={{ content: 'position: absolute\ntop: 18 / left: 30\nzIndex: 3', layout: 'table', type: 'cursor' }}>
-                      <Text style={{ color: '#fff', fontSize: 9 }}>{'z:3'}</Text>
+                      <S.WhiteCaption>{'z:3'}</S.WhiteCaption>
                     </Box>
                     <Box style={{
                       position: 'absolute', top: 36, left: 60, width: 70, height: 70,
                       borderRadius: 8, backgroundColor: P.green, zIndex: 2,
                       justifyContent: 'center', alignItems: 'center',
                     }} tooltip={{ content: 'position: absolute\ntop: 36 / left: 60\nzIndex: 2', layout: 'table', type: 'cursor' }}>
-                      <Text style={{ color: '#fff', fontSize: 9 }}>{'z:2'}</Text>
+                      <S.WhiteCaption>{'z:2'}</S.WhiteCaption>
                     </Box>
                   </Box>
                 </Box>
@@ -675,22 +641,22 @@ export function StyleStory() {
                 {/* ── Overflow ── */}
                 <SectionLabel>{'OVERFLOW'}</SectionLabel>
                 <Box style={{ flexDirection: 'row', gap: 40, justifyContent: 'center', paddingTop: 10, paddingBottom: 30 }}>
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                  <S.CenterG4>
                     <Box style={{ width: 80, height: 56, overflow: 'hidden', borderWidth: 2, borderColor: P.blue, borderRadius: 6, backgroundColor: c.surface }}>
                       <Box style={{ width: 120, height: 80, backgroundColor: P.blue, opacity: 0.4, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
                         <Text style={{ color: '#fff', fontSize: 8 }}>{'clipped'}</Text>
                       </Box>
                     </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'hidden'}</Text>
-                  </Box>
-                  <Box style={{ alignItems: 'center', gap: 4 }}>
+                    <S.StoryTiny>{'hidden'}</S.StoryTiny>
+                  </S.CenterG4>
+                  <S.CenterG4>
                     <Box style={{ width: 80, height: 56, overflow: 'visible', borderWidth: 2, borderColor: P.orange, borderRadius: 6, backgroundColor: c.surface }}>
                       <Box style={{ width: 120, height: 80, backgroundColor: P.orange, opacity: 0.4, borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
                         <Text style={{ color: '#fff', fontSize: 8 }}>{'paints out'}</Text>
                       </Box>
                     </Box>
-                    <Text style={{ color: c.muted, fontSize: 8 }}>{'visible'}</Text>
-                  </Box>
+                    <S.StoryTiny>{'visible'}</S.StoryTiny>
+                  </S.CenterG4>
                 </Box>
 
                 {/* ── Spring Transitions ── */}
@@ -700,7 +666,7 @@ export function StyleStory() {
                     backgroundColor: c.primary, paddingLeft: 12, paddingRight: 12,
                     paddingTop: 6, paddingBottom: 6, borderRadius: 6, alignItems: 'center',
                   }}>
-                    <Text style={{ color: '#fff', fontSize: 10 }}>{expanded ? 'Collapse' : 'Expand'}</Text>
+                    <S.WhiteBody>{expanded ? 'Collapse' : 'Expand'}</S.WhiteBody>
                   </Pressable>
                   <Box style={{
                     width: expanded ? '100%' : 80,
@@ -712,7 +678,7 @@ export function StyleStory() {
                     overflow: 'hidden',
                     transition: { width: { duration: 600, easing: 'spring' } },
                   }}>
-                    <Text style={{ color: '#fff', fontSize: 9 }}>{expanded ? 'expanded' : '80px'}</Text>
+                    <S.WhiteCaption>{expanded ? 'expanded' : '80px'}</S.WhiteCaption>
                   </Box>
                 </Box>
 
@@ -722,7 +688,7 @@ export function StyleStory() {
                     backgroundColor: c.primary, paddingLeft: 12, paddingRight: 12,
                     paddingTop: 6, paddingBottom: 6, borderRadius: 6, alignItems: 'center',
                   }}>
-                    <Text style={{ color: '#fff', fontSize: 10 }}>{'Toggle'}</Text>
+                    <S.WhiteBody>{'Toggle'}</S.WhiteBody>
                   </Pressable>
                   <Box style={{ width: '100%', height: 80, position: 'relative' }}>
                     <Box style={{
@@ -742,7 +708,7 @@ export function StyleStory() {
                       alignItems: 'center',
                       transition: { transform: { duration: 600, easing: 'spring' } },
                     }}>
-                      <Text style={{ color: '#fff', fontSize: 9 }}>{toggled ? '160' : '0'}</Text>
+                      <S.WhiteCaption>{toggled ? '160' : '0'}</S.WhiteCaption>
                     </Box>
                   </Box>
                 </Box>
@@ -751,21 +717,13 @@ export function StyleStory() {
                 <SectionLabel>{'RECIPES'}</SectionLabel>
 
                 {/* Card */}
-                <Box style={{
-                  width: '100%',
-                  backgroundColor: c.bgElevated,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  padding: 14,
-                  gap: 6,
-                }} tooltip={{ content: 'Card recipe\nbgElevated + borderRadius + borderWidth + padding', layout: 'table', type: 'cursor' }}>
+                <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 10, padding: 14, gap: 6 }} tooltip={{ content: 'Card recipe\nbgElevated + borderRadius + borderWidth + padding', layout: 'table', type: 'cursor' }}>
                   <Text style={{ fontSize: 14, color: c.text }}>{'Card'}</Text>
-                  <Text style={{ fontSize: 11, color: c.muted }}>{'borderRadius + borderWidth + bgElevated + padding'}</Text>
-                </Box>
+                  <S.DimBody11>{'borderRadius + borderWidth + bgElevated + padding'}</S.DimBody11>
+                </S.Bordered>
 
                 {/* Badges */}
-                <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
                   {([
                     ['default', c.primary],
                     ['success', P.green],
@@ -777,55 +735,47 @@ export function StyleStory() {
                       paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
                       borderRadius: 10, backgroundColor: bg,
                     }} tooltip={{ content: 'Badge: borderRadius:10 + backgroundColor', layout: 'table', type: 'cursor' }}>
-                      <Text style={{ fontSize: 10, color: '#fff' }}>{label}</Text>
+                      <S.WhiteBody>{label}</S.WhiteBody>
                     </Box>
                   ))}
-                </Box>
+                </S.RowG8>
 
                 {/* Divider */}
                 <Box style={{ gap: 6 }}>
-                  <Text style={{ fontSize: 11, color: c.muted }}>{'Divider: height:1 + backgroundColor'}</Text>
-                  <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
-                  <Text style={{ fontSize: 11, color: c.muted }}>{'Just a styled Box \u2014 no special component needed.'}</Text>
+                  <S.DimBody11>{'Divider: height:1 + backgroundColor'}</S.DimBody11>
+                  <S.HorzDivider style={{ width: '100%' }} />
+                  <S.DimBody11>{'Just a styled Box \u2014 no special component needed.'}</S.DimBody11>
                 </Box>
 
                 {/* Composed notification */}
-                <Box style={{
-                  width: '100%',
-                  backgroundColor: c.bgElevated,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                  padding: 14,
-                  gap: 6,
-                }}>
+                <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 10, padding: 14, gap: 6 }}>
                   <Text style={{ fontSize: 14, color: c.text }}>{'Notification'}</Text>
-                  <Text style={{ fontSize: 11, color: c.muted }}>{'Card + Badge + Divider combined'}</Text>
-                  <Box style={{ flexDirection: 'row', gap: 6 }}>
+                  <S.DimBody11>{'Card + Badge + Divider combined'}</S.DimBody11>
+                  <S.RowG6>
                     <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 10, backgroundColor: P.green }}>
-                      <Text style={{ fontSize: 10, color: '#fff' }}>{'new'}</Text>
+                      <S.WhiteBody>{'new'}</S.WhiteBody>
                     </Box>
                     <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 10, backgroundColor: P.red }}>
-                      <Text style={{ fontSize: 10, color: '#fff' }}>{'urgent'}</Text>
+                      <S.WhiteBody>{'urgent'}</S.WhiteBody>
                     </Box>
-                  </Box>
-                  <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
+                  </S.RowG6>
+                  <S.HorzDivider style={{ width: '100%' }} />
                   <Box style={{ gap: 6 }}>
                     {(['Alert: system ready', 'Update available', 'Build passed'] as const).map((msg, i) => (
-                      <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                      <S.RowCenterG8 key={i}>
                         <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
                         <Text style={{ fontSize: 11, color: c.text }}>{msg}</Text>
-                      </Box>
+                      </S.RowCenterG8>
                     ))}
                   </Box>
-                </Box>
+                </S.Bordered>
 
                 {/* ═══════════════ Icons ═══════════════ */}
-                <Box style={{ height: 1, backgroundColor: c.border, marginTop: 10 }} />
+                <S.HorzDivider style={{ marginTop: 10 }} />
                 <SectionLabel>{'ICONS'}</SectionLabel>
 
                 {/* Search + size controls */}
-                <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <S.RowCenterG6>
                   <Box style={{ flexGrow: 1 }}>
                     <TextInput
                       placeholder={`Search ${iconNames.length} icons\u2026`}
@@ -860,14 +810,14 @@ export function StyleStory() {
                       </Text>
                     </Pressable>
                   ))}
-                </Box>
+                </S.RowCenterG6>
 
-                <Text style={{ color: c.muted, fontSize: 9 }}>
+                <S.StoryCap>
                   {`${filteredIcons.length} of ${iconNames.length} icons`}
-                </Text>
+                </S.StoryCap>
 
                 {/* Icon grid */}
-                <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 3, justifyContent: 'center', alignItems: 'center' }}>
+                <S.RowCenter style={{ flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
                   {pageIcons.map(name => {
                     const data = iconMap[name];
                     if (!data) return null;
@@ -891,80 +841,71 @@ export function StyleStory() {
                       </Pressable>
                     );
                   })}
-                </Box>
+                </S.RowCenter>
 
                 {/* Pagination */}
                 {iconTotalPages > 1 && (
-                  <Box style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+                  <S.RowCenterG8 style={{ justifyContent: 'center' }}>
                     <Pressable
                       onPress={() => setIconPage(Math.max(0, iconPage - 1))}
                       style={{ paddingTop: 3, paddingBottom: 3, paddingLeft: 8, paddingRight: 8, backgroundColor: c.surface, borderRadius: 4 }}
                     >
-                      <Text style={{ color: c.text, fontSize: 10 }}>{'< Prev'}</Text>
+                      <S.StoryBody>{'< Prev'}</S.StoryBody>
                     </Pressable>
-                    <Text style={{ color: c.muted, fontSize: 10 }}>
+                    <S.StoryMuted>
                       {`${iconPage + 1} / ${iconTotalPages}`}
-                    </Text>
+                    </S.StoryMuted>
                     <Pressable
                       onPress={() => setIconPage(Math.min(iconTotalPages - 1, iconPage + 1))}
                       style={{ paddingTop: 3, paddingBottom: 3, paddingLeft: 8, paddingRight: 8, backgroundColor: c.surface, borderRadius: 4 }}
                     >
-                      <Text style={{ color: c.text, fontSize: 10 }}>{'Next >'}</Text>
+                      <S.StoryBody>{'Next >'}</S.StoryBody>
                     </Pressable>
-                  </Box>
+                  </S.RowCenterG8>
                 )}
 
                 {/* Selected icon detail */}
                 {selectedIcon && iconMap[selectedIcon] && (
-                  <Box style={{
-                    width: '100%',
-                    backgroundColor: c.bgElevated,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                    padding: 12,
-                    gap: 8,
-                    alignItems: 'center',
-                  }}>
+                  <S.CenterW100 style={{ backgroundColor: c.bgElevated, borderRadius: 8, borderWidth: 1, borderColor: c.border, padding: 12, gap: 8 }}>
                     <Icon icon={iconMap[selectedIcon]} size={48} color={c.text} />
-                    <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>{selectedIcon}</Text>
+                    <S.BoldText style={{ fontSize: 12 }}>{selectedIcon}</S.BoldText>
                     <Box style={{
                       width: '100%',
                       backgroundColor: c.bg,
                       borderRadius: 6,
                       padding: 8,
                     }}>
-                      <Text style={{ color: c.muted, fontSize: 9, fontFamily: 'monospace' }}>
+                      <S.StoryCap style={{ fontFamily: 'monospace' }}>
                         {`import { ${selectedIcon} } from '@reactjit/icons';\n<Icon icon={${selectedIcon}} size={24} color="#fff" />`}
-                      </Text>
+                      </S.StoryCap>
                     </Box>
                     {/* Size variants */}
                     // rjit-ignore-next-line
-                    <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
+                    <S.RowG12 style={{ alignItems: 'flex-end' }}>
                       {ICON_SIZES.map(sz => (
                         <Box key={sz} style={{ alignItems: 'center', gap: 3 }}>
                           <Icon icon={iconMap[selectedIcon]} size={sz} color={c.text} />
-                          <Text style={{ color: c.muted, fontSize: 8 }}>{`${sz}`}</Text>
+                          <S.StoryTiny>{`${sz}`}</S.StoryTiny>
                         </Box>
                       ))}
-                    </Box>
-                  </Box>
+                    </S.RowG12>
+                  </S.CenterW100>
                 )}
 
                 {/* Icon usage examples */}
                 <SectionLabel>{'ICON USAGE'}</SectionLabel>
 
                 {/* Inline with text */}
-                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <S.RowCenterG8>
                   <Icon icon={iconMap.Home} size={16} color={c.text} />
                   <Text style={{ color: c.text, fontSize: 12 }}>{'Home'}</Text>
-                  <Box style={{ width: 1, height: 14, backgroundColor: c.border }} />
+                  <S.VertDivider style={{ height: 14 }} />
                   <Icon icon={iconMap.Settings} size={16} color={c.text} />
                   <Text style={{ color: c.text, fontSize: 12 }}>{'Settings'}</Text>
-                  <Box style={{ width: 1, height: 14, backgroundColor: c.border }} />
+                  <S.VertDivider style={{ height: 14 }} />
                   <Icon icon={iconMap.Search} size={16} color={c.text} />
                   <Text style={{ color: c.text, fontSize: 12 }}>{'Search'}</Text>
-                </Box>
+                </S.RowCenterG8>
 
                 {/* Colored icons */}
                 <Box style={{ flexDirection: 'row', gap: 10 }}>
@@ -977,14 +918,14 @@ export function StyleStory() {
                 </Box>
 
                 {/* Button-like usage */}
-                <Box style={{ flexDirection: 'row', gap: 6 }}>
+                <S.RowG6>
                   <Pressable onPress={() => {}} style={{
                     flexDirection: 'row', gap: 5, alignItems: 'center',
                     backgroundColor: c.primary, borderRadius: 6,
                     paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
                   }}>
                     <Icon icon={iconMap.Plus} size={12} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 10 }}>{'New'}</Text>
+                    <S.WhiteBody>{'New'}</S.WhiteBody>
                   </Pressable>
                   <Pressable onPress={() => {}} style={{
                     flexDirection: 'row', gap: 5, alignItems: 'center',
@@ -992,7 +933,7 @@ export function StyleStory() {
                     paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
                   }}>
                     <Icon icon={iconMap.Download} size={12} color={c.text} />
-                    <Text style={{ color: c.text, fontSize: 10 }}>{'Download'}</Text>
+                    <S.StoryBody>{'Download'}</S.StoryBody>
                   </Pressable>
                   <Pressable onPress={() => {}} style={{
                     flexDirection: 'row', gap: 5, alignItems: 'center',
@@ -1000,26 +941,26 @@ export function StyleStory() {
                     paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
                   }}>
                     <Icon icon={iconMap.Trash2} size={12} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 10 }}>{'Delete'}</Text>
+                    <S.WhiteBody>{'Delete'}</S.WhiteBody>
                   </Pressable>
-                </Box>
+                </S.RowG6>
 
                 {/* ═══════════════ Theme ═══════════════ */}
-                <Box style={{ height: 1, backgroundColor: c.border, marginTop: 10 }} />
+                <S.HorzDivider style={{ marginTop: 10 }} />
                 <SectionLabel>{'THEME'}</SectionLabel>
 
                 {/* Active theme + switcher */}
-                <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                <S.RowCenter style={{ gap: 10 }}>
                   <Box style={{ gap: 2, flexGrow: 1 }}>
-                    <Text style={{ color: c.muted, fontSize: 9 }}>{'Active theme'}</Text>
+                    <S.StoryCap>{'Active theme'}</S.StoryCap>
                     <Text style={{ color: c.primary, fontSize: 12, fontWeight: 'bold' }}>{themeId}</Text>
                   </Box>
                   <ThemeSwitcher />
-                </Box>
+                </S.RowCenter>
 
                 {/* Semantic tokens */}
                 <SectionLabel>{'SEMANTIC TOKENS'}</SectionLabel>
-                <Box style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+                <S.RowWrap style={{ gap: 5 }}>
                   <ColorSwatch color={c.bg} label="bg" />
                   <ColorSwatch color={c.bgAlt} label="bgAlt" />
                   <ColorSwatch color={c.bgElevated} label="bgElevated" />
@@ -1034,14 +975,14 @@ export function StyleStory() {
                   <ColorSwatch color={c.warning} label="warning" />
                   <ColorSwatch color={c.success} label="success" />
                   <ColorSwatch color={c.info} label="info" />
-                </Box>
+                </S.RowWrap>
 
                 {/* Theme gallery */}
                 <SectionLabel>{'THEME GALLERY'}</SectionLabel>
-                <Text style={{ color: c.muted, fontSize: 9 }}>
+                <S.StoryCap>
                   {`${themeNames.length} themes. Click to switch.`}
-                </Text>
-                <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                </S.StoryCap>
+                <S.RowG6 style={{ flexWrap: 'wrap' }}>
                   {themeNames.map(id => (
                     <ThemeCard
                       key={id}
@@ -1050,7 +991,7 @@ export function StyleStory() {
                       onPress={() => setTheme(id)}
                     />
                   ))}
-                </Box>
+                </S.RowG6>
 
               </Box>
             </ScrollView>
@@ -1059,13 +1000,13 @@ export function StyleStory() {
 
             {/* ══════════════ RIGHT: API Reference ══════════════ */}
             <ScrollView style={{ flexGrow: 1, flexBasis: 0, justifyContent: 'center', alignItems: 'center' }}>
-              <Box style={{ width: '100%', padding: 14, gap: 10 }}>
+              <S.StackG10W100 style={{ padding: 14 }}>
 
                 {/* ── Overview ── */}
                 <SectionLabel>{'OVERVIEW'}</SectionLabel>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                <S.StoryBody>
                   {'Style properties control the visual appearance of nodes beyond layout. Gradients add color depth. Borders define edges. Shadows lift elements. Transform rotates, scales, and translates without affecting flow. Transitions animate changes with spring or easing curves. Icons provide vector glyphs at any size. The theme system delivers semantic color tokens that adapt across palettes.'}
-                </Text>
+                </S.StoryBody>
 
                 <HorizontalDivider />
 
@@ -1079,10 +1020,10 @@ export function StyleStory() {
                 <SectionLabel>{'STYLE BEHAVIOR'}</SectionLabel>
                 <Box style={{ gap: 4, width: '100%' }}>
                   {STYLE_BEHAVIOR_NOTES.map((note, i) => (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', width: '100%' }}>
+                    <S.RowG6 key={i} style={{ alignItems: 'flex-start', width: '100%' }}>
                       <Image src="chevron-right" style={{ width: 8, height: 8, flexShrink: 0, marginTop: 2 }} tintColor={c.muted} />
-                      <Text style={{ color: c.text, fontSize: 10, flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</Text>
-                    </Box>
+                      <S.StoryBody style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>{note}</S.StoryBody>
+                    </S.RowG6>
                   ))}
                 </Box>
 
@@ -1092,11 +1033,11 @@ export function StyleStory() {
                 <SectionLabel>{'STYLE PROPS'}</SectionLabel>
                 <Box style={{ gap: 3 }}>
                   {STYLE_PROPS.map(([prop, type, icon]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                      <Image src={icon} style={{ width: 10, height: 10 }} tintColor={SYN.prop} />
+                    <S.RowCenterG5 key={prop}>
+                      <S.StorySectionIcon src={icon} tintColor={SYN.prop} />
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{type}</Text>
-                    </Box>
+                      <S.StoryCap>{type}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
@@ -1104,18 +1045,18 @@ export function StyleStory() {
 
                 {/* ── Icon API ── */}
                 <SectionLabel>{'ICON API'}</SectionLabel>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                <S.StoryBody>
                   {'The Icon component renders vector path data as geometry. Import named icons from @reactjit/icons \u2014 each export is a number[][] of path segments. Pass it to <Icon> with a size and color.'}
-                </Text>
+                </S.StoryBody>
                 <CodeBlock language="tsx" fontSize={9} code={ICON_USAGE_CODE} />
 
                 <SectionLabel>{'ICON PROPS'}</SectionLabel>
                 <Box style={{ gap: 3 }}>
                   {ICON_PROPS.map(([prop, desc]) => (
-                    <Box key={prop} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                    <S.RowCenterG5 key={prop}>
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{prop}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{desc}</Text>
-                    </Box>
+                      <S.StoryCap>{desc}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
@@ -1123,46 +1064,34 @@ export function StyleStory() {
 
                 {/* ── Theme API ── */}
                 <SectionLabel>{'THEME API'}</SectionLabel>
-                <Text style={{ color: c.text, fontSize: 10 }}>
+                <S.StoryBody>
                   {'The theme system provides semantic color tokens that adapt to any palette. useThemeColors() returns the active token set. useTheme() gives programmatic switching. ThemeSwitcher is a drop-in picker widget.'}
-                </Text>
+                </S.StoryBody>
                 <CodeBlock language="tsx" fontSize={9} code={THEME_USAGE_CODE} />
 
                 <SectionLabel>{'THEME TOKENS'}</SectionLabel>
                 <Box style={{ gap: 3 }}>
                   {THEME_TOKENS.map(([token, desc]) => (
-                    <Box key={token} style={{ flexDirection: 'row', gap: 5, alignItems: 'center' }}>
+                    <S.RowCenterG5 key={token}>
                       <Text style={{ color: SYN.prop, fontSize: 9, fontWeight: 'bold' }}>{token}</Text>
-                      <Text style={{ color: c.muted, fontSize: 9 }}>{desc}</Text>
-                    </Box>
+                      <S.StoryCap>{desc}</S.StoryCap>
+                    </S.RowCenterG5>
                   ))}
                 </Box>
 
-              </Box>
+              </S.StackG10W100>
             </ScrollView>
           </>
         )}
-      </Box>
+      </S.RowGrow>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20,
-        paddingRight: 20,
-        paddingTop: 6,
-        paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="palette" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Style'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="palette" />
+        <S.StoryBreadcrumbActive>{'Style'}</S.StoryBreadcrumbActive>
 
         <Box style={{ flexGrow: 1 }} />
 
@@ -1180,11 +1109,7 @@ export function StyleStory() {
             borderRadius: 4,
           })}
         >
-          <Image
-            src={playground ? 'book-open' : 'play'}
-            style={{ width: 10, height: 10 }}
-            tintColor={playground ? 'white' : c.text}
-          />
+          <S.StorySectionIcon src={playground ? 'book-open' : 'play'} tintColor={playground ? 'white' : c.text} />
           <Text style={{
             color: playground ? 'white' : c.text,
             fontSize: 9,
@@ -1194,8 +1119,8 @@ export function StyleStory() {
           </Text>
         </Pressable>
 
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

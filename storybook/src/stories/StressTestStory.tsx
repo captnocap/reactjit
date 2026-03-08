@@ -98,17 +98,17 @@ export function StressTestStory() {
 
   if (!current) {
     return (
-      <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
+      <S.FullSize style={{ padding: 24, gap: 20, overflow: 'scroll' }}>
         <Box style={{ gap: 4 }}>
           <Text style={{ color: c.text, fontSize: 20, fontWeight: 'normal' }}>Choose a stress test</Text>
           <Text style={{ color: c.textDim, fontSize: 12 }}>Pick a scenario to run heavy load and rendering checks.</Text>
         </Box>
-        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'space-around', width: '100%' }}>
+        <S.RowWrap style={{ gap: 16, justifyContent: 'space-around', width: '100%' }}>
           {STRESS_TESTS.map((item) => (
             <StressCard key={item.id} item={item} onSelect={setSelected} />
           ))}
-        </Box>
-      </Box>
+        </S.RowWrap>
+      </S.FullSize>
     );
   }
 
@@ -117,21 +117,8 @@ export function StressTestStory() {
 
   return (
     <S.StoryRoot>
-      <Box
-        style={{
-          height: 36,
-          width: '100%',
-          paddingLeft: 12,
-          paddingRight: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          backgroundColor: c.bgAlt,
-          borderBottomWidth: 1,
-          borderColor: c.border,
-        }}
-      >
-        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <S.RowCenterBorder style={{ height: 36, width: '100%', paddingLeft: 12, paddingRight: 12, justifyContent: 'space-between', backgroundColor: c.bgAlt, borderBottomWidth: 1 }}>
+        <S.RowCenterG8>
           <Pressable
             onPress={() => setSelected(null)}
             style={(state) => ({
@@ -143,17 +130,17 @@ export function StressTestStory() {
               borderRadius: 4,
             })}
           >
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Stress Tests</Text>
+            <S.SecondaryBody>Stress Tests</S.SecondaryBody>
           </Pressable>
           <Text style={{ color: c.text, fontSize: 12, fontWeight: 'normal' }}>{current.name}</Text>
           <Text style={{ color: categoryColor, fontSize: 10, fontWeight: 'normal' }}>{current.category.toUpperCase()}</Text>
-        </Box>
-        <Text style={{ color: c.textDim, fontSize: 10 }}>{current.description}</Text>
-      </Box>
+        </S.RowCenterG8>
+        <S.StoryMuted>{current.description}</S.StoryMuted>
+      </S.RowCenterBorder>
       <Box style={{ width: '100%', flexGrow: 1, padding: 12 }}>
-        <Box style={{ width: '100%', height: '100%', borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, overflow: 'scroll' }}>
+        <S.StoryRoot style={{ borderRadius: 10, borderWidth: 1, borderColor: c.border, overflow: 'scroll' }}>
           <ActiveStory />
-        </Box>
+        </S.StoryRoot>
       </Box>
     </S.StoryRoot>
   );

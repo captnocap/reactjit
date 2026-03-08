@@ -222,7 +222,7 @@ function PeriodicTableDemo() {
   const el = useElement(selected ?? 1);
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <PeriodicTable
         onSelect={(el) => setSelected(el.number)}
         selected={selected}
@@ -230,12 +230,12 @@ function PeriodicTableDemo() {
       />
 
       {el && (
-        <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 12 }}>
           <ElementCard element={el.number} style={{ flexGrow: 1 }} />
           <ElectronShell element={el.number} />
-        </Box>
+        </S.RowWrap>
       )}
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -253,8 +253,8 @@ function ElementDemo() {
   ], []);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+    <S.StackG6W100>
+      <S.RowWrap style={{ gap: 4 }}>
         {elements.map(e => (
           <Pressable
             key={e.n}
@@ -268,16 +268,16 @@ function ElementDemo() {
             <Text style={{ fontSize: 10, color: num === e.n ? '#000' : c.text }}>{e.sym}</Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowWrap>
 
       {el && (
         <>
-          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <S.RowCenterG6>
             <Box style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: el.cpkColor }} />
-            <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>
+            <S.BoldText style={{ fontSize: 12 }}>
               {`${el.number} ${el.symbol} — ${el.name}`}
-            </Text>
-          </Box>
+            </S.BoldText>
+          </S.RowCenterG6>
           <Box style={{ gap: 2 }}>
             {[
               { k: 'Mass', v: `${el.mass} u`, color: P.blue },
@@ -287,16 +287,16 @@ function ElementDemo() {
               { k: 'Electronegativity', v: el.electronegativity !== null ? `${el.electronegativity}` : 'N/A', color: P.yellow },
               { k: 'Melting Point', v: el.meltingPoint !== null ? `${el.meltingPoint} K` : 'N/A', color: P.peach },
             ].map(row => (
-              <Box key={row.k} style={{ flexDirection: 'row', gap: 6, alignItems: 'start' }}>
+              <S.RowG6 key={row.k} style={{ alignItems: 'start' }}>
                 <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: row.color, marginTop: 3, flexShrink: 0 }} />
-                <Text style={{ fontSize: 9, color: c.muted, width: 90, flexShrink: 0 }}>{row.k}</Text>
+                <S.StoryCap style={{ width: 90, flexShrink: 0 }}>{row.k}</S.StoryCap>
                 <S.StoryBreadcrumbActive>{row.v}</S.StoryBreadcrumbActive>
-              </Box>
+              </S.RowG6>
             ))}
           </Box>
         </>
       )}
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -318,7 +318,7 @@ function MoleculesDemo() {
   }, [search]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <TextInput
         placeholder="Search compounds (water, glucose...)"
         value={search}
@@ -330,16 +330,16 @@ function MoleculesDemo() {
         <Box style={{ gap: 3 }}>
           {results.map(r => (
             <Pressable key={r.formula} onPress={() => { setFormula(r.formula); setSearch(''); }}>
-              <Box style={{ flexDirection: 'row', gap: 6, padding: 4, backgroundColor: c.surface, borderRadius: 4 }}>
+              <S.RowG6 style={{ padding: 4, backgroundColor: c.surface, borderRadius: 4 }}>
                 <ChemFormula formula={r.formula} fontSize={10} color={P.accent} />
                 <S.StoryMuted>{r.name}</S.StoryMuted>
-              </Box>
+              </S.RowG6>
             </Pressable>
           ))}
         </Box>
       )}
 
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+      <S.RowWrap style={{ gap: 4 }}>
         {DEMO_FORMULAS.map(f => (
           <Pressable
             key={f}
@@ -353,10 +353,10 @@ function MoleculesDemo() {
             <ChemFormula formula={f} fontSize={9} color={formula === f ? '#000' : c.text} />
           </Pressable>
         ))}
-      </Box>
+      </S.RowWrap>
 
       <MoleculeCard formula={formula} />
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -375,8 +375,8 @@ function ReactionsDemo() {
   }, [customEq]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+    <S.StackG8W100>
+      <S.RowG6>
         <TextInput
           placeholder="H2 + O2 -> H2O"
           value={customEq}
@@ -389,9 +389,9 @@ function ReactionsDemo() {
             <Text style={{ fontSize: 11, color: '#000' }}>{'Balance'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG6>
 
-      <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+      <S.RowWrap style={{ gap: 3 }}>
         {DEMO_REACTIONS.map(eq => (
           <Pressable
             key={eq}
@@ -401,14 +401,14 @@ function ReactionsDemo() {
             <ChemEquation equation={eq} fontSize={8} color={c.muted} />
           </Pressable>
         ))}
-      </Box>
+      </S.RowWrap>
 
       <Box style={{ gap: 6 }}>
         {equations.slice(0, 4).map((eq, i) => (
           <ReactionView key={`${eq}-${i}`} equation={eq} />
         ))}
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -421,14 +421,14 @@ function ReagentsDemo() {
   const [infoReagent, setInfoReagent] = useState<ReagentType>('marquis');
 
   return (
-    <Box style={{ gap: 10, width: '100%' }}>
+    <S.StackG10W100>
       <S.StoryCap>
         {'Color-change presumptive tests. Stack multiple reagents for higher confidence.'}
       </S.StoryCap>
 
       <Box style={{ gap: 4 }}>
         <S.StoryCap>{'Sample compound'}</S.StoryCap>
-        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 4 }}>
           {REAGENT_COMPOUNDS.map(cmp => (
             <Pressable
               key={cmp}
@@ -442,30 +442,30 @@ function ReagentsDemo() {
               <Text style={{ fontSize: 10, color: compound === cmp ? '#000' : c.text }}>{cmp}</Text>
             </Pressable>
           ))}
-        </Box>
+        </S.RowWrap>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', width: '100%', justifyContent: 'center' }}>
+      <S.RowWrap style={{ gap: 10, width: '100%', justifyContent: 'center' }}>
         {REAGENT_TYPES.map(r => (
-          <Box key={r} style={{ alignItems: 'center', gap: 4 }}>
+          <S.CenterG4 key={r}>
             <ReagentTest
               type={r}
               sample={compound}
               onReactionComplete={(e) => setLastResult(`${r}: ${(e as any).description}`)}
               style={{ width: 104, height: 148 }}
             />
-          </Box>
+          </S.CenterG4>
         ))}
-      </Box>
+      </S.RowWrap>
 
       {lastResult !== '' && (
         <S.StoryInputWell>
-          <Text style={{ fontSize: 10, color: c.text }}>{lastResult}</Text>
+          <S.StoryBody>{lastResult}</S.StoryBody>
         </S.StoryInputWell>
       )}
 
       <Box style={{ gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
+        <S.RowG4>
           {REAGENT_TYPES.map(r => (
             <Pressable key={r} onPress={() => setInfoReagent(r)}>
               <Box style={{
@@ -479,14 +479,14 @@ function ReagentsDemo() {
               </Box>
             </Pressable>
           ))}
-        </Box>
-        <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 3 }}>
-          <Text style={{ fontSize: 11, color: c.text, fontWeight: 'bold' }}>{REAGENT_INFO[infoReagent].name}</Text>
+        </S.RowG4>
+        <S.SurfaceR6 style={{ padding: 8, gap: 3 }}>
+          <S.BoldText style={{ fontSize: 11 }}>{REAGENT_INFO[infoReagent].name}</S.BoldText>
           <ChemFormula formula={REAGENT_INFO[infoReagent].formula} fontSize={9} color={P.teal} />
           <S.StoryCap>{REAGENT_INFO[infoReagent].description}</S.StoryCap>
-        </Box>
+        </S.SurfaceR6>
       </Box>
-    </Box>
+    </S.StackG10W100>
   );
 }
 
@@ -504,8 +504,8 @@ function SpectraDemo() {
   const [compound, setCompound] = useState('C2H5OH');
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+    <S.StackG8W100>
+      <S.RowG6>
         {(['ir', 'uv-vis', 'mass-spec'] as const).map(t => (
           <Pressable
             key={t}
@@ -521,9 +521,9 @@ function SpectraDemo() {
             </Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowG6>
 
-      <Box style={{ flexDirection: 'row', gap: 4 }}>
+      <S.RowG4>
         {(SPEC_COMPOUNDS[specType] ?? []).map(cmp => (
           <Pressable
             key={cmp}
@@ -537,10 +537,10 @@ function SpectraDemo() {
             <ChemFormula formula={cmp} fontSize={9} color={compound === cmp ? '#000' : c.text} />
           </Pressable>
         ))}
-      </Box>
+      </S.RowG4>
 
       <SpectrumView spectrumType={specType} compound={compound} style={{ height: 260 }} />
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -549,19 +549,19 @@ function SpectraDemo() {
 function PhaseDiagramDemo() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <S.StoryCap>
         {'Pressure-temperature phase diagrams with triple and critical points. Rendered by Lua at 60fps.'}
       </S.StoryCap>
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
+      <S.RowG12>
         <Box style={{ flexGrow: 1 }}>
           <PhaseDiagram compound="H2O" style={{ height: 240 }} />
         </Box>
         <Box style={{ flexGrow: 1 }}>
           <PhaseDiagram compound="CO2" style={{ height: 240 }} />
         </Box>
-      </Box>
-    </Box>
+      </S.RowG12>
+    </S.StackG8W100>
   );
 }
 
@@ -589,8 +589,8 @@ function PubChemDemo() {
   }, [query]);
 
   return (
-    <Box style={{ gap: 6, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+    <S.StackG6W100>
+      <S.RowG6>
         <TextInput
           placeholder="aspirin, caffeine, CID 2244..."
           value={query}
@@ -603,15 +603,15 @@ function PubChemDemo() {
             <Text style={{ fontSize: 11, color: '#000' }}>{'Fetch'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG6>
       {loading && <S.StoryMuted>{'Loading from PubChem...'}</S.StoryMuted>}
       {error && <Text style={{ fontSize: 10, color: P.red }}>{error}</Text>}
       {data && (
-        <Box style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, gap: 4 }}>
-          <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>
+        <S.SurfaceR6 style={{ padding: 8, gap: 4 }}>
+          <S.BoldText style={{ fontSize: 12 }}>
             {`CID ${data.cid}: ${data.iupacName ?? query}`}
-          </Text>
-          <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          </S.BoldText>
+          <S.RowG8 style={{ flexWrap: 'wrap' }}>
             {data.molecularFormula && (
               <Box style={{ gap: 1 }}>
                 <S.StoryTiny>{'Formula'}</S.StoryTiny>
@@ -636,13 +636,13 @@ function PubChemDemo() {
                 <Text style={{ fontSize: 11, color: P.mauve }}>{`${data.xlogp}`}</Text>
               </Box>
             )}
-          </Box>
+          </S.RowG8>
           {data.inchiKey && (
             <S.StoryTiny>{`InChIKey: ${data.inchiKey}`}</S.StoryTiny>
           )}
-        </Box>
+        </S.SurfaceR6>
       )}
-    </Box>
+    </S.StackG6W100>
   );
 }
 
@@ -675,7 +675,7 @@ function ToolsDemo() {
   }, [moles]);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
+    <S.StackG8W100>
       <Box style={{ gap: 4 }}>
         <S.StoryCap>{'Formula'}</S.StoryCap>
         <TextInput
@@ -684,22 +684,22 @@ function ToolsDemo() {
           onChangeText={setFormula}
           style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, fontSize: 11, color: c.text }}
         />
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <S.RowCenterG6>
           <ChemFormula formula={formula} fontSize={14} color={P.accent} />
           <Text style={{ fontSize: 14, color: P.accent }}>{`= ${mm} g/mol`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        </S.RowCenterG6>
+        <S.RowG6 style={{ flexWrap: 'wrap' }}>
           {Object.entries(composition).map(([sym, pct]) => (
             <S.StoryMuted key={sym}>{`${sym}: ${pct}%`}</S.StoryMuted>
           ))}
-        </Box>
+        </S.RowG6>
       </Box>
 
       <Box style={{ gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        <S.RowCenterG4>
           <S.StoryCap>{'Mass (g) of'}</S.StoryCap>
           <ChemFormula formula={formula} fontSize={9} color={c.muted} />
-        </Box>
+        </S.RowCenterG4>
         <TextInput
           placeholder="18"
           value={mass}
@@ -717,7 +717,7 @@ function ToolsDemo() {
           </Box>
         </Box>
       </Box>
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -726,15 +726,15 @@ function ToolsDemo() {
 function FeatureCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {FEATURES.map(f => (
-        <Box key={f.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={f.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 150, flexShrink: 0 }}>{f.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 150, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{f.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -784,20 +784,14 @@ function NotationDemo() {
       {/* Formulas */}
       <Box style={{ gap: 8 }}>
         <S.StoryMuted>{'Formulas — \\ce{...}'}</S.StoryMuted>
-        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <S.RowWrap style={{ gap: 10 }}>
           {NOTATION_FORMULAS.map(({ label, f }) => (
-            <Box key={f} style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
-              gap: 4,
-              alignItems: 'center',
-            }}>
+            <S.CenterG4 key={f} style={{ backgroundColor: c.surface, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10 }}>
               <ChemFormula formula={f} fontSize={15} color={c.text} />
               <S.StoryTiny>{label}</S.StoryTiny>
-            </Box>
+            </S.CenterG4>
           ))}
-        </Box>
+        </S.RowWrap>
       </Box>
 
       {/* Equations */}
@@ -805,13 +799,9 @@ function NotationDemo() {
         <S.StoryMuted>{'Equations — arrows, state symbols, equilibrium'}</S.StoryMuted>
         <Box style={{ gap: 6 }}>
           {NOTATION_EQUATIONS.map(eq => (
-            <Box key={eq} style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              paddingTop: 6, paddingBottom: 6, paddingLeft: 12, paddingRight: 12,
-            }}>
+            <S.SurfaceR6 key={eq} style={{ paddingTop: 6, paddingBottom: 6, paddingLeft: 12, paddingRight: 12 }}>
               <ChemEquation equation={eq} fontSize={14} color={c.text} />
-            </Box>
+            </S.SurfaceR6>
           ))}
         </Box>
       </Box>
@@ -819,39 +809,27 @@ function NotationDemo() {
       {/* Isotopes */}
       <Box style={{ gap: 8 }}>
         <S.StoryMuted>{'Isotope notation — mass/atomic number'}</S.StoryMuted>
-        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 10 }}>
           {NOTATION_ISOTOPES.map(({ symbol, mass, atomic, label }) => (
-            <Box key={label} style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
-              gap: 4,
-              alignItems: 'center',
-            }}>
+            <S.CenterG4 key={label} style={{ backgroundColor: c.surface, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10 }}>
               <IsoNotation symbol={symbol} mass={mass} atomic={atomic} fontSize={15} color={c.text} />
               <S.StoryTiny>{label}</S.StoryTiny>
-            </Box>
+            </S.CenterG4>
           ))}
-        </Box>
+        </S.RowWrap>
       </Box>
 
       {/* ChemFig linear */}
       <Box style={{ gap: 8 }}>
         <S.StoryMuted>{'Structural formulas — \\chemfig{...} (linear chains)'}</S.StoryMuted>
-        <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+        <S.RowWrap style={{ gap: 10 }}>
           {NOTATION_STRUCTURES.map(({ label, f }) => (
-            <Box key={f} style={{
-              backgroundColor: c.surface,
-              borderRadius: 6,
-              paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10,
-              gap: 4,
-              alignItems: 'center',
-            }}>
+            <S.CenterG4 key={f} style={{ backgroundColor: c.surface, borderRadius: 6, paddingTop: 6, paddingBottom: 6, paddingLeft: 10, paddingRight: 10 }}>
               <ChemFig formula={f} fontSize={14} color={c.text} />
               <S.StoryTiny>{label}</S.StoryTiny>
-            </Box>
+            </S.CenterG4>
           ))}
-        </Box>
+        </S.RowWrap>
       </Box>
 
     </Box>
@@ -863,16 +841,16 @@ function NotationDemo() {
 function ConstantsReference() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {Object.entries(CONSTANTS).map(([name, value]) => (
-        <Box key={name} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <S.RowSpaceBetween key={name}>
           <S.StoryCap>{name.replace(/_/g, ' ')}</S.StoryCap>
           <S.StoryBreadcrumbActive>
             {typeof value === 'number' && value < 0.001 ? value.toExponential(6) : `${value}`}
           </S.StoryBreadcrumbActive>
-        </Box>
+        </S.RowSpaceBetween>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -883,8 +861,8 @@ function BohrModelDemo() {
   const [element, setElement] = useState(26);
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+    <S.StackG8W100>
+      <S.RowWrap style={{ gap: 4 }}>
         {BOHR_ELEMENTS.map(e => (
           <Pressable
             key={e.n}
@@ -898,13 +876,13 @@ function BohrModelDemo() {
             <Text style={{ fontSize: 10, color: element === e.n ? '#000' : c.text }}>{e.sym}</Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowWrap>
 
-      <Box style={{ flexDirection: 'row', gap: 12 }}>
+      <S.RowG12>
         <BohrModel element={element} speed={1.2} style={{ width: 200, height: 200 }} />
         <BohrModel element={element} speed={0.5} style={{ width: 140, height: 140 }} />
-      </Box>
-    </Box>
+      </S.RowG12>
+    </S.StackG8W100>
   );
 }
 
@@ -916,8 +894,8 @@ function StructureDemo() {
   const [custom, setCustom] = useState('');
 
   return (
-    <Box style={{ gap: 8, width: '100%' }}>
-      <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+    <S.StackG8W100>
+      <S.RowWrap style={{ gap: 4 }}>
         {DEMO_SMILES.map(s => (
           <Pressable
             key={s.smiles}
@@ -931,9 +909,9 @@ function StructureDemo() {
             <Text style={{ fontSize: 9, color: smiles === s.smiles ? '#000' : c.text }}>{s.label}</Text>
           </Pressable>
         ))}
-      </Box>
+      </S.RowWrap>
 
-      <Box style={{ flexDirection: 'row', gap: 6 }}>
+      <S.RowG6>
         <TextInput
           placeholder="Enter SMILES..."
           value={custom}
@@ -946,10 +924,10 @@ function StructureDemo() {
             <Text style={{ fontSize: 11, color: '#000' }}>{'Render'}</Text>
           </Box>
         </Pressable>
-      </Box>
+      </S.RowG6>
 
       <StructureView smiles={smiles} showLabels style={{ height: 260 }} />
-    </Box>
+    </S.StackG8W100>
   );
 }
 
@@ -962,18 +940,9 @@ export function ChemistryStory() {
     <S.StoryRoot>
 
       {/* ── Header ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderBottomWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12,
-        gap: 14,
-      }}>
-        <Image src="beaker" style={{ width: 18, height: 18 }} tintColor={P.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Chemistry'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="beaker" tintColor={P.accent} />
+        <S.StoryTitle>{'Chemistry'}</S.StoryTitle>
         <Box style={{
           backgroundColor: P.accentDim,
           borderRadius: 4,
@@ -982,8 +951,8 @@ export function ChemistryStory() {
           <Text style={{ color: P.accent, fontSize: 10 }}>{'@reactjit/chemistry'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'118 elements and counting'}</Text>
-      </Box>
+        <S.StoryMuted>{'118 elements and counting'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
@@ -995,12 +964,12 @@ export function ChemistryStory() {
           paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24,
           gap: 8,
         }}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'Periodic table, molecules, reactions, spectra, reagent tests — all in one package.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'118 elements with full data, 35+ common compounds, equation balancing via LuaJIT RPC, molar mass, stoichiometry conversions, electron configurations, and bond analysis. Reagent spot tests, IR/UV-Vis/Mass spectra, and phase diagrams render at 60fps via Lua capabilities. PubChem REST API for live compound lookups.'}
-          </Text>
+          </S.StoryMuted>
         </Box>
 
         <Divider />
@@ -1009,9 +978,9 @@ export function ChemistryStory() {
         <Band>
           <Half>
             <SectionLabel icon="download">{'INSTALL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Widgets, hooks, utilities, and Lua capabilities — one import. PeriodicTable, ElementTile, ElementCard, and MoleculeCard are React-rendered. ReagentTest, SpectrumView, and PhaseDiagram are 60fps Lua painters.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={INSTALL_CODE} style={{ width: '100%' }} />
@@ -1023,9 +992,9 @@ export function ChemistryStory() {
         {/* ── Full-width: PERIODIC TABLE ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
           <SectionLabel icon="grid" accentColor={P.blue}>{'PERIODIC TABLE'}</SectionLabel>
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryBody>
             {'Interactive 118-element table with three color modes. Click any element for its detail card and electron shell diagram. All element data sourced from IUPAC 2024 + PubChem.'}
-          </Text>
+          </S.StoryBody>
           <PeriodicTableDemo />
         </Box>
 
@@ -1038,9 +1007,9 @@ export function ChemistryStory() {
           </Half>
           <Half>
             <SectionLabel icon="atom" accentColor={P.teal}>{'ELEMENT LOOKUP'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'useElement() returns the full Element record by atomic number or symbol. Mass, category, phase, electron configuration, shells, CPK color, melting/boiling points, density, electronegativity — everything.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={ELEMENT_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1051,9 +1020,9 @@ export function ChemistryStory() {
         <Band>
           <Half>
             <SectionLabel icon="hexagon" accentColor={P.green}>{'MOLECULES'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'35+ common compounds with name, IUPAC, geometry, polarity, and bond data. MoleculeCard renders a detail view for any formula. searchCompounds() finds compounds by name, formula, or IUPAC name.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} code={MOLECULE_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -1070,12 +1039,12 @@ export function ChemistryStory() {
           </Half>
           <Half>
             <SectionLabel icon="git-merge" accentColor={P.yellow}>{'REACTIONS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Equation balancing runs in LuaJIT via chemistry:balance RPC — zero frame lag on every keystroke. Classifies reactions as combustion, synthesis, decomposition, single/double replacement. Enthalpy lookup for common reactions.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Type any unbalanced equation — use -> or => or = as the arrow. ReactionView renders the balanced equation with coefficients, reaction type, and enthalpy when available.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={REACTION_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1084,10 +1053,10 @@ export function ChemistryStory() {
 
         {/* ── Callout: pure TS ── */}
         <CalloutBand borderColor={P.calloutBorder} bgColor={P.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={P.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={P.calloutBorder} />
+          <S.StoryBody>
             {'Element lookups and stoichiometry run in TypeScript. Equation balancing and molecule building are LuaJIT RPCs — no frame lag when users type formulas interactively. The 118-element dataset is 15KB gzipped.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -1095,9 +1064,9 @@ export function ChemistryStory() {
         {/* ── Full-width: REAGENT TESTS ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
           <SectionLabel icon="droplet" accentColor={P.pink}>{'REAGENT SPOT TESTS'}</SectionLabel>
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryBody>
             {'Animated color-change presumptive tests rendered at 60fps by Lua. 8 reagent types (Marquis, Mecke, Mandelin, Simon\'s, Ehrlich, Liebermann, Froehde, Gallic Acid) across 12+ compounds. Each test includes reaction mechanisms and functional group explanations.'}
-          </Text>
+          </S.StoryBody>
           <ReagentsDemo />
         </Box>
 
@@ -1107,12 +1076,12 @@ export function ChemistryStory() {
         <Band>
           <Half>
             <SectionLabel icon="activity" accentColor={P.peach}>{'SPECTROMETRY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'IR, UV-Vis, and Mass Spec plots rendered at 60fps by Lua. Peak data includes labels and structural assignments. IR absorption reference table for functional group identification.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'SpectrumView renders peaks, axes, and labels. PhaseDiagram renders pressure-temperature plots with solid/liquid/gas regions, triple point, and critical point.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={SPECTRA_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -1132,10 +1101,10 @@ export function ChemistryStory() {
 
         {/* ── Callout: Lua capabilities ── */}
         <CalloutBand borderColor={P.calloutBorder} bgColor={P.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={P.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={P.calloutBorder} />
+          <S.StoryBody>
             {'ReagentTest, SpectrumView, PhaseDiagram, BohrModel, and StructureView are Lua capabilities — 60fps painters with smooth animations, not React re-renders. The React component is a one-liner declarative wrapper.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -1147,12 +1116,12 @@ export function ChemistryStory() {
           </Half>
           <Half>
             <SectionLabel icon="atom" accentColor={P.mauve}>{'BOHR MODEL'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Animated 3D Bohr model for any element (Z=1-118). Tilted orbital ellipses with orbiting electrons, CPK-colored nucleus, and element label. All animation runs in Lua — zero frame delay.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Each shell has a different tilt and rotation for the 3D perspective effect. Inner shells orbit faster. Electron count per shell uses actual shell occupancy data from IUPAC.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={BOHR_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1162,9 +1131,9 @@ export function ChemistryStory() {
         {/* ── Full-width: STRUCTURE VIEW ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
           <SectionLabel icon="hexagon" accentColor={P.peach}>{'MOLECULAR STRUCTURE'}</SectionLabel>
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryBody>
             {'2D structural formula rendering from SMILES strings. Uses the Indigo C library via LuaJIT FFI for SMILES parsing and 2D coordinate generation. Atoms are CPK-colored, bonds show single/double/triple/aromatic. Type any valid SMILES to see the structure.'}
-          </Text>
+          </S.StoryBody>
           <StructureDemo />
           <CodeBlock language="tsx" fontSize={9} code={STRUCTURE_CODE} />
         </Box>
@@ -1181,12 +1150,12 @@ export function ChemistryStory() {
         <Band>
           <Half>
             <SectionLabel icon="globe" accentColor={P.blue}>{'PUBCHEM LIVE API'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Live REST API lookups against PubChem — the world\'s largest free chemistry database. Returns IUPAC name, formula, molecular weight, SMILES, InChI, XLogP, H-bond donors/acceptors, and more. No API key required.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Also includes fetchSynonyms, fetchDescription, and fetchHazards. All are plain async functions — call them on user action, not on render. Rate limit: 5 requests/second.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={PUBCHEM_CODE} style={{ width: '100%' }} />
           </Half>
           <Half>
@@ -1203,12 +1172,12 @@ export function ChemistryStory() {
           </Half>
           <Half>
             <SectionLabel icon="calculator" accentColor={P.mauve}>{'STOICHIOMETRY TOOLS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Molar mass calculator, mass composition, mass/moles/particles conversions, ideal gas law, molarity, and dilution. All functions accept formulas as strings and parse them automatically.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Chemistry-specific unit conversions (mol, M, amu, pH, spectroscopy wavelength/frequency) are auto-registered into @reactjit/convert on import.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="tsx" fontSize={9} code={TOOLS_CODE} style={{ width: '100%' }} />
           </Half>
         </Band>
@@ -1218,12 +1187,12 @@ export function ChemistryStory() {
         {/* ── Full-width: CHEMISTRY NOTATION ── */}
         <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 10 }}>
           <SectionLabel icon="type" accentColor={P.teal}>{'CHEMISTRY NOTATION'}</SectionLabel>
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryBody>
             {'Proper chemical typesetting via the LaTeX renderer. Uses mhchem \\ce{} for formulas and equations: element subscripts, ionic charges, state symbols, and reaction arrows. \\chemfig{} for inline structural chain formulas with bond symbols.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 9 }}>
+          </S.StoryBody>
+          <S.StoryCap>
             {'The parser runs in Lua (latex_parser.lua) and extends the existing LaTeX math typesetter. No external library — same Love2D glyph renderer, same Latin Modern font.'}
-          </Text>
+          </S.StoryCap>
           <NotationDemo />
           <CodeBlock language="tsx" fontSize={9} code={NOTATION_CODE} />
         </Box>
@@ -1231,52 +1200,43 @@ export function ChemistryStory() {
         <Divider />
 
         {/* ── Full-width: PHYSICAL CONSTANTS ── */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="database" accentColor={P.peach}>{'PHYSICAL CONSTANTS'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'CONSTANTS object — all values from CODATA 2018:'}</Text>
+          <S.StoryCap>{'CONSTANTS object — all values from CODATA 2018:'}</S.StoryCap>
           <ConstantsReference />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* ── Full-width: FEATURE CATALOG ── */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="list" accentColor={P.green}>{'EXPORT CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Everything @reactjit/chemistry exposes:'}</Text>
+          <S.StoryCap>{'Everything @reactjit/chemistry exposes:'}</S.StoryCap>
           <FeatureCatalog />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* ── Callout: one-liner philosophy ── */}
         <CalloutBand borderColor={P.calloutBorder} bgColor={P.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={P.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={P.calloutBorder} />
+          <S.StoryBody>
             {'One import. One hook. Declare what you need in JSX and the framework does the rest — element data is a lookup, molecules parse from formula strings, equations auto-balance, and Lua renders spectra at 60fps.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
       </ScrollView>
 
       {/* ── Footer ── */}
-      <Box style={{
-        flexShrink: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: c.bgElevated,
-        borderTopWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6,
-        gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Packages'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="beaker" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Chemistry'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Packages'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="beaker" />
+        <S.StoryBreadcrumbActive>{'Chemistry'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
     </S.StoryRoot>
   );

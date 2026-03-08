@@ -164,8 +164,15 @@
     // Finds thin separator elements (dividers) and checks if any text
     // node overlaps them. Returns an AuditResult.
     dividerAudit: async function () {
-      var violations = await bridge.rpc('test:divider-audit', {});
-      return new AuditResult(violations || []);
+      var result = await bridge.rpc('test:divider-audit', {});
+      // New format: { violations, stats, dividerDump }
+      if (result && result.violations) {
+        var ar = new AuditResult(result.violations);
+        ar.stats = result.stats || {};
+        ar.dividerDump = result.dividerDump || [];
+        return ar;
+      }
+      return new AuditResult(result || []);
     },
 
     // ── Resize ──────────────────────────────────────────────────────────

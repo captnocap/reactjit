@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Pressable, Text } from '../../../packages/core/src';
+import { Box, Pressable, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PresentationEditor,
@@ -343,22 +343,10 @@ function Panel({
   const c = useThemeColors();
 
   return (
-    <Box
-      style={{
-        backgroundColor: c.bgElevated,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: c.border,
-        paddingLeft: 14,
-        paddingRight: 14,
-        paddingTop: 14,
-        paddingBottom: 14,
-        gap: 10,
-      }}
-    >
-      <Text style={{ fontSize: 11, color: c.textDim, fontWeight: 'bold' }}>{title}</Text>
+    <S.Bordered style={{ backgroundColor: c.bgElevated, borderRadius: 16, paddingLeft: 14, paddingRight: 14, paddingTop: 14, paddingBottom: 14, gap: 10 }}>
+      <S.DimBody11 style={{ fontWeight: 'bold' }}>{title}</S.DimBody11>
       {children}
-    </Box>
+    </S.Bordered>
   );
 }
 
@@ -372,10 +360,10 @@ function KeyValue({
   const c = useThemeColors();
 
   return (
-    <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-      <Text style={{ fontSize: 10, color: c.textDim, width: 84 }}>{label}</Text>
-      <Text style={{ fontSize: 10, color: c.text }}>{value}</Text>
-    </Box>
+    <S.RowCenterG8>
+      <S.StoryMuted style={{ width: 84 }}>{label}</S.StoryMuted>
+      <S.StoryBody>{value}</S.StoryBody>
+    </S.RowCenterG8>
   );
 }
 
@@ -537,15 +525,15 @@ export function PresentationStory() {
       }}
     >
       <Box style={{ gap: 6 }}>
-        <Text style={{ fontSize: 24, color: c.text, fontWeight: 'bold' }}>Presentation</Text>
-        <Text style={{ fontSize: 11, color: c.textDim }}>
+        <S.BoldText style={{ fontSize: 24 }}>Presentation</S.BoldText>
+        <S.DimBody11>
           Native editor slice. Lua owns selection, pan, zoom, drag, resize, and keyboard transforms. JS only receives commit-time patches and reapplies them to the document.
-        </Text>
+        </S.DimBody11>
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <ToolbarButton label="Reset" onPress={handleReset} />
-      </Box>
+      </S.RowCenterG8>
 
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
         <PresentationSlideStrip
@@ -561,7 +549,7 @@ export function PresentationStory() {
           }}
         />
 
-        <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+        <S.Half>
           <Panel title="Editor Surface">
             <PresentationEditor
               document={document}
@@ -581,18 +569,18 @@ export function PresentationStory() {
                 borderRadius: 12,
               }}
             />
-            <Text style={{ fontSize: 10, color: c.textDim }}>
+            <S.StoryMuted>
               Click the editor to focus it. Ctrl+A or Cmd+A selects the editable canvas nodes. Shift plus click adds to the selection, Shift plus drag marquee-selects on the canvas, Arrow keys nudge, Shift plus Arrow moves 10 pixels, Escape clears selection, Delete removes the selection, and Equal, minus, or zero controls the camera. The hot path stays entirely in Lua.
-            </Text>
+            </S.StoryMuted>
           </Panel>
-        </Box>
+        </S.Half>
 
         <Box style={{ width: 320, gap: 12 }}>
           <Panel title="Insert">
-            <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <S.RowG8 style={{ flexWrap: 'wrap' }}>
               <ToolbarButton label="+ Text" onPress={handleAddText} />
               <ToolbarButton label="+ Shape" onPress={handleAddShape} />
-            </Box>
+            </S.RowG8>
           </Panel>
 
           <Panel title="Active Slide">
@@ -616,32 +604,32 @@ export function PresentationStory() {
                   value={`${selectedNode.frame.x}, ${selectedNode.frame.y}, ${selectedNode.frame.width}, ${selectedNode.frame.height}`}
                 />
                 {selection.length > 1 ? (
-                  <Text style={{ fontSize: 10, color: c.textDim }}>
+                  <S.StoryMuted>
                     Multi-selection is active. Shift plus click and Shift plus drag expand the canvas selection, and keyboard move or delete applies to the full selection.
-                  </Text>
+                  </S.StoryMuted>
                 ) : null}
                 {selectedNode.kind === 'text' ? (
-                  <Text style={{ fontSize: 10, color: c.text }}>{selectedNode.text}</Text>
+                  <S.StoryBody>{selectedNode.text}</S.StoryBody>
                 ) : selectedNode.kind === 'shape' ? (
-                  <Text style={{ fontSize: 10, color: c.text }}>{selectedNode.shape}</Text>
+                  <S.StoryBody>{selectedNode.shape}</S.StoryBody>
                 ) : null}
               </Box>
             ) : (
-              <Text style={{ fontSize: 10, color: c.textDim }}>Nothing selected.</Text>
+              <S.StoryMuted>Nothing selected.</S.StoryMuted>
             )}
           </Panel>
 
           <Panel title="Shortcuts">
             <Box style={{ gap: 6 }}>
-              <Text style={{ fontSize: 10, color: c.text }}>Click the editor surface to focus it.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Ctrl+A or Cmd+A selects every editable node on the canvas.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Shift plus click adds a node to the canvas selection.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Shift plus drag on empty canvas space marquee-selects nodes.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Arrow keys move the selected nodes by 1 pixel.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Shift plus Arrow moves the selected nodes by 10 pixels.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Escape clears the selection.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Delete removes the selected nodes.</Text>
-              <Text style={{ fontSize: 10, color: c.text }}>Wheel zooms. Equal, minus, and zero control zoom from the keyboard.</Text>
+              <S.StoryBody>Click the editor surface to focus it.</S.StoryBody>
+              <S.StoryBody>Ctrl+A or Cmd+A selects every editable node on the canvas.</S.StoryBody>
+              <S.StoryBody>Shift plus click adds a node to the canvas selection.</S.StoryBody>
+              <S.StoryBody>Shift plus drag on empty canvas space marquee-selects nodes.</S.StoryBody>
+              <S.StoryBody>Arrow keys move the selected nodes by 1 pixel.</S.StoryBody>
+              <S.StoryBody>Shift plus Arrow moves the selected nodes by 10 pixels.</S.StoryBody>
+              <S.StoryBody>Escape clears the selection.</S.StoryBody>
+              <S.StoryBody>Delete removes the selected nodes.</S.StoryBody>
+              <S.StoryBody>Wheel zooms. Equal, minus, and zero control zoom from the keyboard.</S.StoryBody>
             </Box>
           </Panel>
 

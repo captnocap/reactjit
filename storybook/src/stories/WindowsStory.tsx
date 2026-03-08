@@ -143,7 +143,7 @@ function WindowDemoControls({ showPanel, showLog, counter, events, onTogglePanel
     <>
       <S.StoryCap>{'Click to spawn real OS windows. State syncs across all of them.'}</S.StoryCap>
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Btn
           label={showPanel ? 'Close Panel' : 'Open Panel Window'}
           onPress={onTogglePanel}
@@ -154,14 +154,14 @@ function WindowDemoControls({ showPanel, showLog, counter, events, onTogglePanel
           onPress={onToggleLog}
           color={showLog ? C.red : C.blue}
         />
-      </Box>
+      </S.RowG6>
 
-      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <S.RowCenterG8>
         <S.StoryBody>{'Shared counter:'}</S.StoryBody>
         <Btn label="-" onPress={onDecrement} color={C.peach} small />
         <Text style={{ fontSize: 12, color: C.accent, fontWeight: 'bold' }}>{String(counter)}</Text>
         <Btn label="+" onPress={onIncrement} color={C.green} small />
-      </Box>
+      </S.RowCenterG8>
 
       {events.length > 0 && (
         <Box style={{ backgroundColor: c.bg, borderRadius: 4, padding: 4, gap: 1 }}>
@@ -191,18 +191,18 @@ function NotificationDemoControls({ onFire, onFireAll, onFireRich }: { onFire: (
 
       <Box style={{ gap: 4 }}>
         {NOTIF_PRESETS.map((n, i) => (
-          <Box key={i} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.RowCenterG8 key={i}>
             <Btn label={'Fire'} onPress={() => onFire(i)} color={n.accent} small />
             <S.StoryBreadcrumbActive>{n.title}</S.StoryBreadcrumbActive>
             <S.StoryTiny>{n.body}</S.StoryTiny>
-          </Box>
+          </S.RowCenterG8>
         ))}
       </Box>
 
-      <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <S.RowG6 style={{ flexWrap: 'wrap' }}>
         <Btn label="Fire All at Once" onPress={onFireAll} color={C.accent} />
         <Btn label="Fire Rich Notification" onPress={onFireRich} color={C.mauve} />
-      </Box>
+      </S.RowG6>
 
       <S.StoryTiny>
         {'Rich notifications render a full React tree in the notification window \u2014 not just text.'}
@@ -246,7 +246,7 @@ function BSODPreview() {
       }}>
         <Text style={{ fontSize: 7, color: C.bsodGreen }}>{'| Watching for code changes...'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
+        <S.RowG4>
           <Box style={{ backgroundColor: C.bsodAccent, borderRadius: 3, paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2 }}>
             <Text style={{ fontSize: 6, color: C.bsodText }}>{'Reboot'}</Text>
           </Box>
@@ -256,7 +256,7 @@ function BSODPreview() {
           <Box style={{ backgroundColor: 'rgba(77, 71, 89, 0.6)', borderRadius: 3, paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2 }}>
             <Text style={{ fontSize: 6, color: C.bsodDim }}>{'Quit'}</Text>
           </Box>
-        </Box>
+        </S.RowG4>
       </Box>
     </Box>
   );
@@ -269,16 +269,16 @@ function ErrorOverlayPreview() {
   return (
     <Box style={{ width: '100%', borderRadius: 6, overflow: 'hidden' }}>
       <Box style={{ backgroundColor: c.bgElevated, padding: 8, gap: 4 }}>
-        <Box style={{ flexDirection: 'row', gap: 6 }}>
+        <S.RowG6>
           <Box style={{ width: 30, height: 6, backgroundColor: c.border, borderRadius: 2 }} />
           <Box style={{ width: 50, height: 6, backgroundColor: c.border, borderRadius: 2 }} />
           <Box style={{ flexGrow: 1 }} />
           <Box style={{ width: 20, height: 6, backgroundColor: c.border, borderRadius: 2 }} />
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 6 }}>
+        </S.RowG6>
+        <S.RowG6>
           <Box style={{ width: 40, height: 20, backgroundColor: c.surface, borderRadius: 3 }} />
           <Box style={{ flexGrow: 1, height: 20, backgroundColor: c.surface, borderRadius: 3 }} />
-        </Box>
+        </S.RowG6>
       </Box>
       <Box style={{ backgroundColor: C.overlayBg, padding: 8, gap: 3 }}>
         <Text style={{ fontSize: 9, color: C.overlayText, fontWeight: 'bold' }}>{'ERROR  --  ReactJIT.update'}</Text>
@@ -306,32 +306,27 @@ function CrashReportPreview() {
         <Box style={{ height: 1, backgroundColor: 'rgb(64, 64, 77)', marginTop: 4, marginBottom: 4 }} />
         <Text style={{ fontSize: 7, color: 'rgb(153, 153, 179)' }}>{'Subsystem Snapshot'}</Text>
         <Box style={{ gap: 1, paddingLeft: 6 }}>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          <S.RowG8>
             <Text style={{ fontSize: 6, color: C.crDim, width: 70 }}>{'Lua heap'}</Text>
             <Text style={{ fontSize: 6, color: C.crText }}>{'142.3 MB'}</Text>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Text style={{ fontSize: 6, color: C.crDim, width: 70 }}>{'Tree nodes'}</Text>
             <Text style={{ fontSize: 6, color: C.crText }}>{'12847'}</Text>
-          </Box>
-          <Box style={{ flexDirection: 'row', gap: 8 }}>
+          </S.RowG8>
+          <S.RowG8>
             <Text style={{ fontSize: 6, color: C.crDim, width: 70 }}>{'Draw calls'}</Text>
             <Text style={{ fontSize: 6, color: C.crText }}>{'3201'}</Text>
-          </Box>
+          </S.RowG8>
         </Box>
       </Box>
-      <Box style={{
-        backgroundColor: 'rgb(31, 31, 38)',
-        borderTopWidth: 1, borderColor: 'rgba(217, 51, 64, 0.3)',
-        paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5,
-        flexDirection: 'row', alignItems: 'center',
-      }}>
+      <S.RowCenter style={{ backgroundColor: 'rgb(31, 31, 38)', borderTopWidth: 1, borderColor: 'rgba(217, 51, 64, 0.3)', paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5 }}>
         <Text style={{ fontSize: 7, color: C.crDim }}>{'Esc close    Ctrl+C copy    R reboot'}</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Box style={{ backgroundColor: 'rgb(51, 115, 230)', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+        <S.PadH6 style={{ backgroundColor: 'rgb(51, 115, 230)', borderRadius: 3, paddingTop: 2, paddingBottom: 2 }}>
           <Text style={{ fontSize: 6, color: '#fff' }}>{'Reboot'}</Text>
-        </Box>
-      </Box>
+        </S.PadH6>
+      </S.RowCenter>
     </Box>
   );
 }
@@ -349,15 +344,15 @@ const CRASH_LAYERS = [
 function CrashLayerCatalog() {
   const c = useThemeColors();
   return (
-    <Box style={{ gap: 3, width: '100%' }}>
+    <S.StackG3W100>
       {CRASH_LAYERS.map(l => (
-        <Box key={l.label} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <S.RowCenterG8 key={l.label}>
           <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: l.color, flexShrink: 0 }} />
-          <Text style={{ fontSize: 9, color: c.text, width: 160, flexShrink: 0 }}>{l.label}</Text>
+          <S.StoryBreadcrumbActive style={{ width: 160, flexShrink: 0 }}>{l.label}</S.StoryBreadcrumbActive>
           <S.StoryCap>{l.desc}</S.StoryCap>
-        </Box>
+        </S.RowCenterG8>
       ))}
-    </Box>
+    </S.StackG3W100>
   );
 }
 
@@ -412,31 +407,27 @@ export function WindowsStory() {
     <S.StoryRoot>
 
       {/* Header */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14,
-      }}>
-        <Image src="layout" style={{ width: 18, height: 18 }} tintColor={C.accent} />
-        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>{'Windows'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 12, paddingBottom: 12, gap: 14 }}>
+        <S.StoryHeaderIcon src="layout" tintColor={C.accent} />
+        <S.StoryTitle>{'Windows'}</S.StoryTitle>
         <Box style={{ backgroundColor: C.accentDim, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
           <Text style={{ color: C.accent, fontSize: 10 }}>{'@reactjit/core'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 10 }}>{'More than 11 of them'}</Text>
-      </Box>
+        <S.StoryMuted>{'More than 11 of them'}</S.StoryMuted>
+      </S.RowCenterBorder>
 
       {/* Content */}
       <ScrollView style={{ flexGrow: 1 }}>
 
         {/* Hero */}
         <HeroBand accentColor={C.accent}>
-          <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
+          <S.StoryHeadline>
             {'One React tree. Many OS windows. Three layers of crash recovery.'}
-          </Text>
-          <Text style={{ color: c.muted, fontSize: 10 }}>
+          </S.StoryHeadline>
+          <S.StoryMuted>
             {'<Window> spawns a child Love2D process connected over TCP. State flows via props \u2014 click in window 1, window 2 reacts. <Notification> pops OS-level notification windows with accent colors and auto-dismiss. When things go wrong, three crash screens stack from gentle overlay to nuclear subprocess, each one watching for your code fix.'}
-          </Text>
+          </S.StoryMuted>
         </HeroBand>
 
         <Divider />
@@ -457,9 +448,9 @@ export function WindowsStory() {
             />
           </Half>
           <Half>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Wrap any subtree in <Window> and it renders in a separate OS window. The component stays in the same React tree \u2014 props, state, and callbacks flow naturally. No IPC boilerplate.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WINDOW_CODE} />
           </Half>
         </Band>
@@ -473,12 +464,12 @@ export function WindowsStory() {
           </Half>
           <Half>
             <SectionLabel icon="settings" accentColor={C.accent}>{'WINDOW PROPS'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Position, size, title, and lifecycle callbacks. onClose fires when the user clicks the OS close button \u2014 you control whether the window actually unmounts.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Focus/blur events let you dim inactive panels or pause expensive rendering. The window manager tracks all child processes and cleans up on quit.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -495,13 +486,13 @@ export function WindowsStory() {
             />
           </Half>
           <Half>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'<Notification> spawns a real OS notification window \u2014 not a DOM overlay, not a toast inside the app. It is a separate window with its own accent color, title, body, and auto-dismiss timer.'}
-            </Text>
+            </S.StoryBody>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={NOTIFICATION_CODE} />
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            <S.StoryCap>
               {'Stack multiple notifications and they arrange themselves. Each one is a real Love2D child process, same as <Window>.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -509,10 +500,10 @@ export function WindowsStory() {
 
         {/* Callout: never frozen */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'The crash screen must never freeze. All three layers cache fonts on init (not per-frame), use pcall for content rendering, and keep the bottom control bar outside the pcall so buttons always render even if the error display itself errors.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
         <Divider />
@@ -524,12 +515,12 @@ export function WindowsStory() {
           </Half>
           <Half>
             <SectionLabel icon="alert-triangle" accentColor={C.yellow}>{'ERROR OVERLAY'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Non-fatal errors show as a red overlay on the bottom 40% of the screen. The app keeps running underneath. Click to dismiss, or cycle through multiple errors.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Cascade protection: if multiple errors fire in sequence, the overlay pins to the first one (the root cause) and ignores subsequent noise from corrupted state.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -539,12 +530,12 @@ export function WindowsStory() {
         <Band>
           <Half>
             <SectionLabel icon="shield" accentColor={C.peach}>{'IN-PROCESS BSOD'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'When an error escapes pcall in update() or draw(), the app enters crash recovery mode. The full-screen BSOD replaces the app with traceback, event trail, and an inline code editor.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'HMR keeps polling. Save your code and the app reloads automatically. Reboot, Copy, and Quit buttons are always clickable \u2014 the bottom bar renders outside the content pcall.'}
-            </Text>
+            </S.StoryCap>
             <CodeBlock language="lua" fontSize={8} style={{ width: '100%' }} code={RECOVERY_CODE} />
           </Half>
           <Half>
@@ -561,12 +552,12 @@ export function WindowsStory() {
           </Half>
           <Half>
             <SectionLabel icon="monitor" accentColor={C.red}>{'CRASH REPORTER'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'For budget errors and runaway allocations, a separate Love2D process spawns to display the full crash report. It survives the parent dying \u2014 but auto-closes after 30 seconds once the parent process is gone.'}
-            </Text>
-            <Text style={{ color: c.muted, fontSize: 9 }}>
+            </S.StoryBody>
+            <S.StoryCap>
               {'Shows subsystem snapshot (node count, memory, draw calls), /proc diagnostics, crisis analysis, event trail, and dmesg output. Reboot button re-launches the original app.'}
-            </Text>
+            </S.StoryCap>
           </Half>
         </Band>
 
@@ -576,9 +567,9 @@ export function WindowsStory() {
         <Band>
           <Half>
             <SectionLabel icon="layers" accentColor={C.accent}>{'CRASH ARCHITECTURE'}</SectionLabel>
-            <Text style={{ color: c.text, fontSize: 10 }}>
+            <S.StoryBody>
               {'Three layers of defense, each catching what the previous one missed. Layer 1 handles most crashes in-process with HMR recovery. Layer 2 catches errors that escape the pcall wrappers entirely. Layer 3 survives even if the Love2D process is killed.'}
-            </Text>
+            </S.StoryBody>
           </Half>
           <Half>
             <CodeBlock language="lua" fontSize={8} style={{ width: '100%' }} code={CRASH_LAYERS_CODE} />
@@ -588,38 +579,34 @@ export function WindowsStory() {
         <Divider />
 
         {/* Full-width: crash layer catalog */}
-        <Box style={{ paddingLeft: 28, paddingRight: 28, paddingTop: 20, paddingBottom: 24, gap: 8 }}>
+        <S.StoryFullBand>
           <SectionLabel icon="list" accentColor={C.accent}>{'RECOVERY CATALOG'}</SectionLabel>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'Every crash recovery mechanism in the stack:'}</Text>
+          <S.StoryCap>{'Every crash recovery mechanism in the stack:'}</S.StoryCap>
           <CrashLayerCatalog />
-        </Box>
+        </S.StoryFullBand>
 
         <Divider />
 
         {/* Callout: font caching */}
         <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Image src="info" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
-          <Text style={{ color: c.text, fontSize: 10 }}>
+          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
+          <S.StoryBody>
             {'love.graphics.newFont() allocates GPU memory. Calling it every frame in a crash screen will eventually exhaust the GPU and freeze \u2014 the one thing a crash screen must never do. All three layers cache fonts once on init.'}
-          </Text>
+          </S.StoryBody>
         </CalloutBand>
 
       </ScrollView>
 
       {/* Footer */}
-      <Box style={{
-        flexShrink: 0, flexDirection: 'row', alignItems: 'center',
-        backgroundColor: c.bgElevated, borderTopWidth: 1, borderColor: c.border,
-        paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12,
-      }}>
-        <Image src="folder" style={{ width: 12, height: 12 }} tintColor={c.muted} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'Core'}</Text>
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'/'}</Text>
-        <Image src="layout" style={{ width: 12, height: 12 }} tintColor={c.text} />
-        <Text style={{ color: c.text, fontSize: 9 }}>{'Windows'}</Text>
+      <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>
+        <S.DimIcon12 src="folder" />
+        <S.StoryCap>{'Core'}</S.StoryCap>
+        <S.StoryCap>{'/'}</S.StoryCap>
+        <S.TextIcon12 src="layout" />
+        <S.StoryBreadcrumbActive>{'Windows'}</S.StoryBreadcrumbActive>
         <Box style={{ flexGrow: 1 }} />
-        <Text style={{ color: c.muted, fontSize: 9 }}>{'v0.1.0'}</Text>
-      </Box>
+        <S.StoryCap>{'v0.1.0'}</S.StoryCap>
+      </S.RowCenterBorder>
 
       {/* Window/Notification nodes — zero-size container so they don't eat layout */}
       <Box style={{ width: 0, height: 0, overflow: 'hidden' }}>
@@ -632,16 +619,16 @@ export function WindowsStory() {
           onFocus={() => logWin('Panel focused')}
           onBlur={() => logWin('Panel blurred')}
         >
-          <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 10 }}>
+          <S.StoryRoot style={{ padding: 16, gap: 10 }}>
             <Text style={{ fontSize: 14, color: c.text, fontWeight: 'normal' }}>{'Synced Panel'}</Text>
-            <Text style={{ fontSize: 10, color: c.muted }}>{'This counter is shared with the main window:'}</Text>
-            <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <S.StoryMuted>{'This counter is shared with the main window:'}</S.StoryMuted>
+            <S.RowCenterG8>
               <Btn label="-" onPress={() => setCounter(n => n - 1)} color={C.peach} small />
               <Text style={{ fontSize: 18, color: C.accent, fontWeight: 'bold' }}>{String(counter)}</Text>
               <Btn label="+" onPress={() => setCounter(n => n + 1)} color={C.green} small />
-            </Box>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'Click +/- here or in the main window. Both update.'}</Text>
-          </Box>
+            </S.RowCenterG8>
+            <S.StoryCap>{'Click +/- here or in the main window. Both update.'}</S.StoryCap>
+          </S.StoryRoot>
         </Window>
       )}
 
@@ -652,16 +639,16 @@ export function WindowsStory() {
           height={200}
           onClose={() => { setShowLog(false); logWin('Log closed via X'); }}
         >
-          <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 6 }}>
+          <S.StoryRoot style={{ padding: 16, gap: 6 }}>
             <Text style={{ fontSize: 14, color: c.text, fontWeight: 'normal' }}>{'Live Events'}</Text>
-            <Text style={{ fontSize: 9, color: c.muted }}>{'Every action across all windows shows up here in real time.'}</Text>
-            <Box style={{ flexGrow: 1, backgroundColor: c.surface, borderRadius: 4, padding: 6, gap: 2 }}>
-              {winEvents.length === 0 && <Text style={{ fontSize: 9, color: c.muted }}>{'No events yet'}</Text>}
+            <S.StoryCap>{'Every action across all windows shows up here in real time.'}</S.StoryCap>
+            <S.StoryInputWell style={{ flexGrow: 1, gap: 2 }}>
+              {winEvents.length === 0 && <S.StoryCap>{'No events yet'}</S.StoryCap>}
               {winEvents.map((e, i) => (
-                <Text key={i} style={{ fontSize: 9, color: c.text }}>{e}</Text>
+                <S.StoryBreadcrumbActive key={i}>{e}</S.StoryBreadcrumbActive>
               ))}
-            </Box>
-          </Box>
+            </S.StoryInputWell>
+          </S.StoryRoot>
         </Window>
       )}
 
@@ -690,23 +677,23 @@ export function WindowsStory() {
           height={180}
           onDismiss={() => dismissRichNotif(notif.id)}
         >
-          <Box style={{ width: '100%', height: '100%', backgroundColor: '#1a1a2e', padding: 16, gap: 8 }}>
-            <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <S.FullSize style={{ backgroundColor: '#1a1a2e', padding: 16, gap: 8 }}>
+            <S.RowCenterG8>
               <Box style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.mauve }} />
               <Box style={{ gap: 2 }}>
-                <Text style={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}>{'Rich Notification'}</Text>
+                <S.WhiteMedText style={{ fontWeight: 'bold' }}>{'Rich Notification'}</S.WhiteMedText>
                 <Text style={{ fontSize: 9, color: '#888' }}>{'Full React tree rendering'}</Text>
               </Box>
-            </Box>
+            </S.RowCenterG8>
             <Box style={{ height: 1, backgroundColor: 'rgba(203, 166, 247, 0.2)' }} />
             <Text style={{ fontSize: 10, color: '#ccc' }}>
               {'This notification renders a full React subtree via IPC \u2014 not just text. Any component works here.'}
             </Text>
-            <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+            <S.RowCenterG4>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.green }} />
               <Text style={{ fontSize: 9, color: C.green }}>{'Live from child process'}</Text>
-            </Box>
-          </Box>
+            </S.RowCenterG4>
+          </S.FullSize>
         </Notification>
       ))}
       </Box>

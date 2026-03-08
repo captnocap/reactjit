@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Slider, useLuaInterval } from '../../../packages/core/src';
+import { Box, Text, Slider, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import type { LoveEvent } from '../../../packages/core/src';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
@@ -22,7 +22,7 @@ function LabeledSlider({
 }) {
   const c = useThemeColors();
   return (
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 24 }}>
+    <S.RowCenterG8 style={{ height: 24 }}>
       <Text style={{ fontSize: 11, color: c.textSecondary, width: 90 }}>{label}</Text>
       <Slider
         value={value}
@@ -37,10 +37,10 @@ function LabeledSlider({
         thumbSize={14}
         trackHeight={3}
       />
-      <Text style={{ fontSize: 10, color: c.textDim, width: 36 }}>
+      <S.StoryMuted style={{ width: 36 }}>
         {value.toFixed(step && step < 0.1 ? 2 : 1)}
-      </Text>
-    </Box>
+      </S.StoryMuted>
+    </S.RowCenterG8>
   );
 }
 
@@ -94,7 +94,7 @@ export function Scene3DPlanetStory() {
   ];
 
   return (
-    <Box style={{ width: '100%', height: '100%' }} onWheel={handleWheel}>
+    <S.FullSize onWheel={handleWheel}>
       <Scene
         style={{ width: '100%', height: '100%' }}
         backgroundColor="#020208"
@@ -184,10 +184,10 @@ export function Scene3DPlanetStory() {
           borderRadius: 6,
         }}
       >
-        <Text style={{ fontSize: 11, color: c.textDim }}>
+        <S.DimBody11>
           Blinn-Phong shading | seed: 42 | drag to rotate
-        </Text>
+        </S.DimBody11>
       </Box>
-    </Box>
+    </S.FullSize>
   );
 }

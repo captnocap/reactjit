@@ -63,13 +63,13 @@ export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
 
   return (
     <StorySection index={index} title="Text effects">
-      <Box style={{ width: '100%', gap: 6 }}>
+      <S.StackG6W100>
         <Text style={{ color: c.text, fontSize: 11 }}>Inline-capable (no frame)</Text>
         {inlineVariants.map((v) => (
-          <Box key={v.id} style={{ width: '100%', paddingTop: 2, paddingBottom: 2, gap: 3 }}>
-            <Text style={{ color: c.textDim, fontSize: 11 }}>
+          <S.StackG3W100 key={v.id} style={{ paddingTop: 2, paddingBottom: 2 }}>
+            <S.DimBody11>
               {v.label}
-            </Text>
+            </S.DimBody11>
             <TextEffect
               type={v.id}
               text={v.sample}
@@ -83,30 +83,19 @@ export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
             <S.StoryMuted>
               {v.id}
             </S.StoryMuted>
-          </Box>
+          </S.StackG3W100>
         ))}
-      </Box>
+      </S.StackG6W100>
 
-      <Box style={{ width: '100%', height: 1, backgroundColor: c.border }} />
+      <S.HorzDivider style={{ width: '100%' }} />
 
-      <Box style={{ width: '100%', gap: 6, alignItems: 'center' }}>
+      <S.CenterW100 style={{ gap: 6 }}>
         <Text style={{ color: c.text, fontSize: 11, width: '100%' }}>Surface / mini-scene (framed)</Text>
         {surfaceVariants.map((v) => (
-          <Box
-            key={v.id}
-            style={{
-              width: 280,
-              backgroundColor: c.surface,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: c.border,
-              padding: 8,
-              gap: 4,
-            }}
-          >
-            <Text style={{ color: c.textDim, fontSize: 11 }}>
+          <S.SurfaceBordered key={v.id} style={{ width: 280, borderRadius: 8, padding: 8, gap: 4 }}>
+            <S.DimBody11>
               {v.label}
-            </Text>
+            </S.DimBody11>
             <TextEffect
               type={v.id}
               text={v.sentence ?? v.sample}
@@ -120,9 +109,9 @@ export function TextEffectsStory({ index = 5 }: { index?: number } = {}) {
             <S.StoryMuted>
               {v.id}
             </S.StoryMuted>
-          </Box>
+          </S.SurfaceBordered>
         ))}
-      </Box>
+      </S.CenterW100>
     </StorySection>
   );
 }
