@@ -1,5 +1,5 @@
 export function normalizeCellAddress(address: string): string {
-  return address.trim().toUpperCase();
+  return address.toUpperCase().replace(/\s+/g, '').replace(/\$/g, '');
 }
 
 export function columnIndexToLabel(index: number): string {

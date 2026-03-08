@@ -61,7 +61,7 @@ Definition of done:
 
 ## Phase 5: Formula Runtime Expansion
 
-Status: planned
+Status: in progress
 
 - Absolute and mixed references (`$A$1`, `A$1`, `$A1`).
 - Named ranges.

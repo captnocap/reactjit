@@ -38,8 +38,12 @@ local function labelToColumn(label)
   return n - 1  -- 0-based
 end
 
+local function normalizeAddress(address)
+  return tostring(address or ''):upper():gsub('%s', ''):gsub('%$', '')
+end
+
 local function parseCell(address)
-  local norm = address:upper():gsub('%s', '')
+  local norm = normalizeAddress(address)
   local col_str, row_str = norm:match('^([A-Z]+)([1-9][0-9]*)$')
   if not col_str then return nil end
   local row = tonumber(row_str) - 1  -- 0-based
@@ -53,8 +57,8 @@ end
 
 local function expandRange(range_str, max_cells)
   max_cells = max_cells or 10000
-  local norm = range_str:upper():gsub('%s', '')
-  local a_str, b_str = norm:match('^([A-Z]+[1-9][0-9]*):([A-Z]+[1-9][0-9]*)$')
+  local norm = tostring(range_str or ''):upper():gsub('%s', '')
+  local a_str, b_str = norm:match('^([^:]+):([^:]+)$')
   if not a_str then return nil, 'Invalid range: ' .. range_str end
   local a = parseCell(a_str)
   local b = parseCell(b_str)
@@ -122,9 +126,9 @@ local function tokenize(src)
       i = j
 
     -- Identifier / bool / cell-ref
-    elseif c:match('[A-Za-z_]') then
+    elseif c == '$' or c:match('[A-Za-z_]') then
       local j = i
-      while j <= n and src:sub(j,j):match('[A-Za-z0-9_]') do j = j + 1 end
+      while j <= n and src:sub(j,j):match('[A-Za-z0-9_$]') do j = j + 1 end
       local word = src:sub(i, j-1)
       local up = word:upper()
       if up == 'TRUE'  then tokens[#tokens+1] = { type=TK.BOOL, value=true  }
@@ -296,18 +300,20 @@ local function makeEval(cell_fn, range_fn)
       if peek().type == TK.IDENT then
         local saved = pos
         local a_tok = advance()
-        if peek().type == TK.COLON then
+        if parseCell(a_tok.value) ~= nil and peek().type == TK.COLON then
           advance()  -- eat ':'
           if peek().type == TK.IDENT then
             local b_tok = advance()
-            local range_str = a_tok.value:upper() .. ':' .. b_tok.value:upper()
-            -- rjit-ignore-next-line
-            local addrs, err = range_fn(range_str)
-            if err then error(err) end
-            local vals = {}
-            -- rjit-ignore-next-line
-            for _, addr in ipairs(addrs) do vals[#vals+1] = cell_fn(addr) end
-            return vals
+            if parseCell(b_tok.value) ~= nil then
+              local range_str = a_tok.value:upper() .. ':' .. b_tok.value:upper()
+              -- rjit-ignore-next-line
+              local addrs, err = range_fn(range_str)
+              if err then error(err) end
+              local vals = {}
+              -- rjit-ignore-next-line
+              for _, addr in ipairs(addrs) do vals[#vals+1] = cell_fn(addr) end
+              return vals
+            end
           end
         end
         pos = saved  -- backtrack
@@ -351,9 +357,8 @@ local function makeEval(cell_fn, range_fn)
           else error('Unknown function: ' .. name) end
         else
           -- Cell reference
-          local up = name:upper()
-          -- rjit-ignore-next-line
-          if up:match('^[A-Z]+[1-9][0-9]*$') then return cell_fn(up) end
+          local ref = parseCell(name)
+          if ref then return cell_fn(buildAddress(ref.col, ref.row)) end
           error('Unknown identifier: ' .. name)
         end
 
@@ -448,6 +453,11 @@ end
 -- ============================================================================
 
 local function evaluateAll(cells, targets, max_range_cells)
+  local normalizedCells = {}
+  for addr, raw in pairs(cells or {}) do
+    normalizedCells[normalizeAddress(addr)] = raw
+  end
+
   local values    = {}
   local errors    = {}
   local evaluating = {}
@@ -455,7 +465,7 @@ local function evaluateAll(cells, targets, max_range_cells)
   local eval_cell  -- forward decl
 
   local function cell_fn(addr)
-    addr = addr:upper():gsub('%s', '')
+    addr = normalizeAddress(addr)
     return eval_cell(addr)
   end
 
@@ -466,11 +476,11 @@ local function evaluateAll(cells, targets, max_range_cells)
   local evaluate_expr = makeEval(cell_fn, range_fn)
 
   eval_cell = function(address)
-    address = address:upper():gsub('%s', '')
+    address = normalizeAddress(address)
     if values[address] ~= nil then return values[address] end
     if errors[address] then return '' end
 
-    local raw = cells[address]
+    local raw = normalizedCells[address]
     if raw == nil then values[address] = ''; return '' end
     raw = tostring(raw):match('^%s*(.-)%s*$')
 
@@ -506,7 +516,7 @@ local function evaluateAll(cells, targets, max_range_cells)
   end
 
   for _, addr in ipairs(targets) do
-    eval_cell(addr:upper():gsub('%s', ''))
+    eval_cell(normalizeAddress(addr))
   end
 
   return { values = values, errors = errors }

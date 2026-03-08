@@ -151,6 +151,23 @@ test("spreadsheet evaluator parses raw literals consistently", function()
   assertEqual(result.values.A5, "", "A5 empty string")
 end)
 
+test("spreadsheet evaluator resolves absolute and mixed references", function()
+  local result = evaluate({
+    cells = {
+      A1 = "3",
+      B1 = "4",
+      C1 = "=$A$1 + B$1 + $B1",
+      C2 = "=SUM($A$1:B$1)",
+    },
+    targets = { "C1", "C2" },
+  })
+
+  assertEqual(result.errors.C1, nil, "C1 should not error")
+  assertEqual(result.errors.C2, nil, "C2 should not error")
+  assertAlmostEqual(result.values.C1, 11, EPSILON, "C1 absolute and mixed refs")
+  assertAlmostEqual(result.values.C2, 7, EPSILON, "C2 absolute range")
+end)
+
 test("spreadsheet evaluator surfaces converter lookup failures as formula errors", function()
   local result = evaluate({
     cells = {
