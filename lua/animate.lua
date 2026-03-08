@@ -335,16 +335,38 @@ function Animate.processStyleUpdate(node, oldValues, newValues)
             fromValue = existing.current
           end
 
-          Log.log("animate", "transition start id=%s prop=%s from=%s to=%s duration=%dms", tostring(node.id), propName, tostring(fromValue), tostring(newValue), config.duration or 300)
-          node.transitionState[propName] = {
-            from = fromValue,
-            to = newValue,
-            startTime = love.timer.getTime(),
-            duration = (config.duration or 300) / 1000,  -- ms -> seconds
-            easing = config.easing or "easeInOut",
-            delay = (config.delay or 0) / 1000,          -- ms -> seconds
-            current = fromValue,
-          }
+          if config.type == "spring" then
+            Log.log("animate", "spring start id=%s prop=%s from=%s to=%s stiffness=%s damping=%s",
+              tostring(node.id), propName, tostring(fromValue), tostring(newValue),
+              tostring(config.stiffness or 100), tostring(config.damping or 10))
+            node.transitionState[propName] = {
+              type = "spring",
+              from = fromValue,
+              to = newValue,
+              stiffness = config.stiffness or 100,
+              damping = config.damping or 10,
+              mass = config.mass or 1,
+              velocity = 0,
+              progress = 0,
+              restThreshold = config.restThreshold or 0.001,
+              delay = (config.delay or 0) / 1000,
+              startTime = love.timer.getTime(),
+              current = fromValue,
+              lastTime = nil,
+            }
+          else
+            Log.log("animate", "transition start id=%s prop=%s from=%s to=%s duration=%dms",
+              tostring(node.id), propName, tostring(fromValue), tostring(newValue), config.duration or 300)
+            node.transitionState[propName] = {
+              from = fromValue,
+              to = newValue,
+              startTime = love.timer.getTime(),
+              duration = (config.duration or 300) / 1000,  -- ms -> seconds
+              easing = config.easing or "easeInOut",
+              delay = (config.delay or 0) / 1000,          -- ms -> seconds
+              current = fromValue,
+            }
+          end
 
           -- Write back the from value so the visual doesn't jump
           node.style[propName] = fromValue
@@ -365,15 +387,33 @@ function Animate.processStyleUpdate(node, oldValues, newValues)
           if config and type(config) == "table" then
             local fromValue = existing.current or existing.from
             Log.log("animate", "transition retarget id=%s prop=%s from=%s to=%s (orphan fix)", tostring(node.id), propName, tostring(fromValue), tostring(newValue))
-            node.transitionState[propName] = {
-              from = fromValue,
-              to = newValue,
-              startTime = love.timer.getTime(),
-              duration = (config.duration or 300) / 1000,
-              easing = config.easing or "easeInOut",
-              delay = (config.delay or 0) / 1000,
-              current = fromValue,
-            }
+            if config.type == "spring" then
+              node.transitionState[propName] = {
+                type = "spring",
+                from = fromValue,
+                to = newValue,
+                stiffness = config.stiffness or 100,
+                damping = config.damping or 10,
+                mass = config.mass or 1,
+                velocity = 0,
+                progress = 0,
+                restThreshold = config.restThreshold or 0.001,
+                delay = (config.delay or 0) / 1000,
+                startTime = love.timer.getTime(),
+                current = fromValue,
+                lastTime = nil,
+              }
+            else
+              node.transitionState[propName] = {
+                from = fromValue,
+                to = newValue,
+                startTime = love.timer.getTime(),
+                duration = (config.duration or 300) / 1000,
+                easing = config.easing or "easeInOut",
+                delay = (config.delay or 0) / 1000,
+                current = fromValue,
+              }
+            end
             node.style[propName] = fromValue
             activeNodes[node.id] = node
           else
@@ -425,25 +465,53 @@ function Animate.tick(dt)
           -- Still in delay period
           allDone = false
         else
-          local activeElapsed = elapsed - ts.delay
-          local progress = 1
-          if ts.duration > 0 then
-            progress = math.min(activeElapsed / ts.duration, 1)
-          end
+          if ts.type == "spring" then
+            -- Spring physics: Verlet integration on normalized progress (0→1)
+            if not ts.lastTime then ts.lastTime = now end
+            local sdt = math.min(now - ts.lastTime, 0.064)
+            ts.lastTime = now
 
-          local easingFn = resolveEasing(ts.easing)
-          local easedProgress = easingFn(progress)
-          local value = interpolateValue(ts.from, ts.to, easedProgress, propName)
+            local displacement = ts.progress - 1
+            local springForce = -ts.stiffness * displacement
+            local dampingForce = -ts.damping * ts.velocity
+            local acceleration = (springForce + dampingForce) / ts.mass
 
-          ts.current = value
-          node.style[propName] = value
+            ts.velocity = ts.velocity + acceleration * sdt
+            ts.progress = ts.progress + ts.velocity * sdt
 
-          if progress >= 1 then
-            -- Transition complete: snap to final value and clean up
-            node.style[propName] = ts.to
-            node.transitionState[propName] = nil
+            local value = interpolateValue(ts.from, ts.to, ts.progress, propName)
+            ts.current = value
+            node.style[propName] = value
+
+            -- Rest condition: snap to target
+            if math.abs(ts.velocity) < ts.restThreshold
+                and math.abs(ts.progress - 1) < ts.restThreshold then
+              node.style[propName] = ts.to
+              node.transitionState[propName] = nil
+            else
+              allDone = false
+            end
           else
-            allDone = false
+            -- Timing-based transition
+            local activeElapsed = elapsed - ts.delay
+            local progress = 1
+            if ts.duration > 0 then
+              progress = math.min(activeElapsed / ts.duration, 1)
+            end
+
+            local easingFn = resolveEasing(ts.easing)
+            local easedProgress = easingFn(progress)
+            local value = interpolateValue(ts.from, ts.to, easedProgress, propName)
+
+            ts.current = value
+            node.style[propName] = value
+
+            if progress >= 1 then
+              node.style[propName] = ts.to
+              node.transitionState[propName] = nil
+            else
+              allDone = false
+            end
           end
 
           -- Layout-affecting properties need tree relayout

@@ -1,32 +1,80 @@
 /**
- * Animation system for reactjit.
+ * Animation system for reactjit — Lua-driven.
  *
- * Provides AnimatedValue (mutable value container), timing/spring animations,
- * composite animations (parallel, sequence, stagger, loop), convenience hooks
- * (useAnimation, useSpring, useTransition), easing functions, and interpolation.
+ * All interpolation runs in Lua (lua/animate.lua). TypeScript provides:
+ *   - Type definitions for transition/animation configs (free — no runtime cost)
+ *   - Easing name constants (Lua resolves them)
+ *   - useShake — imperative trigger, Lua runs the keyframe animation
+ *   - useCountUp / useTypewriter — time-limited text helpers (setTimeout, not frame loop)
  *
- * Frame loop is driven by Lua's love.update(dt) via tickAnimations() — no
- * independent JS timers. setTimeout is only used for one-shot delays.
+ * NO per-frame JS callbacks. NO AnimatedValue. NO JS interpolation math.
+ * React renders when targets change (once). Lua handles the rest.
+ *
+ * Usage: set style.transition or style.animation on your component.
+ *   transition: { all: { type: 'spring', stiffness: 180, damping: 12 } }
+ *   transition: { opacity: { duration: 300, easing: 'easeOut' } }
+ *   animation: { keyframes: { 0: { opacity: 0 }, 100: { opacity: 1 } }, duration: 500 }
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // ── Types ────────────────────────────────────────────────
 
-export type EasingFunction = (t: number) => number;
+/** Easing name resolved by Lua's animate.lua */
+export type EasingName = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'bounce' | 'spring' | 'elastic';
 
+/** Easing config — string name, bezier array, or elastic/bezier object */
+export type EasingSpec =
+  | EasingName
+  | [number, number, number, number]
+  | { type: 'bezier'; x1: number; y1: number; x2: number; y2: number }
+  | { type: 'elastic'; bounciness?: number };
+
+/** Timing-based transition config for a single property or "all" */
+export interface TimingTransitionConfig {
+  duration?: number;
+  easing?: EasingSpec;
+  delay?: number;
+}
+
+/** Spring-based transition config */
+export interface SpringTransitionConfig {
+  type: 'spring';
+  stiffness?: number;
+  damping?: number;
+  mass?: number;
+  restThreshold?: number;
+  delay?: number;
+}
+
+/** Per-property or "all" wildcard transition config */
+export type TransitionConfig = Record<string, TimingTransitionConfig | SpringTransitionConfig>;
+
+/** Keyframe animation config (maps to Lua's animate.setupAnimation) */
+export interface AnimationConfig {
+  keyframes: Record<number, Record<string, any>>;
+  duration?: number;
+  easing?: EasingSpec;
+  iterations?: number;
+  direction?: 'normal' | 'alternate' | 'reverse' | 'alternate-reverse';
+  fillMode?: 'none' | 'forwards' | 'both';
+  delay?: number;
+  playState?: 'running' | 'paused';
+  restart?: number;
+}
+
+// Backward-compat type exports (referenced by external code)
+export type EasingFunction = (t: number) => number;
 export interface Animation {
   start(callback?: (result: { finished: boolean }) => void): void;
   stop(): void;
 }
-
 export interface TimingConfig {
   toValue: number;
   duration?: number;
   easing?: EasingFunction;
   delay?: number;
 }
-
 export interface SpringConfig {
   toValue: number;
   stiffness?: number;
@@ -35,730 +83,247 @@ export interface SpringConfig {
   velocity?: number;
   restThreshold?: number;
 }
-
 export interface InterpolationConfig {
   inputRange: number[];
   outputRange: number[] | string[];
   extrapolate?: 'clamp' | 'extend';
 }
 
-// ── Shared animation frame loop (driven by Lua's love.update) ───
-//
-// No independent JS timers. Lua calls _pollAndDispatchEvents each frame,
-// which calls tickAnimations(). All animation callbacks are advanced in
-// sync with Love2D's frame rate — zero setTimeout/rAF overhead.
-
-type FrameCallback = (timestamp: number) => void;
-
-const activeCallbacks = new Set<FrameCallback>();
-
-function registerFrameCallback(cb: FrameCallback): void {
-  activeCallbacks.add(cb);
-}
-
-function unregisterFrameCallback(cb: FrameCallback): void {
-  activeCallbacks.delete(cb);
-}
-
-/**
- * Advance all active JS animations by one frame.
- * Called from NativeBridge.pollAndDispatchEvents() — i.e., once per
- * Lua love.update(dt) frame. No independent JS timer loop.
- */
-export function tickAnimations(): void {
-  if (activeCallbacks.size === 0) return;
-  const timestamp = Date.now();
-  const snapshot = Array.from(activeCallbacks);
-  for (const cb of snapshot) {
-    cb(timestamp);
-  }
-}
-
-// ── Easing ───────────────────────────────────────────────
+// ── Easing constants ─────────────────────────────────────
+// String names that Lua resolves. Use in transition/animation configs.
 
 export const Easing = {
-  linear: (t: number): number => t,
-
-  easeIn: (t: number): number => t * t,
-
-  easeOut: (t: number): number => t * (2 - t),
-
-  easeInOut: (t: number): number =>
-    t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
-
-  bezier(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-  ): EasingFunction {
-    // Newton-Raphson iteration to solve cubic bezier for t given x
-    return (t: number): number => {
-      if (t <= 0) return 0;
-      if (t >= 1) return 1;
-
-      // Solve for the parameter u where bezierX(u) = t
-      let u = t;
-      for (let i = 0; i < 8; i++) {
-        const xEst = cubicBezier(u, x1, x2) - t;
-        if (Math.abs(xEst) < 1e-6) break;
-        const dx = cubicBezierDerivative(u, x1, x2);
-        if (Math.abs(dx) < 1e-6) break;
-        u -= xEst / dx;
-      }
-      u = Math.max(0, Math.min(1, u));
-      return cubicBezier(u, y1, y2);
-    };
-  },
-
-  bounce: (t: number): number => {
-    if (t < 1 / 2.75) {
-      return 7.5625 * t * t;
-    } else if (t < 2 / 2.75) {
-      const t2 = t - 1.5 / 2.75;
-      return 7.5625 * t2 * t2 + 0.75;
-    } else if (t < 2.5 / 2.75) {
-      const t2 = t - 2.25 / 2.75;
-      return 7.5625 * t2 * t2 + 0.9375;
-    } else {
-      const t2 = t - 2.625 / 2.75;
-      return 7.5625 * t2 * t2 + 0.984375;
-    }
-  },
-
-  elastic(bounciness: number = 1): EasingFunction {
-    const p = 0.3 / Math.max(bounciness, 0.001);
-    return (t: number): number => {
-      if (t <= 0) return 0;
-      if (t >= 1) return 1;
-      return (
-        Math.pow(2, -10 * t) *
-          Math.sin(((t - p / 4) * (2 * Math.PI)) / p) +
-        1
-      );
-    };
-  },
+  linear: 'linear' as const,
+  easeIn: 'easeIn' as const,
+  easeOut: 'easeOut' as const,
+  easeInOut: 'easeInOut' as const,
+  bounce: 'bounce' as const,
+  spring: 'spring' as const,
+  elastic: (bounciness?: number) => ({ type: 'elastic' as const, bounciness: bounciness ?? 1 }),
+  bezier: (x1: number, y1: number, x2: number, y2: number) =>
+    [x1, y1, x2, y2] as [number, number, number, number],
 } as const;
 
-function cubicBezier(t: number, p1: number, p2: number): number {
-  const mt = 1 - t;
-  return 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t;
-}
+// ── No-op frame loop ─────────────────────────────────────
+// Lua drives all animations. This exists for NativeBridge compat.
+export function tickAnimations(): void {}
 
-function cubicBezierDerivative(t: number, p1: number, p2: number): number {
-  const mt = 1 - t;
-  return 3 * mt * mt * p1 + 6 * mt * t * (p2 - p1) + 3 * t * t * (1 - p2);
-}
+// ── Deprecated stubs ─────────────────────────────────────
+// These exist solely so external code that references the types doesn't crash
+// at import time. They do nothing at runtime.
 
-// ── Color interpolation helpers ──────────────────────────
-
-interface RGBA {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-}
-
-function parseColor(str: string): RGBA | null {
-  const rgbaMatch = str.match(
-    /rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*(?:,\s*(\d+(?:\.\d+)?))?\s*\)/,
-  );
-  if (rgbaMatch) {
-    return {
-      r: parseFloat(rgbaMatch[1]),
-      g: parseFloat(rgbaMatch[2]),
-      b: parseFloat(rgbaMatch[3]),
-      a: rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1,
-    };
-  }
-  return null;
-}
-
-function lerpColor(from: RGBA, to: RGBA, t: number): string {
-  const r = Math.round(from.r + (to.r - from.r) * t);
-  const g = Math.round(from.g + (to.g - from.g) * t);
-  const b = Math.round(from.b + (to.b - from.b) * t);
-  const a = from.a + (to.a - from.a) * t;
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
-// ── Interpolation helper ─────────────────────────────────
-
-function interpolateValue(
-  value: number,
-  config: InterpolationConfig,
-): number | string {
-  const { inputRange, outputRange, extrapolate = 'extend' } = config;
-
-  if (inputRange.length < 2 || outputRange.length < 2) {
-    throw new Error('inputRange and outputRange must have at least 2 elements');
-  }
-  if (inputRange.length !== outputRange.length) {
-    throw new Error('inputRange and outputRange must have the same length');
-  }
-
-  // Find the segment
-  let segIndex = 0;
-  for (let i = 1; i < inputRange.length; i++) {
-    if (value <= inputRange[i]) {
-      segIndex = i - 1;
-      break;
-    }
-    segIndex = i - 1;
-  }
-
-  // Handle extrapolation
-  if (value <= inputRange[0]) {
-    segIndex = 0;
-    if (extrapolate === 'clamp') {
-      return outputRange[0];
-    }
-  }
-  if (value >= inputRange[inputRange.length - 1]) {
-    segIndex = inputRange.length - 2;
-    if (extrapolate === 'clamp') {
-      return outputRange[outputRange.length - 1];
-    }
-  }
-
-  const inStart = inputRange[segIndex];
-  const inEnd = inputRange[segIndex + 1];
-  const outStart = outputRange[segIndex];
-  const outEnd = outputRange[segIndex + 1];
-
-  const t = inEnd === inStart ? 0 : (value - inStart) / (inEnd - inStart);
-
-  // String output: attempt color interpolation
-  if (typeof outStart === 'string' && typeof outEnd === 'string') {
-    const fromColor = parseColor(outStart);
-    const toColor = parseColor(outEnd);
-    if (fromColor && toColor) {
-      return lerpColor(fromColor, toColor, t);
-    }
-    // Fallback: return nearest string
-    return t < 0.5 ? outStart : outEnd;
-  }
-
-  // Numeric interpolation
-  const numStart = outStart as number;
-  const numEnd = outEnd as number;
-  return numStart + (numEnd - numStart) * t;
-}
-
-// ── AnimatedValue ────────────────────────────────────────
-
+/** @deprecated Use style.transition / style.animation instead */
 export class AnimatedValue {
-  private _value: number;
-  private _listeners: Set<(value: number) => void>;
-  private _activeAnimation: { stop: () => void } | null;
-
-  constructor(initialValue: number) {
-    this._value = initialValue;
-    this._listeners = new Set();
-    this._activeAnimation = null;
-  }
-
-  getValue(): number {
-    return this._value;
-  }
-
-  setValue(value: number): void {
-    if (this._activeAnimation) {
-      this._activeAnimation.stop();
-      this._activeAnimation = null;
-    }
-    this._updateValue(value);
-  }
-
-  addListener(callback: (value: number) => void): () => void {
-    this._listeners.add(callback);
-    return () => {
-      this._listeners.delete(callback);
-    };
-  }
-
-  timing(config: TimingConfig): Animation {
-    return createTimingAnimation(this, config);
-  }
-
-  spring(config: SpringConfig): Animation {
-    return createSpringAnimation(this, config);
-  }
-
-  interpolate(config: InterpolationConfig): number | string {
-    return interpolateValue(this._value, config);
-  }
-
-  /** @internal */
-  _updateValue(value: number): void {
-    this._value = value;
-    for (const listener of this._listeners) {
-      listener(value);
-    }
-  }
-
-  /** @internal */
-  _setActiveAnimation(animation: { stop: () => void } | null): void {
-    this._activeAnimation = animation;
-  }
-
-  /** @internal */
-  _stopActiveAnimation(): void {
-    if (this._activeAnimation) {
-      this._activeAnimation.stop();
-      this._activeAnimation = null;
-    }
-  }
+  constructor(_v: number) {}
+  getValue() { return 0; }
+  setValue(_v: number) {}
+  addListener(_cb: any) { return () => {}; }
+  timing(_c: any): Animation { return { start() {}, stop() {} }; }
+  spring(_c: any): Animation { return { start() {}, stop() {} }; }
+  interpolate(_c: any) { return 0; }
+  _updateValue(_v: number) {}
+  _setActiveAnimation(_a: any) {}
+  _stopActiveAnimation() {}
 }
 
-// ── Timing animation ─────────────────────────────────────
-
-function createTimingAnimation(
-  animatedValue: AnimatedValue,
-  config: TimingConfig,
-): Animation {
-  const {
-    toValue,
-    duration = 300,
-    easing = Easing.easeInOut,
-    delay = 0,
-  } = config;
-
-  let stopped = false;
-  let startTime: number | null = null;
-  let startValue: number;
-  let delayTimeout: ReturnType<typeof setTimeout> | null = null;
-  let onDone: ((result: { finished: boolean }) => void) | undefined;
-
-  const frameCb = (timestamp: number): void => {
-    if (stopped) return;
-
-    if (startTime === null) {
-      startTime = timestamp;
-      startValue = animatedValue.getValue();
-    }
-
-    const elapsed = timestamp - startTime;
-
-    if (elapsed >= duration) {
-      animatedValue._updateValue(toValue);
-      cleanup();
-      if (onDone) onDone({ finished: true });
-      return;
-    }
-
-    const progress = easing(elapsed / duration);
-    const newValue = startValue + (toValue - startValue) * progress;
-    animatedValue._updateValue(newValue);
-  };
-
-  function cleanup(): void {
-    stopped = true;
-    unregisterFrameCallback(frameCb);
-    animatedValue._setActiveAnimation(null);
-    if (delayTimeout !== null) {
-      clearTimeout(delayTimeout);
-      delayTimeout = null;
-    }
-  }
-
-  const animation: Animation = {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      stopped = false;
-      startTime = null;
-      onDone = callback;
-
-      // Stop any currently running animation on this value
-      animatedValue._stopActiveAnimation();
-      animatedValue._setActiveAnimation({ stop: animation.stop });
-
-      startValue = animatedValue.getValue();
-
-      if (delay > 0) {
-        delayTimeout = setTimeout(() => {
-          delayTimeout = null;
-          if (!stopped) {
-            registerFrameCallback(frameCb);
-          }
-        }, delay);
-      } else {
-        registerFrameCallback(frameCb);
-      }
-    },
-
-    stop(): void {
-      if (!stopped) {
-        cleanup();
-        if (onDone) onDone({ finished: false });
-      }
-    },
-  };
-
-  return animation;
+/** @deprecated Use style.transition / style.animation instead */
+export function useAnimation(v: number): [AnimatedValue, number] {
+  return [new AnimatedValue(v), v];
 }
 
-// ── Spring animation ─────────────────────────────────────
-
-function createSpringAnimation(
-  animatedValue: AnimatedValue,
-  config: SpringConfig,
-): Animation {
-  const {
-    toValue,
-    stiffness = 100,
-    damping = 10,
-    mass = 1,
-    velocity: initialVelocity = 0,
-    restThreshold = 0.001,
-  } = config;
-
-  let stopped = false;
-  let position: number;
-  let velocity: number;
-  let lastTimestamp: number | null = null;
-  let onDone: ((result: { finished: boolean }) => void) | undefined;
-
-  const frameCb = (timestamp: number): void => {
-    if (stopped) return;
-
-    if (lastTimestamp === null) {
-      lastTimestamp = timestamp;
-      position = animatedValue.getValue();
-      velocity = initialVelocity;
-    }
-
-    // dt in seconds, clamped to avoid spiral of death
-    const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.064);
-    lastTimestamp = timestamp;
-
-    // Verlet integration
-    const displacement = position - toValue;
-    const springForce = -stiffness * displacement;
-    const dampingForce = -damping * velocity;
-    const acceleration = (springForce + dampingForce) / mass;
-
-    velocity += acceleration * dt;
-    position += velocity * dt;
-
-    animatedValue._updateValue(position);
-
-    // Check rest condition
-    if (
-      Math.abs(velocity) < restThreshold &&
-      Math.abs(position - toValue) < restThreshold
-    ) {
-      animatedValue._updateValue(toValue);
-      cleanup();
-      if (onDone) onDone({ finished: true });
-      return;
-    }
-  };
-
-  function cleanup(): void {
-    stopped = true;
-    unregisterFrameCallback(frameCb);
-    animatedValue._setActiveAnimation(null);
-  }
-
-  const animation: Animation = {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      stopped = false;
-      lastTimestamp = null;
-      onDone = callback;
-
-      animatedValue._stopActiveAnimation();
-      animatedValue._setActiveAnimation({ stop: animation.stop });
-
-      position = animatedValue.getValue();
-      velocity = initialVelocity;
-
-      registerFrameCallback(frameCb);
-    },
-
-    stop(): void {
-      if (!stopped) {
-        cleanup();
-        if (onDone) onDone({ finished: false });
-      }
-    },
-  };
-
-  return animation;
+/** @deprecated Use style.transition with type:'spring' instead */
+export function useSpring(target: number, _config?: any): number {
+  return target;
 }
 
-// ── Composite animations ─────────────────────────────────
-
-export function parallel(animations: Animation[]): Animation {
-  let stoppedAll = false;
-
-  return {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      stoppedAll = false;
-
-      if (animations.length === 0) {
-        if (callback) callback({ finished: true });
-        return;
-      }
-
-      let completedCount = 0;
-      let allFinished = true;
-
-      for (const anim of animations) {
-        anim.start((result) => {
-          if (stoppedAll) return;
-          if (!result.finished) allFinished = false;
-          completedCount++;
-          if (completedCount === animations.length) {
-            if (callback) callback({ finished: allFinished });
-          }
-        });
-      }
-    },
-
-    stop(): void {
-      stoppedAll = true;
-      for (const anim of animations) {
-        anim.stop();
-      }
-    },
-  };
+/** @deprecated Use style.transition instead */
+export function useTransition(value: number, _config?: any): number {
+  return value;
 }
 
-export function sequence(animations: Animation[]): Animation {
-  let currentIndex = 0;
-  let stopped = false;
+/** @deprecated Use style.animation keyframes instead */
+export function parallel(_a: Animation[]): Animation { return { start() {}, stop() {} }; }
+/** @deprecated Use style.animation keyframes instead */
+export function sequence(_a: Animation[]): Animation { return { start() {}, stop() {} }; }
+/** @deprecated Use style.animation keyframes instead */
+export function stagger(_d: number, _a: Animation[]): Animation { return { start() {}, stop() {} }; }
+/** @deprecated Use style.animation keyframes instead */
+export function loop(_a: Animation, _c?: any): Animation { return { start() {}, stop() {} }; }
 
-  function runNext(callback?: (result: { finished: boolean }) => void): void {
-    if (stopped || currentIndex >= animations.length) {
-      if (callback) callback({ finished: !stopped });
-      return;
-    }
+// ── useShake ─────────────────────────────────────────────
+// Imperative shake trigger. Returns a style object (spread into your element)
+// and a shake() function. One render on trigger, Lua runs the animation.
 
-    animations[currentIndex].start((result) => {
-      if (stopped) return;
-      if (!result.finished) {
-        if (callback) callback({ finished: false });
-        return;
-      }
-      currentIndex++;
-      runNext(callback);
-    });
-  }
+export function useShake(config?: {
+  intensity?: number;
+  duration?: number;
+}): { style: Record<string, any>; shake: () => void } {
+  const intensity = config?.intensity ?? 8;
+  const dur = config?.duration ?? 400;
+  const [key, setKey] = useState(0);
+  const shake = useCallback(() => setKey(k => k + 1), []);
 
-  return {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      currentIndex = 0;
-      stopped = false;
-      runNext(callback);
+  const style = key > 0 ? {
+    animation: {
+      keyframes: {
+        0: { transform: { translateX: 0 } },
+        16: { transform: { translateX: intensity } },
+        33: { transform: { translateX: -intensity } },
+        50: { transform: { translateX: intensity * 0.5 } },
+        66: { transform: { translateX: -intensity * 0.5 } },
+        100: { transform: { translateX: 0 } },
+      },
+      duration: dur,
+      iterations: 1,
+      fillMode: 'none' as const,
+      restart: key,
     },
+  } : {};
 
-    stop(): void {
-      stopped = true;
-      if (currentIndex < animations.length) {
-        animations[currentIndex].stop();
-      }
-    },
-  };
+  return { style, shake };
 }
 
-export function stagger(delay: number, animations: Animation[]): Animation {
-  let stopped = false;
-  const timeouts: ReturnType<typeof setTimeout>[] = [];
+// ── useCountUp ───────────────────────────────────────────
+// Time-limited counter animation. Uses setTimeout (not the frame loop).
+// Runs for `duration` ms then stops. Not an infinite re-render loop.
 
-  return {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      stopped = false;
-
-      if (animations.length === 0) {
-        if (callback) callback({ finished: true });
-        return;
-      }
-
-      let completedCount = 0;
-      let allFinished = true;
-
-      for (let i = 0; i < animations.length; i++) {
-        const timeout = setTimeout(() => {
-          if (stopped) return;
-          animations[i].start((result) => {
-            if (stopped) return;
-            if (!result.finished) allFinished = false;
-            completedCount++;
-            if (completedCount === animations.length) {
-              if (callback) callback({ finished: allFinished });
-            }
-          });
-        }, delay * i);
-        timeouts.push(timeout);
-      }
-    },
-
-    stop(): void {
-      stopped = true;
-      for (const t of timeouts) {
-        clearTimeout(t);
-      }
-      timeouts.length = 0;
-      for (const anim of animations) {
-        anim.stop();
-      }
-    },
-  };
-}
-
-export function loop(
-  animation: Animation,
-  config?: { iterations?: number },
-): Animation {
-  const iterations = config?.iterations ?? -1; // -1 means infinite
-  let currentIteration = 0;
-  let stopped = false;
-
-  function runIteration(
-    callback?: (result: { finished: boolean }) => void,
-  ): void {
-    if (stopped) return;
-
-    animation.start((result) => {
-      if (stopped) return;
-      if (!result.finished) {
-        if (callback) callback({ finished: false });
-        return;
-      }
-
-      currentIteration++;
-
-      if (iterations > 0 && currentIteration >= iterations) {
-        if (callback) callback({ finished: true });
-        return;
-      }
-
-      runIteration(callback);
-    });
-  }
-
-  return {
-    start(callback?: (result: { finished: boolean }) => void): void {
-      currentIteration = 0;
-      stopped = false;
-      runIteration(callback);
-    },
-
-    stop(): void {
-      stopped = true;
-      animation.stop();
-    },
-  };
-}
-
-// ── Hooks ────────────────────────────────────────────────
-
-/**
- * Primary hook for consuming animated values.
- * Returns [AnimatedValue, currentNumericValue].
- * The component re-renders when the value changes (batched to animation frames).
- */
-export function useAnimation(
-  initialValue: number,
-): [AnimatedValue, number] {
-  const animRef = useRef<AnimatedValue | null>(null);
-  if (animRef.current === null) {
-    animRef.current = new AnimatedValue(initialValue);
-  }
-
-  const [currentValue, setCurrentValue] = useState(initialValue);
+export function useCountUp(to: number, config?: {
+  from?: number;
+  duration?: number;
+  delay?: number;
+}): number {
+  const from = config?.from ?? 0;
+  const dur = config?.duration ?? 1000;
+  const delay = config?.delay ?? 0;
+  const [value, setValue] = useState(from);
 
   useEffect(() => {
-    const animatedValue = animRef.current!;
-
-    // Listener fires once per Lua frame (driven by tickAnimations).
-    // No batching needed — we're already synced to the frame rate.
-    const unsubscribe = animatedValue.addListener((value) => {
-      setCurrentValue(value);
-    });
-
-    return () => {
-      unsubscribe();
-      animatedValue._stopActiveAnimation();
+    let start: number | null = null;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      if (start === null) start = Date.now();
+      const elapsed = Date.now() - start - delay;
+      if (elapsed < 0) { timer = setTimeout(tick, 16); return; }
+      const t = Math.min(elapsed / dur, 1);
+      const eased = t * (2 - t); // easeOut
+      setValue(from + (to - from) * eased);
+      if (t < 1) timer = setTimeout(tick, 16);
     };
-  }, []);
+    timer = setTimeout(tick, 0);
+    return () => clearTimeout(timer);
+  }, [to, from, dur, delay]);
 
-  return [animRef.current, currentValue];
+  return value;
 }
 
-/**
- * Convenience hook: automatically springs to `targetValue` whenever it changes.
- * Returns the current interpolated value (triggers re-render).
- */
-export function useSpring(
-  targetValue: number,
-  config?: {
-    stiffness?: number;
-    damping?: number;
-    mass?: number;
-  },
-): number {
-  const [animatedValue, currentValue] = useAnimation(targetValue);
-  const isFirstRender = useRef(true);
-  const configRef = useRef(config);
-  configRef.current = config;
+// ── useTypewriter ────────────────────────────────────────
+// Character-by-character text reveal. Uses setTimeout (not frame loop).
+
+export function useTypewriter(text: string, config?: {
+  speed?: number;
+  delay?: number;
+}): string {
+  const speed = config?.speed ?? 50;
+  const delay = config?.delay ?? 0;
+  const [charCount, setCharCount] = useState(0);
+  const textRef = useRef(text);
+  textRef.current = text;
 
   useEffect(() => {
-    // Skip animation on the very first render; value is already at target
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    const anim = animatedValue.spring({
-      toValue: targetValue,
-      stiffness: configRef.current?.stiffness,
-      damping: configRef.current?.damping,
-      mass: configRef.current?.mass,
-    });
-    anim.start();
-
-    return () => {
-      anim.stop();
+    setCharCount(0);
+    let idx = 0;
+    let timeout: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      idx++;
+      if (idx <= textRef.current.length) {
+        setCharCount(idx);
+        timeout = setTimeout(tick, speed);
+      }
     };
-  }, [targetValue, animatedValue]);
+    timeout = setTimeout(tick, delay);
+    return () => clearTimeout(timeout);
+  }, [text, speed, delay]);
 
-  return currentValue;
+  return text.slice(0, charCount);
 }
 
-/**
- * Convenience hook: automatically transitions to `value` with timing-based easing.
- * Returns the current interpolated value (triggers re-render).
- */
-export function useTransition(
-  value: number,
-  config?: {
-    duration?: number;
-    easing?: EasingFunction;
-  },
-): number {
-  const [animatedValue, currentValue] = useAnimation(value);
-  const isFirstRender = useRef(true);
-  const configRef = useRef(config);
-  configRef.current = config;
+// ── Entrance style helper ────────────────────────────────
+// Returns a style object for one-shot fade+slide entrance. Not a hook.
 
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+export function entranceStyle(config?: {
+  duration?: number;
+  delay?: number;
+  distance?: number;
+  direction?: 'up' | 'down' | 'left' | 'right';
+}): Record<string, any> {
+  const dur = config?.duration ?? 400;
+  const d = config?.delay ?? 0;
+  const dist = config?.distance ?? 20;
+  const dir = config?.direction ?? 'up';
 
-    const anim = animatedValue.timing({
-      toValue: value,
-      duration: configRef.current?.duration,
-      easing: configRef.current?.easing,
-    });
-    anim.start();
+  const fromTransform: Record<string, number> = {};
+  if (dir === 'up') fromTransform.translateY = dist;
+  else if (dir === 'down') fromTransform.translateY = -dist;
+  else if (dir === 'left') fromTransform.translateX = -dist;
+  else if (dir === 'right') fromTransform.translateX = dist;
 
-    return () => {
-      anim.stop();
-    };
-  }, [value, animatedValue]);
+  return {
+    animation: {
+      keyframes: {
+        0: { opacity: 0, transform: fromTransform },
+        100: { opacity: 1, transform: { translateX: 0, translateY: 0 } },
+      },
+      duration: dur,
+      delay: d,
+      iterations: 1,
+      fillMode: 'forwards' as const,
+      easing: 'easeOut',
+    },
+  };
+}
 
-  return currentValue;
+// ── Pulse style helper ───────────────────────────────────
+// Returns a style object for infinite pulse animation. Not a hook.
+
+export function pulseStyle(prop: string, config?: {
+  min?: number;
+  max?: number;
+  duration?: number;
+  easing?: EasingSpec;
+}): Record<string, any> {
+  const mn = config?.min ?? 0.4;
+  const mx = config?.max ?? 1;
+  return {
+    [prop]: mn,
+    animation: {
+      keyframes: {
+        0: { [prop]: mn },
+        50: { [prop]: mx },
+        100: { [prop]: mn },
+      },
+      duration: config?.duration ?? 1500,
+      iterations: -1,
+      easing: config?.easing ?? 'easeInOut',
+    },
+  };
+}
+
+// ── Repeat style helper ──────────────────────────────────
+// Returns a style object for infinite 0→1 loop. Not a hook.
+
+export function repeatStyle(prop: string, config?: {
+  duration?: number;
+  easing?: EasingSpec;
+}): Record<string, any> {
+  return {
+    animation: {
+      keyframes: {
+        0: { [prop]: 0 },
+        100: { [prop]: 1 },
+      },
+      duration: config?.duration ?? 1000,
+      iterations: -1,
+      easing: config?.easing ?? 'linear',
+    },
+  };
 }

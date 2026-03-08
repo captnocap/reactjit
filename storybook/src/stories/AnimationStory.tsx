@@ -11,10 +11,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Text, Image, ScrollView, CodeBlock, Pressable,
-  useAnimation, useSpring, Easing,
-  parallel, sequence, stagger, loop,
-  usePulse, useCountUp, useTypewriter, useShake, useEntrance, useBounce, useRepeat,
-  type EasingFunction, classifiers as S} from '../../../packages/core/src';
+  Easing, useShake,
+  entranceStyle,
+  classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
@@ -213,19 +212,19 @@ const PATTERN_CODE = `// Animated button: press + hover feedback
 
 const SPRING_PRESETS = [
   { label: 'Stiff (300/20)', stiffness: 300, damping: 20, color: C.fire },
-  { label: 'Bouncy (120/8)', stiffness: 120, damping: 8, color: C.amber },
-  { label: 'Sloppy (80/5)', stiffness: 80, damping: 5, color: C.emerald },
+  { label: 'Bouncy (180/4)', stiffness: 180, damping: 4, color: C.amber },
+  { label: 'Sloppy (60/2)', stiffness: 60, damping: 2, color: C.emerald },
 ];
 
-const EASING_LIST: { label: string; fn: EasingFunction; color: string }[] = [
-  { label: 'linear', fn: Easing.linear, color: '#888' },
-  { label: 'easeIn', fn: Easing.easeIn, color: C.fire },
-  { label: 'easeOut', fn: Easing.easeOut, color: C.amber },
-  { label: 'easeInOut', fn: Easing.easeInOut, color: C.emerald },
-  { label: 'bounce', fn: Easing.bounce, color: C.cyan },
-  { label: 'elastic(1)', fn: Easing.elastic(1), color: C.pink },
-  { label: 'elastic(2)', fn: Easing.elastic(2), color: C.accent },
-  { label: 'bezier(.68,-.6,.32,1.6)', fn: Easing.bezier(0.68, -0.6, 0.32, 1.6), color: C.blue },
+const EASING_LIST = [
+  { label: 'linear', easing: 'linear' as const, color: '#888' },
+  { label: 'easeIn', easing: 'easeIn' as const, color: C.fire },
+  { label: 'easeOut', easing: 'easeOut' as const, color: C.amber },
+  { label: 'easeInOut', easing: 'easeInOut' as const, color: C.emerald },
+  { label: 'bounce', easing: 'bounce' as const, color: C.cyan },
+  { label: 'elastic(1)', easing: Easing.elastic(1), color: C.pink },
+  { label: 'elastic(2)', easing: Easing.elastic(2), color: C.accent },
+  { label: 'bezier(.68,-.6,.32,1.6)', easing: Easing.bezier(0.68, -0.6, 0.32, 1.6), color: C.blue },
 ];
 
 const FEATURE_CATALOG = [
@@ -272,17 +271,13 @@ function SpringDemo() {
   const [targetIdx, setTargetIdx] = useState(0);
   const target = SPRING_TARGETS[targetIdx];
 
-  const stiff = useSpring(target, { stiffness: 300, damping: 20 });
-  const bouncy = useSpring(target, { stiffness: 120, damping: 8 });
-  const sloppy = useSpring(target, { stiffness: 80, damping: 5 });
-
   const next = useCallback(() => {
     setTargetIdx(i => (i + 1) % SPRING_TARGETS.length);
   }, []);
 
   return (
     <>
-      <S.StoryCap>{'Three springs race to the same target with different stiffness/damping.'}</S.StoryCap>
+      <S.StoryCap>{'Three springs race to the same target with different stiffness/damping. Lua-driven — one React render per tap.'}</S.StoryCap>
 
       <Pressable onPress={next}>
         <Box style={{
@@ -293,25 +288,23 @@ function SpringDemo() {
         </Box>
       </Pressable>
 
-      {SPRING_PRESETS.map((sp, i) => {
-        const val = i === 0 ? stiff : i === 1 ? bouncy : sloppy;
-        return (
-          <Box key={sp.label} style={{ gap: 2 }}>
-            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: sp.color }} />
-              <Text style={{ color: c.text, fontSize: 9, width: 90 }}>{sp.label}</Text>
-              <S.StoryCap>{String(Math.round(val))}</S.StoryCap>
-            </Box>
-            <Box style={{ height: 14, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' }}>
-              <Box style={{
-                position: 'absolute', left: 0, top: 0,
-                width: Math.max(4, val), height: 14,
-                backgroundColor: sp.color, borderRadius: 3, opacity: 0.85,
-              }} />
-            </Box>
+      {SPRING_PRESETS.map((sp) => (
+        <Box key={sp.label} style={{ gap: 2 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: sp.color }} />
+            <Text style={{ color: c.text, fontSize: 9, width: 90 }}>{sp.label}</Text>
           </Box>
-        );
-      })}
+          <Box style={{ height: 14, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' }}>
+            <Box style={{
+              position: 'absolute', left: 0, top: 0,
+              width: 200, height: 14,
+              backgroundColor: sp.color, borderRadius: 3, opacity: 0.85,
+              transform: { translateX: target - 200 },
+              transition: { all: { type: 'spring', stiffness: sp.stiffness, damping: sp.damping } },
+            }} />
+          </Box>
+        </Box>
+      ))}
     </>
   );
 }
@@ -321,11 +314,10 @@ function SpringDemo() {
 function SpringCounterDemo() {
   const c = useThemeColors();
   const [count, setCount] = useState(0);
-  const springCount = useSpring(count, { stiffness: 200, damping: 15 });
 
   return (
     <>
-      <S.StoryCap>{'useSpring smoothly interpolates to any numeric target.'}</S.StoryCap>
+      <S.StoryCap>{'Spring transition on the bar width. React renders once per button press.'}</S.StoryCap>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Pressable onPress={() => setCount(n => n + 100)}>
           <Box style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 5, paddingBottom: 5, backgroundColor: C.emerald, borderRadius: 4 }}>
@@ -342,7 +334,16 @@ function SpringCounterDemo() {
             <S.StoryMuted>{'reset'}</S.StoryMuted>
           </Box>
         </Pressable>
-        <Text style={{ color: c.text, fontSize: 28, fontWeight: 'bold' }}>{String(Math.round(springCount))}</Text>
+        <Text style={{ color: c.text, fontSize: 28, fontWeight: 'bold' }}>{String(count)}</Text>
+      </Box>
+      <Box style={{ height: 14, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' }}>
+        <Box style={{
+          position: 'absolute', left: 0, top: 0,
+          width: 200, height: 14,
+          backgroundColor: C.emerald, borderRadius: 3, opacity: 0.85,
+          transform: { translateX: Math.max(0, count) - 200 },
+          transition: { all: { type: 'spring', stiffness: 200, damping: 15 } },
+        }} />
       </Box>
     </>
   );
@@ -562,18 +563,22 @@ function StrokeDemo() {
 
 // ── Live Demo: Easing Curves ────────────────────────────
 
-function EasingBar({ label, fn, color }: { label: string; fn: EasingFunction; color: string }) {
+function EasingBar({ label, easing, color }: { label: string; easing: any; color: string }) {
   const c = useThemeColors();
-  const t = useRepeat({ duration: 2000 });
-  const eased = fn(t);
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
       <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
       <Text style={{ color: c.muted, fontSize: 8, width: 80 }}>{label}</Text>
       <Box style={{ width: 140, height: 10, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' }}>
-        <Box style={{ position: 'absolute', left: 0, top: 0, width: Math.max(3, eased * 140), height: 10, backgroundColor: color, borderRadius: 3, opacity: 0.85 }} />
+        <Box style={{
+          position: 'absolute', left: 0, top: 0,
+          width: 140, height: 10, backgroundColor: color, borderRadius: 3, opacity: 0.85,
+          animation: {
+            keyframes: { 0: { transform: { translateX: -140 } }, 100: { transform: { translateX: 0 } } },
+            duration: 2000, iterations: -1, direction: 'alternate', easing,
+          },
+        }} />
       </Box>
-      <Text style={{ color: c.muted, fontSize: 7, width: 24 }}>{eased.toFixed(2)}</Text>
     </Box>
   );
 }
@@ -584,7 +589,7 @@ function EasingDemo() {
     <>
       <S.StoryCap>{'Each bar shows 0\u21921 with a different easing. All loop every 2 seconds.'}</S.StoryCap>
       <Box style={{ gap: 4 }}>
-        {EASING_LIST.map(e => <EasingBar key={e.label} label={e.label} fn={e.fn} color={e.color} />)}
+        {EASING_LIST.map(e => <EasingBar key={e.label} label={e.label} easing={e.easing} color={e.color} />)}
       </Box>
     </>
   );
@@ -594,50 +599,33 @@ function EasingDemo() {
 
 function PresetDemo() {
   const c = useThemeColors();
-  const pulse = usePulse({ min: 0.3, max: 1, duration: 2000 });
-  const [countTarget, setCountTarget] = useState(0);
-  const counted = useCountUp(countTarget, { duration: 1500 });
-  const typed = useTypewriter('ReactJIT animations bring your UI to life.', { speed: 55, delay: 200 });
-  const { value: shakeX, shake } = useShake({ intensity: 10 });
+  const { style: shakeStyle, shake } = useShake({ intensity: 10 });
 
   return (
     <>
-      {/* usePulse */}
+      {/* Lua pulse — style.animation, zero re-renders */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Box style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.fire, opacity: pulse }} />
-        <Box style={{ width: 28, height: 28, borderRadius: 4, backgroundColor: C.cyan, transform: { scaleX: 0.5 + pulse * 0.5, scaleY: 0.5 + pulse * 0.5 } }} />
-        <S.StoryCap>{`usePulse: ${pulse.toFixed(2)}`}</S.StoryCap>
+        <Box style={{
+          width: 28, height: 28, borderRadius: 14, backgroundColor: C.fire,
+          animation: { keyframes: { 0: { opacity: 0.3 }, 50: { opacity: 1 }, 100: { opacity: 0.3 } }, duration: 2000, iterations: -1, easing: 'easeInOut' },
+        }} />
+        <Box style={{
+          width: 28, height: 28, borderRadius: 4, backgroundColor: C.cyan,
+          animation: { keyframes: { 0: { transform: { scaleX: 0.5, scaleY: 0.5 } }, 50: { transform: { scaleX: 1, scaleY: 1 } }, 100: { transform: { scaleX: 0.5, scaleY: 0.5 } } }, duration: 2000, iterations: -1, easing: 'easeInOut' },
+        }} />
+        <S.StoryCap>{'Lua pulse (style.animation)'}</S.StoryCap>
       </Box>
 
-      {/* useCountUp */}
+      {/* useShake — keyframe animation, renders only on trigger */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ color: C.emerald, fontSize: 22, fontWeight: 'bold' }}>{String(Math.round(counted))}</Text>
-        {[1000, 5000, 9999].map(t => (
-          <Pressable key={t} onPress={() => setCountTarget(t)}>
-            <S.StoryChip>
-              <Text style={{ color: c.text, fontSize: 9 }}>{String(t)}</Text>
-            </S.StoryChip>
-          </Pressable>
-        ))}
-        <S.StoryTiny>{'useCountUp'}</S.StoryTiny>
-      </Box>
-
-      {/* useTypewriter */}
-      <Box style={{ backgroundColor: c.bg, borderRadius: 4, padding: 8 }}>
-        {/* rjit-ignore-next-line */}
-        <S.StoryBody>{typed}<Text style={{ color: C.accent, fontSize: 10 }}>{'|'}</Text></S.StoryBody>
-      </Box>
-
-      {/* useShake */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Box style={{ transform: { translateX: shakeX } }}>
+        <Box style={{ ...shakeStyle }}>
           <Pressable onPress={shake}>
             <Box style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: C.fire, borderRadius: 4 }}>
               <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{'Shake me!'}</Text>
             </Box>
           </Pressable>
         </Box>
-        <S.StoryTiny>{`translateX: ${shakeX.toFixed(1)}`}</S.StoryTiny>
+        <S.StoryTiny>{'useShake (keyframe animation)'}</S.StoryTiny>
       </Box>
     </>
   );
@@ -647,10 +635,9 @@ function PresetDemo() {
 
 function EntranceItem({ text, delay, color }: { text: string; delay: number; color: string }) {
   const c = useThemeColors();
-  const { opacity, translateY } = useEntrance({ delay, duration: 500 });
   return (
     <Box style={{
-      opacity, transform: { translateY },
+      ...entranceStyle({ delay, duration: 500 }),
       flexDirection: 'row', alignItems: 'center', gap: 6,
       backgroundColor: c.bgElevated, borderRadius: 4, borderWidth: 1, borderColor: c.border,
       paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5,
@@ -782,48 +769,87 @@ const FLIP_CARD_FACES = [
   { front: 'Queen', back: 'Diamond', color: C.amber },
 ];
 
-function FlipCard({ front, back, color, prog }: {
-  front: string; back: string; color: string; prog: number;
-}) {
-  const c = useThemeColors();
-  const scaleX = Math.abs(Math.cos(prog * Math.PI));
-  const showBack = prog > 0.5;
-  return (
-    <Box style={{
-      width: 90, height: 120, borderRadius: 10, borderWidth: 2,
-      borderColor: color, backgroundColor: showBack ? color : c.bgElevated,
-      justifyContent: 'center', alignItems: 'center', gap: 4,
-      transform: { scaleX: Math.max(0.01, scaleX) },
-      shadowColor: color, shadowBlur: 10, shadowOffsetY: 3,
-    }}>
-      <Text style={{ color: showBack ? '#fff' : c.text, fontSize: 22, fontWeight: 'bold' }}>
-        {showBack ? back : front}
-      </Text>
-      <Text style={{ color: showBack ? 'rgba(255,255,255,0.6)' : c.muted, fontSize: 8 }}>
-        {showBack ? 'back' : 'front'}
-      </Text>
-    </Box>
-  );
-}
-
 function ClickFlipCard({ front, back, color }: { front: string; back: string; color: string }) {
-  const [flipped, setFlipped] = useState(false);
-  const prog = useSpring(flipped ? 1 : 0, { stiffness: 200, damping: 18 });
+  const c = useThemeColors();
+  const [showBack, setShowBack] = useState(false);
+  const [flipKey, setFlipKey] = useState(0);
+
+  const handleFlip = useCallback(() => {
+    setFlipKey(k => k + 1);
+    setTimeout(() => setShowBack(s => !s), 200);
+  }, []);
 
   return (
-    <Pressable onPress={() => setFlipped(f => !f)}>
-      <FlipCard front={front} back={back} color={color} prog={prog} />
+    <Pressable onPress={handleFlip}>
+      <Box style={{
+        width: 90, height: 120, borderRadius: 10, borderWidth: 2,
+        borderColor: color, backgroundColor: showBack ? color : c.bgElevated,
+        justifyContent: 'center', alignItems: 'center', gap: 4,
+        shadowColor: color, shadowBlur: 10, shadowOffsetY: 3,
+        ...(flipKey > 0 ? {
+          animation: {
+            keyframes: {
+              0: { transform: { scaleX: 1 } },
+              50: { transform: { scaleX: 0.02 } },
+              100: { transform: { scaleX: 1 } },
+            },
+            duration: 400, iterations: 1, fillMode: 'forwards',
+            restart: flipKey,
+          },
+        } : {}),
+      }}>
+        <Text style={{ color: showBack ? '#fff' : c.text, fontSize: 22, fontWeight: 'bold' }}>
+          {showBack ? back : front}
+        </Text>
+        <Text style={{ color: showBack ? 'rgba(255,255,255,0.6)' : c.muted, fontSize: 8 }}>
+          {showBack ? 'back' : 'front'}
+        </Text>
+      </Box>
     </Pressable>
   );
 }
 
 function HoverFlipCard({ front, back, color }: { front: string; back: string; color: string }) {
-  const [hovered, setH] = useState(false);
-  const prog = useSpring(hovered ? 1 : 0, { stiffness: 180, damping: 16 });
+  const c = useThemeColors();
+  const [showBack, setShowBack] = useState(false);
+  const [flipKey, setFlipKey] = useState(0);
+
+  const handleHoverIn = useCallback(() => {
+    setFlipKey(k => k + 1);
+    setTimeout(() => setShowBack(true), 200);
+  }, []);
+
+  const handleHoverOut = useCallback(() => {
+    setFlipKey(k => k + 1);
+    setTimeout(() => setShowBack(false), 200);
+  }, []);
 
   return (
-    <Pressable onPress={() => {}} onHoverIn={() => setH(true)} onHoverOut={() => setH(false)}>
-      <FlipCard front={front} back={back} color={color} prog={prog} />
+    <Pressable onPress={() => {}} onHoverIn={handleHoverIn} onHoverOut={handleHoverOut}>
+      <Box style={{
+        width: 90, height: 120, borderRadius: 10, borderWidth: 2,
+        borderColor: color, backgroundColor: showBack ? color : c.bgElevated,
+        justifyContent: 'center', alignItems: 'center', gap: 4,
+        shadowColor: color, shadowBlur: 10, shadowOffsetY: 3,
+        ...(flipKey > 0 ? {
+          animation: {
+            keyframes: {
+              0: { transform: { scaleX: 1 } },
+              50: { transform: { scaleX: 0.02 } },
+              100: { transform: { scaleX: 1 } },
+            },
+            duration: 400, iterations: 1, fillMode: 'forwards',
+            restart: flipKey,
+          },
+        } : {}),
+      }}>
+        <Text style={{ color: showBack ? '#fff' : c.text, fontSize: 22, fontWeight: 'bold' }}>
+          {showBack ? back : front}
+        </Text>
+        <Text style={{ color: showBack ? 'rgba(255,255,255,0.6)' : c.muted, fontSize: 8 }}>
+          {showBack ? 'back' : 'front'}
+        </Text>
+      </Box>
     </Pressable>
   );
 }
@@ -895,9 +921,7 @@ const SBLOCKS: SBlock[] = (() => {
 })();
 
 function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor: string; hueBase: number }) {
-  const c = useThemeColors();
   const [active, setActive] = useState(false);
-  const prog = useSpring(active ? 1 : 0, { stiffness: 120, damping: 10 });
 
   useEffect(() => {
     if (active) {
@@ -906,15 +930,12 @@ function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor
     }
   }, [active]);
 
-  const animating = prog > 0.005;
-  const textOp = Math.max(0, 1 - prog * 5);
-
   return (
     <Box style={{ alignItems: 'center', gap: 4 }}>
       <Box style={{ width: SH_W, height: SH_H + 110 }}>
         <Pressable onPress={() => { if (!active) setActive(true); }}>
           <Box style={{ width: SH_W, height: SH_H }}>
-            {!animating && (
+            {!active && (
               <Box style={{
                 width: SH_W, height: SH_H, backgroundColor: baseColor,
                 borderRadius: 8, justifyContent: 'center', alignItems: 'center',
@@ -922,34 +943,27 @@ function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{label}</Text>
               </Box>
             )}
-            {animating && SBLOCKS.map((b, i) => {
-              const bp = Math.max(0, Math.min(1, (prog - b.d) / (1 - b.d)));
-              const x = b.hx + (b.sx - b.hx) * bp;
-              const y = b.hy + (b.sy - b.hy) * bp;
-              const rot = b.sr * bp;
-              const lit = 55 + bp * 15;
-              return (
-                <Box key={i} style={{
-                  position: 'absolute', left: x, top: y,
-                  width: SH_BS - 1, height: SH_BS - 1,
-                  backgroundColor: `hsl(${hueBase + (i / SBLOCKS.length) * 30}, 70%, ${lit}%)`,
-                  borderRadius: bp > 0.05 ? 3 : 1,
-                  transform: { rotate: rot },
-                }} />
-              );
-            })}
-            {animating && textOp > 0 && (
-              <Box style={{
-                position: 'absolute', left: 0, top: 0, width: SH_W, height: SH_H,
-                justifyContent: 'center', alignItems: 'center', opacity: textOp,
-              }}>
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{label}</Text>
-              </Box>
-            )}
+            {active && SBLOCKS.map((b, i) => (
+              <Box key={i} style={{
+                position: 'absolute', left: b.hx, top: b.hy,
+                width: SH_BS - 1, height: SH_BS - 1,
+                backgroundColor: `hsl(${hueBase + (i / SBLOCKS.length) * 30}, 70%, 55%)`,
+                borderRadius: 1,
+                animation: {
+                  keyframes: {
+                    0: { transform: { translateX: 0, translateY: 0, rotate: 0 }, opacity: 1 },
+                    50: { transform: { translateX: b.sx - b.hx, translateY: b.sy - b.hy, rotate: b.sr }, opacity: 0.8 },
+                    100: { transform: { translateX: 0, translateY: 0, rotate: 0 }, opacity: 1 },
+                  },
+                  duration: 1200, delay: b.d * 400,
+                  easing: 'bounce', iterations: 1, fillMode: 'forwards',
+                },
+              }} />
+            ))}
           </Box>
         </Pressable>
       </Box>
-      <S.StoryTiny>{animating ? 'rebuilding...' : 'click me'}</S.StoryTiny>
+      <S.StoryTiny>{active ? 'rebuilding...' : 'click me'}</S.StoryTiny>
     </Box>
   );
 }
@@ -1038,19 +1052,20 @@ function RippleButton({ label, color }: { label: string; color: string }) {
 }
 
 function RippleCircle({ x, y }: { x: number; y: number }) {
-  const [go, setGo] = useState(false);
-  useEffect(() => { setGo(true); }, []);
-  const prog = useSpring(go ? 1 : 0, { stiffness: 60, damping: 15 });
-  const size = Math.max(1, prog * 120);
-  const opacity = Math.max(0, 1 - prog);
   return (
     <Box style={{
       position: 'absolute',
-      left: x - size / 2, top: y - size / 2,
-      width: size, height: size,
-      borderRadius: size / 2,
+      left: x - 60, top: y - 60,
+      width: 120, height: 120,
+      borderRadius: 60,
       backgroundColor: 'rgba(255,255,255,0.35)',
-      opacity,
+      animation: {
+        keyframes: {
+          0: { transform: { scaleX: 0.01, scaleY: 0.01 }, opacity: 1 },
+          100: { transform: { scaleX: 1, scaleY: 1 }, opacity: 0 },
+        },
+        duration: 600, iterations: 1, fillMode: 'forwards', easing: 'easeOut',
+      },
     }} />
   );
 }
@@ -1060,9 +1075,6 @@ function RippleCircle({ x, y }: { x: number; y: number }) {
 function RubberBandButton({ label, color }: { label: string; color: string }) {
   const c = useThemeColors();
   const [pressed, setP] = useState(false);
-  const prog = useSpring(pressed ? 1 : 0, { stiffness: 400, damping: 6 });
-  const sx = 1 - prog * 0.15;
-  const sy = 1 + prog * 0.08;
 
   return (
     <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -1070,8 +1082,9 @@ function RubberBandButton({ label, color }: { label: string; color: string }) {
         <Box style={{
           width: 120, height: 44, borderRadius: 8, backgroundColor: color,
           justifyContent: 'center', alignItems: 'center',
-          transform: { scaleX: sx, scaleY: sy },
+          transform: { scaleX: pressed ? 0.85 : 1, scaleY: pressed ? 1.08 : 1 },
           shadowColor: color, shadowBlur: pressed ? 0 : 8, shadowOffsetY: pressed ? 0 : 3,
+          transition: { all: { type: 'spring', stiffness: 400, damping: 6 } },
         }}>
           <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{label}</Text>
         </Box>
@@ -1109,7 +1122,6 @@ const CONFETTI_PARTICLES = makeConfetti();
 function ConfettiButton() {
   const c = useThemeColors();
   const [active, setActive] = useState(false);
-  const prog = useSpring(active ? 1 : 0, { stiffness: 60, damping: 12 });
 
   useEffect(() => {
     if (active) {
@@ -1118,39 +1130,39 @@ function ConfettiButton() {
     }
   }, [active]);
 
-  const animating = prog > 0.01;
-  const fade = Math.max(0, 1 - prog * 1.5);
-
   return (
     <Box style={{ alignItems: 'center', gap: 4 }}>
       <Box style={{ width: 140, height: 120 }}>
         <Pressable onPress={() => { if (!active) setActive(true); }}>
           <Box style={{
             width: 140, height: 44, borderRadius: 8,
-            backgroundColor: animating ? `${C.accent}88` : C.accent,
+            backgroundColor: active ? `${C.accent}88` : C.accent,
             justifyContent: 'center', alignItems: 'center',
-            transform: { scaleX: animating ? 0.95 : 1, scaleY: animating ? 0.95 : 1 },
+            transform: { scaleX: active ? 0.95 : 1, scaleY: active ? 0.95 : 1 },
             transition: { all: { duration: 150 } },
           }}>
             <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>
-              {animating ? 'Celebrating!' : 'Confetti'}
+              {active ? 'Celebrating!' : 'Confetti'}
             </Text>
           </Box>
         </Pressable>
-        {animating && CONFETTI_PARTICLES.map((p, i) => {
-          const t = prog;
-          const gravity = 60 * t * t;
-          const px = 70 + p.vx * t;
-          const py = 22 + p.vy * t + gravity;
-          const rot = p.rot * t;
-          const op = Math.max(0, 1 - t * 1.2);
+        {active && CONFETTI_PARTICLES.map((p, i) => {
+          const gravity = 60;
           return (
             <Box key={i} style={{
-              position: 'absolute', left: px - p.size / 2, top: py - p.size / 2,
+              position: 'absolute',
+              left: 70 - p.size / 2, top: 22 - p.size / 2,
               width: p.size, height: p.size,
               borderRadius: srand(i * 41) > 0.5 ? p.size / 2 : 1,
-              backgroundColor: p.color, opacity: op,
-              transform: { rotate: rot },
+              backgroundColor: p.color,
+              animation: {
+                keyframes: {
+                  0: { opacity: 1, transform: { translateX: 0, translateY: 0, rotate: 0 } },
+                  50: { opacity: 0.8, transform: { translateX: p.vx * 0.5, translateY: p.vy * 0.5 + gravity * 0.25, rotate: p.rot * 0.5 } },
+                  100: { opacity: 0, transform: { translateX: p.vx, translateY: p.vy + gravity, rotate: p.rot } },
+                },
+                duration: 1200, iterations: 1, easing: 'easeOut', fillMode: 'forwards',
+              },
             }} />
           );
         })}
@@ -1238,9 +1250,9 @@ function TiltCard({ label, color }: { label: string; color: string }) {
     setHoverPos(null);
   }, []);
 
-  const skX = useSpring(hoverPos ? hoverPos.y * -8 : 0, { stiffness: 200, damping: 14 });
-  const skY = useSpring(hoverPos ? hoverPos.x * 8 : 0, { stiffness: 200, damping: 14 });
-  const lift = useSpring(hoverPos ? 1 : 0, { stiffness: 180, damping: 16 });
+  const skX = hoverPos ? hoverPos.y * -8 : 0;
+  const skY = hoverPos ? hoverPos.x * 8 : 0;
+  const hovered = hoverPos !== null;
 
   return (
     <Box style={{ alignItems: 'center', gap: 4 }}>
@@ -1252,7 +1264,8 @@ function TiltCard({ label, color }: { label: string; color: string }) {
           width: 100, height: 60, borderRadius: 8, backgroundColor: color,
           justifyContent: 'center', alignItems: 'center',
           transform: { skewX: skX, skewY: skY },
-          shadowColor: color, shadowBlur: 4 + lift * 12, shadowOffsetY: 2 + lift * 4,
+          shadowColor: color, shadowBlur: hovered ? 16 : 4, shadowOffsetY: hovered ? 6 : 2,
+          transition: { all: { type: 'spring', stiffness: 200, damping: 14 } },
         }}
       >
         <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{label}</Text>
