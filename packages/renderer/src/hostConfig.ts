@@ -516,6 +516,11 @@ export const hostConfig: HostConfig<
       }
     }
 
+    // Developer-set debugName prop takes priority over auto-derived fiber name
+    if (clean.debugName) {
+      debugName = clean.debugName;
+    }
+
     emit({
       op: 'CREATE',
       id,

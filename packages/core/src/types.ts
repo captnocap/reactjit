@@ -377,6 +377,13 @@ export interface BoxProps {
   /** Lua-owned tooltip. String for simple cursor-relative, object for full control. */
   tooltip?: TooltipProp;
 
+  /** Test identifier — flows through to Lua node props for test:query. */
+  testId?: string;
+
+  /** Developer-set debug name. Overrides the auto-derived component name in
+   *  inspector, test runner, crash reports, and all debug output. */
+  debugName?: string;
+
   children?: React.ReactNode;
   key?: string | number;
 }
@@ -579,6 +586,7 @@ export interface ScrollViewProps {
   onScroll?: (event: ScrollEvent) => void;
   onScrollBegin?: () => void;
   onScrollEnd?: () => void;
+  testId?: string;
   children?: React.ReactNode;
   key?: string | number;
 }

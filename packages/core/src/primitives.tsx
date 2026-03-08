@@ -168,6 +168,7 @@ export function Box(props: BoxProps) {
     onFocus, onBlur,
     onLayout,
     tooltip,
+    testId,
     children,
   } = props;
 
@@ -219,6 +220,7 @@ export function Box(props: BoxProps) {
     onBlur,
     onLayout,
     tooltip,
+    testId,
   };
   if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;

@@ -40,6 +40,7 @@ export interface PressableProps {
   children: React.ReactNode | ((state: PressableState) => React.ReactNode);
   hitSlop?: number | HitSlop;
   accessibilityRole?: string;
+  testId?: string;
 }
 
 function diffStyles(base: Style, variant: Style): Style | undefined {
@@ -220,6 +221,7 @@ export function Pressable({
 
   if (hitSlop) boxProps.hitSlop = hitSlop;
   if (accessibilityRole) boxProps.accessibilityRole = accessibilityRole;
+  if (anyProps.testId) boxProps.testId = anyProps.testId;
   if (playgroundLine !== undefined) boxProps.__rjitPlaygroundLine = playgroundLine;
   if (playgroundTag !== undefined) boxProps.__rjitPlaygroundTag = playgroundTag;
 

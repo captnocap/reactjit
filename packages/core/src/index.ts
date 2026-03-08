@@ -281,35 +281,42 @@ export { AreaChart, type AreaChartProps } from './AreaChart';
 export { PieChart, type PieChartProps, type PieChartSegment } from './PieChart';
 export { RadarChart, type RadarChartProps, type RadarChartAxis } from './RadarChart';
 
-// Animation
+// Animation (Lua-driven — see lua/animate.lua)
 export {
+  // Style helpers (not hooks — return style objects for Lua animation)
+  entranceStyle,
+  pulseStyle,
+  repeatStyle,
+  // Easing name constants (Lua resolves them)
+  Easing,
+  // Hooks that stay in TS (time-limited, not per-frame)
+  useShake,
+  useCountUp,
+  useTypewriter,
+  // No-op kept for NativeBridge compat
+  tickAnimations,
+  // Deprecated stubs (compile but do nothing — migrate to style.transition)
   AnimatedValue,
   useAnimation,
   useSpring,
   useTransition,
-  tickAnimations,
-  Easing,
   parallel,
   sequence,
   stagger,
   loop,
+  // Types
   type Animation,
+  type AnimationConfig,
+  type TransitionConfig,
+  type SpringTransitionConfig,
+  type TimingTransitionConfig,
   type EasingFunction,
+  type EasingName,
+  type EasingSpec,
   type TimingConfig,
   type SpringConfig,
   type InterpolationConfig,
 } from './animation';
-
-// Animation presets (higher-level convenience hooks)
-export {
-  usePulse,
-  useCountUp,
-  useTypewriter,
-  useShake,
-  useEntrance,
-  useBounce,
-  useRepeat,
-} from './animationPresets';
 
 // Colors
 export { colors, type CatppuccinColor } from './colors';

@@ -30,6 +30,7 @@ export const ScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
       onScroll,
       onScrollBegin,
       onScrollEnd,
+      testId,
       children,
     },
     ref
@@ -70,6 +71,7 @@ export const ScrollView = forwardRef<ScrollViewRef, ScrollViewProps>(
       onScroll,
       onScrollBegin,
       onScrollEnd,
+      testId,
     };
     if (playgroundLine !== undefined) hostProps.__rjitPlaygroundLine = playgroundLine;
     if (playgroundTag !== undefined) hostProps.__rjitPlaygroundTag = playgroundTag;
