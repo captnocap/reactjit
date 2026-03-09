@@ -959,7 +959,8 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   end
   if Layout._capabilities then
     if Layout._capabilities.isNonVisual(node.type)
-       and not Layout._capabilities.rendersInOwnSurface(node.type) then
+       and not Layout._capabilities.rendersInOwnSurface(node.type)
+       and #(node.children or {}) == 0 then
       if not Layout._layoutDbgSeen then Layout._layoutDbgSeen = {} end
       Layout._layoutDbgSeen[node.type] = (Layout._layoutDbgSeen[node.type] or 0) + 1
       if Layout._debugPrint and Layout._layoutDbgSeen[node.type] <= 3 then

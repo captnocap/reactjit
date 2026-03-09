@@ -327,6 +327,8 @@ function Capabilities.loadAll()
     "draw_canvas",
     "game_server",
     "filewatcher",
+    "hello_card",
+    "dashboard_card",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

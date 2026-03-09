@@ -159,6 +159,10 @@ function Tree.applyCommands(commands)
         Images.load(props.src)
       end
       -- Video loading is handled by Videos.syncWithTree() each frame
+      -- Set up keyframe animation if present on creation
+      if Animate and style.animation then
+        Animate.setupAnimation(nodes[cmd.id], style.animation)
+      end
       treeDirty = true
 
     elseif op == "CREATE_TEXT" then
@@ -435,6 +439,163 @@ function Tree.setScroll(nodeId, scrollX, scrollY)
   local nextY = sanitize(scrollY, maxScrollY)
   ss.scrollX = math.max(0, math.min(nextX, maxScrollX))
   ss.scrollY = math.max(0, math.min(nextY, maxScrollY))
+end
+
+-- ============================================================================
+-- Lua-side subtree declaration (Love reconciler Tier 1)
+--
+-- Capabilities can declare child nodes directly in Lua without going through
+-- the JS bridge. This lets a visual capability compose its output from the
+-- same primitives React uses (View, __TEXT__, Image, etc.) instead of manual
+-- love.graphics draw calls.
+--
+-- Node IDs use the string format "lua:<parentId>:<key>" to avoid collisions
+-- with the JS reconciler's positive-integer ID space.
+-- ============================================================================
+
+-- Track which parent nodes have Lua-declared children: parentId -> { key -> nodeId }
+local declaredChildren = {}
+
+--- Recursively stamp a template subtree into the tree under a parent node.
+--- @param parentId number|string  The parent node's ID
+--- @param template table  Template tree: { type, key, style?, props?, text?, children? }
+--- @return table  Handles: flat table mapping key -> nodeId for every keyed node
+local function stampTemplate(parentId, template, handles)
+  handles = handles or {}
+
+  for i, tmpl in ipairs(template) do
+    local key = tmpl.key or tostring(i)
+    local nodeId = "lua:" .. tostring(parentId) .. ":" .. key
+
+    local style = {}
+    if tmpl.style then
+      for k, v in pairs(tmpl.style) do style[k] = v end
+    end
+
+    local props = {}
+    if tmpl.props then
+      for k, v in pairs(tmpl.props) do props[k] = v end
+    end
+    props.style = style
+
+    local node = {
+      id = nodeId,
+      type = tmpl.type or "View",
+      props = props,
+      style = style,
+      text = tmpl.text,
+      hasHandlers = false,
+      children = {},
+      parent = nodes[parentId],
+      computed = nil,
+      debugName = "lua:" .. key,
+      renderCount = 1,
+      _luaDeclared = true,  -- marker for cleanup
+    }
+
+    nodes[nodeId] = node
+
+    -- Append as child of parent
+    local parent = nodes[parentId]
+    if parent then
+      parent.children[#parent.children + 1] = node
+    end
+
+    -- Store handle
+    handles[key] = nodeId
+
+    -- Recurse into children
+    if tmpl.children and #tmpl.children > 0 then
+      stampTemplate(nodeId, tmpl.children, handles)
+    end
+  end
+
+  return handles
+end
+
+--- Declare a subtree of children under a parent node from a Lua template.
+--- Returns a handles table mapping template keys to node IDs for later updates.
+---
+--- @param parentId number|string  The capability node's ID in the tree
+--- @param template table  Array of child templates: { { type, key, style?, text?, children? }, ... }
+--- @return table  Handles: { [key] = nodeId, ... }
+function Tree.declareChildren(parentId, template)
+  local parent = nodes[parentId]
+  if not parent then
+    io.write("[tree] declareChildren: parent " .. tostring(parentId) .. " not found\n")
+    io.flush()
+    return {}
+  end
+
+  -- Remove any previous declaration for this parent
+  if declaredChildren[parentId] then
+    Tree.removeDeclaredChildren(parentId)
+  end
+
+  local handles = stampTemplate(parentId, template)
+  declaredChildren[parentId] = handles
+  treeDirty = true
+
+  Log.log("tree", "declareChildren parent=%s keys=%d", tostring(parentId), #template)
+  return handles
+end
+
+--- Update props on a Lua-declared child node.
+--- For __TEXT__ nodes, set `props.text` to update the text content.
+---
+--- @param nodeId string  The node ID (from handles table)
+--- @param props table  Props to merge: { text?, style?, ... }
+function Tree.updateChildProps(nodeId, props)
+  local node = nodes[nodeId]
+  if not node then return end
+
+  for k, v in pairs(props) do
+    if k == "text" then
+      -- For text nodes, update the text field directly
+      node.text = v
+    elseif k == "style" then
+      -- Merge style in-place
+      if type(v) == "table" then
+        if not node.style then node.style = {} end
+        if not node.props.style then node.props.style = {} end
+        for sk, sv in pairs(v) do
+          node.style[sk] = sv
+          node.props.style[sk] = sv
+        end
+      end
+    else
+      node.props[k] = v
+    end
+  end
+
+  treeDirty = true
+end
+
+--- Remove all Lua-declared children from a parent node.
+--- @param parentId number|string  The parent node ID
+function Tree.removeDeclaredChildren(parentId)
+  local handles = declaredChildren[parentId]
+  if not handles then return end
+
+  -- Remove declared nodes from parent's children list
+  local parent = nodes[parentId]
+  if parent then
+    local kept = {}
+    for _, child in ipairs(parent.children) do
+      if not child._luaDeclared then
+        kept[#kept + 1] = child
+      end
+    end
+    parent.children = kept
+  end
+
+  -- Recursively clean up declared nodes from the nodes table
+  for key, nodeId in pairs(handles) do
+    cleanup(nodeId)
+  end
+
+  declaredChildren[parentId] = nil
+  treeDirty = true
 end
 
 return Tree

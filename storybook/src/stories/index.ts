@@ -1,6 +1,15 @@
 import type { ComponentType } from 'react';
 
-export type StorySection = 'Core' | 'Packages' | 'Demos' | 'Stress Test' | 'Dev' | 'Bad Habits' | 'Layouts';
+export type StorySection =
+  | 'Primitives'
+  | 'Core Hooks'
+  | 'Packages'
+  | 'Effects & Masks'
+  | 'Galleries'
+  | 'Dev'
+  | 'Demos'
+  | 'Stress Test'
+  | 'Layouts';
 
 export interface StoryDef {
   id: string;
@@ -9,143 +18,148 @@ export interface StoryDef {
   component: ComponentType;
 }
 
+// ── Primitives (Layout1) ────────────────────────────────
 import { BoxStory } from './BoxStory';
-import { TextStory } from './TextStory';
+import { ClassifierStory } from './ClassifierStory';
+import { ImageVideoStory } from './ImageVideoStory';
+import { InputStory } from './InputStory';
 import { LayoutStory } from './LayoutStory';
 import { StyleStory } from './StyleStory';
-import { InputStory } from './InputStory';
-import { MonacoMirrorStory } from './MonacoMirrorStory';
-import { DemoStory } from './DemoStory';
-import { ErrorTestStory } from './ErrorTest';
+import { TextStory } from './TextStory';
+
+// ── Core Hooks (Layout2) ────────────────────────────────
+import { AnimationStory } from './AnimationStory';
 import { DataStory } from './DataStory';
+import { MonacoMirrorStory } from './MonacoMirrorStory';
 import { NavigationStory } from './NavigationStory';
-import { NetworkingStory } from './NetworkingStory';
+import { OverlayStory } from './OverlayStory';
+import { RenderStory } from './RenderStory';
+import { WindowsStory } from './WindowsStory';
+
+// ── Packages (Layout2) ──────────────────────────────────
+import { AIStory } from './AIStory';
+import { AudioStory } from './AudioStory';
+import { CapabilitiesStory } from './CapabilitiesStory';
+import { CaptureStory } from './CaptureStory';
+import { ChemistryStory } from './ChemistryStory';
+import { ConversionsStory } from './ConversionsStory';
 import { CryptoStory } from './CryptoStory';
 import { FilesStory } from './FilesStory';
-import { ImageGalleryStory } from './ImageGalleryStory';
-import { ImageVideoStory } from './ImageVideoStory';
-import EmulatorStory from './EmulatorStory';
-import { Scene3DShowcaseStory } from './Scene3DShowcaseStory';
-import { AudioRackStory } from './AudioRackStory';
-import { MapBasicStory } from './MapBasicStory';
-import { CartridgeInspectorStory } from './CartridgeInspectorStory';
-import { EffectsStory } from './EffectsStory';
-import { StressTestStory } from './StressTestStory';
-import { TslBoidsStory } from './TslBoidsStory';
-import { MasksStory } from './MasksStory';
-import { IconStory } from './IconStory';
+import { FinanceStory } from './FinanceStory';
+import { GeoStory } from './GeoStory';
+import { ImagingStory } from './ImagingStory';
 import { MathStory } from './MathStory';
-import { LintTestStory } from './LintTestStory';
-import { SyntaxStressStory } from './SyntaxStressStory';
-import { TimeStory } from './TimeStory';
+import { NetworkingStory } from './NetworkingStory';
+import { PhysicsStory } from './PhysicsStory';
+import { PresentationStory } from './PresentationStory';
 import { PrivacyStory } from './PrivacyStory';
+import { DataSpreadsheetStory } from './DataSpreadsheetStory';
+import { StorageStory } from './StorageStory';
+import { ThreeDStory } from './ThreeDStory';
+import { TimeStory } from './TimeStory';
+
+// ── Effects & Masks (Layout3) ───────────────────────────
+import { EffectsStory } from './EffectsStory';
+import { MasksStory } from './MasksStory';
+
+// ── Galleries (Layout3) ─────────────────────────────────
+import { GalleryStory } from './GalleryStory';
+import { HookGalleryStory } from './HookGalleryStory';
+import { IconStory } from './IconStory';
+
+// ── Dev Tooling (Layout2) ───────────────────────────────
+import { CartridgeInspectorStory } from './CartridgeInspectorStory';
+import { CompatibilityStory } from './CompatibilityStory';
+import { DevToolsStory } from './DevToolsStory';
+import { ErrorTestStory } from './ErrorTest';
+import { LoveReconcilerStory } from './LoveReconcilerStory';
+import { TslBoidsStory } from './TslBoidsStory';
+
+// ── Demos (hub layout) ─────────────────────────────────
+import { AudioRackStory } from './AudioRackStory';
+import { CreativeConceptsStory } from './CreativeConceptsStory';
+import { DemoStory } from './DemoStory';
+
+// ── Stress Test ─────────────────────────────────────────
+import RecordingStressStory from './RecordingStressStory';
+import { StressTestStory } from './StressTestStory';
+import { SyntaxStressStory } from './SyntaxStressStory';
+
+// ── Layouts (templates) ─────────────────────────────────
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
-import { ConversionsStory } from './ConversionsStory';
-import { DataSpreadsheetStory } from './DataSpreadsheetStory';
-import { CapabilitiesStory } from './CapabilitiesStory';
-import { StorageStory } from './StorageStory';
-import { WindowsStory } from './WindowsStory';
-import { AudioStory } from './AudioStory';
-import { DevToolsStory } from './DevToolsStory';
-import { RenderStory } from './RenderStory';
-import { CompatibilityStory } from './CompatibilityStory';
-import { PhysicsStory } from './PhysicsStory';
-import { GeoStory } from './GeoStory';
-import { GeoScene3DStory } from './GeoScene3DStory';
-import { ThreeDStory } from './ThreeDStory';
-import { OverlayStory } from './OverlayStory';
-import { OverflowCompareStory } from './OverflowCompareStory';
-
-import { ImagingStory } from './ImagingStory';
-import { CaptureStory } from './CaptureStory';
-import RecordingStressStory from './RecordingStressStory';
-
-import { CreativeConceptsStory } from './CreativeConceptsStory';
-import { AIStory } from './AIStory';
-import { FinanceStory } from './FinanceStory';
-import { ChemistryStory } from './ChemistryStory';
-import { GalleryStory } from './GalleryStory';
-import { HookGalleryStory } from './HookGalleryStory';
-import { AnimationStory } from './AnimationStory';
-import { ClassifierStory } from './ClassifierStory';
-import { PresentationStory } from './PresentationStory';
 
 export const stories: StoryDef[] = [
-  // Core — framework primitives in learning order
-  { id: 'gallery', title: 'Gallery', section: 'Core', component: GalleryStory },
-  { id: 'hook-gallery', title: 'Hook Gallery', section: 'Core', component: HookGalleryStory },
-  { id: 'box', title: 'Box', section: 'Core', component: BoxStory },
-  { id: 'text', title: 'Text', section: 'Core', component: TextStory },
-  { id: 'layout', title: 'Layout', section: 'Core', component: LayoutStory },
-  { id: 'style', title: 'Style', section: 'Core', component: StyleStory },
-  { id: 'image-video', title: 'Image & Video', section: 'Core', component: ImageVideoStory },
-  { id: 'image-gallery', title: 'Image Gallery', section: 'Core', component: ImageGalleryStory },
-  { id: 'input', title: 'Input', section: 'Core', component: InputStory },
-  { id: 'monaco-mirror', title: 'Monaco Mirror', section: 'Core', component: MonacoMirrorStory },
-  { id: 'icons', title: 'Icons', section: 'Core', component: IconStory },
-  { id: 'navigation', title: 'Navigation', section: 'Core', component: NavigationStory },
-  { id: 'data', title: 'Data', section: 'Core', component: DataStory },
-  { id: 'windows', title: 'Windows', section: 'Core', component: WindowsStory },
-  { id: 'animation', title: 'Animation', section: 'Core', component: AnimationStory },
-  { id: 'classifier', title: 'Classifier', section: 'Core', component: ClassifierStory },
+  // ── Primitives (Layout1) ──────────────────────────────
+  { id: 'box', title: 'Box', section: 'Primitives', component: BoxStory },
+  { id: 'classifier', title: 'Classifier', section: 'Primitives', component: ClassifierStory },
+  { id: 'image-video', title: 'Image & Video', section: 'Primitives', component: ImageVideoStory },
+  { id: 'input', title: 'Input', section: 'Primitives', component: InputStory },
+  { id: 'layout', title: 'Layout', section: 'Primitives', component: LayoutStory },
+  { id: 'style', title: 'Style', section: 'Primitives', component: StyleStory },
+  { id: 'text', title: 'Text', section: 'Primitives', component: TextStory },
 
-  // Packages
-  { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
+  // ── Core Hooks (Layout2) ──────────────────────────────
+  { id: 'animation', title: 'Animation', section: 'Core Hooks', component: AnimationStory },
+  { id: 'data', title: 'Data', section: 'Core Hooks', component: DataStory },
+  { id: 'monaco-mirror', title: 'Monaco Mirror', section: 'Core Hooks', component: MonacoMirrorStory },
+  { id: 'navigation', title: 'Navigation', section: 'Core Hooks', component: NavigationStory },
+  { id: 'overlay', title: 'Overlay', section: 'Core Hooks', component: OverlayStory },
+  { id: 'render', title: 'Render', section: 'Core Hooks', component: RenderStory },
+  { id: 'windows', title: 'Windows', section: 'Core Hooks', component: WindowsStory },
+
+  // ── Packages (Layout2) ────────────────────────────────
+  { id: '3d', title: '3D', section: 'Packages', component: ThreeDStory },
+  { id: 'ai', title: 'AI', section: 'Packages', component: AIStory },
+  { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
+  { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
+  { id: 'capture', title: 'Capture', section: 'Packages', component: CaptureStory },
+  { id: 'chemistry', title: 'Chemistry', section: 'Packages', component: ChemistryStory },
+  { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
   { id: 'crypto', title: 'Crypto', section: 'Packages', component: CryptoStory },
   { id: 'files', title: 'Files', section: 'Packages', component: FilesStory },
-  { id: 'effects', title: 'Effects', section: 'Packages', component: EffectsStory },
-  { id: 'masks', title: 'Masks', section: 'Packages', component: MasksStory },
-  { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
-  { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
-  { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
-  { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
-  { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
-  { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
-  { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
-  { id: 'audio', title: 'Audio', section: 'Packages', component: AudioStory },
-  { id: '3d', title: '3D', section: 'Packages', component: ThreeDStory },
+  { id: 'finance', title: 'Finance', section: 'Packages', component: FinanceStory },
   { id: 'geo', title: 'Geo', section: 'Packages', component: GeoStory },
-  { id: 'presentation', title: 'Presentation', section: 'Packages', component: PresentationStory },
-  { id: 'render', title: 'Render', section: 'Core', component: RenderStory },
-
-  // Demos
-  { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
-  { id: 'emulator', title: 'NES Emulator', section: 'Demos', component: EmulatorStory },
-  { id: 'scene-3d-showcase', title: '3D Showcase', section: 'Demos', component: Scene3DShowcaseStory },
-  { id: 'map-basic', title: 'Map', section: 'Demos', component: MapBasicStory },
-  { id: 'geoscene-3d', title: 'GeoScene3D', section: 'Demos', component: GeoScene3DStory },
-  { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
-  { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
-
   { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
-  { id: 'capture', title: 'Capture', section: 'Packages', component: CaptureStory },
+  { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
+  { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
+  { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
+  { id: 'presentation', title: 'Presentation', section: 'Packages', component: PresentationStory },
+  { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
+  { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
+  { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
+  { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
 
+  // ── Effects & Masks (Layout3) ─────────────────────────
+  { id: 'effects', title: 'Effects', section: 'Effects & Masks', component: EffectsStory },
+  { id: 'masks', title: 'Masks', section: 'Effects & Masks', component: MasksStory },
 
-  // Bad Habits — compatibility layers (Tailwind, HTML elements, merge precedence)
-  { id: 'compatibility', title: 'Compatibility', section: 'Bad Habits', component: CompatibilityStory },
+  // ── Galleries (Layout3) ───────────────────────────────
+  { id: 'gallery', title: 'Component Gallery', section: 'Galleries', component: GalleryStory },
+  { id: 'hook-gallery', title: 'Hook Gallery', section: 'Galleries', component: HookGalleryStory },
+  { id: 'icons', title: 'Icons', section: 'Galleries', component: IconStory },
 
-  // Stress Test
+  // ── Dev Tooling (Layout2) ─────────────────────────────
+  { id: 'cartridge-inspector', title: 'Cartridge Inspector', section: 'Dev', component: CartridgeInspectorStory },
+  { id: 'compatibility', title: 'Compatibility', section: 'Dev', component: CompatibilityStory },
+  { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
+  { id: 'error-test', title: 'Error Test', section: 'Dev', component: ErrorTestStory },
+  { id: 'love-reconciler', title: 'Love Reconciler', section: 'Dev', component: LoveReconcilerStory },
+  { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },
+
+  // ── Demos (hub layout) ────────────────────────────────
+  { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
+  { id: 'creative-concepts', title: 'Creative Concepts', section: 'Demos', component: CreativeConceptsStory },
+  { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
+
+  // ── Stress Test ───────────────────────────────────────
+  { id: 'recording-stress', title: 'Recording Stress', section: 'Stress Test', component: RecordingStressStory },
   { id: 'stress-test', title: 'Stress Test Hub', section: 'Stress Test', component: StressTestStory },
   { id: 'syntax-stress', title: 'Syntax Stress', section: 'Stress Test', component: SyntaxStressStory },
-  { id: 'recording-stress', title: 'Recording Stress', section: 'Stress Test', component: RecordingStressStory },
 
-  // Dev
-  { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },
-  { id: 'cartridge-inspector', title: 'Cartridge Inspector', section: 'Dev', component: CartridgeInspectorStory },
-  { id: 'error-test', title: 'Error Test', section: 'Dev', component: ErrorTestStory },
-  { id: 'lint-test', title: 'Lint Test', section: 'Dev', component: LintTestStory },
-  { id: 'devtools', title: 'DevTools', section: 'Dev', component: DevToolsStory },
-
-  // Layouts — story layout templates
+  // ── Layouts (templates) ───────────────────────────────
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
-  { id: 'overflow-compare', title: 'Overflow Compare', section: 'Layouts', component: OverflowCompareStory },
-  { id: 'overlay', title: 'Overlay', section: 'Core', component: OverlayStory },
-  { id: 'creative-concepts', title: 'CreativeConcepts', section: 'Demos', component: CreativeConceptsStory },
-  { id: 'ai', title: 'AI', section: 'Packages', component: AIStory },
-  { id: 'finance', title: 'Finance', section: 'Packages', component: FinanceStory },
-  { id: 'chemistry', title: 'Chemistry', section: 'Packages', component: ChemistryStory },
 ];

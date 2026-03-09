@@ -31,7 +31,6 @@ local MapModule = nil     -- Injected at init time via Painter.init()
 local GeoScene3DModule = nil -- Injected at init time via Painter.init()
 local ChartModule = nil   -- Lazy-loaded to avoid circular deps
 local GameModule = nil    -- Injected at init time via Painter.init()
-local EmulatorModule = nil -- Injected at init time via Painter.init()
 local RenderSourceModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
 local MasksModule = nil    -- Injected at init time via Painter.init()
@@ -106,7 +105,6 @@ function Painter.init(config)
   MapModule = config.map
   GeoScene3DModule = config.geoscene3d
   GameModule = config.game
-  EmulatorModule = config.emulator
   RenderSourceModule = config.render_source
   EffectsModule = config.effects
   MasksModule = config.masks
@@ -891,8 +889,9 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     if ok then CapabilitiesModule = mod end
   end
   if CapabilitiesModule and CapabilitiesModule.isNonVisual(node.type)
-     and not CapabilitiesModule.rendersInOwnSurface(node.type) then
-    if dbgLog then io.write(string.format("[PAINT-DBG] SKIP non-visual: %s\n", dbgType)); io.flush() end
+     and not CapabilitiesModule.rendersInOwnSurface(node.type)
+     and #(node.children or {}) == 0 then
+    if dbgLog then io.write(string.format("[PAINT-DBG] SKIP non-visual (no children): %s\n", dbgType)); io.flush() end
     return
   end
 
@@ -1617,19 +1616,6 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
     -- Note: children (React UI overlay) are painted by the normal child recursion below
-
-  elseif not isHidden and node.type == "Emulator" then
-    -- NES emulator viewport: draw the pre-rendered Canvas from emulator.lua
-    if EmulatorModule then
-      local canvas = EmulatorModule.get(node.id)
-      if canvas then
-        -- Scale NES native resolution (256x240) to layout size
-        local scaleX = (c.w or 256) / 256
-        local scaleY = (c.h or 240) / 240
-        love.graphics.setColor(1, 1, 1, effectiveOpacity)
-        love.graphics.draw(canvas, c.x, c.y, 0, scaleX, scaleY)
-      end
-    end
 
   elseif not isHidden and node.type == "Render" then
     -- External capture source: draw the live Image from render_source.lua

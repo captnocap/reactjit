@@ -1,8 +1,10 @@
 --[[
-  capabilities/element_card.lua — Full element property card
+  capabilities/element_card.lua — Full element property card (tree-composed)
 
-  All properties at a glance: symbol badge, mass, group, period, phase,
-  valence electrons, EN, melting/boiling point, density, electron config.
+  This is the first capability to use Lua-side subtree declaration instead of
+  manual love.graphics draw calls. The render output is composed from the same
+  tree primitives React uses (View, __TEXT__, Text) — laid out by layout.lua,
+  painted by painter.lua.
 
   React usage:
     <ElementCard element={26} />
@@ -14,7 +16,7 @@
 
 local Capabilities = require("lua.capabilities")
 local Chemistry = require("lua.capabilities.chemistry")
-local Color = require("lua.color")
+local Tree = require("lua.tree")
 
 local CATEGORY_COLORS = {
   ["alkali-metal"]         = "#7b6faa",
@@ -36,22 +38,163 @@ local PHASE_COLORS = {
   unknown = "#868e96",
 }
 
-local function getThemeColors()
-  local theme = ReactJIT and ReactJIT.getTheme and ReactJIT.getTheme()
-  return (theme and theme.colors) or {}
+--- Build the static template for an ElementCard subtree.
+--- This is the tree-composed equivalent of what render() used to draw manually.
+local function buildTemplate()
+  -- Property row helper: label on left, value on right
+  local function propRow(key)
+    return {
+      type = "View", key = key,
+      style = {
+        flexDirection = "row", justifyContent = "space-between",
+        paddingLeft = 0, paddingRight = 0,
+      },
+      children = {
+        { type = "Text", key = key .. "_label",
+          children = {
+            { type = "__TEXT__", key = key .. "_label_t", text = "" },
+          },
+          style = { fontSize = 12, color = "#a5adcb" },
+        },
+        { type = "Text", key = key .. "_value",
+          children = {
+            { type = "__TEXT__", key = key .. "_value_t", text = "" },
+          },
+          style = { fontSize = 12, color = "#cad3f5" },
+        },
+      },
+    }
+  end
+
+  return {
+    -- Outer card container
+    {
+      type = "View", key = "card",
+      style = {
+        borderRadius = 8, backgroundColor = "#363a4f",
+        padding = 12, borderWidth = 2, borderColor = "#868e96",
+        width = "100%", height = "100%",
+      },
+      children = {
+        -- Header row: badge + name/category
+        {
+          type = "View", key = "header",
+          style = { flexDirection = "row", gap = 10, marginBottom = 12 },
+          children = {
+            -- Symbol badge
+            {
+              type = "View", key = "badge",
+              style = {
+                width = 44, height = 44, borderRadius = 6,
+                backgroundColor = "#868e96",
+                alignItems = "center", justifyContent = "center",
+              },
+              children = {
+                { type = "Text", key = "badge_number",
+                  children = {
+                    { type = "__TEXT__", key = "badge_number_t", text = "" },
+                  },
+                  style = { fontSize = 10, color = "rgba(0,0,0,0.6)" },
+                },
+                { type = "Text", key = "badge_symbol",
+                  children = {
+                    { type = "__TEXT__", key = "badge_symbol_t", text = "" },
+                  },
+                  style = { fontSize = 16, color = "#000000", fontWeight = "bold" },
+                },
+              },
+            },
+            -- Name + category column
+            {
+              type = "View", key = "name_col",
+              style = { justifyContent = "center" },
+              children = {
+                { type = "Text", key = "name",
+                  children = {
+                    { type = "__TEXT__", key = "name_t", text = "" },
+                  },
+                  style = { fontSize = 14, color = "#cad3f5" },
+                },
+                { type = "Text", key = "category",
+                  children = {
+                    { type = "__TEXT__", key = "category_t", text = "" },
+                  },
+                  style = { fontSize = 12, color = "#a5adcb" },
+                },
+              },
+            },
+          },
+        },
+        -- Property rows
+        propRow("mass"),
+        propRow("group"),
+        propRow("period"),
+        propRow("phase"),
+        propRow("valence"),
+        propRow("en"),
+        propRow("mp"),
+        propRow("bp"),
+        propRow("density"),
+        propRow("econfig"),
+      },
+    },
+  }
 end
 
-local function drawRow(font, x, y, w, label, value, opacity, labelColor, valueColor, valueOverrideColor)
-  love.graphics.setColor(labelColor[1], labelColor[2], labelColor[3], opacity)
-  love.graphics.print(label, x, y)
-  local vc = valueOverrideColor or valueColor
-  love.graphics.setColor(vc[1], vc[2], vc[3], opacity)
-  local vw = font:getWidth(value)
-  love.graphics.print(value, x + w - vw, y)
+--- Push element data into the declared subtree handles.
+local function updateTree(handles, el)
+  if not el then return end
+
+  local catColor = CATEGORY_COLORS[el.category] or "#868e96"
+  local phaseColor = PHASE_COLORS[el.phase] or "#868e96"
+  local valence = Chemistry.valenceElectrons(el.number)
+
+  -- Card border color
+  Tree.updateChildProps(handles["card"], {
+    style = { borderColor = catColor },
+  })
+
+  -- Badge
+  Tree.updateChildProps(handles["badge"], {
+    style = { backgroundColor = catColor },
+  })
+  Tree.updateChildProps(handles["badge_number_t"], { text = tostring(el.number) })
+  Tree.updateChildProps(handles["badge_symbol_t"], { text = el.symbol })
+
+  -- Name + category
+  Tree.updateChildProps(handles["name_t"], { text = el.name })
+  Tree.updateChildProps(handles["category_t"], { text = el.category:gsub("-", " ") })
+
+  -- Property rows: { key, label, value, valueColor? }
+  local rows = {
+    { "mass",    "Atomic Mass",        string.format("%.3f u", el.mass) },
+    { "group",   "Group",              tostring(el.group) },
+    { "period",  "Period",             tostring(el.period) },
+    { "phase",   "Phase",              el.phase,                          phaseColor },
+    { "valence", "Valence Electrons",  tostring(valence) },
+    { "en",      "Electronegativity",  el.electronegativity and tostring(el.electronegativity) or "\u{2014}" },
+    { "mp",      "Melting Point",      el.meltingPoint and string.format("%.0f K", el.meltingPoint) or "\u{2014}" },
+    { "bp",      "Boiling Point",      el.boilingPoint and string.format("%.0f K", el.boilingPoint) or "\u{2014}" },
+    { "density", "Density",            el.density and string.format("%.3f g/cm\u{00B3}", el.density) or "\u{2014}" },
+    { "econfig", "Electron Config",    el.electronConfig or "" },
+  }
+
+  for _, row in ipairs(rows) do
+    local key, label, value, valueColor = row[1], row[2], row[3], row[4]
+    Tree.updateChildProps(handles[key .. "_label_t"], { text = label })
+    Tree.updateChildProps(handles[key .. "_value_t"], { text = value })
+    if valueColor then
+      Tree.updateChildProps(handles[key .. "_value"], {
+        style = { color = valueColor },
+      })
+    end
+  end
 end
 
 Capabilities.register("ElementCard", {
-  visual = true,
+  -- visual = false: we no longer paint manually. The subtree nodes
+  -- are regular tree nodes — layout and painter handle them.
+  visual = false,
 
   schema = {
     element = { type = "number", default = 1, desc = "Atomic number or symbol" },
@@ -60,100 +203,23 @@ Capabilities.register("ElementCard", {
   events = {},
 
   create = function(nodeId, props)
-    return { elementData = nil, prevElement = nil }
+    local handles = Tree.declareChildren(nodeId, buildTemplate())
+    local el = Chemistry.getElement(props.element)
+    updateTree(handles, el)
+    return { handles = handles, elementData = el, prevElement = props.element }
   end,
 
   update = function(nodeId, props, prev, state)
     if props.element ~= state.prevElement then
       state.prevElement = props.element
       state.elementData = Chemistry.getElement(props.element)
+      updateTree(state.handles, state.elementData)
     end
   end,
 
-  destroy = function(nodeId, state) end,
+  destroy = function(nodeId, state)
+    Tree.removeDeclaredChildren(nodeId)
+  end,
+
   tick = function(nodeId, state, dt, pushEvent, props) end,
-
-  render = function(node, c, opacity)
-    local state = Capabilities._instances and Capabilities._instances[node.id]
-    if not state then return end
-    state = state.state
-
-    local el = state.elementData
-    if not el then return end
-
-    local x, y, w, h = c.x, c.y, c.w, c.h
-    local tc = getThemeColors()
-    local font = love.graphics.getFont()
-    local lineH = font:getHeight() + 2
-
-    -- Background
-    local ebr, ebg, ebb = Color.parse(tc.bgElevated or "#363a4f")
-    love.graphics.setColor(ebr or 0.2, ebg or 0.2, ebb or 0.25, opacity)
-    love.graphics.rectangle("fill", x, y, w, h, 8, 8)
-
-    -- Category color border
-    local bgHex = CATEGORY_COLORS[el.category] or "#868e96"
-    local br, bg_, bb = Color.parse(bgHex)
-    love.graphics.setColor(br or 0.5, bg_ or 0.5, bb or 0.5, opacity)
-    love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", x, y, w, h, 8, 8)
-
-    -- Symbol badge
-    local badgeSize = 44
-    local bx, by = x + 12, y + 12
-    love.graphics.setColor(br or 0.5, bg_ or 0.5, bb or 0.5, opacity)
-    love.graphics.rectangle("fill", bx, by, badgeSize, badgeSize, 6, 6)
-
-    love.graphics.setColor(0, 0, 0, 0.6 * opacity)
-    local numStr = tostring(el.number)
-    local numW = font:getWidth(numStr)
-    love.graphics.print(numStr, bx + (badgeSize - numW) / 2, by + 2)
-
-    love.graphics.setColor(0, 0, 0, opacity)
-    local symW = font:getWidth(el.symbol)
-    love.graphics.print(el.symbol, bx + (badgeSize - symW) / 2, by + 14)
-
-    -- Name + category
-    local textX = bx + badgeSize + 10
-    local tr, tg, tb = Color.parse(tc.text or "#cad3f5")
-    love.graphics.setColor(tr or 0.8, tg or 0.8, tb or 0.85, opacity)
-    love.graphics.print(el.name, textX, by + 2)
-
-    local dr, dg, db = Color.parse(tc.textDim or "#a5adcb")
-    love.graphics.setColor(dr or 0.6, dg or 0.6, db or 0.7, opacity)
-    love.graphics.print(el.category:gsub("-", " "), textX, by + lineH + 2)
-
-    -- Property rows
-    local rowX = x + 12
-    local rowW = w - 24
-    local rowY = by + badgeSize + 12
-    local labelColor = {dr or 0.6, dg or 0.6, db or 0.7}
-    local valueColor = {tr or 0.8, tg or 0.8, tb or 0.85}
-
-    local valence = Chemistry.valenceElectrons(el.number)
-
-    local rows = {
-      {"Atomic Mass", string.format("%.3f u", el.mass)},
-      {"Group", tostring(el.group)},
-      {"Period", tostring(el.period)},
-      {"Phase", el.phase, PHASE_COLORS[el.phase]},
-      {"Valence Electrons", tostring(valence)},
-      {"Electronegativity", el.electronegativity and tostring(el.electronegativity) or "\u{2014}"},
-      {"Melting Point", el.meltingPoint and string.format("%.0f K", el.meltingPoint) or "\u{2014}"},
-      {"Boiling Point", el.boilingPoint and string.format("%.0f K", el.boilingPoint) or "\u{2014}"},
-      {"Density", el.density and string.format("%.3f g/cm\u{00B3}", el.density) or "\u{2014}"},
-      {"Electron Config", el.electronConfig or ""},
-    }
-
-    for _, row in ipairs(rows) do
-      if rowY + lineH > y + h then break end
-      local overrideColor = nil
-      if row[3] then
-        local pr, pg, pb = Color.parse(row[3])
-        if pr then overrideColor = {pr, pg, pb} end
-      end
-      drawRow(font, rowX, rowY, rowW, row[1], row[2], opacity, labelColor, valueColor, overrideColor)
-      rowY = rowY + lineH
-    end
-  end,
 })
