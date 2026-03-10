@@ -148,9 +148,22 @@ Capabilities.register("ClaudeCanvas", {
     local inputState = getInputState(nodeId)
     inputState.viewportH = c.h
 
-    -- Resize vterm to match cols prop (if provided)
+    -- Auto-fit vterm cols to container width (or use explicit cols prop)
     if props.cols then
-      Session.resize(props.cols, nil, sessionId)
+      Session.setDesiredSize(props.cols, nil)
+    elseif c.w > 0 and Measure then
+      local fitFont = Measure.getFont(13, nil, nil)
+      local fitTagFont = Measure.getFont(9, nil, nil)
+      local fitCharW = fitFont:getWidth("M")
+      if fitCharW > 0 then
+        -- Subtract tag prefix + row number reserve (same as render uses)
+        local fitTagW = fitTagFont:getWidth("[list_selectable] ")
+        local fitOffsetX = fitTagW + 4
+        local fitRowNumW = 180
+        local fitCellArea = c.w - fitOffsetX - fitRowNumW
+        local fitCols = math.max(40, math.floor(fitCellArea / fitCharW))
+        Session.setDesiredSize(fitCols, nil)
+      end
     end
 
     -- ── Compute bottom reserved area (debug overlay only) ─────────

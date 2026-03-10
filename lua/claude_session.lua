@@ -933,12 +933,17 @@ Capabilities.register("ClaudeCode", {
     if not pushEvent then return end
 
     -- Apply deferred column resize (rows stay fixed — row resize segfaults libvterm)
-    if _desiredCols and state.vterm then
-      local curRows, curCols = state.vterm:size()
-      if curCols ~= _desiredCols then
-        state.vterm:resize(curRows, _desiredCols)
-        if state.proc then state.proc:resize(curRows, _desiredCols) end
-        state._emittedRows = {}
+    if _desiredCols then
+      if state.vterm then
+        local curRows, curCols = state.vterm:size()
+        if curCols ~= _desiredCols then
+          io.write(string.format("[RESIZE] %d -> %d cols\n", curCols, _desiredCols)); io.flush()
+          state.vterm:resize(curRows, _desiredCols)
+          if state.proc then state.proc:resize(curRows, _desiredCols) end
+          state._emittedRows = {}
+        end
+      else
+        io.write("[RESIZE] _desiredCols=" .. _desiredCols .. " but NO vterm\n"); io.flush()
       end
       _desiredCols = nil
     end

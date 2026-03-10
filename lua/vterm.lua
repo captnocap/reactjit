@@ -424,13 +424,13 @@ function VTerm:getCell(row, col)
         0xE0 + bit.rshift(cp, 12),
         0x80 + bit.band(bit.rshift(cp, 6), 0x3F),
         0x80 + bit.band(cp, 0x3F))
-    else
+    elseif cp <= 0x10FFFF then
       char = string.char(
         0xF0 + bit.rshift(cp, 18),
         0x80 + bit.band(bit.rshift(cp, 12), 0x3F),
         0x80 + bit.band(bit.rshift(cp, 6), 0x3F),
         0x80 + bit.band(cp, 0x3F))
-    end
+    end -- else: invalid codepoint, leave char as ""
   end
 
   return {

@@ -371,6 +371,13 @@ end
 --- Build a structured event table suitable for sending to the JS bridge.
 --- Format matches BridgeEvent: { type: string, payload: any }
 function Events.createEvent(eventType, targetId, x, y, button, bubblePath)
+  local ctrl, shift, alt, meta = false, false, false, false
+  if love and love.keyboard and love.keyboard.isDown then
+    ctrl  = love.keyboard.isDown("lctrl", "rctrl")
+    shift = love.keyboard.isDown("lshift", "rshift")
+    alt   = love.keyboard.isDown("lalt", "ralt")
+    meta  = love.keyboard.isDown("lgui", "rgui")
+  end
   return {
     type = eventType,
     payload = {
@@ -380,6 +387,10 @@ function Events.createEvent(eventType, targetId, x, y, button, bubblePath)
       y = y,
       button = button,
       bubblePath = bubblePath,
+      ctrl = ctrl,
+      shift = shift,
+      alt = alt,
+      meta = meta,
     }
   }
 end

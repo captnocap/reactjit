@@ -99,6 +99,12 @@ export async function updateCommand(args) {
   syncFile(join(sourceLuaRoot, 'masks.lua'), join(cwd, 'lua', 'masks.lua'), 'lua/masks.lua (source overlay)');
   syncFile(join(sourceLuaRoot, 'scene3d.lua'), join(cwd, 'lua', 'scene3d.lua'), 'lua/scene3d.lua (source overlay)');
   syncFile(join(sourceLuaRoot, 'capabilities.lua'), join(cwd, 'lua', 'capabilities.lua'), 'lua/capabilities.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'claude_canvas.lua'), join(cwd, 'lua', 'claude_canvas.lua'), 'lua/claude_canvas.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'claude_session.lua'), join(cwd, 'lua', 'claude_session.lua'), 'lua/claude_session.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'claude_renderer.lua'), join(cwd, 'lua', 'claude_renderer.lua'), 'lua/claude_renderer.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'claude_graph.lua'), join(cwd, 'lua', 'claude_graph.lua'), 'lua/claude_graph.lua (source overlay)');
+  syncFile(join(sourceLuaRoot, 'libvterm_shim.so'), join(cwd, 'lua', 'libvterm_shim.so'), 'lua/libvterm_shim.so (source overlay)');
+  syncFile(join(sourceLuaRoot, 'vterm.lua'), join(cwd, 'lua', 'vterm.lua'), 'lua/vterm.lua (source overlay)');
   // In monorepo development, always overlay source-of-truth lua/masks.
   // This keeps generated projects aligned with root runtime while iterating.
   const runtimeMasks = join(runtimeLua, 'masks');
