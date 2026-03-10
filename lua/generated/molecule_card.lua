@@ -145,7 +145,7 @@ end
 local function updateTree(handles, props)
   local data = computeData(props)
   Tree.updateChildProps(handles["n0_3_1_3_3"], { style = { display = (data.mol.name) and "flex" or "none" } })
-  Tree.updateChildProps(handles["n0_11_5"], { style = { display = (data.atoms.length > 0) and "flex" or "none" } })
+  Tree.updateChildProps(handles["n0_11_5"], { style = { display = (#data.atoms > 0) and "flex" or "none" } })
   Tree.updateChildProps(handles["n0_15_8"], { style = { display = (data.mol.iupac) and "flex" or "none" } })
   Tree.updateChildProps(handles["n0_3_1_1_2_0_t"], { text = data.mol.formula or "?" or "" })
   Tree.updateChildProps(handles["n0_3_1_3_3_0_t"], { text = data.mol.name or "" })

@@ -148,6 +148,28 @@ function __tsl.flat(arr)
   return result
 end
 
+--- arr.fill(value, start?, end?) → fill array with value
+--- Also handles Array(n).fill(v) pattern: __tsl.fill({}, v) with pre-sized n
+function __tsl.fill(arr, value, start, stop)
+  local n = #arr
+  start = start or 1
+  stop = stop or n
+  for i = start, stop do
+    arr[i] = value
+  end
+  return arr
+end
+
+--- Array(n).fill(v) → create array of n copies of v
+--- Called as __tsl.arrayFill(n, v) by the transpiler
+function __tsl.arrayFill(n, value)
+  local result = {}
+  for i = 1, n do
+    result[i] = value
+  end
+  return result
+end
+
 -- ── Object methods ──────────────────────────────────────────
 
 --- Object.keys(obj) → array of keys

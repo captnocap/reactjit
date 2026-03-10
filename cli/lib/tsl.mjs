@@ -1206,6 +1206,14 @@ function emitMethodCall(node, ctx) {
       return `__tsl.flatMap(${obj}, ${args[0]})`;
     case 'fill':
       ctx.usesStdlib = true;
+      // Detect new Array(n).fill(v) → __tsl.arrayFill(n, v)
+      if (ts.isNewExpression(prop.expression) &&
+          ts.isIdentifier(prop.expression.expression) &&
+          prop.expression.expression.text === 'Array' &&
+          prop.expression.arguments && prop.expression.arguments.length === 1) {
+        const size = emitExpression(prop.expression.arguments[0], ctx);
+        return `__tsl.arrayFill(${size}, ${args.join(', ')})`;
+      }
       return `__tsl.fill(${obj}, ${args.join(', ')})`;
     case 'keys':
       // Array.keys() → numeric iterator, but for table use __tsl.keys

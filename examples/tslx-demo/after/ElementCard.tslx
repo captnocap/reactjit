@@ -7,7 +7,7 @@ import { Box, Text } from '@reactjit/core';
 // After:  Box + Text, data from compute block
 
 capability ElementCard {
-  require "lua.capabilities.chemistry" as Chemistry
+  require "lua.generated.chemistry.elements" as Chemistry
 
   schema: {
     element: { type: "number", default: 1, desc: "Atomic number or symbol" }

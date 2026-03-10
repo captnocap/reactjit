@@ -43,6 +43,8 @@ function tsBlockToLua(text) {
     .replace(/\|\|/g, 'or')
     // && → and
     .replace(/&&/g, 'and')
+    // .length → # (Lua length operator for tables and strings)
+    .replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1')
     // "quoted-key": value → ["quoted-key"] = value (in table constructors)
     .replace(/"([^"]+)"\s*:/g, '["$1"] =')
     // unquoted key: value → key = value (in table constructors, not ternary)
@@ -438,11 +440,16 @@ function exprToLua(node, sf) {
     }
 
     case ts.SyntaxKind.PropertyAccessExpression: {
+      const prop = node.name.text || node.name.escapedText;
+      // .length → #expr (Lua table/string length operator)
+      if (prop === 'length') {
+        const obj = exprToLua(node.expression, sf);
+        return `#${obj}`;
+      }
       // Check if the root identifier is a render local: el.symbol → data.el.symbol
       const root = node.expression;
       if (root.kind === ts.SyntaxKind.Identifier && activeRenderLocals[root.text] !== undefined) {
         const resolved = activeRenderLocals[root.text];
-        const prop = node.name.text || node.name.escapedText;
         return `${resolved}.${prop}`;
       }
       const text = node.getText(sf);

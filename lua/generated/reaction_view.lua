@@ -142,7 +142,7 @@ local function computeData(props)
     end
     local n = #reactants + #products
     local maxCoeff = 10
-    local coeffs = __tsl.fill({}, 1)
+    local coeffs = __tsl.arrayFill(n, 1)
     local found = false
     local function search(idx)
       if idx >= n then

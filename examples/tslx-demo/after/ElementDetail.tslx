@@ -7,7 +7,7 @@ import { Box, Text } from '@reactjit/core';
 // After:  Box + Text with flexWrap for chip flow
 
 capability ElementDetail {
-  require "lua.capabilities.chemistry" as Chemistry
+  require "lua.generated.chemistry.elements" as Chemistry
 
   schema: {
     element: { type: "number", default: 1, desc: "Atomic number or symbol" }
