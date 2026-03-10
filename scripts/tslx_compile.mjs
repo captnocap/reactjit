@@ -1086,11 +1086,15 @@ function emitLua(parsed) {
 
   const updateLua = bindingsToLua(dynamicBindings, dataVar);
 
-  const requireLines = requires.map(r => {
-    // Convert / to . for Lua module paths (chemistry/elements → chemistry.elements)
-    const luaModule = r.module.replace(/\//g, '.');
-    return `local ${r.alias} = require("${luaModule}")`;
-  }).join('\n');
+  const requireLines = requires
+    // Skip requires for other .tslx capabilities (single PascalCase name, no dots/slashes).
+    // These are looked up by type name via Capabilities.registry, not Lua require().
+    .filter(r => r.module.includes('.') || r.module.includes('/'))
+    .map(r => {
+      // Convert / to . for Lua module paths (chemistry/elements → chemistry.elements)
+      const luaModule = r.module.replace(/\//g, '.');
+      return `local ${r.alias} = require("${luaModule}")`;
+    }).join('\n');
 
   const hasSetState = setStateHandlers.length > 0;
   // setState implies statefulness — the capability needs state + refresh

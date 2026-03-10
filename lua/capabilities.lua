@@ -168,6 +168,8 @@ end
 local Log = require("lua.debug_log")
 local _syncDebugOnce = false
 function Capabilities.syncWithTree(nodes, pushEvent, dt)
+  -- Store pushEvent so capability handlers (onPress etc.) can emit events
+  Capabilities._pushEventFn = pushEvent
   if not _syncDebugOnce and Log.isOn("capsync") then
     _syncDebugOnce = true
     local count = 0
@@ -340,6 +342,26 @@ function Capabilities.loadAll()
       if _G._reactjit_verbose then io.write("[capabilities] WARNING: " .. name .. ": " .. tostring(err) .. "\n"); io.flush() end
     end
   end
+  -- Load generated capabilities (compiled from .tslx)
+  local generated = {
+    "element_tile",
+    "element_card",
+    "element_detail",
+    "molecule_card",
+    "reaction_view",
+    "periodic_table",
+    "chemistry_story",
+  }
+  for _, name in ipairs(generated) do
+    local ok, err = pcall(require, "lua.generated." .. name)
+    if ok then
+      loaded[#loaded + 1] = name
+    else
+      failed[#failed + 1] = name
+      if _G._reactjit_verbose then io.write("[capabilities] WARNING: generated/" .. name .. ": " .. tostring(err) .. "\n"); io.flush() end
+    end
+  end
+
   if _G._reactjit_verbose then io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush() end
 end
 

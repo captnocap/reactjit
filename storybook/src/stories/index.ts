@@ -42,6 +42,7 @@ import { AudioStory } from './AudioStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
 import { CaptureStory } from './CaptureStory';
 import { ChemistryStory } from './ChemistryStory';
+import { ChemistryTslxStory } from './ChemistryTslxStory';
 import { ConversionsStory } from './ConversionsStory';
 import { CryptoStory } from './CryptoStory';
 import { FilesStory } from './FilesStory';
@@ -53,6 +54,8 @@ import { NetworkingStory } from './NetworkingStory';
 import { PhysicsStory } from './PhysicsStory';
 import { PresentationStory } from './PresentationStory';
 import { PrivacyStory } from './PrivacyStory';
+import { PTYStory } from './PTYStory';
+import { ClaudeCanvasStory } from './ClaudeCanvasStory';
 import { DataSpreadsheetStory } from './DataSpreadsheetStory';
 import { StorageStory } from './StorageStory';
 import { ThreeDStory } from './ThreeDStory';
@@ -116,6 +119,7 @@ export const stories: StoryDef[] = [
   { id: 'capabilities', title: 'Capabilities', section: 'Packages', component: CapabilitiesStory },
   { id: 'capture', title: 'Capture', section: 'Packages', component: CaptureStory },
   { id: 'chemistry', title: 'Chemistry', section: 'Packages', component: ChemistryStory },
+  { id: 'chemistry-tslx', title: 'Chemistry (TSLX)', section: 'Packages', component: ChemistryTslxStory },
   { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
   { id: 'crypto', title: 'Crypto', section: 'Packages', component: CryptoStory },
   { id: 'files', title: 'Files', section: 'Packages', component: FilesStory },
@@ -127,6 +131,8 @@ export const stories: StoryDef[] = [
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
   { id: 'presentation', title: 'Presentation', section: 'Packages', component: PresentationStory },
   { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
+  { id: 'pty', title: 'PTY', section: 'Packages', component: PTYStory },
+  { id: 'claude-canvas', title: 'Claude Canvas', section: 'Packages', component: ClaudeCanvasStory },
   { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },

@@ -140,12 +140,15 @@ function emitStatementBody(node, ctx) {
     case SK.BreakStatement:
       return `${indent(ctx)}break`;
     case SK.ContinueStatement:
-      // Lua has no continue — this is a known limitation
-      error(ctx, node, 'TSL does not support "continue". Restructure your loop or use a guard condition.');
-      return `${indent(ctx)}-- continue (unsupported)`;
+      // LuaJIT supports goto — use it for continue
+      if (!ctx._continueLabel) ctx._continueLabel = 0;
+      return `${indent(ctx)}goto __continue__`;
+    case SK.SwitchStatement:
+      return emitSwitchStatement(node, ctx);
     case SK.TypeAliasDeclaration:
     case SK.InterfaceDeclaration:
     case SK.EnumDeclaration:
+    case SK.ModuleDeclaration:
       // Type-only — strip
       return null;
     case SK.ImportDeclaration:
@@ -153,13 +156,11 @@ function emitStatementBody(node, ctx) {
     case SK.ExportDeclaration:
       return emitExportDeclaration(node, ctx);
     case SK.ClassDeclaration:
-      error(ctx, node, 'TSL does not support classes. Use tables and functions.');
-      return null;
+      return emitClassDeclaration(node, ctx);
     case SK.ThrowStatement:
       return `${indent(ctx)}error(${emitExpression(node.expression, ctx)})`;
     case SK.TryStatement:
-      error(ctx, node, 'TSL does not support try/catch. Use pcall() directly in Lua if needed.');
-      return null;
+      return emitTryStatement(node, ctx);
     case SK.EmptyStatement:
       return null;
     default:
@@ -245,16 +246,18 @@ function emitArrayDestructuring(decl, ctx, isExport) {
 function emitFunctionDeclaration(node, ctx) {
   const isExport = hasModifier(node, ts.SyntaxKind.ExportKeyword);
   const isAsync = hasModifier(node, ts.SyntaxKind.AsyncKeyword);
-  if (isAsync) {
-    error(ctx, node, 'TSL does not support async functions.');
-    return null;
-  }
 
   const name = node.name ? node.name.text : '_anonymous';
   const params = node.parameters.map(p => emitParameter(p, ctx)).join(', ');
   const body = emitFunctionBody(node.body, ctx);
 
   if (isExport) ctx.exports.push(name);
+
+  if (isAsync) {
+    // async function → wraps body in coroutine.wrap
+    return `${indent(ctx)}local function ${name}(${params})\n${indent(ctx)}  return coroutine.wrap(function()\n${body}\n${indent(ctx)}  end)\n${indent(ctx)}end`;
+  }
+
   return `${indent(ctx)}local function ${name}(${params})\n${body}\n${indent(ctx)}end`;
 }
 
@@ -325,6 +328,9 @@ function emitForOfStatement(node, ctx) {
   let result = `${indent(ctx)}for _, ${varName} in ipairs(${iterable}) do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
+  if (bodyUsesContinue(node.statement)) {
+    result += `\n${indent(ctx)}::__continue__::`;
+  }
   ctx.indent--;
   result += `\n${indent(ctx)}end`;
   return result;
@@ -338,6 +344,9 @@ function emitForInStatement(node, ctx) {
   let result = `${indent(ctx)}for ${varName}, _ in pairs(${obj}) do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
+  if (bodyUsesContinue(node.statement)) {
+    result += `\n${indent(ctx)}::__continue__::`;
+  }
   ctx.indent--;
   result += `\n${indent(ctx)}end`;
   return result;
@@ -363,6 +372,9 @@ function emitForStatement(node, ctx) {
   result += `${indent(ctx)}while ${cond} do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
+  if (bodyUsesContinue(node.statement)) {
+    result += `\n${indent(ctx)}::__continue__::`;
+  }
   if (node.incrementor) {
     result += `\n${indent(ctx)}${emitExpression(node.incrementor, ctx)}`;
   }
@@ -436,16 +448,46 @@ function tryNumericFor(node, ctx) {
   let result = `${indent(ctx)}for ${varName} = ${start}, ${limit}${stepStr} do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
+  if (bodyUsesContinue(node.statement)) {
+    result += `\n${indent(ctx)}::__continue__::`;
+  }
   ctx.indent--;
   result += `\n${indent(ctx)}end`;
   return result;
 }
 
 function emitWhileStatement(node, ctx) {
-  const cond = emitExpression(node.expression, ctx);
+  const SK = ts.SyntaxKind;
+  const expr = node.expression;
+
+  // Detect while (x = expr) pattern — JS assigns in condition, Lua can't
+  // Also handles while (x = expr) !== null patterns via ParenthesizedExpression
+  const innerExpr = expr.kind === SK.ParenthesizedExpression ? expr.expression : expr;
+  if (innerExpr.kind === SK.BinaryExpression &&
+      innerExpr.operatorToken.kind === SK.EqualsToken) {
+    const varName = emitExpression(innerExpr.left, ctx);
+    const value = emitExpression(innerExpr.right, ctx);
+    let result = `${indent(ctx)}${varName} = ${value}\n`;
+    result += `${indent(ctx)}while ${varName} do\n`;
+    ctx.indent++;
+    result += emitBlockBody(node.statement, ctx);
+    // Re-assign at end of loop body for next iteration
+    result += `\n${indent(ctx)}${varName} = ${value}`;
+    if (bodyUsesContinue(node.statement)) {
+      result += `\n${indent(ctx)}::__continue__::`;
+    }
+    ctx.indent--;
+    result += `\n${indent(ctx)}end`;
+    return result;
+  }
+
+  const cond = emitExpression(expr, ctx);
   let result = `${indent(ctx)}while ${cond} do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
+  if (bodyUsesContinue(node.statement)) {
+    result += `\n${indent(ctx)}::__continue__::`;
+  }
   ctx.indent--;
   result += `\n${indent(ctx)}end`;
   return result;
@@ -459,6 +501,159 @@ function emitDoStatement(node, ctx) {
   const cond = emitExpression(node.expression, ctx);
   result += `\n${indent(ctx)}until not (${cond})`;
   return result;
+}
+
+function emitSwitchStatement(node, ctx) {
+  const SK = ts.SyntaxKind;
+  const expr = emitExpression(node.expression, ctx);
+  const lines = [];
+  const tempVar = `_sw`;
+  lines.push(`${indent(ctx)}local ${tempVar} = ${expr}`);
+
+  let first = true;
+  for (const clause of node.caseBlock.clauses) {
+    if (clause.kind === SK.DefaultClause) {
+      lines.push(`${indent(ctx)}else`);
+    } else {
+      const test = emitExpression(clause.expression, ctx);
+      lines.push(`${indent(ctx)}${first ? 'if' : 'elseif'} ${tempVar} == ${test} then`);
+      first = false;
+    }
+    ctx.indent++;
+    for (const stmt of clause.statements) {
+      // Skip break statements in switch cases — they don't translate to Lua if/elseif
+      if (stmt.kind === SK.BreakStatement) continue;
+      const result = emitStatement(stmt, ctx);
+      if (result !== null && result !== undefined) lines.push(result);
+    }
+    ctx.indent--;
+  }
+  lines.push(`${indent(ctx)}end`);
+  return lines.join('\n');
+}
+
+function emitClassDeclaration(node, ctx) {
+  const SK = ts.SyntaxKind;
+  const name = node.name ? node.name.text : '_AnonymousClass';
+  const isExport = hasModifier(node, SK.ExportKeyword);
+  const lines = [];
+
+  // Create the class table and metatable
+  lines.push(`${indent(ctx)}local ${name} = {}`);
+  lines.push(`${indent(ctx)}${name}.__index = ${name}`);
+
+  // Handle extends
+  if (node.heritageClauses) {
+    for (const clause of node.heritageClauses) {
+      if (clause.token === SK.ExtendsKeyword && clause.types.length > 0) {
+        const base = emitExpression(clause.types[0].expression, ctx);
+        lines.push(`${indent(ctx)}setmetatable(${name}, { __index = ${base} })`);
+      }
+    }
+  }
+
+  // Process members
+  for (const member of node.members) {
+    if (member.kind === SK.Constructor) {
+      // Constructor → ClassName.new(...)
+      lines.push('');
+      const params = member.parameters
+        .filter(p => !isTypeOnlyParam(p))
+        .map(p => emitBindingName(p.name, ctx));
+      lines.push(`${indent(ctx)}function ${name}.new(${params.join(', ')})`);
+      ctx.indent++;
+      lines.push(`${indent(ctx)}local self = setmetatable({}, ${name})`);
+
+      // Handle parameter properties (public/private/protected params that auto-assign)
+      for (const p of member.parameters) {
+        if (hasModifier(p, SK.PublicKeyword) || hasModifier(p, SK.PrivateKeyword) || hasModifier(p, SK.ProtectedKeyword) || hasModifier(p, SK.ReadonlyKeyword)) {
+          const pName = emitBindingName(p.name, ctx);
+          lines.push(`${indent(ctx)}self.${pName} = ${pName}`);
+        }
+      }
+
+      if (member.body) {
+        // Emit constructor body, replacing 'this' references
+        const bodyCtx = { ...ctx, classThis: 'self' };
+        for (const stmt of member.body.statements) {
+          const result = emitStatement(stmt, bodyCtx);
+          if (result !== null && result !== undefined) lines.push(result);
+        }
+      }
+      lines.push(`${indent(ctx)}return self`);
+      ctx.indent--;
+      lines.push(`${indent(ctx)}end`);
+    } else if (member.kind === SK.MethodDeclaration) {
+      lines.push('');
+      const methodName = member.name.text || emitExpression(member.name, ctx);
+      const params = member.parameters
+        .filter(p => !isTypeOnlyParam(p))
+        .map(p => emitBindingName(p.name, ctx));
+      const isStatic = hasModifier(member, SK.StaticKeyword);
+      const sep = isStatic ? '.' : ':';
+      lines.push(`${indent(ctx)}function ${name}${sep}${methodName}(${params.join(', ')})`);
+      ctx.indent++;
+      if (member.body) {
+        const bodyCtx = { ...ctx, classThis: isStatic ? name : 'self' };
+        for (const stmt of member.body.statements) {
+          const result = emitStatement(stmt, bodyCtx);
+          if (result !== null && result !== undefined) lines.push(result);
+        }
+      }
+      ctx.indent--;
+      lines.push(`${indent(ctx)}end`);
+    } else if (member.kind === SK.PropertyDeclaration) {
+      // Static properties get assigned directly, instance properties handled in constructor
+      if (hasModifier(member, SK.StaticKeyword) && member.initializer) {
+        const propName = member.name.text || emitExpression(member.name, ctx);
+        lines.push(`${indent(ctx)}${name}.${propName} = ${emitExpression(member.initializer, ctx)}`);
+      }
+      // Instance properties with initializers should ideally be in constructor
+      // but we skip them here — they'll be set via this.x = ... in the constructor body
+    } else if (member.kind === SK.GetAccessor) {
+      // Getter — emit as a regular method (Lua doesn't have native getters)
+      const propName = member.name.text || emitExpression(member.name, ctx);
+      lines.push('');
+      lines.push(`${indent(ctx)}function ${name}:get_${propName}()`);
+      ctx.indent++;
+      if (member.body) {
+        const bodyCtx = { ...ctx, classThis: 'self' };
+        for (const stmt of member.body.statements) {
+          const result = emitStatement(stmt, bodyCtx);
+          if (result !== null && result !== undefined) lines.push(result);
+        }
+      }
+      ctx.indent--;
+      lines.push(`${indent(ctx)}end`);
+    } else if (member.kind === SK.SetAccessor) {
+      const propName = member.name.text || emitExpression(member.name, ctx);
+      const params = member.parameters.map(p => emitBindingName(p.name, ctx));
+      lines.push('');
+      lines.push(`${indent(ctx)}function ${name}:set_${propName}(${params.join(', ')})`);
+      ctx.indent++;
+      if (member.body) {
+        const bodyCtx = { ...ctx, classThis: 'self' };
+        for (const stmt of member.body.statements) {
+          const result = emitStatement(stmt, bodyCtx);
+          if (result !== null && result !== undefined) lines.push(result);
+        }
+      }
+      ctx.indent--;
+      lines.push(`${indent(ctx)}end`);
+    }
+    // Skip other member types (index signatures, etc.)
+  }
+
+  if (isExport) {
+    ctx.exports.push(name);
+  }
+
+  return lines.join('\n');
+}
+
+function isTypeOnlyParam(param) {
+  // Parameters that are purely type annotations (this: Type)
+  return param.name && param.name.text === 'this';
 }
 
 function emitBlock(node, ctx) {
@@ -486,9 +681,28 @@ function emitBlockBody(node, ctx) {
 function emitImportDeclaration(node, ctx) {
   const moduleSpec = node.moduleSpecifier.text;
   const clause = node.importClause;
+
+  // Resolve relative imports (./foo, ../foo) to Lua module paths
+  let luaModule = moduleSpec;
+  if (moduleSpec.startsWith('./') || moduleSpec.startsWith('../')) {
+    // Resolve relative to the source file's directory
+    const sourceDir = ctx.sourceFile.fileName.replace(/\/[^/]+$/, '');
+    const parts = sourceDir.split('/').filter(Boolean);
+    const relParts = moduleSpec.split('/');
+    for (const p of relParts) {
+      if (p === '.') continue;
+      if (p === '..') { parts.pop(); continue; }
+      parts.push(p);
+    }
+    luaModule = parts.join('.');
+  } else {
+    // Convert / to . for non-relative paths
+    luaModule = moduleSpec.replace(/\//g, '.');
+  }
+
   if (!clause) {
     // Side-effect import: import "foo" → require("foo")
-    return `${indent(ctx)}require("${moduleSpec}")`;
+    return `${indent(ctx)}require("${luaModule}")`;
   }
 
   const lines = [];
@@ -497,7 +711,7 @@ function emitImportDeclaration(node, ctx) {
   if (clause.namedBindings) {
     if (ts.isNamedImports(clause.namedBindings)) {
       // import { a, b } from "foo"
-      lines.push(`${indent(ctx)}local ${moduleName} = require("${moduleSpec}")`);
+      lines.push(`${indent(ctx)}local ${moduleName} = require("${luaModule}")`);
       for (const el of clause.namedBindings.elements) {
         const imported = (el.propertyName || el.name).text;
         const local = el.name.text;
@@ -506,13 +720,13 @@ function emitImportDeclaration(node, ctx) {
     } else if (ts.isNamespaceImport(clause.namedBindings)) {
       // import * as foo from "bar"
       const name = clause.namedBindings.name.text;
-      lines.push(`${indent(ctx)}local ${name} = require("${moduleSpec}")`);
+      lines.push(`${indent(ctx)}local ${name} = require("${luaModule}")`);
     }
   }
 
   if (clause.name) {
     // import foo from "bar" (default import)
-    lines.push(`${indent(ctx)}local ${clause.name.text} = require("${moduleSpec}")`);
+    lines.push(`${indent(ctx)}local ${clause.name.text} = require("${luaModule}")`);
   }
 
   return lines.join('\n');
@@ -549,6 +763,14 @@ function emitExpression(node, ctx) {
     case SK.NullKeyword:
     case SK.UndefinedKeyword:
       return 'nil';
+    case SK.ThisKeyword:
+      return ctx.classThis || 'self';
+    case SK.SuperKeyword:
+      // super → call parent class method via metatable
+      return ctx.classThis ? `getmetatable(${ctx.classThis}).__index` : 'self.__super';
+    case SK.ImportKeyword:
+      // Dynamic import() — emit as require() (best-effort)
+      return 'require';
     case SK.BinaryExpression:
       return emitBinaryExpression(node, ctx);
     case SK.PrefixUnaryExpression:
@@ -578,7 +800,8 @@ function emitExpression(node, ctx) {
       return `unpack(${emitExpression(node.expression, ctx)})`;
     case SK.AsExpression:
     case SK.TypeAssertionExpression:
-      // Type assertion — strip, emit inner expression
+    case SK.SatisfiesExpression:
+      // Type assertion / satisfies — strip, emit inner expression
       return emitExpression(node.expression, ctx);
     case SK.NonNullExpression:
       // x! — strip, emit inner
@@ -588,14 +811,15 @@ function emitExpression(node, ctx) {
     case SK.DeleteExpression:
       return `${emitExpression(node.expression, ctx)} = nil`;
     case SK.AwaitExpression:
-      error(ctx, node, 'TSL does not support await.');
-      return emitExpression(node.expression, ctx);
+      // await expr → coroutine.yield(expr)
+      return `coroutine.yield(${emitExpression(node.expression, ctx)})`;
     case SK.YieldExpression:
       error(ctx, node, 'TSL does not support yield/generators.');
       return 'nil';
     case SK.NewExpression:
-      error(ctx, node, 'TSL does not support "new". Use table constructors.');
-      return 'nil';
+      return emitNewExpression(node, ctx);
+    case SK.RegularExpressionLiteral:
+      return emitRegExpLiteral(node, ctx);
     case SK.CommaToken:
       return ', ';
     default:
@@ -611,8 +835,62 @@ function emitIdentifier(node, ctx) {
     case 'undefined': return 'nil';
     case 'Infinity': return 'math.huge';
     case 'NaN': return '0/0';
+    case 'parseInt': return 'tonumber';
+    case 'parseFloat': return 'tonumber';
+    case 'Number': return 'tonumber';
+    case 'String': return 'tostring';
+    // isNaN/isFinite handled in call expression emitter
     default: return name;
   }
+}
+
+function looksLikeString(node) {
+  const SK = ts.SyntaxKind;
+  if (!node) return false;
+  // String literal: "hello", 'world'
+  if (node.kind === SK.StringLiteral) return true;
+  // Template literal: `hello ${x}`
+  if (node.kind === SK.TemplateExpression || node.kind === SK.NoSubstitutionTemplateLiteral) return true;
+  // String method calls: x.toLowerCase(), x.trim(), etc.
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+    const method = node.expression.name.text;
+    const stringMethods = ['toLowerCase', 'toUpperCase', 'trim', 'trimStart', 'trimEnd',
+      'replace', 'replaceAll', 'slice', 'substring', 'substr', 'charAt', 'repeat',
+      'padStart', 'padEnd', 'split', 'join', 'toString', 'toFixed'];
+    if (stringMethods.includes(method)) return true;
+  }
+  // Property access on known string-returning props
+  if (ts.isPropertyAccessExpression(node)) {
+    const prop = node.name.text;
+    if (['name', 'title', 'description', 'text', 'label', 'message', 'type',
+         'id', 'url', 'href', 'src', 'className', 'tag', 'key', 'value'].includes(prop)) return true;
+  }
+  // Element access on a string-like variable: formula[i], str[0], name[idx]
+  if (ts.isElementAccessExpression(node)) {
+    return looksLikeString(node.expression);
+  }
+  // Identifier with string-like names: str, formula, sym, char, text, etc.
+  if (ts.isIdentifier(node)) {
+    const name = node.text.toLowerCase();
+    const stringNames = ['str', 'string', 'formula', 'sym', 'symbol', 'char', 'c',
+      'text', 'line', 'word', 'name', 'prefix', 'suffix', 'input', 'output',
+      'result', 'buf', 'buffer', 'countstr', 'numstr'];
+    if (stringNames.includes(name)) return true;
+  }
+  // Recursive: if either side of another + looks like string, this chain is string
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === SK.PlusToken) {
+    return looksLikeString(node.left) || looksLikeString(node.right);
+  }
+  // Comparison with string literal: c >= "A" implies c is a string
+  if (ts.isBinaryExpression(node)) {
+    const cmpOps = [SK.GreaterThanEqualsToken, SK.LessThanEqualsToken,
+      SK.GreaterThanToken, SK.LessThanToken, SK.EqualsEqualsEqualsToken,
+      SK.EqualsEqualsToken, SK.ExclamationEqualsEqualsToken, SK.ExclamationEqualsToken];
+    if (cmpOps.includes(node.operatorToken.kind)) {
+      if (looksLikeString(node.left) || looksLikeString(node.right)) return true;
+    }
+  }
+  return false;
 }
 
 function emitBinaryExpression(node, ctx) {
@@ -621,8 +899,13 @@ function emitBinaryExpression(node, ctx) {
 
   // String concatenation: + with string operand
   if (op === SK.PlusToken) {
-    // We can't reliably detect string concat without type info,
-    // but we can handle template-driven cases. Regular + stays as +.
+    // Heuristic: if either operand is a string literal, template literal,
+    // or a call that likely returns a string, use .. for concatenation
+    if (looksLikeString(node.left) || looksLikeString(node.right)) {
+      const left = emitExpression(node.left, ctx);
+      const right = emitExpression(node.right, ctx);
+      return `${left} .. ${right}`;
+    }
   }
 
   // Assignment operators
@@ -630,6 +913,19 @@ function emitBinaryExpression(node, ctx) {
     const left = emitExpression(node.left, ctx);
     const right = emitExpression(node.right, ctx);
     return `${left} = ${right}`;
+  }
+
+  // instanceof → type check (best-effort: checks metatable or type string)
+  if (op === SK.InstanceOfKeyword) {
+    const lhs = emitExpression(node.left, ctx);
+    return `(type(${lhs}) == "table")`;
+  }
+
+  // String += → ..
+  if (op === SK.PlusEqualsToken && (looksLikeString(node.left) || looksLikeString(node.right))) {
+    const left = emitExpression(node.left, ctx);
+    const right = emitExpression(node.right, ctx);
+    return `${left} = ${left} .. ${right}`;
   }
 
   // Compound assignments
@@ -641,6 +937,19 @@ function emitBinaryExpression(node, ctx) {
     [SK.PercentEqualsToken]: '%',
     [SK.AsteriskAsteriskEqualsToken]: '^',
   };
+
+  // Bitwise compound assignments → bit library
+  const bitwiseCompoundOps = {
+    [SK.BarEqualsToken]: 'bit.bor',
+    [SK.AmpersandEqualsToken]: 'bit.band',
+    [SK.CaretEqualsToken]: 'bit.bxor',
+  };
+  if (bitwiseCompoundOps[op]) {
+    const left = emitExpression(node.left, ctx);
+    const right = emitExpression(node.right, ctx);
+    return `${left} = ${bitwiseCompoundOps[op]}(${left}, ${right})`;
+  }
+
   if (compoundOps[op]) {
     const left = emitExpression(node.left, ctx);
     const right = emitExpression(node.right, ctx);
@@ -681,6 +990,11 @@ function emitBinaryExpression(node, ctx) {
     [SK.PercentToken]: '%',
     [SK.AsteriskAsteriskToken]: '^',
   };
+
+  // "key in obj" → obj[key] ~= nil
+  if (op === SK.InKeyword) {
+    return `${right}[${left}] ~= nil`;
+  }
 
   const luaOp = opMap[op];
   if (luaOp) {
@@ -743,6 +1057,18 @@ function emitCallExpression(node, ctx) {
   if (ts.isPropertyAccessExpression(node.expression)) {
     const methodResult = emitMethodCall(node, ctx);
     if (methodResult !== null) return methodResult;
+  }
+
+  // Standalone global function mappings
+  if (ts.isIdentifier(node.expression)) {
+    const name = node.expression.text;
+    const fnArgs = node.arguments.map(a => emitExpression(a, ctx));
+    if (name === 'isNaN') return `(${fnArgs[0]} ~= ${fnArgs[0]})`;
+    if (name === 'isFinite') return `(${fnArgs[0]} == ${fnArgs[0]} and ${fnArgs[0]} ~= math.huge and ${fnArgs[0]} ~= -math.huge)`;
+    if (name === 'setTimeout' || name === 'setInterval') {
+      // Best-effort: emit as a comment + the callback
+      return `--[[ ${name} ]] ${fnArgs[0]}`;
+    }
   }
 
   const callee = emitExpression(node.expression, ctx);
@@ -826,6 +1152,40 @@ function emitMethodCall(node, ctx) {
     case 'filter':
       ctx.usesStdlib = true;
       return `__tsl.filter(${obj}, ${args[0]})`;
+    case 'find':
+      ctx.usesStdlib = true;
+      return `__tsl.find(${obj}, ${args[0]})`;
+    case 'findIndex':
+      ctx.usesStdlib = true;
+      return `__tsl.findIndex(${obj}, ${args[0]})`;
+    case 'some':
+      ctx.usesStdlib = true;
+      return `__tsl.some(${obj}, ${args[0]})`;
+    case 'every':
+      ctx.usesStdlib = true;
+      return `__tsl.every(${obj}, ${args[0]})`;
+    case 'reduce':
+      ctx.usesStdlib = true;
+      if (args.length > 1) return `__tsl.reduce(${obj}, ${args[0]}, ${args[1]})`;
+      return `__tsl.reduce(${obj}, ${args[0]})`;
+    case 'flat':
+      ctx.usesStdlib = true;
+      return `__tsl.flat(${obj})`;
+    case 'flatMap':
+      ctx.usesStdlib = true;
+      return `__tsl.flatMap(${obj}, ${args[0]})`;
+    case 'fill':
+      ctx.usesStdlib = true;
+      return `__tsl.fill(${obj}, ${args.join(', ')})`;
+    case 'keys':
+      // Array.keys() → numeric iterator, but for table use __tsl.keys
+      ctx.usesStdlib = true;
+      return `__tsl.keys(${obj})`;
+    case 'entries':
+      ctx.usesStdlib = true;
+      return `__tsl.entries(${obj})`;
+    case 'splice':
+      return `table.remove(${obj}, ${args[0]} + 1)`;
   }
 
   // String methods
@@ -861,6 +1221,86 @@ function emitMethodCall(node, ctx) {
       return `string.sub(${obj}, ${args[0]} + 1, ${args[1]})`;
     case 'toString':
       return `tostring(${obj})`;
+  }
+
+  // Number.parseInt / Number.parseFloat / Number.isNaN / Number.isFinite
+  if (ts.isIdentifier(prop.expression) && prop.expression.text === 'Number') {
+    switch (methodName) {
+      case 'parseInt': return `tonumber(${args[0]})`;
+      case 'parseFloat': return `tonumber(${args[0]})`;
+      case 'isNaN': return `(${args[0]} ~= ${args[0]})`;
+      case 'isFinite': return `(${args[0]} == ${args[0]} and ${args[0]} ~= math.huge and ${args[0]} ~= -math.huge)`;
+    }
+  }
+
+  // JSON.stringify / JSON.parse
+  if (ts.isIdentifier(prop.expression) && prop.expression.text === 'JSON') {
+    switch (methodName) {
+      case 'stringify': {
+        ctx.usesStdlib = true;
+        return `__tsl.jsonEncode(${args.join(', ')})`;
+      }
+      case 'parse': {
+        ctx.usesStdlib = true;
+        return `__tsl.jsonDecode(${args[0]})`;
+      }
+    }
+  }
+
+  // .exec() on regex → string.match (single match, not iterator)
+  if (methodName === 'exec') {
+    return `{string.match(${args[0]}, ${obj})}`;
+  }
+
+  // .test() on regex → string.find
+  if (methodName === 'test') {
+    return `(string.find(${args[0]}, ${obj}) ~= nil)`;
+  }
+
+  // .match() → string.match
+  if (methodName === 'match') {
+    return `string.match(${obj}, ${args[0]})`;
+  }
+
+  // .padStart / .padEnd
+  if (methodName === 'padStart') {
+    ctx.usesStdlib = true;
+    return `__tsl.padStart(${obj}, ${args.join(', ')})`;
+  }
+  if (methodName === 'padEnd') {
+    ctx.usesStdlib = true;
+    return `__tsl.padEnd(${obj}, ${args.join(', ')})`;
+  }
+
+  // .toFixed
+  if (methodName === 'toFixed') {
+    return `string.format("%." .. ${args[0]} .. "f", ${obj})`;
+  }
+
+  // .toString with radix
+  if (methodName === 'toString' && args.length === 1) {
+    // n.toString(16) → string.format("%x", n)
+    if (args[0] === '16') return `string.format("%x", ${obj})`;
+    return `tostring(${obj})`;
+  }
+
+  // String.fromCharCode → string.char
+  if (ts.isIdentifier(prop.expression) && prop.expression.text === 'String') {
+    if (methodName === 'fromCharCode') return `string.char(${args.join(', ')})`;
+  }
+
+  // Array.from / Array.isArray
+  if (ts.isIdentifier(prop.expression) && prop.expression.text === 'Array') {
+    if (methodName === 'isArray') return `(type(${args[0]}) == "table")`;
+    if (methodName === 'from') {
+      ctx.usesStdlib = true;
+      return `__tsl.arrayFrom(${args.join(', ')})`;
+    }
+  }
+
+  // .replaceAll → string.gsub (gsub replaces all by default)
+  if (methodName === 'replaceAll') {
+    return `string.gsub(${obj}, ${args[0]}, ${args[1]})`;
   }
 
   // Object.keys / Object.values / Object.entries
@@ -904,6 +1344,17 @@ function emitPropertyAccess(node, ctx) {
     return `#${obj}`;
   }
 
+  // .lastIndex — RegExp state, no-op in Lua (patterns are stateless)
+  // When assigned (re.lastIndex = 0), the statement emitter handles it
+  if (prop === 'lastIndex') {
+    return `0 --[[ ${obj}.lastIndex ]]`;
+  }
+
+  // .prototype — strip
+  if (prop === 'prototype') {
+    return obj;
+  }
+
   // Optional chaining is handled by the parent node type check
   if (node.questionDotToken) {
     return `(${obj} and ${obj}.${prop})`;
@@ -916,9 +1367,25 @@ function emitElementAccess(node, ctx) {
   const obj = emitExpression(node.expression, ctx);
   const index = emitExpression(node.argumentExpression, ctx);
 
-  // Check for literal 0 index — error
-  if (ts.isNumericLiteral(node.argumentExpression) && node.argumentExpression.text === '0') {
-    error(ctx, node, 'TSL arrays are 1-indexed. Use arr[1] for the first element.');
+  // String character access: str[i] → string.sub(str, i+1, i+1)
+  if (looksLikeString(node.expression)) {
+    if (ts.isNumericLiteral(node.argumentExpression)) {
+      const num = parseInt(node.argumentExpression.text, 10);
+      return `string.sub(${obj}, ${num + 1}, ${num + 1})`;
+    }
+    return `string.sub(${obj}, ${index} + 1, ${index} + 1)`;
+  }
+
+  // Auto-adjust 0-indexed access to 1-indexed
+  if (ts.isNumericLiteral(node.argumentExpression)) {
+    const num = parseInt(node.argumentExpression.text, 10);
+    if (!isNaN(num)) {
+      // Optional chaining
+      if (node.questionDotToken) {
+        return `(${obj} and ${obj}[${num + 1}])`;
+      }
+      return `${obj}[${num + 1}]`;
+    }
   }
 
   // Optional chaining
@@ -1036,6 +1503,22 @@ function emitTemplateLiteral(node, ctx) {
 
 // ── Helpers ─────────────────────────────────────────────────
 
+/** Check if a loop body contains a continue statement (direct children only, not nested loops). */
+function bodyUsesContinue(node) {
+  if (!node) return false;
+  function walk(n) {
+    if (n.kind === ts.SyntaxKind.ContinueStatement) return true;
+    // Don't recurse into nested loops — their continues are their own
+    if (n.kind === ts.SyntaxKind.ForStatement ||
+        n.kind === ts.SyntaxKind.ForOfStatement ||
+        n.kind === ts.SyntaxKind.ForInStatement ||
+        n.kind === ts.SyntaxKind.WhileStatement ||
+        n.kind === ts.SyntaxKind.DoStatement) return false;
+    return ts.forEachChild(n, walk) || false;
+  }
+  return walk(node);
+}
+
 function emitBindingName(name, ctx) {
   if (ts.isIdentifier(name)) return name.text;
   return '_destructured';
@@ -1076,6 +1559,90 @@ function escapeString(str) {
 function error(ctx, node, message) {
   const pos = ctx.sourceFile.getLineAndCharacterOfPosition(node.getStart(ctx.sourceFile));
   ctx.errors.push(`line ${pos.line + 1}: ${message}`);
+}
+
+// ── try/catch → pcall ───────────────────────────────────────
+
+function emitTryStatement(node, ctx) {
+  const tryBody = emitFunctionBody(node.tryBlock, ctx);
+  let result = '';
+
+  if (node.catchClause) {
+    const errVar = node.catchClause.variableDeclaration
+      ? node.catchClause.variableDeclaration.name.text
+      : '_err';
+    const catchBody = emitFunctionBody(node.catchClause.block, ctx);
+    result += `${indent(ctx)}local _ok, ${errVar} = pcall(function()\n${tryBody}\n${indent(ctx)}end)\n`;
+    result += `${indent(ctx)}if not _ok then\n${catchBody}\n${indent(ctx)}end`;
+  } else {
+    result += `${indent(ctx)}pcall(function()\n${tryBody}\n${indent(ctx)}end)`;
+  }
+
+  if (node.finallyBlock) {
+    const finallyBody = emitFunctionBody(node.finallyBlock, ctx);
+    result += `\n${indent(ctx)}-- finally\n${finallyBody}`;
+  }
+
+  return result;
+}
+
+// ── new X(...) → X.new(...) or X(...) ──────────────────────
+
+function emitNewExpression(node, ctx) {
+  const callee = emitExpression(node.expression, ctx);
+  const args = node.arguments ? node.arguments.map(a => emitExpression(a, ctx)).join(', ') : '';
+
+  // Known JS built-ins that map to Lua equivalents
+  const knownBuiltins = {
+    'Map': '{}',
+    'Set': '{}',
+    'Object': '{}',
+    'Array': '{}',
+    'Error': null,   // new Error("msg") → error("msg")
+    'Date': null,     // new Date() → os.time()
+    'Uint8Array': null,
+    'TextEncoder': null,
+    'TextDecoder': null,
+  };
+
+  if (callee in knownBuiltins) {
+    if (callee === 'Error') return `error(${args})`;
+    if (callee === 'Date') return args ? `os.time()` : `os.time()`;
+    if (callee === 'Uint8Array') return `{${args}}`;
+    if (callee === 'TextEncoder' || callee === 'TextDecoder') {
+      // TextEncoder/TextDecoder don't exist in Lua — return a stub table
+      return '{}';
+    }
+    const val = knownBuiltins[callee];
+    if (val) return val;
+  }
+
+  // General case: new Foo(args) → Foo.new(args) (matches our class emitter)
+  return `${callee}.new(${args})`;
+}
+
+// ── RegExp literal → Lua pattern string ─────────────────────
+
+function emitRegExpLiteral(node, ctx) {
+  // /pattern/flags → "pattern" (best-effort conversion to Lua pattern)
+  const text = node.text; // e.g. /^[0-9a-fA-F]{6}$/
+  const match = text.match(/^\/(.*?)\/([gimsuy]*)$/);
+  if (!match) return `"${escapeString(text)}"`;
+
+  let pattern = match[1];
+  // Convert common regex features to Lua patterns (best-effort)
+  // \d → %d, \s → %s, \w → %w, \b → %%b (word boundary doesn't exist but %b is close enough)
+  pattern = pattern.replace(/\\d/g, '%d');
+  pattern = pattern.replace(/\\s/g, '%s');
+  pattern = pattern.replace(/\\w/g, '%w');
+  pattern = pattern.replace(/\\D/g, '%D');
+  pattern = pattern.replace(/\\S/g, '%S');
+  pattern = pattern.replace(/\\W/g, '%W');
+  // [a-z] style classes pass through (Lua supports them)
+  // ^ and $ anchors work the same in Lua patterns
+  // {6} quantifiers don't exist in Lua — leave as-is for now (user can fix)
+
+  return `"${escapeString(pattern)}"`;
 }
 
 // ── Comment extraction ──────────────────────────────────────
