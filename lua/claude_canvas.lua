@@ -630,12 +630,24 @@ Capabilities.register("ClaudeCanvas", {
 
       -- ── Prompt cursor ─────────────────────────────────────────
       -- We are the terminal. The cursor is our box overlay.
-      -- Use the prompt row we found during classification + vterm cursor col.
+      -- Ink renders its cursor as a reverse-video cell on the prompt row.
+      -- Scan for that cell to find the actual cursor column.
       if inputState.blinkOn and promptVtRow then
-        local cursor = vterm:getCursor()
-        if cursor then
+        local cursorCol = nil
+        local scanCols = select(2, vterm:size())
+        for col = 0, scanCols - 1 do
+          local cell = vterm:getCell(promptVtRow, col)
+          if cell then
+            local hasBg = cell.bg and (cell.bg[1] > 0 or cell.bg[2] > 0 or cell.bg[3] > 0)
+            if cell.reverse or hasBg then
+              cursorCol = col
+              break
+            end
+          end
+        end
+        if cursorCol then
           local cy = c.y + 8 + promptVtRow * lineH - scrollY
-          local cx = c.x + cellOffsetX + cursor.col * charW
+          local cx = c.x + cellOffsetX + cursorCol * charW
           if cy >= c.y and cy + lineH <= contentBottom then
             love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
             love.graphics.rectangle("fill", cx, cy, charW, lineH)
