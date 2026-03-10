@@ -627,31 +627,12 @@ Capabilities.register("ClaudeCanvas", {
       Scissor.restore(prevScissor)
 
       -- ── Prompt cursor ─────────────────────────────────────────
-      -- The CLI (Ink) parks the vterm cursor below visible content.
-      -- Find the prompt row by scanning for ❯ in the input zone,
-      -- then draw cursor after the last non-empty cell on that row.
-      if inputState.blinkOn and boundary > 0 then
-        local promptRow = nil
-        local promptCol = nil
-        for row = boundary, lastNonEmpty do
-          local rowText = vterm:getRowText(row)
-          if rowText:find("❯", 1, true) or rowText:match("^>%s") then
-            promptRow = row
-            -- Find the last non-empty cell to place cursor after text
-            local lastCell = 0
-            for col = 0, cols - 1 do
-              local cell = vterm:getCell(row, col)
-              if cell and cell.char and #cell.char > 0 and cell.char ~= " " then
-                lastCell = col + 1
-              end
-            end
-            promptCol = lastCell
-            break
-          end
-        end
-        if promptRow then
-          local cy = c.y + 8 + promptRow * lineH - scrollY
-          local cx = c.x + cellOffsetX + promptCol * charW
+      -- Use the vterm's actual cursor position — it is the SSoT.
+      if inputState.blinkOn then
+        local cursor = vterm:getCursor()
+        if cursor then
+          local cy = c.y + 8 + cursor.row * lineH - scrollY
+          local cx = c.x + cellOffsetX + cursor.col * charW
           if cy >= c.y and cy + lineH <= contentBottom then
             love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
             love.graphics.rectangle("fill", cx, cy, charW, lineH)
