@@ -5,8 +5,8 @@
 
 local Capabilities = require("lua.capabilities")
 local Tree = require("lua.tree")
-local Elements = require("chemistry.elements")
-local Formulas = require("chemistry.formulas")
+local Elements = require("lua.generated.chemistry.elements")
+local Formulas = require("lua.generated.chemistry.formulas")
 
 local function computeData(props, state)
   local el = Elements.getElement(state.selected)

@@ -5,7 +5,7 @@
 
 local Capabilities = require("lua.capabilities")
 local Tree = require("lua.tree")
-local Formulas = require("chemistry.formulas")
+local Formulas = require("lua.generated.chemistry.formulas")
 
 local __tsl = require("lua.tsl_stdlib")
 

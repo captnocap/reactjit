@@ -8,8 +8,8 @@ import { Box, Text, Pressable, ScrollView } from '@reactjit/core';
 // After:  Composed from TSLX components. State in compute(). Layout in render().
 
 capability ChemistryStory {
-  require "chemistry/elements" as Elements
-  require "chemistry/formulas" as Formulas
+  require "lua.generated.chemistry.elements" as Elements
+  require "lua.generated.chemistry.formulas" as Formulas
   require "ElementTile" as ElementTile
   require "ElementCard" as ElementCard
   require "ElementDetail" as ElementDetail

@@ -7,9 +7,9 @@ import { Box, Text } from '@reactjit/core';
 // After:  Box + Text with flexWrap, molecule builder inlined in compute()
 
 capability MoleculeCard {
-  require "chemistry/elements" as Elements
-  require "chemistry/compounds" as Compounds
-  require "chemistry/formulas" as Formulas
+  require "lua.generated.chemistry.elements" as Elements
+  require "lua.generated.chemistry.compounds" as Compounds
+  require "lua.generated.chemistry.formulas" as Formulas
 
   schema: {
     formula:   { type: "string", default: "H2O", desc: "Chemical formula or compound name" },

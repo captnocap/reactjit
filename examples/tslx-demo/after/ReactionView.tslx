@@ -7,7 +7,7 @@ import { Box, Text } from '@reactjit/core';
 // After:  Box + Text in a row, balancer logic lives in compute()
 
 capability ReactionView {
-  require "chemistry/formulas" as Formulas
+  require "lua.generated.chemistry.formulas" as Formulas
 
   schema: {
     equation:   { type: "string", default: "",    desc: "Chemical equation to balance" },

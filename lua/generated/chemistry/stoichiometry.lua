@@ -3,10 +3,10 @@ local __tsl = require("lua.tsl_stdlib")
 -- chemistry/stoichiometry.tsl — Stoichiometry, gas laws, equilibrium
 --
 -- Compiles to Lua. All the unit conversion and thermodynamics math.
-local _mod___elements = require("stoichiometry.tsl.elements")
+local _mod___elements = require("lua.generated.chemistry.elements")
 local ELEMENTS = _mod___elements.ELEMENTS
 local BY_SYMBOL = _mod___elements.BY_SYMBOL
-local _mod___formulas = require("stoichiometry.tsl.formulas")
+local _mod___formulas = require("lua.generated.chemistry.formulas")
 local parseFormula = _mod___formulas.parseFormula
 local molarMass = _mod___formulas.molarMass
 local AVOGADRO = 6.02214076e+23

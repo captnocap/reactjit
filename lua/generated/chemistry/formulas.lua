@@ -1,7 +1,7 @@
 -- chemistry/formulas.tsl — Formula parsing + molar mass
 --
 -- Compiles to Lua. Character-by-character formula parser.
-local _mod___elements = require("formulas.tsl.elements")
+local _mod___elements = require("lua.generated.chemistry.elements")
 local BY_SYMBOL = _mod___elements.BY_SYMBOL
 local function parseFormula(formula)
   local atoms = {}
