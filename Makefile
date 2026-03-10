@@ -338,6 +338,8 @@ cli-setup: setup
 	cp lua/devtools_window/*.lua cli/runtime/lua/devtools_window/
 	mkdir -p cli/runtime/lua/notification_window
 	cp lua/notification_window/*.lua cli/runtime/lua/notification_window/
+	mkdir -p cli/runtime/lua/emulator
+	-cp lua/emulator/*.so cli/runtime/lua/emulator/ 2>/dev/null || true
 	cp zig-out/lib/libquickjs$(LIB_EXT) cli/runtime/lib/
 	@# ── Optional system libraries (platform-aware discovery) ──
 ifeq ($(UNAME_S),Darwin)
