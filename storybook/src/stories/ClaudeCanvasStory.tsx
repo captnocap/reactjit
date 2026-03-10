@@ -325,18 +325,20 @@ export function ClaudeCanvasStory() {
               <Text style={{ fontSize: 9, color: c.muted }}>{'Working directory'}</Text>
               <TextInput
                 value={workingDir}
-                onChangeText={setWorkingDir}
+                onChangeText={showLive ? undefined : setWorkingDir}
+                editable={!showLive}
                 placeholder="/path/to/your/project"
                 style={{
                   width: '100%',
                   fontSize: 10,
                   backgroundColor: C.canvasBg,
-                  color: '#cdd6f4',
+                  color: showLive ? C.dimText : '#cdd6f4',
                   borderWidth: 1,
                   borderColor: C.canvasBorder,
                   borderRadius: 4,
                   paddingLeft: 8, paddingRight: 8,
                   paddingTop: 5, paddingBottom: 5,
+                  opacity: showLive ? 0.5 : 1,
                 }}
               />
               <S.StoryCap>
