@@ -295,6 +295,16 @@ local function isSurface(node)
     local props = node.props or {}
     if not props.background then return true end
   end
+  -- Visual capabilities (ElementTile, ElementCard, etc.) are surfaces too.
+  -- They paint via love.graphics and need non-zero layout dimensions.
+  if Layout._capabilities then
+    local capDef = Layout._capabilities.getDefinition(node.type)
+    if capDef and capDef.visual then
+      local s = node.style or {}
+      if s.overflow == "scroll" or s.overflow == "auto" then return false end
+      return true
+    end
+  end
   return false
 end
 
@@ -1039,6 +1049,20 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   local explicitH = ru(s.height, pctH)
   local fitW = isFitContent(s.width)
   local fitH = isFitContent(s.height)
+
+  -- Visual capabilities with a "size" prop use it as implicit width/height
+  -- when no explicit style dimensions are set (e.g. <ElementTile size={64} />).
+  if not explicitW and not explicitH then
+    local props = node.props or {}
+    local capSize = tonumber(props.size)
+    if capSize and capSize > 0 and Layout._capabilities then
+      local capDef = Layout._capabilities.getDefinition(node.type)
+      if capDef and capDef.visual then
+        explicitW = capSize
+        explicitH = capSize
+      end
+    end
+  end
 
   local w, h
   local wSource, hSource  -- provenance: why this dimension has its value
