@@ -47,6 +47,7 @@ local permit = nil
 local audit = nil
 local midi = nil
 local audioEngine = nil
+local gamepadMaps = nil
 
 -- ============================================================================
 -- State
@@ -617,6 +618,120 @@ function SystemPanel.draw()
       state.itemRects[key] = rect
 
       y = y + ITEM_ROW_H
+
+      -- Controller type selector + button mapping (only if not blocked and gamepadMaps available)
+      if not blocked and gamepadMaps then
+        local currentProfile = gamepadMaps.getProfile(ctrl.id)
+        local profiles = gamepadMaps.getProfiles()
+
+        -- Profile selector row
+        love.graphics.setColor(C.dimText)
+        love.graphics.setFont(getFont(10))
+        love.graphics.print("Type:", x + 22, y + 5)
+
+        local profX = x + 60
+        for _, prof in ipairs(profiles) do
+          local isActive = (prof.id == currentProfile)
+          local profKey = "profile:" .. ctrl.id .. ":" .. prof.id
+          local profHovered = state.hoverItems[profKey] ~= nil
+          local profW = getFont(10):getWidth(prof.label) + 12
+          local profBtnStyle = isActive and "active" or "normal"
+          local profRect = drawButton(profX, y + 2, profW, BTN_H - 2, prof.label, profHovered, profBtnStyle)
+          profRect.action = "set_profile"
+          profRect.deviceId = ctrl.id
+          profRect.profileId = prof.id
+          state.itemRects[profKey] = profRect
+          profX = profX + profW + 4
+        end
+        y = y + ITEM_ROW_H
+
+        -- Button mapping sub-section (collapsed by default)
+        local mapKey = "map:" .. ctrl.id
+        -- Default collapsed: nil = collapsed, true = expanded (toggled via section click)
+        local mapCollapsed = not state.collapsed[mapKey]
+        love.graphics.setColor(C.dimText)
+        love.graphics.setFont(getFont(10))
+        drawChevron(x + 22, y + 6, 8, mapCollapsed)
+        love.graphics.print("Button Mapping", x + 34, y + 4)
+        state.sectionRects[mapKey] = { x = x + 22, y = y, w = w - 22, h = ITEM_ROW_H }
+        y = y + ITEM_ROW_H
+
+        if not mapCollapsed then
+          local resolved = gamepadMaps.getResolvedMap(ctrl.id)
+
+          -- Button mappings
+          love.graphics.setColor(C.sectionText)
+          love.graphics.setFont(getFont(9))
+          love.graphics.print("BUTTONS", x + 30, y + 2)
+          y = y + 16
+
+          local sortedBtns = {}
+          local profile = gamepadMaps.getRawProfiles()[currentProfile] or gamepadMaps.getRawProfiles().xbox
+          for btn, _ in pairs(profile.buttons) do
+            sortedBtns[#sortedBtns + 1] = btn
+          end
+          table.sort(sortedBtns)
+
+          for _, btn in ipairs(sortedBtns) do
+            local action = resolved.buttons[btn]
+            local actionLabel = action and gamepadMaps.getActionLabel(action) or "(unbound)"
+
+            love.graphics.setColor(C.dimText)
+            love.graphics.setFont(getFont(10))
+            love.graphics.print(btn, x + 34, y + 3)
+
+            love.graphics.setColor(action and C.itemText or C.dimText)
+            love.graphics.print(actionLabel, x + 140, y + 3)
+
+            -- Cycle action button
+            local cycleKey = "remap:" .. ctrl.id .. ":btn:" .. btn
+            local cycleHov = state.hoverItems[cycleKey] ~= nil
+            local cycleRect = drawButton(x + w - 50, y + 1, 44, BTN_H - 4, "Edit", cycleHov, "normal")
+            cycleRect.action = "cycle_button_action"
+            cycleRect.deviceId = ctrl.id
+            cycleRect.buttonName = btn
+            state.itemRects[cycleKey] = cycleRect
+
+            y = y + 20
+          end
+
+          -- Axis mappings
+          love.graphics.setColor(C.sectionText)
+          love.graphics.setFont(getFont(9))
+          love.graphics.print("AXES", x + 30, y + 2)
+          y = y + 16
+
+          local sortedAxes = {}
+          for ax, _ in pairs(profile.axes) do
+            sortedAxes[#sortedAxes + 1] = ax
+          end
+          table.sort(sortedAxes)
+
+          for _, ax in ipairs(sortedAxes) do
+            local action = resolved.axes[ax]
+            local actionLabel = action and gamepadMaps.getActionLabel(action) or "(unbound)"
+
+            love.graphics.setColor(C.dimText)
+            love.graphics.setFont(getFont(10))
+            love.graphics.print(ax, x + 34, y + 3)
+
+            love.graphics.setColor(action and C.itemText or C.dimText)
+            love.graphics.print(actionLabel, x + 140, y + 3)
+
+            local cycleKey = "remap:" .. ctrl.id .. ":ax:" .. ax
+            local cycleHov = state.hoverItems[cycleKey] ~= nil
+            local cycleRect = drawButton(x + w - 50, y + 1, 44, BTN_H - 4, "Edit", cycleHov, "normal")
+            cycleRect.action = "cycle_axis_action"
+            cycleRect.deviceId = ctrl.id
+            cycleRect.axisName = ax
+            state.itemRects[cycleKey] = cycleRect
+
+            y = y + 20
+          end
+
+          y = y + 4  -- padding after mappings
+        end
+      end
     end
     return y
   end)
@@ -934,19 +1049,50 @@ function SystemPanel.mousepressed(x, y, button)
       elseif rect.action == "toggle_perm" then
         local catId = rect.category
         if state.permOverrides[catId] == false then
-          -- Was blocked by user, unblock (remove override)
           state.permOverrides[catId] = nil
           if permit and permit.setUserOverride then
             permit.setUserOverride(catId, nil)
           end
         else
-          -- Block it
           state.permOverrides[catId] = false
           if permit and permit.setUserOverride then
             permit.setUserOverride(catId, false)
           end
         end
         markDirty()
+      elseif rect.action == "set_profile" and gamepadMaps then
+        gamepadMaps.setProfile(rect.deviceId, rect.profileId)
+      elseif rect.action == "cycle_button_action" and gamepadMaps then
+        -- Cycle through available actions for this button
+        local actions = gamepadMaps.getActions()
+        local currentAction = gamepadMaps.getButtonAction(rect.deviceId, rect.buttonName)
+        local nextIdx = 1
+        if currentAction then
+          for i, a in ipairs(actions) do
+            if a == currentAction then nextIdx = i + 1; break end
+          end
+        end
+        -- Wrap around, with nil (unbound) as last option
+        if nextIdx > #actions then
+          gamepadMaps.setButtonOverride(rect.deviceId, rect.buttonName, "__none__")
+        else
+          gamepadMaps.setButtonOverride(rect.deviceId, rect.buttonName, actions[nextIdx])
+        end
+      elseif rect.action == "cycle_axis_action" and gamepadMaps then
+        -- Cycle through axis-compatible actions
+        local axisActions = { "navigate_x", "navigate_y", "scroll_x", "scroll_y" }
+        local currentAction = gamepadMaps.getAxisAction(rect.deviceId, rect.axisName)
+        local nextIdx = 1
+        if currentAction then
+          for i, a in ipairs(axisActions) do
+            if a == currentAction then nextIdx = i + 1; break end
+          end
+        end
+        if nextIdx > #axisActions then
+          gamepadMaps.setAxisOverride(rect.deviceId, rect.axisName, "__none__")
+        else
+          gamepadMaps.setAxisOverride(rect.deviceId, rect.axisName, axisActions[nextIdx])
+        end
       end
       return true
     end
@@ -1030,6 +1176,7 @@ function SystemPanel.init(deps)
   audit = deps.audit
   midi = deps.midi
   audioEngine = deps.audioEngine
+  gamepadMaps = deps.gamepadMaps
 
   loadPrefs()
 

@@ -39,6 +39,7 @@ local M = {
   settings    = require("lua.settings"),
   themeMenu   = require("lua.theme_menu"),
   systemPanel = require("lua.system_panel"),
+  gamepadMaps = require("lua.gamepad_maps"),
   screenshot = nil,
   inspectorEnabled = true,
   settingsEnabled  = true,
@@ -433,6 +434,7 @@ end
 -- Gamepad axis state — Lua owns this, React polls it via RPC.
 local gamepadAxes = {}  -- [joystickId] = { leftx=0, lefty=0, rightx=0, ... }
 local gamepadButtons = {}  -- [joystickId] = { a=false, b=false, ... }
+local gamepadMaps = M.gamepadMaps  -- local alias for hot path
 
 --- Find any ScrollView in the tree (fallback when no focused node).
 --- Returns the first scroll node found via BFS from root.
@@ -772,8 +774,10 @@ function ReactJIT.init(config)
       permit = require("lua.permit"),
       audit = pcall(require, "lua.audit") and require("lua.audit") or nil,
       midi = pcall(require, "lua.audio.midi") and require("lua.audio.midi") or nil,
+      gamepadMaps = M.gamepadMaps,
     })
   end
+  M.gamepadMaps.init()
 
   mode = detectMode(config)
   local ns = config.namespace or "default"
@@ -1215,6 +1219,7 @@ function ReactJIT.init(config)
     return {
       axes = gamepadAxes[id] or {},
       buttons = gamepadButtons[id] or {},
+      profile = gamepadMaps.getProfile(id),
     }
   end
 
@@ -5520,8 +5525,7 @@ function ReactJIT.joystickremoved(joystick)
 end
 
 --- Call from love.gamepadpressed(joystick, button).
---- D-pad drives spatial navigation, A activates, B/Start synthesize Escape.
---- Other buttons pass through as gamepad events for custom handling.
+--- Uses gamepad_maps to resolve button → action, then dispatches by action.
 function ReactJIT.gamepadpressed(joystick, button)
   if not isRendering() then return end
   if not M.bridge then return end
@@ -5543,9 +5547,14 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- D-pad → spatial navigation; if no target in that direction, scroll instead
+  -- Resolve button → action via controller map
+  local action = gamepadMaps.getButtonAction(joystickId, button)
+  if not action then return end  -- unbound button, already broadcast above
+
   local DPAD_SCROLL = 40
-  if button == "dpup" then
+
+  -- Navigation actions — spatial focus movement with scroll fallback
+  if action == "navigate_up" then
     if not focus.navigate("up", joystickId) then
       local sn = findAnyScrollNode()
       if sn and sn.scrollState then
@@ -5555,7 +5564,7 @@ function ReactJIT.gamepadpressed(joystick, button)
     end
     return
   end
-  if button == "dpdown" then
+  if action == "navigate_down" then
     if not focus.navigate("down", joystickId) then
       local sn = findAnyScrollNode()
       if sn and sn.scrollState then
@@ -5565,7 +5574,7 @@ function ReactJIT.gamepadpressed(joystick, button)
     end
     return
   end
-  if button == "dpleft" then
+  if action == "navigate_left" then
     if not focus.navigate("left", joystickId) then
       local sn = findAnyScrollNode()
       if sn and sn.scrollState then
@@ -5575,7 +5584,7 @@ function ReactJIT.gamepadpressed(joystick, button)
     end
     return
   end
-  if button == "dpright" then
+  if action == "navigate_right" then
     if not focus.navigate("right", joystickId) then
       local sn = findAnyScrollNode()
       if sn and sn.scrollState then
@@ -5586,14 +5595,36 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- A button → activate focused node for this controller (synthesize click)
-  if button == "a" then
+  -- Discrete scroll actions (e.g. N64 C-buttons mapped to x/y)
+  if action == "scroll_up" or action == "scroll_down"
+  or action == "scroll_left" or action == "scroll_right" then
+    local scrollNode = nil
+    local node = focus.getForController(joystickId)
+    if node then scrollNode = findScrollAncestor(node) end
+    if not scrollNode then scrollNode = findAnyScrollNode() end
+    if scrollNode and scrollNode.scrollState then
+      local ss = scrollNode.scrollState
+      if action == "scroll_up" then
+        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) - DPAD_SCROLL)
+      elseif action == "scroll_down" then
+        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + DPAD_SCROLL)
+      elseif action == "scroll_left" then
+        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) - DPAD_SCROLL, ss.scrollY or 0)
+      elseif action == "scroll_right" then
+        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + DPAD_SCROLL, ss.scrollY or 0)
+      end
+      emitScrollEvent(scrollNode)
+    end
+    return
+  end
+
+  -- Confirm → activate focused node (synthesize click)
+  if action == "confirm" then
     local node = focus.getForController(joystickId)
     if node then
       local bubblePath = M.events.buildBubblePath(node)
       local cx = node.computed.x + node.computed.w / 2
       local cy = node.computed.y + node.computed.h / 2
-      -- Send "click" — same event type as mousepressed uses for onPress/onClick
       pushEvent(M.events.createEvent("click", node.id, cx, cy, 1, bubblePath))
       if M.events then M.events.setPressedNode(node) end
       applyInteractionStyle(node)
@@ -5606,33 +5637,25 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- B button → synthesize Escape keydown
-  if button == "b" then
+  -- Back / Menu → synthesize Escape
+  if action == "back" or action == "menu" then
     pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
     return
   end
 
-  -- Shoulder buttons → cycle focus groups
-  if button == "leftshoulder" then
+  -- Focus group cycling
+  if action == "group_prev" then
     focus.cycleGroup("prev")
     return
   end
-  if button == "rightshoulder" then
+  if action == "group_next" then
     focus.cycleGroup("next")
     return
   end
-
-  -- Start button → synthesize Escape (pause menu pattern)
-  if button == "start" then
-    pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
-    return
-  end
-
-  -- Other buttons: already broadcast at top of function
 end
 
 --- Call from love.gamepadreleased(joystick, button).
---- A release synthesizes mouseup on focused node.
+--- Confirm release synthesizes mouseup on focused node.
 function ReactJIT.gamepadreleased(joystick, button)
   if not isRendering() then return end
   if not M.bridge then return end
@@ -5647,15 +5670,16 @@ function ReactJIT.gamepadreleased(joystick, button)
   -- Broadcast to React handlers FIRST (onGamepadRelease fires for ALL buttons)
   pushEvent(M.events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 
-  if button == "a" then
+  -- Confirm release → synthesize mouseup on focused node
+  local action = gamepadMaps.getButtonAction(joystickId, button)
+  if action == "confirm" then
     local node = focus.getForController(joystickId)
     if node then
       local bubblePath = M.events.buildBubblePath(node)
       local cx = node.computed.x + node.computed.w / 2
       local cy = node.computed.y + node.computed.h / 2
-      -- Send "release" — same event type as mousereleased, triggers onRelease → onPress
       M.events.clearPressedNode()
-      applyInteractionStyle(node)  -- revert active style (node no longer pressed)
+      applyInteractionStyle(node)
       pushEvent(M.events.createEvent("release", node.id, cx, cy, 1, bubblePath))
     end
     return
@@ -5663,8 +5687,7 @@ function ReactJIT.gamepadreleased(joystick, button)
 end
 
 --- Call from love.gamepadaxis(joystick, axis, value).
---- Left stick feeds focus navigation (processed in update).
---- Right stick scrolls the nearest scroll ancestor of the focused node.
+--- Uses gamepad_maps to resolve axis → action, then dispatches.
 function ReactJIT.gamepadaxis(joystick, axis, value)
   if not isRendering() then return end
   if not M.bridge then return end
@@ -5683,15 +5706,20 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
     return
   end
 
-  -- Left stick → focus navigation (handled in update via Focus.updateStick)
-  if axis == "leftx" or axis == "lefty" then
-    focus.setStickInput(axis, value, joystickId)
+  -- Resolve axis → action via controller map
+  local action = gamepadMaps.getAxisAction(joystickId, axis)
+  if not action then return end
+
+  -- Navigate stick → focus navigation (handled in update via Focus.updateStick)
+  if action == "navigate_x" or action == "navigate_y" then
+    -- Map action back to axis name for focus module
+    local focusAxis = (action == "navigate_x") and "leftx" or "lefty"
+    focus.setStickInput(focusAxis, value, joystickId)
     return
   end
 
-  -- Right stick → scroll the nearest scroll ancestor of focused node
-  -- Falls back to any ScrollView in the tree if no focused node
-  if axis == "rightx" or axis == "righty" then
+  -- Scroll stick → scroll nearest scroll ancestor of focused node
+  if action == "scroll_x" or action == "scroll_y" then
     local scrollNode = nil
     local node = focus.getForController(joystickId)
     if node then
@@ -5703,10 +5731,10 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
     if scrollNode and scrollNode.scrollState then
       local SCROLL_SPEED = 8
       local ss = scrollNode.scrollState
-      if axis == "rightx" and math.abs(value) > 0.3 then
+      if action == "scroll_x" and math.abs(value) > 0.3 then
         M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
         emitScrollEvent(scrollNode)
-      elseif axis == "righty" and math.abs(value) > 0.3 then
+      elseif action == "scroll_y" and math.abs(value) > 0.3 then
         M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
         emitScrollEvent(scrollNode)
       end
