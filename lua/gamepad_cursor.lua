@@ -150,43 +150,66 @@ end
 -- Edge-scroll helper
 -- ============================================================================
 
---- Find scroll container under cursor and compute edge-scroll velocity.
+-- Track the last scroll container the cursor was inside, per joystick.
+-- This persists when cursor leaves the scroll area (into header/footer)
+-- so screen-edge scrolling still has a target.
+local lastScrollNode = {}  -- { [joystickId] = scrollNode }
+
+--- Compute edge-scroll based on screen edges (not scroll container edges).
+--- Uses the scroll container under the cursor, or the last known one if
+--- cursor has moved into a non-scrollable area (header/footer).
 --- Returns scrollNode, scrollDX, scrollDY
-local function computeEdgeScroll(c, dt)
+local function computeEdgeScroll(c, joystickId, dt)
   if not eventsModule or not treeModule then return nil, 0, 0 end
-  local root = treeModule.getTree()
-  if not root then return nil, 0, 0 end
 
-  local hit = eventsModule.hitTest(root, c.x, c.y)
-  if not hit then return nil, 0, 0 end
-
-  local scrollNode = eventsModule.findScrollContainer(hit, c.x, c.y)
-  if not scrollNode or not scrollNode.computed or not scrollNode.scrollState then
-    return nil, 0, 0
+  local w, h = 800, 600
+  if love and love.graphics then
+    w = love.graphics.getWidth()
+    h = love.graphics.getHeight()
   end
 
-  local sc = scrollNode.computed
+  -- Try to find scroll container under cursor and remember it
+  local root = treeModule.getTree()
+  if root then
+    local hit = eventsModule.hitTest(root, c.x, c.y)
+    if hit then
+      local sc = eventsModule.findScrollContainer(hit, c.x, c.y)
+      if sc and sc.scrollState then
+        lastScrollNode[joystickId] = sc
+      end
+    end
+  end
+
+  -- Use last known scroll container (survives cursor leaving scroll area)
+  local scrollNode = lastScrollNode[joystickId]
+  if not scrollNode or not scrollNode.scrollState then
+    -- Final fallback: any scroll node in tree
+    if root then scrollNode = GamepadCursor._findAnyScrollNode(root) end
+    if scrollNode then lastScrollNode[joystickId] = scrollNode end
+  end
+  if not scrollNode or not scrollNode.scrollState then return nil, 0, 0 end
+
   local dx, dy = 0, 0
 
-  -- Distance from cursor to each edge of the scroll container
-  local distTop = c.y - sc.y
-  local distBottom = (sc.y + sc.h) - c.y
-  local distLeft = c.x - sc.x
-  local distRight = (sc.x + sc.w) - c.x
+  -- Distance from cursor to screen edges
+  local distTop = c.y
+  local distBottom = h - c.y
+  local distLeft = c.x
+  local distRight = w - c.x
 
-  -- Compute scroll velocity based on proximity to edge (linear ramp)
-  if distBottom < EDGE_SCROLL_MARGIN and distBottom >= 0 then
+  -- Scroll when cursor is near screen edges
+  if distBottom < EDGE_SCROLL_MARGIN then
     local t = 1 - (distBottom / EDGE_SCROLL_MARGIN)
     dy = EDGE_SCROLL_SPEED * t * dt
-  elseif distTop < EDGE_SCROLL_MARGIN and distTop >= 0 then
+  elseif distTop < EDGE_SCROLL_MARGIN then
     local t = 1 - (distTop / EDGE_SCROLL_MARGIN)
     dy = -EDGE_SCROLL_SPEED * t * dt
   end
 
-  if distRight < EDGE_SCROLL_MARGIN and distRight >= 0 then
+  if distRight < EDGE_SCROLL_MARGIN then
     local t = 1 - (distRight / EDGE_SCROLL_MARGIN)
     dx = EDGE_SCROLL_SPEED * t * dt
-  elseif distLeft < EDGE_SCROLL_MARGIN and distLeft >= 0 then
+  elseif distLeft < EDGE_SCROLL_MARGIN then
     local t = 1 - (distLeft / EDGE_SCROLL_MARGIN)
     dx = -EDGE_SCROLL_SPEED * t * dt
   end
@@ -306,7 +329,7 @@ function GamepadCursor.update(dt)
 
     -- === Edge-scroll: auto-scroll when cursor is near scroll container edges ===
     if moved then
-      local scrollNode, edgeDX, edgeDY = computeEdgeScroll(c, dt)
+      local scrollNode, edgeDX, edgeDY = computeEdgeScroll(c, joystickId, dt)
       if scrollNode and (edgeDX ~= 0 or edgeDY ~= 0) then
         local ss = scrollNode.scrollState
         treeModule.setScroll(scrollNode.id,
