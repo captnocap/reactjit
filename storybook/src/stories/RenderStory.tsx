@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, Window, useLocalStore, useAndroidVM, classifiers as S} from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, Window, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
@@ -125,55 +125,6 @@ const EVENTS_CODE = `<Render
   onError={(e) => console.log('Error:', e.message)}
   onFrame={(e) => console.log('Frame', e.frameNumber)}
 />`;
-
-const ANDROID_VM_CODE = `import { useAndroidVM, Render } from '@reactjit/core'
-
-function AndroidApp() {
-  const vm = useAndroidVM({ port: 5556, autoConnect: true })
-
-  return (
-    <Box style={{ width: '100%', height: '100%' }}>
-      <Render source="bliss.iso" interactive vmMemory={4096} />
-      <Pressable onPress={async () => {
-        await vm.tap(500, 300)
-        await vm.type("hello android")
-        await vm.launch("com.android.chrome")
-      }}>
-        <Text>Control VM</Text>
-      </Pressable>
-    </Box>
-  )
-}`;
-
-const ANDROID_API_CODE = `const vm = useAndroidVM({ port: 5556 })
-
-// Connection
-await vm.connect()           // adb connect
-await vm.disconnect()        // adb disconnect
-
-// Input
-await vm.tap(500, 300)       // input tap x y
-await vm.longpress(500, 300) // input swipe (same coords)
-await vm.swipe(0, 500, 0, 100, 300)  // scroll up
-await vm.type("hello world") // input text
-await vm.key("HOME")         // input keyevent KEYCODE_HOME
-await vm.key("BACK")         // input keyevent KEYCODE_BACK
-
-// Apps
-await vm.launch("com.android.chrome")
-await vm.install("/path/to/app.apk")
-await vm.uninstall("com.example.app")
-const { packages } = await vm.packages()
-
-// System
-const { output } = await vm.shell("getprop ro.build.version.release")
-await vm.screenshot("/tmp/android.png")
-const { value } = await vm.getprop("sys.boot_completed")
-await vm.waitBoot(120) // poll until booted
-
-// File transfer
-await vm.push("/local/file.txt", "/sdcard/file.txt")
-await vm.pull("/sdcard/photo.jpg", "/local/photo.jpg")`;
 
 const APPEMBED_CODE = `// Embed any X11 app as a React component
 <Render source="display" command="firefox" interactive
@@ -504,110 +455,6 @@ function CartridgeOSDemo() {
   );
 }
 
-// ── Live Demo: Android VM Puppeteer ──────────────────────
-
-function AndroidVMDemo() {
-  const c = useThemeColors();
-  const vm = useAndroidVM({ port: 5556 });
-  const [log, setLog] = useState<string[]>([]);
-  const [connected, setConnected] = useState(false);
-
-  const addLog = useCallback((msg: string) => {
-    setLog(prev => [...prev.slice(-6), msg]);
-  }, []);
-
-  const doConnect = useCallback(async () => {
-    addLog('Connecting to localhost:5556...');
-    const r = await vm.connect();
-    if (r?.ok) { setConnected(true); addLog('Connected: ' + (r.serial || '')); }
-    else addLog('Failed: ' + (r?.error || 'unknown'));
-  }, [vm, addLog]);
-
-  const doTap = useCallback(async () => {
-    addLog('Tapping (540, 960)...');
-    await vm.tap(540, 960);
-    addLog('Tap sent');
-  }, [vm, addLog]);
-
-  const doHome = useCallback(async () => {
-    addLog('Pressing HOME...');
-    await vm.key('HOME');
-    addLog('HOME sent');
-  }, [vm, addLog]);
-
-  const doShell = useCallback(async () => {
-    addLog('Running: getprop ro.build.version.release');
-    const r = await vm.shell('getprop ro.build.version.release');
-    addLog('Android ' + (r?.output || r?.error || '?'));
-  }, [vm, addLog]);
-
-  const doScreenshot = useCallback(async () => {
-    addLog('Taking screenshot...');
-    const r = await vm.screenshot('/tmp/android_demo.png');
-    if (r?.ok) addLog('Saved: ' + r.path);
-    else addLog('Failed: ' + ((r as any)?.error || 'unknown'));
-  }, [vm, addLog]);
-
-  const doPackages = useCallback(async () => {
-    addLog('Listing packages...');
-    const r = await vm.packages();
-    if (r?.packages) addLog(r.packages.length + ' packages installed');
-    else addLog('Failed');
-  }, [vm, addLog]);
-
-  const buttons = [
-    { label: 'Connect', fn: doConnect, color: C.webcam, needsConn: false },
-    { label: 'Tap Center', fn: doTap, color: C.interactive, needsConn: true },
-    { label: 'HOME', fn: doHome, color: C.accent, needsConn: true },
-    { label: 'Shell', fn: doShell, color: C.display, needsConn: true },
-    { label: 'Screenshot', fn: doScreenshot, color: C.vm, needsConn: true },
-    { label: 'Packages', fn: doPackages, color: C.window, needsConn: true },
-  ];
-
-  return (
-    <S.CenterW100 style={{ gap: 8 }}>
-      <S.RowG6 style={{ flexWrap: 'wrap' }}>
-        <Tag text="useAndroidVM" color={C.vm} />
-        <Tag text="ADB" color={C.accent} />
-      </S.RowG6>
-
-      <S.RowG6 style={{ flexWrap: 'wrap' }}>
-        {buttons.map(b => (
-          <Pressable key={b.label} onPress={b.fn} disabled={b.needsConn && !connected}>
-            <Box style={{
-              backgroundColor: (b.needsConn && !connected) ? c.surface : b.color + '22',
-              paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4,
-            }}>
-              <Text style={{ fontSize: 9, color: (b.needsConn && !connected) ? c.textDim : b.color }}>{b.label}</Text>
-            </Box>
-          </Pressable>
-        ))}
-      </S.RowG6>
-
-      <Box style={{
-        width: '100%', minHeight: 80, borderRadius: 6,
-        backgroundColor: '#0a0a0a',
-        borderWidth: 1, borderColor: C.vm + '33',
-        paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6,
-        gap: 2,
-      }}>
-        {log.length === 0 ? (
-          <Text style={{ fontSize: 8, color: c.textDim, fontFamily: 'monospace' }}>{'// ADB command log appears here'}</Text>
-        ) : log.map((line, i) => (
-          <Text key={i} style={{ fontSize: 8, color: C.vm, fontFamily: 'monospace' }}>{`> ${line}`}</Text>
-        ))}
-      </Box>
-
-      <S.RowCenterG6>
-        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connected ? C.webcam : c.textDim }} />
-        <Text style={{ fontSize: 9, color: connected ? C.webcam : c.textDim }}>
-          {connected ? 'ADB connected' : 'Not connected — start a VM first'}
-        </Text>
-      </S.RowCenterG6>
-    </S.CenterW100>
-  );
-}
-
 // ── Source Catalog ───────────────────────────────────────
 
 function SourceCatalog() {
@@ -933,64 +780,6 @@ export function RenderStory() {
 
         <Divider />
 
-        {/* ── Android VM Puppeteer: text + code | demo ── */}
-        <Band>
-          <Half>
-            <SectionLabel icon="smartphone">{'ANDROID VM PUPPETEER'}</SectionLabel>
-            <S.StoryBody>
-              {'Programmatic control of Android VMs via ADB. The useAndroidVM hook wraps 18 ADB commands as async functions — tap, type, swipe, launch apps, install APKs, take screenshots, transfer files. Puppeteer for Android, running inside your React app.'}
-            </S.StoryBody>
-            <S.StoryCap>
-              {'Works with any Android VM spawned by <Render source="*.iso" />. QEMU automatically gets ADB port forwarding. Connect, script the VM, watch it happen live in the Render viewport.'}
-            </S.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={ANDROID_VM_CODE} />
-          </Half>
-          <Half>
-            <AndroidVMDemo />
-          </Half>
-        </Band>
-
-        <Divider />
-
-        {/* ── Android API Reference ── */}
-        <Band>
-          <Half>
-            <S.CenterW100 style={{ gap: 8 }}>
-              <S.RowG6 style={{ flexWrap: 'wrap' }}>
-                <Tag text="useAndroidVM" color={C.vm} />
-                <Tag text="ADB" color={C.accent} />
-                <Tag text="18 commands" color={C.display} />
-              </S.RowG6>
-              <Box style={{ gap: 4 }}>
-                {[
-                  { label: 'connect / disconnect', desc: 'ADB TCP connection' },
-                  { label: 'tap / longpress / swipe', desc: 'Touch input injection' },
-                  { label: 'type / key', desc: 'Text and keycode input' },
-                  { label: 'launch / install / uninstall', desc: 'App lifecycle management' },
-                  { label: 'shell', desc: 'Run any shell command' },
-                  { label: 'screenshot', desc: 'Capture and pull to host' },
-                  { label: 'getprop / packages', desc: 'System info queries' },
-                  { label: 'waitBoot', desc: 'Poll until sys.boot_completed=1' },
-                  { label: 'push / pull', desc: 'File transfer host <-> device' },
-                ].map(item => (
-                  <S.RowCenterG8 key={item.label}>
-                    <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.vm, flexShrink: 0 }} />
-                    <S.StoryBody style={{ width: 140, flexShrink: 0 }}>{item.label}</S.StoryBody>
-                    <S.SecondaryBody>{item.desc}</S.SecondaryBody>
-                  </S.RowCenterG8>
-                ))}
-              </Box>
-            </S.CenterW100>
-          </Half>
-          <Half>
-            <SectionLabel icon="terminal">{'API REFERENCE'}</SectionLabel>
-            <S.StoryCap>{'Every async method on the vm object:'}</S.StoryCap>
-            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={ANDROID_API_CODE} />
-          </Half>
-        </Band>
-
-        <Divider />
-
         {/* ── AppEmbed Workspace: text + code | visual ── */}
         <Band>
           <Half>
@@ -1024,16 +813,6 @@ export function RenderStory() {
             </S.CenterW100>
           </Half>
         </Band>
-
-        <Divider />
-
-        {/* ── Callout: VM + Puppeteer ── */}
-        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <S.StoryInfoIcon src="info" tintColor={C.calloutBorder} />
-          <S.StoryBody>
-            {'Combine <Render source="bliss.iso" /> with useAndroidVM() to see and control an Android VM simultaneously. The Render component shows the live framebuffer while the hook scripts it via ADB. Boot an OS, install apps, automate UI flows — all from React.'}
-          </S.StoryBody>
-        </CalloutBand>
 
         <Divider />
 

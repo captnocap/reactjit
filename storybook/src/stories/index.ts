@@ -92,6 +92,7 @@ import { SyntaxStressStory } from './SyntaxStressStory';
 import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
+import { AutomationStory } from './AutomationStory';
 
 export const stories: StoryDef[] = [
   // ── Primitives (Layout1) ──────────────────────────────
@@ -168,4 +169,5 @@ export const stories: StoryDef[] = [
   { id: 'layout-1', title: 'Layout 1', section: 'Layouts', component: Layout1Story },
   { id: 'layout-2', title: 'Layout 2', section: 'Layouts', component: Layout2Story },
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
+  { id: 'automation', title: 'Automation', section: 'Dev', component: AutomationStory },
 ];
