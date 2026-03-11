@@ -7,8 +7,9 @@
 
   Actions:
     navigate_up, navigate_down, navigate_left, navigate_right
-    confirm, back, menu
+    confirm, back, menu             (menu opens system panel / F11)
     group_prev, group_next          (shoulder-style focus group cycling)
+    panel_prev, panel_next          (cycle F9-F12 panels via triggers)
     scroll_up, scroll_down, scroll_left, scroll_right  (discrete scroll)
     navigate_x, navigate_y          (analog stick → focus navigation)
     scroll_x, scroll_y              (analog stick → scroll)
@@ -62,8 +63,8 @@ local profiles = {
       lefty        = "navigate_y",
       rightx       = "scroll_x",
       righty       = "scroll_y",
-      triggerleft  = nil,
-      triggerright  = nil,
+      triggerleft  = "panel_prev",
+      triggerright  = "panel_next",
     },
   },
 
@@ -91,8 +92,8 @@ local profiles = {
       -- C-buttons as right stick (some adapters)
       rightx       = "scroll_x",
       righty       = "scroll_y",
-      triggerleft  = nil,
-      triggerright  = nil,
+      triggerleft  = "panel_prev",
+      triggerright  = "panel_next",
     },
   },
 
@@ -353,6 +354,7 @@ function GamepadMaps.getActions()
     "navigate_up", "navigate_down", "navigate_left", "navigate_right",
     "confirm", "back", "menu",
     "group_prev", "group_next",
+    "panel_prev", "panel_next",
     "scroll_up", "scroll_down", "scroll_left", "scroll_right",
     "navigate_x", "navigate_y",
     "scroll_x", "scroll_y",
@@ -370,9 +372,11 @@ function GamepadMaps.getActionLabel(action)
     navigate_right = "Navigate Right",
     confirm        = "Confirm / Click",
     back           = "Back / Escape",
-    menu           = "Menu / Escape",
+    menu           = "System Panel",
     group_prev     = "Prev Focus Group",
     group_next     = "Next Focus Group",
+    panel_prev     = "Prev Panel (F9-F12)",
+    panel_next     = "Next Panel (F9-F12)",
     scroll_up      = "Scroll Up",
     scroll_down    = "Scroll Down",
     scroll_left    = "Scroll Left",

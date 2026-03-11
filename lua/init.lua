@@ -434,6 +434,7 @@ end
 -- Gamepad axis state — Lua owns this, React polls it via RPC.
 local gamepadAxes = {}  -- [joystickId] = { leftx=0, lefty=0, rightx=0, ... }
 local gamepadButtons = {}  -- [joystickId] = { a=false, b=false, ... }
+local gamepadTriggerFired = {}  -- [joystickId] = { triggerleft=false, ... } — edge detection
 local gamepadMaps = M.gamepadMaps  -- local alias for hot path
 
 --- Find any ScrollView in the tree (fallback when no focused node).
@@ -5538,6 +5539,12 @@ function ReactJIT.gamepadpressed(joystick, button)
   if not gamepadButtons[joystickId] then gamepadButtons[joystickId] = {} end
   gamepadButtons[joystickId][button] = true
 
+  -- System panel intercepts all gamepad input when open (for remap listen mode)
+  if M.systemPanelEnabled and systemPanel.isOpen() then
+    systemPanel.gamepadpressed(button, joystickId)
+    return
+  end
+
   -- Broadcast to React handlers FIRST (onGamepadPress fires for ALL buttons)
   pushEvent(M.events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
 
@@ -5637,9 +5644,17 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- Back / Menu → synthesize Escape
-  if action == "back" or action == "menu" then
+  -- Back → synthesize Escape
+  if action == "back" then
     pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
+    return
+  end
+
+  -- Menu → toggle system panel (F11)
+  if action == "menu" then
+    if M.systemPanelEnabled then
+      systemPanel.keypressed(systemPanelToggleKey)
+    end
     return
   end
 
@@ -5650,6 +5665,46 @@ function ReactJIT.gamepadpressed(joystick, button)
   end
   if action == "group_next" then
     focus.cycleGroup("next")
+    return
+  end
+
+  -- Panel cycling (triggers → F9/F10/F11)
+  if action == "panel_prev" or action == "panel_next" then
+    local panels = {}
+    if M.themeMenuEnabled then
+      panels[#panels + 1] = { key = themeMenuToggleKey, mod = M.themeMenu }
+    end
+    if M.settingsEnabled then
+      panels[#panels + 1] = { key = settingsToggleKey, mod = M.settings }
+    end
+    if M.systemPanelEnabled then
+      panels[#panels + 1] = { key = systemPanelToggleKey, mod = systemPanel }
+    end
+    if #panels == 0 then return end
+
+    -- Find which panel is currently open
+    local openIdx = nil
+    for i, p in ipairs(panels) do
+      if p.mod and p.mod.isOpen and p.mod.isOpen() then
+        openIdx = i
+        break
+      end
+    end
+    if openIdx then
+      -- Close current, open next/prev
+      panels[openIdx].mod.keypressed(panels[openIdx].key)
+      local nextIdx
+      if action == "panel_next" then
+        nextIdx = openIdx % #panels + 1
+      else
+        nextIdx = (openIdx - 2) % #panels + 1
+      end
+      panels[nextIdx].mod.keypressed(panels[nextIdx].key)
+    else
+      -- Nothing open — open first or last
+      local idx = (action == "panel_next") and 1 or #panels
+      panels[idx].mod.keypressed(panels[idx].key)
+    end
     return
   end
 end
@@ -5700,6 +5755,12 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
   if not gamepadAxes[joystickId] then gamepadAxes[joystickId] = {} end
   gamepadAxes[joystickId][axis] = value
 
+  -- System panel intercepts axis input when open (for remap listen mode)
+  if M.systemPanelEnabled and systemPanel.isOpen() then
+    systemPanel.gamepadaxis(axis, value, joystickId)
+    return
+  end
+
   -- On-screen keyboard intercepts stick input while open
   if M.osk and M.osk.isOpen() then
     M.osk.handleGamepadAxis(axis, value, joystickId)
@@ -5737,6 +5798,49 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
       elseif action == "scroll_y" and math.abs(value) > 0.3 then
         M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
         emitScrollEvent(scrollNode)
+      end
+    end
+    return
+  end
+
+  -- Trigger axes → panel_prev/panel_next (edge-detected: fire once when crossing 0.5)
+  if action == "panel_prev" or action == "panel_next" then
+    if not gamepadTriggerFired[joystickId] then gamepadTriggerFired[joystickId] = {} end
+    local fired = gamepadTriggerFired[joystickId][axis]
+    if value > 0.5 and not fired then
+      gamepadTriggerFired[joystickId][axis] = true
+      local panels = {}
+      if M.themeMenuEnabled then
+        panels[#panels + 1] = { key = themeMenuToggleKey, mod = M.themeMenu }
+      end
+      if M.settingsEnabled then
+        panels[#panels + 1] = { key = settingsToggleKey, mod = M.settings }
+      end
+      if M.systemPanelEnabled then
+        panels[#panels + 1] = { key = systemPanelToggleKey, mod = systemPanel }
+      end
+      if #panels > 0 then
+        local openIdx = nil
+        for i, p in ipairs(panels) do
+          if p.mod and p.mod.isOpen and p.mod.isOpen() then openIdx = i; break end
+        end
+        if openIdx then
+          panels[openIdx].mod.keypressed(panels[openIdx].key)
+          local nextIdx
+          if action == "panel_next" then
+            nextIdx = openIdx % #panels + 1
+          else
+            nextIdx = (openIdx - 2) % #panels + 1
+          end
+          panels[nextIdx].mod.keypressed(panels[nextIdx].key)
+        else
+          local idx = (action == "panel_next") and 1 or #panels
+          panels[idx].mod.keypressed(panels[idx].key)
+        end
+      end
+    elseif value < 0.3 then
+      if gamepadTriggerFired[joystickId] then
+        gamepadTriggerFired[joystickId][axis] = false
       end
     end
     return

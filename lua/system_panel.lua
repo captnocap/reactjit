@@ -104,6 +104,11 @@ local state = {
   cachedSerial      = {},
   cachedAudioOut    = {},
   cachedAudioIn     = {},
+
+  -- Gamepad remap listen mode
+  -- When non-nil, we're waiting for the user to press a button/move an axis
+  -- to assign to this action.
+  remapListen = nil,  -- { deviceId, action, inputType = "button"|"axis", timeout = 5.0 }
 }
 
 -- ============================================================================
@@ -659,72 +664,125 @@ function SystemPanel.draw()
         if not mapCollapsed then
           local resolved = gamepadMaps.getResolvedMap(ctrl.id)
 
-          -- Button mappings
+          -- Build reverse map: action → button/axis name
+          local actionToButton = {}
+          for btn, act in pairs(resolved.buttons) do
+            actionToButton[act] = btn
+          end
+          local actionToAxis = {}
+          for ax, act in pairs(resolved.axes) do
+            actionToAxis[act] = ax
+          end
+
+          -- Show actions grouped: each action → what input is bound to it
+          -- Button actions
           love.graphics.setColor(C.sectionText)
           love.graphics.setFont(getFont(9))
-          love.graphics.print("BUTTONS", x + 30, y + 2)
+          love.graphics.print("BUTTON ACTIONS", x + 30, y + 2)
           y = y + 16
 
-          local sortedBtns = {}
-          local profile = gamepadMaps.getRawProfiles()[currentProfile] or gamepadMaps.getRawProfiles().xbox
-          for btn, _ in pairs(profile.buttons) do
-            sortedBtns[#sortedBtns + 1] = btn
-          end
-          table.sort(sortedBtns)
+          local buttonActions = {
+            "navigate_up", "navigate_down", "navigate_left", "navigate_right",
+            "confirm", "back", "menu",
+            "group_prev", "group_next",
+            "panel_prev", "panel_next",
+            "scroll_up", "scroll_down", "scroll_left", "scroll_right",
+          }
 
-          for _, btn in ipairs(sortedBtns) do
-            local action = resolved.buttons[btn]
-            local actionLabel = action and gamepadMaps.getActionLabel(action) or "(unbound)"
+          for _, action in ipairs(buttonActions) do
+            local label = gamepadMaps.getActionLabel(action)
+            local boundBtn = actionToButton[action]
 
-            love.graphics.setColor(C.dimText)
+            -- Check if this action is in listen mode
+            local isListening = state.remapListen
+              and state.remapListen.deviceId == ctrl.id
+              and state.remapListen.targetAction == action
+              and state.remapListen.inputType == "button"
+
+            -- Action label
+            love.graphics.setColor(C.itemText)
             love.graphics.setFont(getFont(10))
-            love.graphics.print(btn, x + 34, y + 3)
+            love.graphics.print(label, x + 34, y + 3)
 
-            love.graphics.setColor(action and C.itemText or C.dimText)
-            love.graphics.print(actionLabel, x + 140, y + 3)
+            -- Current binding or listen prompt
+            if isListening then
+              love.graphics.setColor(C.accent)
+              love.graphics.setFont(getFont(10))
+              local timeLeft = math.ceil(state.remapListen.timeout)
+              love.graphics.print("Press a button... (" .. timeLeft .. "s)", x + 200, y + 3)
+            elseif boundBtn then
+              love.graphics.setColor(C.green)
+              love.graphics.setFont(getFont(10))
+              love.graphics.print(boundBtn, x + 200, y + 3)
+            else
+              love.graphics.setColor(C.dimText)
+              love.graphics.setFont(getFont(10))
+              love.graphics.print("(none)", x + 200, y + 3)
+            end
 
-            -- Cycle action button
-            local cycleKey = "remap:" .. ctrl.id .. ":btn:" .. btn
-            local cycleHov = state.hoverItems[cycleKey] ~= nil
-            local cycleRect = drawButton(x + w - 50, y + 1, 44, BTN_H - 4, "Edit", cycleHov, "normal")
-            cycleRect.action = "cycle_button_action"
-            cycleRect.deviceId = ctrl.id
-            cycleRect.buttonName = btn
-            state.itemRects[cycleKey] = cycleRect
+            -- Remap button
+            if not isListening then
+              local remapKey = "remap:" .. ctrl.id .. ":btn:" .. action
+              local remapHov = state.hoverItems[remapKey] ~= nil
+              local remapRect = drawButton(x + w - 58, y + 1, 52, BTN_H - 4, "Remap", remapHov, "normal")
+              remapRect.action = "remap_button"
+              remapRect.deviceId = ctrl.id
+              remapRect.targetAction = action
+              state.itemRects[remapKey] = remapRect
+            end
 
             y = y + 20
           end
 
-          -- Axis mappings
+          -- Axis actions
           love.graphics.setColor(C.sectionText)
           love.graphics.setFont(getFont(9))
-          love.graphics.print("AXES", x + 30, y + 2)
+          love.graphics.print("STICK / AXIS ACTIONS", x + 30, y + 2)
           y = y + 16
 
-          local sortedAxes = {}
-          for ax, _ in pairs(profile.axes) do
-            sortedAxes[#sortedAxes + 1] = ax
-          end
-          table.sort(sortedAxes)
+          local axisActions = {
+            "navigate_x", "navigate_y",
+            "scroll_x", "scroll_y",
+            "panel_prev", "panel_next",
+          }
 
-          for _, ax in ipairs(sortedAxes) do
-            local action = resolved.axes[ax]
-            local actionLabel = action and gamepadMaps.getActionLabel(action) or "(unbound)"
+          for _, action in ipairs(axisActions) do
+            local label = gamepadMaps.getActionLabel(action)
+            local boundAxis = actionToAxis[action]
 
-            love.graphics.setColor(C.dimText)
+            local isListening = state.remapListen
+              and state.remapListen.deviceId == ctrl.id
+              and state.remapListen.targetAction == action
+              and state.remapListen.inputType == "axis"
+
+            love.graphics.setColor(C.itemText)
             love.graphics.setFont(getFont(10))
-            love.graphics.print(ax, x + 34, y + 3)
+            love.graphics.print(label, x + 34, y + 3)
 
-            love.graphics.setColor(action and C.itemText or C.dimText)
-            love.graphics.print(actionLabel, x + 140, y + 3)
+            if isListening then
+              love.graphics.setColor(C.accent)
+              love.graphics.setFont(getFont(10))
+              local timeLeft = math.ceil(state.remapListen.timeout)
+              love.graphics.print("Move a stick... (" .. timeLeft .. "s)", x + 200, y + 3)
+            elseif boundAxis then
+              love.graphics.setColor(C.green)
+              love.graphics.setFont(getFont(10))
+              love.graphics.print(boundAxis, x + 200, y + 3)
+            else
+              love.graphics.setColor(C.dimText)
+              love.graphics.setFont(getFont(10))
+              love.graphics.print("(none)", x + 200, y + 3)
+            end
 
-            local cycleKey = "remap:" .. ctrl.id .. ":ax:" .. ax
-            local cycleHov = state.hoverItems[cycleKey] ~= nil
-            local cycleRect = drawButton(x + w - 50, y + 1, 44, BTN_H - 4, "Edit", cycleHov, "normal")
-            cycleRect.action = "cycle_axis_action"
-            cycleRect.deviceId = ctrl.id
-            cycleRect.axisName = ax
-            state.itemRects[cycleKey] = cycleRect
+            if not isListening then
+              local remapKey = "remap:" .. ctrl.id .. ":ax:" .. action
+              local remapHov = state.hoverItems[remapKey] ~= nil
+              local remapRect = drawButton(x + w - 58, y + 1, 52, BTN_H - 4, "Remap", remapHov, "normal")
+              remapRect.action = "remap_axis"
+              remapRect.deviceId = ctrl.id
+              remapRect.targetAction = action
+              state.itemRects[remapKey] = remapRect
+            end
 
             y = y + 20
           end
@@ -1062,36 +1120,28 @@ function SystemPanel.mousepressed(x, y, button)
         markDirty()
       elseif rect.action == "set_profile" and gamepadMaps then
         gamepadMaps.setProfile(rect.deviceId, rect.profileId)
-      elseif rect.action == "cycle_button_action" and gamepadMaps then
-        -- Cycle through available actions for this button
-        local actions = gamepadMaps.getActions()
-        local currentAction = gamepadMaps.getButtonAction(rect.deviceId, rect.buttonName)
-        local nextIdx = 1
-        if currentAction then
-          for i, a in ipairs(actions) do
-            if a == currentAction then nextIdx = i + 1; break end
-          end
-        end
-        -- Wrap around, with nil (unbound) as last option
-        if nextIdx > #actions then
-          gamepadMaps.setButtonOverride(rect.deviceId, rect.buttonName, "__none__")
-        else
-          gamepadMaps.setButtonOverride(rect.deviceId, rect.buttonName, actions[nextIdx])
-        end
-      elseif rect.action == "cycle_axis_action" and gamepadMaps then
-        -- Cycle through axis-compatible actions
-        local axisActions = { "navigate_x", "navigate_y", "scroll_x", "scroll_y" }
-        local currentAction = gamepadMaps.getAxisAction(rect.deviceId, rect.axisName)
-        local nextIdx = 1
-        if currentAction then
-          for i, a in ipairs(axisActions) do
-            if a == currentAction then nextIdx = i + 1; break end
-          end
-        end
-        if nextIdx > #axisActions then
-          gamepadMaps.setAxisOverride(rect.deviceId, rect.axisName, "__none__")
-        else
-          gamepadMaps.setAxisOverride(rect.deviceId, rect.axisName, axisActions[nextIdx])
+      elseif rect.action == "remap_button" and gamepadMaps then
+        -- Enter listen mode: wait for user to press a button
+        state.remapListen = {
+          deviceId = rect.deviceId,
+          targetAction = rect.targetAction,
+          inputType = "button",
+          timeout = 5.0,
+        }
+      elseif rect.action == "remap_axis" and gamepadMaps then
+        -- Enter listen mode: wait for user to move an axis
+        state.remapListen = {
+          deviceId = rect.deviceId,
+          targetAction = rect.targetAction,
+          inputType = "axis",
+          timeout = 5.0,
+        }
+      elseif rect.action == "clear_binding" and gamepadMaps then
+        -- Clear a specific override (revert to profile default)
+        if rect.bindingType == "button" then
+          gamepadMaps.setButtonOverride(rect.deviceId, rect.buttonName, nil)
+        elseif rect.bindingType == "axis" then
+          gamepadMaps.setAxisOverride(rect.deviceId, rect.axisName, nil)
         end
       end
       return true
@@ -1158,12 +1208,69 @@ function SystemPanel.update(dt)
     end
   end
 
+  -- Remap listen mode timeout
+  if state.remapListen then
+    state.remapListen.timeout = state.remapListen.timeout - dt
+    if state.remapListen.timeout <= 0 then
+      state.remapListen = nil  -- cancelled by timeout
+    end
+  end
+
   -- Periodic device rescan (every 3 seconds while open)
   state.rescanTimer = state.rescanTimer + dt
   if state.rescanTimer >= 3.0 then
     state.rescanTimer = 0
     scanDevices()
   end
+end
+
+--- Called from init.lua when a gamepad button is pressed while the panel is open.
+--- If in listen mode, captures the button and assigns it to the target action.
+--- @param button string  SDL button name
+--- @param joystickId number
+--- @return boolean  true if consumed
+function SystemPanel.gamepadpressed(button, joystickId)
+  if not state.open then return false end
+
+  -- If in listen mode, capture this button
+  if state.remapListen and state.remapListen.inputType == "button" then
+    local listen = state.remapListen
+    -- Find what action this button currently has and swap it
+    -- First: clear any existing button that has this action
+    -- Then: set this button to the target action
+    if gamepadMaps then
+      gamepadMaps.setButtonOverride(listen.deviceId, button, listen.targetAction)
+    end
+    state.remapListen = nil
+    return true
+  end
+
+  -- Consume all gamepad input while panel is open
+  return true
+end
+
+--- Called from init.lua when a gamepad axis moves while the panel is open.
+--- If in listen mode for an axis, captures it.
+--- @param axis string  SDL axis name
+--- @param value number
+--- @param joystickId number
+--- @return boolean  true if consumed
+function SystemPanel.gamepadaxis(axis, value, joystickId)
+  if not state.open then return false end
+
+  -- If in listen mode for axis, capture when moved past threshold
+  if state.remapListen and state.remapListen.inputType == "axis" then
+    if math.abs(value) > 0.5 then
+      local listen = state.remapListen
+      if gamepadMaps then
+        gamepadMaps.setAxisOverride(listen.deviceId, axis, listen.targetAction)
+      end
+      state.remapListen = nil
+      return true
+    end
+  end
+
+  return true  -- consume while open
 end
 
 -- ============================================================================
