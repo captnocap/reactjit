@@ -71,6 +71,16 @@ interface ConversationRecord {
   messages: Message[];
   systemPrompt: string;
   updatedAt: number;
+  totalTokens?: number;
+}
+
+interface OllamaModelInfo {
+  name: string;
+  size: number;
+  parameter_size?: string;
+  quantization_level?: string;
+  family?: string;
+  format?: string;
 }
 
 // ── Built-in providers ───────────────────────────────────────────────────────
@@ -387,8 +397,16 @@ function LLMStudio() {
       const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
       return sum + content.length;
     }, 0);
-    return Math.round(totalChars / 4); // rough estimate: 4 chars per token
+    return Math.round(totalChars / 4);
   }, [chat.messages]);
+
+  // Per-message token counts (approximate)
+  const messageTokens = useMemo(() =>
+    chat.messages.map(m => {
+      const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+      return Math.round(content.length / 4);
+    }),
+  [chat.messages]);
 
   // ── Conversation management ──────────────────────────
   const persistConversation = useCallback(async (convo: ConversationRecord) => {
@@ -524,6 +542,44 @@ function LLMStudio() {
     setContextFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  // Export all conversations as JSON
+  const exportConversations = useCallback(() => {
+    const data = JSON.stringify({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      conversations: conversations.map(c => ({
+        ...c,
+        messages: c.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+        })),
+      })),
+    }, null, 2);
+    try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', data); } catch {}
+    return data;
+  }, [conversations]);
+
+  // Import conversations from JSON
+  const importConversations = useCallback((jsonStr: string) => {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (!data.conversations || !Array.isArray(data.conversations)) return false;
+      const imported: ConversationRecord[] = data.conversations.map((c: any) => ({
+        id: `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        title: c.title || 'Imported Chat',
+        providerId: c.providerId || activeProviderId,
+        model: c.model || '',
+        messages: c.messages || [],
+        systemPrompt: c.systemPrompt || 'You are a helpful assistant.',
+        updatedAt: Date.now(),
+        totalTokens: c.totalTokens,
+      }));
+      setConversations(prev => [...imported, ...prev]);
+      imported.forEach(c => persistConversation(c));
+      return true;
+    } catch { return false; }
+  }, [activeProviderId, persistConversation]);
+
   // ── Provider management ──────────────────────────────
   const [newPName, setNewPName] = useState('');
   const [newPURL, setNewPURL] = useState('');
@@ -570,6 +626,8 @@ function LLMStudio() {
         onRenameConvo={renameConversation}
         renamingConvoId={renamingConvoId}
         onStartRename={setRenamingConvoId}
+        onExport={exportConversations}
+        onImport={importConversations}
         view={view} onSetView={setView}
         onAddProvider={() => setProviderModalOpen(true)}
       />
@@ -866,9 +924,14 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
         }}>
           {/* Role label + actions */}
           <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4 }}>
-            <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold' }}>
-              {isUser ? 'You' : 'Assistant'}
-            </Text>
+            <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold' }}>
+                {isUser ? 'You' : 'Assistant'}
+              </Text>
+              <Text style={{ fontSize: 8, color: C.textDim }}>
+                {`~${Math.round(content.length / 4)} tokens`}
+              </Text>
+            </Box>
             {hovered && !editing && (
               <Box style={{ flexDirection: 'row', gap: 4 }}>
                 <MsgAction label={copied ? 'Copied' : 'Copy'} color={copied ? C.green : C.textDim} onPress={handleCopy} />
@@ -1046,6 +1109,7 @@ function Sidebar({
   providers, activeProviderId, onSelectProvider,
   conversations, activeConvoId, onSelectConvo, onNewChat, onDeleteConvo,
   onCloneConvo, onPopOutConvo, onRenameConvo, renamingConvoId, onStartRename,
+  onExport, onImport,
   view, onSetView, onAddProvider,
 }: {
   providers: Provider[]; activeProviderId: string; onSelectProvider: (id: string) => void;
@@ -1054,8 +1118,12 @@ function Sidebar({
   onCloneConvo: (id: string) => void; onPopOutConvo: (id: string) => void;
   onRenameConvo: (id: string, title: string) => void;
   renamingConvoId: string | null; onStartRename: (id: string | null) => void;
+  onExport: () => string; onImport: (json: string) => boolean;
   view: View; onSetView: (v: View) => void; onAddProvider: () => void;
 }) {
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importStatus, setImportStatus] = useState('');
   const [search, setSearch] = useState('');
   const filtered = search
     ? conversations.filter(c => c.title.toLowerCase().includes(search.toLowerCase()))
@@ -1171,6 +1239,61 @@ function Sidebar({
           )}
         </Box>
       </ScrollView>
+
+      {/* Export/Import */}
+      <Box style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 4, flexDirection: 'row', gap: 4 }}>
+        <Pressable onPress={() => { onExport(); setImportStatus('Copied to clipboard'); setTimeout(() => setImportStatus(''), 2000); }}>
+          {({ hovered: eh }) => (
+            <Box style={{ flexGrow: 1, padding: 4, borderRadius: 4, alignItems: 'center', backgroundColor: eh ? C.surfaceHover : 'transparent' }}>
+              <Text style={{ fontSize: 9, color: C.textDim }}>Export</Text>
+            </Box>
+          )}
+        </Pressable>
+        <Pressable onPress={() => setImportModalOpen(true)}>
+          {({ hovered: ih }) => (
+            <Box style={{ flexGrow: 1, padding: 4, borderRadius: 4, alignItems: 'center', backgroundColor: ih ? C.surfaceHover : 'transparent' }}>
+              <Text style={{ fontSize: 9, color: C.textDim }}>Import</Text>
+            </Box>
+          )}
+        </Pressable>
+      </Box>
+      {importStatus ? (
+        <Box style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 4 }}>
+          <Text style={{ fontSize: 9, color: C.green, textAlign: 'center' }}>{importStatus}</Text>
+        </Box>
+      ) : null}
+
+      {/* Import modal */}
+      {importModalOpen && (
+        <Modal visible onClose={() => setImportModalOpen(false)}>
+          <Box style={{ width: 450, backgroundColor: C.bgElevated, borderRadius: 12, padding: 20, gap: 12 }}>
+            <Text style={{ fontSize: 16, color: C.text, fontWeight: 'bold' }}>Import Conversations</Text>
+            <Text style={{ fontSize: 11, color: C.textMuted }}>Paste exported JSON below:</Text>
+            <TextInput
+              value={importText} onChangeText={setImportText}
+              multiline placeholder="Paste JSON here..."
+              placeholderColor={C.textDim}
+              style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8, minHeight: 150 }}
+              textStyle={{ color: C.text, fontSize: 11, fontFamily: 'monospace' }}
+            />
+            <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'end' }}>
+              <Btn label="Cancel" color={C.textMuted} bgColor={C.surface} onPress={() => setImportModalOpen(false)} />
+              <Btn label="Import" color="#fff" bgColor={C.accent} onPress={() => {
+                const ok = onImport(importText);
+                if (ok) {
+                  setImportText('');
+                  setImportModalOpen(false);
+                  setImportStatus('Imported successfully');
+                  setTimeout(() => setImportStatus(''), 2000);
+                } else {
+                  setImportStatus('Invalid JSON format');
+                  setTimeout(() => setImportStatus(''), 3000);
+                }
+              }} />
+            </Box>
+          </Box>
+        </Modal>
+      )}
 
       {/* Footer: keyboard shortcuts hint */}
       <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border }}>
@@ -1439,10 +1562,37 @@ function ModelBrowser({
   const [pulling, setPulling] = useState(false);
   const [pullStatus, setPullStatus] = useState('');
 
+  const [modelInfoMap, setModelInfoMap] = useState<Record<string, OllamaModelInfo>>({});
+
   const isOllama = provider.id === 'ollama';
   const filtered = search
     ? models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
     : models;
+
+  // Fetch Ollama model details on mount/refresh
+  useEffect(() => {
+    if (!isOllama || models.length === 0) return;
+    const baseURL = provider.baseURL || 'http://localhost:11434';
+    (async () => {
+      try {
+        const res = await fetch(`${baseURL}/api/tags`, { signal: AbortSignal.timeout(5000) } as any);
+        if (!res.ok) return;
+        const data = await res.json();
+        const infoMap: Record<string, OllamaModelInfo> = {};
+        for (const m of (data.models || [])) {
+          infoMap[m.name || m.model] = {
+            name: m.name || m.model,
+            size: m.size || 0,
+            parameter_size: m.details?.parameter_size,
+            quantization_level: m.details?.quantization_level,
+            family: m.details?.family,
+            format: m.details?.format,
+          };
+        }
+        setModelInfoMap(infoMap);
+      } catch { /* ok */ }
+    })();
+  }, [isOllama, models.length, provider.baseURL]);
 
   const handlePull = useCallback(async () => {
     if (!pullModel.trim() || !isOllama) return;
@@ -1548,7 +1698,10 @@ function ModelBrowser({
       ) : (
         <ScrollView style={{ flexGrow: 1 }}>
           <Box style={{ gap: 4 }}>
-            {filtered.map(m => (
+            {filtered.map(m => {
+              const info = modelInfoMap[m.id] || modelInfoMap[m.name];
+              const sizeGB = info?.size ? `${(info.size / 1e9).toFixed(1)}GB` : '';
+              return (
               <Pressable key={m.id} onPress={() => onSelectModel(m.id)}>
                 {({ hovered }) => (
                   <Box style={{
@@ -1560,7 +1713,29 @@ function ModelBrowser({
                       <Text style={{ fontSize: 13, color: C.text, fontWeight: m.id === activeModel ? 'bold' : 'normal' }}>
                         {m.name}
                       </Text>
-                      <Text style={{ fontSize: 10, color: C.textDim }}>{m.id}</Text>
+                      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, color: C.textDim }}>{m.id}</Text>
+                        {info && (
+                          <>
+                            {info.parameter_size && (
+                              <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: C.accentDim }}>
+                                <Text style={{ fontSize: 8, color: C.accent }}>{info.parameter_size}</Text>
+                              </Box>
+                            )}
+                            {info.quantization_level && (
+                              <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: C.greenDim }}>
+                                <Text style={{ fontSize: 8, color: C.green }}>{info.quantization_level}</Text>
+                              </Box>
+                            )}
+                            {sizeGB && (
+                              <Text style={{ fontSize: 9, color: C.textDim }}>{sizeGB}</Text>
+                            )}
+                            {info.family && (
+                              <Text style={{ fontSize: 9, color: C.textDim }}>{info.family}</Text>
+                            )}
+                          </>
+                        )}
+                      </Box>
                     </Box>
                     <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                       {m.id === activeModel && (
@@ -1584,7 +1759,8 @@ function ModelBrowser({
                   </Box>
                 )}
               </Pressable>
-            ))}
+              );
+            })}
           </Box>
         </ScrollView>
       )}
