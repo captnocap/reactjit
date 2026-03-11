@@ -30,6 +30,19 @@ const C = {
   pink: '#ec4899',
 };
 
+// ── State colors (lifecycle) ─────────────────────────────
+
+const STATE_COLORS: Record<string, string> = {
+  creating: C.yellow,
+  installing: C.peach,
+  ready: C.green,
+  running: C.blue,
+  exited: C.mauve,
+  failed: C.red,
+  rebuilding: C.yellow,
+  missing: '#585b70',
+};
+
 // ── Static code blocks (hoisted — never recreated) ──────
 
 const INSTALL_CODE = `import { useEnvironment, useProcess,
@@ -127,9 +140,188 @@ const HOOKS_LIST = [
   { label: 'useEnvRun', desc: 'One-liner: run command in an env', color: C.peach },
 ];
 
-// ── Live Demo: Environment List ─────────────────────────
+const ENV_STATES = [
+  { label: 'creating', desc: 'venv/conda env being built', key: 'creating' },
+  { label: 'installing', desc: 'packages being installed', key: 'installing' },
+  { label: 'ready', desc: 'activated, can run processes', key: 'ready' },
+  { label: 'rebuilding', desc: 'destroy + recreate in progress', key: 'rebuilding' },
+  { label: 'failed', desc: 'setup error or missing dep', key: 'failed' },
+];
 
-function EnvListDemo() {
+const PROC_STATES = [
+  { label: 'running', desc: 'process alive, PTY attached', key: 'running' },
+  { label: 'exited', desc: 'process finished (exitCode)', key: 'exited' },
+  { label: 'failed', desc: 'spawn error or crash', key: 'failed' },
+];
+
+// ── Type icon map ────────────────────────────────────────
+
+const TYPE_ICONS: Record<string, string> = {
+  python: 'code',
+  node: 'hexagon',
+  conda: 'flask-conical',
+  rust: 'cog',
+  docker: 'box',
+  custom: 'wrench',
+};
+
+// ── Concept Diagram ──────────────────────────────────────
+
+function ConceptDiagram() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 10 }}>
+      {/* Environment box */}
+      <Box style={{
+        borderWidth: 1, borderColor: C.accent, borderRadius: 6,
+        padding: 10, gap: 6,
+      }}>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Box style={{
+            backgroundColor: C.accentDim, borderRadius: 3,
+            paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+          }}>
+            <Text style={{ fontSize: 8, color: C.accent, fontWeight: 'bold' }}>{'ENVIRONMENT'}</Text>
+          </Box>
+          <Text style={{ fontSize: 9, color: c.muted }}>{'= setup context'}</Text>
+        </Box>
+        <Text style={{ fontSize: 9, color: c.text }}>
+          {'Type + packages + env vars + cwd + activation script'}
+        </Text>
+        <Text style={{ fontSize: 8, color: c.muted }}>
+          {'Persists across sessions. Created once, reused forever.'}
+        </Text>
+
+        {/* Process boxes inside */}
+        <Box style={{ flexDirection: 'row', gap: 6, marginTop: 2 }}>
+          <Box style={{
+            flexGrow: 1, borderWidth: 1, borderColor: C.green,
+            borderRadius: 4, padding: 6, gap: 3,
+          }}>
+            <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <Box style={{
+                backgroundColor: 'rgba(166, 227, 161, 0.15)', borderRadius: 3,
+                paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
+              }}>
+                <Text style={{ fontSize: 7, color: C.green, fontWeight: 'bold' }}>{'PROCESS'}</Text>
+              </Box>
+              <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.green }} />
+            </Box>
+            <Text style={{ fontSize: 8, color: c.text }}>{'python train.py'}</Text>
+            <Text style={{ fontSize: 7, color: c.muted }}>{'PTY + stdout + stdin'}</Text>
+          </Box>
+          <Box style={{
+            flexGrow: 1, borderWidth: 1, borderColor: C.blue,
+            borderRadius: 4, padding: 6, gap: 3,
+          }}>
+            <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <Box style={{
+                backgroundColor: 'rgba(137, 180, 250, 0.15)', borderRadius: 3,
+                paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
+              }}>
+                <Text style={{ fontSize: 7, color: C.blue, fontWeight: 'bold' }}>{'PROCESS'}</Text>
+              </Box>
+              <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.mauve }} />
+            </Box>
+            <Text style={{ fontSize: 8, color: c.text }}>{'jupyter notebook'}</Text>
+            <Text style={{ fontSize: 7, color: c.muted }}>{'PTY + stdout + stdin'}</Text>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Arrow: env.run() spawns processes */}
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12 }}>
+        <Image src="arrow-right" style={{ width: 10, height: 10 }} tintColor={c.muted} />
+        <Text style={{ fontSize: 8, color: c.muted }}>
+          {'env.run() spawns processes inside the activated environment'}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── State Lifecycle ──────────────────────────────────────
+
+function StateLifecycle() {
+  const c = useThemeColors();
+  return (
+    <Box style={{ gap: 8 }}>
+      {/* Environment states */}
+      <Box style={{ gap: 4 }}>
+        <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold' }}>{'ENVIRONMENT STATES'}</Text>
+        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          {ENV_STATES.map((s) => (
+            <Box key={s.key} style={{
+              flexDirection: 'row', gap: 4, alignItems: 'center',
+              backgroundColor: c.bg, borderRadius: 4,
+              paddingLeft: 6, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+            }}>
+              <Box style={{
+                width: 7, height: 7, borderRadius: 4,
+                backgroundColor: STATE_COLORS[s.key],
+              }} />
+              <Text style={{ fontSize: 9, color: c.text, fontWeight: 'normal' }}>{s.label}</Text>
+            </Box>
+          ))}
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center', paddingLeft: 2 }}>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.creating }}>{'creating'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'-->'}</Text>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.installing }}>{'installing'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'-->'}</Text>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.ready }}>{'ready'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'|'}</Text>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.failed }}>{'failed'}</Text>
+        </Box>
+      </Box>
+
+      {/* Process states */}
+      <Box style={{ gap: 4 }}>
+        <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold' }}>{'PROCESS STATES'}</Text>
+        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          {PROC_STATES.map((s) => (
+            <Box key={s.key} style={{
+              flexDirection: 'row', gap: 4, alignItems: 'center',
+              backgroundColor: c.bg, borderRadius: 4,
+              paddingLeft: 6, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+            }}>
+              <Box style={{
+                width: 7, height: 7, borderRadius: 4,
+                backgroundColor: STATE_COLORS[s.key],
+              }} />
+              <Text style={{ fontSize: 9, color: c.text, fontWeight: 'normal' }}>{s.label}</Text>
+            </Box>
+          ))}
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center', paddingLeft: 2 }}>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.running }}>{'running'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'-->'}</Text>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.exited }}>{'exited (code)'}</Text>
+          <Text style={{ fontSize: 8, color: c.muted }}>{'|'}</Text>
+          <Text style={{ fontSize: 8, color: STATE_COLORS.failed }}>{'failed'}</Text>
+        </Box>
+      </Box>
+
+      {/* Descriptions */}
+      <Box style={{ gap: 2 }}>
+        {[...ENV_STATES, ...PROC_STATES].map((s) => (
+          <Box key={s.key + '-desc'} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Box style={{
+              width: 5, height: 5, borderRadius: 3,
+              backgroundColor: STATE_COLORS[s.key],
+            }} />
+            <Text style={{ fontSize: 8, color: c.text, width: 65 }}>{s.label}</Text>
+            <Text style={{ fontSize: 8, color: c.muted }}>{s.desc}</Text>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Live Demo: Environment Cards ─────────────────────────
+
+function EnvCardsDemo() {
   const c = useThemeColors();
   const { environments, refresh } = useEnvironments();
   const [refreshing, setRefreshing] = useState(false);
@@ -160,36 +352,90 @@ function EnvListDemo() {
       </Box>
 
       {environments.length === 0 ? (
-        <Box style={{ backgroundColor: c.bg, padding: 8, borderRadius: 4 }}>
+        <Box style={{
+          backgroundColor: c.bg, padding: 12, borderRadius: 6,
+          borderWidth: 1, borderColor: c.border, gap: 4, alignItems: 'center',
+        }}>
+          <Image src="inbox" style={{ width: 20, height: 20 }} tintColor={c.muted} />
           <Text style={{ fontSize: 10, color: c.muted }}>
-            {'No environments yet. Use useEnvironment() to create one.'}
+            {'No environments yet'}
+          </Text>
+          <Text style={{ fontSize: 9, color: c.muted }}>
+            {'useEnvironment(name, config) creates one'}
           </Text>
         </Box>
       ) : (
-        <Box style={{ gap: 4 }}>
-          {environments.map((env) => (
-            <Box key={env.config.name} style={{
-              flexDirection: 'row', gap: 8, alignItems: 'center',
-              backgroundColor: c.bg, padding: 6, borderRadius: 4,
-            }}>
-              <Box style={{
-                width: 6, height: 6, borderRadius: 3,
-                backgroundColor: env.ready ? C.green : C.yellow,
-              }} />
-              <Text style={{ fontSize: 10, color: c.text, fontWeight: 'normal', width: 100 }}>
-                {env.config.name}
-              </Text>
-              <Text style={{ fontSize: 10, color: C.accent }}>
-                {env.config.type}
-              </Text>
-              <Text style={{ fontSize: 10, color: c.muted }}>
-                {env.ready ? 'ready' : 'installing...'}
-              </Text>
-              {env.path ? (
-                <Text style={{ fontSize: 9, color: c.muted }}>{env.path}</Text>
-              ) : null}
-            </Box>
-          ))}
+        <Box style={{ gap: 6 }}>
+          {environments.map((env) => {
+            const cfg = env.config;
+            const typeColor = ENV_TYPES.find((t) => t.label === cfg.type)?.color || C.accent;
+            const statusColor = env.ready ? STATE_COLORS.ready :
+              env.installing ? STATE_COLORS.installing : STATE_COLORS.creating;
+            const statusLabel = env.ready ? 'ready' :
+              env.installing ? 'installing' : 'creating';
+            const pkgCount = cfg.packages?.length || 0;
+            const icon = TYPE_ICONS[cfg.type] || 'package';
+
+            return (
+              <Box key={cfg.name} style={{
+                backgroundColor: c.bg, borderRadius: 6,
+                borderWidth: 1, borderColor: c.border,
+                padding: 10, gap: 6,
+              }}>
+                {/* Card header: name + type badge + status */}
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Image src={icon} style={{ width: 14, height: 14 }} tintColor={typeColor} />
+                  <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>
+                    {cfg.name}
+                  </Text>
+                  <Box style={{
+                    backgroundColor: typeColor + '20', borderRadius: 3,
+                    paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
+                  }}>
+                    <Text style={{ fontSize: 8, color: typeColor, fontWeight: 'bold' }}>
+                      {cfg.type.toUpperCase()}
+                    </Text>
+                  </Box>
+                  <Box style={{ flexGrow: 1 }} />
+                  <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                    <Box style={{
+                      width: 6, height: 6, borderRadius: 3,
+                      backgroundColor: statusColor,
+                    }} />
+                    <Text style={{ fontSize: 9, color: statusColor }}>{statusLabel}</Text>
+                  </Box>
+                </Box>
+
+                {/* Card details: cwd, packages, path */}
+                <Box style={{ gap: 3 }}>
+                  {cfg.cwd ? (
+                    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="folder" style={{ width: 9, height: 9 }} tintColor={c.muted} />
+                      <Text style={{ fontSize: 9, color: c.muted }}>{cfg.cwd}</Text>
+                    </Box>
+                  ) : null}
+                  {pkgCount > 0 ? (
+                    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="package" style={{ width: 9, height: 9 }} tintColor={c.muted} />
+                      <Text style={{ fontSize: 9, color: c.muted }}>
+                        {`${pkgCount} package${pkgCount !== 1 ? 's' : ''}`}
+                      </Text>
+                      <Text style={{ fontSize: 8, color: c.muted }}>
+                        {(cfg.packages || []).slice(0, 5).join(', ')}
+                        {pkgCount > 5 ? ` +${pkgCount - 5} more` : ''}
+                      </Text>
+                    </Box>
+                  ) : null}
+                  {env.path ? (
+                    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <Image src="hard-drive" style={{ width: 9, height: 9 }} tintColor={c.muted} />
+                      <Text style={{ fontSize: 8, color: c.muted }}>{env.path}</Text>
+                    </Box>
+                  ) : null}
+                </Box>
+              </Box>
+            );
+          })}
         </Box>
       )}
     </>
@@ -211,6 +457,14 @@ function QuickRunDemo() {
     proc.start();
   }, [proc]);
 
+  const statusColor = !started ? c.muted :
+    proc.running ? STATE_COLORS.running :
+    proc.exitCode === 0 ? STATE_COLORS.exited : STATE_COLORS.failed;
+  const statusLabel = !started ? 'idle' :
+    proc.running ? 'running' :
+    proc.exitCode === 0 ? 'exited (0)' :
+    proc.exitCode !== null ? `failed (${proc.exitCode})` : 'spawning';
+
   return (
     <>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -229,19 +483,19 @@ function QuickRunDemo() {
             </Text>
           </Box>
         </Pressable>
+        {/* Status indicator */}
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
+          <Text style={{ fontSize: 8, color: statusColor }}>{statusLabel}</Text>
+        </Box>
       </Box>
 
       {started && (
-        <Box style={{ backgroundColor: c.bg, padding: 6, borderRadius: 4, gap: 2 }}>
-          <Text style={{ fontSize: 9, color: c.muted }}>{'stdout:'}</Text>
+        <Box style={{ backgroundColor: c.bg, padding: 8, borderRadius: 4, gap: 3 }}>
+          <Text style={{ fontSize: 8, color: c.muted, fontWeight: 'bold' }}>{'STDOUT'}</Text>
           <Text style={{ fontSize: 10, color: C.green }}>
             {proc.state.stdout || '(waiting...)'}
           </Text>
-          {proc.exitCode !== null && (
-            <Text style={{ fontSize: 9, color: proc.exitCode === 0 ? C.green : C.red }}>
-              {`exit code: ${proc.exitCode}`}
-            </Text>
-          )}
         </Box>
       )}
     </>
@@ -328,12 +582,32 @@ export function EnvironmentsStory() {
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
-            {'Attach any process to your app. Python, Node, Rust, Docker — one hook.'}
+            {'Declare an environment. Run a process. Attach I/O. Persist the config.'}
           </Text>
           <Text style={{ color: c.muted, fontSize: 10 }}>
-            {'Create isolated environments with package lists, run processes inside them with full PTY I/O, and persist configs across sessions. Environments are stored in ~/.reactjit/environments/.'}
+            {'React declares the operational domain. Lua owns the ugly reality: venv activation, PTY lifecycle, package installation, process signals. The environment is the setup context. The process is the running command inside it.'}
           </Text>
         </HeroBand>
+
+        <Divider />
+
+        {/* ── CONCEPT: Environment vs Process ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="git-branch" accentColor={C.accent}>{'CONCEPT'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Two distinct abstractions. An environment is a stored config — type, packages, env vars, activation script. A process is a running command inside that context. One env spawns many processes.'}
+            </Text>
+            <ConceptDiagram />
+          </Half>
+          <Half>
+            <SectionLabel icon="activity" accentColor={C.accent}>{'STATE LIFECYCLE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Both environments and processes have explicit state machines. The current state is always visible — no silent transitions, no mystery waiting.'}
+            </Text>
+            <StateLifecycle />
+          </Half>
+        </Band>
 
         <Divider />
 
@@ -408,11 +682,11 @@ export function EnvironmentsStory() {
 
         <Divider />
 
-        {/* ── Live demo: env list ── */}
+        {/* ── Live demo: env cards + quick run ── */}
         <Band>
           <Half>
-            <SectionLabel icon="list" accentColor={C.accent}>{'LIVE: STORED ENVS'}</SectionLabel>
-            <EnvListDemo />
+            <SectionLabel icon="database" accentColor={C.accent}>{'LIVE: STORED ENVIRONMENTS'}</SectionLabel>
+            <EnvCardsDemo />
           </Half>
           <Half>
             <SectionLabel icon="play" accentColor={C.green}>{'LIVE: QUICK RUN'}</SectionLabel>
@@ -487,6 +761,16 @@ export function EnvironmentsStory() {
           </Half>
           <CodeBlock language="tsx" fontSize={9} code={MANAGE_CODE} />
         </Band>
+
+        <Divider />
+
+        {/* ── Scope callout ── */}
+        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
+          <Image src="shield" style={{ width: 12, height: 12 }} tintColor={C.calloutBorder} />
+          <Text style={{ color: c.text, fontSize: 10 }}>
+            {'Scope: declare env, run process, attach I/O, persist config. This is not a task runner, CI system, or orchestrator. It is a substrate for connecting existing toolchains to a reactive surface.'}
+          </Text>
+        </CalloutBand>
 
       </ScrollView>
 
