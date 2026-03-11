@@ -72,6 +72,19 @@ const PROVIDER_COLORS: Record<string, string> = {
   perplexity: '#22B8CD',
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function relativeTime(ts: number): string {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'yesterday' : `${d}d ago`;
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface Provider {
@@ -91,10 +104,13 @@ interface ConversationRecord {
   model: string;
   messages: Message[];
   systemPrompt: string;
+  createdAt: number;
   updatedAt: number;
   totalTokens?: number;
   tags?: string[];
   pinned?: boolean;
+  parentId?: string;       // forked from this conversation
+  branchPoint?: number;    // message index where branch occurred
 }
 
 interface OllamaModelInfo {
@@ -480,9 +496,10 @@ function LLMStudio() {
 
   const newConversation = useCallback(() => {
     const id = `conv_${Date.now().toString(36)}`;
+    const now = Date.now();
     const convo: ConversationRecord = {
       id, title: 'New Chat', providerId: activeProviderId,
-      model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
+      model: effectiveModel, messages: [], systemPrompt, createdAt: now, updatedAt: now,
     };
     setConversations(prev => [convo, ...prev]);
     setActiveConvoId(id);
@@ -533,8 +550,10 @@ function LLMStudio() {
     const source = conversations.find(c => c.id === id);
     if (!source) return;
     const newId = `conv_${Date.now().toString(36)}`;
+    const now = Date.now();
     const clone: ConversationRecord = {
-      ...source, id: newId, title: `${source.title} (copy)`, updatedAt: Date.now(),
+      ...source, id: newId, title: `${source.title} (copy)`,
+      createdAt: now, updatedAt: now, parentId: source.id,
       messages: [...source.messages],
     };
     setConversations(prev => [clone, ...prev]);
@@ -550,10 +569,12 @@ function LLMStudio() {
     if (!source) return;
     const newId = `conv_${Date.now().toString(36)}`;
     const branchedMessages = chat.messages.slice(0, fromIndex + 1);
+    const now = Date.now();
     const branch: ConversationRecord = {
       ...source, id: newId,
       title: `${source.title} (branch @${fromIndex + 1})`,
-      messages: branchedMessages, updatedAt: Date.now(),
+      messages: branchedMessages, createdAt: now, updatedAt: now,
+      parentId: activeConvoId, branchPoint: fromIndex,
     };
     setConversations(prev => [branch, ...prev]);
     setActiveConvoId(newId);
@@ -833,9 +854,10 @@ function LLMStudio() {
 
                           if (!activeConvoId) {
                             const id = `conv_${Date.now().toString(36)}`;
+                            const now = Date.now();
                             const convo: ConversationRecord = {
                               id, title: 'New Chat', providerId: activeProviderId,
-                              model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
+                              model: effectiveModel, messages: [], systemPrompt, createdAt: now, updatedAt: now,
                             };
                             setConversations(prev => [convo, ...prev]);
                             setActiveConvoId(id);
@@ -1396,8 +1418,17 @@ function Sidebar({
                           </Text>
                         </Box>
                       )}
-                      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                         <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
+                        <Text style={{ fontSize: 9, color: C.textDim }}>{relativeTime(convo.updatedAt)}</Text>
+                        {convo.messages.length > 0 && (
+                          <Text style={{ fontSize: 9, color: C.textDim }}>{`${convo.messages.length} msgs`}</Text>
+                        )}
+                        {convo.parentId && (
+                          <Box style={{ paddingLeft: 3, paddingRight: 3, borderRadius: 3, backgroundColor: C.greenDim }}>
+                            <Text style={{ fontSize: 8, color: C.green }}>fork</Text>
+                          </Box>
+                        )}
                         {convo.tags && convo.tags.map(t => (
                           <Box key={t} style={{
                             paddingLeft: 4, paddingRight: 4, paddingTop: 0, paddingBottom: 0,
