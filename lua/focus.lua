@@ -58,6 +58,9 @@ local focusGroups = {}          -- { [nodeId] = group }
 -- Per-joystick stick state for multi-controller
 local stickStates = {}          -- { [joystickId] = { x, y, repeat = { dir, timer } } }
 
+-- Single active group — shoulder buttons cycle this
+local activeGroup = nil              -- nil = default group is active
+
 -- ============================================================================
 -- Init
 -- ============================================================================
@@ -449,10 +452,8 @@ end
 
 --- Get the focused node for a specific controller.
 function Focus.getForController(joystickId)
-  local groups = Focus.getGroupsForController(joystickId)
-  for _, group in ipairs(groups) do
-    if group.focusedNode then return group.focusedNode end
-  end
+  local group = activeGroup or defaultGroup
+  if group.focusedNode then return group.focusedNode end
   return nil
 end
 
@@ -476,35 +477,23 @@ end
 -- Navigation
 -- ============================================================================
 
---- Spatial navigation within the correct group(s) for a controller.
+--- Spatial navigation within the active group only.
 function Focus.navigate(direction, joystickId)
-  Log.log("focus", "navigate direction=%s joystick=%s", tostring(direction), tostring(joystickId or "default"))
-  local groups
-  if joystickId then
-    groups = Focus.getGroupsForController(joystickId)
-  else
-    groups = { defaultGroup }
-  end
+  -- Use the active group, or default if none set
+  local group = activeGroup or defaultGroup
+  if #group.focusableNodes == 0 then return end
 
-  for _, group in ipairs(groups) do
-    if #group.focusableNodes > 0 then
-      local oldNode = group.focusedNode
-      if not group.focusedNode then
-        group.focusedNode = group.focusableNodes[1]
-        scrollIntoView(group.focusedNode)
-        emitFocusChange(oldNode, group.focusedNode)
-        Log.log("focus", "  initial focus -> id=%s", tostring(group.focusedNode.id))
-      else
-        local best = spatialNavigate(group.focusedNode, group.focusableNodes, direction)
-        if best then
-          group.focusedNode = best
-          scrollIntoView(best)
-          emitFocusChange(oldNode, best)
-          Log.log("focus", "  navigated %s -> id=%s", direction, tostring(best.id))
-        else
-          Log.log("focus", "  navigate %s: no target found", direction)
-        end
-      end
+  local oldNode = group.focusedNode
+  if not group.focusedNode then
+    group.focusedNode = group.focusableNodes[1]
+    scrollIntoView(group.focusedNode)
+    emitFocusChange(oldNode, group.focusedNode)
+  else
+    local best = spatialNavigate(group.focusedNode, group.focusableNodes, direction)
+    if best then
+      group.focusedNode = best
+      scrollIntoView(best)
+      emitFocusChange(oldNode, best)
     end
   end
 end
@@ -552,24 +541,78 @@ function Focus.navigateSequential(direction, joystickId)
   end
 end
 
+--- Build a sorted list of all groups (defaultGroup + focusGroups by position).
+local function buildGroupList()
+  local allGroups = {}
+  if #defaultGroup.focusableNodes > 0 then
+    table.insert(allGroups, defaultGroup)
+  end
+  local sorted = {}
+  for id, group in pairs(focusGroups) do
+    if #group.focusableNodes > 0 then
+      table.insert(sorted, { id = id, group = group })
+    end
+  end
+  table.sort(sorted, function(a, b)
+    local ay = a.group.node and a.group.node.computed and a.group.node.computed.y or 0
+    local ax = a.group.node and a.group.node.computed and a.group.node.computed.x or 0
+    local by = b.group.node and b.group.node.computed and b.group.node.computed.y or 0
+    local bx = b.group.node and b.group.node.computed and b.group.node.computed.x or 0
+    if ay ~= by then return ay < by end
+    return ax < bx
+  end)
+  for _, entry in ipairs(sorted) do
+    table.insert(allGroups, entry.group)
+  end
+  return allGroups
+end
+
+--- Cycle focus to the next/prev group. One group active at a time, one ring.
+--- direction: "next" (right shoulder) or "prev" (left shoulder)
+function Focus.cycleGroup(direction)
+  local allGroups = buildGroupList()
+  if #allGroups < 2 then return end
+
+  -- Find current index
+  local currentIdx = nil
+  for i, g in ipairs(allGroups) do
+    if g == (activeGroup or defaultGroup) then currentIdx = i; break end
+  end
+
+  local nextIdx
+  if not currentIdx then
+    nextIdx = (direction == "next") and 1 or #allGroups
+  elseif direction == "next" then
+    nextIdx = (currentIdx % #allGroups) + 1
+  else
+    nextIdx = ((currentIdx - 2) % #allGroups) + 1
+  end
+
+  activeGroup = allGroups[nextIdx]
+
+  -- Focus first node or restore previous
+  if not activeGroup.focusedNode and #activeGroup.focusableNodes > 0 then
+    activeGroup.focusedNode = activeGroup.focusableNodes[1]
+  end
+  if activeGroup.focusedNode then
+    scrollIntoView(activeGroup.focusedNode)
+  end
+end
+
 -- ============================================================================
 -- All focused nodes (for rendering multiple focus rings)
 -- ============================================================================
 
---- Get all focused nodes across all groups with their ring colors.
+--- Only the active group's focused node gets a ring.
 function Focus.getAllFocused()
   local result = {}
-  if defaultGroup.focusedNode then
-    table.insert(result, { node = defaultGroup.focusedNode, ringColor = defaultGroup.ringColor })
-  end
-  for _, group in pairs(focusGroups) do
-    if group.focusedNode then
-      local color = group.ringColor
-      if not color and group.controller then
-        color = PLAYER_COLORS[((group.controller - 1) % 4) + 1]
-      end
-      table.insert(result, { node = group.focusedNode, ringColor = color })
+  local group = activeGroup or defaultGroup
+  if group.focusedNode then
+    local color = group.ringColor
+    if not color and group.controller then
+      color = PLAYER_COLORS[((group.controller - 1) % 4) + 1]
     end
+    table.insert(result, { node = group.focusedNode, ringColor = color })
   end
   return result
 end
@@ -617,31 +660,26 @@ function Focus.updateRings(dt)
   end
 end
 
---- Get all animated ring rects for rendering.
+--- Get animated ring rect for the active group only.
 --- Returns { { x, y, w, h, ringColor, borderRadius }, ... }
 function Focus.getAllRings()
   local result = {}
-  local function addRing(group, color)
-    if group.ring and group.focusedNode then
-      local s = group.focusedNode.style or {}
-      local radius = s.borderRadius or 0
-      table.insert(result, {
-        x = group.ring.x,
-        y = group.ring.y,
-        w = group.ring.w,
-        h = group.ring.h,
-        ringColor = color,
-        borderRadius = radius + 3,  -- offset matches ring offset
-      })
-    end
-  end
-  addRing(defaultGroup, defaultGroup.ringColor)
-  for _, group in pairs(focusGroups) do
+  local group = activeGroup or defaultGroup
+  if group.ring and group.focusedNode then
+    local s = group.focusedNode.style or {}
+    local radius = s.borderRadius or 0
     local color = group.ringColor
     if not color and group.controller then
       color = PLAYER_COLORS[((group.controller - 1) % 4) + 1]
     end
-    addRing(group, color)
+    table.insert(result, {
+      x = group.ring.x,
+      y = group.ring.y,
+      w = group.ring.w,
+      h = group.ring.h,
+      ringColor = color,
+      borderRadius = radius + 3,
+    })
   end
   return result
 end

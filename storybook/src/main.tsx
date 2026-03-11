@@ -448,7 +448,7 @@ function StorybookPanel() {
           </Box>
         )
       ) : (
-        <Box style={{
+        <Box focusGroup style={{
           width: sidebarW,
           backgroundColor: c.bgAlt,
           borderWidth: 1,
@@ -461,7 +461,7 @@ function StorybookPanel() {
       )}
 
       {/* Content */}
-      <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
+      <Box focusGroup focusable style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'scroll' }}>
         <ScaleProvider reference={{ width: 800, height: 600 }} curve={scaleCurve} insetWidth={compact ? 0 : sidebarW}>
           {StoryComp && <StoryComp key={active.id} />}
         </ScaleProvider>
@@ -508,7 +508,7 @@ function Storybook() {
   return (
     <Box style={{ width: '100%', height: '100%' }}>
       {/* Mode toggle bar */}
-      <Box style={{
+      <Box focusGroup style={{
         flexDirection: 'row',
         backgroundColor: c.bgAlt,
         borderWidth: 1,

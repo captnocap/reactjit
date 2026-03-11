@@ -56,6 +56,7 @@ export function initEventDispatching(bridge: Subscribable): void {
   // ── Mouse events (bubbling) ──────────────────────────────
 
   bridge.subscribe('click', (event: LoveEvent) => {
+    console.log('[EVENT] click received targetId=' + event.targetId + ' bubblePath=' + JSON.stringify(event.bubblePath));
     dispatchWithBubbling(event, 'onClick');
   });
 
@@ -488,6 +489,7 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
       enrichedEvent.currentTarget = nodeId;
 
       const handlers = handlerRegistry.get(nodeId);
+      console.log('[EVENT] bubble nodeId=' + nodeId + ' hasHandlers=' + !!handlers + ' hasTarget=' + !!(handlers && handlers[handlerName]));
       if (!handlers) continue;
 
       const handler = handlers[handlerName];
