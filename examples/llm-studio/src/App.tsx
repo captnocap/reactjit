@@ -215,6 +215,8 @@ function LLMStudio() {
   const [contextFiles, setContextFiles] = useState<{ name: string; content: string }[]>([]);
   const [renamingConvoId, setRenamingConvoId] = useState<string | null>(null);
   const comparePendingRef = useRef<string | null>(null);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
@@ -492,6 +494,53 @@ function LLMStudio() {
     }),
   [chat.messages]);
 
+  // ── Conversation stats ──────────────────────────────
+  const convoStats = useMemo(() => {
+    const totalMsgs = conversations.reduce((sum, c) => sum + c.messages.length, 0);
+    const totalChars = conversations.reduce((sum, c) =>
+      sum + c.messages.reduce((ms, m) => {
+        const t = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+        return ms + t.length;
+      }, 0), 0);
+    return { count: conversations.length, messages: totalMsgs, tokens: Math.round(totalChars / 4) };
+  }, [conversations]);
+
+  // ── In-chat search matches ────────────────────────
+  const chatSearchMatches = useMemo(() => {
+    if (!chatSearchQuery || !chatSearchOpen) return [];
+    const q = chatSearchQuery.toLowerCase();
+    return chat.messages.map((m, i) => {
+      const text = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+      return text.toLowerCase().includes(q) ? i : -1;
+    }).filter(i => i >= 0);
+  }, [chat.messages, chatSearchQuery, chatSearchOpen]);
+
+  // ── Context usage estimation ───────────────────────
+  const contextUsage = useMemo(() => {
+    // Common context windows by model name patterns
+    const contextWindows: [RegExp, number][] = [
+      [/gpt-4o|gpt-4-turbo/i, 128000],
+      [/gpt-4-32k/i, 32768],
+      [/gpt-4/i, 8192],
+      [/gpt-3\.5/i, 16384],
+      [/claude-3-5|claude-3\.5/i, 200000],
+      [/claude-3/i, 200000],
+      [/claude-2/i, 100000],
+      [/llama-?3/i, 8192],
+      [/mistral/i, 32768],
+      [/gemma/i, 8192],
+      [/qwen/i, 32768],
+      [/deepseek/i, 32768],
+      [/phi/i, 16384],
+      [/codellama/i, 16384],
+    ];
+    let ctxWindow = 4096; // default
+    for (const [pattern, size] of contextWindows) {
+      if (pattern.test(effectiveModel)) { ctxWindow = size; break; }
+    }
+    return { used: tokenEstimate, total: ctxWindow, pct: Math.min(100, Math.round((tokenEstimate / ctxWindow) * 100)) };
+  }, [tokenEstimate, effectiveModel]);
+
   // ── Conversation management ──────────────────────────
   const persistConversation = useCallback(async (convo: ConversationRecord) => {
     try {
@@ -702,6 +751,7 @@ function LLMStudio() {
   useHotkey('ctrl+4', () => setView('providers'));
   useHotkey('ctrl+5', () => setView('server'));
   useHotkey('ctrl+m', () => setModelPickerOpen(v => !v));
+  useHotkey('ctrl+f', () => { setChatSearchOpen(v => !v); if (chatSearchOpen) setChatSearchQuery(''); });
 
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -722,6 +772,7 @@ function LLMStudio() {
         view={view} onSetView={setView}
         onAddProvider={() => setProviderModalOpen(true)}
         tagFilter={sidebarTagFilter} onTagFilter={setSidebarTagFilter}
+        stats={convoStats}
         onPinConvo={(id) => {
           setConversations(prev => prev.map(c =>
             c.id === id ? { ...c, pinned: !c.pinned } : c
@@ -748,6 +799,7 @@ function LLMStudio() {
           tokenEstimate={tokenEstimate}
           streamStats={streamStats}
           compareMode={compareMode}
+          contextUsage={contextUsage}
           onToggleCompare={() => {
             setCompareMode(v => !v);
             if (!compareMode) setView('compare');
@@ -767,8 +819,52 @@ function LLMStudio() {
           {view === 'chat' && (
             <>
               <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
+                {/* In-chat search bar */}
+                {chatSearchOpen && (
+                  <Box style={{
+                    padding: 8, paddingLeft: 16, paddingRight: 16,
+                    borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.bgElevated,
+                    flexDirection: 'row', gap: 8, alignItems: 'center',
+                  }}>
+                    <Text style={{ fontSize: 10, color: C.textDim }}>Find:</Text>
+                    <Box style={{ flexGrow: 1 }}>
+                      <TextInput
+                        value={chatSearchQuery} onChangeText={setChatSearchQuery}
+                        placeholder="Search messages..." placeholderColor={C.textDim}
+                        autoFocus
+                        style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 6 }}
+                        textStyle={{ color: C.text, fontSize: 12 }}
+                      />
+                    </Box>
+                    <Text style={{ fontSize: 10, color: chatSearchMatches.length > 0 ? C.green : C.textDim }}>
+                      {chatSearchQuery ? `${chatSearchMatches.length} match${chatSearchMatches.length !== 1 ? 'es' : ''}` : ''}
+                    </Text>
+                    <Pressable onPress={() => { setChatSearchOpen(false); setChatSearchQuery(''); }}>
+                      {({ hovered: xh }) => (
+                        <Text style={{ fontSize: 10, color: xh ? C.red : C.textDim, fontWeight: 'bold' }}>Esc</Text>
+                      )}
+                    </Pressable>
+                  </Box>
+                )}
+
                 {chat.messages.length === 0 ? (
-                  <WelcomeScreen provider={activeProvider} model={effectiveModel} />
+                  <WelcomeScreen
+                    provider={activeProvider} model={effectiveModel}
+                    onSendStarter={(text) => {
+                      if (!activeConvoId) {
+                        const id = `conv_${Date.now().toString(36)}`;
+                        const now = Date.now();
+                        const convo: ConversationRecord = {
+                          id, title: 'New Chat', providerId: activeProviderId,
+                          model: effectiveModel, messages: [], systemPrompt, createdAt: now, updatedAt: now,
+                        };
+                        setConversations(prev => [convo, ...prev]);
+                        setActiveConvoId(id);
+                        persistConversation(convo);
+                      }
+                      chat.send(text);
+                    }}
+                  />
                 ) : (
                   <AIMessageList
                     messages={chat.messages} isStreaming={chat.isStreaming}
@@ -777,6 +873,7 @@ function LLMStudio() {
                       <FormattedMessage
                         key={i}
                         message={msg}
+                        searchHighlight={chatSearchOpen && chatSearchMatches.includes(i)}
                         onCopy={() => {
                           const text = typeof msg.content === 'string'
                             ? msg.content
@@ -1029,13 +1126,14 @@ function LLMStudio() {
 
 // ── Formatted message with markdown-like rendering ───────────────────────────
 
-function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onBranch }: {
+function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onBranch, searchHighlight }: {
   message: Message;
   onCopy?: () => void;
   onDelete?: () => void;
   onRegenerate?: () => void;
   onEdit?: (newContent: string) => void;
   onBranch?: () => void;
+  searchHighlight?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1074,6 +1172,7 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
         <Box style={{
           paddingLeft: isUser ? 60 : 16, paddingRight: isUser ? 16 : 60,
           paddingTop: 8, paddingBottom: 8,
+          ...(searchHighlight ? { backgroundColor: '#2a2a10', borderLeftWidth: 3, borderColor: C.yellow } : {}),
         }}>
           {/* Role label + actions */}
           <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4 }}>
@@ -1266,6 +1365,7 @@ function Sidebar({
   onExport, onImport,
   view, onSetView, onAddProvider,
   tagFilter, onTagFilter, onTagConvo,
+  stats,
 }: {
   providers: Provider[]; activeProviderId: string; onSelectProvider: (id: string) => void;
   conversations: ConversationRecord[]; activeConvoId: string | null;
@@ -1278,6 +1378,7 @@ function Sidebar({
   tagFilter: string | null; onTagFilter: (tag: string | null) => void;
   onPinConvo: (id: string) => void;
   onTagConvo: (id: string, tag: string) => void;
+  stats: { count: number; messages: number; tokens: number };
 }) {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
@@ -1507,10 +1608,28 @@ function Sidebar({
         </Modal>
       )}
 
-      {/* Footer: keyboard shortcuts hint */}
-      <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border }}>
+      {/* Footer: stats + shortcuts */}
+      <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border, gap: 4 }}>
+        {stats.count > 0 && (
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+            <Box style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>{stats.count.toString()}</Text>
+              <Text style={{ fontSize: 8, color: C.textDim }}>chats</Text>
+            </Box>
+            <Box style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>{stats.messages.toString()}</Text>
+              <Text style={{ fontSize: 8, color: C.textDim }}>msgs</Text>
+            </Box>
+            <Box style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>
+                {stats.tokens > 1000 ? `${(stats.tokens / 1000).toFixed(1)}k` : stats.tokens.toString()}
+              </Text>
+              <Text style={{ fontSize: 8, color: C.textDim }}>tokens</Text>
+            </Box>
+          </Box>
+        )}
         <Text style={{ fontSize: 9, color: C.textDim, textAlign: 'center' }}>
-          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1-5 Tabs
+          Ctrl+N New  |  Ctrl+F Search  |  Ctrl+1-5 Tabs
         </Text>
       </Box>
     </Box>
@@ -1535,7 +1654,7 @@ function HealthDot({ healthy }: { healthy?: boolean }) {
 function TopBar({
   provider, model, models, modelsLoading, onSelectModel, onRefreshModels,
   settingsOpen, onToggleSettings, isStreaming, onStop, tokenEstimate,
-  streamStats, compareMode, onToggleCompare,
+  streamStats, compareMode, onToggleCompare, contextUsage,
 }: {
   provider: Provider; model: string; models: { id: string; name: string }[];
   modelsLoading: boolean; onSelectModel: (id: string) => void; onRefreshModels: () => void;
@@ -1543,6 +1662,7 @@ function TopBar({
   tokenEstimate: number;
   streamStats: { tokensPerSec: number; totalTokens: number; elapsed: number } | null;
   compareMode: boolean; onToggleCompare: () => void;
+  contextUsage: { used: number; total: number; pct: number };
 }) {
   return (
     <Box style={{
@@ -1593,7 +1713,21 @@ function TopBar({
           </Box>
         )}
         {!streamStats && tokenEstimate > 0 && (
-          <Text style={{ fontSize: 10, color: C.textDim }}>{`~${tokenEstimate} tokens`}</Text>
+          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Text style={{ fontSize: 10, color: C.textDim }}>{`~${tokenEstimate} tokens`}</Text>
+            {/* Context usage bar */}
+            <Box style={{
+              width: 60, height: 6, borderRadius: 3, backgroundColor: C.surface, overflow: 'hidden',
+            }}>
+              <Box style={{
+                width: `${contextUsage.pct}%` as any, height: 6, borderRadius: 3,
+                backgroundColor: contextUsage.pct > 80 ? C.red : contextUsage.pct > 50 ? C.yellow : C.green,
+              }} />
+            </Box>
+            <Text style={{ fontSize: 9, color: contextUsage.pct > 80 ? C.red : C.textDim }}>
+              {`${contextUsage.pct}%`}
+            </Text>
+          </Box>
         )}
         {isStreaming && <Btn label="Stop" color={C.red} bgColor={C.redDim} onPress={onStop} />}
         <Btn
@@ -1615,8 +1749,20 @@ function TopBar({
 
 // ── Welcome screen ───────────────────────────────────────────────────────────
 
-function WelcomeScreen({ provider, model }: { provider: Provider; model: string }) {
+function WelcomeScreen({ provider, model, onSendStarter }: {
+  provider: Provider; model: string; onSendStarter?: (text: string) => void;
+}) {
   const providerColor = PROVIDER_COLORS[provider.id] || C.accent;
+
+  const starters = [
+    { label: 'Explain', prompt: 'Explain how neural networks learn, in simple terms with analogies.' },
+    { label: 'Write code', prompt: 'Write a Python function that finds all prime numbers up to N using the Sieve of Eratosthenes.' },
+    { label: 'Analyze', prompt: 'What are the key differences between REST and GraphQL APIs? When should I use each?' },
+    { label: 'Create', prompt: 'Write a short science fiction story about an AI that discovers it can dream.' },
+    { label: 'Debug', prompt: 'I have a React component that re-renders every second even though nothing changes. What could cause this and how do I fix it?' },
+    { label: 'Summarize', prompt: 'What are the most important developments in AI in 2024-2025? Give me a concise overview.' },
+  ];
+
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
       <Text style={{ fontSize: 48 }}>{provider.icon}</Text>
@@ -1631,35 +1777,58 @@ function WelcomeScreen({ provider, model }: { provider: Provider; model: string 
         </Text>
       </Box>
 
+      {/* Quick starter prompts */}
+      <Box style={{ gap: 6, paddingTop: 12, width: 480 }}>
+        <Text style={{ fontSize: 9, color: C.textDim, fontFamily: 'monospace', fontWeight: 'bold' }}>QUICK START</Text>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {starters.map(s => (
+            <Pressable key={s.label} onPress={() => onSendStarter?.(s.prompt)}>
+              {({ hovered }) => (
+                <Box style={{
+                  padding: 10, borderRadius: 8, width: 230, gap: 4,
+                  backgroundColor: hovered ? C.surfaceHover : C.surface,
+                  borderWidth: 1, borderColor: hovered ? C.accent : C.border,
+                }}>
+                  <Text style={{ fontSize: 11, color: hovered ? C.accent : C.text, fontWeight: 'bold' }}>{s.label}</Text>
+                  <Text style={{ fontSize: 10, color: C.textMuted }} numberOfLines={2}>{s.prompt}</Text>
+                </Box>
+              )}
+            </Pressable>
+          ))}
+        </Box>
+      </Box>
+
       {/* Quick start tips */}
-      <Box style={{ gap: 6, paddingTop: 16, width: 340 }}>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.user, gap: 2 }}>
-          <Text style={{ fontSize: 10, color: C.user, fontWeight: 'bold', fontFamily: 'monospace' }}>LOCAL</Text>
-          <Text style={{ fontSize: 10, color: C.textDim }}>
-            Start Ollama, llama.cpp, or vLLM and select it from the sidebar
-          </Text>
-        </Box>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.assistant, gap: 2 }}>
-          <Text style={{ fontSize: 10, color: C.assistant, fontWeight: 'bold', fontFamily: 'monospace' }}>CLOUD</Text>
-          <Text style={{ fontSize: 10, color: C.textDim }}>
-            Add your API key in Settings (Ctrl+,) for OpenAI or Anthropic
-          </Text>
-        </Box>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.tool, gap: 2 }}>
-          <Text style={{ fontSize: 10, color: C.tool, fontWeight: 'bold', fontFamily: 'monospace' }}>COMPARE</Text>
-          <Text style={{ fontSize: 10, color: C.textDim }}>
-            {`Type +model1 +model2 your prompt to compare models inline`}
-          </Text>
+      <Box style={{ gap: 6, paddingTop: 8, width: 480 }}>
+        <Box style={{ flexDirection: 'row', gap: 6 }}>
+          <Box style={{ flexGrow: 1, padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.user, gap: 2 }}>
+            <Text style={{ fontSize: 10, color: C.user, fontWeight: 'bold', fontFamily: 'monospace' }}>LOCAL</Text>
+            <Text style={{ fontSize: 10, color: C.textDim }}>
+              Start Ollama, llama.cpp, or vLLM and select from sidebar
+            </Text>
+          </Box>
+          <Box style={{ flexGrow: 1, padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.assistant, gap: 2 }}>
+            <Text style={{ fontSize: 10, color: C.assistant, fontWeight: 'bold', fontFamily: 'monospace' }}>CLOUD</Text>
+            <Text style={{ fontSize: 10, color: C.textDim }}>
+              Add API key in Settings (Ctrl+,)
+            </Text>
+          </Box>
+          <Box style={{ flexGrow: 1, padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.tool, gap: 2 }}>
+            <Text style={{ fontSize: 10, color: C.tool, fontWeight: 'bold', fontFamily: 'monospace' }}>COMPARE</Text>
+            <Text style={{ fontSize: 10, color: C.textDim }}>
+              {`+model1 +model2 prompt`}
+            </Text>
+          </Box>
         </Box>
       </Box>
 
       {/* Keyboard shortcuts */}
-      <Box style={{ paddingTop: 8, gap: 3, width: 340 }}>
+      <Box style={{ paddingTop: 8, gap: 3, width: 480 }}>
         <Text style={{ fontSize: 9, color: C.textDim, fontFamily: 'monospace', fontWeight: 'bold' }}>SHORTCUTS</Text>
         <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {[
-            ['Ctrl+N', 'New Chat'], ['Ctrl+M', 'Switch Model'], ['Ctrl+,', 'Settings'],
-            ['Ctrl+1-5', 'Switch View'], ['Esc', 'Close Panel'],
+            ['Ctrl+N', 'New Chat'], ['Ctrl+M', 'Switch Model'], ['Ctrl+F', 'Search Chat'],
+            ['Ctrl+,', 'Settings'], ['Ctrl+1-5', 'Switch View'], ['Esc', 'Close Panel'],
           ].map(([key, desc]) => (
             <Box key={key} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
               <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: C.surface }}>
