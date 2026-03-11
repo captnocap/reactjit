@@ -193,6 +193,49 @@
       return await bridge.rpc('test:scroll-heights', {});
     },
 
+    // ── Gamepad simulation ─────────────────────────────────────────────
+    // Virtual controller for testing gamepad navigation, scrolling, focus.
+    gamepad: {
+      // Connect a virtual controller.
+      connect: function (joystickId) {
+        return bridge.rpc('test:gamepad-connect', { joystickId: joystickId || 1 });
+      },
+      // Press a button (e.g. 'a', 'dpup', 'leftshoulder'). Waits 1 frame.
+      press: async function (button, joystickId) {
+        await bridge.rpc('test:gamepad-pressed', { button: button, joystickId: joystickId || 1 });
+        await bridge.rpc('test:wait', {});
+      },
+      // Release a button. Waits 1 frame.
+      release: async function (button, joystickId) {
+        await bridge.rpc('test:gamepad-released', { button: button, joystickId: joystickId || 1 });
+        await bridge.rpc('test:wait', {});
+      },
+      // Press and release a button (full tap). Waits 1 frame after each.
+      tap: async function (button, joystickId) {
+        await bridge.rpc('test:gamepad-pressed', { button: button, joystickId: joystickId || 1 });
+        await bridge.rpc('test:wait', {});
+        await bridge.rpc('test:gamepad-released', { button: button, joystickId: joystickId || 1 });
+        await bridge.rpc('test:wait', {});
+      },
+      // Move an axis (e.g. 'leftx', 'righty'). Value from -1 to 1.
+      axis: async function (axis, value, joystickId) {
+        await bridge.rpc('test:gamepad-axis', { axis: axis, value: value, joystickId: joystickId || 1 });
+        await bridge.rpc('test:wait', {});
+      },
+      // Get the currently focused node. Returns { found, id, type, debugName, text, x, y, w, h }.
+      getFocused: function () {
+        return bridge.rpc('test:get-focused', {});
+      },
+      // Get scroll state of a node. Returns { found, scrollX, scrollY, contentW, contentH, ... }.
+      getScroll: function (type, props) {
+        return bridge.rpc('test:get-scroll', { type: type, props: props || {} });
+      },
+      // Get all focusable nodes in active group.
+      getFocusables: function () {
+        return bridge.rpc('test:get-focusables', {});
+      },
+    },
+
     audit: async function (options) {
       var args = {};
       if (options) {

@@ -1007,6 +1007,162 @@ function Testrunner.scroll_heights(_args)
   }
 end
 
+-- ---------------------------------------------------------------------------
+-- Gamepad simulation — virtual controller for testing
+-- ---------------------------------------------------------------------------
+
+-- Mock joystick object that implements the Love2D Joystick interface
+-- just enough for ReactJIT's gamepad handlers.
+local MockJoystick = {}
+MockJoystick.__index = MockJoystick
+
+local _mockJoysticks = {}
+
+local function getMockJoystick(id)
+  if not _mockJoysticks[id] then
+    local j = setmetatable({}, MockJoystick)
+    j._id = id
+    j._name = "Virtual Controller " .. id
+    j._guid = "virtual-" .. id
+    j._axes = {}
+    j._buttons = {}
+    _mockJoysticks[id] = j
+  end
+  return _mockJoysticks[id]
+end
+
+function MockJoystick:getID() return self._id end
+function MockJoystick:getName() return self._name end
+function MockJoystick:getGUID() return self._guid end
+function MockJoystick:isGamepad() return true end
+function MockJoystick:isConnected() return true end
+function MockJoystick:getGamepadAxis(axis) return self._axes[axis] or 0 end
+function MockJoystick:isGamepadDown(button) return self._buttons[button] or false end
+function MockJoystick:getAxisCount() return 6 end
+function MockJoystick:getButtonCount() return 16 end
+function MockJoystick:getHatCount() return 0 end
+
+--- Simulate connecting a virtual controller.
+function Testrunner.gamepad_connect(args)
+  local id = (args and args.joystickId) or 1
+  local mock = getMockJoystick(id)
+  -- Fire joystickadded if available
+  local ReactJIT = require("lua.init")
+  if ReactJIT.joystickadded then
+    ReactJIT.joystickadded(mock)
+  end
+  return { joystickId = id }
+end
+
+--- Simulate a gamepad button press.
+function Testrunner.gamepad_pressed(args)
+  local id = (args and args.joystickId) or 1
+  local button = args and args.button
+  if not button then return { error = "missing button" } end
+  local mock = getMockJoystick(id)
+  mock._buttons[button] = true
+  local ReactJIT = require("lua.init")
+  if ReactJIT.gamepadpressed then
+    ReactJIT.gamepadpressed(mock, button)
+  end
+  return {}
+end
+
+--- Simulate a gamepad button release.
+function Testrunner.gamepad_released(args)
+  local id = (args and args.joystickId) or 1
+  local button = args and args.button
+  if not button then return { error = "missing button" } end
+  local mock = getMockJoystick(id)
+  mock._buttons[button] = false
+  local ReactJIT = require("lua.init")
+  if ReactJIT.gamepadreleased then
+    ReactJIT.gamepadreleased(mock, button)
+  end
+  return {}
+end
+
+--- Simulate a gamepad axis movement.
+function Testrunner.gamepad_axis(args)
+  local id = (args and args.joystickId) or 1
+  local axis = args and args.axis
+  local value = (args and args.value) or 0
+  if not axis then return { error = "missing axis" } end
+  local mock = getMockJoystick(id)
+  mock._axes[axis] = value
+  local ReactJIT = require("lua.init")
+  if ReactJIT.gamepadaxis then
+    ReactJIT.gamepadaxis(mock, axis, value)
+  end
+  return {}
+end
+
+--- Query focus state — returns the currently focused node's info.
+function Testrunner.get_focused(args)
+  local focus = require("lua.focus")
+  local node = focus.get()
+  if not node then return { found = false } end
+  local c = node.computed or {}
+  return {
+    found = true,
+    id = node.id,
+    type = node.type,
+    debugName = node.debugName or node.type,
+    props = safeProps(node),
+    text = nodeText(node),
+    x = c.x or 0, y = c.y or 0,
+    w = c.w or 0, h = c.h or 0,
+  }
+end
+
+--- Query scroll state of a node by type/props.
+function Testrunner.get_scroll(args)
+  local queryType  = args and args.type
+  local queryProps = args and args.props
+  local nodes = Tree.getNodes()
+  for _, node in pairs(nodes) do
+    if matchesQuery(node, queryType, queryProps) then
+      if node.scrollState then
+        local ss = node.scrollState
+        local c = node.computed or {}
+        return {
+          found = true,
+          id = node.id,
+          scrollX = ss.scrollX or 0,
+          scrollY = ss.scrollY or 0,
+          contentW = ss.contentW or 0,
+          contentH = ss.contentH or 0,
+          viewportW = c.w or 0,
+          viewportH = c.h or 0,
+        }
+      end
+    end
+  end
+  return { found = false }
+end
+
+--- Query all focusable nodes in the active group.
+function Testrunner.get_focusables(_args)
+  local focus = require("lua.focus")
+  local rings = focus.getAllRings()
+  local focused = focus.getAllFocused()
+  local result = { rings = {}, focused = {} }
+  for _, r in ipairs(rings or {}) do
+    result.rings[#result.rings + 1] = { x = r.x, y = r.y, w = r.w, h = r.h }
+  end
+  for _, f in ipairs(focused or {}) do
+    local c = f.node and f.node.computed or {}
+    result.focused[#result.focused + 1] = {
+      id = f.node and f.node.id,
+      debugName = f.node and (f.node.debugName or f.node.type),
+      text = f.node and nodeText(f.node) or "",
+      x = c.x or 0, y = c.y or 0,
+      w = c.w or 0, h = c.h or 0,
+    }
+  end
+  return result
+end
+
 --- Print structured test results and quit Love2D.
 --- Exit code 0 if all tests passed, 1 if any failed.
 function Testrunner.report(args)

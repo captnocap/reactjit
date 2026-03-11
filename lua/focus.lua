@@ -97,35 +97,68 @@ end
 -- Basic focus API (backwards-compatible)
 -- ============================================================================
 
+--- Find which group a node belongs to (by checking focusableNodes lists).
+--- Returns the group table, or defaultGroup if not found in any named group.
+local function findGroupForNode(node)
+  if not node then return defaultGroup end
+  local nodeId = node.id
+  for _, group in pairs(focusGroups) do
+    for _, n in ipairs(group.focusableNodes) do
+      if n == node or n.id == nodeId then return group end
+    end
+  end
+  return defaultGroup
+end
+
 --- Set focus to a node. Returns the previously focused node.
+--- Automatically finds the correct focus group for the node.
 function Focus.set(node)
-  local prev = defaultGroup.focusedNode
+  local targetGroup = findGroupForNode(node)
+  local prev = targetGroup.focusedNode
   Log.log("focus", "set id=%s type=%s (prev=%s)", tostring(node and node.id), tostring(node and node.type), tostring(prev and prev.id or "nil"))
   if node == nil and prev ~= nil then
     io.write("[focus:set(nil)] NULLIFYING focus from " .. tostring(prev.type) .. " id=" .. tostring(prev.id) .. "\n")
     io.write("[focus:set(nil)] traceback: " .. debug.traceback("", 2) .. "\n")
     io.flush()
   end
-  defaultGroup.focusedNode = node
+  targetGroup.focusedNode = node
+  -- If setting focus in a named group, also make it the active group
+  if targetGroup ~= defaultGroup then
+    activeGroup = targetGroup
+  end
   return prev
 end
 
 --- Clear focus. Returns the previously focused node.
+--- Clears from whichever group currently holds focus.
 function Focus.clear()
-  local prev = defaultGroup.focusedNode
+  -- Check active group first, then default
+  local group = activeGroup or defaultGroup
+  local prev = group.focusedNode
+  if not prev then
+    -- Try default if active group had nothing
+    prev = defaultGroup.focusedNode
+    group = defaultGroup
+  end
   Log.log("focus", "clear (prev=%s)", tostring(prev and prev.id or "nil"))
   if prev then
     io.write("[focus:clear] CLEARING focus from " .. tostring(prev.type) .. " id=" .. tostring(prev.id) .. "\n")
-    io.write("[focus:clear] traceback: " .. debug.traceback("", 2) .. "\n")
     io.flush()
   end
-  defaultGroup.focusedNode = nil
+  group.focusedNode = nil
   return prev
 end
 
---- Get the currently focused node (default group, backwards-compatible).
+--- Get the currently focused node.
+--- Checks the active group first, then falls back to the default group.
 function Focus.get()
-  return defaultGroup.focusedNode
+  local group = activeGroup or defaultGroup
+  if group.focusedNode then return group.focusedNode end
+  -- Fall back to default group if active group has no focus
+  if activeGroup and defaultGroup.focusedNode then
+    return defaultGroup.focusedNode
+  end
+  return nil
 end
 
 --- Check if a specific node has focus in any group.
@@ -200,6 +233,9 @@ local function isFocusable(node)
   return false
 end
 
+-- DEBUG: trace the walk to find why Terminal isn't found
+local _walkTraceEnabled = true
+
 -- ============================================================================
 -- FocusGroup helpers
 -- ============================================================================
@@ -220,9 +256,14 @@ end
 function restoreGroupFocus(group)
   if not group.focusedNode then
     if group.lastFocused then
+      local lastId = group.lastFocused.id
       local found = false
       for _, n in ipairs(group.focusableNodes) do
-        if n == group.lastFocused then found = true; break end
+        if n == group.lastFocused or n.id == lastId then
+          group.lastFocused = n
+          found = true
+          break
+        end
       end
       if found then
         group.focusedNode = group.lastFocused
@@ -239,13 +280,31 @@ function restoreGroupFocus(group)
 end
 
 --- Validate that a group's focused node still exists in its focusable list.
+--- Matches by node ID (not object reference) so focus survives tree rebuilds
+--- where the same logical node gets a new Lua table.
 local function validateGroupFocus(group)
   if group.focusedNode then
+    local focusedId = group.focusedNode.id
     local found = false
     for _, n in ipairs(group.focusableNodes) do
       if n == group.focusedNode then found = true; break end
+      if n.id == focusedId then
+        -- Same logical node, new object — update the reference
+        group.focusedNode = n
+        found = true
+        break
+      end
     end
-    if not found then group.focusedNode = nil end
+    if not found then
+      local isDefault = (group == defaultGroup) and "DEFAULT" or "NAMED"
+      io.write(string.format("[focus:validate] DROPPING focus: id=%s type=%s group=%s (not in %d focusableNodes)\n",
+        tostring(focusedId), tostring(group.focusedNode.type), isDefault, #group.focusableNodes))
+      for i, n in ipairs(group.focusableNodes) do
+        io.write(string.format("  [%d] id=%s type=%s\n", i, tostring(n.id), tostring(n.type)))
+      end
+      io.flush()
+      group.focusedNode = nil
+    end
   end
 end
 
@@ -397,6 +456,16 @@ function Focus.rebuildFocusableList(root)
     if not node or not node.computed then return end
     local s = node.style or {}
     if s.display == "none" then return end
+    -- DEBUG: trace Terminal nodes (once only)
+    if node.type == "Terminal" and _walkTraceEnabled then
+      _walkTraceEnabled = false
+      local focusable = isFocusable(node)
+      local groupAnc = findFocusGroupAncestor(node)
+      io.write(string.format("[focus:walk] Terminal id=%s focusable=%s groupAncestor=%s\n",
+        tostring(node.id), tostring(focusable),
+        groupAnc and tostring(groupAnc.id) or "DEFAULT"))
+      io.flush()
+    end
     if isFocusable(node) then
       local groupAncestor = findFocusGroupAncestor(node)
       if groupAncestor and focusGroups[groupAncestor.id] then
@@ -478,24 +547,28 @@ end
 -- ============================================================================
 
 --- Spatial navigation within the active group only.
+--- Returns true if focus moved, false if it didn't (no target in that direction).
 function Focus.navigate(direction, joystickId)
   -- Use the active group, or default if none set
   local group = activeGroup or defaultGroup
-  if #group.focusableNodes == 0 then return end
+  if #group.focusableNodes == 0 then return false end
 
   local oldNode = group.focusedNode
   if not group.focusedNode then
     group.focusedNode = group.focusableNodes[1]
     scrollIntoView(group.focusedNode)
     emitFocusChange(oldNode, group.focusedNode)
+    return true
   else
     local best = spatialNavigate(group.focusedNode, group.focusableNodes, direction)
     if best then
       group.focusedNode = best
       scrollIntoView(best)
       emitFocusChange(oldNode, best)
+      return true
     end
   end
+  return false
 end
 
 --- Sequential navigation (Tab/Shift+Tab) within the correct group(s).
