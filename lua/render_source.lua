@@ -740,43 +740,39 @@ end
 local function createDisplayFeed(nodeId, props)
   local resolution = props.resolution or "1920x1080"
   local w, h = parseResolution(resolution)
-  local fps = props.fps or 30
 
   local displayNum = findFreeDisplay()
   if not displayNum then
-    Log.log("render", "No free display number for virtual display")
     feeds[nodeId] = { status = "error", error = "No free display number", nodeId = nodeId }
     return feeds[nodeId]
   end
 
-  -- Try Xephyr first (most common), then Xvfb
+  -- Try Xvfb first (headless, no window), then Xephyr (nested, visible)
   local xServerPid = spawnProcess(string.format(
-    "Xephyr :%d -screen %dx%d -no-host-grab -resizeable 2>/dev/null",
+    "Xvfb :%d -screen 0 %dx%dx24 2>/dev/null",
     displayNum, w, h
   ))
+  local xServerType = "xvfb"
 
-  local xServerType = "xephyr"
   if not xServerPid then
     xServerPid = spawnProcess(string.format(
-      "Xvfb :%d -screen 0 %dx%dx24 2>/dev/null",
+      "Xephyr :%d -screen %dx%d -no-host-grab -resizeable 2>/dev/null",
       displayNum, w, h
     ))
-    xServerType = "xvfb"
+    xServerType = "xephyr"
   end
 
   if not xServerPid then
-    Log.log("render", "Neither Xephyr nor Xvfb available. Install with: apt install xserver-xephyr")
-    feeds[nodeId] = { status = "error", error = "Install xserver-xephyr or xvfb: apt install xserver-xephyr", nodeId = nodeId }
+    feeds[nodeId] = { status = "error", error = "Install xvfb or xserver-xephyr: apt install xvfb", nodeId = nodeId }
     return feeds[nodeId]
   end
 
-  -- Register for cleanup
   local Registry = require("lua.process_registry")
   Registry.register(xServerPid)
 
   -- Wait for X server to start (poll lock file)
   local waited = 0
-  while waited < 3 do
+  while waited < 5 do
     local f = io.open("/tmp/.X" .. displayNum .. "-lock", "r")
     if f then f:close(); break end
     local sok, s = pcall(require, "socket")
@@ -787,50 +783,149 @@ local function createDisplayFeed(nodeId, props)
   Log.log("render", "Virtual display :%d started (%s, pid %d, %dx%d)",
     displayNum, xServerType, xServerPid, w, h)
 
-  -- Capture from the virtual display via FFmpeg x11grab
-  local Q = "-nostdin -loglevel quiet -probesize 32 -analyzeduration 0 -fflags nobuffer -flags low_delay"
-  local cmd = string.format(
-    "ffmpeg %s -f x11grab -framerate %d -video_size %dx%d -i :%d -f rawvideo -pix_fmt rgba -an -sn - 2>/dev/null",
-    Q, fps, w, h, displayNum
-  )
+  -- Auto-launch command into the virtual display
+  local appPid
+  if props.command and props.command ~= "" then
+    local appCmd = string.format("DISPLAY=:%d %s", displayNum, props.command)
+    Log.log("render", "Launching into :%d: %s", displayNum, appCmd)
+    appPid = spawnProcess(appCmd)
+    if appPid then
+      Registry.register(appPid)
+      Log.log("render", "Launched pid %d into :%d", appPid, displayNum)
+    else
+      Log.log("render", "Failed to launch: %s", appCmd)
+    end
+  end
+
+  -- Open dedicated X11 connection to the virtual display for XShm capture
+  local displayName = string.format(":%d", displayNum)
+  local displayDpy, displayRoot, displayScreen
+  local xshmCap
+
+  -- Ensure X11/XShm FFI bindings are loaded (normally triggered by screen capture)
+  initXShm()
+
+  if libX11 and libXext then
+    -- Wait a moment for the X server to be fully ready for connections
+    local sok, s = pcall(require, "socket")
+    if sok then s.sleep(0.5) else os.execute("sleep 0.5") end
+
+    displayDpy = libX11.XOpenDisplay(displayName)
+    if displayDpy ~= nil then
+      -- Check XShm on this display
+      if libXext.XShmQueryExtension(displayDpy) ~= 0 then
+        displayScreen = libX11.XDefaultScreen(displayDpy)
+        displayRoot = libX11.XDefaultRootWindow(displayDpy)
+
+        -- Create XShm capture context for this display
+        local visual = libX11.XDefaultVisual(displayDpy, displayScreen)
+        local depth = libX11.XDefaultDepth(displayDpy, displayScreen)
+        local shminfo = ffi.new("XShmSegmentInfo")
+        local ximage = libXext.XShmCreateImage(displayDpy, visual, depth, ZPixmap, nil, shminfo, w, h)
+
+        if ximage ~= nil then
+          local shmsize = ximage.bytes_per_line * ximage.height
+          shminfo.shmid = ffi.C.shmget(IPC_PRIVATE, shmsize, SHM_PERMS)
+          if shminfo.shmid >= 0 then
+            shminfo.shmaddr = ffi.cast("char*", ffi.C.shmat(shminfo.shmid, nil, 0))
+            if shminfo.shmaddr ~= ffi.cast("char*", -1) then
+              ximage.data = shminfo.shmaddr
+              shminfo.readOnly = 0
+              libXext.XShmAttach(displayDpy, shminfo)
+              ffi.C.shmctl(shminfo.shmid, IPC_RMID, nil)
+              xshmCap = { ximage = ximage, shminfo = shminfo }
+              Log.log("render", "XShm capture ready for :%d", displayNum)
+            else
+              ffi.C.shmctl(shminfo.shmid, IPC_RMID, nil)
+              libX11.XFree(ximage)
+            end
+          else
+            libX11.XFree(ximage)
+          end
+        end
+      end
+
+      if not xshmCap then
+        libX11.XCloseDisplay(displayDpy)
+        displayDpy = nil
+        Log.log("render", "XShm not available for :%d, falling back to ffmpeg", displayNum)
+      end
+    else
+      Log.log("render", "Cannot open X connection to :%d", displayNum)
+    end
+  end
 
   local imageData = love.image.newImageData(w, h)
-  local feedId = tostring(nodeId):gsub("[^%w]", "_")
-  local controlChannel = love.thread.getChannel("render_control_" .. feedId)
-  local frameChannel = love.thread.getChannel("render_frames_" .. feedId)
-  local statusChannel = love.thread.getChannel("render_status_" .. feedId)
 
-  controlChannel:clear()
-  frameChannel:clear()
-  statusChannel:clear()
+  -- If XShm is available, use direct capture (no ffmpeg). Otherwise fall back to ffmpeg.
+  local feed
+  if xshmCap then
+    feed = {
+      nodeId = nodeId,
+      parsed = { type = "display" },
+      backend = "display_xshm",
+      width = w,
+      height = h,
+      imageData = imageData,
+      image = nil,
+      status = "ready",
+      frameCount = 0,
+      interactive = props.interactive ~= false,
+      source = props.source,
+      displayNum = displayNum,
+      xServerPid = xServerPid,
+      xServerType = xServerType,
+      appPid = appPid,
+      -- Per-display XShm state
+      displayDpy = displayDpy,
+      displayRoot = displayRoot,
+      displayScreen = displayScreen,
+      xshmCap = xshmCap,
+    }
+  else
+    -- Fallback: ffmpeg x11grab
+    local fps = props.fps or 30
+    local Q = "-nostdin -loglevel quiet -probesize 32 -analyzeduration 0 -fflags nobuffer -flags low_delay"
+    local cmd = string.format(
+      "ffmpeg %s -f x11grab -framerate %d -video_size %dx%d -i :%d -f rawvideo -pix_fmt rgba -an -sn - 2>/dev/null",
+      Q, fps, w, h, displayNum
+    )
+    local feedId = tostring(nodeId):gsub("[^%w]", "_")
+    local controlChannel = love.thread.getChannel("render_control_" .. feedId)
+    local frameChannel = love.thread.getChannel("render_frames_" .. feedId)
+    local statusChannel = love.thread.getChannel("render_status_" .. feedId)
+    controlChannel:clear()
+    frameChannel:clear()
+    statusChannel:clear()
+    local thread = love.thread.newThread(READER_THREAD_CODE)
+    controlChannel:push(feedId)
+    controlChannel:push(cmd)
+    controlChannel:push(w)
+    controlChannel:push(h)
+    thread:start("render_control_" .. feedId)
 
-  local thread = love.thread.newThread(READER_THREAD_CODE)
-  controlChannel:push(feedId)
-  controlChannel:push(cmd)
-  controlChannel:push(w)
-  controlChannel:push(h)
-  thread:start("render_control_" .. feedId)
-
-  local feed = {
-    nodeId = nodeId,
-    parsed = { type = "display" },
-    backend = "display",
-    width = w,
-    height = h,
-    imageData = imageData,
-    image = nil,
-    thread = thread,
-    controlChannel = controlChannel,
-    frameChannel = frameChannel,
-    statusChannel = statusChannel,
-    status = "starting",
-    frameCount = 0,
-    interactive = props.interactive ~= false,  -- default true for displays
-    source = props.source,
-    displayNum = displayNum,
-    xServerPid = xServerPid,
-    xServerType = xServerType,
-  }
+    feed = {
+      nodeId = nodeId,
+      parsed = { type = "display" },
+      backend = "display",
+      width = w,
+      height = h,
+      imageData = imageData,
+      image = nil,
+      thread = thread,
+      controlChannel = controlChannel,
+      frameChannel = frameChannel,
+      statusChannel = statusChannel,
+      status = "starting",
+      frameCount = 0,
+      interactive = props.interactive ~= false,
+      source = props.source,
+      displayNum = displayNum,
+      xServerPid = xServerPid,
+      xServerType = xServerType,
+      appPid = appPid,
+    }
+  end
 
   feeds[nodeId] = feed
   return feed
@@ -1161,6 +1256,29 @@ function RenderSource.destroy(nodeId)
     if feed.statusChannel then feed.statusChannel:clear() end
     if feed.controlChannel then feed.controlChannel:clear() end
 
+  elseif feed.backend == "display_xshm" then
+    -- Clean up XShm capture for virtual display
+    if feed.xshmCap and feed.displayDpy then
+      libXext.XShmDetach(feed.displayDpy, feed.xshmCap.shminfo)
+      ffi.C.shmdt(feed.xshmCap.shminfo.shmaddr)
+      feed.xshmCap.ximage.data = nil
+      libX11.XFree(feed.xshmCap.ximage)
+    end
+    if feed.displayDpy then
+      libX11.XCloseDisplay(feed.displayDpy)
+    end
+    -- Kill the app process
+    if feed.appPid then
+      os.execute("kill " .. feed.appPid .. " 2>/dev/null")
+      Registry.unregister(feed.appPid)
+    end
+    -- Kill the virtual X server
+    if feed.xServerPid then
+      os.execute("kill " .. feed.xServerPid .. " 2>/dev/null")
+      Registry.unregister(feed.xServerPid)
+      Log.log("render", "Virtual display :%d stopped", feed.displayNum or 0)
+    end
+
   elseif feed.backend == "display" then
     -- Stop FFmpeg capture thread
     if feed.controlChannel then feed.controlChannel:push("stop") end
@@ -1168,6 +1286,11 @@ function RenderSource.destroy(nodeId)
     if feed.frameChannel then feed.frameChannel:clear() end
     if feed.statusChannel then feed.statusChannel:clear() end
     if feed.controlChannel then feed.controlChannel:clear() end
+    -- Kill the app process
+    if feed.appPid then
+      os.execute("kill " .. feed.appPid .. " 2>/dev/null")
+      Registry.unregister(feed.appPid)
+    end
     -- Kill the virtual X server
     if feed.xServerPid then
       os.execute("kill " .. feed.xServerPid .. " 2>/dev/null")
@@ -1234,6 +1357,50 @@ function RenderSource.updateAll()
         feed.width, feed.height)
 
       if ok then
+        if feed.image then
+          feed.image:replacePixels(feed.imageData)
+        else
+          feed.image = love.graphics.newImage(feed.imageData)
+          feed.image:setFilter("linear", "linear")
+        end
+        feed.frameCount = feed.frameCount + 1
+      end
+
+    elseif feed.backend == "display_xshm" then
+      -- Direct XShm capture from virtual display (no ffmpeg)
+      local dest = ffi.cast("uint8_t*", feed.imageData:getFFIPointer())
+      -- Use per-display connection and root window
+      local cap = feed.xshmCap
+      local dpy = feed.displayDpy
+      local root = feed.displayRoot
+      local ok = libXext.XShmGetImage(dpy, root, cap.ximage, 0, 0, 0xFFFFFFFFULL)
+      if ok ~= 0 then
+        -- BGRX -> RGBA conversion
+        local src = ffi.cast("uint8_t*", cap.ximage.data)
+        local bpl = cap.ximage.bytes_per_line
+        local w, h = feed.width, feed.height
+        if bpl == w * 4 then
+          for i = 0, w * h * 4 - 1, 4 do
+            dest[i]     = src[i + 2]
+            dest[i + 1] = src[i + 1]
+            dest[i + 2] = src[i]
+            dest[i + 3] = 255
+          end
+        else
+          for y = 0, h - 1 do
+            local srcRow = y * bpl
+            local dstRow = y * w * 4
+            for x = 0, w - 1 do
+              local si = srcRow + x * 4
+              local di = dstRow + x * 4
+              dest[di]     = src[si + 2]
+              dest[di + 1] = src[si + 1]
+              dest[di + 2] = src[si]
+              dest[di + 3] = 255
+            end
+          end
+        end
+
         if feed.image then
           feed.image:replacePixels(feed.imageData)
         else
@@ -1356,6 +1523,51 @@ function RenderSource.getDimensions(nodeId)
   return feed.width, feed.height
 end
 
+--- Convert screen coordinates to source-local coordinates.
+--- Accounts for the node's position and objectFit scaling.
+--- @param nodeId any    Node ID
+--- @param screenX number  Screen X
+--- @param screenY number  Screen Y
+--- @param nodeX number    Node computed X
+--- @param nodeY number    Node computed Y
+--- @param nodeW number    Node computed width
+--- @param nodeH number    Node computed height
+--- @param objectFit string  "contain", "cover", or "fill"
+--- @return number, number  Source-local X, Y
+function RenderSource.screenToLocal(nodeId, screenX, screenY, nodeX, nodeY, nodeW, nodeH, objectFit)
+  local feed = feeds[nodeId]
+  if not feed then return screenX - nodeX, screenY - nodeY end
+
+  local srcW, srcH = feed.width, feed.height
+  local lx = screenX - nodeX
+  local ly = screenY - nodeY
+
+  objectFit = objectFit or "contain"
+
+  if objectFit == "contain" then
+    local scale = math.min(nodeW / srcW, nodeH / srcH)
+    local drawW = srcW * scale
+    local drawH = srcH * scale
+    local offsetX = (nodeW - drawW) / 2
+    local offsetY = (nodeH - drawH) / 2
+    lx = (lx - offsetX) / scale
+    ly = (ly - offsetY) / scale
+  elseif objectFit == "cover" then
+    local scale = math.max(nodeW / srcW, nodeH / srcH)
+    local drawW = srcW * scale
+    local drawH = srcH * scale
+    local offsetX = (nodeW - drawW) / 2
+    local offsetY = (nodeH - drawH) / 2
+    lx = (lx - offsetX) / scale
+    ly = (ly - offsetY) / scale
+  else -- "fill"
+    lx = lx * srcW / nodeW
+    ly = ly * srcH / nodeH
+  end
+
+  return lx, ly
+end
+
 --- Get the virtual display number (for "display" backend, so apps can target it)
 function RenderSource.getDisplayNum(nodeId)
   local feed = feeds[nodeId]
@@ -1402,7 +1614,7 @@ function RenderSource.forwardMouse(nodeId, eventType, localX, localY, button)
     return
   end
 
-  if feed.backend == "display" then
+  if feed.backend == "display" or feed.backend == "display_xshm" then
     -- xdotool on the virtual display
     local displayEnv = string.format("DISPLAY=:%d", feed.displayNum)
     local sx, sy = math.floor(localX), math.floor(localY)
@@ -1478,7 +1690,7 @@ function RenderSource.forwardKey(nodeId, eventType, key)
     return
   end
 
-  if feed.backend == "display" then
+  if feed.backend == "display" or feed.backend == "display_xshm" then
     local displayEnv = string.format("DISPLAY=:%d", feed.displayNum)
     if eventType == "keypressed" then
       os.execute(string.format("%s xdotool keydown %s &", displayEnv, key))

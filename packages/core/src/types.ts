@@ -506,6 +506,8 @@ export interface RenderProps {
   vmMemory?: number;
   /** VM CPU count (default: 2) */
   vmCpus?: number;
+  /** Command to launch into the virtual display (only used with source="display") */
+  command?: string;
 
   // Shorthand props
   w?: number | string;

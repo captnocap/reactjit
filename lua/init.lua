@@ -4398,6 +4398,18 @@ function ReactJIT.mousepressed(x, y, button)
         end
         return
       end
+    elseif hit.type == "Render" then
+      -- Clicked a Render node: forward mouse to the captured source
+      if not focus.isFocused(hit) then
+        focus.set(hit)
+      end
+      local RenderSource = require("lua.render_source")
+      if RenderSource.isInteractive(hit.id) and hit.computed then
+        local c = hit.computed
+        local objectFit = (hit.props and hit.props.objectFit) or "contain"
+        local lx, ly = RenderSource.screenToLocal(hit.id, x, y, c.x, c.y, c.w, c.h, objectFit)
+        RenderSource.forwardMouse(hit.id, "mousepressed", lx, ly, button)
+      end
     elseif M.capabilities and M.capabilities.isHittable(hit.type) then
       -- Clicked a hittable capability (e.g. ClaudeCanvas): set focus
       if not focus.isFocused(hit) then
@@ -4462,6 +4474,18 @@ function ReactJIT.mousereleased(x, y, button)
   if M.codeblock and M.codeblock.handleMouseReleased and M.codeblock.handleMouseReleased() then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
+
+  -- Render node: forward mouse release to interactive source
+  local focusedForRelease = focus.get()
+  if focusedForRelease and focusedForRelease.type == "Render" and focusedForRelease.computed then
+    local RenderSource = require("lua.render_source")
+    if RenderSource.isInteractive(focusedForRelease.id) then
+      local c = focusedForRelease.computed
+      local objectFit = (focusedForRelease.props and focusedForRelease.props.objectFit) or "contain"
+      local lx, ly = RenderSource.screenToLocal(focusedForRelease.id, x, y, c.x, c.y, c.w, c.h, objectFit)
+      RenderSource.forwardMouse(focusedForRelease.id, "mousereleased", lx, ly, button)
+    end
+  end
 
   -- Text selection: finalize on mouse release, clear pending
   textSelectPending = nil
@@ -4567,6 +4591,18 @@ function ReactJIT.mousemoved(x, y)
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
 
   focus.setMouseMode()
+
+  -- Render node: forward mouse movement to interactive source
+  local focusedRender = focus.get()
+  if focusedRender and focusedRender.type == "Render" and focusedRender.computed then
+    local RenderSource = require("lua.render_source")
+    if RenderSource.isInteractive(focusedRender.id) then
+      local c = focusedRender.computed
+      local objectFit = (focusedRender.props and focusedRender.props.objectFit) or "contain"
+      local lx, ly = RenderSource.screenToLocal(focusedRender.id, x, y, c.x, c.y, c.w, c.h, objectFit)
+      RenderSource.forwardMouse(focusedRender.id, "mousemoved", lx, ly, 0)
+    end
+  end
 
   -- Context menu hover tracking
   if M.contextmenu and M.contextmenu.isOpen() then

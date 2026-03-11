@@ -41,6 +41,7 @@ Capabilities.register("Render", {
     objectFit   = { type = "string", default = "contain", desc = "Scaling mode: fill, contain, cover" },
     vmMemory    = { type = "number", default = 2048, desc = "VM RAM in MB (VM sources only)" },
     vmCpus      = { type = "number", default = 2, desc = "VM CPU count (VM sources only)" },
+    command     = { type = "string", desc = "Command to launch into virtual display (display source only)" },
   },
 
   events = { "onReady", "onError", "onFrame" },
