@@ -201,9 +201,11 @@ function LLMStudio() {
   const [customPresets, setCustomPresets] = useState<{ label: string; prompt: string }[]>([]);
   const [sidebarTagFilter, setSidebarTagFilter] = useState<string | null>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const [streamStats, setStreamStats] = useState<{ tokensPerSec: number; totalTokens: number; elapsed: number } | null>(null);
+  const [streamStats, setStreamStats] = useState<{ tokensPerSec: number; totalTokens: number; elapsed: number; ttft?: number } | null>(null);
   const streamStartRef = useRef(0);
   const streamCharsRef = useRef(0);
+  const streamRequestRef = useRef(0); // when the request was sent
+  const ttftRef = useRef<number | null>(null);
   const [view, setView] = useState<View>('chat');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [providerModalOpen, setProviderModalOpen] = useState(false);
@@ -217,6 +219,7 @@ function LLMStudio() {
   const comparePendingRef = useRef<string | null>(null);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const messageTimestampsRef = useRef<Map<number, number>>(new Map());
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
@@ -460,11 +463,22 @@ function LLMStudio() {
       ? conversations.find(c => c.id === activeConvoId)?.messages || []
       : [],
     onChunk: (chunk) => {
-      if (streamStartRef.current === 0) streamStartRef.current = Date.now();
+      if (streamStartRef.current === 0) {
+        streamStartRef.current = Date.now();
+        // TTFT = time from request to first token
+        if (streamRequestRef.current > 0) {
+          ttftRef.current = Date.now() - streamRequestRef.current;
+        }
+      }
       streamCharsRef.current += chunk.length;
       const elapsed = (Date.now() - streamStartRef.current) / 1000;
       const approxTokens = Math.round(streamCharsRef.current / 4);
-      if (elapsed > 0.2) setStreamStats({ tokensPerSec: Math.round(approxTokens / elapsed), totalTokens: approxTokens, elapsed: Math.round(elapsed * 10) / 10 });
+      if (elapsed > 0.2) setStreamStats({
+        tokensPerSec: Math.round(approxTokens / elapsed),
+        totalTokens: approxTokens,
+        elapsed: Math.round(elapsed * 10) / 10,
+        ttft: ttftRef.current != null ? Math.round(ttftRef.current) : undefined,
+      });
     },
   });
 
@@ -473,9 +487,22 @@ function LLMStudio() {
   if (chat.isStreaming && !prevStreaming.current) {
     streamStartRef.current = 0;
     streamCharsRef.current = 0;
+    streamRequestRef.current = Date.now();
+    ttftRef.current = null;
     setStreamStats(null);
   }
   prevStreaming.current = chat.isStreaming;
+
+  // Track message timestamps (stamp new messages as they appear)
+  const prevMsgCount = useRef(0);
+  if (chat.messages.length > prevMsgCount.current) {
+    for (let i = prevMsgCount.current; i < chat.messages.length; i++) {
+      if (!messageTimestampsRef.current.has(i)) {
+        messageTimestampsRef.current.set(i, Date.now());
+      }
+    }
+  }
+  prevMsgCount.current = chat.messages.length;
 
   // ── Token estimation ─────────────────────────────────
   const tokenEstimate = useMemo(() => {
@@ -874,6 +901,7 @@ function LLMStudio() {
                         key={i}
                         message={msg}
                         searchHighlight={chatSearchOpen && chatSearchMatches.includes(i)}
+                        timestamp={messageTimestampsRef.current.get(i)}
                         onCopy={() => {
                           const text = typeof msg.content === 'string'
                             ? msg.content
@@ -1126,7 +1154,7 @@ function LLMStudio() {
 
 // ── Formatted message with markdown-like rendering ───────────────────────────
 
-function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onBranch, searchHighlight }: {
+function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onBranch, searchHighlight, timestamp }: {
   message: Message;
   onCopy?: () => void;
   onDelete?: () => void;
@@ -1134,6 +1162,7 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
   onEdit?: (newContent: string) => void;
   onBranch?: () => void;
   searchHighlight?: boolean;
+  timestamp?: number;
 }) {
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1184,6 +1213,11 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
               <Text style={{ fontSize: 8, color: C.textDim, fontFamily: 'monospace' }}>
                 {`${Math.round(content.length / 4)} tok`}
               </Text>
+              {timestamp && (
+                <Text style={{ fontSize: 8, color: C.textDim, fontFamily: 'monospace' }}>
+                  {new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              )}
             </Box>
             {hovered && !editing && (
               <Box style={{ flexDirection: 'row', gap: 4 }}>
@@ -1237,6 +1271,50 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
                     </Box>
                   );
                 }
+                if (part.type === 'blockquote') {
+                  return (
+                    <Box key={i} style={{
+                      borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 10,
+                      paddingTop: 4, paddingBottom: 4, backgroundColor: C.bgInput, borderRadius: 4,
+                    }}>
+                      <Text style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic' }}>{part.content}</Text>
+                    </Box>
+                  );
+                }
+                if (part.type === 'table') {
+                  return (
+                    <Box key={i} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 6, overflow: 'hidden' }}>
+                      {/* Header row */}
+                      <Box style={{ flexDirection: 'row', backgroundColor: C.surfaceActive }}>
+                        {part.headers.map((h, hi) => (
+                          <Box key={hi} style={{
+                            flexGrow: 1, padding: 6,
+                            borderRightWidth: hi < part.headers.length - 1 ? 1 : 0, borderColor: C.border,
+                          }}>
+                            <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold' }}>{h}</Text>
+                          </Box>
+                        ))}
+                      </Box>
+                      {/* Data rows */}
+                      {part.rows.map((row, ri) => (
+                        <Box key={ri} style={{
+                          flexDirection: 'row',
+                          borderTopWidth: 1, borderColor: C.border,
+                          backgroundColor: ri % 2 === 0 ? C.surface : C.bgInput,
+                        }}>
+                          {row.map((cell, ci) => (
+                            <Box key={ci} style={{
+                              flexGrow: 1, padding: 6,
+                              borderRightWidth: ci < row.length - 1 ? 1 : 0, borderColor: C.border,
+                            }}>
+                              <Text style={{ fontSize: 11, color: C.text }}>{cell}</Text>
+                            </Box>
+                          ))}
+                        </Box>
+                      ))}
+                    </Box>
+                  );
+                }
                 return <RichText key={i} text={part.content} />;
               })}
             </Box>
@@ -1268,7 +1346,9 @@ type MarkdownPart =
   | { type: 'text'; content: string }
   | { type: 'code'; content: string; language?: string }
   | { type: 'heading'; content: string; level: number }
-  | { type: 'bullet'; content: string };
+  | { type: 'bullet'; content: string }
+  | { type: 'blockquote'; content: string }
+  | { type: 'table'; headers: string[]; rows: string[][] };
 
 function parseMarkdown(text: string): MarkdownPart[] {
   const parts: MarkdownPart[] = [];
@@ -1295,28 +1375,61 @@ function parseTextBlock(text: string): MarkdownPart[] {
   const parts: MarkdownPart[] = [];
   const lines = text.split('\n');
   let currentText = '';
+  let blockquoteLines: string[] = [];
+  let tableLines: string[] = [];
+
+  const flushText = () => { if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; } };
+  const flushBlockquote = () => {
+    if (blockquoteLines.length > 0) { parts.push({ type: 'blockquote', content: blockquoteLines.join('\n') }); blockquoteLines = []; }
+  };
+  const flushTable = () => {
+    if (tableLines.length >= 2) {
+      const headers = tableLines[0].split('|').map(s => s.trim()).filter(Boolean);
+      const rows = tableLines.slice(2).map(r => r.split('|').map(s => s.trim()).filter(Boolean));
+      parts.push({ type: 'table', headers, rows });
+    }
+    tableLines = [];
+  };
 
   for (const line of lines) {
     const trimmed = line.trim();
 
+    // Table detection: lines with pipes
+    if (trimmed.includes('|') && (tableLines.length > 0 || trimmed.match(/^\|.*\|$/))) {
+      flushText(); flushBlockquote();
+      tableLines.push(trimmed);
+      continue;
+    } else if (tableLines.length > 0) {
+      flushTable();
+    }
+
+    // Blockquotes
+    if (trimmed.startsWith('> ')) {
+      flushText();
+      blockquoteLines.push(trimmed.slice(2));
+      continue;
+    } else if (blockquoteLines.length > 0) {
+      flushBlockquote();
+    }
+
     // Headings
     const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (headingMatch) {
-      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      flushText();
       parts.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length });
       continue;
     }
 
     // Bullet points
     if (trimmed.match(/^[-*]\s+(.+)$/)) {
-      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      flushText();
       parts.push({ type: 'bullet', content: trimmed.replace(/^[-*]\s+/, '') });
       continue;
     }
 
     // Numbered lists
     if (trimmed.match(/^\d+\.\s+(.+)$/)) {
-      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      flushText();
       parts.push({ type: 'bullet', content: trimmed.replace(/^\d+\.\s+/, '') });
       continue;
     }
@@ -1324,6 +1437,8 @@ function parseTextBlock(text: string): MarkdownPart[] {
     currentText += line + '\n';
   }
 
+  flushBlockquote();
+  flushTable();
   if (currentText.trim()) parts.push({ type: 'text', content: currentText.trim() });
   return parts;
 }
@@ -1660,7 +1775,7 @@ function TopBar({
   modelsLoading: boolean; onSelectModel: (id: string) => void; onRefreshModels: () => void;
   settingsOpen: boolean; onToggleSettings: () => void; isStreaming: boolean; onStop: () => void;
   tokenEstimate: number;
-  streamStats: { tokensPerSec: number; totalTokens: number; elapsed: number } | null;
+  streamStats: { tokensPerSec: number; totalTokens: number; elapsed: number; ttft?: number } | null;
   compareMode: boolean; onToggleCompare: () => void;
   contextUsage: { used: number; total: number; pct: number };
 }) {
@@ -1710,6 +1825,16 @@ function TopBar({
             <Text style={{ fontSize: 9, color: C.textDim }}>
               {`${streamStats.totalTokens} tok / ${streamStats.elapsed}s`}
             </Text>
+            {streamStats.ttft != null && (
+              <Box style={{
+                paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1,
+                borderRadius: 3, backgroundColor: C.surface,
+              }}>
+                <Text style={{ fontSize: 9, color: streamStats.ttft < 500 ? C.green : streamStats.ttft < 2000 ? C.yellow : C.red, fontFamily: 'monospace' }}>
+                  {`TTFT ${streamStats.ttft}ms`}
+                </Text>
+              </Box>
+            )}
           </Box>
         )}
         {!streamStats && tokenEstimate > 0 && (
@@ -2175,9 +2300,29 @@ function ModelBrowser({
   const [modelInfoMap, setModelInfoMap] = useState<Record<string, OllamaModelInfo>>({});
 
   const isOllama = provider.id === 'ollama';
+  const [showLibrary, setShowLibrary] = useState(false);
   const filtered = search
     ? models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
     : models;
+
+  // Popular Ollama models for the library browser
+  const ollamaLibrary = [
+    { name: 'llama3.2', desc: 'Meta Llama 3.2 — fast, versatile', sizes: ['1b', '3b'], family: 'llama' },
+    { name: 'llama3.1', desc: 'Meta Llama 3.1 — strong general purpose', sizes: ['8b', '70b', '405b'], family: 'llama' },
+    { name: 'qwen2.5', desc: 'Alibaba Qwen 2.5 — multilingual, code', sizes: ['0.5b', '1.5b', '3b', '7b', '14b', '32b', '72b'], family: 'qwen' },
+    { name: 'deepseek-r1', desc: 'DeepSeek R1 — reasoning focused', sizes: ['1.5b', '7b', '8b', '14b', '32b', '70b'], family: 'deepseek' },
+    { name: 'mistral', desc: 'Mistral AI — fast, efficient', sizes: ['7b'], family: 'mistral' },
+    { name: 'mixtral', desc: 'Mistral MoE — expert mixture', sizes: ['8x7b', '8x22b'], family: 'mistral' },
+    { name: 'phi3', desc: 'Microsoft Phi-3 — small but capable', sizes: ['mini', 'medium'], family: 'phi' },
+    { name: 'gemma2', desc: 'Google Gemma 2 — lightweight', sizes: ['2b', '9b', '27b'], family: 'gemma' },
+    { name: 'codellama', desc: 'Meta Code Llama — code generation', sizes: ['7b', '13b', '34b', '70b'], family: 'llama' },
+    { name: 'starcoder2', desc: 'BigCode StarCoder 2 — code', sizes: ['3b', '7b', '15b'], family: 'starcoder' },
+    { name: 'nomic-embed-text', desc: 'Nomic embeddings — text similarity', sizes: ['v1.5'], family: 'nomic' },
+    { name: 'llava', desc: 'LLaVA — vision + language', sizes: ['7b', '13b', '34b'], family: 'llava' },
+  ];
+  const filteredLibrary = search
+    ? ollamaLibrary.filter(m => m.name.includes(search.toLowerCase()) || m.desc.toLowerCase().includes(search.toLowerCase()))
+    : ollamaLibrary;
 
   // Fetch Ollama model details on mount/refresh
   // rjit-ignore-next-line
@@ -2262,7 +2407,16 @@ function ModelBrowser({
       {/* Ollama pull section */}
       {isOllama && (
         <Box style={{ padding: 12, backgroundColor: C.surface, borderRadius: 8, gap: 8 }}>
-          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Pull Model from Ollama</Text>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Pull Model from Ollama</Text>
+            <Pressable onPress={() => setShowLibrary(v => !v)}>
+              {({ hovered }) => (
+                <Text style={{ fontSize: 10, color: hovered ? C.accent : C.textMuted, fontWeight: 'bold' }}>
+                  {showLibrary ? 'Hide Library' : 'Browse Library'}
+                </Text>
+              )}
+            </Pressable>
+          </Box>
           <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Box style={{ flexGrow: 1 }}>
               <TextInput
@@ -2285,6 +2439,54 @@ function ModelBrowser({
               {pullStatus}
             </Text>
           ) : null}
+
+          {/* Model library */}
+          {showLibrary && (
+            <Box style={{ gap: 6, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
+              <Text style={{ fontSize: 10, color: C.textMuted }}>Click a size to pull. Models download from ollama.com.</Text>
+              {filteredLibrary.map(lib => {
+                const installed = models.some(m => m.id.startsWith(lib.name));
+                return (
+                  <Box key={lib.name} style={{
+                    padding: 8, borderRadius: 6, backgroundColor: C.bgInput, gap: 4,
+                    borderLeftWidth: 2, borderColor: installed ? C.green : C.border,
+                  }}>
+                    <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }}>{lib.name}</Text>
+                        {installed && (
+                          <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: C.greenDim }}>
+                            <Text style={{ fontSize: 8, color: C.green }}>installed</Text>
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                    <Text style={{ fontSize: 10, color: C.textDim }}>{lib.desc}</Text>
+                    <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                      {lib.sizes.map(size => {
+                        const fullName = `${lib.name}:${size}`;
+                        const isInstalled = models.some(m => m.id === fullName || m.id === `${lib.name}:${size}-instruct`);
+                        return (
+                          <Pressable key={size} onPress={() => { setPullModel(fullName); }}>
+                            {({ hovered }) => (
+                              <Box style={{
+                                paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4,
+                                backgroundColor: isInstalled ? C.greenDim : hovered ? C.accentDim : C.surface,
+                              }}>
+                                <Text style={{ fontSize: 10, color: isInstalled ? C.green : hovered ? C.accent : C.textMuted, fontFamily: 'monospace' }}>
+                                  {size}
+                                </Text>
+                              </Box>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
         </Box>
       )}
 
