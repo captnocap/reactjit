@@ -1947,11 +1947,11 @@ export function PreviewMessageList({ c }: { c: ThemeColors }) {
 export function PreviewActionBar({ c }: { c: ThemeColors }) {
   return (
     <S.GrowCenterAlign style={{ gap: 20, padding: 20 }}>
-      <ActionBar actions={[
-        { id: 'copy', label: 'Copy' },
-        { id: 'edit', label: 'Edit' },
-        { id: 'share', label: 'Share' },
-        { id: 'delete', label: 'Delete' },
+      <ActionBar items={[
+        { key: 'copy', label: 'Copy' },
+        { key: 'edit', label: 'Edit' },
+        { key: 'share', label: 'Share' },
+        { key: 'delete', label: 'Delete' },
       ]} onAction={() => {}} />
     </S.GrowCenterAlign>
   );
@@ -2391,8 +2391,8 @@ register({ id: 'messagelist', label: 'MessageList', pkg: 'core',
 });
 register({ id: 'actionbar', label: 'ActionBar', pkg: 'core',
   desc: 'Horizontal row of labeled action buttons (copy, delete, regenerate).',
-  usage: `<ActionBar actions={[\n  { id: 'copy', label: 'Copy' },\n  { id: 'delete', label: 'Delete' },\n]} onAction={handle} />`,
-  props: [['actions', 'Action[]']],
+  usage: `<ActionBar items={[\n  { key: 'copy', label: 'Copy' },\n  { key: 'delete', label: 'Delete' },\n]} onAction={handle} />`,
+  props: [['items', 'ActionBarItem[]']],
   callbacks: [['onAction', '(id: string) => void']],
   thumb: (c) => <ThumbActionBar c={c} />, preview: (c) => <PreviewActionBar c={c} />,
 });
