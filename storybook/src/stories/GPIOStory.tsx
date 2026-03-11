@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Native } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
@@ -313,6 +313,50 @@ export function GPIOStory() {
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={INSTALL_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Live PCB Board visual ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="cpu" accentColor={C.accent}>{'LIVE HARDWARE'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'A stylized PCB with an ATmega microcontroller, voltage regulator, passive components, GPIO pin headers, and a blinking power LED. Everything rendered in Lua at 60fps — copper traces, silkscreen labels, solder joints, mounting holes.'}
+            </Text>
+            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Tag text="PCBBoard" color={C.pin} />
+              <Tag text="love.graphics" color={C.accent} />
+              <Tag text="60fps" color={C.pwm} />
+            </Box>
+          </Half>
+          <Half>
+            <Native type="PCBBoard" showLabels ledColor="green" ledBlink style={{ width: '100%', height: 180 }} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Live LED Matrix visual ── */}
+        <Band>
+          <Half>
+            <Box style={{ flexDirection: 'row', gap: 12, justifyContent: 'center', width: '100%' }}>
+              <Native type="LEDMatrix" color="red" pattern="cycle" style={{ width: 120, height: 120 }} />
+              <Native type="LEDMatrix" color="green" pattern="wave" speed={1.5} style={{ width: 120, height: 120 }} />
+              <Native type="LEDMatrix" color="blue" pattern="spiral" style={{ width: 120, height: 120 }} />
+            </Box>
+          </Half>
+          <Half>
+            <SectionLabel icon="grid" accentColor={C.serial}>{'8x8 LED MATRIX'}</SectionLabel>
+            <Text style={{ color: c.text, fontSize: 10 }}>
+              {'Three LED matrices running different patterns simultaneously. Left cycles through 8 built-in bitmaps (smiley, heart, arrow, checkerboard, skull, space invader). Center renders a real-time wave function. Right draws an animated spiral. All patterns computed in Lua every frame.'}
+            </Text>
+            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Tag text="LEDMatrix" color={C.serial} />
+              <Tag text="8 patterns" color={C.i2c} />
+              <Tag text="scroll text" color={C.spi} />
+            </Box>
           </Half>
         </Band>
 

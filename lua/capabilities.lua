@@ -332,6 +332,8 @@ function Capabilities.loadAll()
     "hello_card",
     "dashboard_card",
     "android_vm",
+    "pcb_board",
+    "led_matrix",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
