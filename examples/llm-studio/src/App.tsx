@@ -93,6 +93,7 @@ interface ConversationRecord {
   systemPrompt: string;
   updatedAt: number;
   totalTokens?: number;
+  tags?: string[];
 }
 
 interface OllamaModelInfo {
@@ -164,6 +165,13 @@ function LLMStudio() {
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(4096);
+  const [topP, setTopP] = useState<number | undefined>(undefined);
+  const [frequencyPenalty, setFrequencyPenalty] = useState<number | undefined>(undefined);
+  const [presencePenalty, setPresencePenalty] = useState<number | undefined>(undefined);
+  const [repeatPenalty, setRepeatPenalty] = useState<number | undefined>(undefined);
+  const [stopSequences, setStopSequences] = useState<string[]>([]);
+  const [customPresets, setCustomPresets] = useState<{ label: string; prompt: string }[]>([]);
+  const [sidebarTagFilter, setSidebarTagFilter] = useState<string | null>(null);
   const [view, setView] = useState<View>('chat');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [providerModalOpen, setProviderModalOpen] = useState(false);
@@ -408,6 +416,11 @@ function LLMStudio() {
     baseURL: activeProvider.baseURL,
     temperature,
     maxTokens,
+    topP,
+    frequencyPenalty,
+    presencePenalty,
+    repeatPenalty,
+    stop: stopSequences.length > 0 ? stopSequences : undefined,
     systemPrompt: effectiveSystemPrompt,
     initialMessages: activeConvoId
       ? conversations.find(c => c.id === activeConvoId)?.messages || []
@@ -654,6 +667,15 @@ function LLMStudio() {
         onImport={importConversations}
         view={view} onSetView={setView}
         onAddProvider={() => setProviderModalOpen(true)}
+        tagFilter={sidebarTagFilter} onTagFilter={setSidebarTagFilter}
+        onTagConvo={(id, tag) => {
+          setConversations(prev => prev.map(c => {
+            if (c.id !== id) return c;
+            const tags = c.tags || [];
+            const updated = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
+            return { ...c, tags: updated };
+          }));
+        }}
       />
 
       {/* ── Main content ── */}
@@ -808,6 +830,12 @@ function LLMStudio() {
                   systemPrompt={systemPrompt} onSystemPromptChange={setSystemPrompt}
                   temperature={temperature} onTemperatureChange={setTemperature}
                   maxTokens={maxTokens} onMaxTokensChange={setMaxTokens}
+                  topP={topP} onTopPChange={setTopP}
+                  frequencyPenalty={frequencyPenalty} onFrequencyPenaltyChange={setFrequencyPenalty}
+                  presencePenalty={presencePenalty} onPresencePenaltyChange={setPresencePenalty}
+                  repeatPenalty={repeatPenalty} onRepeatPenaltyChange={setRepeatPenalty}
+                  stopSequences={stopSequences} onStopSequencesChange={setStopSequences}
+                  customPresets={customPresets} onCustomPresetsChange={setCustomPresets}
                   provider={activeProvider}
                   onProviderKeyChange={(key) => {
                     setProviders(prev => prev.map(p =>
@@ -1164,6 +1192,7 @@ function Sidebar({
   onCloneConvo, onPopOutConvo, onRenameConvo, renamingConvoId, onStartRename,
   onExport, onImport,
   view, onSetView, onAddProvider,
+  tagFilter, onTagFilter, onTagConvo,
 }: {
   providers: Provider[]; activeProviderId: string; onSelectProvider: (id: string) => void;
   conversations: ConversationRecord[]; activeConvoId: string | null;
@@ -1173,21 +1202,38 @@ function Sidebar({
   renamingConvoId: string | null; onStartRename: (id: string | null) => void;
   onExport: () => string; onImport: (json: string) => boolean;
   view: View; onSetView: (v: View) => void; onAddProvider: () => void;
+  tagFilter: string | null; onTagFilter: (tag: string | null) => void;
+  onTagConvo: (id: string, tag: string) => void;
 }) {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [importStatus, setImportStatus] = useState('');
   const [search, setSearch] = useState('');
-  const filtered = search
-    ? conversations.filter(c => {
-        const q = search.toLowerCase();
+  const [taggingConvoId, setTaggingConvoId] = useState<string | null>(null);
+  const [newTag, setNewTag] = useState('');
+
+  // Collect all tags across conversations
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    conversations.forEach(c => c.tags?.forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [conversations]);
+
+  const filtered = useMemo(() => {
+    let list = conversations;
+    if (tagFilter) list = list.filter(c => c.tags?.includes(tagFilter));
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(c => {
         if (c.title.toLowerCase().includes(q)) return true;
         return c.messages.some(m => {
           const text = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
           return text.toLowerCase().includes(q);
         });
-      })
-    : conversations;
+      });
+    }
+    return list;
+  }, [conversations, tagFilter, search]);
 
   const activeProvider = providers.find(p => p.id === activeProviderId);
 
@@ -1251,6 +1297,36 @@ function Sidebar({
         />
       </Box>
 
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <Box style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 6 }}>
+          <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+            <Pressable onPress={() => onTagFilter(null)}>
+              {({ hovered }) => (
+                <Box style={{
+                  paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, borderRadius: 3,
+                  backgroundColor: !tagFilter ? C.accent : hovered ? C.surfaceHover : C.surface,
+                }}>
+                  <Text style={{ fontSize: 9, color: !tagFilter ? '#fff' : C.textMuted }}>All</Text>
+                </Box>
+              )}
+            </Pressable>
+            {allTags.map(tag => (
+              <Pressable key={tag} onPress={() => onTagFilter(tagFilter === tag ? null : tag)}>
+                {({ hovered }) => (
+                  <Box style={{
+                    paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, borderRadius: 3,
+                    backgroundColor: tagFilter === tag ? C.accent : hovered ? C.surfaceHover : C.surface,
+                  }}>
+                    <Text style={{ fontSize: 9, color: tagFilter === tag ? '#fff' : C.textMuted }}>{tag}</Text>
+                  </Box>
+                )}
+              </Pressable>
+            ))}
+          </Box>
+        </Box>
+      )}
+
       {/* Conversation list */}
       <ScrollView style={{ flexGrow: 1 }}>
         <Box style={{ padding: 4, gap: 2 }}>
@@ -1275,16 +1351,61 @@ function Sidebar({
                           {convo.title}
                         </Text>
                       )}
-                      <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
+                      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
+                        {convo.tags && convo.tags.map(t => (
+                          <Box key={t} style={{
+                            paddingLeft: 4, paddingRight: 4, paddingTop: 0, paddingBottom: 0,
+                            borderRadius: 3, backgroundColor: C.accentDim,
+                          }}>
+                            <Text style={{ fontSize: 8, color: C.accent }}>{t}</Text>
+                          </Box>
+                        ))}
+                      </Box>
                     </Box>
                   </Box>
                   {hovered && renamingConvoId !== convo.id && (
-                    <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
-                      <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
-                      <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
-                      <MsgAction label="Pop Out" color={C.accent} onPress={() => onPopOutConvo(convo.id)} />
-                      <MsgAction label="Del" color={C.red} onPress={() => onDeleteConvo(convo.id)} />
-                    </Box>
+                    <>
+                      <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
+                        <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
+                        <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
+                        <MsgAction label="Tag" color={C.yellow} onPress={() => setTaggingConvoId(taggingConvoId === convo.id ? null : convo.id)} />
+                        <MsgAction label="Pop Out" color={C.accent} onPress={() => onPopOutConvo(convo.id)} />
+                        <MsgAction label="Del" color={C.red} onPress={() => onDeleteConvo(convo.id)} />
+                      </Box>
+                      {taggingConvoId === convo.id && (
+                        <Box style={{ paddingTop: 4, gap: 4 }}>
+                          <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+                            {allTags.map(t => {
+                              const has = convo.tags?.includes(t);
+                              return (
+                                <Pressable key={t} onPress={() => onTagConvo(convo.id, t)}>
+                                  {({ hovered: th }) => (
+                                    <Box style={{
+                                      paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, borderRadius: 3,
+                                      backgroundColor: has ? C.accent : th ? C.surfaceHover : C.surface,
+                                    }}>
+                                      <Text style={{ fontSize: 8, color: has ? '#fff' : C.textMuted }}>{t}</Text>
+                                    </Box>
+                                  )}
+                                </Pressable>
+                              );
+                            })}
+                          </Box>
+                          <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+                            <Box style={{ flexGrow: 1 }}>
+                              <TextInput
+                                value={newTag} onChangeText={setNewTag}
+                                onSubmit={() => { if (newTag.trim()) { onTagConvo(convo.id, newTag.trim()); setNewTag(''); } }}
+                                placeholder="New tag..." placeholderColor={C.textDim}
+                                style={{ backgroundColor: C.bgInput, borderRadius: 3, padding: 3 }}
+                                textStyle={{ color: C.text, fontSize: 9 }}
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
+                      )}
+                    </>
                   )}
                 </Box>
               )}
@@ -1293,7 +1414,7 @@ function Sidebar({
           {filtered.length === 0 && (
             <Box style={{ padding: 20, alignItems: 'center' }}>
               <Text style={{ fontSize: 12, color: C.textDim }}>
-                {search ? 'No matches' : 'No conversations yet'}
+                {search ? 'No matches' : tagFilter ? 'No conversations with this tag' : 'No conversations yet'}
               </Text>
             </Box>
           )}
@@ -1493,23 +1614,38 @@ function WelcomeScreen({ provider, model }: { provider: Provider; model: string 
 function SettingsPanel({
   systemPrompt, onSystemPromptChange, temperature, onTemperatureChange,
   maxTokens, onMaxTokensChange, provider, onProviderKeyChange,
+  topP, onTopPChange, frequencyPenalty, onFrequencyPenaltyChange,
+  presencePenalty, onPresencePenaltyChange, repeatPenalty, onRepeatPenaltyChange,
+  stopSequences, onStopSequencesChange, customPresets, onCustomPresetsChange,
 }: {
   systemPrompt: string; onSystemPromptChange: (s: string) => void;
   temperature: number; onTemperatureChange: (n: number) => void;
   maxTokens: number; onMaxTokensChange: (n: number) => void;
+  topP: number | undefined; onTopPChange: (n: number | undefined) => void;
+  frequencyPenalty: number | undefined; onFrequencyPenaltyChange: (n: number | undefined) => void;
+  presencePenalty: number | undefined; onPresencePenaltyChange: (n: number | undefined) => void;
+  repeatPenalty: number | undefined; onRepeatPenaltyChange: (n: number | undefined) => void;
+  stopSequences: string[]; onStopSequencesChange: (s: string[]) => void;
+  customPresets: { label: string; prompt: string }[];
+  onCustomPresetsChange: (p: { label: string; prompt: string }[]) => void;
   provider: Provider; onProviderKeyChange: (key: string) => void;
 }) {
-  // Common system prompt presets
-  const presets = [
+  const [newStopSeq, setNewStopSeq] = useState('');
+  const [presetName, setPresetName] = useState('');
+
+  const builtInPresets = [
     { label: 'Default', prompt: 'You are a helpful assistant.' },
     { label: 'Coder', prompt: 'You are an expert programmer. Write clean, efficient code with clear explanations. Always include the language in code blocks.' },
     { label: 'Creative', prompt: 'You are a creative writing assistant. Be vivid, expressive, and original.' },
     { label: 'Concise', prompt: 'Be concise. Answer in as few words as possible while being complete.' },
+    { label: 'Analyst', prompt: 'You are a data analyst. Break down problems methodically, use numbers and evidence, and present findings clearly.' },
+    { label: 'Tutor', prompt: 'You are a patient tutor. Explain concepts step by step, check understanding, and adapt to the learner\'s level.' },
   ];
+  const allPresets = [...builtInPresets, ...customPresets];
 
   return (
     <ScrollView style={{
-      width: 280, borderLeftWidth: 1, borderColor: C.border,
+      width: 300, borderLeftWidth: 1, borderColor: C.border,
       backgroundColor: C.bgSidebar,
     }}>
       <Box style={{ padding: 16, gap: 16 }}>
@@ -1522,16 +1658,24 @@ function SettingsPanel({
         <Box style={{ gap: 4 }}>
           <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>System Prompt</Text>
           <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-            {presets.map(p => (
+            {allPresets.map((p, idx) => (
               <Pressable key={p.label} onPress={() => onSystemPromptChange(p.prompt)}>
                 {({ hovered }) => (
                   <Box style={{
                     paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
                     backgroundColor: systemPrompt === p.prompt ? C.accent : hovered ? C.surfaceHover : C.surface,
+                    flexDirection: 'row', gap: 4, alignItems: 'center',
                   }}>
                     <Text style={{ fontSize: 9, color: systemPrompt === p.prompt ? '#fff' : C.textMuted }}>
                       {p.label}
                     </Text>
+                    {idx >= builtInPresets.length && (
+                      <Pressable onPress={() => onCustomPresetsChange(customPresets.filter((_, ci) => ci !== idx - builtInPresets.length))}>
+                        {({ hovered: xh }) => (
+                          <Text style={{ fontSize: 8, color: xh ? C.red : C.textDim }}>x</Text>
+                        )}
+                      </Pressable>
+                    )}
                   </Box>
                 )}
               </Pressable>
@@ -1544,6 +1688,38 @@ function SettingsPanel({
             style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8, minHeight: 80 }}
             textStyle={{ color: C.text, fontSize: 12 }}
           />
+          {/* Save custom preset */}
+          <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+            <Box style={{ flexGrow: 1 }}>
+              <TextInput
+                value={presetName} onChangeText={setPresetName}
+                onSubmit={() => {
+                  if (presetName.trim()) {
+                    onCustomPresetsChange([...customPresets, { label: presetName.trim(), prompt: systemPrompt }]);
+                    setPresetName('');
+                  }
+                }}
+                placeholder="Save as preset..." placeholderColor={C.textDim}
+                style={{ backgroundColor: C.bgInput, borderRadius: 4, padding: 4 }}
+                textStyle={{ color: C.text, fontSize: 10 }}
+              />
+            </Box>
+            <Pressable onPress={() => {
+              if (presetName.trim()) {
+                onCustomPresetsChange([...customPresets, { label: presetName.trim(), prompt: systemPrompt }]);
+                setPresetName('');
+              }
+            }}>
+              {({ hovered }) => (
+                <Box style={{
+                  paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
+                  borderRadius: 4, backgroundColor: hovered ? C.accentHover : C.surface,
+                }}>
+                  <Text style={{ fontSize: 9, color: C.accent }}>Save</Text>
+                </Box>
+              )}
+            </Pressable>
+          </Box>
         </Box>
 
         {/* Temperature */}
@@ -1583,9 +1759,148 @@ function SettingsPanel({
           />
         </Box>
 
+        {/* Advanced sampling parameters */}
+        <Box style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Advanced Sampling</Text>
+
+          {/* Top P */}
+          <Box style={{ gap: 2 }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 10, color: C.textMuted }}>Top P</Text>
+              <Text style={{ fontSize: 10, color: C.textDim }}>{topP != null ? topP.toFixed(2) : 'off'}</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              {[undefined, 0.1, 0.5, 0.9, 0.95, 1.0].map((v, i) => (
+                <Pressable key={i} onPress={() => onTopPChange(v)}>
+                  {({ hovered }) => (
+                    <Box style={{
+                      paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 3,
+                      backgroundColor: topP === v ? C.accent : hovered ? C.surfaceHover : C.surface,
+                    }}>
+                      <Text style={{ fontSize: 9, color: topP === v ? '#fff' : C.textMuted }}>
+                        {v == null ? 'off' : v.toString()}
+                      </Text>
+                    </Box>
+                  )}
+                </Pressable>
+              ))}
+            </Box>
+          </Box>
+
+          {/* Frequency Penalty */}
+          <Box style={{ gap: 2 }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 10, color: C.textMuted }}>Frequency Penalty</Text>
+              <Text style={{ fontSize: 10, color: C.textDim }}>{frequencyPenalty != null ? frequencyPenalty.toFixed(1) : 'off'}</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              {[undefined, 0, 0.5, 1.0, 1.5, 2.0].map((v, i) => (
+                <Pressable key={i} onPress={() => onFrequencyPenaltyChange(v)}>
+                  {({ hovered }) => (
+                    <Box style={{
+                      paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 3,
+                      backgroundColor: frequencyPenalty === v ? C.accent : hovered ? C.surfaceHover : C.surface,
+                    }}>
+                      <Text style={{ fontSize: 9, color: frequencyPenalty === v ? '#fff' : C.textMuted }}>
+                        {v == null ? 'off' : v.toString()}
+                      </Text>
+                    </Box>
+                  )}
+                </Pressable>
+              ))}
+            </Box>
+          </Box>
+
+          {/* Presence Penalty */}
+          <Box style={{ gap: 2 }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 10, color: C.textMuted }}>Presence Penalty</Text>
+              <Text style={{ fontSize: 10, color: C.textDim }}>{presencePenalty != null ? presencePenalty.toFixed(1) : 'off'}</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              {[undefined, 0, 0.5, 1.0, 1.5, 2.0].map((v, i) => (
+                <Pressable key={i} onPress={() => onPresencePenaltyChange(v)}>
+                  {({ hovered }) => (
+                    <Box style={{
+                      paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 3,
+                      backgroundColor: presencePenalty === v ? C.accent : hovered ? C.surfaceHover : C.surface,
+                    }}>
+                      <Text style={{ fontSize: 9, color: presencePenalty === v ? '#fff' : C.textMuted }}>
+                        {v == null ? 'off' : v.toString()}
+                      </Text>
+                    </Box>
+                  )}
+                </Pressable>
+              ))}
+            </Box>
+          </Box>
+
+          {/* Repeat Penalty (Ollama/llama.cpp specific) */}
+          <Box style={{ gap: 2 }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 10, color: C.textMuted }}>Repeat Penalty</Text>
+              <Text style={{ fontSize: 10, color: C.textDim }}>{repeatPenalty != null ? repeatPenalty.toFixed(1) : 'off'}</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              {[undefined, 1.0, 1.1, 1.2, 1.5, 2.0].map((v, i) => (
+                <Pressable key={i} onPress={() => onRepeatPenaltyChange(v)}>
+                  {({ hovered }) => (
+                    <Box style={{
+                      paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 3,
+                      backgroundColor: repeatPenalty === v ? C.accent : hovered ? C.surfaceHover : C.surface,
+                    }}>
+                      <Text style={{ fontSize: 9, color: repeatPenalty === v ? '#fff' : C.textMuted }}>
+                        {v == null ? 'off' : v.toString()}
+                      </Text>
+                    </Box>
+                  )}
+                </Pressable>
+              ))}
+            </Box>
+          </Box>
+
+          {/* Stop sequences */}
+          <Box style={{ gap: 4 }}>
+            <Text style={{ fontSize: 10, color: C.textMuted }}>Stop Sequences</Text>
+            {stopSequences.length > 0 && (
+              <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+                {stopSequences.map((s, si) => (
+                  <Pressable key={si} onPress={() => onStopSequencesChange(stopSequences.filter((_, i) => i !== si))}>
+                    {({ hovered }) => (
+                      <Box style={{
+                        paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2,
+                        borderRadius: 3, backgroundColor: hovered ? C.redDim : C.surface,
+                        flexDirection: 'row', gap: 3, alignItems: 'center',
+                      }}>
+                        <Text style={{ fontSize: 9, color: C.text, fontFamily: 'monospace' }}>
+                          {JSON.stringify(s)}
+                        </Text>
+                        <Text style={{ fontSize: 8, color: C.textDim }}>x</Text>
+                      </Box>
+                    )}
+                  </Pressable>
+                ))}
+              </Box>
+            )}
+            <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <Box style={{ flexGrow: 1 }}>
+                <TextInput
+                  value={newStopSeq} onChangeText={setNewStopSeq}
+                  onSubmit={() => {
+                    if (newStopSeq) { onStopSequencesChange([...stopSequences, newStopSeq]); setNewStopSeq(''); }
+                  }}
+                  placeholder="Add stop sequence..." placeholderColor={C.textDim}
+                  style={{ backgroundColor: C.bgInput, borderRadius: 4, padding: 4 }}
+                  textStyle={{ color: C.text, fontSize: 10, fontFamily: 'monospace' }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+
         {/* API Key for cloud providers */}
         {(provider.type === 'anthropic' || provider.id === 'openai') && (
-          <Box style={{ gap: 4 }}>
+          <Box style={{ gap: 4, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
             <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>API Key</Text>
             <TextInput
               value={provider.apiKey || ''} onChangeText={onProviderKeyChange}

@@ -16,6 +16,11 @@ export interface AIConfig {
   baseURL?: string;
   temperature?: number;
   maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  repeatPenalty?: number;
+  stop?: string[];
   systemPrompt?: string;
   /** SOCKS5 or HTTP proxy URL — leverages Love2D's existing proxy support */
   proxy?: string;

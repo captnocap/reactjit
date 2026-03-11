@@ -91,6 +91,8 @@ export const anthropic: ProviderModule = {
 
     if (systemPrompt) body.system = systemPrompt;
     if (config.temperature != null) body.temperature = config.temperature;
+    if (config.topP != null) body.top_p = config.topP;
+    if (config.stop && config.stop.length > 0) body.stop_sequences = config.stop;
 
     if (tools && tools.length > 0) {
       body.tools = tools.map(toolToAnthropic);

@@ -63,6 +63,11 @@ export const openai: ProviderModule = {
 
     if (config.temperature != null) body.temperature = config.temperature;
     if (config.maxTokens != null) body.max_tokens = config.maxTokens;
+    if (config.topP != null) body.top_p = config.topP;
+    if (config.frequencyPenalty != null) body.frequency_penalty = config.frequencyPenalty;
+    if (config.presencePenalty != null) body.presence_penalty = config.presencePenalty;
+    if (config.repeatPenalty != null) body.repeat_penalty = config.repeatPenalty;
+    if (config.stop && config.stop.length > 0) body.stop = config.stop;
 
     if (tools && tools.length > 0) {
       body.tools = tools.map(toolToOpenAI);
