@@ -85,6 +85,17 @@ function relativeTime(ts: number): string {
   return d === 1 ? 'yesterday' : `${d}d ago`;
 }
 
+function dateGroup(ts: number): string {
+  const now = new Date();
+  const d = new Date(ts);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return 'Today';
+  if (ts >= startOfToday - 86400000) return 'Yesterday';
+  if (ts >= startOfToday - 604800000) return 'This Week';
+  if (ts >= startOfToday - 2592000000) return 'This Month';
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface Provider {
@@ -1299,6 +1310,22 @@ function Sidebar({
     return [...list].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
   }, [conversations, tagFilter, search]);
 
+  // Group conversations by date
+  const grouped = useMemo(() => {
+    const groups: { label: string; convos: ConversationRecord[] }[] = [];
+    let lastLabel = '';
+    for (const c of filtered) {
+      const label = c.pinned ? 'Pinned' : dateGroup(c.updatedAt);
+      if (label !== lastLabel) {
+        groups.push({ label, convos: [c] });
+        lastLabel = label;
+      } else {
+        groups[groups.length - 1].convos.push(c);
+      }
+    }
+    return groups;
+  }, [filtered]);
+
   const activeProvider = providers.find(p => p.id === activeProviderId);
 
   return (
@@ -1391,102 +1418,29 @@ function Sidebar({
         </Box>
       )}
 
-      {/* Conversation list */}
+      {/* Conversation list (grouped by date) */}
       <ScrollView style={{ flexGrow: 1 }}>
         <Box style={{ padding: 4, gap: 2 }}>
-          {filtered.map(convo => (
-            <Pressable key={convo.id} onPress={() => onSelectConvo(convo.id)}>
-              {({ hovered }) => (
-                <Box style={{
-                  padding: 10, paddingLeft: 12, borderRadius: 6,
-                  backgroundColor: convo.id === activeConvoId ? C.surfaceActive : hovered ? C.surfaceHover : 'transparent',
-                  gap: 2,
-                }}>
-                  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box style={{ flexGrow: 1 }}>
-                      {renamingConvoId === convo.id ? (
-                        <ConvoRenameInput
-                          initialTitle={convo.title}
-                          onCommit={(t) => onRenameConvo(convo.id, t)}
-                          onCancel={() => onStartRename(null)}
-                        />
-                      ) : (
-                        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-                          {convo.pinned && <Text style={{ fontSize: 10, color: C.yellow }}>*</Text>}
-                          <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
-                            {convo.title}
-                          </Text>
-                        </Box>
-                      )}
-                      <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
-                        <Text style={{ fontSize: 9, color: C.textDim }}>{relativeTime(convo.updatedAt)}</Text>
-                        {convo.messages.length > 0 && (
-                          <Text style={{ fontSize: 9, color: C.textDim }}>{`${convo.messages.length} msgs`}</Text>
-                        )}
-                        {convo.parentId && (
-                          <Box style={{ paddingLeft: 3, paddingRight: 3, borderRadius: 3, backgroundColor: C.greenDim }}>
-                            <Text style={{ fontSize: 8, color: C.green }}>fork</Text>
-                          </Box>
-                        )}
-                        {convo.tags && convo.tags.map(t => (
-                          <Box key={t} style={{
-                            paddingLeft: 4, paddingRight: 4, paddingTop: 0, paddingBottom: 0,
-                            borderRadius: 3, backgroundColor: C.accentDim,
-                          }}>
-                            <Text style={{ fontSize: 8, color: C.accent }}>{t}</Text>
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </Box>
-                  {hovered && renamingConvoId !== convo.id && (
-                    <>
-                      <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
-                        <MsgAction label={convo.pinned ? 'Unpin' : 'Pin'} color={C.yellow} onPress={() => onPinConvo(convo.id)} />
-                        <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
-                        <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
-                        <MsgAction label="Tag" color={C.yellow} onPress={() => setTaggingConvoId(taggingConvoId === convo.id ? null : convo.id)} />
-                        <MsgAction label="Pop Out" color={C.accent} onPress={() => onPopOutConvo(convo.id)} />
-                        <MsgAction label="Del" color={C.red} onPress={() => onDeleteConvo(convo.id)} />
-                      </Box>
-                      {taggingConvoId === convo.id && (
-                        <Box style={{ paddingTop: 4, gap: 4 }}>
-                          <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
-                            {allTags.map(t => {
-                              const has = convo.tags?.includes(t);
-                              return (
-                                <Pressable key={t} onPress={() => onTagConvo(convo.id, t)}>
-                                  {({ hovered: th }) => (
-                                    <Box style={{
-                                      paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, borderRadius: 3,
-                                      backgroundColor: has ? C.accent : th ? C.surfaceHover : C.surface,
-                                    }}>
-                                      <Text style={{ fontSize: 8, color: has ? '#fff' : C.textMuted }}>{t}</Text>
-                                    </Box>
-                                  )}
-                                </Pressable>
-                              );
-                            })}
-                          </Box>
-                          <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-                            <Box style={{ flexGrow: 1 }}>
-                              <TextInput
-                                value={newTag} onChangeText={setNewTag}
-                                onSubmit={() => { if (newTag.trim()) { onTagConvo(convo.id, newTag.trim()); setNewTag(''); } }}
-                                placeholder="New tag..." placeholderColor={C.textDim}
-                                style={{ backgroundColor: C.bgInput, borderRadius: 3, padding: 3 }}
-                                textStyle={{ color: C.text, fontSize: 9 }}
-                              />
-                            </Box>
-                          </Box>
-                        </Box>
-                      )}
-                    </>
-                  )}
-                </Box>
-              )}
-            </Pressable>
+          {grouped.map(group => (
+            <Box key={group.label} style={{ gap: 2 }}>
+              <Box style={{ paddingLeft: 10, paddingTop: 8, paddingBottom: 2 }}>
+                <Text style={{ fontSize: 9, color: C.textDim, fontWeight: 'bold', fontFamily: 'monospace' }}>
+                  {group.label.toUpperCase()}
+                </Text>
+              </Box>
+              {group.convos.map(convo => (
+                <ConvoItem key={convo.id} convo={convo} activeConvoId={activeConvoId}
+                  renamingConvoId={renamingConvoId} taggingConvoId={taggingConvoId}
+                  allTags={allTags} newTag={newTag}
+                  onSelectConvo={onSelectConvo} onStartRename={onStartRename}
+                  onRenameConvo={onRenameConvo} onCloneConvo={onCloneConvo}
+                  onPopOutConvo={onPopOutConvo} onDeleteConvo={onDeleteConvo}
+                  onPinConvo={onPinConvo} onTagConvo={onTagConvo}
+                  setTaggingConvoId={setTaggingConvoId}
+                  setNewTag={setNewTag}
+                />
+              ))}
+            </Box>
           ))}
           {filtered.length === 0 && (
             <Box style={{ padding: 20, alignItems: 'center' }}>
@@ -1694,8 +1648,26 @@ function WelcomeScreen({ provider, model }: { provider: Provider; model: string 
         <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.tool, gap: 2 }}>
           <Text style={{ fontSize: 10, color: C.tool, fontWeight: 'bold', fontFamily: 'monospace' }}>COMPARE</Text>
           <Text style={{ fontSize: 10, color: C.textDim }}>
-            Use Compare tab to send the same prompt to multiple models at once
+            {`Type +model1 +model2 your prompt to compare models inline`}
           </Text>
+        </Box>
+      </Box>
+
+      {/* Keyboard shortcuts */}
+      <Box style={{ paddingTop: 8, gap: 3, width: 340 }}>
+        <Text style={{ fontSize: 9, color: C.textDim, fontFamily: 'monospace', fontWeight: 'bold' }}>SHORTCUTS</Text>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {[
+            ['Ctrl+N', 'New Chat'], ['Ctrl+M', 'Switch Model'], ['Ctrl+,', 'Settings'],
+            ['Ctrl+1-5', 'Switch View'], ['Esc', 'Close Panel'],
+          ].map(([key, desc]) => (
+            <Box key={key} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: C.surface }}>
+                <Text style={{ fontSize: 8, color: C.textMuted, fontFamily: 'monospace' }}>{key}</Text>
+              </Box>
+              <Text style={{ fontSize: 9, color: C.textDim }}>{desc}</Text>
+            </Box>
+          ))}
         </Box>
       </Box>
     </Box>
@@ -2760,6 +2732,117 @@ function CompareChatColumn({
         </Box>
       )}
     </Box>
+  );
+}
+
+// ── Sidebar conversation item ─────────────────────────────────────────────────
+
+function ConvoItem({ convo, activeConvoId, renamingConvoId, taggingConvoId, allTags, newTag,
+  onSelectConvo, onStartRename, onRenameConvo, onCloneConvo, onPopOutConvo, onDeleteConvo,
+  onPinConvo, onTagConvo, setTaggingConvoId, setNewTag,
+}: {
+  convo: ConversationRecord; activeConvoId: string | null;
+  renamingConvoId: string | null; taggingConvoId: string | null;
+  allTags: string[]; newTag: string;
+  onSelectConvo: (id: string) => void; onStartRename: (id: string | null) => void;
+  onRenameConvo: (id: string, title: string) => void; onCloneConvo: (id: string) => void;
+  onPopOutConvo: (id: string) => void; onDeleteConvo: (id: string) => void;
+  onPinConvo: (id: string) => void; onTagConvo: (id: string, tag: string) => void;
+  setTaggingConvoId: (id: string | null) => void; setNewTag: (s: string) => void;
+}) {
+  return (
+    <Pressable onPress={() => onSelectConvo(convo.id)}>
+      {({ hovered }) => (
+        <Box style={{
+          padding: 10, paddingLeft: 12, borderRadius: 6,
+          backgroundColor: convo.id === activeConvoId ? C.surfaceActive : hovered ? C.surfaceHover : 'transparent',
+          gap: 2,
+        }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box style={{ flexGrow: 1 }}>
+              {renamingConvoId === convo.id ? (
+                <ConvoRenameInput
+                  initialTitle={convo.title}
+                  onCommit={(t) => onRenameConvo(convo.id, t)}
+                  onCancel={() => onStartRename(null)}
+                />
+              ) : (
+                <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  {convo.pinned && <Text style={{ fontSize: 10, color: C.yellow }}>*</Text>}
+                  <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
+                    {convo.title}
+                  </Text>
+                </Box>
+              )}
+              <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
+                <Text style={{ fontSize: 9, color: C.textDim }}>{relativeTime(convo.updatedAt)}</Text>
+                {convo.messages.length > 0 && (
+                  <Text style={{ fontSize: 9, color: C.textDim }}>{`${convo.messages.length} msgs`}</Text>
+                )}
+                {convo.parentId && (
+                  <Box style={{ paddingLeft: 3, paddingRight: 3, borderRadius: 3, backgroundColor: C.greenDim }}>
+                    <Text style={{ fontSize: 8, color: C.green }}>fork</Text>
+                  </Box>
+                )}
+                {convo.tags && convo.tags.map(t => (
+                  <Box key={t} style={{
+                    paddingLeft: 4, paddingRight: 4, paddingTop: 0, paddingBottom: 0,
+                    borderRadius: 3, backgroundColor: C.accentDim,
+                  }}>
+                    <Text style={{ fontSize: 8, color: C.accent }}>{t}</Text>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+          {hovered && renamingConvoId !== convo.id && (
+            <>
+              <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
+                <MsgAction label={convo.pinned ? 'Unpin' : 'Pin'} color={C.yellow} onPress={() => onPinConvo(convo.id)} />
+                <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
+                <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
+                <MsgAction label="Tag" color={C.yellow} onPress={() => setTaggingConvoId(taggingConvoId === convo.id ? null : convo.id)} />
+                <MsgAction label="Pop Out" color={C.accent} onPress={() => onPopOutConvo(convo.id)} />
+                <MsgAction label="Del" color={C.red} onPress={() => onDeleteConvo(convo.id)} />
+              </Box>
+              {taggingConvoId === convo.id && (
+                <Box style={{ paddingTop: 4, gap: 4 }}>
+                  <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+                    {allTags.map(t => {
+                      const has = convo.tags?.includes(t);
+                      return (
+                        <Pressable key={t} onPress={() => onTagConvo(convo.id, t)}>
+                          {({ hovered: th }) => (
+                            <Box style={{
+                              paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, borderRadius: 3,
+                              backgroundColor: has ? C.accent : th ? C.surfaceHover : C.surface,
+                            }}>
+                              <Text style={{ fontSize: 8, color: has ? '#fff' : C.textMuted }}>{t}</Text>
+                            </Box>
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                  </Box>
+                  <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
+                    <Box style={{ flexGrow: 1 }}>
+                      <TextInput
+                        value={newTag} onChangeText={setNewTag}
+                        onSubmit={() => { if (newTag.trim()) { onTagConvo(convo.id, newTag.trim()); setNewTag(''); } }}
+                        placeholder="New tag..." placeholderColor={C.textDim}
+                        style={{ backgroundColor: C.bgInput, borderRadius: 3, padding: 3 }}
+                        textStyle={{ color: C.text, fontSize: 9 }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
+      )}
+    </Pressable>
   );
 }
 
