@@ -96,7 +96,9 @@ Capabilities.register("Render", {
   end,
 
   -- Keyboard event forwarding for interactive mode
-  handleKeyPressed = function(nodeId, key, scancode, isrepeat)
+  -- Note: init.lua passes the full node object, not just nodeId
+  handleKeyPressed = function(node, key, scancode, isrepeat)
+    local nodeId = node.id
     local RenderSource = require("lua.render_source")
     if RenderSource.isInteractive(nodeId) then
       RenderSource.forwardKey(nodeId, "keypressed", key)
@@ -105,10 +107,21 @@ Capabilities.register("Render", {
     return false
   end,
 
-  handleKeyReleased = function(nodeId, key, scancode)
+  handleKeyReleased = function(node, key, scancode)
+    local nodeId = node.id
     local RenderSource = require("lua.render_source")
     if RenderSource.isInteractive(nodeId) then
       RenderSource.forwardKey(nodeId, "keyreleased", key)
+      return true
+    end
+    return false
+  end,
+
+  handleTextInput = function(node, text)
+    local nodeId = node.id
+    local RenderSource = require("lua.render_source")
+    if RenderSource.isInteractive(nodeId) then
+      RenderSource.forwardText(nodeId, text)
       return true
     end
     return false

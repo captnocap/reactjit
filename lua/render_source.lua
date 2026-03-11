@@ -1656,9 +1656,29 @@ function RenderSource.forwardMouse(nodeId, eventType, localX, localY, button)
   end
 end
 
+-- Map Love2D key names to X11 keysym names (xdotool format)
+local LOVE_TO_X11 = {
+  ["backspace"] = "BackSpace", ["return"] = "Return", ["escape"] = "Escape",
+  ["tab"] = "Tab", ["space"] = "space", ["delete"] = "Delete",
+  ["up"] = "Up", ["down"] = "Down", ["left"] = "Left", ["right"] = "Right",
+  ["home"] = "Home", ["end"] = "End", ["pageup"] = "Prior", ["pagedown"] = "Next",
+  ["insert"] = "Insert",
+  ["lshift"] = "Shift_L", ["rshift"] = "Shift_R",
+  ["lctrl"] = "Control_L", ["rctrl"] = "Control_R",
+  ["lalt"] = "Alt_L", ["ralt"] = "Alt_R",
+  ["lgui"] = "Super_L", ["rgui"] = "Super_R",
+  ["capslock"] = "Caps_Lock", ["numlock"] = "Num_Lock", ["scrolllock"] = "Scroll_Lock",
+  ["f1"] = "F1", ["f2"] = "F2", ["f3"] = "F3", ["f4"] = "F4",
+  ["f5"] = "F5", ["f6"] = "F6", ["f7"] = "F7", ["f8"] = "F8",
+  ["f9"] = "F9", ["f10"] = "F10", ["f11"] = "F11", ["f12"] = "F12",
+}
+
 function RenderSource.forwardKey(nodeId, eventType, key)
   local feed = feeds[nodeId]
   if not feed or not feed.interactive then return end
+
+  -- Translate Love2D key name to X11 keysym name
+  local xkey = LOVE_TO_X11[key] or key
 
   if feed.backend == "vnc" then
     -- VNC protocol key forwarding via control channel
@@ -1693,9 +1713,9 @@ function RenderSource.forwardKey(nodeId, eventType, key)
   if feed.backend == "display" or feed.backend == "display_xshm" then
     local displayEnv = string.format("DISPLAY=:%d", feed.displayNum)
     if eventType == "keypressed" then
-      os.execute(string.format("%s xdotool keydown %s &", displayEnv, key))
+      os.execute(string.format("%s xdotool keydown %s &", displayEnv, xkey))
     elseif eventType == "keyreleased" then
-      os.execute(string.format("%s xdotool keyup %s &", displayEnv, key))
+      os.execute(string.format("%s xdotool keyup %s &", displayEnv, xkey))
     end
     return
   end
@@ -1704,10 +1724,44 @@ function RenderSource.forwardKey(nodeId, eventType, key)
   local parsed = feed.parsed
   if parsed.type == "screen" or parsed.type == "window" then
     if eventType == "keypressed" then
-      os.execute(string.format("xdotool keydown %s &", key))
+      os.execute(string.format("xdotool keydown %s &", xkey))
     elseif eventType == "keyreleased" then
-      os.execute(string.format("xdotool keyup %s &", key))
+      os.execute(string.format("xdotool keyup %s &", xkey))
     end
+  end
+end
+
+function RenderSource.forwardText(nodeId, text)
+  local feed = feeds[nodeId]
+  if not feed or not feed.interactive then return end
+
+  if feed.backend == "vnc" then
+    -- VNC: send each character as key press/release
+    if feed.controlChannel then
+      for i = 1, #text do
+        local ch = text:sub(i, i)
+        local keysym = string.byte(ch)
+        feed.controlChannel:push(string.format("key:down:%d", keysym))
+        feed.controlChannel:push(string.format("key:up:%d", keysym))
+      end
+    end
+    return
+  end
+
+  if feed.backend == "display" or feed.backend == "display_xshm" then
+    local displayEnv = string.format("DISPLAY=:%d", feed.displayNum)
+    -- xdotool type handles UTF-8 and special chars properly
+    -- Escape single quotes in the text for shell safety
+    local escaped = text:gsub("'", "'\\''")
+    os.execute(string.format("%s xdotool type -- '%s' &", displayEnv, escaped))
+    return
+  end
+
+  -- Screen / window capture
+  local parsed = feed.parsed
+  if parsed.type == "screen" or parsed.type == "window" then
+    local escaped = text:gsub("'", "'\\''")
+    os.execute(string.format("xdotool type -- '%s' &", escaped))
   end
 end
 
