@@ -1163,6 +1163,18 @@ function Testrunner.get_focusables(_args)
   return result
 end
 
+--- Emit a single TEST_PASS or TEST_FAIL line to stdout immediately.
+--- Used by sweep tests that report per-component results in real time.
+function Testrunner.emit(args)
+  if args.passed then
+    io.write("TEST_PASS: " .. tostring(args.name) .. "\n")
+  else
+    io.write("TEST_FAIL: " .. tostring(args.name) .. ": " .. tostring(args.error or "unknown") .. "\n")
+  end
+  io.flush()
+  return {}
+end
+
 --- Print structured test results and quit Love2D.
 --- Exit code 0 if all tests passed, 1 if any failed.
 function Testrunner.report(args)

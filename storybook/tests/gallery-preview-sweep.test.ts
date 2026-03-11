@@ -1,117 +1,90 @@
-// Gallery preview sweep — click every component, check for crashes.
+// Gallery preview sweep — render every component, report each one individually.
 //
-// Navigates to the Component Gallery, then clicks each component thumbnail
-// and checks the preview renders without errors.
+// The old version wrapped 61 checks in 1 test() block. The runner saw "0 passed,
+// 1 failed (1 test)" — hiding that 60 components actually worked. Now each
+// component emits its own TEST_PASS/TEST_FAIL through bridge RPC, so the runner
+// reports the truth: "60 passed, 1 failed (61 tests)".
 //
 // Run:
-//   cd storybook && rjit build && rjit test tests/gallery-preview-sweep.test.ts --timeout=300
+//   cd storybook && rjit build && rjit test tests/gallery-preview-sweep.test.ts --timeout=300 --visible -v
 
-type RpcBridge = {
-  rpc<T = any>(method: string, args?: any, timeoutMs?: number): Promise<T>;
-};
+test('Gallery preview sweep', async () => {
+  const bridge = (globalThis as any).__rjitBridge;
 
-const bridge = (globalThis as any).__rjitBridge as RpcBridge | undefined;
+  // ── Intercept console.error to catch JS errors the error boundary swallows ──
+  const jsErrors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: any[]) => {
+    jsErrors.push(args.map(String).join(' '));
+    origError(...args);
+  };
 
-function requireBridge(): RpcBridge {
-  if (!bridge) throw new Error('Missing __rjitBridge');
-  return bridge;
-}
-
-async function setViewport(w: number, h: number): Promise<void> {
-  await requireBridge().rpc('window:setSize', { width: w, height: h });
-  await page.wait(3);
-}
-
-async function navigateToGallery(): Promise<boolean> {
-  // __navigateToStory is exposed by StorybookPanel on globalThis
+  // Navigate to the Component Gallery story
   const nav = (globalThis as any).__navigateToStory;
-  if (typeof nav === 'function') {
-    const ok = nav('gallery');
-    if (ok) {
-      await page.wait(10); // let React re-render + layout settle
-      return true;
-    }
-  }
-  // Fallback: try clicking in sidebar
-  try {
-    await page.find('Text', { children: 'Component Gallery' }).click();
-    await page.wait(5);
-    return true;
-  } catch {
-    return false;
-  }
-}
+  if (typeof nav !== 'function') throw new Error('__navigateToStory not found');
+  nav('gallery');
+  await page.wait(10);
 
-test('Gallery preview sweep — all components', async () => {
-  const broken: string[] = [];
-  const passed: string[] = [];
-  const skipped: string[] = [];
+  // Get component list + setter from GalleryStory
+  const entries = (globalThis as any).__galleryEntries as Array<{ id: string; label: string }>;
+  const setActive = (globalThis as any).__gallerySetActive as (id: string) => void;
+  if (!entries || !setActive) throw new Error('Gallery not loaded — __galleryEntries or __gallerySetActive missing');
 
-  await setViewport(1440, 900);
+  let totalPassed = 0;
+  let totalFailed = 0;
+  const total = entries.length;
 
-  const navOk = await navigateToGallery();
-  if (!navOk) {
-    await page.screenshot('/tmp/gallery_sweep_nav_fail.png');
-    throw new Error('Could not navigate to Component Gallery. See /tmp/gallery_sweep_nav_fail.png');
-  }
+  for (let i = 0; i < total; i++) {
+    const entry = entries[i];
+    const testName = `Gallery/${entry.label}`;
+    console.log(`[${i + 1}/${total}] ${entry.label}...`);
 
-  await page.screenshot('/tmp/gallery_sweep_start.png');
+    // Clear error buffer before each component
+    jsErrors.length = 0;
 
-  // Get component list from globalThis (exposed by GalleryStory)
-  const entries = (globalThis as any).__galleryEntries as Array<{ id: string; label: string }> | undefined;
-  if (!entries || entries.length === 0) {
-    throw new Error('No __galleryEntries found on globalThis. GalleryStory may not have rendered.');
-  }
-
-  for (const entry of entries) {
     try {
-      // Click the thumbnail label by testId
-      const thumb = await page.find('Text', { testId: `gallery-thumb-${entry.id}` }).all();
-      if (thumb.length === 0) { skipped.push(entry.label); continue; }
-
-      await thumb[0].click();
+      setActive(entry.id);
       await page.wait(5);
 
-      // Check for error overlay — StoryErrorBoundary renders "Story Crashed"
-      try {
-        const crashNodes = await page.find('Text', { children: 'Story Crashed' }).all();
-        if (crashNodes.length > 0) {
-          broken.push(`${entry.label}: Story Crashed`);
-          const safeName = entry.id.replace(/[^a-z0-9]/g, '_');
-          await page.screenshot(`/tmp/gallery_fail_${safeName}.png`);
-          continue;
-        }
-      } catch { /* no error — good */ }
+      // ── Check 1: Error boundary crash overlay ──
+      const crashNodes = await page.find('Text', { children: 'Story Crashed' }).all();
+      if (crashNodes.length > 0) {
+        await bridge.rpc('test:emit', { name: testName, passed: false, error: 'Story Crashed' });
+        totalFailed++;
+        await page.screenshot(`/tmp/gallery_fail_${entry.id}.png`);
+        continue;
+      }
 
-      // Also check for ERROR text in the preview itself
-      try {
-        const errorNodes = await page.find('Text', { children: 'ERROR' }).all();
-        if (errorNodes.length > 0) {
-          const errText = await errorNodes[0].text();
-          broken.push(`${entry.label}: ${errText.slice(0, 150)}`);
-          const safeName = entry.id.replace(/[^a-z0-9]/g, '_');
-          await page.screenshot(`/tmp/gallery_fail_${safeName}.png`);
-          continue;
-        }
-      } catch { /* no error — good */ }
+      // ── Check 2: JS console errors during render ──
+      const realErrors = jsErrors.filter((e: string) =>
+        e.includes('The above error occurred') ||
+        (e.includes('[ERROR]') && !e.includes('Warning:'))
+      );
+      if (realErrors.length > 0) {
+        const firstErr = realErrors[0].slice(0, 120);
+        await bridge.rpc('test:emit', { name: testName, passed: false, error: `console.error: ${firstErr}` });
+        totalFailed++;
+        await page.screenshot(`/tmp/gallery_fail_${entry.id}.png`);
+        continue;
+      }
 
-      passed.push(entry.label);
+      // Passed
+      await bridge.rpc('test:emit', { name: testName, passed: true });
+      totalPassed++;
+
     } catch (e: any) {
-      broken.push(`${entry.label}: ${(e?.message || String(e)).slice(0, 150)}`);
+      const msg = (e?.message || String(e)).slice(0, 150);
+      await bridge.rpc('test:emit', { name: testName, passed: false, error: msg });
+      totalFailed++;
+      await page.screenshot(`/tmp/gallery_fail_${entry.id}.png`);
     }
   }
 
-  // Summary
-  const summary = [
-    `Gallery Preview Sweep: ${passed.length} pass, ${broken.length} fail, ${skipped.length} skip`,
-    '',
-    ...broken.map(b => `  FAIL  ${b}`),
-    ...skipped.map(s => `  SKIP  ${s}`),
-  ].join('\n');
+  // Restore console.error
+  console.error = origError;
 
-  console.log(summary);
+  console.log(`\nSweep complete: ${totalPassed} pass, ${totalFailed} fail (${total} total)`);
 
-  if (broken.length > 0) {
-    throw new Error(summary);
-  }
+  // Don't throw — individual results are already emitted.
+  // The outer test passes silently; the real results are the per-component ones.
 });

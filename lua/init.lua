@@ -2195,6 +2195,7 @@ function ReactJIT.init(config)
     rpcHandlers["test:get-focused"]      = function(a) return tr.get_focused(a) end
     rpcHandlers["test:get-scroll"]       = function(a) return tr.get_scroll(a) end
     rpcHandlers["test:get-focusables"]   = function(a) return tr.get_focusables(a) end
+    rpcHandlers["test:emit"]       = function(a) return tr.emit(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
