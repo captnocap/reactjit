@@ -216,6 +216,7 @@ function Imaging.loadOps()
     "filter",
     "blend",
     "mask",
+    "detect",
   }
   for _, name in ipairs(opFiles) do
     local ok, err = pcall(require, "lua.imaging.ops." .. name)

@@ -268,6 +268,56 @@ export interface ImagingToolState {
 }
 
 // ============================================================================
+// Object Detection
+// ============================================================================
+
+/** Parameters for foreground detection. All optional — auto-tuned if omitted. */
+export interface DetectForegroundParams {
+  /** Color distance threshold (0-1). Higher = more permissive foreground. Auto-tuned from border variance if omitted. */
+  threshold?: number;
+  /** Transition softness (0-1). Controls how gradual the fg/bg transition is. */
+  softness?: number;
+  /** Border sampling width in pixels. Pixels from image edges are sampled as "definite background". */
+  borderWidth?: number;
+  /** Morphological cleanup radius. Erode then dilate to remove noise. */
+  morphRadius?: number;
+  /** Edge feather radius. Gaussian blur applied to final mask edges. */
+  featherRadius?: number;
+  /** Edge refinement strength (0-1). Uses Sobel edges to sharpen mask boundaries. */
+  edgeWeight?: number;
+}
+
+export interface DetectForegroundResult {
+  ok: boolean;
+  /** Mask handle — pass to compositeBackground or imaging:apply's maskId. */
+  maskId: string;
+  width: number;
+  height: number;
+  error?: string;
+}
+
+export interface CompositeBackgroundResult {
+  ok: boolean;
+  width: number;
+  height: number;
+  outputPath?: string;
+  error?: string;
+}
+
+export interface UseObjectDetectResult {
+  /** Detect foreground in an image. Returns a maskId for compositing. */
+  detectForeground: (src: string, params?: DetectForegroundParams) => Promise<DetectForegroundResult | null>;
+  /** Composite foreground over a new background using a detection mask. */
+  compositeBackground: (src: string, background: string, maskId: string, output?: string) => Promise<CompositeBackgroundResult | null>;
+  /** Release a detection mask from memory. */
+  releaseMask: (maskId: string) => Promise<void>;
+  /** Whether a detection or composite operation is running. */
+  processing: boolean;
+  /** Error from the last operation. */
+  error: string | null;
+}
+
+// ============================================================================
 // Draw Canvas
 // ============================================================================
 

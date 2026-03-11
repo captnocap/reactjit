@@ -22,6 +22,10 @@ export type {
   ImagingSelectionRasterizeOptions,
   ImagingToolState,
   UseImagingResult,
+  DetectForegroundParams,
+  DetectForegroundResult,
+  CompositeBackgroundResult,
+  UseObjectDetectResult,
   DrawCanvasProps,
   UseDrawCanvasResult,
 } from './types';
@@ -34,6 +38,7 @@ export {
   useImagingHistory,
   useImagingSelection,
   useImagingTools,
+  useObjectDetect,
 } from './hooks';
 
 export { useDrawCanvas } from './canvas';

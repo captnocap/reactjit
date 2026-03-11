@@ -963,6 +963,160 @@ local handlers = {
   ["imaging:mask_info"] = function()
     return { count = MaskRegistry.count() }
   end,
+
+  -- -------------------------------------------------------------------------
+  -- Object detection RPCs
+  -- -------------------------------------------------------------------------
+
+  --- Detect foreground in an image and return a mask handle.
+  --- The mask is stored in MaskRegistry for use with imaging:composite_background
+  --- or imaging:apply (via maskId).
+  ---
+  --- @param args.src string  Source image path
+  --- @param args.threshold number  (optional) Color distance threshold (0-1, auto if omitted)
+  --- @param args.softness number  (optional) Transition softness
+  --- @param args.borderWidth number  (optional) Border sampling width in pixels
+  --- @param args.morphRadius number  (optional) Morphological cleanup radius
+  --- @param args.featherRadius number  (optional) Edge feather radius
+  --- @param args.edgeWeight number  (optional) Edge refinement strength (0-1)
+  --- @return { ok, maskId, width, height, error }
+  ["imaging:detect_foreground"] = function(args)
+    args = args or {}
+    local Detect = require("lua.imaging.ops.detect")
+
+    -- Load source image
+    local src = args.src
+    if not src or src == "" then
+      return { ok = false, error = "src is required" }
+    end
+
+    local loadOk, img = pcall(love.graphics.newImage, src)
+    if not loadOk or not img then
+      return { ok = false, error = "Failed to load: " .. tostring(src) }
+    end
+
+    local iw, ih = img:getWidth(), img:getHeight()
+    local source = love.graphics.newCanvas(iw, ih)
+    love.graphics.push("all")
+    love.graphics.setCanvas(source)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(img, 0, 0)
+    love.graphics.pop()
+    img:release()
+
+    local detectOk, mask = pcall(Detect.detectForeground, source, {
+      threshold = args.threshold and tonumber(args.threshold) or nil,
+      softness = args.softness and tonumber(args.softness) or nil,
+      borderWidth = args.borderWidth and tonumber(args.borderWidth) or nil,
+      morphRadius = args.morphRadius and tonumber(args.morphRadius) or nil,
+      featherRadius = args.featherRadius and tonumber(args.featherRadius) or nil,
+      edgeWeight = args.edgeWeight and tonumber(args.edgeWeight) or nil,
+    })
+
+    source:release()
+
+    if not detectOk or not mask then
+      return { ok = false, error = "Detection failed: " .. tostring(mask) }
+    end
+
+    local maskId = MaskRegistry.store(mask)
+    return {
+      ok = true,
+      maskId = maskId,
+      width = iw,
+      height = ih,
+    }
+  end,
+
+  --- Composite a foreground image over a new background using a detection mask.
+  ---
+  --- @param args.src string  Foreground image path
+  --- @param args.background string  Background image path
+  --- @param args.maskId string  Mask handle from imaging:detect_foreground
+  --- @param args.output string  (optional) Output file path
+  --- @return { ok, width, height, outputPath, error }
+  ["imaging:composite_background"] = function(args)
+    args = args or {}
+    local Detect = require("lua.imaging.ops.detect")
+
+    if not args.src or args.src == "" then
+      return { ok = false, error = "src is required" }
+    end
+    if not args.background or args.background == "" then
+      return { ok = false, error = "background is required" }
+    end
+    if not args.maskId or args.maskId == "" then
+      return { ok = false, error = "maskId is required" }
+    end
+
+    local maskCanvas = MaskRegistry.get(args.maskId)
+    if not maskCanvas then
+      return { ok = false, error = "maskId '" .. args.maskId .. "' not found" }
+    end
+
+    -- Load foreground
+    local fgOk, fgImg = pcall(love.graphics.newImage, args.src)
+    if not fgOk or not fgImg then
+      return { ok = false, error = "Failed to load fg: " .. tostring(args.src) }
+    end
+    local fw, fh = fgImg:getWidth(), fgImg:getHeight()
+    local fgCanvas = love.graphics.newCanvas(fw, fh)
+    love.graphics.push("all")
+    love.graphics.setCanvas(fgCanvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(fgImg, 0, 0)
+    love.graphics.pop()
+    fgImg:release()
+
+    -- Load background
+    local bgOk, bgImg = pcall(love.graphics.newImage, args.background)
+    if not bgOk or not bgImg then
+      fgCanvas:release()
+      return { ok = false, error = "Failed to load bg: " .. tostring(args.background) }
+    end
+    local bw, bh = bgImg:getWidth(), bgImg:getHeight()
+    local bgCanvas = love.graphics.newCanvas(bw, bh)
+    love.graphics.push("all")
+    love.graphics.setCanvas(bgCanvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(bgImg, 0, 0)
+    love.graphics.pop()
+    bgImg:release()
+
+    -- Composite
+    local compOk, result = pcall(Detect.compositeBackground, fgCanvas, bgCanvas, maskCanvas)
+    fgCanvas:release()
+    bgCanvas:release()
+
+    if not compOk or not result then
+      return { ok = false, error = "Composite failed: " .. tostring(result) }
+    end
+
+    -- Save if output specified
+    local outputPath = nil
+    if args.output and args.output ~= "" then
+      local saveOk, saveErr = pcall(Imaging.save, result, args.output)
+      if saveOk then
+        outputPath = args.output
+      else
+        result:release()
+        return { ok = false, error = "Save failed: " .. tostring(saveErr) }
+      end
+    end
+
+    local rw, rh = result:getWidth(), result:getHeight()
+    result:release()
+
+    return {
+      ok = true,
+      width = rw,
+      height = rh,
+      outputPath = outputPath,
+    }
+  end,
 }
 
 local Caps = require("lua.capabilities")

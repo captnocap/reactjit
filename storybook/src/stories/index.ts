@@ -49,6 +49,7 @@ import { FilesStory } from './FilesStory';
 import { FinanceStory } from './FinanceStory';
 import { GeoStory } from './GeoStory';
 import { ImagingStory } from './ImagingStory';
+import { ObjectDetectStory } from './ObjectDetectStory';
 import { MathStory } from './MathStory';
 import { NetworkingStory } from './NetworkingStory';
 import { PhysicsStory } from './PhysicsStory';
@@ -129,6 +130,7 @@ export const stories: StoryDef[] = [
   { id: 'finance', title: 'Finance', section: 'Packages', component: FinanceStory },
   { id: 'geo', title: 'Geo', section: 'Packages', component: GeoStory },
   { id: 'imaging', title: 'Imaging', section: 'Packages', component: ImagingStory },
+  { id: 'object-detect', title: 'Object Detect', section: 'Packages', component: ObjectDetectStory },
   { id: 'math', title: 'Math', section: 'Packages', component: MathStory },
   { id: 'networking', title: 'Networking', section: 'Packages', component: NetworkingStory },
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },

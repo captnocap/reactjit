@@ -12,6 +12,10 @@ import type {
   ImagingSelectionRasterizeResult,
   ImagingToolState,
   UseImagingResult,
+  DetectForegroundParams,
+  DetectForegroundResult,
+  CompositeBackgroundResult,
+  UseObjectDetectResult,
 } from './types';
 import {
   commitImagingHistory,
@@ -267,4 +271,94 @@ export function useImagingTools(initial?: Partial<ImagingToolState>) {
     brushOpacity: initial?.brushOpacity ?? 1,
   });
   return { tools, setTools };
+}
+
+/**
+ * Hook for GPU-accelerated foreground detection and background replacement.
+ *
+ * Usage:
+ *   const { detectForeground, compositeBackground, releaseMask } = useObjectDetect();
+ *
+ *   // Step 1: detect foreground, get a mask handle
+ *   const result = await detectForeground('lib/placeholders/avatar.png');
+ *
+ *   // Step 2: composite with new background
+ *   await compositeBackground(
+ *     'lib/placeholders/avatar.png',
+ *     'lib/placeholders/landscape.png',
+ *     result.maskId,
+ *     'output.png'
+ *   );
+ *
+ *   // Step 3: release mask when done
+ *   await releaseMask(result.maskId);
+ */
+export function useObjectDetect(): UseObjectDetectResult {
+  const bridge = useBridge();
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const detectForeground = useCallback(async (
+    src: string,
+    params?: DetectForegroundParams,
+  ): Promise<DetectForegroundResult | null> => {
+    if (!bridge) return null;
+    setProcessing(true);
+    setError(null);
+    try {
+      const result = await bridge.rpc<DetectForegroundResult>('imaging:detect_foreground', {
+        src,
+        threshold: params?.threshold,
+        softness: params?.softness,
+        borderWidth: params?.borderWidth,
+        morphRadius: params?.morphRadius,
+        featherRadius: params?.featherRadius,
+        edgeWeight: params?.edgeWeight,
+      });
+      if (result && !result.ok) {
+        setError(result.error || 'Detection failed');
+      }
+      return result || null;
+    } catch (err: any) {
+      setError(err?.message || String(err));
+      return null;
+    } finally {
+      setProcessing(false);
+    }
+  }, [bridge]);
+
+  const compositeBackground = useCallback(async (
+    src: string,
+    background: string,
+    maskId: string,
+    output?: string,
+  ): Promise<CompositeBackgroundResult | null> => {
+    if (!bridge) return null;
+    setProcessing(true);
+    setError(null);
+    try {
+      const result = await bridge.rpc<CompositeBackgroundResult>('imaging:composite_background', {
+        src,
+        background,
+        maskId,
+        output,
+      });
+      if (result && !result.ok) {
+        setError(result.error || 'Composite failed');
+      }
+      return result || null;
+    } catch (err: any) {
+      setError(err?.message || String(err));
+      return null;
+    } finally {
+      setProcessing(false);
+    }
+  }, [bridge]);
+
+  const releaseMask = useCallback(async (maskId: string): Promise<void> => {
+    if (!bridge) return;
+    await bridge.rpc('imaging:mask_release', { maskId });
+  }, [bridge]);
+
+  return { detectForeground, compositeBackground, releaseMask, processing, error };
 }
