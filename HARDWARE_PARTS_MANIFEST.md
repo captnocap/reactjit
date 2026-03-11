@@ -174,21 +174,33 @@ local _cache = {}
 
 local function init(node)
   -- Build all static geometry, label positions, color lookups.
-  -- Store in node.state._cache or a local upvalue.
   -- This runs ONCE when the node is created.
   node.state = node.state or {}
   node.state.time = 0
-  node.state._cache = {}
-  -- Pre-compute anything that doesn't change per-frame:
+  node.state.runtime = {}    -- display state read by render()
+  node.state.sim = {}        -- simulation-only state
+  node.state.io = {}         -- hardware backend state
+  node.state.ui = {}         -- interaction state (hover, drag, selection)
+  node.state._cache = {}     -- static geometry, labels, colors — NEVER modified after init
+  -- Pre-compute everything that doesn't change per-frame:
   -- pin positions, label strings, color tables, glow radii, etc.
+  -- Store in node.state._cache
 end
 
 local function tick(node, dt)
-  -- Update ONLY time-varying state: animation timers, simulation values,
-  -- LED blink phase, servo angle interpolation, sensor data generation.
-  -- NO table creation. NO string building. NO color computation.
-  -- Write to node.state.* fields that render() will read.
+  -- Update ONLY time-varying state.
+  -- Write to node.state.runtime (display), .sim, or .io
+  -- Read from node.state.ui for interaction→state translation
+  -- NO table creation. NO string building (except dynamic labels via pre-allocated FMT_*).
   node.state.time = (node.state.time or 0) + dt
+
+  local props = node.props
+  if props.simulate ~= false then
+    -- Simulation mode: generate fake data, write to .sim and .runtime
+  else
+    -- Real mode: read from backend, write to .io and .runtime
+    -- If backend unavailable, .runtime keeps stale values (do NOT crash)
+  end
 end
 
 local function render(node, c, opacity)
@@ -207,15 +219,51 @@ local function render(node, c, opacity)
   )
   love.graphics.scale(scale)
 
-  -- Draw ONLY from cached state. No computation here.
+  -- Draw ONLY from node.state.runtime, .ui, and ._cache
   -- Use Colors.* for all colors. Use Draw.* for shared shapes.
+  -- No computation here. No string building. No table creation.
 
   love.graphics.pop()
+
+  -- MANDATORY: draw mode badge and degraded-state overlays
+  -- (after pop, in screen space)
+  local mode = "sim"
+  if node.props.simulate == false then
+    mode = node.state.io.connected and "live" or "offline"
+  end
+  Draw.drawModeBadge(x + w - 2, y + 2, mode, opacity)
+
+  if mode == "offline" and (node.state.time - (node.state.io.lastReadTime or 0)) > 2 then
+    Draw.drawStaleOverlay(x, y, w, h, opacity)
+  end
 end
 
 local function destroy(node)
   -- Clean up any resources (rare for visual-only parts)
 end
+
+-- ============================================================================
+-- Interaction handlers (optional — only for interactive parts)
+-- All coordinates are in internal space. Framework does screen→internal conversion.
+-- Handlers write to node.state.ui ONLY.
+-- ============================================================================
+
+local function pointerDown(node, ix, iy, button)
+  -- ix, iy are in internal coordinate space
+  -- Use Anchors.hitTestAnchor(ANCHORS, ix, iy, radius) to find what was clicked
+end
+
+local function pointerUp(node, ix, iy, button)
+  -- Fire events here (onPress, onPinTap, etc.)
+end
+
+local function pointerMove(node, ix, iy)
+  -- Hover detection: node.state.ui.hoveredPin = Anchors.hitTestAnchor(...)
+end
+
+-- local function wheel(node, ix, iy, dx, dy)  -- uncomment if needed
+--   -- Rotary encoder, potentiometer
+-- end
 
 -- ============================================================================
 -- Registration
@@ -251,6 +299,12 @@ Capabilities.register("HW_PartName", {
   tick = tick,
   render = render,
   destroy = destroy,
+
+  -- Interaction handlers (optional — set nil for non-interactive parts)
+  pointerDown = pointerDown,
+  pointerUp = pointerUp,
+  pointerMove = pointerMove,
+  wheel = nil,                -- uncomment handler above if needed
 })
 ```
 
@@ -339,6 +393,369 @@ Each part has two modes, selected by a `simulate` prop (default `true`):
   Same visual rendering, real data. If the backend is unavailable, the part renders
   normally with stale/zero data — it does NOT crash or error.
 
+### Backend Ownership of Truth (resolve this ONCE, not per part)
+
+When `simulate=true`, domain props from React are the **desired/display state**.
+The part's `tick()` generates its own values (e.g. fake temperature curves) and
+those override the React-provided prop values for display purposes.
+
+When `simulate=false`, backend-read values override domain props for display.
+React props become **initial/fallback values** only — the real sensor data wins.
+
+```
+simulate=true:   tick() generates data → render() displays it, props are fallback
+simulate=false:  backend provides data → render() displays it, props are fallback
+```
+
+There is no `preferPropValues` flag. There is no per-part decision about this.
+The backend always wins when present. Props are always fallback. This is universal.
+
+---
+
+## Event Contract (GLOBAL LAW)
+
+Every event emitted via `pushEvent()` MUST follow this exact shape:
+
+```lua
+pushEvent(node, "onRead", {
+  partType   = "HW_DHT22",           -- capability type (REQUIRED)
+  partId     = node.id,              -- instance ID (REQUIRED)
+  timestamp  = node.state.time,      -- part-local time in seconds (REQUIRED)
+  -- domain-specific fields below:
+  temperature = 22.5,
+  humidity    = 61.2,
+})
+```
+
+**Mandatory fields in EVERY event payload:**
+- `partType` — the `HW_` capability type string
+- `partId` — `node.id` (unique instance identifier)
+- `timestamp` — `node.state.time` (seconds since init)
+
+**Rules:**
+- Payload is always a table. Never a bare string or number.
+- Domain fields use the same names as the corresponding props (e.g. `temperature`, not `temp` or `sensorTemp`).
+- Boolean events (button press, motion detect) still include the mandatory fields.
+- No nested tables in event payloads unless the data is inherently structured (e.g. `accel = {x=0, y=0, z=1}`).
+- Event names match the propsSchema callback names: `onRead`, `onPress`, `onRelease`, `onRotate`, `onMeasure`, etc.
+
+**Example events for reference:**
+```lua
+-- Sensor read
+pushEvent(node, "onRead", { partType="HW_DHT22", partId=node.id, timestamp=t, temperature=22.5, humidity=61 })
+
+-- Button press
+pushEvent(node, "onPress", { partType="HW_Button", partId=node.id, timestamp=t })
+
+-- Pin tap (interactive board)
+pushEvent(node, "onPinTap", { partType="HW_ArduinoUno", partId=node.id, timestamp=t, pin="D13", kind="gpio" })
+
+-- Rotary encoder
+pushEvent(node, "onRotate", { partType="HW_RotaryEncoder", partId=node.id, timestamp=t, direction="cw", value=42 })
+
+-- RFID card detect
+pushEvent(node, "onCardDetect", { partType="HW_RFID", partId=node.id, timestamp=t, uid="A1B2C3D4", cardType="MIFARE" })
+```
+
+---
+
+## State Namespace Rules (MANDATORY)
+
+All part state lives in `node.state`. To prevent collision and make debugging
+possible across 50+ parts, state MUST be organized into these namespaces:
+
+```lua
+node.state = {
+  -- Time accumulator (every part has this)
+  time = 0,
+
+  -- Runtime display state: what render() reads to draw
+  -- LED brightness, servo angle, display text, pin highlights, etc.
+  runtime = {
+    ledOn = true,
+    currentAngle = 90,
+    displayText = "HELLO",
+  },
+
+  -- Simulation state: only written when simulate=true
+  -- Generated sensor values, animation phases, fake data cursors
+  sim = {
+    tempPhase = 0,
+    lastTrigger = 0,
+    noiseOffset = 0,
+  },
+
+  -- I/O state: only written when simulate=false
+  -- Raw hardware readings, connection status, error counts
+  io = {
+    lastRead = nil,
+    connected = false,
+    errorCount = 0,
+  },
+
+  -- UI state: hover, selection, drag, focus
+  -- Only written by interaction handlers
+  ui = {
+    hoveredPin = nil,
+    selected = false,
+    dragValue = 0,
+  },
+
+  -- Cache: static geometry built in init(), NEVER modified after
+  _cache = {
+    pinPositions = {},
+    labelStrings = {},
+    colorLookup = {},
+  },
+}
+```
+
+**Rules:**
+- `init()` creates all namespaces and populates `_cache`
+- `tick()` writes to `runtime`, `sim`, or `io` — NEVER to `_cache`
+- `render()` reads from `runtime`, `ui`, and `_cache` — NEVER writes anything
+- Interaction handlers write to `ui` only
+- No top-level fields except `time` and the 5 namespaces above
+- If you need a new namespace, you're doing something wrong
+
+---
+
+## Interaction Handlers (EXPLICIT CONTRACT)
+
+Parts with `interactive = true` MAY implement these optional handlers.
+They are called by the event system (System A), not by React.
+
+```lua
+-- All handlers receive the node and coordinates in internal space (pre-scale).
+-- The framework handles screen→internal coordinate conversion.
+
+local function pointerDown(node, x, y, button)
+  -- button: 1=left, 2=right, 3=middle
+  -- Use Anchors.hitTestAnchor() to find what was clicked
+  -- Write to node.state.ui only
+end
+
+local function pointerUp(node, x, y, button)
+  -- Pair with pointerDown. Fire events here (onPress, onPinTap, etc.)
+end
+
+local function pointerMove(node, x, y)
+  -- Hover detection, drag updates
+  -- Write to node.state.ui.hoveredPin, node.state.ui.dragValue, etc.
+end
+
+local function wheel(node, x, y, dx, dy)
+  -- Scroll wheel input (for rotary encoder, potentiometer)
+  -- dy > 0 = scroll up, dy < 0 = scroll down
+end
+
+-- Register in capability:
+Capabilities.register("HW_PartName", {
+  -- ...
+  pointerDown = pointerDown,   -- optional, nil if not interactive
+  pointerUp = pointerUp,       -- optional
+  pointerMove = pointerMove,   -- optional
+  wheel = wheel,               -- optional
+})
+```
+
+**Rules:**
+- Handlers write to `node.state.ui` ONLY. Never to `runtime` or `sim`.
+- `tick()` reads from `node.state.ui` and translates to `node.state.runtime` changes.
+- This keeps the interaction→state→render pipeline clean and unidirectional.
+- `render()` uses `node.state.ui.hoveredPin` etc. for hover highlights.
+- All coordinates passed to handlers are in **internal coordinate space**.
+  The framework converts screen coords using the part's `internalSize`.
+
+---
+
+## Validation Error Vocabulary (CANONICAL CODES)
+
+The netlist validator (System B) uses these codes. Parts declare which ones
+apply via their `VALIDATION` table. The UI, docs, and error messages all use
+the same vocabulary.
+
+```lua
+-- Voltage errors
+"voltage_mismatch"           -- 5V output connected to 3.3V-max input
+"overvoltage"                -- input exceeds part's maxVoltage
+"no_power"                   -- part has no power pin connected
+"reverse_polarity"           -- power connected backwards (electrolytic cap, LED)
+
+-- Ground errors
+"missing_ground"             -- part has no ground connection
+"ground_loop"                -- multiple ground paths (warning, not error)
+
+-- Protection errors
+"missing_series_resistor"    -- LED without current-limiting resistor
+"missing_pullup"             -- I2C bus without pull-up resistors
+"missing_decoupling_cap"     -- IC without bypass capacitor (warning)
+
+-- Bus errors
+"i2c_address_conflict"       -- two devices on same I2C bus with same address
+"spi_cs_conflict"            -- two SPI devices sharing a chip select
+"uart_tx_to_tx"              -- UART TX connected to TX instead of RX
+"uart_rx_to_rx"              -- UART RX connected to RX instead of TX
+"bus_not_terminated"         -- SPI/I2C bus missing termination
+
+-- Signal errors
+"output_to_output_conflict"  -- two outputs driving the same net
+"floating_input"             -- input pin connected to nothing
+"power_to_ground_short"      -- direct short between power and ground
+
+-- Capacity errors
+"max_current_exceeded"       -- too many loads on a single output
+"fan_out_exceeded"           -- too many inputs on a single driver
+```
+
+**Per-part validation declaration:**
+```lua
+local VALIDATION = {
+  bus = "i2c",
+  i2cAddress = 0x3C,
+  maxVoltage = 3.3,
+  requirements = {
+    "missing_series_resistor",   -- this part needs a resistor
+  },
+  warnings = {
+    "missing_decoupling_cap",    -- nice to have
+  },
+  pwmCapable = { "D3", "D5", "D6", "D9", "D10", "D11" },
+}
+```
+
+---
+
+## Degraded State Visual Convention (UNIVERSAL)
+
+When a part is in a non-nominal state, it must show this visually.
+Every part uses the SAME indicators — no per-part invention.
+
+### Mode badge (top-right corner, tiny, always visible)
+- **SIM** — green text, shown when `simulate=true`
+- **LIVE** — blue text, shown when `simulate=false` and backend connected
+- **OFFLINE** — amber text, shown when `simulate=false` but backend unavailable
+
+Implementation: `Draw.drawModeBadge(x, y, mode, opacity)` in `_draw.lua`.
+Every part calls this at the end of `render()`. Non-negotiable.
+
+### Stale data indicator
+When `simulate=false` and no data has been received for >2 seconds:
+- A subtle amber striped overlay (diagonal lines, 10% opacity) covers the part
+- The mode badge changes from LIVE to OFFLINE
+
+Implementation: `Draw.drawStaleOverlay(x, y, w, h, opacity)` in `_draw.lua`.
+Called in `render()` when `node.state.io.lastReadTime` is stale.
+
+### Error state
+When a validation error applies to this part (flagged by netlist validator):
+- A thin red border around the part
+- Error code shown as tooltip on hover
+
+Implementation: `Draw.drawErrorBorder(x, y, w, h, opacity)` in `_draw.lua`.
+
+### Hover state (interactive parts only)
+When pointer is over an anchor/clickable surface:
+- Anchor: gold highlight ring around the pin
+- Surface (button, knob): subtle brightness increase
+
+Implementation: Use `Colors.highlight` for the gold ring. Read from `node.state.ui.hoveredPin`.
+
+---
+
+## Text and Label Rules (LAW)
+
+Labels cause the most subtle rendering bugs. Lock these down.
+
+### Static labels (pin names, component designators, silk text)
+- Built as strings in `init()`, stored in `node.state._cache.labels`
+- NEVER rebuilt in `tick()` or `render()`
+- Use `Draw.drawLabel()` which handles font, size, and alignment
+
+### Dynamic labels (sensor readouts, values, counters)
+- Built as strings in `tick()`, stored in `node.state.runtime.displayText` (or similar)
+- `string.format()` is allowed in `tick()` ONLY
+- Maximum 12 characters for any single dynamic label
+- If a value exceeds 12 chars, truncate with `...` or use scientific notation
+- Pre-allocate the format string as a module-level constant:
+  ```lua
+  local FMT_TEMP = "%.1f°C"    -- module level, not inside tick()
+  -- in tick():
+  node.state.runtime.tempLabel = string.format(FMT_TEMP, temp)
+  ```
+
+### Label rendering rules
+- Font size: use `Draw.drawLabel()` which picks size from a fixed set (8, 10, 12, 14, 16)
+- Color: always from `Colors.*` — silkscreen white for board labels, domain color for readouts
+- No label may overlap another label. If space is tight, hide lower-priority labels.
+- At thumbnail scale (<80px), hide ALL labels except the part name/type
+
+---
+
+## Platform Objects (NOT regular parts)
+
+These are elevated above the parts catalog. They have subsystem-level complexity
+and interact with System B (netlist/wiring) in ways that regular parts do not.
+
+### HW_Breadboard
+The breadboard is not a leaf part. It is a **placement canvas** with its own rules:
+
+- **Hole grid:** 830 points (full) or 400 (half), organized as 5-hole rows + power rails
+- **Row/rail mapping:** holes in the same row are electrically connected (5-hole groups, split by center channel). Power rails run the full length.
+- **Snapping:** parts placed on the breadboard snap to hole positions
+- **Occupancy tracking:** knows which holes are filled by which part's pins
+- **Anchor targeting:** when a wire endpoint is near a breadboard hole, it snaps to that hole and inherits the hole's net
+- **Wire routing:** wires between breadboard holes follow the channel/rail geometry
+- **Zoom-friendly:** hole labels (row numbers, column letters) appear/hide based on scale
+
+**This part gets its own implementation file AND may need a companion module
+in `lua/hw/breadboard_grid.lua` for the occupancy/snapping/routing logic
+that System B consumes.**
+
+### HW_Wire
+Wire is owned by **System B (netlist)**, not System A (part renderer).
+It is NOT a regular capability. It is rendered by the netlist wire renderer.
+
+- Wire data lives in the netlist: `{ from = {partId, pinId}, to = {partId, pinId}, color }`
+- Wire visual is a bezier curve between two anchor screen positions
+- Wire color follows the standard wire color palette from `_colors.lua`
+- Wire does NOT register as a capability. It is drawn by `lua/hw/wire_renderer.lua`
+
+**Do NOT implement HW_Wire as a `Capabilities.register()` part.**
+
+---
+
+## Acceptance Snapshot Requirement (per-part deliverable)
+
+Every part builder must deliver, in addition to the capability file:
+
+A **fixture story** in `storybook/src/stories/hw/` that renders the part
+at three scales with canonical props:
+
+```tsx
+// storybook/src/stories/hw/HW_LED_Fixture.tsx
+export function HW_LED_Fixture() {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 20 }}>
+      {/* Thumbnail */}
+      <Native type="HW_LED" color="red" on brightness={1} style={{ width: 60, height: 60 }} />
+      {/* Normal */}
+      <Native type="HW_LED" color="red" on brightness={1} style={{ width: 150, height: 150 }} />
+      {/* Large */}
+      <Native type="HW_LED" color="red" on brightness={1} style={{ width: 300, height: 300 }} />
+    </Box>
+  )
+}
+```
+
+This serves as:
+- Visual regression baseline
+- Scale test (thumbnail, normal, large)
+- Canonical prop example
+- Quick visual review during parallel merge
+
+The fixture is NOT the final playground story. It is a per-part acceptance artifact.
+
 ---
 
 ## Shared Foundation Modules (build BEFORE any parts)
@@ -353,6 +770,9 @@ Must include:
 - LED glow: red, green, blue, yellow, white, cyan, purple (each with on/off/glow variants)
 - Wire colors: red, black, orange, yellow, green, blue, white, purple, grey, brown
 - State indicators: active green, warning amber, error red, inactive grey
+- Mode badge colors: sim green, live blue, offline amber
+- Degraded state: stale overlay amber (10% opacity), error border red, hover ring gold
+- Highlight: anchor hover gold, surface hover (brightness +15%)
 - PCB variants: Arduino blue, Raspberry Pi green, ESP32 black, Adafruit purple, SparkFun red
 
 ### `lua/capabilities/hw/_draw.lua`
@@ -375,6 +795,10 @@ Must include:
 - `drawTrace(points, width, color, opacity)` — copper trace between points
 - `drawWire(x1, y1, x2, y2, color, opacity)` — bezier jumper wire
 - `drawGlow(cx, cy, r, color, intensity, opacity)` — radial glow effect
+- `drawModeBadge(x, y, mode, opacity)` — SIM/LIVE/OFFLINE corner badge (MANDATORY in every part's render)
+- `drawStaleOverlay(x, y, w, h, opacity)` — amber diagonal stripes for stale data state
+- `drawErrorBorder(x, y, w, h, opacity)` — thin red border for validation errors
+- `drawHoverRing(cx, cy, r, opacity)` — gold highlight ring for hovered anchors
 
 ### `lua/capabilities/hw/_simulate.lua`
 Shared simulation helpers for `tick()` functions.
@@ -424,22 +848,43 @@ Must include:
 
 Every part must pass ALL of these before merge. No exceptions.
 
+### Visual
 - [ ] **Recognizable silhouette** — someone who has used the real part recognizes it instantly
 - [ ] **Reads clearly at thumbnail scale** — identifiable even in a 60x60 sidebar tile
 - [ ] **Scales cleanly** — internal coord system + uniform scale, no pixel artifacts at any size
 - [ ] **At least one animated/live state** — LED glow, blink, pulse, rotation, data readout
+- [ ] **Mode badge rendered** — SIM/LIVE/OFFLINE badge via `Draw.drawModeBadge()` at end of render()
+- [ ] **Stale overlay works** — amber stripes appear after 2s of no backend data in real mode
+- [ ] **Labels hide at thumbnail** — dynamic labels hidden when rendered below 80px
+
+### Structure
+- [ ] **Follows the skeleton exactly** — init/tick/render/destroy, PINS, ANCHORS, VALIDATION, propsSchema, defaultProps
+- [ ] **State namespaces used** — `runtime`, `sim`, `io`, `ui`, `_cache` — no top-level fields except `time`
 - [ ] **All props documented** in propsSchema with types
 - [ ] **All logical pins defined** in PINS with kind + direction
 - [ ] **All visual anchors defined** in ANCHORS with internal coordinates
+- [ ] **Validation rules declared** — bus, address, maxVoltage, requirements, warnings
+- [ ] **`simulate` prop defaults to `true`** in defaultProps
+
+### Performance
 - [ ] **No render-time allocations** — zero table creation, zero string building in render()
+- [ ] **Dynamic labels built in tick()** — using pre-allocated FMT_* format strings
+- [ ] **Static labels built in init()** — stored in `_cache.labels`
+- [ ] **No label exceeds 12 characters** — truncated with `...` or scientific notation
+
+### Behavior
 - [ ] **simulate=true works standalone** — part is interesting without any wiring or backend
 - [ ] **simulate=false does not crash** — gracefully shows stale/zero data if backend unavailable
+- [ ] **Backend values override props** — in real mode, backend data wins over React props
 - [ ] **Emits at least one event** if interactive (buttons, encoders, sensors)
+- [ ] **Events follow global contract** — partType + partId + timestamp in every payload
 - [ ] **Selected/hover visual state** if the part has clickable surfaces
+- [ ] **Interaction handlers write to ui only** — pointerDown/Up/Move never touch runtime/sim
+
+### Integration
 - [ ] **Uses shared palette** — all colors from `_colors.lua`, not local hex values
 - [ ] **Uses shared drawing helpers** — `_draw.lua` for standard shapes, not bespoke duplicates
-- [ ] **Follows the skeleton exactly** — init/tick/render/destroy, PINS, ANCHORS, VALIDATION, propsSchema, defaultProps
-- [ ] **`simulate` prop defaults to `true`** in defaultProps
+- [ ] **Fixture story delivered** — 3-scale snapshot (60px, 150px, 300px) in `storybook/src/stories/hw/`
 
 ---
 
@@ -829,15 +1274,9 @@ WiFi, Bluetooth, Radio, GPS, RFID.
 ### CATEGORY: Passive Components (`passive/`)
 The boring-but-essential bits that complete every circuit.
 
-#### `[ ] HW_Breadboard`
-- **What it is:** 830-point solderless breadboard (or half-size 400)
-- **Visual:** White/cream body, 5-hole rows, power rails (red/blue), center channel, labeled columns (a-j) and rows (1-63)
-- **Internal coords:** 600x200 (full), 300x200 (half)
-- **Props:** `size: string` ("full"|"half"), `connections: table` (list of {row, col, color} for placed wires)
-- **Render:** Grid of holes, highlighted when connected, wire paths
-- **Interactive:** This is the canvas base — wires drawn between holes
-- **Note:** This is a PLATFORM OBJECT, not "just another part." It has its own subsystem complexity: hole grid, row/rail mapping, snapping, occupancy, anchor targeting, wire routing, labels, zoom. Treat it with the same weight as the netlist system.
-- **Pins:** Power rail pins (positive/negative, top and bottom), but these are structural, not individual capability pins
+#### `[ ] HW_Breadboard` — **SEE "Platform Objects" SECTION ABOVE**
+- This is NOT a regular part. It is a platform object with subsystem-level complexity.
+- Full spec is in the dedicated Platform Objects section.
 
 #### `[ ] HW_BreadboardPSU`
 - **What it is:** MB102 breadboard power supply module, USB or DC jack input, 3.3V/5V selectable
@@ -887,12 +1326,9 @@ The boring-but-essential bits that complete every circuit.
 - **Visual state:** Small indicator when conducting
 - **Pins:** E (gpio, bidirectional), B (gpio, input), C (gpio, bidirectional)
 
-#### `[ ] HW_Wire`
-- **What it is:** Jumper wire / dupont cable
-- **Visual:** Colored insulated wire with pin ends
-- **Props:** `from: table` ({x,y}), `to: table` ({x,y}), `color: string`, `wireType: string` ("mm"|"mf"|"ff")
-- **Render:** Bezier curve between points, colored insulation
-- **Note:** Used by the wiring system (System B), not placed standalone as a capability. This may be implemented as part of the netlist renderer rather than a standalone capability.
+#### `[ ] HW_Wire` — **SEE "Platform Objects" SECTION ABOVE**
+- This is NOT a regular capability. It is owned by System B (netlist/wiring).
+- Full spec is in the dedicated Platform Objects section.
 
 ---
 
