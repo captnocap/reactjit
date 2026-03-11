@@ -1254,6 +1254,11 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
             }}>
               {parts.map((part, i) => {
                 if (part.type === 'code') {
+                  const isHtml = (part.language === 'html' || part.language === 'htm')
+                    && (part.content.includes('<') && part.content.includes('>'));
+                  if (isHtml) {
+                    return <HtmlCodeBlock key={i} code={part.content} />;
+                  }
                   return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
                 }
                 if (part.type === 'heading') {
@@ -3387,6 +3392,521 @@ function FileContextButton({ onAddFile }: { onAddFile: (name: string, content: s
       )}
     </>
   );
+}
+
+// ── HTML code block with inline preview ──────────────────────────────────────
+
+function HtmlCodeBlock({ code }: { code: string }) {
+  const [showPreview, setShowPreview] = useState(true);
+
+  return (
+    <Box style={{ borderRadius: 6, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
+      {/* Toggle bar */}
+      <Box style={{
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        padding: 6, paddingLeft: 10, paddingRight: 10, backgroundColor: C.surfaceActive,
+      }}>
+        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Text style={{ fontSize: 10, color: C.accent, fontWeight: 'bold', fontFamily: 'monospace' }}>HTML</Text>
+          <Text style={{ fontSize: 9, color: C.textDim }}>
+            {`${Math.round(code.length / 1024)}kb`}
+          </Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 4 }}>
+          <Pressable onPress={() => setShowPreview(true)}>
+            {({ hovered }) => (
+              <Box style={{
+                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
+                backgroundColor: showPreview ? C.accent : hovered ? C.surfaceHover : C.surface,
+              }}>
+                <Text style={{ fontSize: 9, color: showPreview ? '#fff' : C.textMuted, fontWeight: 'bold' }}>Preview</Text>
+              </Box>
+            )}
+          </Pressable>
+          <Pressable onPress={() => setShowPreview(false)}>
+            {({ hovered }) => (
+              <Box style={{
+                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
+                backgroundColor: !showPreview ? C.accent : hovered ? C.surfaceHover : C.surface,
+              }}>
+                <Text style={{ fontSize: 9, color: !showPreview ? '#fff' : C.textMuted, fontWeight: 'bold' }}>Code</Text>
+              </Box>
+            )}
+          </Pressable>
+          <Pressable onPress={() => {
+            try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', code); } catch {}
+          }}>
+            {({ hovered }) => (
+              <Box style={{
+                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
+                backgroundColor: hovered ? C.surfaceHover : C.surface,
+              }}>
+                <Text style={{ fontSize: 9, color: C.textMuted, fontWeight: 'bold' }}>Copy</Text>
+              </Box>
+            )}
+          </Pressable>
+        </Box>
+      </Box>
+
+      {/* Content */}
+      {showPreview ? (
+        <Box style={{ padding: 12, backgroundColor: '#ffffff', minHeight: 100 }}>
+          <HtmlPreview html={code} />
+        </Box>
+      ) : (
+        <CodeBlock code={code} language="html" style={{ borderRadius: 0 }} />
+      )}
+    </Box>
+  );
+}
+
+// ── HTML parser → ReactJIT primitives ────────────────────────────────────────
+
+interface HtmlNode {
+  tag: string;
+  attrs: Record<string, string>;
+  children: (HtmlNode | string)[];
+}
+
+function parseHtml(html: string): HtmlNode[] {
+  // Extract body content if full document
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const content = bodyMatch ? bodyMatch[1] : html;
+
+  // Extract <style> blocks for basic CSS
+  const styles: Record<string, Record<string, string>> = {};
+  const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let styleMatch;
+  while ((styleMatch = styleRegex.exec(html)) !== null) {
+    const rules = styleMatch[1].matchAll(/([^{]+)\{([^}]+)\}/g);
+    for (const rule of rules) {
+      const selector = rule[1].trim();
+      const props = parseInlineStyle(rule[2]);
+      styles[selector] = props;
+    }
+  }
+
+  // Remove script and style tags from content
+  const cleaned = content
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+
+  return parseNodes(cleaned, styles);
+}
+
+function parseNodes(html: string, styles: Record<string, Record<string, string>>): HtmlNode[] {
+  const nodes: (HtmlNode | string)[] = [];
+  let pos = 0;
+
+  while (pos < html.length) {
+    const tagStart = html.indexOf('<', pos);
+    if (tagStart === -1) {
+      const text = html.slice(pos).trim();
+      if (text) nodes.push(decodeEntities(text));
+      break;
+    }
+
+    // Text before tag
+    if (tagStart > pos) {
+      const text = html.slice(pos, tagStart).trim();
+      if (text) nodes.push(decodeEntities(text));
+    }
+
+    // Self-closing or void tags
+    const voidMatch = html.slice(tagStart).match(/^<(br|hr|img|input|meta|link|col|area|base|embed|source|track|wbr)\b([^>]*?)\/?\s*>/i);
+    if (voidMatch) {
+      const tag = voidMatch[1].toLowerCase();
+      const attrs = parseAttrs(voidMatch[2], styles);
+      nodes.push({ tag, attrs, children: [] });
+      pos = tagStart + voidMatch[0].length;
+      continue;
+    }
+
+    // Opening tag
+    const openMatch = html.slice(tagStart).match(/^<(\w[\w-]*)\b([^>]*)>/);
+    if (openMatch) {
+      const tag = openMatch[1].toLowerCase();
+      const attrs = parseAttrs(openMatch[2], styles);
+      pos = tagStart + openMatch[0].length;
+
+      // Find matching close tag (simple, non-nested)
+      const closeTag = `</${tag}>`;
+      const closeIdx = html.toLowerCase().indexOf(closeTag, pos);
+      if (closeIdx !== -1) {
+        const inner = html.slice(pos, closeIdx);
+        const children = parseNodes(inner, styles);
+        nodes.push({ tag, attrs, children });
+        pos = closeIdx + closeTag.length;
+      } else {
+        nodes.push({ tag, attrs, children: [] });
+      }
+      continue;
+    }
+
+    // Skip unrecognized
+    pos = tagStart + 1;
+  }
+
+  return nodes as HtmlNode[];
+}
+
+function parseAttrs(attrStr: string, styles: Record<string, Record<string, string>>): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const regex = /(\w[\w-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?/g;
+  let m;
+  while ((m = regex.exec(attrStr)) !== null) {
+    attrs[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
+  }
+
+  // Merge class-based styles into style attr
+  if (attrs.class) {
+    const classNames = attrs.class.split(/\s+/);
+    for (const cn of classNames) {
+      const classStyle = styles[`.${cn}`];
+      if (classStyle) {
+        const existing = attrs.style || '';
+        attrs.style = existing + ';' + Object.entries(classStyle).map(([k, v]) => `${k}:${v}`).join(';');
+      }
+    }
+  }
+  // Also check tag-level styles
+  return attrs;
+}
+
+function parseInlineStyle(style: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const decl of style.split(';')) {
+    const [prop, ...valParts] = decl.split(':');
+    if (prop && valParts.length > 0) {
+      result[prop.trim().toLowerCase()] = valParts.join(':').trim();
+    }
+  }
+  return result;
+}
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+}
+
+function cssColorToHex(color: string): string | undefined {
+  if (!color) return undefined;
+  if (color.startsWith('#') || color.startsWith('rgb')) return color;
+  const named: Record<string, string> = {
+    white: '#ffffff', black: '#000000', red: '#ff0000', blue: '#0000ff',
+    green: '#008000', yellow: '#ffff00', orange: '#ffa500', purple: '#800080',
+    gray: '#808080', grey: '#808080', pink: '#ffc0cb', cyan: '#00ffff',
+    navy: '#000080', teal: '#008080', maroon: '#800000', lime: '#00ff00',
+    silver: '#c0c0c0', olive: '#808000', aqua: '#00ffff', fuchsia: '#ff00ff',
+    transparent: 'transparent', inherit: undefined,
+  };
+  return named[color.toLowerCase()];
+}
+
+function cssToStyle(cssStr: string | undefined): Record<string, any> {
+  if (!cssStr) return {};
+  const css = parseInlineStyle(cssStr);
+  const s: Record<string, any> = {};
+
+  if (css.color) s.color = cssColorToHex(css.color);
+  if (css['background-color'] || css.background) {
+    const bg = css['background-color'] || css.background;
+    // Only use simple color values, not gradients
+    if (!bg.includes('gradient') && !bg.includes('url')) s.backgroundColor = cssColorToHex(bg);
+  }
+  if (css['font-size']) {
+    const n = parseInt(css['font-size'], 10);
+    if (n > 0) s.fontSize = n;
+  }
+  if (css['font-weight'] === 'bold' || css['font-weight'] === '700' || css['font-weight'] === '800' || css['font-weight'] === '900') {
+    s.fontWeight = 'bold';
+  }
+  if (css['font-style'] === 'italic') s.fontStyle = 'italic';
+  if (css['text-align']) s.textAlign = css['text-align'] as any;
+  if (css.padding) { const n = parseInt(css.padding, 10); if (n >= 0) s.padding = n; }
+  if (css['padding-left']) { const n = parseInt(css['padding-left'], 10); if (n >= 0) s.paddingLeft = n; }
+  if (css['padding-right']) { const n = parseInt(css['padding-right'], 10); if (n >= 0) s.paddingRight = n; }
+  if (css['padding-top']) { const n = parseInt(css['padding-top'], 10); if (n >= 0) s.paddingTop = n; }
+  if (css['padding-bottom']) { const n = parseInt(css['padding-bottom'], 10); if (n >= 0) s.paddingBottom = n; }
+  if (css.margin) { const n = parseInt(css.margin, 10); if (n >= 0) s.margin = n; }
+  if (css['margin-top']) { const n = parseInt(css['margin-top'], 10); if (n >= 0) s.marginTop = n; }
+  if (css['margin-bottom']) { const n = parseInt(css['margin-bottom'], 10); if (n >= 0) s.marginBottom = n; }
+  if (css['border-radius']) { const n = parseInt(css['border-radius'], 10); if (n >= 0) s.borderRadius = n; }
+  if (css.width) { const n = parseInt(css.width, 10); if (n > 0) s.width = n; }
+  if (css.height) { const n = parseInt(css.height, 10); if (n > 0) s.height = n; }
+  if (css['max-width']) { const n = parseInt(css['max-width'], 10); if (n > 0) s.maxWidth = n; }
+  if (css.gap) { const n = parseInt(css.gap, 10); if (n >= 0) s.gap = n; }
+  if (css.display === 'flex') { /* already default */ }
+  if (css['flex-direction'] === 'row') s.flexDirection = 'row';
+  if (css['flex-direction'] === 'column') s.flexDirection = 'column';
+  if (css['flex-grow']) { const n = parseFloat(css['flex-grow']); if (n > 0) s.flexGrow = n; }
+  if (css['flex-wrap'] === 'wrap') s.flexWrap = 'wrap';
+  if (css['justify-content']) {
+    const jc = css['justify-content'].replace('flex-', '');
+    if (['start', 'center', 'end', 'space-between', 'space-around', 'space-evenly'].includes(jc)) s.justifyContent = jc;
+  }
+  if (css['align-items']) {
+    const ai = css['align-items'].replace('flex-', '');
+    if (['start', 'center', 'end', 'stretch'].includes(ai)) s.alignItems = ai;
+  }
+  if (css.border) {
+    const borderMatch = css.border.match(/(\d+)px\s+\w+\s+([\w#]+)/);
+    if (borderMatch) {
+      s.borderWidth = parseInt(borderMatch[1], 10);
+      s.borderColor = cssColorToHex(borderMatch[2]);
+    }
+  }
+  if (css['border-bottom']) {
+    const bm = css['border-bottom'].match(/(\d+)px\s+\w+\s+([\w#]+)/);
+    if (bm) { s.borderBottomWidth = parseInt(bm[1], 10); s.borderColor = cssColorToHex(bm[2]); }
+  }
+  if (css['box-shadow']) {
+    // Approximate box shadow as border
+  }
+
+  return s;
+}
+
+// Map HTML tags to ReactJIT rendering
+function HtmlPreview({ html }: { html: string }) {
+  const nodes = useMemo(() => parseHtml(html), [html]);
+  return (
+    <Box style={{ gap: 4 }}>
+      {nodes.map((node, i) => <HtmlNodeRenderer key={i} node={node} />)}
+    </Box>
+  );
+}
+
+function HtmlNodeRenderer({ node }: { node: HtmlNode | string }) {
+  if (typeof node === 'string') {
+    const trimmed = node.trim();
+    if (!trimmed) return null;
+    return <Text style={{ fontSize: 14, color: '#1a1a1a', lineHeight: 1.5 }}>{trimmed}</Text>;
+  }
+
+  const style = cssToStyle(node.attrs.style);
+  const children = node.children.map((child, i) => <HtmlNodeRenderer key={i} node={child} />);
+
+  switch (node.tag) {
+    // ── Block elements ──
+    case 'div':
+    case 'section':
+    case 'article':
+    case 'main':
+    case 'header':
+    case 'footer':
+    case 'nav':
+    case 'aside':
+    case 'form':
+      return <Box style={{ gap: 4, ...style }}>{children}</Box>;
+
+    case 'p':
+      return (
+        <Box style={{ paddingTop: 2, paddingBottom: 2, ...style }}>
+          {node.children.map((child, i) => {
+            if (typeof child === 'string') {
+              return <Text key={i} style={{ fontSize: 14, color: style.color || '#1a1a1a', lineHeight: 1.5, ...(style.fontWeight ? { fontWeight: style.fontWeight } : {}), ...(style.textAlign ? { textAlign: style.textAlign } : {}) }}>{child.trim()}</Text>;
+            }
+            return <HtmlNodeRenderer key={i} node={child} />;
+          })}
+        </Box>
+      );
+
+    case 'h1':
+      return <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#000000', paddingTop: 8, paddingBottom: 4, ...style }}>{textContent(node)}</Text>;
+    case 'h2':
+      return <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1a1a1a', paddingTop: 6, paddingBottom: 3, ...style }}>{textContent(node)}</Text>;
+    case 'h3':
+      return <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#2a2a2a', paddingTop: 4, paddingBottom: 2, ...style }}>{textContent(node)}</Text>;
+    case 'h4':
+      return <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#333333', paddingTop: 3, paddingBottom: 2, ...style }}>{textContent(node)}</Text>;
+    case 'h5':
+    case 'h6':
+      return <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#444444', paddingTop: 2, paddingBottom: 1, ...style }}>{textContent(node)}</Text>;
+
+    // ── Inline text ──
+    case 'span':
+      return <Text style={{ fontSize: 14, color: '#1a1a1a', ...style }}>{textContent(node)}</Text>;
+    case 'strong':
+    case 'b':
+      return <Text style={{ fontSize: 14, color: '#1a1a1a', fontWeight: 'bold', ...style }}>{textContent(node)}</Text>;
+    case 'em':
+    case 'i':
+      return <Text style={{ fontSize: 14, color: '#1a1a1a', fontStyle: 'italic', ...style }}>{textContent(node)}</Text>;
+    case 'code':
+      return (
+        <Box style={{ backgroundColor: '#f0f0f0', borderRadius: 3, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
+          <Text style={{ fontSize: 12, color: '#c7254e', fontFamily: 'monospace' }}>{textContent(node)}</Text>
+        </Box>
+      );
+    case 'pre':
+      return (
+        <Box style={{ backgroundColor: '#f5f5f5', borderRadius: 6, padding: 10, ...style }}>
+          <Text style={{ fontSize: 12, color: '#333333', fontFamily: 'monospace' }}>{textContent(node)}</Text>
+        </Box>
+      );
+    case 'a':
+      return <Text style={{ fontSize: 14, color: '#0066cc', ...style }}>{textContent(node)}</Text>;
+    case 'small':
+      return <Text style={{ fontSize: 11, color: '#666666', ...style }}>{textContent(node)}</Text>;
+    case 'label':
+      return <Text style={{ fontSize: 13, color: '#333333', fontWeight: 'bold', ...style }}>{textContent(node)}</Text>;
+
+    // ── Lists ──
+    case 'ul':
+    case 'ol':
+      return (
+        <Box style={{ paddingLeft: 16, gap: 2, ...style }}>
+          {node.children.filter(c => typeof c !== 'string' || c.trim()).map((child, i) => {
+            if (typeof child === 'string') return null;
+            const bullet = node.tag === 'ol' ? `${i + 1}.` : '\u2022';
+            return (
+              <Box key={i} style={{ flexDirection: 'row', gap: 6 }}>
+                <Text style={{ fontSize: 14, color: '#666666' }}>{bullet}</Text>
+                <Box style={{ flexGrow: 1 }}><HtmlNodeRenderer node={child} /></Box>
+              </Box>
+            );
+          })}
+        </Box>
+      );
+    case 'li':
+      return <Box style={{ gap: 2, ...style }}>{children}</Box>;
+
+    // ── Table ──
+    case 'table':
+      return (
+        <Box style={{ borderWidth: 1, borderColor: '#dddddd', borderRadius: 4, overflow: 'hidden', ...style }}>
+          {children}
+        </Box>
+      );
+    case 'thead':
+      return <Box style={{ backgroundColor: '#f5f5f5' }}>{children}</Box>;
+    case 'tbody':
+      return <Box>{children}</Box>;
+    case 'tr':
+      return <Box style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#eeeeee', ...style }}>{children}</Box>;
+    case 'th':
+      return (
+        <Box style={{ flexGrow: 1, padding: 6, borderRightWidth: 1, borderColor: '#eeeeee', ...style }}>
+          <Text style={{ fontSize: 12, color: '#333333', fontWeight: 'bold' }}>{textContent(node)}</Text>
+        </Box>
+      );
+    case 'td':
+      return (
+        <Box style={{ flexGrow: 1, padding: 6, borderRightWidth: 1, borderColor: '#eeeeee', ...style }}>
+          {children.length > 0 ? children : <Text style={{ fontSize: 12, color: '#333333' }}>{textContent(node)}</Text>}
+        </Box>
+      );
+
+    // ── Media ──
+    case 'img':
+      return (
+        <Box style={{
+          backgroundColor: '#f0f0f0', borderRadius: 4, padding: 8, alignItems: 'center', ...style,
+        }}>
+          <Text style={{ fontSize: 10, color: '#999999' }}>{`[Image: ${node.attrs.alt || node.attrs.src || 'image'}]`}</Text>
+        </Box>
+      );
+
+    // ── Form elements (visual only) ──
+    case 'button':
+      return (
+        <Box style={{
+          backgroundColor: style.backgroundColor || '#4a90d9', borderRadius: 6,
+          paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8,
+          alignItems: 'center', alignSelf: 'start', ...style,
+        }}>
+          <Text style={{ fontSize: 14, color: style.color || '#ffffff', fontWeight: 'bold' }}>{textContent(node)}</Text>
+        </Box>
+      );
+    case 'input':
+      return (
+        <Box style={{
+          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
+          padding: 8, backgroundColor: '#ffffff', ...style,
+        }}>
+          <Text style={{ fontSize: 13, color: '#999999' }}>
+            {node.attrs.placeholder || node.attrs.value || node.attrs.type || 'input'}
+          </Text>
+        </Box>
+      );
+    case 'textarea':
+      return (
+        <Box style={{
+          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
+          padding: 8, backgroundColor: '#ffffff', minHeight: 60, ...style,
+        }}>
+          <Text style={{ fontSize: 13, color: '#999999' }}>
+            {node.attrs.placeholder || textContent(node) || 'textarea'}
+          </Text>
+        </Box>
+      );
+    case 'select':
+      return (
+        <Box style={{
+          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
+          padding: 8, backgroundColor: '#ffffff', flexDirection: 'row', justifyContent: 'space-between', ...style,
+        }}>
+          <Text style={{ fontSize: 13, color: '#333333' }}>
+            {textContent(node.children.find(c => typeof c !== 'string' && c.tag === 'option') as HtmlNode | undefined || node) || 'select'}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#999999' }}>{'\u25BC'}</Text>
+        </Box>
+      );
+    case 'option':
+      return null; // handled by select
+
+    // ── Separators ──
+    case 'br':
+      return <Box style={{ height: 4 }} />;
+    case 'hr':
+      return <Box style={{ height: 1, backgroundColor: '#dddddd', marginTop: 4, marginBottom: 4, ...style }} />;
+
+    // ── Semantic ──
+    case 'blockquote':
+      return (
+        <Box style={{
+          borderLeftWidth: 3, borderColor: '#cccccc', paddingLeft: 12,
+          paddingTop: 4, paddingBottom: 4, backgroundColor: '#f9f9f9', borderRadius: 4, ...style,
+        }}>
+          {children}
+        </Box>
+      );
+
+    case 'details':
+    case 'summary':
+    case 'figure':
+    case 'figcaption':
+    case 'dl':
+    case 'dt':
+    case 'dd':
+      return <Box style={{ gap: 2, ...style }}>{children}</Box>;
+
+    // ── Head elements (skip) ──
+    case 'html':
+    case 'head':
+    case 'title':
+    case 'meta':
+    case 'link':
+    case 'script':
+    case 'style':
+      return null;
+
+    case 'body':
+      return <Box style={{ gap: 4, ...style }}>{children}</Box>;
+
+    default:
+      // Unknown tags: render as Box with children
+      return children.length > 0 ? <Box style={{ ...style }}>{children}</Box> : null;
+  }
+}
+
+function textContent(node: HtmlNode | undefined): string {
+  if (!node) return '';
+  return node.children.map(c => typeof c === 'string' ? c : textContent(c)).join('');
 }
 
 // ── Shared small components ──────────────────────────────────────────────────
