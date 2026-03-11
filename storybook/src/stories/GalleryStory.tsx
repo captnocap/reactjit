@@ -15,7 +15,7 @@
 import React, { useState, useMemo } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { getAll, PKG_COLORS } from './galleryRegistry';
+import { getAll, PKG_COLORS, type GalleryEntry } from './galleryRegistry';
 import './GalleryComponents'; // side-effect: registers all components
 
 // ── Palette ──────────────────────────────────────────────
@@ -26,7 +26,18 @@ const C = {
   selected: 'rgba(139, 92, 246, 0.2)',
 };
 
-// TABS is now driven by the registry — components self-register in GalleryComponents.tsx
+// Package display order + labels for the grouped tab grid
+const PKG_ORDER = ['core', 'controls', 'chemistry', 'finance', 'time', 'ai', 'data', 'apis'];
+const PKG_LABELS: Record<string, string> = {
+  core: 'Core',
+  controls: 'Controls',
+  chemistry: 'Chemistry',
+  finance: 'Finance',
+  time: 'Time',
+  ai: 'AI',
+  data: 'Data',
+  apis: 'APIs',
+};
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -60,6 +71,21 @@ export function GalleryStory() {
       t.desc.toLowerCase().includes(q)
     );
   }, [searchQuery, TABS]);
+
+  // Group filtered tabs by package in display order
+  const groupedTabs = useMemo(() => {
+    const byPkg: Record<string, GalleryEntry[]> = {};
+    for (const t of filteredTabs) {
+      if (!byPkg[t.pkg]) byPkg[t.pkg] = [];
+      byPkg[t.pkg].push(t);
+    }
+    return PKG_ORDER.filter(p => byPkg[p] && byPkg[p].length > 0).map(p => ({
+      pkg: p,
+      label: PKG_LABELS[p] || p,
+      color: PKG_COLORS[p],
+      items: byPkg[p],
+    }));
+  }, [filteredTabs]);
 
   const tabGridHeight = tabsExpanded ? 380 : 232;
 
@@ -182,47 +208,61 @@ export function GalleryStory() {
         </S.RowCenterBorder>
       </Pressable>
 
-      {/* ── Tab grid — thumbnail previews ── */}
+      {/* ── Tab grid — thumbnail previews grouped by package ── */}
       <ScrollView testId="gallery-tab-grid" style={{
         height: tabGridHeight, flexShrink: 0,
         backgroundColor: c.bgElevated,
       }}>
-        <S.RowG6 style={{ flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 }}>
-          {filteredTabs.map(comp => {
-            const active = comp.id === activeId;
-            const compPkgColor = PKG_COLORS[comp.pkg];
-            return (
-              <Pressable key={comp.id} onPress={() => setActiveId(comp.id)}>
-                <Box style={{
-                  width: 68, height: 68,
-                  backgroundColor: active ? C.selected : c.surface,
-                  borderRadius: 6,
-                  borderWidth: active ? 2 : 1,
-                  borderColor: active ? C.accent : c.border,
-                  overflow: 'hidden',
-                }}>
-                  <Box style={{ flexGrow: 1, overflow: 'hidden' }}>
-                    {comp.thumb(c)}
-                  </Box>
-                  <Box style={{
-                    flexShrink: 0, height: 14,
-                    backgroundColor: active ? C.accentDim : 'rgba(0,0,0,0.3)',
-                    justifyContent: 'center', alignItems: 'center',
-                    flexDirection: 'row', gap: 3,
-                  }}>
-                    {compPkgColor && <Box style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: compPkgColor }} />}
-                    <Text style={{ color: active ? c.text : c.muted, fontSize: 6 }}>{comp.label}</Text>
-                  </Box>
-                </Box>
-              </Pressable>
-            );
-          })}
+        <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 8, gap: 2 }}>
+          {groupedTabs.map(group => (
+            <Box key={group.pkg}>
+              {/* Package section header */}
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 4, paddingTop: 6, paddingBottom: 4 }}>
+                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: group.color || C.accent }} />
+                <Text style={{ fontSize: 8, color: group.color || c.muted, fontWeight: 'bold', letterSpacing: 1 }}>
+                  {`@reactjit/${group.pkg}`}
+                </Text>
+                <Box style={{ flexGrow: 1, height: 1, backgroundColor: group.color || c.border, opacity: 0.2 }} />
+                <Text style={{ fontSize: 7, color: c.muted, paddingRight: 4 }}>{`${group.items.length}`}</Text>
+              </Box>
+              {/* Thumbnails row */}
+              <S.RowG6 style={{ flexWrap: 'wrap', paddingLeft: 2, paddingRight: 2 }}>
+                {group.items.map(comp => {
+                  const active = comp.id === activeId;
+                  return (
+                    <Pressable key={comp.id} onPress={() => setActiveId(comp.id)}>
+                      <Box style={{
+                        width: 68, height: 68,
+                        backgroundColor: active ? C.selected : c.surface,
+                        borderRadius: 6,
+                        borderWidth: active ? 2 : 1,
+                        borderColor: active ? C.accent : c.border,
+                        overflow: 'hidden',
+                      }}>
+                        <Box style={{ flexGrow: 1, overflow: 'hidden' }}>
+                          {comp.thumb(c)}
+                        </Box>
+                        <Box style={{
+                          flexShrink: 0, height: 14,
+                          backgroundColor: active ? C.accentDim : 'rgba(0,0,0,0.3)',
+                          justifyContent: 'center', alignItems: 'center',
+                          flexDirection: 'row', gap: 3,
+                        }}>
+                          <Text style={{ color: active ? c.text : c.muted, fontSize: 6 }}>{comp.label}</Text>
+                        </Box>
+                      </Box>
+                    </Pressable>
+                  );
+                })}
+              </S.RowG6>
+            </Box>
+          ))}
           {filteredTabs.length === 0 && (
             <Box style={{ padding: 20, alignItems: 'center' }}>
               <S.DimBody11>{`No components match "${searchQuery}"`}</S.DimBody11>
             </Box>
           )}
-        </S.RowG6>
+        </Box>
       </ScrollView>
 
       </Box>{/* end gallery-content */}
