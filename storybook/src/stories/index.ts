@@ -58,7 +58,6 @@ import { ProcessesStory } from './ProcessesStory';
 import { DataSpreadsheetStory } from './DataSpreadsheetStory';
 import { StorageStory } from './StorageStory';
 import { ThreeDStory } from './ThreeDStory';
-import { SVGAnimationStory } from './SVGAnimationStory';
 import { TimeStory } from './TimeStory';
 
 // ── Effects & Masks (Layout3) ───────────────────────────
@@ -138,7 +137,6 @@ export const stories: StoryDef[] = [
   { id: 'processes', title: 'Processes', section: 'Packages', component: ProcessesStory },
   { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
-  { id: 'svg-animation', title: 'SVG Animation', section: 'Packages', component: SVGAnimationStory },
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
 
   // ── Effects & Masks (Layout3) ─────────────────────────

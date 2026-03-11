@@ -13,6 +13,8 @@ import {
   Box, Text, Image, ScrollView, CodeBlock, Pressable,
   Easing, useShake,
   entranceStyle,
+  SVGAnimation,
+  useHotState,
   classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
@@ -207,6 +209,34 @@ const PATTERN_CODE = `// Animated button: press + hover feedback
     },
   }} />
 ))}`;
+
+const SVG_CODE = `// Stroke reveal — draws SVG paths on over time
+<SVGAnimation
+  src={svgString}
+  effect="reveal"
+  duration={2000}
+  easing="easeInOut"
+  loop
+  style={{ width: 150, height: 150 }}
+/>
+
+// Morph — interpolate between two SVGs
+<SVGAnimation
+  src={circleSvg} srcTo={starSvg}
+  effect="morph" duration={1500} loop
+  style={{ width: 150, height: 150 }}
+/>
+
+// Per-element — animate by element ID
+<SVGAnimation src={faceSvg} effect="elements"
+  targets={{ eye: { scale: 1.5 }, mouth: { translateY: -5 } }}
+/>
+
+// Path follow — track position along a path
+<SVGAnimation src={trackSvg} effect="follow"
+  pathId="track" duration={3000}
+  onProgress={({ x, y, angle }) => ...}
+/>`;
 
 // ── Hoisted data arrays ─────────────────────────────────
 
@@ -1311,6 +1341,68 @@ function EffectsDemo() {
   );
 }
 
+// ── SVG Animation Demos ─────────────────────────────────
+
+const SVG_STAR = `<svg viewBox="0 0 100 100" width="100" height="100"><path d="M50 5 L61 38 L97 38 L68 59 L79 93 L50 72 L21 93 L32 59 L3 38 L39 38 Z" fill="none" stroke="#FBBF24" stroke-width="2"/></svg>`;
+const SVG_CIRCLE = `<svg viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="40" fill="none" stroke="#60A5FA" stroke-width="2"/></svg>`;
+const SVG_SQUARE = `<svg viewBox="0 0 100 100" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="none" stroke="#F472B6" stroke-width="2"/></svg>`;
+const SVG_HOUSE = `<svg viewBox="0 0 100 100" width="100" height="100"><path d="M50 10 L90 45 L10 45 Z" fill="none" stroke="#F87171" stroke-width="2"/><rect x="20" y="45" width="60" height="40" fill="none" stroke="#93C5FD" stroke-width="2"/><rect x="40" y="55" width="20" height="30" fill="none" stroke="#FBBF24" stroke-width="2"/></svg>`;
+
+function SVGAnimDemo() {
+  const [key, setKey] = useHotState('svg-anim-key', 0);
+  return (
+    <>
+      <Pressable onPress={() => setKey(key + 1)} style={{ alignItems: 'center', gap: 16 }}>
+        <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center', gap: 4 }}>
+            <Box style={{ width: 120, height: 120, alignItems: 'center', justifyContent: 'center' }}>
+              <SVGAnimation
+                key={`rev-star-${key}`}
+                src={SVG_STAR}
+                effect="reveal"
+                duration={2000}
+                easing="easeInOut"
+                style={{ width: 120, height: 120 }}
+              />
+            </Box>
+            <S.StoryCap>{'reveal'}</S.StoryCap>
+          </Box>
+          <Box style={{ alignItems: 'center', gap: 4 }}>
+            <Box style={{ width: 120, height: 120, alignItems: 'center', justifyContent: 'center' }}>
+              <SVGAnimation
+                key={`rev-house-${key}`}
+                src={SVG_HOUSE}
+                effect="reveal"
+                duration={3000}
+                easing="easeOut"
+                fillReveal
+                style={{ width: 120, height: 120 }}
+              />
+            </Box>
+            <S.StoryCap>{'reveal + fill'}</S.StoryCap>
+          </Box>
+          <Box style={{ alignItems: 'center', gap: 4 }}>
+            <Box style={{ width: 120, height: 120, alignItems: 'center', justifyContent: 'center' }}>
+              <SVGAnimation
+                key={`morph-${key}`}
+                src={SVG_CIRCLE}
+                srcTo={SVG_STAR}
+                effect="morph"
+                duration={2000}
+                easing="easeInOut"
+                loop
+                style={{ width: 120, height: 120 }}
+              />
+            </Box>
+            <S.StoryCap>{'morph (loop)'}</S.StoryCap>
+          </Box>
+        </Box>
+        <S.StoryCap>{'Tap to restart'}</S.StoryCap>
+      </Pressable>
+    </>
+  );
+}
+
 // ── Feature Catalog ─────────────────────────────────────
 
 function FeatureList() {
@@ -1558,6 +1650,19 @@ export function AnimationStory() {
           </Half>
           <Half>
             <CodeBlock language="tsx" fontSize={9} code={EFFECTS_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── code | demo — SVG ANIMATION ── */}
+        <Band>
+          <Half>
+            <CodeBlock language="tsx" fontSize={9} code={SVG_CODE} />
+          </Half>
+          <Half>
+            <SectionLabel icon="pen-tool" accentColor={C.amber}>{'SVG ANIMATION'}</SectionLabel>
+            <SVGAnimDemo />
           </Half>
         </Band>
 
