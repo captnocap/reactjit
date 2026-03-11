@@ -4945,10 +4945,6 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
-  -- DEBUG: trace focus state on every keypress
-  local _dbgFocus = focus.get()
-  io.write(string.format("[KEY-ENTRY] key=%s focusedNode=%s type=%s\n", tostring(key), tostring(_dbgFocus and _dbgFocus.id or "nil"), tostring(_dbgFocus and _dbgFocus.type or "nil"))); io.flush()
-
   if M.overlay and M.overlay.keypressed(key) then return end
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
@@ -5184,19 +5180,12 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     return
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
-    io.write(string.format("[KEY-DBG] routing to hittable cap: type=%s id=%s\n", tostring(focusedNode.type), tostring(focusedNode.id))); io.flush()
     local capDef = M.capabilities.getDefinition(focusedNode.type)
     if capDef and capDef.handleKeyPressed then
       local result = capDef.handleKeyPressed(focusedNode, key, scancode, isrepeat)
       if result ~= false then
         return  -- consumed by visual capability
       end
-    else
-      io.write(string.format("[KEY-DBG] no handleKeyPressed on capDef for %s\n", tostring(focusedNode.type))); io.flush()
-    end
-  else
-    if focusedNode then
-      io.write(string.format("[KEY-DBG] focusedNode type=%s id=%s isHittable=%s\n", tostring(focusedNode.type), tostring(focusedNode.id), tostring(M.capabilities and M.capabilities.isHittable(focusedNode.type)))); io.flush()
     end
   end
 

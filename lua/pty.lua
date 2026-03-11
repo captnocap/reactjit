@@ -413,15 +413,17 @@ function M.open(opts)
     ffi.C.dup2(slavefd, 2)
     if slavefd > 2 then ffi.C.close(slavefd) end
 
-    -- Put slave into raw mode: kills echo, canonical mode, signal processing.
-    -- Claude still sees isatty()=true (permissions work), but the PTY won't
-    -- echo writes back or do line buffering. Re-enable OPOST so \n → \r\n
-    -- translation is preserved — the line parser needs \n delimiters.
-    local tios = ffi.new("struct termios")
-    if ffi.C.tcgetattr(0, tios) == 0 then
-      ffi.C.cfmakeraw(tios)
-      tios.c_oflag = bit.bor(tios.c_oflag, OPOST)
-      ffi.C.tcsetattr(0, TCSANOW, tios)
+    -- Raw mode: only for applications that manage their own terminal display
+    -- (e.g. Claude Code ink app, ncurses apps launched via raw PTY).
+    -- Normal interactive shells (bash, zsh) need default terminal settings
+    -- so readline/zle can handle echo, line editing, and job control.
+    if opts.rawMode then
+      local tios = ffi.new("struct termios")
+      if ffi.C.tcgetattr(0, tios) == 0 then
+        ffi.C.cfmakeraw(tios)
+        tios.c_oflag = bit.bor(tios.c_oflag, OPOST)
+        ffi.C.tcsetattr(0, TCSANOW, tios)
+      end
     end
 
     -- Working directory

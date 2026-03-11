@@ -358,13 +358,15 @@ local function spawnClaude(state, props)
   end
 
   -- PTY: gives Claude isatty()=true (via tmux, which preserves the TTY)
+  -- rawMode: Claude Code (ink app) manages its own terminal display
   state.proc = PTY.open({
-    shell = shell,
-    args  = args,
-    cwd   = cwd,
-    rows  = TERM_ROWS,
-    cols  = TERM_COLS,
-    env   = {
+    shell   = shell,
+    args    = args,
+    cwd     = cwd,
+    rawMode = true,
+    rows    = TERM_ROWS,
+    cols    = TERM_COLS,
+    env     = {
       CLAUDECODE      = false,
       LD_PRELOAD      = false,
       LD_LIBRARY_PATH = false,
