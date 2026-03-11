@@ -103,6 +103,26 @@ function love.directorydropped(dir)
   ReactJIT.safeCall("directorydropped", dir)
 end
 
+function love.joystickadded(joystick)
+  ReactJIT.safeCall("joystickadded", joystick)
+end
+
+function love.joystickremoved(joystick)
+  ReactJIT.safeCall("joystickremoved", joystick)
+end
+
+function love.gamepadpressed(joystick, button)
+  ReactJIT.safeCall("gamepadpressed", joystick, button)
+end
+
+function love.gamepadreleased(joystick, button)
+  ReactJIT.safeCall("gamepadreleased", joystick, button)
+end
+
+function love.gamepadaxis(joystick, axis, value)
+  ReactJIT.safeCall("gamepadaxis", joystick, axis, value)
+end
+
 -- quit must return a value — keep as direct call
 function love.quit()
   ReactJIT.quit()
