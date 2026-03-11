@@ -16,7 +16,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput, Modal, Select,
-  CodeBlock, useHotkey, Window,
+  CodeBlock, useHotkey, Window, useMount,
 } from '@reactjit/core';
 import { useChat, useModels, type AIProviderType, type Message } from '@reactjit/ai';
 import { AIMessageList, AIChatInput } from '@reactjit/ai';
@@ -174,6 +174,7 @@ function LLMStudio() {
   const [poppedOutConvos, setPoppedOutConvos] = useState<string[]>([]);
   const [contextFiles, setContextFiles] = useState<{ name: string; content: string }[]>([]);
   const [renamingConvoId, setRenamingConvoId] = useState<string | null>(null);
+  const comparePendingRef = useRef<string | null>(null);
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
@@ -315,7 +316,7 @@ function LLMStudio() {
   const providerCRUD = useCRUD('custom_providers', providerSchema);
 
   // Load persisted conversations on mount
-  useEffect(() => {
+  useMount(() => {
     (async () => {
       try {
         const saved = await convoCRUD.list();
@@ -329,10 +330,10 @@ function LLMStudio() {
         }
       } catch { /* first run, no data */ }
     })();
-  }, []);
+  });
 
   // Load custom providers on mount
-  useEffect(() => {
+  useMount(() => {
     (async () => {
       try {
         const saved = await providerCRUD.list();
@@ -348,9 +349,10 @@ function LLMStudio() {
         }
       } catch { /* first run */ }
     })();
-  }, []);
+  });
 
   // ── Provider health checks ───────────────────────────
+  // rjit-ignore-next-line
   useEffect(() => {
     const checkHealth = async () => {
       const updates = await Promise.all(
@@ -455,6 +457,7 @@ function LLMStudio() {
   }, [activeProviderId, effectiveModel, systemPrompt, chat, persistConversation]);
 
   // Sync messages to conversation + persist
+  // rjit-ignore-next-line
   useEffect(() => {
     if (activeConvoId && chat.messages.length > 0) {
       setConversations(prev => {
@@ -751,6 +754,33 @@ function LLMStudio() {
                     <Box style={{ flexGrow: 1 }}>
                       <AIChatInput
                         send={(text) => {
+                          // Parse +model inline syntax: "+claude +gpt What is X?"
+                          const tokens = text.split(/\s+/);
+                          const plusTokens: string[] = [];
+                          let contentStart = 0;
+                          for (let i = 0; i < tokens.length; i++) {
+                            if (tokens[i].startsWith('+') && tokens[i].length > 1) {
+                              plusTokens.push(tokens[i].slice(1).toLowerCase());
+                              contentStart = i + 1;
+                            } else break;
+                          }
+
+                          if (plusTokens.length > 0 && contentStart < tokens.length) {
+                            // Fuzzy match +tokens against model IDs
+                            const matched = plusTokens.flatMap(t =>
+                              models.filter(m => m.id.toLowerCase().includes(t)).map(m => m.id)
+                            ).filter((v, i, a) => a.indexOf(v) === i); // unique
+                            if (matched.length > 0) {
+                              const cleanText = tokens.slice(contentStart).join(' ');
+                              setCompareModels(matched);
+                              setCompareMode(true);
+                              setView('compare');
+                              // Stash the text for compare view to pick up on next render
+                              comparePendingRef.current = cleanText;
+                              return;
+                            }
+                          }
+
                           if (!activeConvoId) {
                             const id = `conv_${Date.now().toString(36)}`;
                             const convo: ConversationRecord = {
@@ -764,7 +794,7 @@ function LLMStudio() {
                           chat.send(text);
                         }}
                         isLoading={chat.isLoading}
-                        placeholder={`Message ${activeProvider.name}${effectiveModel ? ` / ${effectiveModel}` : ''}...`}
+                        placeholder={`Message ${activeProvider.name}${effectiveModel ? ` / ${effectiveModel}` : ''}... (+model +model to compare)`}
                         sendColor={C.accent} autoFocus
                       />
                     </Box>
@@ -798,6 +828,7 @@ function LLMStudio() {
               systemPrompt={systemPrompt}
               temperature={temperature}
               maxTokens={maxTokens}
+              pendingInput={comparePendingRef}
               onPickResponse={(modelId, messages) => {
                 // Switch to single chat with the picked model's output
                 setActiveModel(modelId);
@@ -1148,7 +1179,14 @@ function Sidebar({
   const [importStatus, setImportStatus] = useState('');
   const [search, setSearch] = useState('');
   const filtered = search
-    ? conversations.filter(c => c.title.toLowerCase().includes(search.toLowerCase()))
+    ? conversations.filter(c => {
+        const q = search.toLowerCase();
+        if (c.title.toLowerCase().includes(q)) return true;
+        return c.messages.some(m => {
+          const text = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+          return text.toLowerCase().includes(q);
+        });
+      })
     : conversations;
 
   const activeProvider = providers.find(p => p.id === activeProviderId);
@@ -1593,6 +1631,7 @@ function ModelBrowser({
     : models;
 
   // Fetch Ollama model details on mount/refresh
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!isOllama || models.length === 0) return;
     const baseURL = provider.baseURL || 'http://localhost:11434';
@@ -2043,7 +2082,7 @@ response = client.chat.completions.create(
 
 function CompareView({
   models, compareModels, onSetCompareModels, provider,
-  systemPrompt, temperature, maxTokens, onPickResponse,
+  systemPrompt, temperature, maxTokens, onPickResponse, pendingInput,
 }: {
   models: { id: string; name: string }[];
   compareModels: string[];
@@ -2053,9 +2092,21 @@ function CompareView({
   temperature: number;
   maxTokens: number;
   onPickResponse: (modelId: string, messages: Message[]) => void;
+  pendingInput?: React.MutableRefObject<string | null>;
 }) {
   const [sharedInput, setSharedInput] = useState('');
   const [sendSignal, setSendSignal] = useState(0); // increment to trigger all columns
+
+  // Auto-send if we got here via +model syntax
+  // rjit-ignore-next-line
+  useEffect(() => {
+    if (pendingInput?.current && compareModels.length > 0) {
+      setSharedInput(pendingInput.current);
+      pendingInput.current = null;
+      // Trigger send on next frame so sharedInput is set
+      setTimeout(() => setSendSignal(s => s + 1), 50);
+    }
+  }, [compareModels.length]);
 
   const toggleModel = useCallback((id: string) => {
     onSetCompareModels(
@@ -2193,6 +2244,7 @@ function CompareChatColumn({
   const lastSignal = useRef(0);
 
   // Send when signal changes (shared input broadcast)
+  // rjit-ignore-next-line
   useEffect(() => {
     if (sendSignal > lastSignal.current && sharedInput.trim()) {
       lastSignal.current = sendSignal;
