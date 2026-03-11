@@ -1018,4 +1018,13 @@ function M.getShells(key)
   return e and e.shells or nil
 end
 
+function M.valenceElectrons(key)
+  local e = M.getElement(key)
+  if not e or not e.shells then return 0 end
+  return e.shells[#e.shells]
+end
+
+M.buildMolecule = buildMolecule
+M.balanceEquation = balanceEquation
+
 return M
