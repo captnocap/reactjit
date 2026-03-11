@@ -16,7 +16,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput, Modal, Select,
-  CodeBlock, useHotkey,
+  CodeBlock, useHotkey, Window,
 } from '@reactjit/core';
 import { useChat, useModels, type AIProviderType, type Message } from '@reactjit/ai';
 import { AIMessageList, AIChatInput } from '@reactjit/ai';
@@ -140,6 +140,9 @@ function LLMStudio() {
   const [serverPort, setServerPort] = useState(5001);
   const [compareMode, setCompareMode] = useState(false);
   const [compareModels, setCompareModels] = useState<string[]>([]);
+  const [poppedOutConvos, setPoppedOutConvos] = useState<string[]>([]);
+  const [contextFiles, setContextFiles] = useState<{ name: string; content: string }[]>([]);
+  const [renamingConvoId, setRenamingConvoId] = useState<string | null>(null);
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
@@ -355,6 +358,15 @@ function LLMStudio() {
     return models.length > 0 ? models[0].id : '';
   }, [activeModel, models]);
 
+  // ── Effective system prompt (includes file context) ──
+  const effectiveSystemPrompt = useMemo(() => {
+    if (contextFiles.length === 0) return systemPrompt;
+    const fileBlock = contextFiles.map(f =>
+      `<file name="${f.name}">\n${f.content}\n</file>`
+    ).join('\n\n');
+    return `${systemPrompt}\n\nThe user has attached the following files for context:\n\n${fileBlock}`;
+  }, [systemPrompt, contextFiles]);
+
   // ── Chat hook ────────────────────────────────────────
   const chat = useChat({
     provider: activeProvider.type,
@@ -363,7 +375,7 @@ function LLMStudio() {
     baseURL: activeProvider.baseURL,
     temperature,
     maxTokens,
-    systemPrompt,
+    systemPrompt: effectiveSystemPrompt,
     initialMessages: activeConvoId
       ? conversations.find(c => c.id === activeConvoId)?.messages || []
       : [],
@@ -440,6 +452,78 @@ function LLMStudio() {
     try { await convoCRUD.delete(id); } catch { /* ok */ }
   }, [activeConvoId, chat, convoCRUD]);
 
+  // Clone: duplicate entire conversation
+  const cloneConversation = useCallback((id: string) => {
+    const source = conversations.find(c => c.id === id);
+    if (!source) return;
+    const newId = `conv_${Date.now().toString(36)}`;
+    const clone: ConversationRecord = {
+      ...source, id: newId, title: `${source.title} (copy)`, updatedAt: Date.now(),
+      messages: [...source.messages],
+    };
+    setConversations(prev => [clone, ...prev]);
+    setActiveConvoId(newId);
+    chat.setMessages(clone.messages);
+    persistConversation(clone);
+  }, [conversations, chat, persistConversation]);
+
+  // Branch: fork from a specific message index
+  const branchConversation = useCallback((fromIndex: number) => {
+    if (!activeConvoId) return;
+    const source = conversations.find(c => c.id === activeConvoId);
+    if (!source) return;
+    const newId = `conv_${Date.now().toString(36)}`;
+    const branchedMessages = chat.messages.slice(0, fromIndex + 1);
+    const branch: ConversationRecord = {
+      ...source, id: newId,
+      title: `${source.title} (branch @${fromIndex + 1})`,
+      messages: branchedMessages, updatedAt: Date.now(),
+    };
+    setConversations(prev => [branch, ...prev]);
+    setActiveConvoId(newId);
+    chat.setMessages(branchedMessages);
+    persistConversation(branch);
+  }, [activeConvoId, conversations, chat, persistConversation]);
+
+  // Rename conversation
+  const renameConversation = useCallback((id: string, newTitle: string) => {
+    setConversations(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const updated = { ...c, title: newTitle };
+      persistConversation(updated);
+      return updated;
+    }));
+    setRenamingConvoId(null);
+  }, [persistConversation]);
+
+  // Pop out a conversation into its own window
+  const popOutConversation = useCallback((id: string) => {
+    if (!poppedOutConvos.includes(id)) {
+      setPoppedOutConvos(prev => [...prev, id]);
+    }
+  }, [poppedOutConvos]);
+
+  const closePopOut = useCallback((id: string) => {
+    setPoppedOutConvos(prev => prev.filter(c => c !== id));
+  }, []);
+
+  // Edit a message in-place
+  const editMessage = useCallback((index: number, newContent: string) => {
+    const updated = chat.messages.map((m, i) =>
+      i === index ? { ...m, content: newContent } : m
+    );
+    chat.setMessages(updated);
+  }, [chat]);
+
+  // Add file context
+  const addContextFile = useCallback((name: string, content: string) => {
+    setContextFiles(prev => [...prev, { name, content }]);
+  }, []);
+
+  const removeContextFile = useCallback((index: number) => {
+    setContextFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
   // ── Provider management ──────────────────────────────
   const [newPName, setNewPName] = useState('');
   const [newPURL, setNewPURL] = useState('');
@@ -481,6 +565,11 @@ function LLMStudio() {
         conversations={conversations} activeConvoId={activeConvoId}
         onSelectConvo={selectConversation} onNewChat={newConversation}
         onDeleteConvo={deleteConversation}
+        onCloneConvo={cloneConversation}
+        onPopOutConvo={popOutConversation}
+        onRenameConvo={renameConversation}
+        renamingConvoId={renamingConvoId}
+        onStartRename={setRenamingConvoId}
         view={view} onSetView={setView}
         onAddProvider={() => setProviderModalOpen(true)}
       />
@@ -528,14 +617,14 @@ function LLMStudio() {
                           const text = typeof msg.content === 'string'
                             ? msg.content
                             : msg.content.map(b => b.text || '').join('');
-                          // Copy via bridge clipboard RPC
                           try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', text); } catch {}
                         }}
                         onDelete={() => {
                           chat.setMessages(chat.messages.filter((_, mi) => mi !== i));
                         }}
+                        onEdit={(newContent) => editMessage(i, newContent)}
+                        onBranch={() => branchConversation(i)}
                         onRegenerate={msg.role === 'assistant' ? () => {
-                          // Remove this assistant message and re-send the preceding user message
                           const preceding = chat.messages.slice(0, i);
                           const lastUser = [...preceding].reverse().find(m => m.role === 'user');
                           chat.setMessages(preceding);
@@ -550,26 +639,58 @@ function LLMStudio() {
                     )}
                   />
                 )}
-                <Box style={{ padding: 12, borderTopWidth: 1, borderColor: C.border }}>
-                  <AIChatInput
-                    send={(text) => {
-                      // Auto-create conversation if none active
-                      if (!activeConvoId) {
-                        const id = `conv_${Date.now().toString(36)}`;
-                        const convo: ConversationRecord = {
-                          id, title: 'New Chat', providerId: activeProviderId,
-                          model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
-                        };
-                        setConversations(prev => [convo, ...prev]);
-                        setActiveConvoId(id);
-                        persistConversation(convo);
-                      }
-                      chat.send(text);
-                    }}
-                    isLoading={chat.isLoading}
-                    placeholder={`Message ${activeProvider.name}${effectiveModel ? ` / ${effectiveModel}` : ''}...`}
-                    sendColor={C.accent} autoFocus
-                  />
+                {/* File context bar */}
+                {contextFiles.length > 0 && (
+                  <Box style={{
+                    paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6,
+                    borderTopWidth: 1, borderColor: C.border,
+                    flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+                  }}>
+                    <Text style={{ fontSize: 9, color: C.textDim }}>Context:</Text>
+                    {contextFiles.map((f, fi) => (
+                      <Box key={fi} style={{
+                        flexDirection: 'row', gap: 4, alignItems: 'center',
+                        paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+                        backgroundColor: C.surface, borderRadius: 4,
+                      }}>
+                        <Text style={{ fontSize: 10, color: C.accent }}>{f.name}</Text>
+                        <Text style={{ fontSize: 9, color: C.textDim }}>
+                          {`${Math.round(f.content.length / 1024)}kb`}
+                        </Text>
+                        <Pressable onPress={() => removeContextFile(fi)}>
+                          {({ hovered: xh }) => (
+                            <Text style={{ fontSize: 9, color: xh ? C.red : C.textDim }}>x</Text>
+                          )}
+                        </Pressable>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+
+                <Box style={{ padding: 12, borderTopWidth: 1, borderColor: C.border, gap: 6 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ flexGrow: 1 }}>
+                      <AIChatInput
+                        send={(text) => {
+                          if (!activeConvoId) {
+                            const id = `conv_${Date.now().toString(36)}`;
+                            const convo: ConversationRecord = {
+                              id, title: 'New Chat', providerId: activeProviderId,
+                              model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
+                            };
+                            setConversations(prev => [convo, ...prev]);
+                            setActiveConvoId(id);
+                            persistConversation(convo);
+                          }
+                          chat.send(text);
+                        }}
+                        isLoading={chat.isLoading}
+                        placeholder={`Message ${activeProvider.name}${effectiveModel ? ` / ${effectiveModel}` : ''}...`}
+                        sendColor={C.accent} autoFocus
+                      />
+                    </Box>
+                    <FileContextButton onAddFile={addContextFile} />
+                  </Box>
                 </Box>
               </Box>
 
@@ -674,20 +795,41 @@ function LLMStudio() {
           </Box>
         </Modal>
       )}
+
+      {/* ── Pop-out chat windows ── */}
+      {poppedOutConvos.map(convoId => {
+        const convo = conversations.find(c => c.id === convoId);
+        if (!convo) return null;
+        return (
+          <PopOutChatWindow
+            key={convoId}
+            conversation={convo}
+            provider={providers.find(p => p.id === convo.providerId) || activeProvider}
+            systemPrompt={convo.systemPrompt}
+            temperature={temperature}
+            maxTokens={maxTokens}
+            onClose={() => closePopOut(convoId)}
+          />
+        );
+      })}
     </Box>
   );
 }
 
 // ── Formatted message with markdown-like rendering ───────────────────────────
 
-function FormattedMessage({ message, onCopy, onDelete, onRegenerate }: {
+function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onBranch }: {
   message: Message;
   onCopy?: () => void;
   onDelete?: () => void;
   onRegenerate?: () => void;
+  onEdit?: (newContent: string) => void;
+  onBranch?: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
   const content = typeof message.content === 'string'
     ? message.content
     : message.content.map(b => b.text || '').join('');
@@ -703,6 +845,18 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate }: {
     setTimeout(() => setCopied(false), 1500);
   }, [onCopy]);
 
+  const startEdit = useCallback(() => {
+    setEditText(content);
+    setEditing(true);
+  }, [content]);
+
+  const commitEdit = useCallback(() => {
+    if (editText.trim() && editText !== content) {
+      onEdit?.(editText);
+    }
+    setEditing(false);
+  }, [editText, content, onEdit]);
+
   return (
     <Pressable onHoverIn={() => setHovered(true)} onHoverOut={() => setHovered(false)}>
       {() => (
@@ -715,9 +869,11 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate }: {
             <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold' }}>
               {isUser ? 'You' : 'Assistant'}
             </Text>
-            {hovered && (
+            {hovered && !editing && (
               <Box style={{ flexDirection: 'row', gap: 4 }}>
                 <MsgAction label={copied ? 'Copied' : 'Copy'} color={copied ? C.green : C.textDim} onPress={handleCopy} />
+                {onEdit && <MsgAction label="Edit" color={C.textDim} onPress={startEdit} />}
+                {onBranch && <MsgAction label="Branch" color={C.accent} onPress={onBranch} />}
                 {!isUser && onRegenerate && (
                   <MsgAction label="Retry" color={C.textDim} onPress={onRegenerate} />
                 )}
@@ -726,33 +882,49 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate }: {
             )}
           </Box>
 
-          {/* Content */}
-          <Box style={{
-            padding: 12, borderRadius: 10, gap: 6,
-            backgroundColor: isUser ? C.surfaceActive : C.surface,
-          }}>
-            {parts.map((part, i) => {
-              if (part.type === 'code') {
-                return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
-              }
-              if (part.type === 'heading') {
-                return (
-                  <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
-                    {part.content}
-                  </Text>
-                );
-              }
-              if (part.type === 'bullet') {
-                return (
-                  <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
-                    <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
-                    <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
-                  </Box>
-                );
-              }
-              return <RichText key={i} text={part.content} />;
-            })}
-          </Box>
+          {/* Content or editor */}
+          {editing ? (
+            <Box style={{ gap: 6 }}>
+              <TextInput
+                value={editText} onChangeText={setEditText}
+                multiline
+                style={{ backgroundColor: C.bgInput, borderRadius: 8, padding: 10, minHeight: 80 }}
+                textStyle={{ color: C.text, fontSize: 13 }}
+                autoFocus
+              />
+              <Box style={{ flexDirection: 'row', gap: 6 }}>
+                <Btn label="Save" color="#fff" bgColor={C.accent} onPress={commitEdit} />
+                <Btn label="Cancel" color={C.textMuted} bgColor={C.surface} onPress={() => setEditing(false)} />
+              </Box>
+            </Box>
+          ) : (
+            <Box style={{
+              padding: 12, borderRadius: 10, gap: 6,
+              backgroundColor: isUser ? C.surfaceActive : C.surface,
+            }}>
+              {parts.map((part, i) => {
+                if (part.type === 'code') {
+                  return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
+                }
+                if (part.type === 'heading') {
+                  return (
+                    <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
+                      {part.content}
+                    </Text>
+                  );
+                }
+                if (part.type === 'bullet') {
+                  return (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
+                      <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
+                      <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
+                    </Box>
+                  );
+                }
+                return <RichText key={i} text={part.content} />;
+              })}
+            </Box>
+          )}
         </Box>
       )}
     </Pressable>
@@ -873,11 +1045,15 @@ function RichText({ text }: { text: string }) {
 function Sidebar({
   providers, activeProviderId, onSelectProvider,
   conversations, activeConvoId, onSelectConvo, onNewChat, onDeleteConvo,
+  onCloneConvo, onPopOutConvo, onRenameConvo, renamingConvoId, onStartRename,
   view, onSetView, onAddProvider,
 }: {
   providers: Provider[]; activeProviderId: string; onSelectProvider: (id: string) => void;
   conversations: ConversationRecord[]; activeConvoId: string | null;
   onSelectConvo: (id: string) => void; onNewChat: () => void; onDeleteConvo: (id: string) => void;
+  onCloneConvo: (id: string) => void; onPopOutConvo: (id: string) => void;
+  onRenameConvo: (id: string, title: string) => void;
+  renamingConvoId: string | null; onStartRename: (id: string | null) => void;
   view: View; onSetView: (v: View) => void; onAddProvider: () => void;
 }) {
   const [search, setSearch] = useState('');
@@ -956,20 +1132,31 @@ function Sidebar({
                 <Box style={{
                   padding: 10, paddingLeft: 12, borderRadius: 6,
                   backgroundColor: convo.id === activeConvoId ? C.surfaceActive : hovered ? C.surfaceHover : 'transparent',
-                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                  gap: 2,
                 }}>
-                  <Box style={{ flexGrow: 1 }}>
-                    <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
-                      {convo.title}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
-                  </Box>
-                  {hovered && (
-                    <Pressable onPress={() => onDeleteConvo(convo.id)}>
-                      {({ pressed: dp }) => (
-                        <Text style={{ fontSize: 12, color: dp ? C.red : C.textDim }}>x</Text>
+                  <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box style={{ flexGrow: 1 }}>
+                      {renamingConvoId === convo.id ? (
+                        <ConvoRenameInput
+                          initialTitle={convo.title}
+                          onCommit={(t) => onRenameConvo(convo.id, t)}
+                          onCancel={() => onStartRename(null)}
+                        />
+                      ) : (
+                        <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
+                          {convo.title}
+                        </Text>
                       )}
-                    </Pressable>
+                      <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
+                    </Box>
+                  </Box>
+                  {hovered && renamingConvoId !== convo.id && (
+                    <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
+                      <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
+                      <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
+                      <MsgAction label="Pop Out" color={C.accent} onPress={() => onPopOutConvo(convo.id)} />
+                      <MsgAction label="Del" color={C.red} onPress={() => onDeleteConvo(convo.id)} />
+                    </Box>
                   )}
                 </Box>
               )}
@@ -1914,6 +2101,178 @@ function CompareChatColumn({
         </Box>
       )}
     </Box>
+  );
+}
+
+// ── Conversation rename input ─────────────────────────────────────────────────
+
+function ConvoRenameInput({ initialTitle, onCommit, onCancel }: {
+  initialTitle: string; onCommit: (title: string) => void; onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initialTitle);
+  return (
+    <TextInput
+      value={title} onChangeText={setTitle}
+      onSubmit={() => onCommit(title.trim() || initialTitle)}
+      autoFocus
+      style={{ backgroundColor: C.bgInput, borderRadius: 4, padding: 4 }}
+      textStyle={{ color: C.text, fontSize: 12 }}
+    />
+  );
+}
+
+// ── Pop-out chat window ──────────────────────────────────────────────────────
+
+function PopOutChatWindow({ conversation, provider, systemPrompt, temperature, maxTokens, onClose }: {
+  conversation: ConversationRecord;
+  provider: Provider;
+  systemPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  onClose: () => void;
+}) {
+  const chat = useChat({
+    provider: provider.type,
+    model: conversation.model,
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL,
+    temperature,
+    maxTokens,
+    systemPrompt,
+    initialMessages: conversation.messages,
+  });
+
+  return (
+    <Window
+      title={`LLM Studio - ${conversation.title}`}
+      width={700} height={550}
+      onClose={onClose}
+    >
+      <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg, flexDirection: 'column' }}>
+        {/* Header */}
+        <Box style={{
+          padding: 10, borderBottomWidth: 1, borderColor: C.border,
+          backgroundColor: C.bgElevated, flexDirection: 'row', alignItems: 'center', gap: 8,
+        }}>
+          <Text style={{ fontSize: 14 }}>{provider.icon}</Text>
+          <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>{conversation.title}</Text>
+          <Text style={{ fontSize: 10, color: C.textDim }}>{conversation.model}</Text>
+          {chat.isStreaming && <Text style={{ fontSize: 9, color: C.yellow }}>streaming...</Text>}
+        </Box>
+
+        {/* Messages */}
+        <ScrollView style={{ flexGrow: 1 }}>
+          <Box style={{ padding: 8, gap: 6 }}>
+            {chat.messages.map((msg, i) => {
+              if (msg.role === 'system' || msg.role === 'tool') return null;
+              const text = typeof msg.content === 'string'
+                ? msg.content
+                : msg.content.map(b => b.text || '').join('');
+              const isUser = msg.role === 'user';
+              return (
+                <Box key={i} style={{
+                  paddingLeft: isUser ? 40 : 8, paddingRight: isUser ? 8 : 40,
+                  paddingTop: 4, paddingBottom: 4,
+                }}>
+                  <Text style={{ fontSize: 9, color: C.textDim, fontWeight: 'bold', paddingBottom: 2 }}>
+                    {isUser ? 'You' : 'Assistant'}
+                  </Text>
+                  <Box style={{
+                    padding: 10, borderRadius: 8, gap: 4,
+                    backgroundColor: isUser ? C.surfaceActive : C.surface,
+                  }}>
+                    {parseMarkdown(text).map((part, pi) => {
+                      if (part.type === 'code') {
+                        return <CodeBlock key={pi} code={part.content} language={part.language} style={{ borderRadius: 4 }} />;
+                      }
+                      return (
+                        <Text key={pi} style={{ fontSize: 12, color: C.text, lineHeight: 1.4 }}>
+                          {part.content}
+                        </Text>
+                      );
+                    })}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </ScrollView>
+
+        {/* Input */}
+        <Box style={{ padding: 10, borderTopWidth: 1, borderColor: C.border }}>
+          <AIChatInput
+            send={(text) => chat.send(text)}
+            isLoading={chat.isLoading}
+            placeholder={`Message ${provider.name} / ${conversation.model}...`}
+            sendColor={C.accent} autoFocus
+          />
+        </Box>
+
+        {/* Error */}
+        {chat.error && (
+          <Box style={{ padding: 6, backgroundColor: C.redDim }}>
+            <Text style={{ fontSize: 10, color: C.red }}>{chat.error.message}</Text>
+          </Box>
+        )}
+      </Box>
+    </Window>
+  );
+}
+
+// ── File context button ──────────────────────────────────────────────────────
+
+function FileContextButton({ onAddFile }: { onAddFile: (name: string, content: string) => void }) {
+  const [showModal, setShowModal] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [fileContent, setFileContent] = useState('');
+
+  const handleAdd = useCallback(() => {
+    if (!fileName.trim() || !fileContent.trim()) return;
+    onAddFile(fileName.trim(), fileContent);
+    setFileName('');
+    setFileContent('');
+    setShowModal(false);
+  }, [fileName, fileContent, onAddFile]);
+
+  return (
+    <>
+      <Pressable onPress={() => setShowModal(true)}>
+        {({ hovered }) => (
+          <Box style={{
+            paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8,
+            borderRadius: 8, backgroundColor: hovered ? C.surfaceHover : C.surface,
+          }}>
+            <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>+ File</Text>
+          </Box>
+        )}
+      </Pressable>
+      {showModal && (
+        <Modal visible onClose={() => setShowModal(false)}>
+          <Box style={{ width: 500, backgroundColor: C.bgElevated, borderRadius: 12, padding: 20, gap: 12 }}>
+            <Text style={{ fontSize: 16, color: C.text, fontWeight: 'bold' }}>Add File Context</Text>
+            <Text style={{ fontSize: 11, color: C.textMuted }}>
+              Paste file content below. It will be included in the system prompt as context for the AI.
+            </Text>
+            <LabeledInput label="File Name" value={fileName} onChange={setFileName} placeholder="e.g. main.py, data.json" />
+            <Box style={{ gap: 4 }}>
+              <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Content</Text>
+              <TextInput
+                value={fileContent} onChangeText={setFileContent}
+                multiline
+                placeholder="Paste file content here..."
+                placeholderColor={C.textDim}
+                style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8, minHeight: 200 }}
+                textStyle={{ color: C.text, fontSize: 12, fontFamily: 'monospace' }}
+              />
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 8, justifyContent: 'end' }}>
+              <Btn label="Cancel" color={C.textMuted} bgColor={C.surface} onPress={() => setShowModal(false)} />
+              <Btn label="Add File" color="#fff" bgColor={C.accent} onPress={handleAdd} />
+            </Box>
+          </Box>
+        </Modal>
+      )}
+    </>
   );
 }
 
