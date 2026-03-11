@@ -343,6 +343,7 @@ function Capabilities.loadAll()
     "molecule_card",
     "reaction_view",
     "periodic_table",
+    "svg_animation",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

@@ -1040,6 +1040,71 @@ function SVG.draw(doc, x, y, scale, overrides)
   love.graphics.pop()
 end
 
+--- Draw a single element from a parsed SVG document.
+--- Useful for per-element animation where each element needs individual transforms.
+--- @param elem table  Element from doc.elements[]
+--- @param x number  Draw position X
+--- @param y number  Draw position Y
+--- @param scale number?  Scale factor (default 1)
+--- @param fillOverride table?  Override fill color {r,g,b,a}
+--- @param strokeOverride table?  Override stroke color {r,g,b,a}
+--- @param opacityOverride number?  Override opacity
+function SVG.drawElement(elem, x, y, scale, fillOverride, strokeOverride, opacityOverride)
+  if not elem then return end
+  scale = scale or 1
+
+  love.graphics.push()
+  love.graphics.translate(x, y)
+  love.graphics.scale(scale, scale)
+
+  local fill = fillOverride or elem.fill
+  local stroke = strokeOverride or elem.stroke
+  local elemOpacity = opacityOverride or elem.opacity
+
+  -- Fill closed subpaths
+  if fill then
+    local a = (fill[4] or 1) * elemOpacity * elem.fillOpacity
+    love.graphics.setColor(fill[1], fill[2], fill[3], a)
+
+    for i, sp in ipairs(elem.subpaths) do
+      if elem.closed[i] and #sp >= 6 then
+        local tris = elem.triangles[i]
+        if tris then
+          for _, tri in ipairs(tris) do
+            love.graphics.polygon("fill", tri)
+          end
+        else
+          local ok = pcall(love.graphics.polygon, "fill", sp)
+          if not ok then
+            local tok, t = pcall(love.math.triangulate, sp)
+            if tok then
+              for _, tri in ipairs(t) do
+                love.graphics.polygon("fill", tri)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- Stroke all subpaths
+  if stroke then
+    local a = (stroke[4] or 1) * elemOpacity * elem.strokeOpacity
+    love.graphics.setColor(stroke[1], stroke[2], stroke[3], a)
+    love.graphics.setLineWidth(elem.strokeWidth * scale)
+    love.graphics.setLineJoin("bevel")
+
+    for _, sp in ipairs(elem.subpaths) do
+      if #sp >= 4 then
+        love.graphics.line(sp)
+      end
+    end
+  end
+
+  love.graphics.pop()
+end
+
 --- Get the intrinsic size of a parsed SVG document.
 --- @param doc table  Parsed document
 --- @param scale number?  Scale factor (default 1)

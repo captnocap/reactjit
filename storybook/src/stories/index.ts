@@ -54,11 +54,11 @@ import { NetworkingStory } from './NetworkingStory';
 import { PhysicsStory } from './PhysicsStory';
 import { PresentationStory } from './PresentationStory';
 import { PrivacyStory } from './PrivacyStory';
-import { PTYStory } from './PTYStory';
-import { ClaudeCanvasStory } from './ClaudeCanvasStory';
+import { ProcessesStory } from './ProcessesStory';
 import { DataSpreadsheetStory } from './DataSpreadsheetStory';
 import { StorageStory } from './StorageStory';
 import { ThreeDStory } from './ThreeDStory';
+import { SVGAnimationStory } from './SVGAnimationStory';
 import { TimeStory } from './TimeStory';
 
 // ── Effects & Masks (Layout3) ───────────────────────────
@@ -95,7 +95,6 @@ import { Layout3Story } from './Layout3Story';
 import { AutomationStory } from './AutomationStory';
 import { GamepadStory } from './GamepadStory';
 import { GPIOStory } from './GPIOStory';
-import { EnvironmentsStory } from './EnvironmentsStory';
 
 export const stories: StoryDef[] = [
   // ── Primitives (Layout1) ──────────────────────────────
@@ -136,10 +135,10 @@ export const stories: StoryDef[] = [
   { id: 'physics', title: 'Physics', section: 'Packages', component: PhysicsStory },
   { id: 'presentation', title: 'Presentation', section: 'Packages', component: PresentationStory },
   { id: 'privacy', title: 'Privacy', section: 'Packages', component: PrivacyStory },
-  { id: 'pty', title: 'PTY', section: 'Packages', component: PTYStory },
-  { id: 'claude-canvas', title: 'Claude Canvas', section: 'Packages', component: ClaudeCanvasStory },
+  { id: 'processes', title: 'Processes', section: 'Packages', component: ProcessesStory },
   { id: 'spreadsheet', title: 'Spreadsheet', section: 'Packages', component: DataSpreadsheetStory },
   { id: 'storage', title: 'Storage', section: 'Packages', component: StorageStory },
+  { id: 'svg-animation', title: 'SVG Animation', section: 'Packages', component: SVGAnimationStory },
   { id: 'time', title: 'Time', section: 'Packages', component: TimeStory },
 
   // ── Effects & Masks (Layout3) ─────────────────────────
@@ -175,5 +174,4 @@ export const stories: StoryDef[] = [
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
   { id: 'automation', title: 'Automation', section: 'Dev', component: AutomationStory },
   { id: 'gpio', title: 'GPIO', section: 'Packages', component: GPIOStory },
-  { id: 'environments', title: 'Environments', section: 'Dev', component: EnvironmentsStory },
 ];

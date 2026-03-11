@@ -548,8 +548,8 @@ Capabilities.register("SemanticTerminal", {
     -- Font setup
     local fontSize = 13
     local badgeFontSize = 9
-    local font = Measure and Measure.getFont(fontSize, nil, nil)
-    local badgeFont = Measure and Measure.getFont(badgeFontSize, nil, nil)
+    local font = Measure and Measure.getFont(fontSize, "monospace", nil)
+    local badgeFont = Measure and Measure.getFont(badgeFontSize, "monospace", nil)
     local lineHeight = font and font:getHeight() or 16
     local charWidth = font and font:getWidth("M") or 8
 
@@ -598,7 +598,7 @@ Capabilities.register("SemanticTerminal", {
       local tokenColor = getTokenColor(kind)
 
       -- Token badge (left gutter)
-      if showTokens and entry and entry.kind ~= "output" then
+      if showTokens and entry then
         -- Badge background
         love.graphics.setColor(0.15, 0.18, 0.25, 0.8 * alpha)
         local badgeWidth = badgeFont and badgeFont:getWidth(kind) + 6 or 50
@@ -612,12 +612,82 @@ Capabilities.register("SemanticTerminal", {
         end
       end
 
-      -- Row text
-      if #text > 0 then
-        love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], tokenColor[4] * alpha)
-        if font then
-          love.graphics.setFont(font)
-          love.graphics.print(text, c.x + gutterWidth + 4, yPos)
+      -- Row text: render cell-by-cell with vterm ANSI colors (like terminal.lua)
+      if #text > 0 and font then
+        love.graphics.setFont(font)
+        local textX = c.x + gutterWidth + 4
+        local col = 0
+        while col < cols do
+          local cell = vterm:getCell(row, col)
+          if cell.char == "" or cell.char == " " then
+            -- Draw bg on space/empty cells if present
+            if cell.bg then
+              love.graphics.setColor(cell.bg[1] / 255, cell.bg[2] / 255, cell.bg[3] / 255, alpha)
+              love.graphics.rectangle("fill", textX + col * charWidth, yPos, charWidth, lineHeight)
+            end
+            col = col + 1
+          else
+            -- Start a span of same-fg chars for performance
+            local spanStart = col
+            local spanFg = cell.fg
+            local spanBg = cell.bg
+            local spanBold = cell.bold
+            local spanChars = { cell.char }
+            col = col + (cell.width and cell.width > 0 and cell.width or 1)
+
+            while col < cols do
+              local nc = vterm:getCell(row, col)
+              if nc.char == "" or nc.char == " " then break end
+              local sameFg = (spanFg == nil and nc.fg == nil) or
+                (spanFg and nc.fg and spanFg[1] == nc.fg[1] and spanFg[2] == nc.fg[2] and spanFg[3] == nc.fg[3])
+              local sameBold = (spanBold == nc.bold)
+              if not sameFg or not sameBold then break end
+              spanChars[#spanChars + 1] = nc.char
+              col = col + (nc.width and nc.width > 0 and nc.width or 1)
+            end
+
+            -- Draw bg for span if present
+            if spanBg then
+              love.graphics.setColor(spanBg[1] / 255, spanBg[2] / 255, spanBg[3] / 255, alpha)
+              love.graphics.rectangle("fill", textX + spanStart * charWidth, yPos, #spanChars * charWidth, lineHeight)
+            end
+
+            -- Draw fg text with ANSI color (or token color fallback)
+            if spanFg then
+              love.graphics.setColor(spanFg[1] / 255, spanFg[2] / 255, spanFg[3] / 255, alpha)
+            else
+              love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], tokenColor[4] * alpha)
+            end
+
+            -- Bold font if available
+            if spanBold and Measure then
+              local boldFont = Measure.getFont(fontSize, "monospace", "bold")
+              if boldFont then love.graphics.setFont(boldFont) end
+            end
+
+            love.graphics.print(table.concat(spanChars), textX + spanStart * charWidth, yPos)
+
+            if spanBold and font then
+              love.graphics.setFont(font)
+            end
+          end
+        end
+
+        -- Right-side debug info: token color RGB, classifier kind, row number
+        if showTokens then
+          if badgeFont then love.graphics.setFont(badgeFont) end
+          local hex = TOKEN_COLORS[kind] or "#e2e8f0"
+          -- Get first cell fg for debug display
+          local firstCell = vterm:getCell(row, 0)
+          local fgStr = "def"
+          if firstCell and firstCell.fg then
+            fgStr = string.format("%d,%d,%d", firstCell.fg[1], firstCell.fg[2], firstCell.fg[3])
+          end
+          local debugStr = string.format("%s  %s  %d", fgStr, kind, row)
+          local debugW = badgeFont and badgeFont:getWidth(debugStr) or 80
+          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.35 * alpha)
+          love.graphics.print(debugStr, c.x + c.w - debugW - 6, yPos + (lineHeight - badgeFontSize) / 2)
+          if font then love.graphics.setFont(font) end
         end
       end
 
