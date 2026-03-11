@@ -57,6 +57,7 @@ local M = {
   rendersource = nil,
   videoplayer = nil,
   focus    = require("lua.focus"),
+  gamepadCursor = require("lua.gamepad_cursor"),
   texteditor = nil,
   textinput  = nil,
   codeblock  = nil,
@@ -862,6 +863,7 @@ function ReactJIT.init(config)
     M.spellcheck.init()
 
     focus.init(M.tree, pushEvent)
+    M.gamepadCursor.init(M.events, M.tree, pushEvent)
 
     M.events.setWidgetsModule(M.widgets)
 
@@ -942,6 +944,7 @@ function ReactJIT.init(config)
     -- sqlite/docstore/spellcheck: SKIPPED (sqlite is FFI, spellcheck depends on sqlite)
 
     focus.init(M.tree, pushEvent)
+    M.gamepadCursor.init(M.events, M.tree, pushEvent)
 
     M.events.setWidgetsModule(M.widgets)
 
@@ -1039,6 +1042,7 @@ function ReactJIT.init(config)
     M.spellcheck.init()
 
     focus.init(M.tree, pushEvent)
+    M.gamepadCursor.init(M.events, M.tree, pushEvent)
 
     M.events.setWidgetsModule(M.widgets)
 
@@ -3724,6 +3728,17 @@ function ReactJIT.update(dt)
   end
   focus.updateStick(dt)
   focus.updateRings(dt)
+  M.gamepadCursor.update(dt)
+
+  -- Forward gamepad cursor position to system panel for hover tracking
+  if M.systemPanelEnabled and systemPanel.isOpen() and M.gamepadCursor.isVisible() then
+    -- Find the first visible cursor and forward its position
+    for _, joy in ipairs(love.joystick.getJoysticks()) do
+      local cx, cy = M.gamepadCursor.getPosition(joy:getID())
+      systemPanel.mousemoved(cx, cy)
+      break  -- only need one cursor for the panel
+    end
+  end
 
   -- On-screen keyboard update (stick repeat timer)
   if M.osk then M.osk.update(dt) end
@@ -3960,6 +3975,9 @@ function ReactJIT.draw()
       M.painter.drawFocusRing(ring)
     end
   end
+
+  -- Gamepad cursor (after focus rings, before overlays)
+  M.gamepadCursor.draw()
 
   -- Controller toast (after focus rings, before overlays)
   if M.controllerToast.timer and M.controllerToast.text then
@@ -4525,11 +4543,13 @@ function ReactJIT.mousepressed(x, y, button)
         RenderSource.forwardMouse(hit.id, "mousepressed", lx, ly, button)
       end
     elseif M.capabilities and M.capabilities.isHittable(hit.type) then
-      -- Clicked a hittable capability (e.g. ClaudeCanvas): set focus
-      io.write(string.format("[CLICK-DBG] hittable capability clicked: type=%s id=%s isFocused=%s\n", tostring(hit.type), tostring(hit.id), tostring(focus.isFocused(hit)))); io.flush()
+      -- Clicked a hittable capability (e.g. Terminal, ClaudeCanvas): set focus + forward mouse
       if not focus.isFocused(hit) then
         focus.set(hit)
-        io.write(string.format("[CLICK-DBG] focus SET to %s id=%s\n", tostring(hit.type), tostring(hit.id))); io.flush()
+      end
+      local capDef = M.capabilities.getDefinition(hit.type)
+      if capDef and capDef.handleMousePressed then
+        capDef.handleMousePressed(hit, x, y, button)
       end
     elseif M.widgets then
       -- Convert screen coords to content-space (account for scroll ancestors)
@@ -4613,12 +4633,17 @@ function ReactJIT.mousereleased(x, y, button)
     end
   end
 
-  -- TextEditor/TextInput drag selection release
+  -- TextEditor/TextInput/capability drag selection release
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     M.texteditor.handleMouseReleased(focusedNode)
   elseif focusedNode and focusedNode.type == "TextInput" then
     M.textinput.handleMouseReleased(focusedNode)
+  elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
+    local capDef = M.capabilities.getDefinition(focusedNode.type)
+    if capDef and capDef.handleMouseReleased then
+      capDef.handleMouseReleased(focusedNode, x, y, button)
+    end
   end
 
   -- VideoPlayer seek/volume drag release (check all VideoPlayer nodes since
@@ -4707,6 +4732,7 @@ function ReactJIT.mousemoved(x, y)
   if M.gamemod then M.gamemod.mousemoved(x, y, 0, 0) end
 
   focus.setMouseMode()
+  M.gamepadCursor.hideAll()
 
   -- Render node: forward mouse movement to interactive source
   local focusedRender = focus.get()
@@ -4776,6 +4802,13 @@ function ReactJIT.mousemoved(x, y)
     local cx, cy = M.events.screenToContent(focusedNode, x, y)
     if M.textinput.handleMouseMoved(focusedNode, cx, cy) then
       return  -- TextInput consumed the mouse move
+    end
+  elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
+    local capDef = M.capabilities.getDefinition(focusedNode.type)
+    if capDef and capDef.handleMouseMoved then
+      if capDef.handleMouseMoved(focusedNode, x, y) then
+        return  -- consumed by hittable capability
+      end
     end
   end
 
@@ -5519,6 +5552,7 @@ function ReactJIT.joystickremoved(joystick)
   local joysticks = love.joystick.getJoysticks()
   if #joysticks == 0 then
     focus.setMouseMode()
+    M.gamepadCursor.hideAll()
   end
   if M.bridge then
     pushEvent({
@@ -5537,6 +5571,7 @@ function ReactJIT.gamepadpressed(joystick, button)
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
+  M.gamepadCursor.show(joystickId)
 
   -- Store button state in Lua
   if not gamepadButtons[joystickId] then gamepadButtons[joystickId] = {} end
@@ -5544,6 +5579,12 @@ function ReactJIT.gamepadpressed(joystick, button)
 
   -- System panel intercepts all gamepad input when open (for remap listen mode)
   if M.systemPanelEnabled and systemPanel.isOpen() then
+    -- When cursor is visible, forward confirm as a synthetic mouse click
+    local action = gamepadMaps.getButtonAction(joystickId, button)
+    if action == "confirm" and M.gamepadCursor.isVisible() then
+      local cx, cy = M.gamepadCursor.getPosition(joystickId)
+      systemPanel.mousepressed(cx, cy, 1)
+    end
     systemPanel.gamepadpressed(button, joystickId)
     return
   end
@@ -5628,17 +5669,25 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- Confirm → activate focused node (synthesize click)
+  -- Confirm → click at cursor position (if visible), else activate focused node
   if action == "confirm" then
-    local node = focus.getForController(joystickId)
+    local node = nil
+    if M.gamepadCursor.isVisible() then
+      -- Cursor mode: click whatever is under the cursor
+      node = M.gamepadCursor.click(joystickId)
+    else
+      -- Focus mode fallback: click the focused node
+      node = focus.getForController(joystickId)
+      if node then
+        local bubblePath = M.events.buildBubblePath(node)
+        local cx = node.computed.x + node.computed.w / 2
+        local cy = node.computed.y + node.computed.h / 2
+        pushEvent(M.events.createEvent("click", node.id, cx, cy, 1, bubblePath))
+        if M.events then M.events.setPressedNode(node) end
+      end
+    end
     if node then
-      local bubblePath = M.events.buildBubblePath(node)
-      local cx = node.computed.x + node.computed.w / 2
-      local cy = node.computed.y + node.computed.h / 2
-      pushEvent(M.events.createEvent("click", node.id, cx, cy, 1, bubblePath))
-      if M.events then M.events.setPressedNode(node) end
       applyInteractionStyle(node)
-
       -- Auto-open OSK for TextInput nodes
       if M.osk and (node.type == "TextInput" or node.type == "text-input") then
         M.osk.open(node, joystickId, pushEvent)
@@ -5728,17 +5777,22 @@ function ReactJIT.gamepadreleased(joystick, button)
   -- Broadcast to React handlers FIRST (onGamepadRelease fires for ALL buttons)
   pushEvent(M.events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 
-  -- Confirm release → synthesize mouseup on focused node
+  -- Confirm release → synthesize mouseup at cursor or focused node
   local action = gamepadMaps.getButtonAction(joystickId, button)
   if action == "confirm" then
-    local node = focus.getForController(joystickId)
-    if node then
-      local bubblePath = M.events.buildBubblePath(node)
-      local cx = node.computed.x + node.computed.w / 2
-      local cy = node.computed.y + node.computed.h / 2
-      M.events.clearPressedNode()
-      applyInteractionStyle(node)
-      pushEvent(M.events.createEvent("release", node.id, cx, cy, 1, bubblePath))
+    if M.gamepadCursor.isVisible() then
+      local node = M.gamepadCursor.release(joystickId)
+      if node then applyInteractionStyle(node) end
+    else
+      local node = focus.getForController(joystickId)
+      if node then
+        local bubblePath = M.events.buildBubblePath(node)
+        local cx = node.computed.x + node.computed.w / 2
+        local cy = node.computed.y + node.computed.h / 2
+        M.events.clearPressedNode()
+        applyInteractionStyle(node)
+        pushEvent(M.events.createEvent("release", node.id, cx, cy, 1, bubblePath))
+      end
     end
     return
   end
@@ -5760,6 +5814,19 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
 
   -- System panel intercepts axis input when open (for remap listen mode)
   if M.systemPanelEnabled and systemPanel.isOpen() then
+    -- Always feed cursor movement so the user can aim at panel buttons
+    local action = gamepadMaps.getAxisAction(joystickId, axis)
+    if action == "navigate_x" or action == "navigate_y" then
+      M.gamepadCursor.show(joystickId)
+      local cursorAxis = (action == "navigate_x") and "cursor_x" or "cursor_y"
+      M.gamepadCursor.setStickInput(cursorAxis, value, joystickId)
+    elseif action == "scroll_x" or action == "scroll_y" then
+      -- Scroll the system panel itself
+      if action == "scroll_y" and math.abs(value) > 0.2 then
+        systemPanel.wheelmoved(0, -value * 2)
+      end
+    end
+    -- Let system panel capture for remap listen mode
     systemPanel.gamepadaxis(axis, value, joystickId)
     return
   end
@@ -5774,35 +5841,21 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
   local action = gamepadMaps.getAxisAction(joystickId, axis)
   if not action then return end
 
-  -- Navigate stick → focus navigation (handled in update via Focus.updateStick)
+  -- Navigate stick → gamepad cursor movement (continuous, handled in cursor update)
   if action == "navigate_x" or action == "navigate_y" then
-    -- Map action back to axis name for focus module
+    M.gamepadCursor.show(joystickId)
+    local cursorAxis = (action == "navigate_x") and "cursor_x" or "cursor_y"
+    M.gamepadCursor.setStickInput(cursorAxis, value, joystickId)
+    -- Also feed focus stick for D-pad repeat (coexistence)
     local focusAxis = (action == "navigate_x") and "leftx" or "lefty"
     focus.setStickInput(focusAxis, value, joystickId)
     return
   end
 
-  -- Scroll stick → scroll nearest scroll ancestor of focused node
+  -- Scroll stick → scroll container under gamepad cursor (or focused node fallback)
   if action == "scroll_x" or action == "scroll_y" then
-    local scrollNode = nil
-    local node = focus.getForController(joystickId)
-    if node then
-      scrollNode = findScrollAncestor(node)
-    end
-    if not scrollNode then
-      scrollNode = findAnyScrollNode()
-    end
-    if scrollNode and scrollNode.scrollState then
-      local SCROLL_SPEED = 8
-      local ss = scrollNode.scrollState
-      if action == "scroll_x" and math.abs(value) > 0.3 then
-        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
-        emitScrollEvent(scrollNode)
-      elseif action == "scroll_y" and math.abs(value) > 0.3 then
-        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
-        emitScrollEvent(scrollNode)
-      end
-    end
+    -- Feed cursor scroll module (continuous, handled in cursor update)
+    M.gamepadCursor.setScrollInput(axis, value, joystickId)
     return
   end
 
@@ -6144,6 +6197,7 @@ function ReactJIT.reload()
       M.textselection.init({ measure = M.measure, events = M.events, tree = M.tree })
       focus = require("lua.focus")
       focus.init(M.tree, pushEvent)
+    M.gamepadCursor.init(M.events, M.tree, pushEvent)
       M.focus = focus
       -- Re-require devtools stack
       errors    = require("lua.errors")
