@@ -317,6 +317,9 @@ export function useObjectDetect(): UseObjectDetectResult {
         morphRadius: params?.morphRadius,
         featherRadius: params?.featherRadius,
         edgeWeight: params?.edgeWeight,
+        spatialWeight: params?.spatialWeight,
+        sharpWeight: params?.sharpWeight,
+        refine: params?.refine,
       });
       if (result && !result.ok) {
         setError(result.error || 'Detection failed');

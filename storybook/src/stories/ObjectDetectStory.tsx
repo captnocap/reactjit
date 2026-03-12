@@ -72,6 +72,7 @@ await compositeBackground(
 
 const BORDER_PRESETS: { label: string; params: DetectForegroundParams }[] = [
   { label: 'Auto', params: {} },
+  { label: 'Smart', params: { spatialWeight: 0.3, sharpWeight: 0.25, edgeWeight: 0.9, morphRadius: 3, featherRadius: 3 } },
   { label: 'Tight', params: { threshold: 0.15, softness: 0.04, morphRadius: 3, featherRadius: 2, edgeWeight: 1.0 } },
   { label: 'Soft', params: { threshold: 0.25, softness: 0.12, morphRadius: 2, featherRadius: 6, edgeWeight: 0.5 } },
   { label: 'Wide', params: { threshold: 0.35, softness: 0.15, morphRadius: 1, featherRadius: 4, edgeWeight: 0.3 } },
@@ -224,7 +225,7 @@ function BorderDetectPanel() {
 
       <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
         <Text style={{ fontSize: 12, color: c.text, lineHeight: 18 }}>
-          {`Approach: Sample border pixels as "definite background", k-means cluster into 4 colors, GPU shader measures per-pixel distance to clusters, Sobel edge refines boundaries, morphological cleanup + feather.`}
+          {`Approach: Multi-cue saliency — sample border pixels as "definite background", k-means cluster into 4 colors, then GPU shader combines color distance + spatial center prior + Laplacian sharpness (in-focus detection). Iterative refinement re-estimates fg/bg color models from the initial mask. Sobel edge refines boundaries, morphological cleanup + feather.`}
         </Text>
       </CalloutBand>
 

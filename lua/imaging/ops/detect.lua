@@ -177,6 +177,102 @@ local multiColorDistanceShader = [[
 ]]
 
 -- ============================================================================
+-- Step 3b: Multi-cue saliency shader (color + spatial + sharpness)
+-- ============================================================================
+
+local saliencyShader = [[
+  extern vec3 bgColor1;
+  extern vec3 bgColor2;
+  extern vec3 bgColor3;
+  extern vec3 bgColor4;
+  extern float threshold;
+  extern float softness;
+  extern int numColors;
+  extern vec2 texelSize;
+  extern float spatialWeight;
+  extern float sharpWeight;
+
+  vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 pixel = Texel(tex, tc);
+
+    // Cue 1: Color distance from background clusters
+    float minDist = length(pixel.rgb - bgColor1);
+    if (numColors >= 2) minDist = min(minDist, length(pixel.rgb - bgColor2));
+    if (numColors >= 3) minDist = min(minDist, length(pixel.rgb - bgColor3));
+    if (numColors >= 4) minDist = min(minDist, length(pixel.rgb - bgColor4));
+    float colorScore = smoothstep(threshold - softness, threshold + softness, minDist);
+
+    // Cue 2: Spatial center prior — subjects tend to be centered
+    float cx = tc.x - 0.5;
+    float cy = tc.y - 0.5;
+    float centerDist = sqrt(cx * cx + cy * cy);
+    float spatialScore = 1.0 - smoothstep(0.15, 0.6, centerDist);
+
+    // Cue 3: Local sharpness via Laplacian energy (in-focus = foreground)
+    float lum = dot(pixel.rgb, vec3(0.299, 0.587, 0.114));
+    float tL = dot(Texel(tex, tc + vec2( 0,-1) * texelSize).rgb, vec3(0.299, 0.587, 0.114));
+    float bL = dot(Texel(tex, tc + vec2( 0, 1) * texelSize).rgb, vec3(0.299, 0.587, 0.114));
+    float lL = dot(Texel(tex, tc + vec2(-1, 0) * texelSize).rgb, vec3(0.299, 0.587, 0.114));
+    float rL = dot(Texel(tex, tc + vec2( 1, 0) * texelSize).rgb, vec3(0.299, 0.587, 0.114));
+    float laplacian = abs(4.0 * lum - tL - bL - lL - rL);
+    float sharpScore = smoothstep(0.005, 0.05, laplacian);
+
+    // Combine cues (weighted)
+    float colorW = max(0.0, 1.0 - spatialWeight - sharpWeight);
+    float saliency = colorScore * colorW + spatialScore * spatialWeight + sharpScore * sharpWeight;
+    saliency = clamp(saliency, 0.0, 1.0) * pixel.a;
+
+    return vec4(saliency, saliency, saliency, 1.0) * color;
+  }
+]]
+
+-- ============================================================================
+-- Step 3c: Iterative refinement shader (fg/bg color model re-estimation)
+-- ============================================================================
+
+local refinementShader = [[
+  extern vec3 fgColor1;
+  extern vec3 fgColor2;
+  extern vec3 fgColor3;
+  extern vec3 fgColor4;
+  extern vec3 bgRefColor1;
+  extern vec3 bgRefColor2;
+  extern vec3 bgRefColor3;
+  extern vec3 bgRefColor4;
+  extern int numFgColors;
+  extern int numBgColors;
+  extern Image initialMask;
+  extern float blendFactor;
+
+  vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 pixel = Texel(tex, tc);
+    float initial = Texel(initialMask, tc).r;
+
+    // Distance to nearest fg cluster
+    float fgDist = length(pixel.rgb - fgColor1);
+    if (numFgColors >= 2) fgDist = min(fgDist, length(pixel.rgb - fgColor2));
+    if (numFgColors >= 3) fgDist = min(fgDist, length(pixel.rgb - fgColor3));
+    if (numFgColors >= 4) fgDist = min(fgDist, length(pixel.rgb - fgColor4));
+
+    // Distance to nearest bg cluster
+    float bgDist = length(pixel.rgb - bgRefColor1);
+    if (numBgColors >= 2) bgDist = min(bgDist, length(pixel.rgb - bgRefColor2));
+    if (numBgColors >= 3) bgDist = min(bgDist, length(pixel.rgb - bgRefColor3));
+    if (numBgColors >= 4) bgDist = min(bgDist, length(pixel.rgb - bgRefColor4));
+
+    // Relative distance: closer to fg = higher mask
+    float epsilon = 0.001;
+    float refined = bgDist / (fgDist + bgDist + epsilon);
+
+    // Blend with initial for stability
+    float result = mix(initial, refined, blendFactor);
+    result = clamp(result, 0.0, 1.0) * pixel.a;
+
+    return vec4(result, result, result, 1.0) * color;
+  }
+]]
+
+-- ============================================================================
 -- Step 4: Morphological operations (erode/dilate via blur + threshold)
 -- ============================================================================
 
@@ -311,12 +407,54 @@ local function clusterColors(samples, k)
 end
 
 -- ============================================================================
+-- Sample fg/bg pixels from an initial mask for refinement
+-- ============================================================================
+
+--- Sample pixels from image regions where the mask indicates fg or bg.
+--- @param imageData love.ImageData  Source image
+--- @param maskData love.ImageData  Initial mask (white = fg)
+--- @param isForeground boolean  true = sample where mask > 0.7, false = where mask < 0.3
+--- @return table  Array of { r, g, b } samples
+local function sampleFromMask(imageData, maskData, isForeground)
+  local w = imageData:getWidth()
+  local h = imageData:getHeight()
+  local samples = {}
+
+  -- Stride of 3 for performance (don't need every pixel)
+  for y = 0, h - 1, 3 do
+    for x = 0, w - 1, 3 do
+      local mr = maskData:getPixel(x, y)
+      local include = false
+      if isForeground and mr > 0.7 then include = true end
+      if not isForeground and mr < 0.3 then include = true end
+
+      if include then
+        local r, g, b = imageData:getPixel(x, y)
+        samples[#samples + 1] = { r = r, g = g, b = b }
+      end
+    end
+  end
+
+  return samples
+end
+
+-- ============================================================================
 -- Main detection pipeline
 -- ============================================================================
 
 --- Run foreground detection on a source canvas.
+--- Uses multi-cue saliency (color distance + spatial prior + sharpness) for
+--- robust segmentation even when foreground and background share colors.
+--- Optionally performs iterative refinement by re-estimating fg/bg color models
+--- from the initial mask.
+---
 --- @param source love.Canvas  Input image
---- @param params table  { threshold, softness, borderWidth, morphRadius, featherRadius, edgeWeight }
+--- @param params table  {
+---   threshold, softness, borderWidth, morphRadius, featherRadius, edgeWeight,
+---   spatialWeight (0-1, center prior strength, default 0.25),
+---   sharpWeight (0-1, sharpness cue strength, default 0.2),
+---   refine (boolean, enable iterative refinement, default true),
+--- }
 --- @return love.Canvas  Grayscale mask (white = foreground)
 local function detectForeground(source, params)
   params = params or {}
@@ -328,7 +466,6 @@ local function detectForeground(source, params)
   local borderWidth = params.borderWidth or max(8, floor(min(w, h) * 0.05))
   local meanBg, samples = sampleBorderColors(imageData, borderWidth)
   local variance = computeVariance(meanBg, samples)
-  imageData:release()
 
   -- Auto-threshold: higher variance = need higher threshold
   local baseThreshold = params.threshold or (0.18 + math.sqrt(variance) * 0.5)
@@ -340,48 +477,88 @@ local function detectForeground(source, params)
   local clusters = clusterColors(samples, 4)
   local numClusters = #clusters
 
-  -- 3. Generate initial mask via color distance
-  local rawMask
-  if numClusters >= 2 then
-    rawMask = applyShader("multi_color_dist", multiColorDistanceShader, source, w, h, function(s)
-      s:send("bgColor1", { clusters[1].r, clusters[1].g, clusters[1].b })
-      s:send("bgColor2", { clusters[min(2, numClusters)].r, clusters[min(2, numClusters)].g, clusters[min(2, numClusters)].b })
-      s:send("bgColor3", { clusters[min(3, numClusters)].r, clusters[min(3, numClusters)].g, clusters[min(3, numClusters)].b })
-      s:send("bgColor4", { clusters[min(4, numClusters)].r, clusters[min(4, numClusters)].g, clusters[min(4, numClusters)].b })
-      s:send("threshold", baseThreshold)
-      s:send("softness", softness)
-      s:send("numColors", numClusters)
-    end)
-  else
-    rawMask = applyShader("color_dist", colorDistanceShader, source, w, h, function(s)
-      s:send("bgColor", { meanBg.r, meanBg.g, meanBg.b })
-      s:send("threshold", baseThreshold)
-      s:send("softness", softness)
-    end)
+  -- 3. Generate initial mask via multi-cue saliency
+  local spatialW = tonumber(params.spatialWeight) or 0.25
+  local sharpW = tonumber(params.sharpWeight) or 0.2
+  -- Clamp so color always has some weight
+  spatialW = max(0, min(0.45, spatialW))
+  sharpW = max(0, min(0.45, sharpW))
+
+  local rawMask = applyShader("saliency_detect", saliencyShader, source, w, h, function(s)
+    s:send("bgColor1", { clusters[1].r, clusters[1].g, clusters[1].b })
+    s:send("bgColor2", { clusters[min(2, numClusters)].r, clusters[min(2, numClusters)].g, clusters[min(2, numClusters)].b })
+    s:send("bgColor3", { clusters[min(3, numClusters)].r, clusters[min(3, numClusters)].g, clusters[min(3, numClusters)].b })
+    s:send("bgColor4", { clusters[min(4, numClusters)].r, clusters[min(4, numClusters)].g, clusters[min(4, numClusters)].b })
+    s:send("threshold", baseThreshold)
+    s:send("softness", softness)
+    s:send("numColors", numClusters)
+    s:send("texelSize", { 1 / w, 1 / h })
+    s:send("spatialWeight", spatialW)
+    s:send("sharpWeight", sharpW)
+  end)
+
+  -- 4. Iterative refinement: sample fg/bg from initial mask, re-segment
+  local doRefine = params.refine ~= false  -- default true
+  if doRefine then
+    local maskData = rawMask:newImageData()
+
+    -- Sample fg and bg pixels from image using the initial mask
+    local fgSamples = sampleFromMask(imageData, maskData, true)
+    local bgSamples = sampleFromMask(imageData, maskData, false)
+
+    -- Cluster each into up to 4 representative colors
+    local fgClusters = clusterColors(fgSamples, 4)
+    local bgClusters = clusterColors(bgSamples, 4)
+    local numFg = #fgClusters
+    local numBg = #bgClusters
+
+    if numFg > 0 and numBg > 0 then
+      local refined = applyShader("refine_mask", refinementShader, source, w, h, function(s)
+        s:send("fgColor1", { fgClusters[1].r, fgClusters[1].g, fgClusters[1].b })
+        s:send("fgColor2", { fgClusters[min(2, numFg)].r, fgClusters[min(2, numFg)].g, fgClusters[min(2, numFg)].b })
+        s:send("fgColor3", { fgClusters[min(3, numFg)].r, fgClusters[min(3, numFg)].g, fgClusters[min(3, numFg)].b })
+        s:send("fgColor4", { fgClusters[min(4, numFg)].r, fgClusters[min(4, numFg)].g, fgClusters[min(4, numFg)].b })
+        s:send("bgRefColor1", { bgClusters[1].r, bgClusters[1].g, bgClusters[1].b })
+        s:send("bgRefColor2", { bgClusters[min(2, numBg)].r, bgClusters[min(2, numBg)].g, bgClusters[min(2, numBg)].b })
+        s:send("bgRefColor3", { bgClusters[min(3, numBg)].r, bgClusters[min(3, numBg)].g, bgClusters[min(3, numBg)].b })
+        s:send("bgRefColor4", { bgClusters[min(4, numBg)].r, bgClusters[min(4, numBg)].g, bgClusters[min(4, numBg)].b })
+        s:send("numFgColors", numFg)
+        s:send("numBgColors", numBg)
+        s:send("initialMask", rawMask)
+        s:send("blendFactor", 0.6)
+      end)
+      rawMask:release()
+      rawMask = refined
+    end
+
+    maskData:release()
   end
 
-  -- 4. Edge detection for boundary refinement
+  -- Release imageData now that refinement is done
+  imageData:release()
+
+  -- 5. Edge detection for boundary refinement
   local edgeWeight = params.edgeWeight or 0.8
   local edgeOp = Imaging.getOps()["edge_detect"]
   if edgeOp and edgeWeight > 0 then
     local edgeMap = edgeOp.gpu(source, w, h, { method = "sobel" })
-    local refined = applyShader("edge_refine", edgeRefineShader, rawMask, w, h, function(s)
+    local edgeRefined = applyShader("edge_refine", edgeRefineShader, rawMask, w, h, function(s)
       s:send("edgeMap", edgeMap)
       s:send("edgeStrength", edgeWeight)
     end)
     edgeMap:release()
     rawMask:release()
-    rawMask = refined
+    rawMask = edgeRefined
   end
 
-  -- 5. Morphological cleanup: erode (remove noise) then dilate (restore shape)
+  -- 6. Morphological cleanup: erode (remove noise) then dilate (restore shape)
   local morphRadius = params.morphRadius or max(2, floor(min(w, h) * 0.008))
   local eroded = erode(rawMask, w, h, morphRadius)
   rawMask:release()
   local dilated = dilate(eroded, w, h, morphRadius + 1)
   eroded:release()
 
-  -- 6. Feather the mask edges
+  -- 7. Feather the mask edges
   local featherRadius = params.featherRadius or max(2, floor(min(w, h) * 0.01))
   if featherRadius > 0 then
     local blurOp = Imaging.getOps()["gaussian_blur"]

@@ -1041,6 +1041,9 @@ local handlers = {
       morphRadius = args.morphRadius and tonumber(args.morphRadius) or nil,
       featherRadius = args.featherRadius and tonumber(args.featherRadius) or nil,
       edgeWeight = args.edgeWeight and tonumber(args.edgeWeight) or nil,
+      spatialWeight = args.spatialWeight and tonumber(args.spatialWeight) or nil,
+      sharpWeight = args.sharpWeight and tonumber(args.sharpWeight) or nil,
+      refine = args.refine,
     })
 
     source:release()

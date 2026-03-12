@@ -285,6 +285,12 @@ export interface DetectForegroundParams {
   featherRadius?: number;
   /** Edge refinement strength (0-1). Uses Sobel edges to sharpen mask boundaries. */
   edgeWeight?: number;
+  /** Spatial center prior weight (0-0.45). Higher = stronger bias toward centered subjects. Default 0.25. */
+  spatialWeight?: number;
+  /** Sharpness cue weight (0-0.45). Higher = more influence from in-focus detection. Default 0.2. */
+  sharpWeight?: number;
+  /** Enable iterative refinement (re-estimate fg/bg color models from initial mask). Default true. */
+  refine?: boolean;
 }
 
 export interface DetectForegroundResult {
