@@ -59,6 +59,10 @@ local _lastDiff = {}        -- nodeId -> diff ops from previous frame
 -- sessionId -> nodeId reverse lookup (populated in create)
 local _sessionNodeMap = {}  -- "default" -> numeric nodeId
 
+-- Classified snapshots: captured on submit (Enter) and slash (/) after settle
+local _snapshots = {}       -- nodeId -> { { trigger, frame, timestamp, rows } }
+local _pendingCapture = {}  -- nodeId -> { trigger, framesLeft }
+
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
 local SCROLL_PAGE = 400  -- pixels per PgUp/PgDn (updated to viewport height at render)
@@ -179,12 +183,41 @@ Capabilities.register("ClaudeCanvas", {
       end
     end
 
+    -- Auto-save snapshots (transient menus captured on submit/slash)
+    local snaps = _snapshots[nodeId]
+    if snaps and #snaps > 0 then
+      local snapPath = "recording_" .. ts .. ".snapshots.txt"
+      local f = io.open(snapPath, "w")
+      if f then
+        f:write("-- ClaudeCanvas classified snapshots\n")
+        f:write(string.format("-- %s  snapshots=%d\n", os.date("!%Y-%m-%dT%H:%M:%SZ"), #snaps))
+        f:write("-- Captured on submit (Enter) and slash (/) to preserve transient menus\n")
+        f:write("--\n")
+        for si, snap in ipairs(snaps) do
+          f:write(string.format("== snapshot %d  trigger=%s  frame=%d  %s ==\n",
+            si, snap.trigger, snap.frame, snap.timestamp))
+          for _, entry in ipairs(snap.rows) do
+            local colorStr = #entry.colors > 0 and table.concat(entry.colors, " ") or "-"
+            local nid = entry.nodeId or "-"
+            f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n",
+              entry.kind, entry.text, colorStr, nid, entry.row))
+          end
+          f:write("\n")
+        end
+        f:close()
+        io.write("[claude_canvas] Snapshots saved: " .. snapPath .. " (" .. #snaps .. " snapshots)\n")
+        io.flush()
+      end
+    end
+
     _inputStates[nodeId] = nil
     _lastClassified[nodeId] = nil
     _rowHistory[nodeId] = nil
     _lastRowKind[nodeId] = nil
     _lastGraph[nodeId] = nil
     _lastDiff[nodeId] = nil
+    _snapshots[nodeId] = nil
+    _pendingCapture[nodeId] = nil
   end,
 
   -- ── Visual capability methods (painter.lua / layout.lua) ──────
@@ -753,6 +786,32 @@ Capabilities.register("ClaudeCanvas", {
       -- Store classified cache for clipboard dump hotkey
       _lastClassified[nodeId] = classifiedCache
 
+      -- Pending snapshot capture (delayed after submit/slash to let menus settle)
+      local pending = _pendingCapture[nodeId]
+      if pending then
+        pending.framesLeft = pending.framesLeft - 1
+        if pending.framesLeft <= 0 then
+          if not _snapshots[nodeId] then _snapshots[nodeId] = {} end
+          local snap = {
+            trigger   = pending.trigger,
+            frame     = _frameCounter,
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            rows      = {},
+          }
+          for _, entry in ipairs(classifiedCache) do
+            snap.rows[#snap.rows + 1] = {
+              row     = entry.row,
+              kind    = entry.kind,
+              text    = entry.text,
+              nodeId  = entry.nodeId,
+              colors  = entry.colors,
+            }
+          end
+          _snapshots[nodeId][#_snapshots[nodeId] + 1] = snap
+          _pendingCapture[nodeId] = nil
+        end
+      end
+
       -- Build semantic graph from classified cache
       local prevGraph = _lastGraph[nodeId]
       local graph = Graph.build(classifiedCache, _rowHistory[nodeId], _frameCounter)
@@ -1026,6 +1085,8 @@ Capabilities.register("ClaudeCanvas", {
         end
       end
       Renderer.scrollToBottom(sessionId, inputState.viewportH)
+      -- Schedule classified snapshot after settle (~30 frames ≈ 0.5s)
+      _pendingCapture[nodeId] = { trigger = "submit", framesLeft = 30 }
       Session.writeRaw("\r")
       return true
     end
@@ -1116,7 +1177,11 @@ Capabilities.register("ClaudeCanvas", {
   handleTextInput = function(node, text)
     -- Don't send keystrokes until CLI prompt is ready
     if not Session.isReady() then return end
-    -- io.write("[KEY] textInput → PTY: '" .. text .. "'\n"); io.flush()
+    -- Schedule classified snapshot when / is typed (slash menu renders immediately)
+    -- Capture after ~20 frames (~0.33s) to let the menu settle
+    if text == "/" then
+      _pendingCapture[node.id] = { trigger = "slash", framesLeft = 20 }
+    end
     -- Send typed characters directly to PTY
     Session.writeRaw(text)
   end,
