@@ -717,7 +717,7 @@ Capabilities.register("SemanticTerminal", {
           end
           prevKind = kind
           local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", kind, cleanText, colorStr, "-", i))
+          f:write(string.format("[%s] %s\t%s\t%s\t%d\n", kind, cleanText, colorStr, "-", i))
         end
         -- Grid rows
         for r = 0, vtRows - 1 do
@@ -727,7 +727,7 @@ Capabilities.register("SemanticTerminal", {
           local nodeId = entry and entry.nodeId or "-"
           local colors = sampleRowColors(vterm, r, vtCols)
           local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
+          f:write(string.format("[%s] %s\t%s\t%s\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
         end
         f:close()
         io.write("[semantic_terminal] export saved: " .. exportPath .. "\n"); io.flush()
@@ -1657,7 +1657,7 @@ rpc["semantic_terminal:export_buffer"] = function(args)
     for _, line in ipairs(lines) do
       local colorStr = #line.colors > 0 and table.concat(line.colors, ",") or "-"
       local groupStr = line.nodeId or "-"
-      f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n",
+      f:write(string.format("[%s] %s\t%s\t%s\t%d\n",
         line.kind,
         line.text,
         colorStr,
