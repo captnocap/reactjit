@@ -122,9 +122,10 @@ def node_to_dict(node, depth=0, max_depth=10, path=None):
     if value:
         result["value"] = value
 
-    # Recurse into children
+    # Recurse into children (cap per node to keep responses small)
+    max_children = max_depth - depth <= 1 and 50 or 200  # fewer at leaf depth
     children = []
-    for i in range(min(child_count, 200)):
+    for i in range(min(child_count, max_children)):
         try:
             child = node.get_child_at_index(i)
             child_dict = node_to_dict(child, depth + 1, max_depth, path + [i])
@@ -239,9 +240,10 @@ class A11yHandler(BaseHTTPRequestHandler):
             self.send_json(tree)
 
         elif path.startswith('/subtree/'):
-            # /subtree/<app>?path=0,1,2&depth=3 — fetch a subtree by index path
+            # /subtree/<app>?path=0,1,2&depth=2 — fetch a subtree by index path
+            # Default depth=2 (node + direct children) keeps responses small
             app_name = path[9:]  # strip '/subtree/'
-            depth = int(qs.get('depth', ['3'])[0])
+            depth = int(qs.get('depth', ['2'])[0])
             path_str = qs.get('path', [''])[0]
             index_path = [int(x) for x in path_str.split(',') if x]
             app = find_app(app_name)

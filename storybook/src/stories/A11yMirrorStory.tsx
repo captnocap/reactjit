@@ -2,10 +2,13 @@
  * Accessibility Mirror — reads the desktop accessibility tree via AT-SPI2
  * and renders it as a live React component hierarchy.
  *
- * Requires: python3 tools/a11y_server.py running on port 9876
+ * Polls the tree and diffs against previous state — only damaged nodes update.
+ * Expand/collapse state is preserved across polls.
+ *
+ * Requires: /usr/bin/python3 tools/a11y_server.py running on port 9876
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Box, Text, Pressable, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useAPI, useAPIMutation } from '../../../packages/apis/src/base';
@@ -84,6 +87,47 @@ interface A11yNode {
 interface AppInfo {
   name: string;
   windows: number;
+}
+
+// ── Stable tree merge ────────────────────────────────────
+// Diff incoming tree against previous, return same reference if unchanged.
+// This prevents React from re-rendering nodes that haven't changed.
+
+function nodeFingerprint(n: A11yNode): string {
+  const r = n.rect;
+  return `${n.role}|${n.name}|${r ? `${r.x},${r.y},${r.w},${r.h}` : '-'}|${n.states.join(',')}|${n.childCount}|${n.text || ''}`;
+}
+
+function mergeTree(prev: A11yNode | null, next: A11yNode): A11yNode {
+  if (!prev) return next;
+  if (prev.role !== next.role) return next;
+
+  const sameSelf = nodeFingerprint(prev) === nodeFingerprint(next);
+
+  // Merge children recursively
+  let mergedChildren: A11yNode[] | undefined;
+  let childrenChanged = false;
+
+  if (next.children && next.children.length > 0) {
+    const prevChildren = prev.children || [];
+    mergedChildren = next.children.map((nextChild, i) => {
+      const prevChild = i < prevChildren.length ? prevChildren[i] : null;
+      const merged = mergeTree(prevChild, nextChild);
+      if (merged !== prevChild) childrenChanged = true;
+      return merged;
+    });
+    if (mergedChildren.length !== prevChildren.length) childrenChanged = true;
+  } else if (prev.children && !next.children) {
+    // Next has no children data (shallow fetch) — keep previous children
+    mergedChildren = prev.children;
+  }
+
+  if (sameSelf && !childrenChanged) return prev; // same reference = no re-render
+
+  return {
+    ...next,
+    children: mergedChildren || next.children,
+  };
 }
 
 // ── Server URL ───────────────────────────────────────────
@@ -251,7 +295,7 @@ function LazyNode({ node, depth, appName, onAction }: {
   );
 }
 
-/** Fetches children of a node lazily when expanded */
+/** Fetches children of a node lazily when expanded, polls and diffs */
 function LazyChildren({ appName, path, depth, onAction }: {
   appName: string;
   path: number[];
@@ -260,11 +304,20 @@ function LazyChildren({ appName, path, depth, onAction }: {
 }) {
   const c = useThemeColors();
   const pathStr = path.join(',');
-  const { data, loading, error } = useAPI<A11yNode>(
-    `${SERVER}/subtree/${appName}?path=${pathStr}&depth=3`,
+  const stableRef = useRef<A11yNode | null>(null);
+
+  const { data: rawData, loading, error } = useAPI<A11yNode>(
+    `${SERVER}/subtree/${appName}?path=${pathStr}&depth=2`,
+    { interval: 1500 }
   );
 
-  if (loading) {
+  // Merge incoming data with stable reference
+  if (rawData) {
+    stableRef.current = mergeTree(stableRef.current, rawData);
+  }
+  const data = stableRef.current;
+
+  if (loading && !data) {
     return (
       <Box style={{ paddingLeft: 32 }}>
         <Text style={{ color: c.muted, fontSize: 10 }}>Loading...</Text>
@@ -272,7 +325,7 @@ function LazyChildren({ appName, path, depth, onAction }: {
     );
   }
 
-  if (error || !data) {
+  if (error && !data) {
     return (
       <Box style={{ paddingLeft: 32 }}>
         <Text style={{ color: '#ef4444', fontSize: 10 }}>{`Error: ${error?.message || 'no data'}`}</Text>
@@ -280,7 +333,7 @@ function LazyChildren({ appName, path, depth, onAction }: {
     );
   }
 
-  if (!data.children || data.children.length === 0) {
+  if (!data || !data.children || data.children.length === 0) {
     return (
       <Box style={{ paddingLeft: 32 }}>
         <Text style={{ color: c.muted, fontSize: 10 }}>(empty)</Text>
@@ -308,6 +361,7 @@ function LazyChildren({ appName, path, depth, onAction }: {
 export function A11yMirrorStory() {
   const c = useThemeColors();
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const stableTreeRef = useRef<A11yNode | null>(null);
 
   // Fetch app list, poll every 5s
   const { data: appsData } = useAPI<{ apps: AppInfo[] }>(
@@ -315,11 +369,23 @@ export function A11yMirrorStory() {
     { interval: 5000 }
   );
 
-  // Fetch shallow tree (depth=3 keeps responses small — ~4KB)
-  const { data: treeData, loading: treeLoading, error: treeError } = useAPI<A11yNode>(
+  // Fetch shallow tree, poll every 3s, diff against stable ref
+  const { data: rawTree, loading: treeLoading, error: treeError } = useAPI<A11yNode>(
     selectedApp ? `${SERVER}/tree/${selectedApp}?depth=3` : null,
-    { interval: 3000 }
+    { interval: 1500 }
   );
+
+  // Merge incoming tree into stable reference — only changed nodes get new references
+  if (rawTree) {
+    stableTreeRef.current = mergeTree(stableTreeRef.current, rawTree);
+  }
+  // Reset stable ref when switching apps
+  const prevAppRef = useRef(selectedApp);
+  if (selectedApp !== prevAppRef.current) {
+    stableTreeRef.current = null;
+    prevAppRef.current = selectedApp;
+  }
+  const treeData = stableTreeRef.current;
 
   // Action mutation
   const { execute: executeAction } = useAPIMutation<{ ok: boolean; action: string }>();
@@ -345,7 +411,7 @@ export function A11yMirrorStory() {
       }}>
         <Text style={{ color: c.text, fontSize: 20, fontWeight: '700' }}>Accessibility Mirror</Text>
         <Text style={{ color: c.muted, fontSize: 12, paddingTop: 4 }}>
-          {`Live AT-SPI2 tree — click ▶ to expand nodes on demand`}
+          {`Live AT-SPI2 tree — polls every 3s, only damaged nodes update`}
         </Text>
       </Box>
 
@@ -361,7 +427,7 @@ export function A11yMirrorStory() {
         }}>
           <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>Server not running</Text>
           <Text style={{ color: '#fca5a5', fontSize: 12, paddingTop: 4 }}>
-            {`Run: python3 tools/a11y_server.py`}
+            {`Run: /usr/bin/python3 tools/a11y_server.py`}
           </Text>
         </Box>
       ) : null}
