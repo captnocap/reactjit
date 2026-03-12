@@ -1439,9 +1439,47 @@ rpc["semantic_terminal:save_recording"] = function(args)
   end
 end
 
--- Export entire buffer with per-line semantic debug annotations
--- Returns structured data or writes to file. Format:
---   { lines = { { row, kind, nodeId, turnId, groupId, text }, ... }, meta = { ... } }
+-- Helper: sample all distinct fg colors from a row of vterm cells
+local function sampleRowColors(vterm, gridRow, cols)
+  local colors = {}
+  local seen = {}
+  for col = 0, cols - 1 do
+    local cell = vterm:getCell(gridRow, col)
+    if cell and cell.fg then
+      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      if not seen[label] then
+        seen[label] = true
+        colors[#colors + 1] = label
+      end
+    end
+  end
+  return colors
+end
+
+-- Helper: sample colors from a scrollback row
+local function sampleScrollbackColors(sbRow)
+  local colors = {}
+  local seen = {}
+  if not sbRow then return colors end
+  for _, cell in ipairs(sbRow) do
+    if cell.fg then
+      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      if not seen[label] then
+        seen[label] = true
+        colors[#colors + 1] = label
+      end
+    end
+  end
+  return colors
+end
+
+-- Helper: strip ANSI escape sequences from text
+local function stripAnsi(text)
+  return text:gsub("\27%[%d*;?%d*;?%d*;?%d*m", ""):gsub("\27%[[%d;]*[A-Za-z]", ""):gsub("\27%].-\27\\", "")
+end
+
+-- Export entire buffer with per-line semantic debug annotations + color sequences
+-- Returns structured data or writes to file.
 rpc["semantic_terminal:export_buffer"] = function(args)
   local Caps = require("lua.capabilities")
   local inst = Caps.getInstance(args.id)
@@ -1478,21 +1516,24 @@ rpc["semantic_terminal:export_buffer"] = function(args)
       for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
       text = table.concat(chars)
     end
+    local colors = sampleScrollbackColors(sbRow)
     lines[#lines + 1] = {
-      row    = i,
-      zone   = "scrollback",
-      kind   = "scrollback",
-      nodeId = nil,
-      turnId = nil,
+      row     = i,
+      zone    = "scrollback",
+      kind    = "scrollback",
+      nodeId  = nil,
+      turnId  = nil,
       groupId = nil,
-      text   = text,
+      text    = stripAnsi(text),
+      colors  = colors,
     }
   end
 
-  -- Grid rows (with classification)
+  -- Grid rows (with classification + color sampling)
   for r = 0, vtRows - 1 do
     local text = vterm:getRowText(r)
     local entry = rowLookup[r]
+    local colors = sampleRowColors(vterm, r, vtCols)
     lines[#lines + 1] = {
       row     = sbCount + r,
       zone    = "grid",
@@ -1501,7 +1542,8 @@ rpc["semantic_terminal:export_buffer"] = function(args)
       nodeId  = entry and entry.nodeId or nil,
       turnId  = entry and entry.turnId or nil,
       groupId = entry and entry.groupId or nil,
-      text    = text,
+      text    = stripAnsi(text),
+      colors  = colors,
     }
   end
 
@@ -1530,18 +1572,21 @@ rpc["semantic_terminal:export_buffer"] = function(args)
     f:write(string.format("-- %s  classifier=%s  scrollback=%d  grid=%dx%d  frame=%d\n",
       result.meta.timestamp, state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
     f:write("--\n")
-    f:write("-- Format: [row] [zone] [kind] [nodeId] [turnId] [groupId] | text\n")
+    f:write("-- Format: [row] [zone] [kind] [nodeId] [turnId] [groupId] [colors] | text\n")
     f:write("-- Edit the [kind] column to retag identifiers, then re-import.\n")
+    f:write("-- Colors are the distinct fg RGB values sampled from vterm cells.\n")
     f:write("--\n")
 
     for _, line in ipairs(lines) do
-      f:write(string.format("%-5d %-10s %-20s %-8s t:%-3s g:%-3s | %s\n",
+      local colorStr = #line.colors > 0 and table.concat(line.colors, " ") or "-"
+      f:write(string.format("%-5d %-10s %-20s %-8s t:%-3s g:%-3s  [%s] | %s\n",
         line.row,
         line.zone,
         line.kind,
         line.nodeId or "-",
         tostring(line.turnId or "-"),
         tostring(line.groupId or "-"),
+        colorStr,
         line.text))
     end
 
