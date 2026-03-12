@@ -959,6 +959,24 @@ Capabilities.register("SemanticTerminal", {
         graphInfo = graphInfo .. "  session=" .. state.attachedSession
       end
       love.graphics.print(graphInfo, c.x + 8, dbgY + 3 + debugFontH * 2)
+
+      -- Recording indicator (right-aligned on line 1)
+      if state.recorder then
+        local recLabel = "● REC"
+        if state.recorder.meta and state.recorder.meta.frameCount then
+          recLabel = recLabel .. string.format("  %d frames", state.recorder.meta.frameCount)
+        end
+        love.graphics.setColor(1, 0.3, 0.3, 0.9 * alpha)
+        local recW = debugFont:getWidth(recLabel)
+        love.graphics.print(recLabel, c.x + c.w - recW - 8, dbgY + 3)
+      end
+
+      -- Export path hint (right-aligned on line 2)
+      local exportPath = "recording_" .. os.date("!%Y%m%d_%H%M%S")
+      love.graphics.setColor(0.6, 0.7, 0.8, 0.5 * alpha)
+      local expLabel = "export: " .. exportPath
+      local expW = debugFont:getWidth(expLabel)
+      love.graphics.print(expLabel, c.x + c.w - expW - 8, dbgY + 3 + debugFontH)
     end
 
     -- ── Timeline scrubber (playback mode) ──────────────────────────────────
