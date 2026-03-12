@@ -8,7 +8,7 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback, useRef, useEffect, type ErrorInfo } from 'react';
+import React, { useState, useCallback, useRef, type ErrorInfo } from 'react';
 import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
@@ -25,7 +25,7 @@ import './stories/_shared/storybook.cls'; // register storybook classifiers
 //   disableStatePreservation,
 //   setPreservationBridge,
 // } from '../../packages/core/src/preserveState';
-import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint, useScaleInfo, type ScaleCurve } from '../../packages/core/src';
+import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint, useScaleInfo, useMount, type ScaleCurve } from '../../packages/core/src';
 import { ThemeProvider, useThemeColors, ThemeSwitcher } from '../../packages/theme/src';
 import { stories, type StoryDef, type StorySection } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
@@ -212,7 +212,7 @@ function StorybookPanel() {
   (globalThis as any).__navigateToStory = (id: string): boolean => {
     const idx = stories.findIndex(s => s.id === id);
     if (idx < 0) return false;
-    setActiveIdx(idx);
+    navigateToStory(idx);
     return true;
   };
   const groups = groupBySection(stories);
@@ -234,10 +234,15 @@ function StorybookPanel() {
 
   // ── Record route changes in the event trail for crash diagnostics ──
   const bridge = useBridge();
-  // rjit-ignore-next-line
-  useEffect(() => {
+  const navigateToStory = useCallback((idx: number) => {
+    setActiveIdx(idx);
+    const story = stories[idx];
+    if (story) bridge.rpc('trail:navigate', { route: story.title });
+  }, [bridge]);
+  // Record the initial route on mount
+  useMount(() => {
     if (active) bridge.rpc('trail:navigate', { route: active.title });
-  }, [activeIdx]);
+  });
 
   // ── Ghost node diagnostic crawl (Ctrl+Shift+D) ──
   const crawlingRef = useRef(false);
@@ -353,7 +358,7 @@ function StorybookPanel() {
             return (
               <Pressable
                 key={s.id}
-                onPress={() => { setActiveIdx(idx); if (compact) setSidebarOpen(false); }}
+                onPress={() => { navigateToStory(idx); if (compact) setSidebarOpen(false); }}
                 style={{
                   paddingLeft: 16,
                   paddingRight: 8,

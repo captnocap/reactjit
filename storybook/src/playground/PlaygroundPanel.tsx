@@ -6,8 +6,8 @@
  * to go back to the picker.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, TextEditor, Pressable, useLocalStore } from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, TextEditor, Pressable, useLocalStore, useMount } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Preview } from './Preview';
 import { StatusBar } from './StatusBar';
@@ -52,7 +52,7 @@ export function PlaygroundPanel() {
   }, [setSavedCode]);
 
   // Process code on mount if we have HMR code
-  useEffect(() => { if (code) processCode(code); }, []);
+  useMount(() => { if (code) processCode(code); });
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);
