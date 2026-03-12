@@ -696,7 +696,9 @@ Capabilities.register("SemanticTerminal", {
           os.date("!%Y-%m-%dT%H:%M:%SZ"), state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
         f:write("-- Format: [kind] <content>\\t<colors>\\t<grouping>\\t<row>\n")
         f:write("--\n")
-        -- Scrollback rows
+        -- Scrollback rows — classify with same classifier
+        local classifier = state.classifier
+        local prevKind = nil
         for i = 0, sbCount - 1 do
           local sbRow = vterm:getScrollbackRow(i + 1)
           local text, colors = "", sampleScrollbackColors(sbRow)
@@ -705,8 +707,17 @@ Capabilities.register("SemanticTerminal", {
             for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
             text = table.concat(chars)
           end
+          local cleanText = stripAnsi(text)
+          local kind = "output"
+          if classifier and classifier.classifyRow and #cleanText > 0 then
+            kind = classifier.classifyRow(cleanText, i, sbCount + vtRows)
+            if classifier.refineAdjacency then
+              kind = classifier.refineAdjacency(kind, prevKind, cleanText, {})
+            end
+          end
+          prevKind = kind
           local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", "scrollback", stripAnsi(text), colorStr, "-", i))
+          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", kind, cleanText, colorStr, "-", i))
         end
         -- Grid rows
         for r = 0, vtRows - 1 do
@@ -1561,7 +1572,9 @@ rpc["semantic_terminal:export_buffer"] = function(args)
   local sbCount = vterm:scrollbackCount()
   local lines = {}
 
-  -- Scrollback rows (no classification — pre-scroll content)
+  -- Scrollback rows — run classifier on scrollback text so tokens are preserved
+  local classifier = state.classifier
+  local prevKind = nil
   for i = 0, sbCount - 1 do
     local sbRow = vterm:getScrollbackRow(i + 1)
     local text = ""
@@ -1570,15 +1583,25 @@ rpc["semantic_terminal:export_buffer"] = function(args)
       for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
       text = table.concat(chars)
     end
+    local cleanText = stripAnsi(text)
+    -- Classify using the same classifier as live mode
+    local kind = "output"
+    if classifier and classifier.classifyRow and #cleanText > 0 then
+      kind = classifier.classifyRow(cleanText, i, sbCount + vtRows)
+      if classifier.refineAdjacency then
+        kind = classifier.refineAdjacency(kind, prevKind, cleanText, {})
+      end
+    end
+    prevKind = kind
     local colors = sampleScrollbackColors(sbRow)
     lines[#lines + 1] = {
       row     = i,
       zone    = "scrollback",
-      kind    = "scrollback",
+      kind    = kind,
       nodeId  = nil,
       turnId  = nil,
       groupId = nil,
-      text    = stripAnsi(text),
+      text    = cleanText,
       colors  = colors,
     }
   end
