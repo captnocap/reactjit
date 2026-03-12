@@ -94,7 +94,7 @@ def node_to_dict(node, depth=0, max_depth=10, path=None):
         if text_iface:
             count = text_iface.get_character_count()
             if count > 0:
-                text = text_iface.get_text(0, min(count, 500))
+                text = Atspi.Text.get_text(text_iface, 0, min(count, 500))
     except:
         pass
 
