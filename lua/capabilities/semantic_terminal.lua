@@ -717,7 +717,7 @@ Capabilities.register("SemanticTerminal", {
           end
           prevKind = kind
           local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%s] %s\t%s\t%s\t%d\n", kind, cleanText, colorStr, "-", i))
+          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n", kind, cleanText, colorStr, "-", i))
         end
         -- Grid rows
         for r = 0, vtRows - 1 do
@@ -727,7 +727,7 @@ Capabilities.register("SemanticTerminal", {
           local nodeId = entry and entry.nodeId or "-"
           local colors = sampleRowColors(vterm, r, vtCols)
           local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%s] %s\t%s\t%s\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
+          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
         end
         f:close()
         io.write("[semantic_terminal] export saved: " .. exportPath .. "\n"); io.flush()
@@ -1657,7 +1657,7 @@ rpc["semantic_terminal:export_buffer"] = function(args)
     for _, line in ipairs(lines) do
       local colorStr = #line.colors > 0 and table.concat(line.colors, ",") or "-"
       local groupStr = line.nodeId or "-"
-      f:write(string.format("[%s] %s\t%s\t%s\t%d\n",
+      f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n",
         line.kind,
         line.text,
         colorStr,
@@ -1690,9 +1690,9 @@ rpc["semantic_terminal:import_tags"] = function(args)
     for line in f:lines() do
       -- Skip comment lines
       if not line:match("^%-%-") then
-        -- Parse: [kind] text\tcolors\tgrouping\trow
+        -- Parse: [kind] text\t[colors]\t[grouping]\trow
         local kind, text, colorStr, nodeId, rowStr =
-          line:match("^%[(.-)%]%s(.-)%\t(.-)%\t(.-)%\t(%d+)$")
+          line:match("^%[(.-)%]%s(.-)%\t%[(.-)%]%\t%[(.-)%]%\t(%d+)$")
         if kind and rowStr then
           kind = kind:match("^%s*(.-)%s*$")  -- trim whitespace from kind
           local row = tonumber(rowStr)
