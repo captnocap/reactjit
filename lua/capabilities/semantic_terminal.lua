@@ -323,6 +323,9 @@ Capabilities.register("SemanticTerminal", {
 
       -- Rendering state
       scrollY      = 0,
+      _userScrolled = false,
+      _blinkTimer   = 0,
+      _blinkOn      = true,
       frameCounter = 0,
 
       -- Row history (for transition traces)
@@ -410,6 +413,13 @@ Capabilities.register("SemanticTerminal", {
   tick = function(nodeId, state, dt, pushEvent, props)
     state.frameCounter = state.frameCounter + 1
     local needsClassify = false
+
+    -- Cursor blink timer (0.5s on, 0.5s off)
+    state._blinkTimer = state._blinkTimer + dt
+    if state._blinkTimer >= 0.5 then
+      state._blinkTimer = state._blinkTimer - 0.5
+      state._blinkOn = not state._blinkOn
+    end
 
     -- Session attachment mode: borrow vterm from an existing Terminal session
     if state.attachedSession then
@@ -644,7 +654,14 @@ Capabilities.register("SemanticTerminal", {
     -- Determine visible row range based on scroll
     local totalContentH = (lastNonEmpty + 1) * lineHeight + 16
     local maxScroll = math.max(0, totalContentH - contentHeight)
+
+    -- Auto-scroll to bottom when new content arrives (unless user scrolled up)
+    if not state._userScrolled then
+      state.scrollY = maxScroll
+    end
     state.scrollY = math.max(0, math.min(state.scrollY, maxScroll))
+    -- Detect user scroll: if we're not at the bottom, user scrolled up
+    state._userScrolled = (state.scrollY < maxScroll - 2)
 
     local firstVisibleRow = math.floor(state.scrollY / lineHeight)
     local lastVisibleRow = math.min(lastNonEmpty, firstVisibleRow + math.ceil(contentHeight / lineHeight) + 1)
@@ -832,9 +849,9 @@ Capabilities.register("SemanticTerminal", {
       if font then love.graphics.setFont(font) end
     end
 
-    -- Cursor
+    -- Cursor (blinks 0.5s on / 0.5s off)
     local showCursor = state.mode == "live" or state.attachedSession
-    if vterm:isCursorVisible() and showCursor then
+    if vterm:isCursorVisible() and showCursor and state._blinkOn then
       local cursor = vterm:getCursor()
       local cursorX = c.x + cellOffsetX + cursor.col * charWidth
       local cursorY = c.y + (cursor.row * lineHeight) - state.scrollY
@@ -957,6 +974,11 @@ Capabilities.register("SemanticTerminal", {
     end
 
     if state.mode == "live" or state.attachedSession then
+      -- Reset blink (show cursor immediately on input) and auto-scroll to bottom
+      state._blinkTimer = 0
+      state._blinkOn = true
+      state._userScrolled = false
+
       -- Forward keyboard to PTY via key-to-escape-sequence mapping
       if pty then
         local seq = nil
@@ -1135,6 +1157,9 @@ Capabilities.register("SemanticTerminal", {
     local prevScrollY = state.scrollY
     local scrollAmount = 3 * lineHeight
     state.scrollY = math.max(0, math.min(state.scrollY - wy * scrollAmount, maxScroll))
+
+    -- Track user scroll intent (scrolled away from bottom)
+    state._userScrolled = (state.scrollY < maxScroll - 2)
 
     -- Consume only if scroll actually changed
     return state.scrollY ~= prevScrollY
