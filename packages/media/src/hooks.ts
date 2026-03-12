@@ -5,8 +5,8 @@
  * Archive features require libarchive; scanning works everywhere.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC } from '@reactjit/core';
+import { useState, useCallback, useRef } from 'react';
+import { useLoveRPC, useLuaQuery } from '@reactjit/core';
 import type {
   MediaFile,
   MediaType,
@@ -26,35 +26,14 @@ import type {
  * const { entries, loading, error, refresh } = useArchive('/path/to/file.rar');
  */
 export function useArchive(filepath: string | null) {
-  const listRpc = useLoveRPC<ArchiveEntry[] | { error: string }>('archive:list');
-  const [entries, setEntries] = useState<ArchiveEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetch = useCallback(async () => {
-    if (!filepath) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listRpc({ file: filepath });
-      if (result && 'error' in result) {
-        setError((result as any).error);
-        setEntries([]);
-      } else {
-        setEntries(result as ArchiveEntry[]);
-      }
-    } catch (e: any) {
-      setError(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [filepath, listRpc]);
-
-  useEffect(() => {
-    if (filepath) fetch();
-  }, [filepath, fetch]);
-
-  return { entries, loading, error, refresh: fetch };
+  const { data: raw, loading, error: rpcError, refetch } = useLuaQuery<ArchiveEntry[] | { error: string }>(
+    'archive:list',
+    filepath ? { file: filepath } : {},
+    [filepath],
+  );
+  const entries = raw && !('error' in raw) ? raw as ArchiveEntry[] : [];
+  const error = rpcError ?? (raw && 'error' in raw ? (raw as any).error : null);
+  return { entries, loading, error, refresh: refetch };
 }
 
 /**
@@ -65,27 +44,13 @@ export function useArchive(filepath: string | null) {
  * // info.totalEntries, info.totalSize, info.extensions
  */
 export function useArchiveInfo(filepath: string | null) {
-  const infoRpc = useLoveRPC<ArchiveInfo | { error: string }>('archive:info');
-  const [info, setInfo] = useState<ArchiveInfo | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!filepath) return;
-    setLoading(true);
-    setError(null);
-    infoRpc({ file: filepath })
-      .then((result) => {
-        if (result && 'error' in result && typeof (result as any).error === 'string') {
-          setError((result as any).error);
-        } else {
-          setInfo(result as ArchiveInfo);
-        }
-      })
-      .catch((e: any) => setError(e.message || String(e)))
-      .finally(() => setLoading(false));
-  }, [filepath, infoRpc]);
-
+  const { data: raw, loading, error: rpcError } = useLuaQuery<ArchiveInfo | { error: string }>(
+    'archive:info',
+    filepath ? { file: filepath } : {},
+    [filepath],
+  );
+  const info = raw && !('error' in raw) ? raw as ArchiveInfo : null;
+  const error = rpcError ?? (raw && 'error' in raw ? (raw as any).error : null);
   return { info, loading, error };
 }
 
@@ -118,22 +83,12 @@ export function useArchiveRead() {
  * const { matches } = useArchiveSearch('/path/to/file.rar', '%.mp4$');
  */
 export function useArchiveSearch(filepath: string | null, pattern: string) {
-  const searchRpc = useLoveRPC<ArchiveEntry[] | { error: string }>('archive:search');
-  const [matches, setMatches] = useState<ArchiveEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!filepath || !pattern) return;
-    setLoading(true);
-    searchRpc({ file: filepath, pattern })
-      .then((result) => {
-        if (result && !('error' in result)) {
-          setMatches(result as ArchiveEntry[]);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [filepath, pattern, searchRpc]);
-
+  const { data: raw, loading } = useLuaQuery<ArchiveEntry[] | { error: string }>(
+    'archive:search',
+    filepath && pattern ? { file: filepath, pattern } : {},
+    [filepath, pattern],
+  );
+  const matches = raw && !('error' in raw) ? raw as ArchiveEntry[] : [];
   return { matches, loading };
 }
 
@@ -149,43 +104,21 @@ export function useMediaLibrary(
   directory: string | null,
   options?: MediaLibraryOptions,
 ) {
-  const scanRpc = useLoveRPC<MediaFile[]>('media:scan');
-  const [files, setFiles] = useState<MediaFile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const optsRef = useRef(options);
-  optsRef.current = options;
+  const { data: raw, loading, error, refetch } = useLuaQuery<MediaFile[]>(
+    'media:scan',
+    directory ? {
+      dir: directory,
+      recursive: options?.recursive ?? true,
+      maxDepth: options?.maxDepth ?? 10,
+    } : {},
+    [directory, options?.recursive, options?.maxDepth],
+  );
 
-  const scan = useCallback(async () => {
-    if (!directory) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await scanRpc({
-        dir: directory,
-        recursive: optsRef.current?.recursive ?? true,
-        maxDepth: optsRef.current?.maxDepth ?? 10,
-      });
-
-      let filtered = result;
-      if (optsRef.current?.filter?.length) {
-        const allowed = new Set(optsRef.current.filter);
-        filtered = result.filter((f) => allowed.has(f.type as MediaType));
-      }
-
-      setFiles(filtered);
-    } catch (e: any) {
-      setError(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [directory, scanRpc]);
-
-  useEffect(() => {
-    if (directory && (optsRef.current?.autoScan !== false)) {
-      scan();
-    }
-  }, [directory, scan]);
+  let files = raw ?? [];
+  if (options?.filter?.length) {
+    const allowed = new Set(options.filter);
+    files = files.filter((f) => allowed.has(f.type as MediaType));
+  }
 
   // Compute stats from files
   const stats: DirStats = {
@@ -202,7 +135,7 @@ export function useMediaLibrary(
     }
   }
 
-  return { files, stats, loading, error, rescan: scan };
+  return { files, stats, loading, error, rescan: refetch };
 }
 
 /**
@@ -212,19 +145,11 @@ export function useMediaLibrary(
  * const { stats, loading } = useMediaStats('/home/user/Movies');
  */
 export function useMediaStats(directory: string | null) {
-  const statsRpc = useLoveRPC<DirStats>('media:dirStats');
-  const [stats, setStats] = useState<DirStats | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!directory) return;
-    setLoading(true);
-    statsRpc({ dir: directory })
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [directory, statsRpc]);
-
+  const { data: stats, loading } = useLuaQuery<DirStats>(
+    'media:dirStats',
+    directory ? { dir: directory } : {},
+    [directory],
+  );
   return { stats, loading };
 }
 
@@ -242,43 +167,23 @@ export function useMediaIndex(
   directory: string | null,
   options?: MediaIndexOptions,
 ) {
-  const indexRpc = useLoveRPC<MediaFile[]>('media:indexDeep');
-  const [index, setIndex] = useState<MediaFile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const optsRef = useRef(options);
-  optsRef.current = options;
+  const { data: raw, loading, error, refetch } = useLuaQuery<MediaFile[]>(
+    'media:indexDeep',
+    directory ? {
+      dir: directory,
+      indexArchives: options?.indexArchives ?? true,
+      archivePattern: options?.archivePattern,
+    } : {},
+    [directory, options?.indexArchives, options?.archivePattern],
+  );
 
-  const scan = useCallback(async () => {
-    if (!directory) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await indexRpc({
-        dir: directory,
-        indexArchives: optsRef.current?.indexArchives ?? true,
-        archivePattern: optsRef.current?.archivePattern,
-      });
+  let index = raw ?? [];
+  if (options?.filter?.length) {
+    const allowed = new Set(options.filter);
+    index = index.filter((f) => allowed.has(f.type as MediaType));
+  }
 
-      let filtered = result;
-      if (optsRef.current?.filter?.length) {
-        const allowed = new Set(optsRef.current.filter);
-        filtered = result.filter((f) => allowed.has(f.type as MediaType));
-      }
-
-      setIndex(filtered);
-    } catch (e: any) {
-      setError(e.message || String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [directory, indexRpc]);
-
-  useEffect(() => {
-    if (directory) scan();
-  }, [directory, scan]);
-
-  return { index, loading, error, rescan: scan };
+  return { index, loading, error, rescan: refetch };
 }
 
 // ── Utilities ──────────────────────────────────────────

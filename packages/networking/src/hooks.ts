@@ -4,8 +4,8 @@
  * All state lives in Lua — these hooks poll via RPC and dispatch commands.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC, useLoveEvent } from '@reactjit/core';
+import { useState, useCallback, useRef } from 'react';
+import { useLoveRPC, useLuaInterval, useLuaQuery } from '@reactjit/core';
 import type {
   ServerState,
   ServerStatus,
@@ -46,6 +46,7 @@ export function useGameServer(): UseGameServerResult {
   const controlRpc = useLoveRPC('gameserver:control');
   const mapsRpc = useLoveRPC('gameserver:maps');
 
+  // Refs for callbacks to avoid stale closures in interval handlers
   const statusRpcRef = useRef(statusRpc);
   const playersRpcRef = useRef(playersRpc);
   const logsRpcRef = useRef(logsRpc);
@@ -55,75 +56,46 @@ export function useGameServer(): UseGameServerResult {
   logsRpcRef.current = logsRpc;
   mapsRpcRef.current = mapsRpc;
 
-  // Track state for adaptive polling — active states poll faster
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // Initial maps fetch — fires once on mount
+  const { data: initialMaps } = useLuaQuery<{ maps: string[] }>('gameserver:maps', {}, []);
+  const initialMapsRef = useRef(false);
+  if (initialMaps?.maps?.length && !initialMapsRef.current) {
+    initialMapsRef.current = true;
+    setMaps(initialMaps.maps);
+  }
 
-  // rjit-ignore-next-line
+  const isActive = state === 'installing' || state === 'starting' || state === 'stopping';
+
   // Poll status — adaptive: 500ms during active states, 2300ms when idle
-  useEffect(() => { // rjit-ignore-next-line
-    let id: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const res = await statusRpcRef.current({});
-        if (res) {
-          setState(res.state || 'stopped');
-          if (res.status) setStatus(res.status);
-        }
-      } catch (_) {}
-      const active = stateRef.current === 'installing' || stateRef.current === 'starting' || stateRef.current === 'stopping';
-      id = setTimeout(poll, active ? 500 : 2300);
-    };
-    id = setTimeout(poll, 500);
-    return () => clearTimeout(id);
-  }, []);
+  useLuaInterval(isActive ? 500 : 2300, () => {
+    statusRpcRef.current({}).then((res: any) => {
+      if (res) {
+        setState(res.state || 'stopped');
+        if (res.status) setStatus(res.status);
+      }
+    }).catch(() => {});
+  });
 
-  // rjit-ignore-next-line
   // Poll players (3100ms — staggered)
-  useEffect(() => { // rjit-ignore-next-line
-    const id = setInterval(async () => {
-      try {
-        const res = await playersRpcRef.current({});
-        if (res && res.players) setPlayers(res.players);
-      } catch (_) {}
-    }, 3100);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(3100, () => {
+    playersRpcRef.current({}).then((res: any) => {
+      if (res && res.players) setPlayers(res.players);
+    }).catch(() => {});
+  });
 
-  // rjit-ignore-next-line
   // Poll maps (10s — only needs to run once after install, then rarely)
-  useEffect(() => { // rjit-ignore-next-line
-    const id = setInterval(async () => {
-      try {
-        const res = await mapsRpcRef.current({});
-        if (res && res.maps && res.maps.length > 0) setMaps(res.maps);
-      } catch (_) {}
-    }, 10000);
-    // Also poll immediately on mount
-    (async () => {
-      try {
-        const res = await mapsRpcRef.current({});
-        if (res && res.maps) setMaps(res.maps);
-      } catch (_) {}
-    })();
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(10000, () => {
+    mapsRpcRef.current({}).then((res: any) => {
+      if (res && res.maps && res.maps.length > 0) setMaps(res.maps);
+    }).catch(() => {});
+  });
 
-  // rjit-ignore-next-line
   // Poll logs — adaptive: 300ms during active states, 1700ms when idle
-  useEffect(() => { // rjit-ignore-next-line
-    let id: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const res = await logsRpcRef.current({});
-        if (res && res.logs) setLogs(res.logs);
-      } catch (_) {}
-      const active = stateRef.current === 'installing' || stateRef.current === 'starting' || stateRef.current === 'stopping';
-      id = setTimeout(poll, active ? 300 : 1700);
-    };
-    id = setTimeout(poll, 300);
-    return () => clearTimeout(id);
-  }, []);
+  useLuaInterval(isActive ? 300 : 1700, () => {
+    logsRpcRef.current({}).then((res: any) => {
+      if (res && res.logs) setLogs(res.logs);
+    }).catch(() => {});
+  });
 
   // Apply immediate state from control responses (no waiting for next poll)
   const applySnapshot = useCallback((res: any) => {
@@ -194,21 +166,15 @@ export function usePlayerList(): UsePlayerListResult {
   const [players, setPlayers] = useState<Player[]>([]);
   const [maxPlayers, setMaxPlayers] = useState(0);
   const playersRpc = useLoveRPC('gameserver:players');
-  const playersRpcRef = useRef(playersRpc);
-  playersRpcRef.current = playersRpc;
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await playersRpcRef.current({});
-        if (res) {
-          if (res.players) setPlayers(res.players);
-          if (res.maxPlayers) setMaxPlayers(res.maxPlayers);
-        }
-      } catch (_) {}
-    }, 2700);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(2700, () => {
+    playersRpc({}).then((res: any) => {
+      if (res) {
+        if (res.players) setPlayers(res.players);
+        if (res.maxPlayers) setMaxPlayers(res.maxPlayers);
+      }
+    }).catch(() => {});
+  });
 
   return { players, count: players.length, maxPlayers };
 }
@@ -226,18 +192,12 @@ export function usePlayerList(): UsePlayerListResult {
 export function useServerStatus(): UseServerStatusResult {
   const [status, setStatus] = useState<ServerStatus | null>(null);
   const statusRpc = useLoveRPC('gameserver:status');
-  const statusRpcRef = useRef(statusRpc);
-  statusRpcRef.current = statusRpc;
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await statusRpcRef.current({});
-        if (res && res.status) setStatus(res.status);
-      } catch (_) {}
-    }, 3500);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(3500, () => {
+    statusRpc({}).then((res: any) => {
+      if (res && res.status) setStatus(res.status);
+    }).catch(() => {});
+  });
 
   return {
     status,
@@ -259,20 +219,14 @@ export function useServerStatus(): UseServerStatusResult {
  */
 export function useServerLogs(): UseServerLogsResult {
   const [logs, setLogs] = useState<ServerLog[]>([]);
-  const logsRpc = useLoveRPC('gameserver:logs');
   const controlRpc = useLoveRPC('gameserver:control');
-  const logsRpcRef = useRef(logsRpc);
-  logsRpcRef.current = logsRpc;
+  const logsRpc = useLoveRPC('gameserver:logs');
 
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await logsRpcRef.current({});
-        if (res && res.logs) setLogs(res.logs);
-      } catch (_) {}
-    }, 1900);
-    return () => clearInterval(id);
-  }, []);
+  useLuaInterval(1900, () => {
+    logsRpc({}).then((res: any) => {
+      if (res && res.logs) setLogs(res.logs);
+    }).catch(() => {});
+  });
 
   const clear = useCallback(() => {
     controlRpc({ action: 'clear_logs' });

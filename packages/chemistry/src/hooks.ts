@@ -1,35 +1,19 @@
-import { useState, useEffect } from 'react';
-import { useLoveRPC } from '@reactjit/core';
+import { useLuaQuery } from '@reactjit/core';
 import type { Element, Molecule, Reaction, EquilibriumState } from './types';
 
 export function useElement(key: number | string): Element | undefined {
-  const rpc = useLoveRPC<Element>('chemistry:element');
-  const [result, setResult] = useState<Element | undefined>(undefined);
-  useEffect(() => {
-    if (key === undefined || key === null || key === '') return;
-    rpc({ key }).then(setResult).catch(() => {});
-  }, [key]);
-  return result;
+  const { data } = useLuaQuery<Element>('chemistry:element', { key }, [key]);
+  return data ?? undefined;
 }
 
 export function useMolecule(formulaOrName: string): Molecule | null {
-  const rpc = useLoveRPC<Molecule>('chemistry:molecule');
-  const [result, setResult] = useState<Molecule | null>(null);
-  useEffect(() => {
-    if (!formulaOrName) return;
-    rpc({ formula: formulaOrName }).then(setResult).catch(() => {});
-  }, [formulaOrName]);
-  return result;
+  const { data } = useLuaQuery<Molecule>('chemistry:molecule', { formula: formulaOrName }, [formulaOrName]);
+  return data;
 }
 
 export function useReaction(equation: string): Reaction | null {
-  const rpc = useLoveRPC<Reaction>('chemistry:balance');
-  const [result, setResult] = useState<Reaction | null>(null);
-  useEffect(() => {
-    if (!equation) return;
-    rpc({ equation }).then(setResult).catch(() => {});
-  }, [equation]);
-  return result;
+  const { data } = useLuaQuery<Reaction>('chemistry:balance', { equation }, [equation]);
+  return data;
 }
 
 export function useEquilibrium(opts: {
@@ -40,14 +24,13 @@ export function useEquilibrium(opts: {
   changeTemp?: number;
   changePressure?: number;
 }): EquilibriumState | null {
-  const compute = useLoveRPC<EquilibriumState>('chemistry:compute');
-  const [result, setResult] = useState<EquilibriumState | null>(null);
   const { kEq, temperature, pressure, deltaH, changeTemp, changePressure } = opts;
-  useEffect(() => {
-    compute({ method: 'equilibrium', kEq, temperature, pressure, deltaH, changeTemp, changePressure })
-      .then(setResult).catch(() => {});
-  }, [kEq, temperature, pressure, deltaH, changeTemp, changePressure]);
-  return result;
+  const { data } = useLuaQuery<EquilibriumState>(
+    'chemistry:compute',
+    { method: 'equilibrium', kEq, temperature, pressure, deltaH, changeTemp, changePressure },
+    [kEq, temperature, pressure, deltaH, changeTemp, changePressure],
+  );
+  return data;
 }
 
 export function usePeriodicTableFilter(filter?: {
@@ -55,11 +38,11 @@ export function usePeriodicTableFilter(filter?: {
   phase?: Element['phase'];
   search?: string;
 }): { highlighted: number[] } {
-  const rpc = useLoveRPC<Element[]>('chemistry:elements');
-  const [highlighted, setHighlighted] = useState<number[]>([]);
-  useEffect(() => {
-    if (!filter) { setHighlighted([]); return; }
-    rpc(filter).then(els => setHighlighted(els.map(e => e.number))).catch(() => {});
-  }, [filter?.category, filter?.phase, filter?.search]);
-  return { highlighted };
+  const hasFilter = !!(filter?.category || filter?.phase || filter?.search);
+  const { data } = useLuaQuery<Element[]>(
+    'chemistry:elements',
+    hasFilter ? filter : {},
+    [filter?.category, filter?.phase, filter?.search],
+  );
+  return { highlighted: hasFilter && data ? data.map(e => e.number) : [] };
 }
