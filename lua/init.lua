@@ -4186,6 +4186,47 @@ local function getScrollPageStep(node, axis)
   return math.max(40, math.floor(viewport * 0.85))
 end
 
+local function applyDiscreteScrollAction(scrollNode, action, step)
+  if not scrollNode or not scrollNode.scrollState then return false end
+
+  local ss = scrollNode.scrollState
+  local allowX, allowY = getScrollAxisFlags(scrollNode)
+  local nextX = ss.scrollX or 0
+  local nextY = ss.scrollY or 0
+
+  if action == "scroll_up" then
+    if allowY then
+      nextY = nextY - step
+    elseif allowX then
+      nextX = nextX - step
+    end
+  elseif action == "scroll_down" then
+    if allowY then
+      nextY = nextY + step
+    elseif allowX then
+      nextX = nextX + step
+    end
+  elseif action == "scroll_left" then
+    if allowX and not allowY then
+      nextX = nextX - step
+    elseif allowY then
+      nextY = nextY - getScrollPageStep(scrollNode, "y")
+    end
+  elseif action == "scroll_right" then
+    if allowX and not allowY then
+      nextX = nextX + step
+    elseif allowY then
+      nextY = nextY + getScrollPageStep(scrollNode, "y")
+    end
+  else
+    return false
+  end
+
+  M.tree.setScroll(scrollNode.id, nextX, nextY)
+  emitScrollEvent(scrollNode)
+  return true
+end
+
 --- Start a scrollbar drag or jump-to-position on click.
 local function scrollbarMousePressed(root, mx, my, button)
   if button ~= 1 then return false end
@@ -5717,19 +5758,7 @@ function ReactJIT.gamepadpressed(joystick, button)
       if node then scrollNode = findScrollAncestor(node) end
     end
     if not scrollNode then scrollNode = findAnyScrollNode() end
-    if scrollNode and scrollNode.scrollState then
-      local ss = scrollNode.scrollState
-      if action == "scroll_up" then
-        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) - DPAD_SCROLL)
-      elseif action == "scroll_down" then
-        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + DPAD_SCROLL)
-      elseif action == "scroll_left" then
-        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) - DPAD_SCROLL, ss.scrollY or 0)
-      elseif action == "scroll_right" then
-        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + DPAD_SCROLL, ss.scrollY or 0)
-      end
-      emitScrollEvent(scrollNode)
-    end
+    applyDiscreteScrollAction(scrollNode, action, DPAD_SCROLL)
     return
   end
 
