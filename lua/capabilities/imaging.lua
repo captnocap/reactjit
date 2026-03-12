@@ -563,6 +563,35 @@ local function compositeMasked(source, processed, maskCanvas, w, h)
   return output
 end
 
+local mergeMasksShader = [[
+  extern Image baseMask;
+
+  vec4 effect(vec4 color, Image addedMask, vec2 tc, vec2 sc) {
+    float base = Texel(baseMask, tc).r;
+    float added = Texel(addedMask, tc).r;
+    float merged = max(base, added);
+    return vec4(merged, merged, merged, 1.0) * color;
+  }
+]]
+
+local function mergeMaskCanvases(baseMask, addedMask, w, h)
+  local ShaderCache = require("lua.imaging.shader_cache")
+  local shader = ShaderCache.get("merge_mask_rpc", mergeMasksShader)
+  if not shader then return addedMask end
+
+  local output = love.graphics.newCanvas(w, h)
+  love.graphics.push("all")
+  love.graphics.setCanvas(output)
+  love.graphics.clear(0, 0, 0, 1)
+  love.graphics.setColor(1, 1, 1, 1)
+  shader:send("baseMask", baseMask)
+  love.graphics.setShader(shader)
+  love.graphics.draw(addedMask, 0, 0)
+  love.graphics.setShader()
+  love.graphics.pop()
+  return output
+end
+
 --- Rasterize an array of selection shapes to a grayscale Love2D Canvas.
 --- Each shape is drawn white (selected) on a black background.
 --- mode: "replace" draws all shapes fresh; future modes (add/subtract/intersect)
@@ -1131,6 +1160,7 @@ local handlers = {
   --- @param args.seedY number  Seed point Y coordinate (pixels)
   --- @param args.tolerance number  (optional) Color distance threshold (0-1, default 0.2)
   --- @param args.adaptive boolean  (optional) Compare against running mean (default true)
+  --- @param args.baseMaskId string  (optional) Existing mask handle to merge into
   --- @param args.edgeStrength number  (optional) Edge refinement strength (0-1)
   --- @param args.edgeThreshold number  (optional) Edge detection sensitivity
   --- @param args.morphRadius number  (optional) Morphological cleanup radius
@@ -1183,6 +1213,20 @@ local handlers = {
 
     if not detectOk or not mask then
       return { ok = false, error = "Flood detection failed: " .. tostring(mask) }
+    end
+
+    if args.baseMaskId and args.baseMaskId ~= "" then
+      local baseMask = MaskRegistry.get(args.baseMaskId)
+      if not baseMask then
+        if mask and mask.release then mask:release() end
+        return { ok = false, error = "baseMaskId not found: " .. tostring(args.baseMaskId) }
+      end
+
+      local merged = mergeMaskCanvases(baseMask, mask, iw, ih)
+      if merged ~= mask and mask.release then
+        mask:release()
+      end
+      mask = merged
     end
 
     -- Save mask if output specified

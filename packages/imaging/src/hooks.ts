@@ -404,6 +404,7 @@ export function useFloodDetect(): UseFloodDetectResult {
         seedY,
         tolerance: params?.tolerance,
         adaptive: params?.adaptive,
+        baseMaskId: params?.baseMaskId,
         edgeStrength: params?.edgeStrength,
         edgeThreshold: params?.edgeThreshold,
         morphRadius: params?.morphRadius,

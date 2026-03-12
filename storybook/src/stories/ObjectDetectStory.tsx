@@ -9,7 +9,7 @@
  * All compute runs in Lua/GLSL. React just declares layout and buttons.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, Native, CodeBlock, classifiers as S } from '../../../packages/core/src';
 import type { LayoutEvent, LoveEvent } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -55,14 +55,17 @@ await compositeBackground(
 const FLOOD_CODE = `const { floodDetect,
         compositeBackground } = useFloodDetect();
 
-// User clicked at (256, 300) on the robot
 const det = await floodDetect(
   'avatar.png', 256, 300,
   { tolerance: 0.2 }
 );
+const expanded = await floodDetect(
+  'avatar.png', 280, 314,
+  { tolerance: 0.2, baseMaskId: det.maskId }
+);
 await compositeBackground(
   'avatar.png', 'landscape.png',
-  det.maskId, 'output.png'
+  expanded.maskId, 'output.png'
 );`;
 
 // ── Border detect presets ────────────────────────────────
@@ -247,89 +250,119 @@ function FloodDetectPanel() {
   const [hasResult, setHasResult] = useState(false);
   const [hasMask, setHasMask] = useState(false);
   const [preset, setPreset] = useState(0);
-  const [seed, setSeed] = useState<{ x: number; y: number } | null>(null);
-  const [status, setStatus] = useState('Click on the robot to place your seed point.');
+  const [seeds, setSeeds] = useState<{ x: number; y: number }[]>([]);
+  const [status, setStatus] = useState('Click on the robot. Each click adds to the current selection.');
 
-  // Track the image element's screen position via onLayout on wrapper
+  // Track the clickable box geometry so pointer coordinates map to source pixels.
   const imgRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  const handleImgLayout = (e: LayoutEvent) => {
+  const handleImgLayout = useCallback((e: LayoutEvent) => {
     imgRectRef.current = { x: e.x, y: e.y, w: e.width, h: e.height };
-  };
+  }, []);
 
-  const handleImgClick = async (e: LoveEvent) => {
+  const clearSelection = useCallback(async () => {
+    if (maskId) {
+      await releaseMask(maskId);
+    }
+    setMaskId(null);
+    setSeeds([]);
+    setHasMask(false);
+    setHasResult(false);
+    setStatus('Click on the robot. Each click adds to the current selection.');
+  }, [maskId, releaseMask]);
+
+  const handleImgClick = useCallback(async (e: LoveEvent) => {
     const rect = imgRectRef.current;
-    if (!rect || e.x == null || e.y == null) return;
+    if (!rect || e.x == null || e.y == null || processing) return;
 
-    // Screen coords → element-local coords
-    const localX = e.x - rect.x;
-    const localY = e.y - rect.y;
+    const localX = Math.max(0, Math.min(rect.w, e.x - rect.x));
+    const localY = Math.max(0, Math.min(rect.h, e.y - rect.y));
 
-    // Element-local → source image coords (element displays at CLICK_IMG_SIZE square)
     const scaleX = SRC_W / rect.w;
     const scaleY = SRC_H / rect.h;
     const imgX = Math.round(Math.max(0, Math.min(SRC_W - 1, localX * scaleX)));
     const imgY = Math.round(Math.max(0, Math.min(SRC_H - 1, localY * scaleY)));
-
-    setSeed({ x: imgX, y: imgY });
-
-    // Auto-run full pipeline on click
-    if (maskId) { await releaseMask(maskId); setMaskId(null); }
     setHasResult(false);
     setHasMask(false);
-    setStatus(`Flood filling from (${imgX}, ${imgY})...`);
+    setStatus(maskId
+      ? `Adding seed ${seeds.length + 1} at (${imgX}, ${imgY})...`
+      : `Flood filling from (${imgX}, ${imgY})...`);
 
     const params = FLOOD_PRESETS[preset].params;
-    const det = await floodDetect(FG_SRC, imgX, imgY, { ...params, output: FLOOD_MASK_OUTPUT } as any);
+    const previousMaskId = maskId;
+    const det = await floodDetect(FG_SRC, imgX, imgY, {
+      ...params,
+      baseMaskId: previousMaskId || undefined,
+      output: FLOOD_MASK_OUTPUT,
+    } as any);
     if (!det?.ok) { setStatus(`Failed: ${det?.error || 'unknown'}`); return; }
+
+    if (previousMaskId) {
+      await releaseMask(previousMaskId);
+    }
+
     setMaskId(det.maskId);
+    setSeeds((prev) => [...prev, { x: imgX, y: imgY }]);
     setHasMask(true);
 
     const comp = await compositeBackground(FG_SRC, BG_SRC, det.maskId, FLOOD_OUTPUT);
     if (!comp?.ok) { setStatus(`Composite failed: ${comp?.error || 'unknown'}`); return; }
 
     setHasResult(true);
-    setStatus(`Done! Seed (${imgX}, ${imgY}) — ${comp.width}x${comp.height}`);
-  };
+    setStatus(`Selection has ${seeds.length + 1} seed${seeds.length + 1 === 1 ? '' : 's'} — ${comp.width}x${comp.height}`);
+  }, [compositeBackground, floodDetect, maskId, preset, processing, releaseMask, seeds.length]);
 
-  // Compute crosshair position in display coords
-  const crosshair = seed ? {
-    left: (seed.x / SRC_W) * CLICK_IMG_SIZE,
-    top: (seed.y / SRC_H) * CLICK_IMG_SIZE,
-  } : null;
+  const displayW = imgRectRef.current?.w || CLICK_IMG_SIZE;
+  const displayH = imgRectRef.current?.h || CLICK_IMG_SIZE;
 
   return (
     <Box>
       {/* Clickable source image */}
-      <SectionLabel color={C.flood} label="Click on the image to place seed" />
+      <SectionLabel color={C.flood} label="Click on the image to add seeds" />
       <Box style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 8 }}>
         <Box
+          onClick={handleImgClick}
           onLayout={handleImgLayout}
           style={{ width: CLICK_IMG_SIZE, height: CLICK_IMG_SIZE, borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: C.flood }}
         >
-          <Image src={FG_SRC} onClick={handleImgClick} style={{ width: CLICK_IMG_SIZE, height: CLICK_IMG_SIZE }} />
-          {crosshair && (
-            <Box style={{
-              position: 'absolute',
-              left: crosshair.left - 8,
-              top: crosshair.top - 8,
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              borderWidth: 2,
-              borderColor: '#ff3333',
-              backgroundColor: 'rgba(255, 51, 51, 0.3)',
-            }} />
-          )}
+          <Image src={FG_SRC} style={{ width: CLICK_IMG_SIZE, height: CLICK_IMG_SIZE }} />
+          {seeds.map((seed, index) => (
+            <Box
+              key={`${seed.x}-${seed.y}-${index}`}
+              style={{
+                position: 'absolute',
+                left: ((seed.x / SRC_W) * displayW) - 7,
+                top: ((seed.y / SRC_H) * displayH) - 7,
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                borderWidth: 2,
+                borderColor: index === seeds.length - 1 ? '#ff3333' : '#ffd166',
+                backgroundColor: index === seeds.length - 1
+                  ? 'rgba(255, 51, 51, 0.32)'
+                  : 'rgba(255, 209, 102, 0.24)',
+              }}
+            />
+          ))}
         </Box>
         <Text style={{ fontSize: 11, color: c.muted, marginTop: 6 }}>
-          {seed ? `Seed: (${seed.x}, ${seed.y})` : 'No seed selected'}
+          {seeds.length > 0
+            ? `${seeds.length} seed${seeds.length === 1 ? '' : 's'} placed`
+            : 'No seeds selected'}
         </Text>
       </Box>
 
       {/* Tolerance preset */}
       <SectionLabel color={C.flood} label="Tolerance Preset" />
       <PresetRow items={FLOOD_PRESETS} active={preset} onSelect={setPreset} accentColor={C.flood} />
+
+      <Box style={S_ACTIONS}>
+        <Pressable onPress={clearSelection}>
+          <Box style={{ ...S_BTN, backgroundColor: c.bgElevated, borderWidth: 1, borderColor: c.border }}>
+            <Text style={{ ...S_BTN_TXT, color: c.text }}>Clear Selection</Text>
+          </Box>
+        </Pressable>
+      </Box>
 
       <Text style={{ ...S_STATUS, color: error ? '#ef4444' : processing ? C.flood : c.muted }}>
         {processing ? 'Processing...' : error || status}
@@ -342,9 +375,9 @@ function FloodDetectPanel() {
             <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.mask }}>
               <Native type="Imaging" src={FLOOD_MASK_OUTPUT} operations="[]" style={S_IMG} />
             </Box>
-            {seed && (
+            {seeds.length > 0 && (
               <Text style={{ ...S_PREVIEW_LABEL, color: C.mask, marginTop: 6 }}>
-                {`Seed: (${seed.x}, ${seed.y})`}
+                {`${seeds.length} seed${seeds.length === 1 ? '' : 's'} merged`}
               </Text>
             )}
           </Box>
@@ -364,7 +397,7 @@ function FloodDetectPanel() {
 
       <CalloutBand borderColor={C.floodCalloutBorder} bgColor={C.floodCallout}>
         <Text style={{ fontSize: 12, color: c.text, lineHeight: 18 }}>
-          {`Approach: Click anywhere on the image to select a seed point. BFS flood fill expands outward by color similarity (adaptive mean). Boundary validated through 4 independent edge channels (Sobel, Laplacian, luminance gradient, chroma gradient) averaged into consensus edge. Morphological cleanup + feather.`}
+          {`Approach: Click anywhere on the image to add seed points, similar to additive object selection in Photoshop. Each flood region expands by color similarity (adaptive mean), then the combined mask is constrained by 4 independent edge channels (Sobel, Laplacian, luminance gradient, chroma gradient) averaged into a consensus edge before cleanup + feather.`}
         </Text>
       </CalloutBand>
 

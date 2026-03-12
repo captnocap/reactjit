@@ -327,6 +327,8 @@ export interface FloodDetectParams {
   tolerance?: number;
   /** Compare against running region mean instead of seed color. Default true. */
   adaptive?: boolean;
+  /** Existing mask handle to merge into. When provided, the new flood region is added to that mask. */
+  baseMaskId?: string;
   /** Multi-channel edge consensus strength (0-1). Default 0.9. */
   edgeStrength?: number;
   /** Edge detection sensitivity threshold. Default 0.08. */
