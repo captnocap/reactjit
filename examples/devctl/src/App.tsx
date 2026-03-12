@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Box, Text, ScrollView, Modal, Input, useTray } from '@reactjit/core';
+import { Box, Text, ScrollView, Modal, Input, useTray, useLuaInterval } from '@reactjit/core';
 import {
   useProcessManager, useServerLogs, useDaemonManager,
   useAuditLog, useReservedPorts, formatUptime,
@@ -644,10 +644,9 @@ export function App() {
   });
 
   // Keep tray menu in sync when server list changes
-  // rjit-ignore-next-line
-  React.useEffect(() => {
+  useLuaInterval(500, () => {
     updateMenu(trayMenu);
-  }, [trayMenu, updateMenu]);
+  });
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg }}>

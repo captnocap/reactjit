@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, useLoveRPC, useLoveEvent } from '@reactjit/core';
+import React, { useState, useRef } from 'react';
+import { Box, Text, useLoveRPC, useLoveEvent, useMount } from '@reactjit/core';
 
 const C = {
   bg:      '#0f172a',
@@ -17,17 +17,16 @@ export function App() {
 
   // Initial state from Lua
   const getState = useLoveRPC<{ buffer: string; resolved: string[] }>('keystroke:state');
-  const didInit = useRef(false);
-  useEffect(() => {
-    if (didInit.current) return;
-    didInit.current = true;
-    getState().then((s) => {
+  const getStateRef = useRef(getState);
+  getStateRef.current = getState;
+  useMount(() => {
+    getStateRef.current().then((s) => {
       if (s) {
         setBuffer(s.buffer);
         setResolved(s.resolved);
       }
     });
-  }, []);
+  });
 
   // Live updates pushed from Lua on every keystroke
   useLoveEvent('keystroke', (data: { buffer: string; resolved: string[] }) => {

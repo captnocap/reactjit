@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Box, Text, Pressable } from '@reactjit/core';
+import React, { useState, useCallback, useRef } from 'react';
+import { Box, Text, Pressable, useMount } from '@reactjit/core';
 import { useLoveRPC } from '@reactjit/core';
 import { useAudioInit, useRack, useModule } from '@reactjit/audio';
 
@@ -242,15 +242,9 @@ function KeyboardOctave({ whites, blacks, notes, onDown, onUp }: {
 
 const SYNTH_ID = 'synth';
 
-export function App() {
-  const audioReady = useAudioInit();
-  const rack = useRack();
-  const synth = useModule(SYNTH_ID);
-  const [rackInitialized, setRackInitialized] = useState(false);
-
-  // Set up the rack: one polysynth module
-  useEffect(() => {
-    if (!audioReady || rackInitialized) return;
+// ── Rack initializer (fires once on mount) ─────────────────────
+function RackInit({ rack, onReady }: { rack: ReturnType<typeof useRack>; onReady: () => void }) {
+  useMount(() => {
     rack.addModule('polysynth', SYNTH_ID, {
       waveform: 'saw',
       attack: 0.01,
@@ -259,8 +253,16 @@ export function App() {
       release: 0.4,
       volume: 0.5,
       octaveShift: 0,
-    }).then(() => setRackInitialized(true));
-  }, [audioReady, rackInitialized]);
+    }).then(onReady);
+  });
+  return null;
+}
+
+export function App() {
+  const audioReady = useAudioInit();
+  const rack = useRack();
+  const synth = useModule(SYNTH_ID);
+  const [rackInitialized, setRackInitialized] = useState(false);
 
   // Extract state from the module
   const activeNotes = synth.activeNotes || {};
@@ -292,6 +294,7 @@ export function App() {
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: P.bg, padding: 16, gap: 12 }}>
+      {audioReady && !rackInitialized && <RackInit rack={rack} onReady={() => setRackInitialized(true)} />}
 
       {/* ── Header ──────────────────────────────── */}
       <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>

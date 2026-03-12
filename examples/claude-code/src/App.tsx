@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Box, Text, Native, Input, useLoveRPC } from '@reactjit/core';
+import React, { useRef, useState } from 'react';
+import { Box, Text, Native, Input, useLoveRPC, useLuaInterval } from '@reactjit/core';
 import { useClaude, useSessionChrome } from '@reactjit/terminal';
 import { BlankSlateCanvas } from './components/BlankSlateCanvas';
 import { PermissionModal } from './components/PermissionModal';
@@ -13,18 +13,12 @@ export function App() {
   const debugRef = useRef(debugRpc);
   debugRef.current = debugRpc;
   const [showDebug, setShowDebug] = useState(true);
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      if (!alive) return;
-      try {
-        const res = await debugRef.current({}) as any;
-        if (res && typeof res.show === 'boolean') setShowDebug(res.show);
-      } catch {}
-    };
-    const interval = setInterval(poll, 200);
-    return () => { alive = false; clearInterval(interval); };
-  }, []);
+  useLuaInterval(200, async () => {
+    try {
+      const res = await debugRef.current({}) as any;
+      if (res && typeof res.show === 'boolean') setShowDebug(res.show);
+    } catch {}
+  });
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg, flexDirection: 'column' }}>

@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, Pressable, Render, useBridge } from '@reactjit/core';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Pressable, Render, useBridge, useMount, useLuaInterval } from '@reactjit/core';
+import type { IBridge } from '@reactjit/core';
 
 // --- Theme ---
 const C = {
@@ -33,6 +34,7 @@ const APPS: AppConfig[] = [
   { id: 'antix', source: 'antiX-23.1_x64-full.iso', label: 'antiX', resolution: '1280x720', vmMemory: 2048, vmCpus: 2, fps: 30 },
   { id: 'debian', source: 'debian-12.8.0-amd64-netinst.iso', label: 'Debian', resolution: '1280x720', vmMemory: 2048, vmCpus: 2, fps: 30 },
   { id: 'win7', source: 'en_windows_7_professional_with_sp1_x64_dvd_u_676939.iso', label: 'Windows 7', resolution: '1280x720', vmMemory: 4096, vmCpus: 4, fps: 30 },
+  { id: 'balatro', source: 'window:Balatro', label: 'Balatro', resolution: '1920x1080', fps: 60 },
 ];
 
 // --- Tree types (read-only from Lua) ---
@@ -181,33 +183,39 @@ function TreeView({ node, focusedId, swapSource, bridge, onRequestSplit }: {
   );
 }
 
-// --- Root ---
+// --- Root (gate on bridge) ---
 export function App() {
   const bridge = useBridge();
+  if (!bridge) {
+    return (
+      <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: C.muted, fontSize: 14 }}>{`Loading workspace...`}</Text>
+      </Box>
+    );
+  }
+  return <AppInner bridge={bridge} />;
+}
+
+function AppInner({ bridge }: { bridge: IBridge }) {
   const [state, setState] = useState<WorkspaceState | null>(null);
   const [picking, setPicking] = useState<PickState>(null);
 
   // Init workspace in Lua on mount
-  useEffect(() => {
-    if (!bridge) return;
+  useMount(() => {
     bridge.rpc('workspace:init', APPS[1]);
-  }, [bridge]);
+  });
 
-  // Poll workspace state from Lua
-  useEffect(() => {
-    if (!bridge) return;
-    const poll = setInterval(() => {
-      bridge.rpc<WorkspaceState>('workspace:getState', {}).then(setState);
-    }, 16);
-    return () => clearInterval(poll);
-  }, [bridge]);
+  // Poll workspace state from Lua (16ms ≈ every frame)
+  useLuaInterval(16, () => {
+    bridge.rpc<WorkspaceState>('workspace:getState', {}).then(setState);
+  });
 
   const handleRequestSplit = useCallback((leafId: string, dir: 'h' | 'v') => {
     setPicking({ leafId, direction: dir });
   }, []);
 
   const handlePick = useCallback((app: AppConfig) => {
-    if (!picking || !bridge) return;
+    if (!picking) return;
     bridge.rpc('workspace:split', { leafId: picking.leafId, app, direction: picking.direction });
     setPicking(null);
   }, [picking, bridge]);

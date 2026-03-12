@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { useBridge, useLuaInterval, type IBridge } from '@reactjit/core';
+import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react';
+import { useBridge, useLuaInterval, useMount, type IBridge } from '@reactjit/core';
 import { generateMnemonic, isValidMnemonic, mnemonicToSeed, deriveAccount } from '../crypto/keys';
 import { encryptKeystore, decryptKeystore, type EncryptedKeystore } from '../crypto/keystore';
 import { signTransaction, type Transaction } from '../crypto/signing';
@@ -133,21 +133,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   bridgeRef.current = bridge;
 
   // Check for existing keystore on mount
-  useEffect(() => {
-    storageGet<EncryptedKeystore>(bridge, 'wallet', 'keystore').then(store => {
+  useMount(() => {
+    const b = bridgeRef.current;
+    storageGet<EncryptedKeystore>(b, 'wallet', 'keystore').then(store => {
       if (store) {
         dispatch({ type: 'SET_HAS_KEYSTORE', has: true });
         dispatch({ type: 'SET_SCREEN', screen: 'unlock' });
       }
     });
 
-    storageGet<{ network: NetworkId; useTor: boolean }>(bridge, 'wallet', 'settings').then(settings => {
+    storageGet<{ network: NetworkId; useTor: boolean }>(b, 'wallet', 'settings').then(settings => {
       if (settings) {
         if (settings.network) dispatch({ type: 'SET_NETWORK', network: settings.network });
         if (settings.useTor !== undefined) dispatch({ type: 'SET_USE_TOR', useTor: settings.useTor });
       }
     });
-  }, [bridge]);
+  });
 
   // Auto-refresh balance every 30s when unlocked
   const shouldPollBalance = state.screen === 'dashboard' && state.accounts.length > 0;

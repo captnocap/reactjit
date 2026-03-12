@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Box, Text, Native, CodeBlock, FileWatcher, Pressable, ScrollView, TextInput, useLoveRPC } from '@reactjit/core';
+import React, { useState, useCallback, useRef } from 'react';
+import { Box, Text, Native, CodeBlock, FileWatcher, Pressable, ScrollView, TextInput, useLoveRPC, useMount } from '@reactjit/core';
 import { ClaudeCanvas } from '@reactjit/terminal';
 import { useClaude, useSessionChrome } from '@reactjit/terminal';
 import { transformJSX } from './jsx-transform';
@@ -54,6 +54,8 @@ interface SelectedElement {
   line: number;
   x: number;
   y: number;
+  width: number;
+  height: number;
 }
 
 // ── Hot Panel ─────────────────────────────────────────────
@@ -79,22 +81,23 @@ function HotPanel() {
   filePathRef.current = filePath;
 
   // Wire up element click handler
-  useEffect(() => {
+  useMount(() => {
     setElementClickHandler((info) => {
       setSelected(info);
       setSteerText('');
     });
     return () => setElementClickHandler(null);
-  }, []);
+  });
 
-  const handleSteerSubmit = useCallback(() => {
-    if (!steerText.trim() || !selected) return;
+  const handleSteerSubmit = useCallback((text?: string) => {
+    const val = (text ?? '').trim();
+    if (!val || !selected) return;
     const shortPath = (filePathRef.current ?? 'unknown').replace(WORK_DIR + '/', '');
-    const msg = `[${shortPath}:${selected.line} <${selected.tag}>] ${steerText.trim()}`;
+    const msg = `[${shortPath}:${selected.line} <${selected.tag}>] ${val}`;
     sendRef.current({ message: msg, session: 'default' });
     setSteerText('');
     setSelected(null);
-  }, [steerText, selected]);
+  }, [selected]);
 
   const loadFile = useCallback(async (path: string, ct: string) => {
     const res = await readFileRef.current({ path });
@@ -177,6 +180,18 @@ function HotPanel() {
           </Box>
         ) : isTsx ? (
           <Box style={{ flexGrow: 1 }}>
+            {/* Inspector outline overlay */}
+            {selected && selected.width > 0 && (
+              <Box style={{
+                position: 'absolute',
+                left: selected.x,
+                top: selected.y,
+                width: selected.width,
+                height: selected.height,
+                borderWidth: 2,
+                borderColor: C.accent,
+              }} />
+            )}
             <ScrollView style={{ flexGrow: 1 }}>
               {evalError ? (
                 <Box style={{ padding: 16 }}>
@@ -253,7 +268,7 @@ export function App() {
 
       <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
         <Box style={{ flexGrow: 2, flexBasis: 0, flexDirection: 'column' }}>
-          <ClaudeCanvas sessionId="default" style={{ flexGrow: 1 }} />
+          <ClaudeCanvas sessionId="default" debugVisible={false} style={{ flexGrow: 1 }} />
         </Box>
         <Box style={{ width: 2, backgroundColor: C.border }} />
         <HotPanel />

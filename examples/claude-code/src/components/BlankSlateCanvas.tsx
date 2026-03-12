@@ -4,8 +4,8 @@
  * Uses claude:classified — reads vterm directly, works from frame 0.
  * DEBUG MODE: Logs poll results.
  */
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Box, Text, ScrollView, Pressable, useLoveRPC, useWindowDimensions } from '@reactjit/core';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
+import { Box, Text, ScrollView, Pressable, useLoveRPC, useWindowDimensions, useMount, useLuaInterval } from '@reactjit/core';
 import { getTokenStyle } from '../lib/token-styles';
 import { C } from '../theme';
 
@@ -126,61 +126,54 @@ export function BlankSlateCanvas({ sessionId = 'default', windowHeight }: { sess
     setDebugLog(prev => [...prev.slice(-14), msg]);
   };
 
+  // ── Mount log ──────────────────────────────────────────────────
+  useMount(() => {
+    log(`mounted sessionId=${sessionId} winH=${winH}`);
+  });
+
   // ── Poll classified rows ─────────────────────────────────────
-  useEffect(() => {
-    let alive = true;
+  useLuaInterval(250, async () => {
+    pollCountRef.current++;
+    const n = pollCountRef.current;
 
-    const poll = async () => {
-      if (!alive) return;
-      pollCountRef.current++;
-      const n = pollCountRef.current;
+    try {
+      const res = await rpcRef.current({ session: sessionId }) as ClassifiedResult;
+      const rowList = Array.isArray(res?.rows) ? res.rows : [];
 
-      try {
-        const res = await rpcRef.current({ session: sessionId }) as ClassifiedResult;
-        const rowList = Array.isArray(res?.rows) ? res.rows : [];
-
-        if (n <= 5 || n % 20 === 0) {
-          log(`poll#${n} rows=${rowList.length} mode=${res?.mode ?? 'nil'}`);
-          if (rowList.length > 0) {
-            const kindCounts: Record<string, number> = {};
-            for (const r of rowList) kindCounts[r.kind] = (kindCounts[r.kind] || 0) + 1;
-            log(`poll#${n} kinds: ${JSON.stringify(kindCounts)}`);
-            log(`poll#${n} first3: ${rowList.slice(0, 3).map(r => `r${r.row}:${r.kind}`).join(' ')}`);
-            log(`poll#${n} last3: ${rowList.slice(-3).map(r => `r${r.row}:${r.kind}`).join(' ')}`);
-          }
-        }
-
-        if (rowList.length === 0) return;
-
-        // Fingerprint
-        const fp = rowList.length + ':' + res.mode + ':' + (rowList[rowList.length - 1]?.text ?? '').slice(0, 40);
-        if (fp === lastFpRef.current) return;
-        lastFpRef.current = fp;
-
-        log(`UPDATED: ${rowList.length} rows, mode=${res.mode}`);
-        setRows(rowList);
-        setMode(res.mode ?? 'idle');
-      } catch (err: any) {
-        if (n <= 5 || n % 20 === 0) {
-          log(`ERROR: ${err?.message ?? String(err)}`);
+      if (n <= 5 || n % 20 === 0) {
+        log(`poll#${n} rows=${rowList.length} mode=${res?.mode ?? 'nil'}`);
+        if (rowList.length > 0) {
+          const kindCounts: Record<string, number> = {};
+          for (const r of rowList) kindCounts[r.kind] = (kindCounts[r.kind] || 0) + 1;
+          log(`poll#${n} kinds: ${JSON.stringify(kindCounts)}`);
+          log(`poll#${n} first3: ${rowList.slice(0, 3).map(r => `r${r.row}:${r.kind}`).join(' ')}`);
+          log(`poll#${n} last3: ${rowList.slice(-3).map(r => `r${r.row}:${r.kind}`).join(' ')}`);
         }
       }
-    };
 
-    log(`mounted sessionId=${sessionId} winH=${winH}`);
-    const interval = setInterval(poll, 250);
-    poll();
-    return () => { alive = false; clearInterval(interval); };
-  }, [sessionId]);
+      if (rowList.length === 0) return;
 
-  // ── Fetch image paths when attachments are present ───────────
-  useEffect(() => {
-    if (rows.some(r => r.kind === 'image_attachment')) {
-      imagesRef.current({}).then((res: any) => {
-        if (Array.isArray(res?.images)) setImagePaths(res.images);
-      }).catch(() => {});
+      // Fingerprint
+      const fp = rowList.length + ':' + res.mode + ':' + (rowList[rowList.length - 1]?.text ?? '').slice(0, 40);
+      if (fp === lastFpRef.current) return;
+      lastFpRef.current = fp;
+
+      log(`UPDATED: ${rowList.length} rows, mode=${res.mode}`);
+      setRows(rowList);
+      setMode(res.mode ?? 'idle');
+
+      // Fetch image paths when attachments are present
+      if (rowList.some(r => r.kind === 'image_attachment')) {
+        imagesRef.current({}).then((imgRes: any) => {
+          if (Array.isArray(imgRes?.images)) setImagePaths(imgRes.images);
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      if (n <= 5 || n % 20 === 0) {
+        log(`ERROR: ${err?.message ?? String(err)}`);
+      }
     }
-  }, [rows]);
+  });
 
   // ── Split rows + merge consecutive same-kind into paragraphs ──
   const { bannerRows, contentRows, imageRows } = useMemo(() => {
