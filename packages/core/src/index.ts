@@ -141,6 +141,7 @@ export { Emulator } from './Emulator';
 
 // Terminal (PTY capability + hook)
 export { Terminal, type TerminalProps } from './Terminal';
+export { TerminalPreview, type TerminalPreviewProps } from './TerminalPreview';
 export { usePTY, type UsePTYOptions, type UsePTYResult, type TerminalCapabilityProps, type DirtyRow, type CursorState } from './usePTY';
 
 // SemanticTerminal (classified PTY + playback + hook)

@@ -53,6 +53,7 @@ local Capabilities = require("lua.capabilities")
 local PTY          = require("lua.pty")
 local VTerm        = require("lua.vterm")
 local Scissor      = require("lua.scissor")
+local Tree         = require("lua.tree")
 
 -- ── Lazy-loaded Measure module ─────────────────────────────────────────────
 
@@ -77,6 +78,120 @@ local PADDING      = 4     -- content padding in pixels
 local BG_COLOR   = { 0.05, 0.05, 0.10, 1.0 }  -- dark background
 local FG_DEFAULT = { 0.80, 0.84, 0.90 }        -- light gray text
 local CURSOR_COLOR = { 0.65, 0.89, 0.63, 0.85 } -- green cursor block
+local SELECT_COLOR = { 0.40, 0.55, 0.80, 0.35 } -- blue selection highlight
+
+-- ── Hyperlink detection ─────────────────────────────────────────────────────
+
+local IMAGE_EXT = { png=1, jpg=1, jpeg=1, gif=1, svg=1, webp=1, bmp=1, ico=1 }
+local VIDEO_EXT = { mp4=1, webm=1, mov=1, avi=1, mkv=1, flv=1 }
+local DOC_EXT   = { pdf=1, html=1, htm=1, txt=1, md=1 }
+local LINK_COLOR = { 0.38, 0.65, 0.98 }  -- blue underline for hyperlinks
+
+local function classifyUrl(url)
+  -- Strip query string and fragment for extension detection
+  local clean = url:gsub("[%?#].*$", "")
+  local ext = clean:match("%.(%w+)$")
+  if ext then
+    ext = ext:lower()
+    if IMAGE_EXT[ext] then return "image" end
+    if VIDEO_EXT[ext] then return "video" end
+    if DOC_EXT[ext]   then return "document" end
+  end
+  if url:match("^https?://") then return "web" end
+  return "file"
+end
+
+-- Find all non-overlapping matches of `pattern` in `text`, return list of {s, e, text}
+local function findAll(text, pattern)
+  local results = {}
+  local pos = 1
+  while true do
+    local s, e = text:find(pattern, pos)
+    if not s then break end
+    results[#results + 1] = { s = s, e = e, text = text:sub(s, e) }
+    pos = e + 1
+  end
+  return results
+end
+
+-- Detect clickable links in a row of terminal text.
+-- Returns list of { startCol, endCol, url, linkType }.
+-- Column values are 0-indexed (for vterm grid coordinates).
+local function detectLinks(text)
+  local links = {}
+  local used = {}  -- track used character positions to avoid overlaps
+
+  -- URLs: http:// and https://
+  for _, m in ipairs(findAll(text, "https?://[^%s\"'<>%(%)%[%]]*[%w/=]")) do
+    -- Strip trailing punctuation that's probably not part of the URL
+    local url = m.text
+    local endPos = m.e
+    while url:match("[%.,%);:!%?]$") and #url > 10 do
+      url = url:sub(1, -2)
+      endPos = endPos - 1
+    end
+    local overlap = false
+    for i = m.s, endPos do
+      if used[i] then overlap = true; break end
+    end
+    if not overlap then
+      for i = m.s, endPos do used[i] = true end
+      links[#links + 1] = {
+        startCol = m.s - 1,
+        endCol   = endPos - 1,
+        url      = url,
+        linkType = classifyUrl(url),
+      }
+    end
+  end
+
+  -- Absolute file paths with known media/doc extensions
+  for _, m in ipairs(findAll(text, "/[%w_%.%-/]+%.[%w]+")) do
+    local path = m.text
+    -- Skip if it looks like part of a URL we already captured
+    local overlap = false
+    for i = m.s, m.e do
+      if used[i] then overlap = true; break end
+    end
+    if not overlap then
+      local ext = path:match("%.(%w+)$")
+      if ext and (IMAGE_EXT[ext:lower()] or VIDEO_EXT[ext:lower()] or DOC_EXT[ext:lower()]) then
+        for i = m.s, m.e do used[i] = true end
+        links[#links + 1] = {
+          startCol = m.s - 1,
+          endCol   = m.e - 1,
+          url      = path,
+          linkType = classifyUrl(path),
+        }
+      end
+    end
+  end
+
+  -- Home-relative paths (~/)
+  for _, m in ipairs(findAll(text, "~/[%w_%.%-/]+%.[%w]+")) do
+    local path = m.text
+    local overlap = false
+    for i = m.s, m.e do
+      if used[i] then overlap = true; break end
+    end
+    if not overlap then
+      local ext = path:match("%.(%w+)$")
+      if ext and (IMAGE_EXT[ext:lower()] or VIDEO_EXT[ext:lower()] or DOC_EXT[ext:lower()]) then
+        for i = m.s, m.e do used[i] = true end
+        -- Expand ~ to HOME
+        local expanded = path:gsub("^~", os.getenv("HOME") or "~")
+        links[#links + 1] = {
+          startCol = m.s - 1,
+          endCol   = m.e - 1,
+          url      = expanded,
+          linkType = classifyUrl(expanded),
+        }
+      end
+    end
+  end
+
+  return links
+end
 
 -- ── Clock (monotonic, milliseconds) ─────────────────────────────────────────
 
@@ -122,6 +237,8 @@ local function buildEnv(props)
   end
   env.TERM      = env.TERM      or "xterm-256color"
   env.COLORTERM = env.COLORTERM or "truecolor"
+  -- Unset vars that prevent nested CLI tools from launching
+  if env.CLAUDECODE == nil then env.CLAUDECODE = false end
   return env
 end
 
@@ -171,9 +288,10 @@ Capabilities.register("Terminal", {
     autoConnect = { type = "bool",    default = true,     desc = "Auto-spawn shell on mount" },
     rawMode     = { type = "bool",    default = false,    desc = "Raw PTY mode for TUI apps (claude, codex, vim). Normal shells leave false." },
     transport   = { type = "string",  default = "bridge", desc = "bridge | ws | http | tor" },
+    hyperlinks  = { type = "bool",    default = false,    desc = "Detect and underline clickable URLs/file paths in output" },
   },
 
-  events = { "onData", "onDirtyRows", "onCursorMove", "onConnect", "onExit", "onError" },
+  events = { "onData", "onDirtyRows", "onCursorMove", "onConnect", "onExit", "onError", "onLinkClick" },
 
   create = function(nodeId, props)
     local rows = props.rows or 24
@@ -195,6 +313,12 @@ Capabilities.register("Terminal", {
       scrollY       = 0,
       blinkTimer    = 0,
       blinkOn       = true,
+      -- Text selection
+      sel           = nil,  -- { startRow, startCol, endRow, endCol, dragging }
+      -- Auto-scroll: stay at bottom unless user scrolls up
+      _userScrolled = false,
+      -- Hyperlink detection cache: gridRow -> list of {startCol, endCol, url, linkType}
+      _links = {},
     }
 
     _sessions[nodeId] = state
@@ -238,13 +362,39 @@ Capabilities.register("Terminal", {
       state.blinkOn = not state.blinkOn
     end
 
+    -- Auto-resize: fit rows/cols to layout dimensions
+    local node = Tree.getNodes()[nodeId]
+    if node and node.computed then
+      local cw, ch = node.computed.w, node.computed.h
+      if cw and ch and cw > 0 and ch > 0 then
+        ensureMeasure()
+        local font = Measure and Measure.getFont(FONT_SIZE, "monospace", nil)
+        local lineH = font and font:getHeight() or 16
+        local charW = font and font:getWidth("M") or 8
+        local fitCols = math.floor((cw - 2 * PADDING) / charW)
+        local fitRows = math.floor((ch - 2 * PADDING) / lineH)
+        fitCols = math.max(20, fitCols)
+        fitRows = math.max(4, fitRows)
+        if fitCols ~= state.cols or fitRows ~= state.rows then
+          state.cols = fitCols
+          state.rows = fitRows
+          if state.vterm then state.vterm:resize(fitRows, fitCols) end
+          if state.pty then state.pty:resize(fitRows, fitCols) end
+          state._pendingDirty = {}
+        end
+      end
+    end
+
     -- Auto-connect on first tick: spawn PTY + create vterm
     if not state.connected and props.autoConnect ~= false then
-      local rows = props.rows or 24
-      local cols = props.cols or 80
+      -- Use auto-fitted dimensions from layout (already computed above), fall back to props
+      local rows = state.rows
+      local cols = state.cols
 
       -- Create vterm first
       state.vterm = VTerm.new(rows, cols)
+      -- Drain any initial output from vterm reset
+      state.vterm:readOutput()
 
       -- Spawn PTY
       local pty, err = spawnPTY(props)
@@ -275,6 +425,13 @@ Capabilities.register("Terminal", {
       -- Feed into vterm for structured damage tracking
       if state.vterm then
         state.vterm:feed(data)
+
+        -- Write back terminal query responses (device attributes, etc.)
+        -- Without this, TUI apps hang waiting for answers to their queries.
+        local response = state.vterm:readOutput()
+        if response then
+          state.pty:write(response)
+        end
       end
     end
 
@@ -317,10 +474,15 @@ Capabilities.register("Terminal", {
       if #dirtyList > 0 and state.vterm then
         local rowData = {}
         for _, r in ipairs(dirtyList) do
+          local text = state.vterm:getRowText(r)
           rowData[#rowData + 1] = {
             row  = r,
-            text = state.vterm:getRowText(r),
+            text = text,
           }
+          -- Update hyperlink cache for this row
+          if props.hyperlinks then
+            state._links[r] = detectLinks(text)
+          end
         end
         pushCap(pushEvent, nodeId, "onDirtyRows", { rows = rowData })
         state._pendingDirty = {}
@@ -397,17 +559,39 @@ Capabilities.register("Terminal", {
     local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, c.h)
 
     local vtRows, vtCols = vterm:size()
+    local sbCount = vterm:scrollbackCount()
+    local totalRows = sbCount + vtRows
 
-    -- Compute scroll bounds
-    local contentHeight = vtRows * lineHeight
-    local maxScroll = math.max(0, contentHeight - c.h)
+    -- Compute scroll bounds (scrollback + grid)
+    local contentHeight = totalRows * lineHeight
+    local maxScroll = math.max(0, contentHeight - c.h + 2 * PADDING)
     state.scrollY = math.max(0, math.min(state.scrollY, maxScroll))
 
-    -- Determine visible row range
+    -- Auto-scroll to bottom when new content arrives (unless user scrolled up)
+    if not state._userScrolled then
+      state.scrollY = maxScroll
+    end
+    -- Detect user scroll: if we're not at the bottom, user scrolled up
+    state._userScrolled = (state.scrollY < maxScroll - 2)
+
+    -- Determine visible total-row range (0..sbCount-1 = scrollback, sbCount..totalRows-1 = grid)
     local firstRow = math.floor(state.scrollY / lineHeight)
-    local lastRow  = math.min(vtRows - 1, firstRow + math.ceil(c.h / lineHeight))
+    local lastRow  = math.min(totalRows - 1, firstRow + math.ceil(c.h / lineHeight) + 1)
 
     if font then love.graphics.setFont(font) end
+
+    -- Helper: get cell for a total-row index (scrollback or grid)
+    local function getCell(totalRow, col)
+      if totalRow < sbCount then
+        -- Scrollback row (1-indexed in vterm scrollback)
+        local sbRow = vterm:getScrollbackRow(totalRow + 1)
+        if sbRow and sbRow[col + 1] then return sbRow[col + 1] end
+        return { char = "", fg = nil, bg = nil, bold = false }
+      else
+        -- Grid row
+        return vterm:getCell(totalRow - sbCount, col)
+      end
+    end
 
     -- Render visible rows cell-by-cell with colors
     for row = firstRow, lastRow do
@@ -421,7 +605,7 @@ Capabilities.register("Terminal", {
       -- Render cells in spans of same fg color for performance
       local col = 0
       while col < vtCols do
-        local cell = vterm:getCell(row, col)
+        local cell = getCell(row, col)
         if cell.char == "" or cell.char == " " then
           -- Check for bg color on space/empty cells
           if cell.bg then
@@ -440,18 +624,18 @@ Capabilities.register("Terminal", {
         local spanBold = cell.bold
         local spanChars = { cell.char }
 
-        col = col + (cell.width > 0 and cell.width or 1)
+        col = col + (cell.width and cell.width > 0 and cell.width or 1)
 
         -- Extend span while fg matches
         while col < vtCols do
-          local next = vterm:getCell(row, col)
+          local next = getCell(row, col)
           if next.char == "" or next.char == " " then break end
           local sameFg = (spanFg == nil and next.fg == nil) or
             (spanFg and next.fg and spanFg[1] == next.fg[1] and spanFg[2] == next.fg[2] and spanFg[3] == next.fg[3])
           local sameBold = (spanBold == next.bold)
           if not sameFg or not sameBold then break end
           spanChars[#spanChars + 1] = next.char
-          col = col + (next.width > 0 and next.width or 1)
+          col = col + (next.width and next.width > 0 and next.width or 1)
         end
 
         -- Draw bg for span if present
@@ -488,11 +672,59 @@ Capabilities.register("Terminal", {
       ::nextRow::
     end
 
-    -- Draw cursor
+    -- Draw hyperlink underlines
+    local hyperlinks = node.props and node.props.hyperlinks
+    if hyperlinks and state._links then
+      love.graphics.setColor(LINK_COLOR[1], LINK_COLOR[2], LINK_COLOR[3], 0.7 * alpha)
+      for row = firstRow, lastRow do
+        local rowLinks = state._links[row]
+        if rowLinks then
+          local yPos = c.y + PADDING + (row * lineHeight) - state.scrollY
+          if yPos + lineHeight >= c.y and yPos <= c.y + c.h then
+            for _, link in ipairs(rowLinks) do
+              local lx = c.x + PADDING + link.startCol * charWidth
+              local lw = (link.endCol - link.startCol + 1) * charWidth
+              local ly = yPos + lineHeight - 1
+              love.graphics.setLineWidth(1)
+              love.graphics.line(lx, ly, lx + lw, ly)
+            end
+          end
+        end
+      end
+    end
+
+    -- Draw selection highlight (clamped to text content per row)
+    if state.sel and vterm then
+      local sr, sc, er, ec = state.sel.startRow, state.sel.startCol, state.sel.endRow, state.sel.endCol
+      -- Normalize: ensure start <= end
+      if sr > er or (sr == er and sc > ec) then
+        sr, sc, er, ec = er, ec, sr, sc
+      end
+      love.graphics.setColor(SELECT_COLOR[1], SELECT_COLOR[2], SELECT_COLOR[3], SELECT_COLOR[4] * alpha)
+      for row = sr, er do
+        if row >= firstRow and row <= lastRow then
+          local rowText = vterm:getRowText(row)
+          local textLen = #rowText
+          if textLen > 0 then
+            local yPos = c.y + PADDING + (row * lineHeight) - state.scrollY
+            local colStart = (row == sr) and sc or 0
+            local colEnd   = (row == er) and ec or (textLen - 1)
+            colEnd = math.min(colEnd, textLen - 1)
+            if colStart <= colEnd then
+              local selX = c.x + PADDING + colStart * charWidth
+              local selW = (colEnd - colStart + 1) * charWidth
+              love.graphics.rectangle("fill", selX, yPos, selW, lineHeight)
+            end
+          end
+        end
+      end
+    end
+
+    -- Draw cursor (cursor.row is grid-relative, offset by scrollback count)
     if state.connected and vterm:isCursorVisible() and state.blinkOn then
       local cursor = vterm:getCursor()
       local cursorX = c.x + PADDING + cursor.col * charWidth
-      local cursorY = c.y + PADDING + (cursor.row * lineHeight) - state.scrollY
+      local cursorY = c.y + PADDING + ((cursor.row + sbCount) * lineHeight) - state.scrollY
 
       -- Only draw if cursor is in visible area
       if cursorY >= c.y and cursorY + lineHeight <= c.y + c.h then
@@ -577,10 +809,29 @@ Capabilities.register("Terminal", {
         if clipboard then state.pty:write(clipboard) end
         return true
       end
-      -- Ctrl+C: interrupt
-      if key == "c" then state.pty:write("\x03"); return true end
+      -- Ctrl+C: copy selection if active, otherwise interrupt
+      if key == "c" then
+        if state.sel and state.vterm then
+          local sr, sc, er, ec = state.sel.startRow, state.sel.startCol, state.sel.endRow, state.sel.endCol
+          if sr > er or (sr == er and sc > ec) then sr, sc, er, ec = er, ec, sr, sc end
+          local lines = {}
+          for row = sr, er do
+            local text = state.vterm:getRowText(row)
+            local cs = (row == sr) and sc + 1 or 1
+            local ce = (row == er) and ec + 1 or #text
+            lines[#lines + 1] = text:sub(cs, ce)
+          end
+          love.system.setClipboardText(table.concat(lines, "\n"))
+          state.sel = nil
+        else
+          state.pty:write("\x03")
+        end
+        return true
+      end
       -- Ctrl+D: EOF
       if key == "d" then state.pty:write("\x04"); return true end
+      -- Ctrl+\: SIGQUIT (force kill unresponsive apps like opencode)
+      if key == "\\" then state.pty:write("\x1c"); return true end
       -- Ctrl+Z: suspend
       if key == "z" then state.pty:write("\x1a"); return true end
       -- Ctrl+A: beginning of line
@@ -649,8 +900,10 @@ Capabilities.register("Terminal", {
       return true
     end
 
-    -- Regular keys are handled by handleTextInput
-    return false
+    -- Regular character keys are handled by handleTextInput, but we still
+    -- consume the event here so it doesn't bubble to parent React handlers
+    -- (e.g. storybook j/k navigation stealing keystrokes from the terminal).
+    return true
   end,
 
   -- ── Text input ─────────────────────────────────────────────────────────
@@ -662,6 +915,7 @@ Capabilities.register("Terminal", {
     local state = capInst.state
 
     if state.pty and state.connected then
+      state.sel = nil  -- clear selection on typing
       state.pty:write(text)
       -- Reset cursor blink
       state.blinkOn = true
@@ -674,18 +928,131 @@ Capabilities.register("Terminal", {
 
   handleWheelMoved = function(node, dx, dy)
     local capInst = Capabilities.getInstance(node.id)
-    if not capInst then return end
+    if not capInst then return false end
     local state = capInst.state
+    if not state.vterm then return false end
 
     ensureMeasure()
     local font = Measure and Measure.getFont(FONT_SIZE, "monospace", nil)
     local lineHeight = font and font:getHeight() or 16
+
+    -- Compute max scroll from scrollback + vterm grid vs viewport
+    local vtRows = state.vterm:size()
+    local sbCount = state.vterm:scrollbackCount()
+    local totalRows = sbCount + vtRows
+    local c = node.computed
+    local viewportH = c and c.h or 400
+    local contentHeight = totalRows * lineHeight
+    local maxScroll = math.max(0, contentHeight - viewportH + 2 * PADDING)
+
+    -- Nothing to scroll — let the event pass through to parent ScrollView
+    if maxScroll <= 0 then return false end
+
+    local prevScrollY = state.scrollY
     local scrollAmount = SCROLL_LINES * lineHeight
 
     -- dy positive = scroll up, negative = scroll down (love2d convention)
     state.scrollY = state.scrollY - dy * scrollAmount
-    if state.scrollY < 0 then state.scrollY = 0 end
-    -- Upper bound clamped in render
+    state.scrollY = math.max(0, math.min(state.scrollY, maxScroll))
+
+    -- Track user scroll intent (scrolled away from bottom)
+    state._userScrolled = (state.scrollY < maxScroll - 2)
+
+    -- If scroll didn't change (saturated), let the event pass through
+    return state.scrollY ~= prevScrollY
+  end,
+
+  -- ── Text selection (click-drag to highlight, Ctrl+C to copy) ──────────
+
+  handleMousePressed = function(node, mx, my, button)
+    if button ~= 1 then return end
+    local capInst = Capabilities.getInstance(node.id)
+    if not capInst then return end
+    local state = capInst.state
+    local c = node.computed
+    if not c or not state.vterm then return end
+
+    ensureMeasure()
+    local font = Measure and Measure.getFont(FONT_SIZE, "monospace", nil)
+    local lineHeight = font and font:getHeight() or 16
+    local charWidth  = font and font:getWidth("M") or 8
+
+    local col = math.floor((mx - c.x - PADDING) / charWidth)
+    local row = math.floor((my - c.y - PADDING + state.scrollY) / lineHeight)
+    row = math.max(0, math.min(row, state.rows - 1))
+
+    -- Clamp col to actual text content on this row
+    local rowText = state.vterm:getRowText(row)
+    local textLen = #rowText
+    if textLen == 0 then state.sel = nil; return end
+    col = math.max(0, math.min(col, textLen - 1))
+
+    state.sel = { startRow = row, startCol = col, endRow = row, endCol = col, dragging = true }
+  end,
+
+  handleMouseMoved = function(node, mx, my)
+    local capInst = Capabilities.getInstance(node.id)
+    if not capInst then return false end
+    local state = capInst.state
+    if not state.sel or not state.sel.dragging then return false end
+    local c = node.computed
+    if not c or not state.vterm then return false end
+
+    ensureMeasure()
+    local font = Measure and Measure.getFont(FONT_SIZE, "monospace", nil)
+    local lineHeight = font and font:getHeight() or 16
+    local charWidth  = font and font:getWidth("M") or 8
+
+    local col = math.floor((mx - c.x - PADDING) / charWidth)
+    local row = math.floor((my - c.y - PADDING + state.scrollY) / lineHeight)
+    row = math.max(0, math.min(row, state.rows - 1))
+
+    -- Clamp col to actual text content on this row
+    local rowText = state.vterm:getRowText(row)
+    local textLen = #rowText
+    col = math.max(0, textLen > 0 and math.min(col, textLen - 1) or 0)
+
+    state.sel.endRow = row
+    state.sel.endCol = col
+    return true
+  end,
+
+  handleMouseReleased = function(node, mx, my, button)
+    local capInst = Capabilities.getInstance(node.id)
+    if not capInst then return end
+    local state = capInst.state
+    if not state.sel then return end
+    state.sel.dragging = false
+
+    -- If start == end, clear selection (it was just a click)
+    if state.sel.startRow == state.sel.endRow and state.sel.startCol == state.sel.endCol then
+      local clickRow = state.sel.startRow
+      local clickCol = state.sel.startCol
+      state.sel = nil
+
+      -- Check for hyperlink hit
+      local hyperlinks = node.props and node.props.hyperlinks
+      if hyperlinks and state._links then
+        local rowLinks = state._links[clickRow]
+        if rowLinks then
+          for _, link in ipairs(rowLinks) do
+            if clickCol >= link.startCol and clickCol <= link.endCol then
+              -- Fire onLinkClick event
+              local pushEvent = Capabilities._pushEventFn
+              if pushEvent then
+                pushCap(pushEvent, node.id, "onLinkClick", {
+                  url      = link.url,
+                  linkType = link.linkType,
+                  row      = clickRow,
+                  col      = clickCol,
+                })
+              end
+              return
+            end
+          end
+        end
+      end
+    end
   end,
 })
 

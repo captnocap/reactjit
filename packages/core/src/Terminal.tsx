@@ -1,29 +1,24 @@
 /**
- * Terminal — non-visual capability node that manages a PTY session.
+ * Terminal — visual, interactive PTY terminal.
  *
- * Drop this in your React tree to own a shell session. It emits onData events
- * as the shell produces output, and accepts input via bridge.rpc('pty:write').
+ * Click to focus, type to interact. Renders the vterm cell grid with proper
+ * ANSI colors, handles keyboard input, scrolling, and cursor blink.
  *
- * Use the `usePTY` hook to manage state and get convenient send helpers.
- *
- * @example
- * // One-liner: stream output
- * <Terminal type="user" onData={(e) => append(e.data)} />
+ * Give it a style with dimensions (flexGrow, width/height) so the layout
+ * engine knows how much space to allocate.
  *
  * @example
- * // With hook (recommended for stateful UI):
- * const { output, send, terminalProps } = usePTY({ type: 'user', session: 'main' })
- * <Terminal {...terminalProps} />
- * <Text fontSize={12}>{output}</Text>
+ * // Interactive terminal (one-liner):
+ * <Terminal type="user" style={{ flexGrow: 1 }} />
  *
  * @example
- * // Root shell (shows sudo prompt if NOPASSWD not configured)
- * <Terminal type="root" session="admin" onData={(e) => append(e.data)} />
+ * // With hook for programmatic control:
+ * const { send, sendLine, terminalProps } = usePTY({ type: 'user', session: 'main' })
+ * <Terminal {...terminalProps} style={{ flexGrow: 1 }} />
  *
  * @example
- * // Template: fresh PTY per command, clean env
- * <Terminal type="template" env={{ MY_API: 'key' }} session="cmd"
- *   onData={(e) => append(e.data)} onExit={(e) => setDone(true)} />
+ * // Fixed-size terminal:
+ * <Terminal type="user" rows={24} cols={80} style={{ width: 660, height: 400 }} />
  */
 
 import React from 'react';
@@ -47,6 +42,10 @@ export interface TerminalProps {
   transport?: 'bridge' | 'ws' | 'http' | 'tor';
   /** Auto-spawn on mount (default: true) */
   autoConnect?: boolean;
+  /** Detect and underline clickable URLs/file paths in terminal output (default: false) */
+  hyperlinks?: boolean;
+  /** Layout style (flexGrow, width, height, etc.) */
+  style?: Record<string, any>;
   /** Fires with each chunk of raw PTY output (ANSI-encoded, backward compat) */
   onData?: (event: { data: string }) => void;
   /** Fires on settle with structured row data from vterm (only changed rows) */
@@ -59,11 +58,13 @@ export interface TerminalProps {
   onExit?: (event: { exitCode: number | null }) => void;
   /** Fires on spawn error */
   onError?: (event: { error: string }) => void;
+  /** Fires when a detected hyperlink is clicked (requires hyperlinks={true}) */
+  onLinkClick?: (event: { url: string; linkType: 'image' | 'video' | 'web' | 'document' | 'file'; row: number; col: number }) => void;
 }
 
 /**
- * Non-visual Terminal capability node.
- * Renders nothing — manages the PTY session lifecycle on the Lua side.
+ * Visual, interactive PTY terminal.
+ * Click to focus, type to interact. Renders vterm output with ANSI colors.
  */
 export function Terminal(props: TerminalProps) {
   return React.createElement('Terminal', props as any);
