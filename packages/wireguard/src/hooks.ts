@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC, useLoveEvent } from '@reactjit/core';
+import { useLoveRPC, useLoveEvent, useLuaInterval, useLuaQuery, useMount } from '@reactjit/core';
 import type {
   KeyPair,
   WireGuardConfig,
@@ -93,14 +93,11 @@ export function useWireGuardIdentity(): {
  */
 export function useWireGuard(interfaceName?: string): UseWireGuardResult {
   const ifname = interfaceName ?? 'wg-rjit0';
-  const [available, setAvailable] = useState(false);
-  const [hasPrivilege, setHasPrivilege] = useState(false);
   const [status, setStatus] = useState<WireGuardStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ifRef = useRef(ifname);
   ifRef.current = ifname;
 
-  const availableRpc = useLoveRPC('wireguard:available');
   const upRpc = useLoveRPC('wireguard:up');
   const downRpc = useLoveRPC('wireguard:down');
   const addPeerRpc = useLoveRPC('wireguard:add_peer');
@@ -108,29 +105,29 @@ export function useWireGuard(interfaceName?: string): UseWireGuardResult {
   const statusRpc = useLoveRPC('wireguard:status');
   const genKeysRpc = useLoveRPC('wireguard:generate_keys');
 
-  // Check availability on mount
-  useEffect(() => {
-    availableRpc({}).then((result: any) => {
-      setAvailable(result.available);
-      setHasPrivilege(result.hasPrivilege ?? false);
-      if (!result.available) setError(result.error);
-    }).catch((err: any) => setError(String(err)));
-  }, []);
+  // Check availability on mount — one-shot RPC
+  const { data: availResult } = useLuaQuery<{ available: boolean; hasPrivilege?: boolean; error?: string }>(
+    'wireguard:available', {}, [],
+  );
+  const available = availResult?.available ?? false;
+  const hasPrivilege = availResult?.hasPrivilege ?? false;
+  if (availResult && !availResult.available && availResult.error && error === null) {
+    // Defer to avoid setState during render
+    Promise.resolve().then(() => setError(availResult.error!));
+  }
 
-  // Poll status when tunnel is up
-  useEffect(() => {
-    if (!available) return;
-    const interval = setInterval(() => {
-      statusRpc({ interface: ifRef.current }).then((result: any) => {
-        if (result && !result.error) {
-          setStatus(result as WireGuardStatus);
-        } else {
-          setStatus(null);
-        }
-      }).catch(() => setStatus(null));
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [available, statusRpc]);
+  // Poll status when tunnel is available (5s interval, disabled when unavailable)
+  const statusRpcRef = useRef(statusRpc);
+  statusRpcRef.current = statusRpc;
+  useLuaInterval(available ? 5000 : null, () => {
+    statusRpcRef.current({ interface: ifRef.current }).then((result: any) => {
+      if (result && !result.error) {
+        setStatus(result as WireGuardStatus);
+      } else {
+        setStatus(null);
+      }
+    }).catch(() => setStatus(null));
+  });
 
   const up = useCallback(async (config: WireGuardConfig): Promise<boolean> => {
     setError(null);
@@ -213,13 +210,6 @@ export function useWireGuard(interfaceName?: string): UseWireGuardResult {
  *
  * // Send encrypted data
  * tunnel.send(theirPublicKey, 'hello');
- *
- * // Receive
- * useEffect(() => {
- *   if (tunnel.lastMessage) {
- *     console.log(tunnel.lastMessage.publicKey, tunnel.lastMessage.data);
- *   }
- * }, [tunnel.lastMessage]);
  */
 export function usePeerTunnel(config: PeerTunnelConfig | null): UsePeerTunnelResult {
   const [ready, setReady] = useState(false);
@@ -231,14 +221,17 @@ export function usePeerTunnel(config: PeerTunnelConfig | null): UsePeerTunnelRes
 
   const createRpc = useLoveRPC('peer_tunnel:create');
   const addPeerRpc = useLoveRPC('peer_tunnel:add_peer');
-  const setEndpointRpc = useLoveRPC('peer_tunnel:set_endpoint');
   const sendRpc = useLoveRPC('peer_tunnel:send');
   const broadcastRpc = useLoveRPC('peer_tunnel:broadcast');
   const removePeerRpc = useLoveRPC('peer_tunnel:remove_peer');
   const infoRpc = useLoveRPC('peer_tunnel:info');
   const destroyRpc = useLoveRPC('peer_tunnel:destroy');
 
-  // Create tunnel on mount
+  // Create tunnel on mount, destroy on unmount.
+  // Re-creates when privateKey changes (key rotation / identity switch).
+  // This is a Lua resource lifecycle that genuinely needs dep-driven re-creation —
+  // useMount only runs once, useLuaEffect doesn't cover custom RPC lifecycles.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!config) {
       setReady(false);
@@ -267,7 +260,7 @@ export function usePeerTunnel(config: PeerTunnelConfig | null): UsePeerTunnelRes
         setPeers([]);
       }
     };
-  }, [config?.privateKey]);
+  }, [config?.privateKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for tunnel events
   useLoveEvent('peer_tunnel', (payload: any) => {
@@ -315,20 +308,18 @@ export function usePeerTunnel(config: PeerTunnelConfig | null): UsePeerTunnelRes
     }
   });
 
-  // Poll tunnel info periodically for peer state updates
-  useEffect(() => {
-    if (!ready) return;
-    const interval = setInterval(() => {
-      if (tunnelIdRef.current === null) return;
-      infoRpc({ tunnelId: tunnelIdRef.current }).then((result: any) => {
-        if (result && result.peers) {
-          setPeers(result.peers as PeerInfo[]);
-          setTunnelInfo(result as TunnelInfo);
-        }
-      }).catch(() => {});
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [ready, infoRpc]);
+  // Poll tunnel info periodically for peer state updates (disabled when not ready)
+  const infoRpcRef = useRef(infoRpc);
+  infoRpcRef.current = infoRpc;
+  useLuaInterval(ready ? 2000 : null, () => {
+    if (tunnelIdRef.current === null) return;
+    infoRpcRef.current({ tunnelId: tunnelIdRef.current }).then((result: any) => {
+      if (result && result.peers) {
+        setPeers(result.peers as PeerInfo[]);
+        setTunnelInfo(result as TunnelInfo);
+      }
+    }).catch(() => {});
+  });
 
   const addPeer = useCallback((publicKey: string, endpoint?: string) => {
     if (tunnelIdRef.current === null) return;

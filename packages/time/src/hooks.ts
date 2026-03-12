@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useBridge, useLoveRPC, useLoveEvent } from '@reactjit/core';
+import { useBridge, useLoveRPC, useLuaInterval, useLuaQuery, useMount } from '@reactjit/core';
 import type {
   StopwatchOptions, StopwatchResult,
   CountdownOptions, CountdownResult,
@@ -85,10 +85,7 @@ function createManagedTimer(
  */
 export function useTime(rateMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), rateMs);
-    return () => clearInterval(id);
-  }, [rateMs]);
+  useLuaInterval(rateMs, () => setNow(Date.now()));
   return now;
 }
 
@@ -108,15 +105,9 @@ export function useTime(rateMs = 1000): number {
  * t?.localStr  // "2026-03-03T14:22:05"
  */
 export function useLuaTime(rateMs = 1000): LuaTimeState | null {
-  const [state, setState] = useState<LuaTimeState | null>(null);
-  const getNow = useLoveRPC<LuaTimeState>('time:now');
-  useEffect(() => {
-    const tick = () => getNow({}).then(t => setState(t)).catch(() => {});
-    tick();
-    const id = setInterval(tick, rateMs);
-    return () => clearInterval(id);
-  }, [getNow, rateMs]);
-  return state;
+  const { data, refetch } = useLuaQuery<LuaTimeState>('time:now', {}, []);
+  useLuaInterval(rateMs, refetch);
+  return data;
 }
 
 // ── useStopwatch — Lua-driven elapsed timer ────────────────────────────────────
@@ -140,14 +131,13 @@ export function useStopwatch(opts: StopwatchOptions = {}): StopwatchResult {
   const ctrlRpc   = useLoveRPC('time:stopwatch:control');
 
   const idRef    = useRef<number | null>(null);
-  const eventRef = useRef<string | null>(null);
 
-  // Create the Lua stopwatch on mount
-  useEffect(() => {
+  // Create the Lua stopwatch on mount, destroy on unmount.
+  // Pure mount lifecycle (no deps) — useMount is the correct hook.
+  useMount(() => {
     let unsubscribe: (() => void) | null = null;
     createRpc({ tickRate, running: autoStart }).then(res => {
-      idRef.current    = res.id;
-      eventRef.current = res.event;
+      idRef.current = res.id;
       if (autoStart) setRunning(true);
       unsubscribe = bridge.subscribe(res.event, (payload: { elapsed: number; running: boolean }) => {
         setElapsed(payload.elapsed);
@@ -161,8 +151,7 @@ export function useStopwatch(opts: StopwatchOptions = {}): StopwatchResult {
         idRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   const control = useCallback((action: string) => {
     if (idRef.current == null) return;
@@ -208,6 +197,9 @@ export function useCountdown(durationMs: number, opts: CountdownOptions = {}): C
 
   const idRef    = useRef<number | null>(null);
 
+  // Create countdown in Lua, re-create when durationMs changes.
+  // Dep-driven Lua resource lifecycle — framework primitive, needs useEffect.
+  // rjit-ignore-next-line
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
     createRpc({ duration: durationMs, tickRate, running: autoStart }).then(res => {
@@ -229,8 +221,7 @@ export function useCountdown(durationMs: number, opts: CountdownOptions = {}): C
         idRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [durationMs]);
+  }, [durationMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const control = useCallback((action: string) => {
     if (idRef.current == null) return;
@@ -281,6 +272,8 @@ export function useOnTime(fn: () => void, delayMs: number, deps: any[] = []): vo
   const fnRef  = useRef(fn);
   fnRef.current = fn;
 
+  // Framework timer primitive — creates/destroys Lua timer on dep change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (delayMs <= 0) {
       fnRef.current();
@@ -299,8 +292,7 @@ export function useOnTime(fn: () => void, delayMs: number, deps: any[] = []): vo
       },
       { once: true },
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bridge, delayMs, ...deps]);
+  }, [bridge, delayMs, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 // ── useInterval — Lua-driven repeating callback ───────────────────────────────
@@ -318,6 +310,8 @@ export function useInterval(fn: () => void, intervalMs: number): void {
   const fnRef  = useRef(fn);
   fnRef.current = fn;
 
+  // Framework timer primitive — creates/destroys Lua timer on interval change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (intervalMs <= 0) return;
     return createManagedTimer(
@@ -355,6 +349,8 @@ export function useFrameInterval(fn: () => void, frames: number): void {
   const fnRef  = useRef(fn);
   fnRef.current = fn;
 
+  // Framework timer primitive — creates/destroys Lua frame timer on change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (frames <= 0) return;
 
