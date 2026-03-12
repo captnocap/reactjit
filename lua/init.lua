@@ -1371,7 +1371,9 @@ function ReactJIT.init(config)
   rpcHandlers["a11y:tree"] = function(args)
     local app = args and args.app or ""
     local depth = args and args.depth or 3
+    local filter = args and args.filter or ""
     local url = string.format("http://127.0.0.1:9876/tree/%s?depth=%d", app, depth)
+    if filter ~= "" then url = url .. "&filter=" .. filter end
     local h = io.popen("curl -s " .. url .. " 2>/dev/null")
     if not h then return { error = "curl failed" } end
     local body = h:read("*a")
@@ -1386,7 +1388,9 @@ function ReactJIT.init(config)
     local app = args and args.app or ""
     local path = args and args.path or ""
     local depth = args and args.depth or 1
+    local filter = args and args.filter or ""
     local url = string.format("http://127.0.0.1:9876/subtree/%s?path=%s&depth=%d", app, path, depth)
+    if filter ~= "" then url = url .. "&filter=" .. filter end
     local h = io.popen("curl -s " .. url .. " 2>/dev/null")
     if not h then return { error = "curl failed" } end
     local body = h:read("*a")

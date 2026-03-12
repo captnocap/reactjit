@@ -18,8 +18,12 @@ Endpoints:
 import json
 import sys
 import argparse
+import traceback
+import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+
+sys.setrecursionlimit(5000)
 
 import gi
 gi.require_version('Atspi', '2.0')
@@ -107,9 +111,26 @@ def node_to_dict(node, depth=0, max_depth=10, path=None):
     except:
         pass
 
+    # If node has no name, peek at direct children via AT-SPI (not recursion)
+    # to find a label. GTK table rows bury the text in the last named child cell.
+    # This runs regardless of max_depth since it uses the live AT-SPI tree, not dict recursion.
+    inferred_name = name
+    if not name and child_count > 0 and child_count <= 20:
+        # Scan children in reverse — label is often the last child
+        for ci in range(child_count - 1, -1, -1):
+            try:
+                ch = node.get_child_at_index(ci)
+                if ch:
+                    ch_name = ch.get_name() or ""
+                    if ch_name:
+                        inferred_name = ch_name
+                        break
+            except:
+                pass
+
     result = {
         "role": role,
-        "name": name,
+        "name": inferred_name,
         "path": path,
         "rect": rect,
         "actions": actions,
@@ -122,23 +143,149 @@ def node_to_dict(node, depth=0, max_depth=10, path=None):
     if value:
         result["value"] = value
 
-    # Recurse into children — cap at 30 per node to keep responses under ~20KB
+    # Recurse into children
+    # For large lists (file managers, etc.) scan all children but prioritize
+    # ones with screen rects (visible). This catches visible items regardless
+    # of their index in the child list.
     cap = 30
     children = []
-    for i in range(min(child_count, cap)):
-        try:
-            child = node.get_child_at_index(i)
-            child_dict = node_to_dict(child, depth + 1, max_depth, path + [i])
-            if child_dict:
-                children.append(child_dict)
-        except:
-            pass
+
+    if child_count > cap:
+        # Large list: scan all children, collect visible ones (with rects)
+        visible = []
+        non_visible = []
+        for i in range(child_count):
+            try:
+                child = node.get_child_at_index(i)
+                if not child:
+                    continue
+                # Quick check: does this child have a screen rect?
+                has_rect = False
+                try:
+                    comp = child.get_component_iface()
+                    if comp:
+                        r = comp.get_extents(Atspi.CoordType.SCREEN)
+                        has_rect = r.x != -2147483648 and r.width > 0
+                except:
+                    pass
+
+                if has_rect:
+                    child_dict = node_to_dict(child, depth + 1, max_depth, path + [i])
+                    if child_dict:
+                        visible.append(child_dict)
+                elif len(non_visible) < 10:
+                    # Keep a few non-visible for context (column headers, etc.)
+                    child_dict = node_to_dict(child, depth + 1, max_depth, path + [i])
+                    if child_dict:
+                        non_visible.append(child_dict)
+            except:
+                pass
+        children = visible + non_visible
+        result["truncated"] = True
+        result["shownChildren"] = len(children)
+        result["visibleChildren"] = len(visible)
+    else:
+        for i in range(child_count):
+            try:
+                child = node.get_child_at_index(i)
+                child_dict = node_to_dict(child, depth + 1, max_depth, path + [i])
+                if child_dict:
+                    children.append(child_dict)
+            except:
+                pass
 
     if children:
         result["children"] = children
-    if child_count > cap:
-        result["truncated"] = True
-        result["shownChildren"] = cap
+
+    return result
+
+
+# ── Human-readable tree filter ───────────────────────────────────────
+# Collapses the raw widget tree into what a person would actually see.
+# Rules:
+#   1. Skip noise roles entirely (filler, separator, scroll bar, table column header)
+#   2. Collapse unnamed single-child containers (panel, split pane, scroll pane)
+#      — promote the child up, preserving the parent's rect if child has none
+#   3. Skip hidden elements (no visible/showing state AND no rect AND no name)
+#   4. Flatten table cell rows — a table cell group becomes one node with the inferred name
+#   5. Promote children of skipped nodes up to the parent
+
+NOISE_ROLES = {
+    'filler', 'separator', 'scroll bar', 'table column header',
+    'tearoff menu item', 'redundant object', 'unknown',
+}
+
+CONTAINER_ROLES = {
+    'panel', 'split pane', 'scroll pane', 'viewport', 'layered pane',
+}
+
+
+def simplify_tree(node):
+    """Post-process a node_to_dict tree into a human-readable form."""
+    if not node:
+        return None
+
+    role = node.get("role", "")
+    name = node.get("name", "")
+    children = node.get("children", [])
+
+    # Skip noise roles entirely — promote their children
+    if role in NOISE_ROLES:
+        if children:
+            results = []
+            for c in children:
+                s = simplify_tree(c)
+                if s:
+                    results.append(s)
+            return results  # return list to be flattened by parent
+        return None
+
+    # Recursively simplify children, flattening lists from skipped nodes
+    simplified_children = []
+    for c in children:
+        result = simplify_tree(c)
+        if result is None:
+            continue
+        if isinstance(result, list):
+            simplified_children.extend(result)
+        else:
+            simplified_children.append(result)
+
+    # Collapse unnamed single-child containers
+    if role in CONTAINER_ROLES and not name and len(simplified_children) == 1:
+        child = simplified_children[0]
+        if isinstance(child, dict):
+            # Preserve parent rect if child doesn't have one
+            if not child.get("rect") and node.get("rect"):
+                child["rect"] = node["rect"]
+            # Preserve parent path for action routing
+            if node.get("path"):
+                child["_originalPath"] = node["path"]
+            return child
+
+    # Skip completely empty hidden nodes
+    is_visible = ("visible" in node.get("states", []) or
+                  "showing" in node.get("states", []))
+    if not name and not is_visible and not node.get("rect") and not simplified_children:
+        return None
+
+    # Build simplified node
+    result = {
+        "role": role,
+        "name": name,
+        "path": node.get("path", []),
+        "rect": node.get("rect"),
+        "actions": node.get("actions", []),
+        "states": node.get("states", []),
+        "childCount": len(simplified_children),
+    }
+
+    if node.get("text"):
+        result["text"] = node["text"]
+    if node.get("value"):
+        result["value"] = node["value"]
+    if simplified_children:
+        result["children"] = simplified_children
 
     return result
 
@@ -169,8 +316,18 @@ def navigate_to_node(app, path):
     return node
 
 
-def do_action(app_name, path, action_index):
-    """Execute an action on a node."""
+def do_action(app_name, path, action_index, refocus=True):
+    """Execute an action on a node, optionally refocusing the caller's window."""
+    # Remember active window so we can refocus after the action
+    prev_window = None
+    if refocus:
+        try:
+            prev_window = subprocess.check_output(
+                ['xdotool', 'getactivewindow'], stderr=subprocess.DEVNULL
+            ).strip()
+        except Exception:
+            pass
+
     app = find_app(app_name)
     if not app:
         return {"error": f"App '{app_name}' not found"}
@@ -188,6 +345,17 @@ def do_action(app_name, path, action_index):
 
     action_name = action_iface.get_action_name(action_index)
     result = action_iface.do_action(action_index)
+
+    # Refocus the caller's window after the action
+    if prev_window:
+        try:
+            subprocess.run(
+                ['xdotool', 'windowactivate', prev_window],
+                stderr=subprocess.DEVNULL, timeout=1
+            )
+        except Exception:
+            pass
+
     return {"ok": True, "action": action_name, "result": result}
 
 
@@ -240,6 +408,17 @@ class A11yHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": f"App '{app_name}' not found"}, 404)
                 return
             tree = node_to_dict(app, max_depth=depth)
+            if 'human' in qs.get('filter', []):
+                try:
+                    tree = simplify_tree(tree)
+                    if isinstance(tree, list):
+                        tree = {"role": "root", "name": app_name, "path": [], "children": tree, "childCount": len(tree), "rect": None, "actions": [], "states": []}
+                    if not tree:
+                        tree = {"role": "application", "name": app_name, "path": [], "children": [], "childCount": 0, "rect": None, "actions": [], "states": []}
+                except Exception as e:
+                    traceback.print_exc()
+                    self.send_json({"error": f"simplify failed: {e}"}, 500)
+                    return
             self.send_json(tree)
 
         elif path.startswith('/subtree/'):
@@ -258,6 +437,17 @@ class A11yHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": f"Node not found at path {index_path}"}, 404)
                 return
             tree = node_to_dict(node, max_depth=depth, path=index_path)
+            if 'human' in qs.get('filter', []):
+                try:
+                    tree = simplify_tree(tree)
+                    if isinstance(tree, list):
+                        tree = {"role": "group", "name": "", "path": index_path, "children": tree, "childCount": len(tree), "rect": None, "actions": [], "states": []}
+                    if not tree:
+                        tree = {"role": "empty", "name": "", "path": index_path, "children": [], "childCount": 0, "rect": None, "actions": [], "states": []}
+                except Exception as e:
+                    traceback.print_exc()
+                    self.send_json({"error": f"simplify failed: {e}"}, 500)
+                    return
             self.send_json(tree)
 
         else:
