@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+// rjit-ignore: useEffect needed for dep-driven internal state sync
+import { useEffect } from 'react';
 import { Box, Input, Text, useThemeColorsOptional } from '@reactjit/core';
 import { normalizeCellAddress } from './formula';
 import type { SpreadsheetCellMap, SpreadsheetProps, SpreadsheetScalar } from './types';
@@ -165,6 +167,8 @@ export function Spreadsheet({
     resolvedMaxColumnWidth,
   ]);
 
+  // Dep-driven: sync internal column widths when cols/config change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (widthControlled) return;
     setInternalColumnWidths((prev) => {
@@ -188,6 +192,8 @@ export function Spreadsheet({
   );
   const [formulaInput, setFormulaInput] = useState(liveCells[selectedKey] ?? '');
 
+  // Dep-driven: sync formula input and native state when selection/cells change.
+  // rjit-ignore-next-line
   useEffect(() => {
     const rawInput = liveCells[selectedKey] ?? '';
     if (!nativeState.editing) {

@@ -5,8 +5,8 @@
  * (useLoveRPC for commands, useLoveEvent for state updates).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useLoveRPC, useLoveEvent } from '@reactjit/core';
+import { useState, useCallback, useRef } from 'react';
+import { useLoveRPC, useLoveEvent, useMount } from '@reactjit/core';
 import type {
   RackState,
   ModuleState,
@@ -368,7 +368,7 @@ export function useAudioInit(): boolean {
   const [ready, setReady] = useState(false);
   const initRpc = useLoveRPC('audio:init');
 
-  useEffect(() => {
+  useMount(() => {
     let cancelled = false;
     initRpc({}).then(() => {
       if (!cancelled) setReady(true);
@@ -377,7 +377,7 @@ export function useAudioInit(): boolean {
       if (!cancelled) setReady(true);
     });
     return () => { cancelled = true; };
-  }, [initRpc]);
+  });
 
   return ready;
 }

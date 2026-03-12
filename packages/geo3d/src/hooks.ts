@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+// rjit-ignore: useEffect needed for dep-driven bridge subscription
+import { useEffect } from 'react';
 import { useBridge } from '@reactjit/core';
 import type { LatLngTuple } from '@reactjit/geo';
 
@@ -25,6 +27,8 @@ export function useGeoCamera(): GeoCameraState {
 
   const bridge = useBridge();
 
+  // Dep-driven: subscribe to camera events when bridge becomes available.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     const unsub = bridge.subscribe('geoscene:camera', (event: any) => {

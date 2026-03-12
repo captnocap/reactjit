@@ -18,7 +18,9 @@
  * const chat = useChat({ tools: [...localTools, ...mcp.tools] });
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
+// rjit-ignore: useEffect needed for dep-driven MCP client lifecycle (reconnect on config change)
+import { useEffect } from 'react';
 import type { ToolDefinition } from '../types';
 import type { MCPServerConfig, MCPServerResult, MCPTool } from './protocol';
 import { MCPClient } from './client';
@@ -39,7 +41,8 @@ export function useMCPServer(config: MCPServerConfig): MCPServerResult {
   const configRef = useRef(config);
   configRef.current = config;
 
-  // Connect and discover on mount
+  // Connect and discover on mount — dep-driven: reconnect when connection params change.
+  // rjit-ignore-next-line
   useEffect(() => {
     let cancelled = false;
     const client = new MCPClient(config);

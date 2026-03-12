@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useContext, createContext } from 'react';
+import { useState, useCallback, useContext, createContext } from 'react';
+// rjit-ignore: useEffect needed for dep-driven bridge subscriptions
+import { useEffect } from 'react';
 import { useBridge } from '@reactjit/core';
 import type {
   LatLngExpression,
@@ -114,6 +116,8 @@ export function useMapEvent<K extends keyof MapEventHandlerFnMap>(
   const map = useMap();
   const bridge = useBridge();
 
+  // Dep-driven: re-subscribe when bridge/type/handler changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     const unsub = bridge.subscribe(`map:${type}`, handler as any);
@@ -131,6 +135,8 @@ export function useMapEvents(handlers: MapEventHandlerFnMap): MapHandle {
   const map = useMap();
   const bridge = useBridge();
 
+  // Dep-driven: re-subscribe when bridge/handlers change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     const unsubs: (() => void)[] = [];
@@ -158,6 +164,8 @@ export function useMapView(): MapViewState {
     pitch: 0,
   });
 
+  // Dep-driven: subscribe to viewchange when bridge becomes available.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     const unsub = bridge.subscribe('map:viewchange', (event: any) => {

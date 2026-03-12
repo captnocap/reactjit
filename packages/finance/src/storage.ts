@@ -5,7 +5,9 @@
  * @reactjit/crypto's encrypt/decrypt for at-rest encryption.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven decrypt + portfolio snapshot
+import { useEffect } from 'react';
 import { useLocalStore, useLoveRPC } from '@reactjit/core';
 import type { Holding, PortfolioSnapshot } from './types';
 
@@ -152,6 +154,7 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
   const updatePriceRpc = useLoveRPC<Holding[]>('finance:portfolio_update_price');
 
   // Load and decrypt on mount or when stored changes
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!stored) {
       setHoldingsState([]);
@@ -198,6 +201,8 @@ export function useSecurePortfolio(opts?: UseSecurePortfolioOptions): SecurePort
     setLoading(false);
   }, [stored]);
 
+  // Dep-driven: re-compute portfolio snapshot when holdings change.
+  // rjit-ignore-next-line
   useEffect(() => {
     let cancelled = false;
     snapshotRpc({ holdings })

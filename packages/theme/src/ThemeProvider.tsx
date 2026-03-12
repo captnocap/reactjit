@@ -1,4 +1,6 @@
-import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useState, useCallback, useMemo, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven theme loading + bridge subscriptions
+import { useEffect } from 'react';
 import { useBridgeOptional, ThemeColorsContext } from '@reactjit/core';
 import { themes, defaultThemeId } from './themes';
 import type { ThemeContextValue, ThemeColors } from './types';
@@ -187,7 +189,9 @@ export function ThemeProvider({
     [bridge, persistTheme],
   );
 
-  // Load persisted theme on mount, then send initial theme to Lua
+  // Load persisted theme on mount, then send initial theme to Lua.
+  // Dep-driven: waits for bridge to become available.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
 
@@ -217,6 +221,8 @@ export function ThemeProvider({
 
   // Listen for Lua-initiated theme switches (F9 theme menu).
   // Uses setThemeIdState directly to avoid sending theme:set back to Lua (circular).
+  // Dep-driven: re-subscribe when bridge/persistTheme changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     const unsub = bridge.subscribe('theme:switch', (payload: ThemeSwitchPayload) => {

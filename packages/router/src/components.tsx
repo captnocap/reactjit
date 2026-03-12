@@ -135,6 +135,8 @@ export function Outlet(): ReactElement | null {
  */
 export function Navigate({ to, replace }: { to: string; replace?: boolean }) {
   const navigate = useNavigate();
+  // Dep-driven navigation: re-navigate when `to` or `replace` props change.
+  // rjit-ignore-next-line
   React.useEffect(() => {
     navigate(to, { replace });
   }, [to, replace, navigate]);

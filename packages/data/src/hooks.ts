@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+// rjit-ignore: useEffect needed for dep-driven evaluation (cells/options change → re-evaluate)
+import { useEffect } from 'react';
 import { useDataEvaluate, normalizeCellAddress } from './formula';
 import type {
   SpreadsheetCellMap,
@@ -15,6 +17,8 @@ export function useSpreadsheet(options: UseSpreadsheetOptions = {}): UseSpreadsh
   const [evaluation, setEvaluation] = useState<SpreadsheetEvaluation>(EMPTY_EVAL);
   const evaluate = useDataEvaluate();
 
+  // Dep-driven: re-evaluate when cells or options change.
+  // rjit-ignore-next-line
   useEffect(() => {
     const targets = options.targetAddresses && options.targetAddresses.length > 0
       ? options.targetAddresses

@@ -4,7 +4,9 @@
  * Sending is a standalone fetch wrapper with retries and HMAC signing.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven webhook server lifecycle (port change)
+import { useEffect } from 'react';
 import { hmacSHA256, timingSafeEqual } from './crypto';
 import type {
   WebhookEvent,
@@ -49,6 +51,8 @@ export function useWebhook(
   const bridgeRef = useRef<any>(null);
   const serverIdRef = useRef<string | null>(null);
 
+  // Dep-driven: create/destroy webhook server when port changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (port == null) {
       setReady(false);

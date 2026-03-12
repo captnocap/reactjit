@@ -3,7 +3,9 @@
  * Provides useAPI (reactive fetching with polling) and useAPIMutation (imperative calls).
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven fetch (url/tick change triggers re-fetch)
+import { useEffect } from 'react';
 import { useLuaInterval } from '@reactjit/core';
 import { rateLimitedFetch, type RateLimitConfig } from './rateLimit';
 
@@ -38,6 +40,8 @@ export function useAPI<T = any>(
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
+  // Dep-driven fetch: re-fetch when url or tick changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (url == null) {
       setData(null);

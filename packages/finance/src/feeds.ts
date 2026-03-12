@@ -8,7 +8,9 @@
  * - Manual push (for scraped/custom data)
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
+// rjit-ignore: useEffect needed for dep-driven fetch/WS message processing
+import { useEffect } from 'react';
 import { useFetch, useWebSocket, useLuaInterval, useLoveRPC } from '@reactjit/core';
 import type { OHLCV, Tick, OrderBook, BookLevel, Timeframe, TIMEFRAME_SECONDS } from './types';
 
@@ -242,6 +244,8 @@ export function usePriceFeed(opts: PriceFeedOptions): PriceFeedResult {
 
   fetchRef.current = doFetch;
 
+  // Dep-driven: initial fetch + re-fetch when symbols/currency change.
+  // rjit-ignore-next-line
   useEffect(() => {
     doFetch();
   }, [doFetch]);
@@ -261,6 +265,8 @@ export function usePriceFeed(opts: PriceFeedOptions): PriceFeedResult {
 
   const { lastMessage } = useWebSocket(wsStreamUrl);
 
+  // Dep-driven: process each new WS message as it arrives.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!lastMessage) return;
     try {
@@ -359,6 +365,8 @@ export function useOHLCVHistory(opts: OHLCVHistoryOptions | null): OHLCVHistoryR
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
+  // Dep-driven: re-fetch OHLCV history when symbol/days/currency change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!opts) {
       setCandles([]);

@@ -1,4 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+// rjit-ignore: useEffect needed for dep-driven bridge availability
+import { useEffect } from 'react';
 import { useBridge } from '@reactjit/core';
 import type {
   ImagingOperation,
@@ -115,6 +117,8 @@ export function useImagingOps(): string[] {
   const bridge = useBridge();
   const [ops, setOps] = useState<string[]>([]);
 
+  // Dep-driven: fetch ops when bridge becomes available.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     bridge.rpc('imaging:list_ops', {}).then((result: string[]) => {
@@ -132,6 +136,8 @@ export function useBlendModes(): string[] {
   const bridge = useBridge();
   const [modes, setModes] = useState<string[]>([]);
 
+  // Dep-driven: fetch blend modes when bridge becomes available.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) return;
     bridge.rpc('imaging:blend_modes', {}).then((result: string[]) => {

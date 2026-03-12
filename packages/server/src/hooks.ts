@@ -5,7 +5,9 @@
  * React-side: hooks for server lifecycle, dynamic route handling
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven server lifecycle (port/host change → re-create)
+import { useEffect } from 'react';
 import { useLoveRPC, useLoveEvent } from '@reactjit/core';
 import type {
   HttpRequest,
@@ -61,6 +63,9 @@ export function useServer(config: ServerConfig | null): UseServerResult {
   // Keep routes ref current without triggering re-mount
   routesRef.current = config?.routes ?? [];
 
+  // Dep-driven server lifecycle: port/host change → teardown old server, create new one.
+  // useMount can't handle this — needs cleanup/re-setup on dep change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!config) {
       setReady(false);
@@ -252,6 +257,8 @@ export function useLibrary(
   const indexRpc = useLoveRPC('httpserver:index');
   const closeRpc = useLoveRPC('httpserver:close');
 
+  // Dep-driven library server lifecycle: port/dirs change → teardown + re-create.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (port == null || directories.length === 0) {
       setReady(false);

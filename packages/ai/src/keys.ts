@@ -5,7 +5,8 @@
  * Keys persist across sessions via Love2D filesystem, SQLite, or localStorage.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { useMount } from '@reactjit/core';
 import type { AIProviderType, APIKeyRecord, APIKeysResult } from './types';
 
 // Schema for API key records — defined inline to avoid hard dep on storage's z
@@ -30,7 +31,7 @@ export function useAPIKeys(): APIKeysResult {
   // Works when @reactjit/storage is in the bundle
   const storageRef = useRef<any>(null);
 
-  useEffect(() => {
+  useMount(() => {
     let cancelled = false;
 
     // Attempt to load keys from storage
@@ -54,7 +55,7 @@ export function useAPIKeys(): APIKeysResult {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  });
 
   const setKey = useCallback(async (
     record: Omit<APIKeyRecord, 'id'> & { id?: string },

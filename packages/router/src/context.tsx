@@ -28,6 +28,8 @@ export function RouterProvider({
   const historyRef = useRef(history);
   historyRef.current = history;
 
+  // Dep-driven subscription: re-subscribe when history adapter changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     return history.subscribe((loc) => {
       setLocation({ ...loc });

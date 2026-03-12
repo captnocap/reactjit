@@ -114,6 +114,8 @@ export function useCRUD<T extends Record<string, any>>(
     const [error, setError] = useState<Error | null>(null);
     const [version, setVersion] = useState(0);
 
+    // Dep-driven fetch: re-fetch when id or version changes.
+    // rjit-ignore-next-line
     useEffect(() => {
       let cancelled = false;
       setLoading(true);
@@ -146,6 +148,8 @@ export function useCRUD<T extends Record<string, any>>(
     const queryRef = useRef(query);
     queryRef.current = query;
 
+    // Dep-driven fetch: re-fetch when version changes (triggered by refetch).
+    // rjit-ignore-next-line
     useEffect(() => {
       let cancelled = false;
       setLoading(true);

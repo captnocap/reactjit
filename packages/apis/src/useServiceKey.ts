@@ -16,7 +16,9 @@
  * }
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven RPC fetch (serviceId/fieldKey/tick change)
+import { useEffect } from 'react';
 import { useBridgeOptional } from '@reactjit/core';
 
 export interface ServiceKeyResult {
@@ -52,6 +54,8 @@ export function useServiceKey(
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
+  // Dep-driven RPC: re-fetch when bridge/serviceId/fieldKey/tick change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) {
       setLoading(false);
@@ -99,6 +103,8 @@ export function useServiceKeys(
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
+  // Dep-driven RPC: re-fetch when bridge/serviceId/tick change.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!bridge) {
       setLoading(false);

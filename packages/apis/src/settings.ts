@@ -16,7 +16,9 @@
  * useSettingsRegistry([...builtinServices, myCustomService]);
  */
 
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+// rjit-ignore: useEffect needed — waits for bridge availability before sending registry
+import { useEffect } from 'react';
 import { useBridgeOptional } from '@reactjit/core';
 import { builtinServices, type ServiceDefinition } from './registry';
 
@@ -35,6 +37,8 @@ export function useSettingsRegistry(
   const servicesRef = useRef(services);
   servicesRef.current = services;
 
+  // Dep-driven: waits for bridge to become available, then sends once.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (registrySent || !bridge) return;
 

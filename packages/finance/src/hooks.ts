@@ -2,7 +2,9 @@
  * React hooks for finance — all one-liners that wire indicators to state.
  */
 
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven RPC calls (candles/holdings/config change)
+import { useEffect } from 'react';
 import { useWebSocket, useLoveRPC } from '@reactjit/core';
 import type { OHLCV, Holding, PortfolioSnapshot, BollingerBand, MACDPoint, StochPoint, IndicatorPoint, PatternSignal } from './types';
 import { pivotPoints } from './indicators';
@@ -234,6 +236,8 @@ export function useTechnicalAnalysis(candles: OHLCV[]): TechnicalAnalysis {
   const requestIdRef = useRef(0);
   const [value, setValue] = useState<TechnicalAnalysis>(() => normalizeTechnicalAnalysis(undefined, candles));
 
+  // Dep-driven: re-compute indicators when candles change.
+  // rjit-ignore-next-line
   useEffect(() => {
     const requestId = ++requestIdRef.current;
     rpc({ candles })
@@ -272,6 +276,8 @@ export function usePortfolio(initialHoldings: Holding[] = []): {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot>(() => emptyPortfolioSnapshot(holdings));
   const updateSeqRef = useRef(0);
 
+  // Dep-driven: re-compute portfolio snapshot when holdings change.
+  // rjit-ignore-next-line
   useEffect(() => {
     let cancelled = false;
     snapshotRpc({ holdings })
@@ -353,6 +359,8 @@ export function useSyntheticCandles(opts?: {
       });
   }, [generateRpc, count, startPrice, volatility, seed]);
 
+  // Dep-driven: regenerate candles when config (count/startPrice/volatility/seed) changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     regenerate();
   }, [regenerate]);

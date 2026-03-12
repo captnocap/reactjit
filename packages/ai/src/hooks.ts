@@ -5,7 +5,9 @@
  * and full agentic tool execution loops.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven model fetch (config change → re-fetch)
+import { useEffect } from 'react';
 import type {
   AIConfig, AIProviderType, Message, ToolCall, StreamDelta,
   ChatOptions, ChatResult, CompletionOptions, CompletionResult,
@@ -388,7 +390,8 @@ export function useModels(options: Partial<AIConfig> = {}): ModelsResult {
     }
   }, [config.provider, config.baseURL, config.apiKey, version]);
 
-  // Auto-fetch when config changes
+  // Auto-fetch when config changes — dep-driven: re-fetch on provider/baseURL/apiKey change.
+  // rjit-ignore-next-line
   useEffect(() => { fetchModels(); }, [fetchModels]);
 
   const refetch = useCallback(() => {

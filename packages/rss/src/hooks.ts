@@ -2,7 +2,9 @@
  * RSS React hooks — one-liner subscription to any RSS/Atom feed.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
+// rjit-ignore: useEffect needed for dep-driven feed fetch (url/tick change)
+import { useEffect } from 'react';
 import { useLuaInterval } from '@reactjit/core';
 import { parseFeed } from './parser';
 import type { Feed, FeedItem, RSSFeedOptions, RSSFeedResult, RSSAggregateOptions, RSSAggregateResult } from './types';
@@ -37,6 +39,8 @@ export function useRSSFeed(
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
+  // Dep-driven: re-fetch feed when url or tick changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (!url) {
       setFeed(null);
@@ -140,6 +144,8 @@ export function useRSSAggregate(
   // Serialize urls for dependency
   const urlsKey = urls.join('\n');
 
+  // Dep-driven: re-fetch all feeds when urls or tick changes.
+  // rjit-ignore-next-line
   useEffect(() => {
     if (urls.length === 0) {
       setFeedResults(new Map());
