@@ -16,13 +16,15 @@ import React from 'react';
 export interface ClaudeCanvasProps {
   sessionId?: string;
   debugVisible?: boolean;
+  recording?: boolean;
   style?: Record<string, any>;
 }
 
-export function ClaudeCanvas({ sessionId = 'default', debugVisible = false, style }: ClaudeCanvasProps) {
+export function ClaudeCanvas({ sessionId = 'default', debugVisible = true, recording, style }: ClaudeCanvasProps) {
   return React.createElement('ClaudeCanvas', {
     sessionId,
     debugVisible,
+    recording,
     style,
   });
 }

@@ -448,8 +448,8 @@ function StateLifecycle() {
         </Box>
       </Box>
       <Box style={{ gap: 2 }}>
-        {[...ENV_STATES, ...PROC_STATES].map(s => (
-          <Box key={s.key + '-desc'} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        {[...ENV_STATES.map(s => ({ ...s, _prefix: 'env' })), ...PROC_STATES.map(s => ({ ...s, _prefix: 'proc' }))].map(s => (
+          <Box key={s._prefix + '-' + s.key + '-desc'} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: STATE_COLORS[s.key] }} />
             <Text style={{ fontSize: 8, color: c.text, width: 65 }}>{s.label}</Text>
             <Text style={{ fontSize: 8, color: c.muted }}>{s.desc}</Text>
@@ -718,7 +718,7 @@ function ClaudeCanvasDemo() {
       {showLive ? (
         <Box style={{ width: '100%', height: 300 }}>
           <Native type="ClaudeCode" sessionId="story-claude" workingDir={workingDir} />
-          <ClaudeCanvas sessionId="story-claude" style={{ width: '100%', height: 300, borderRadius: 6 }} />
+          <ClaudeCanvas sessionId="story-claude" recording style={{ width: '100%', height: 300, borderRadius: 6 }} />
         </Box>
       ) : (
         <Box style={{

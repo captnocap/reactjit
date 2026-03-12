@@ -561,7 +561,13 @@ Capabilities.register("Terminal", {
 
     local vtRows, vtCols = vterm:size()
     local sbCount = vterm:scrollbackCount()
-    local totalRows = sbCount + vtRows
+
+    -- Find last non-empty grid row (avoid phantom scroll from trailing empty rows after clear)
+    local lastNonEmptyGrid = 0
+    for r = vtRows - 1, 0, -1 do
+      if #(vterm:getRowText(r)) > 0 then lastNonEmptyGrid = r; break end
+    end
+    local totalRows = sbCount + lastNonEmptyGrid + 1
 
     -- Compute scroll bounds (scrollback + grid)
     local contentHeight = totalRows * lineHeight
@@ -937,10 +943,14 @@ Capabilities.register("Terminal", {
     local font = Measure and Measure.getFont(FONT_SIZE, "monospace", nil)
     local lineHeight = font and font:getHeight() or 16
 
-    -- Compute max scroll from scrollback + vterm grid vs viewport
-    local vtRows = state.vterm:size()
+    -- Compute max scroll from scrollback + non-empty grid rows vs viewport
+    local vtRows, vtCols = state.vterm:size()
     local sbCount = state.vterm:scrollbackCount()
-    local totalRows = sbCount + vtRows
+    local lastNonEmptyGrid = 0
+    for r = vtRows - 1, 0, -1 do
+      if #(state.vterm:getRowText(r)) > 0 then lastNonEmptyGrid = r; break end
+    end
+    local totalRows = sbCount + lastNonEmptyGrid + 1
     local c = node.computed
     local viewportH = c and c.h or 400
     local contentHeight = totalRows * lineHeight

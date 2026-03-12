@@ -90,7 +90,9 @@ Capabilities.register("ClaudeCanvas", {
   hittable = true,  -- can receive focus and keyboard events
 
   schema = {
-    sessionId = { type = "string", desc = "Session ID linking to a ClaudeCode instance" },
+    sessionId     = { type = "string", desc = "Session ID linking to a ClaudeCode instance" },
+    debugVisible  = { type = "bool", default = true, desc = "Show debug overlays (row nums, tags, colors)" },
+    recording     = { type = "bool", default = false, desc = "Enable recording + auto-save on destroy" },
   },
 
   events = {},
@@ -111,6 +113,8 @@ Capabilities.register("ClaudeCanvas", {
 
     return {
       sessionId = sessionId,
+      _sessionTimestamp = os.date("!%Y%m%d_%H%M%S"),
+      _recording = props.recording or false,
     }
   end,
 
@@ -127,10 +131,60 @@ Capabilities.register("ClaudeCanvas", {
       inputState.blinkTimer = 0
       inputState.blinkOn = not inputState.blinkOn
     end
+
+    -- Recording uses the session's recorder directly (Session.getRecorder())
+    -- No need to feed our own — the session captures all raw PTY data
   end,
 
   destroy = function(nodeId, state)
+    local ts = state._sessionTimestamp or os.date("!%Y%m%d_%H%M%S")
+
+    -- Auto-save .rec.lua recording (from session's recorder which has the actual PTY data)
+    if state._recording then
+      local sessionRec = Session.getRecorder()
+      if sessionRec and sessionRec.meta.frameCount > 0 then
+        local recPath = "recording_" .. ts .. ".rec.lua"
+        local ok = sessionRec:save(recPath)
+        if ok then
+          io.write("[claude_canvas] Recording saved: " .. recPath ..
+            " (" .. sessionRec.meta.frameCount .. " frames, " ..
+            string.format("%.1fs", sessionRec.meta.duration) .. ")\n")
+          io.flush()
+        end
+      end
+    end
+
+    -- Auto-save classified .txt export
+    local cache = _lastClassified[nodeId]
+    local vterm = Session.getVTerm()
+    if cache and #cache > 0 and vterm then
+      local txtPath = "recording_" .. ts .. ".txt"
+      local f = io.open(txtPath, "w")
+      if f then
+        local vtRows, vtCols = vterm:size()
+        f:write("-- ClaudeCanvas buffer export\n")
+        f:write(string.format("-- %s  classifier=claude_code  grid=%dx%d  frame=%d\n",
+          os.date("!%Y-%m-%dT%H:%M:%SZ"), vtRows, vtCols, _frameCounter))
+        f:write("-- Format: [kind] <content>\\t[colors]\\t[grouping]\\t<row>\n")
+        f:write("--\n")
+        for _, entry in ipairs(cache) do
+          local colorStr = #entry.colors > 0 and table.concat(entry.colors, " ") or "-"
+          local nodeIdStr = entry.nodeId or "-"
+          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n",
+            entry.kind, entry.text, colorStr, nodeIdStr, entry.row))
+        end
+        f:close()
+        io.write("[claude_canvas] Export saved: " .. txtPath .. " (" .. #cache .. " rows)\n")
+        io.flush()
+      end
+    end
+
     _inputStates[nodeId] = nil
+    _lastClassified[nodeId] = nil
+    _rowHistory[nodeId] = nil
+    _lastRowKind[nodeId] = nil
+    _lastGraph[nodeId] = nil
+    _lastDiff[nodeId] = nil
   end,
 
   -- ── Visual capability methods (painter.lua / layout.lua) ──────
@@ -181,14 +235,17 @@ Capabilities.register("ClaudeCanvas", {
     local lineHeight = font:getHeight()
 
     -- Debug overlay height (3 lines of debug text + margin)
-    local df = Measure.getFont(10, nil, nil)
-    local dfH = df:getHeight()
-    local debugH = dfH * 3 + 5  -- 3 lines + gap
-    local bottomMargin = 10
-    local debugTop = c.y + c.h - debugH - bottomMargin
+    local df, dfH, debugTop
+    if debugVis then
+      df = Measure.getFont(10, nil, nil)
+      dfH = df:getHeight()
+      local debugH = dfH * 3 + 5  -- 3 lines + gap
+      local bottomMargin = 10
+      debugTop = c.y + c.h - debugH - bottomMargin
+    end
 
-    -- The content area stops at the debug overlay top
-    local contentBottom = debugTop
+    -- The content area stops at the debug overlay top (or bottom of canvas)
+    local contentBottom = debugVis and debugTop or (c.y + c.h)
     local contentRect = { x = c.x, y = c.y, w = c.w, h = contentBottom - c.y }
 
     -- ── Render ALL vterm rows with semantic tags ─────────────────
@@ -218,12 +275,17 @@ Capabilities.register("ClaudeCanvas", {
       local lineH = vtFont:getHeight()
       local rows, cols = vterm:size()
 
-      -- Measure tag prefix width for offsetting cell content
-      local tagW = tagFont:getWidth("[list_selectable] ")  -- widest tag as reference
-      local cellOffsetX = tagW + 4
-      -- Right side reserve: row numbers + color debug info
-      local rowNumW = 180  -- row number + "255,255,255 153,153,153 def" color labels
-      -- Available width for vterm cells between tag and row numbers
+      -- Debug mode: show tag labels, row numbers, color strings
+      local debugVis = (props.debugVisible == nil) and true or props.debugVisible
+      local cellOffsetX, rowNumW
+      if debugVis then
+        local tagW = tagFont:getWidth("[list_selectable] ")
+        cellOffsetX = tagW + 4
+        rowNumW = 180
+      else
+        cellOffsetX = 8
+        rowNumW = 0
+      end
       local cellAreaW = c.w - cellOffsetX - rowNumW
       local maxCellCols = math.max(1, math.floor(cellAreaW / charW))
 
@@ -331,37 +393,38 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
 
-          -- Sample ALL distinct fg colors on this row
-          local borderChars = { ["│"] = true, ["┌"] = true, ["╭"] = true,
-            ["└"] = true, ["╰"] = true, ["─"] = true, ["┐"] = true,
-            ["╮"] = true, ["┘"] = true, ["╯"] = true, ["┤"] = true,
-            ["├"] = true, ["┬"] = true, ["┴"] = true, ["╌"] = true }
-          local sampledFg = nil       -- first content cell's fg (for brightness check)
+          -- Sample ALL distinct fg colors on this row (debug only — expensive per-cell loop)
+          local sampledFg = nil
           local hasTextContent = false
-          local colorSet = {}         -- unique color strings seen
-          local colorList = {}        -- ordered unique color labels
-          local colorSeen = {}
-          for col = 0, math.min(cols - 1, 80) do
-            local cell = vterm:getCell(row, col)
-            if cell and cell.char and #cell.char > 0
-               and cell.char ~= " " and not borderChars[cell.char] then
-              if not hasTextContent then
-                hasTextContent = true
-                sampledFg = cell.fg
-              end
-              local label
-              if cell.fg then
-                label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
-              else
-                label = "def"
-              end
-              if not colorSeen[label] then
-                colorSeen[label] = true
-                colorList[#colorList + 1] = label
+          if debugVis then
+            local borderChars = { ["│"] = true, ["┌"] = true, ["╭"] = true,
+              ["└"] = true, ["╰"] = true, ["─"] = true, ["┐"] = true,
+              ["╮"] = true, ["┘"] = true, ["╯"] = true, ["┤"] = true,
+              ["├"] = true, ["┬"] = true, ["┴"] = true, ["╌"] = true }
+            local colorList = {}
+            local colorSeen = {}
+            for col = 0, math.min(cols - 1, 80) do
+              local cell = vterm:getCell(row, col)
+              if cell and cell.char and #cell.char > 0
+                 and cell.char ~= " " and not borderChars[cell.char] then
+                if not hasTextContent then
+                  hasTextContent = true
+                  sampledFg = cell.fg
+                end
+                local label
+                if cell.fg then
+                  label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
+                else
+                  label = "def"
+                end
+                if not colorSeen[label] then
+                  colorSeen[label] = true
+                  colorList[#colorList + 1] = label
+                end
               end
             end
+            rowColors[row] = { fg = sampledFg, hasText = hasTextContent, colors = colorList }
           end
-          rowColors[row] = { fg = sampledFg, hasText = hasTextContent, colors = colorList }
 
           -- Brightness-based reclassification for box_drawing rows with text content
           if kind == "box_drawing" and hasTextContent then
@@ -616,17 +679,19 @@ Capabilities.register("ClaudeCanvas", {
 
           -- Drawing: only for visible rows
           if inViewport then
-            -- Draw tag prefix
-            love.graphics.setFont(tagFont)
-            -- Color-code by zone: blue=content, orange=input zone
-            if row >= boundary then
-              love.graphics.setColor(1.0, 0.6, 0.2, 0.7 * effectiveOpacity)
-            else
-              love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
+            -- Draw tag prefix (debug only)
+            if debugVis then
+              love.graphics.setFont(tagFont)
+              -- Color-code by zone: blue=content, orange=input zone
+              if row >= boundary then
+                love.graphics.setColor(1.0, 0.6, 0.2, 0.7 * effectiveOpacity)
+              else
+                love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
+              end
+              love.graphics.print("[" .. kind .. "]", c.x + 4, py + 2)
             end
-            love.graphics.print("[" .. kind .. "]", c.x + 4, py + 2)
 
-            -- Draw cells between tag prefix and row numbers
+            -- Draw cells
             love.graphics.setFont(vtFont)
             for col = 0, math.min(cols - 1, maxCellCols - 1) do
               local cell = vterm:getCell(row, col)
@@ -683,63 +748,79 @@ Capabilities.register("ClaudeCanvas", {
       _lastDiff[nodeId] = Graph.diff(prevGraph, graph)
       _lastGraph[nodeId] = graph
 
-      -- Row numbers
-      local numFont = Measure.getFont(9, nil, nil)
-      love.graphics.setFont(numFont)
-      for row = 0, lastNonEmpty do
-        local py = c.y + 8 + row * lineH - scrollY
-        if py + lineH < c.y then goto continue_num end
-        if py > contentBottom then break end
-        local rowText = vterm:getRowText(row)
-        if row >= boundary then
-          love.graphics.setColor(1, 0.6, 0.2, 0.5)  -- orange for input zone
-        elseif #rowText > 0 then
-          love.graphics.setColor(0.3, 1, 0.3, 0.5)
-        else
-          love.graphics.setColor(1, 1, 1, 0.15)
-        end
-        love.graphics.print(string.format("%3d", row), c.x + c.w - 30, py)
-        -- Show nodeId next to row number
-        local rm = rowMeta[row]
-        if rm and rm.nodeId then
-          love.graphics.setColor(0.6, 0.8, 0.4, 0.6)
-          local mw = numFont:getWidth(rm.nodeId .. "  ")
-          love.graphics.print(rm.nodeId, c.x + c.w - 34 - mw, py)
-        end
-        -- Show all distinct fg colors further left
-        local rc = rowColors[row]
-        if rc and rc.colors and #rc.colors > 0 then
-          love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-          local rmWidth = 0
-          if rm and rm.nodeId then
-            rmWidth = numFont:getWidth(rm.nodeId .. "    ")
+      -- Row numbers (debug only)
+      if debugVis then
+        local numFont = Measure.getFont(9, nil, nil)
+        love.graphics.setFont(numFont)
+        for row = 0, lastNonEmpty do
+          local py = c.y + 8 + row * lineH - scrollY
+          if py + lineH < c.y then goto continue_num end
+          if py > contentBottom then break end
+          local rowText = vterm:getRowText(row)
+          if row >= boundary then
+            love.graphics.setColor(1, 0.6, 0.2, 0.5)  -- orange for input zone
+          elseif #rowText > 0 then
+            love.graphics.setColor(0.3, 1, 0.3, 0.5)
+          else
+            love.graphics.setColor(1, 1, 1, 0.15)
           end
-          local colorStr = table.concat(rc.colors, " ")
-          local cw = numFont:getWidth(colorStr .. "  ")
-          love.graphics.print(colorStr, c.x + c.w - 34 - rmWidth - cw, py)
+          love.graphics.print(string.format("%3d", row), c.x + c.w - 30, py)
+          -- Show nodeId next to row number
+          local rm = rowMeta[row]
+          if rm and rm.nodeId then
+            love.graphics.setColor(0.6, 0.8, 0.4, 0.6)
+            local mw = numFont:getWidth(rm.nodeId .. "  ")
+            love.graphics.print(rm.nodeId, c.x + c.w - 34 - mw, py)
+          end
+          -- Show all distinct fg colors further left
+          local rc = rowColors[row]
+          if rc and rc.colors and #rc.colors > 0 then
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
+            local rmWidth = 0
+            if rm and rm.nodeId then
+              rmWidth = numFont:getWidth(rm.nodeId .. "    ")
+            end
+            local colorStr = table.concat(rc.colors, " ")
+            local cw = numFont:getWidth(colorStr .. "  ")
+            love.graphics.print(colorStr, c.x + c.w - 34 - rmWidth - cw, py)
+          end
+          ::continue_num::
         end
-        ::continue_num::
       end
     end
 
     -- ── Debug overlay (above input bar) ─────────────────────────
-    local dbg = Session.getDebugInfo()
-    local dvt = Session.getVTerm()
-    local dRows, dCols = 0, 0
-    if dvt then dRows, dCols = dvt:size() end
-    love.graphics.setFont(df)
-    love.graphics.setColor(1, 1, 0, 0.8)
-    love.graphics.print(
-      string.format("cols=%d rows=%d w=%.0f h=%.0f", dCols, dRows, c.w, c.h),
-      c.x + 8, debugTop)
-    love.graphics.print(
-      string.format("mode=%s alive=%s boundary=%d dirty=%d",
-        dbg.mode or "?", tostring(dbg.alive), dbg.boundary or 0, dbg.dirty or 0),
-      c.x + 8, debugTop + dfH)
-    love.graphics.print(
-      string.format("lastDmg=%dms settle=%dms streamLen=%d vtContent=%d",
-        dbg.lastDmg or 0, dbg.settle or 0, dbg.streaming or 0, dbg.vtContent or 0),
-      c.x + 8, debugTop + dfH * 2)
+    if debugVis then
+      local dbg = Session.getDebugInfo()
+      local dvt = Session.getVTerm()
+      local dRows, dCols = 0, 0
+      if dvt then dRows, dCols = dvt:size() end
+      love.graphics.setFont(df)
+      love.graphics.setColor(1, 1, 0, 0.8)
+      love.graphics.print(
+        string.format("cols=%d rows=%d w=%.0f h=%.0f", dCols, dRows, c.w, c.h),
+        c.x + 8, debugTop)
+      love.graphics.print(
+        string.format("mode=%s alive=%s boundary=%d dirty=%d",
+          dbg.mode or "?", tostring(dbg.alive), dbg.boundary or 0, dbg.dirty or 0),
+        c.x + 8, debugTop + dfH)
+
+      -- Recording indicator + session recorder info
+      local capInst = Capabilities.getInstance(nodeId)
+      local capState = capInst and capInst.state
+      local sessionRec = Session.getRecorder()
+      local recFrames = sessionRec and sessionRec.meta.frameCount or 0
+      local recDur = sessionRec and sessionRec.meta.duration or 0
+      local recIndicator = ""
+      if capState and capState._recording then
+        recIndicator = string.format("  REC. %d frames %.1fs  export: recording_%s",
+          recFrames, recDur, capState._sessionTimestamp or "?")
+      end
+      love.graphics.print(
+        string.format("lastDmg=%dms settle=%dms streamLen=%d vtContent=%d%s",
+          dbg.lastDmg or 0, dbg.settle or 0, dbg.streaming or 0, dbg.vtContent or 0, recIndicator),
+        c.x + 8, debugTop + dfH * 2)
+    end
 
   end,
 
@@ -1066,6 +1147,115 @@ end
 --- Get the canvas nodeId for a session (for direct access)
 function Canvas.getNodeIdForSession(sessionId)
   return resolveNodeId(sessionId)
+end
+
+-- ── RPCs ──────────────────────────────────────────────────────────────────
+
+local rpc = {}
+
+-- Export classified buffer as annotated text
+rpc["claude_canvas:export_buffer"] = function(args)
+  local Caps = require("lua.capabilities")
+
+  -- Resolve nodeId from sessionId
+  local nodeId = args.id
+  if not nodeId and args.sessionId then
+    nodeId = _sessionNodeMap[args.sessionId or "default"]
+  end
+  if not nodeId then
+    -- Fall back to first available
+    for _, nid in pairs(_sessionNodeMap) do nodeId = nid; break end
+  end
+  if not nodeId then return { error = "No ClaudeCanvas instance found" } end
+
+  local cache = _lastClassified[nodeId]
+  if not cache or #cache == 0 then return { error = "No classified data available" } end
+
+  local vterm = Session.getVTerm()
+  local vtRows, vtCols = 0, 0
+  if vterm then vtRows, vtCols = vterm:size() end
+
+  local lines = {}
+  for _, entry in ipairs(cache) do
+    lines[#lines + 1] = {
+      row     = entry.row,
+      kind    = entry.kind,
+      nodeId  = entry.nodeId,
+      turnId  = entry.turnId,
+      groupId = entry.groupId,
+      text    = entry.text,
+      colors  = entry.colors or {},
+    }
+  end
+
+  local result = {
+    lines = lines,
+    meta = {
+      classifier   = "claude_code",
+      gridRows     = vtRows,
+      gridCols     = vtCols,
+      totalLines   = #lines,
+      frame        = _frameCounter,
+      timestamp    = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    },
+  }
+
+  -- If path given, write to file as annotated text
+  if args.path then
+    local f, err = io.open(args.path, "w")
+    if not f then return { error = "Cannot write: " .. tostring(err) } end
+
+    f:write("-- ClaudeCanvas buffer export\n")
+    f:write(string.format("-- %s  classifier=claude_code  grid=%dx%d  frame=%d\n",
+      result.meta.timestamp, vtRows, vtCols, _frameCounter))
+    f:write("--\n")
+    f:write("-- Format mirrors the claude canvas debug render:\n")
+    f:write("-- [kind] <content> [colors] [grouping] [row]\n")
+    f:write("-- Edit the [kind] tag to retag identifiers, then re-import.\n")
+    f:write("--\n")
+
+    for _, line in ipairs(lines) do
+      local colorStr = #line.colors > 0 and table.concat(line.colors, " ") or "-"
+      local groupStr = line.nodeId or "-"
+      f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n",
+        line.kind, line.text, colorStr, groupStr, line.row))
+    end
+
+    f:close()
+    return { ok = true, path = args.path, totalLines = #lines }
+  end
+
+  return result
+end
+
+-- Toggle recording on/off
+rpc["claude_canvas:toggle_recording"] = function(args)
+  local nodeId = args.id
+  if not nodeId and args.sessionId then
+    nodeId = _sessionNodeMap[args.sessionId or "default"]
+  end
+  if not nodeId then
+    for _, nid in pairs(_sessionNodeMap) do nodeId = nid; break end
+  end
+  if not nodeId then return { error = "No ClaudeCanvas instance found" } end
+
+  local inst = Capabilities.getInstance(nodeId)
+  if not inst then return { error = "No instance" } end
+  local state = inst.state
+
+  state._recording = not state._recording
+  if state._recording then
+    state._sessionTimestamp = os.date("!%Y%m%d_%H%M%S")
+  end
+  return { recording = state._recording, timestamp = state._sessionTimestamp }
+end
+
+-- Register RPCs into the capability handler table
+local _origGetHandlers = Capabilities.getHandlers
+Capabilities.getHandlers = function()
+  local h = _origGetHandlers()
+  for method, fn in pairs(rpc) do h[method] = fn end
+  return h
 end
 
 return Canvas

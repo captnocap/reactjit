@@ -879,6 +879,13 @@ end
 
 function Session.getFocusedId() return _focusedId end
 
+--- Get the recorder for a session (for external consumers like ClaudeCanvas)
+function Session.getRecorder(sessionNodeId)
+  local id = sessionNodeId or _focusedId
+  local state = _sessions[id]
+  return state and state._recorder or nil
+end
+
 -- ── Capability registration ──────────────────────────────────────────
 
 Capabilities.register("ClaudeCode", {

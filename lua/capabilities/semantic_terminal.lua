@@ -221,6 +221,88 @@ local function classifyVTerm(vterm, classifier, state)
   return cache
 end
 
+-- ── Full classification pipeline for arbitrary text rows ──────────────────
+-- Runs classifyRow + refineAdjacency + turn detection + group detection + block coalescing.
+-- Input: array of { text = "...", row = N }, classifier table, optional prevKind
+-- Returns: array of { row, kind, nodeId, turnId, groupId, groupType }
+
+local function classifyRows(texts, classifier, opts)
+  opts = opts or {}
+  local prevKind = opts.prevKind or nil
+  local turnId   = opts.turnId or 0
+  local groupId  = opts.groupId or 0
+  local currentGroupType = opts.currentGroupType or nil
+  local blockId  = opts.blockId or 0
+  local blockKind = opts.blockKind or nil
+  local totalRows = opts.totalRows or #texts
+  local results = {}
+
+  for _, entry in ipairs(texts) do
+    local text = entry.text
+    local row  = entry.row
+    local kind = "output"
+
+    if classifier and classifier.classifyRow and #text > 0 then
+      kind = classifier.classifyRow(text, row, totalRows)
+      if classifier.refineAdjacency then
+        kind = classifier.refineAdjacency(kind, prevKind, text, {})
+      end
+    end
+
+    -- Turn detection
+    if classifier and classifier.isTurnStart and classifier.isTurnStart(kind) then
+      turnId = turnId + 1
+    end
+
+    -- Group detection
+    local groupTypes = classifier and classifier.groupTypes or {}
+    local newGroupType = groupTypes[kind]
+    if newGroupType then
+      if newGroupType ~= currentGroupType then
+        groupId = groupId + 1
+        currentGroupType = newGroupType
+      end
+    else
+      currentGroupType = nil
+    end
+
+    -- Block coalescing
+    local blockTypes = classifier and classifier.blockTypes or {}
+    local nodeId
+    if blockTypes[kind] and kind == blockKind then
+      nodeId = "b:" .. blockId
+    else
+      blockId = blockId + 1
+      blockKind = blockTypes[kind] and kind or nil
+      if blockKind then
+        nodeId = "b:" .. blockId
+      else
+        nodeId = "r:" .. row
+      end
+    end
+
+    results[#results + 1] = {
+      row       = row,
+      kind      = kind,
+      nodeId    = nodeId,
+      turnId    = turnId,
+      groupId   = groupId > 0 and groupId or nil,
+      groupType = currentGroupType,
+    }
+
+    prevKind = kind
+  end
+
+  return results, {
+    prevKind = prevKind,
+    turnId = turnId,
+    groupId = groupId,
+    currentGroupType = currentGroupType,
+    blockId = blockId,
+    blockKind = blockKind,
+  }
+end
+
 -- ── Export helpers ────────────────────────────────────────────────────────
 
 -- Sample all distinct fg colors from a row of vterm cells
@@ -230,7 +312,7 @@ local function sampleRowColors(vterm, gridRow, cols)
   for col = 0, cols - 1 do
     local cell = vterm:getCell(gridRow, col)
     if cell and cell.fg then
-      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      local label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
       if not seen[label] then
         seen[label] = true
         colors[#colors + 1] = label
@@ -247,7 +329,7 @@ local function sampleScrollbackColors(sbRow)
   if not sbRow then return colors end
   for _, cell in ipairs(sbRow) do
     if cell.fg then
-      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      local label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
       if not seen[label] then
         seen[label] = true
         colors[#colors + 1] = label
@@ -696,38 +778,37 @@ Capabilities.register("SemanticTerminal", {
           os.date("!%Y-%m-%dT%H:%M:%SZ"), state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
         f:write("-- Format: [kind] <content>\\t<colors>\\t<grouping>\\t<row>\n")
         f:write("--\n")
-        -- Scrollback rows — classify with same classifier
+        -- Collect all rows and classify with full pipeline
         local classifier = state.classifier
-        local prevKind = nil
+        local allTexts = {}
+        local sbRows = {}
         for i = 0, sbCount - 1 do
           local sbRow = vterm:getScrollbackRow(i + 1)
-          local text, colors = "", sampleScrollbackColors(sbRow)
+          local text = ""
           if sbRow then
             local chars = {}
             for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
             text = table.concat(chars)
           end
-          local cleanText = stripAnsi(text)
-          local kind = "output"
-          if classifier and classifier.classifyRow and #cleanText > 0 then
-            kind = classifier.classifyRow(cleanText, i, sbCount + vtRows)
-            if classifier.refineAdjacency then
-              kind = classifier.refineAdjacency(kind, prevKind, cleanText, {})
-            end
-          end
-          prevKind = kind
-          local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n", kind, cleanText, colorStr, "-", i))
+          allTexts[#allTexts + 1] = { text = stripAnsi(text), row = i }
+          sbRows[#sbRows + 1] = sbRow
         end
-        -- Grid rows
         for r = 0, vtRows - 1 do
-          local text = vterm:getRowText(r)
-          local entry = rowLookup[r]
-          local kind = entry and entry.kind or "output"
-          local nodeId = entry and entry.nodeId or "-"
-          local colors = sampleRowColors(vterm, r, vtCols)
-          local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
-          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
+          allTexts[#allTexts + 1] = { text = stripAnsi(vterm:getRowText(r)), row = sbCount + r }
+        end
+        local classified = classifyRows(allTexts, classifier, { totalRows = sbCount + vtRows })
+        for idx, entry in ipairs(classified) do
+          local isScrollback = idx <= sbCount
+          local colors
+          if isScrollback then
+            colors = sampleScrollbackColors(sbRows[idx])
+          else
+            local gridRow = idx - sbCount - 1
+            colors = sampleRowColors(vterm, gridRow, vtCols)
+          end
+          local colorStr = #colors > 0 and table.concat(colors, " ") or "-"
+          local nodeId = entry.nodeId or "-"
+          f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n", entry.kind, allTexts[idx].text, colorStr, nodeId, allTexts[idx].row))
         end
         f:close()
         io.write("[semantic_terminal] export saved: " .. exportPath .. "\n"); io.flush()
@@ -1572,9 +1653,12 @@ rpc["semantic_terminal:export_buffer"] = function(args)
   local sbCount = vterm:scrollbackCount()
   local lines = {}
 
-  -- Scrollback rows — run classifier on scrollback text so tokens are preserved
+  -- Collect all rows (scrollback + grid) and classify with full pipeline
   local classifier = state.classifier
-  local prevKind = nil
+  local allTexts = {}
+
+  -- Scrollback rows
+  local sbTexts = {}  -- parallel array for color sampling
   for i = 0, sbCount - 1 do
     local sbRow = vterm:getScrollbackRow(i + 1)
     local text = ""
@@ -1584,42 +1668,38 @@ rpc["semantic_terminal:export_buffer"] = function(args)
       text = table.concat(chars)
     end
     local cleanText = stripAnsi(text)
-    -- Classify using the same classifier as live mode
-    local kind = "output"
-    if classifier and classifier.classifyRow and #cleanText > 0 then
-      kind = classifier.classifyRow(cleanText, i, sbCount + vtRows)
-      if classifier.refineAdjacency then
-        kind = classifier.refineAdjacency(kind, prevKind, cleanText, {})
-      end
-    end
-    prevKind = kind
-    local colors = sampleScrollbackColors(sbRow)
-    lines[#lines + 1] = {
-      row     = i,
-      zone    = "scrollback",
-      kind    = kind,
-      nodeId  = nil,
-      turnId  = nil,
-      groupId = nil,
-      text    = cleanText,
-      colors  = colors,
-    }
+    allTexts[#allTexts + 1] = { text = cleanText, row = i }
+    sbTexts[#sbTexts + 1] = sbRow
   end
 
-  -- Grid rows (with classification + color sampling)
+  -- Grid rows
   for r = 0, vtRows - 1 do
     local text = vterm:getRowText(r)
-    local entry = rowLookup[r]
-    local colors = sampleRowColors(vterm, r, vtCols)
+    allTexts[#allTexts + 1] = { text = stripAnsi(text), row = sbCount + r }
+  end
+
+  -- Run full classification pipeline (classify + refine + turns + groups + block coalescing)
+  local classified = classifyRows(allTexts, classifier, { totalRows = sbCount + vtRows })
+
+  -- Build lines from classification results
+  for idx, entry in ipairs(classified) do
+    local isScrollback = idx <= sbCount
+    local colors
+    if isScrollback then
+      colors = sampleScrollbackColors(sbTexts[idx])
+    else
+      local gridRow = idx - sbCount - 1
+      colors = sampleRowColors(vterm, gridRow, vtCols)
+    end
     lines[#lines + 1] = {
-      row     = sbCount + r,
-      zone    = "grid",
-      gridRow = r,
-      kind    = entry and entry.kind or "output",
-      nodeId  = entry and entry.nodeId or nil,
-      turnId  = entry and entry.turnId or nil,
-      groupId = entry and entry.groupId or nil,
-      text    = stripAnsi(text),
+      row     = allTexts[idx].row,
+      zone    = isScrollback and "scrollback" or "grid",
+      gridRow = not isScrollback and (idx - sbCount - 1) or nil,
+      kind    = entry.kind,
+      nodeId  = entry.nodeId,
+      turnId  = entry.turnId,
+      groupId = entry.groupId,
+      text    = allTexts[idx].text,
       colors  = colors,
     }
   end
@@ -1655,7 +1735,7 @@ rpc["semantic_terminal:export_buffer"] = function(args)
     f:write("--\n")
 
     for _, line in ipairs(lines) do
-      local colorStr = #line.colors > 0 and table.concat(line.colors, ",") or "-"
+      local colorStr = #line.colors > 0 and table.concat(line.colors, " ") or "-"
       local groupStr = line.nodeId or "-"
       f:write(string.format("[%s] %s\t[%s]\t[%s]\t%d\n",
         line.kind,
