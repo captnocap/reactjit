@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
@@ -119,6 +119,16 @@ type ExplorerTreeNode = {
   name: string;
   path: string;
   children?: ExplorerTreeNode[];
+};
+
+type LocalFileSelection = {
+  baseFilePath: string;
+  path: string;
+};
+
+type ViewStateSnapshot = {
+  filePath: string;
+  state: TextEditorViewState;
 };
 
 function buildExplorerTree(paths: string[]): ExplorerTreeNode[] {
@@ -246,37 +256,33 @@ export function MonacoMirror({
   compactMaxHeight = 260,
   ...rest
 }: MonacoMirrorProps) {
+  const baseFilePath = normalizePath(filePath);
   const initialText = value ?? defaultValue ?? '';
-  const [mirrorText, setMirrorText] = useState(initialText);
-  const [internalSelectedFile, setInternalSelectedFile] = useState(normalizePath(filePath));
-  const [sidebarOpen, setSidebarOpen] = useState(showSidebar);
-  const [minimapOpen, setMinimapOpen] = useState(showMinimap);
+  const [uncontrolledText, setUncontrolledText] = useState(initialText);
+  const [localSelectedFile, setLocalSelectedFile] = useState<LocalFileSelection>(() => ({
+    baseFilePath,
+    path: baseFilePath,
+  }));
+  const [preferredSidebarOpen, setPreferredSidebarOpen] = useState(showSidebar);
+  const [preferredMinimapOpen, setPreferredMinimapOpen] = useState(showMinimap);
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
-  const [editorViewState, setEditorViewState] = useState<TextEditorViewState | null>(null);
-  const [viewTarget, setViewTarget] = useState<ViewTarget>('editor');
+  const [editorViewStateSnapshot, setEditorViewStateSnapshot] = useState<ViewStateSnapshot | null>(null);
+  const [preferredViewTarget, setPreferredViewTarget] = useState<ViewTarget>('editor');
   const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
   const [isShoulderNavigationOwner, setIsShoulderNavigationOwner] = useState(
     () => shoulderNavigationOwnerId === instanceIdRef.current,
   );
-
-  // rjit-ignore-next-line — Dep-driven: syncs mirror text when controlled value prop changes
-  useEffect(() => {
-    if (value !== undefined) setMirrorText(value);
-  }, [value]);
-
-  // rjit-ignore-next-line — Dep-driven: syncs internal selected file when filePath changes
-  useEffect(() => {
-    if (selectedFilePath === undefined) setInternalSelectedFile(normalizePath(filePath));
-  }, [filePath, selectedFilePath]);
-
-  const activeFilePath = selectedFilePath ? normalizePath(selectedFilePath) : internalSelectedFile;
-
-  // rjit-ignore-next-line — Dep-driven: resets editor view state when active file changes
-  useEffect(() => {
-    setEditorViewState(null);
-  }, [activeFilePath]);
+  const mirrorText = value !== undefined ? value : uncontrolledText;
+  const activeFilePath = selectedFilePath
+    ? normalizePath(selectedFilePath)
+    : localSelectedFile.baseFilePath === baseFilePath
+      ? localSelectedFile.path
+      : baseFilePath;
+  const editorViewState = editorViewStateSnapshot?.filePath === activeFilePath
+    ? editorViewStateSnapshot.state
+    : null;
 
   const breadcrumbs = useMemo(() => {
     const source = activeFilePath || filePath || tabLabel || 'untitled.tsx';
@@ -319,35 +325,29 @@ export function MonacoMirror({
 
   const widthCanShowSidebar = explicitWidth === undefined || explicitWidth >= 520;
   const widthCanShowMinimap = explicitWidth === undefined || explicitWidth >= 620;
-
-  // rjit-ignore-next-line — Dep-driven: closes sidebar when showSidebar/compact changes
-  useEffect(() => {
-    if (!showSidebar || compact) setSidebarOpen(false);
-  }, [showSidebar, compact]);
-
-  // rjit-ignore-next-line — Dep-driven: closes minimap when showMinimap/compact changes
-  useEffect(() => {
-    if (!showMinimap || compact) setMinimapOpen(false);
-  }, [showMinimap, compact]);
-
-  // rjit-ignore-next-line — Dep-driven: auto-toggles panels based on available width
-  useEffect(() => {
-    if (panelPreferenceTouched || compact) return;
-    if (showSidebar) setSidebarOpen(widthCanShowSidebar);
-    if (showMinimap) setMinimapOpen(widthCanShowMinimap && (explicitWidth === undefined || explicitWidth >= 700));
-  }, [compact, explicitWidth, panelPreferenceTouched, showMinimap, showSidebar, widthCanShowMinimap, widthCanShowSidebar]);
+  const sidebarAvailable = showSidebar && !compact && widthCanShowSidebar;
+  const minimapAvailable = showMinimap && !compact && widthCanShowMinimap;
+  const autoSidebarOpen = sidebarAvailable;
+  const autoMinimapOpen = minimapAvailable && (explicitWidth === undefined || explicitWidth >= 700);
+  const sidebarOpen = panelPreferenceTouched ? (sidebarAvailable && preferredSidebarOpen) : autoSidebarOpen;
+  const minimapOpen = panelPreferenceTouched ? (minimapAvailable && preferredMinimapOpen) : autoMinimapOpen;
 
   const renderActivityBar = showActivityBar && !compact;
-  const renderSidebar = showSidebar && !compact && widthCanShowSidebar && sidebarOpen;
-  const renderMinimap = showMinimap && !compact && widthCanShowMinimap && minimapOpen;
+  const renderSidebar = sidebarOpen;
+  const renderMinimap = minimapOpen;
   const renderBreadcrumbs = showBreadcrumbs && !compact;
   const availableViewTargets = useMemo<ViewTarget[]>(() => {
     const nextTargets: ViewTarget[] = ['tabs'];
-    if (showSidebar && !compact && widthCanShowSidebar) nextTargets.push('explorer');
+    if (sidebarAvailable) nextTargets.push('explorer');
     nextTargets.push('editor');
-    if (showMinimap && !compact && widthCanShowMinimap) nextTargets.push('minimap');
+    if (minimapAvailable) nextTargets.push('minimap');
     return nextTargets;
-  }, [compact, showMinimap, showSidebar, widthCanShowMinimap, widthCanShowSidebar]);
+  }, [minimapAvailable, sidebarAvailable]);
+  const viewTarget = useMemo<ViewTarget>(() => {
+    if (availableViewTargets.includes(preferredViewTarget)) return preferredViewTarget;
+    if (availableViewTargets.includes('editor')) return 'editor';
+    return availableViewTargets[0] ?? 'editor';
+  }, [availableViewTargets, preferredViewTarget]);
 
   const resolvedSidebarWidth = explicitWidth !== undefined
     ? Math.max(132, Math.min(sidebarWidth, Math.floor(explicitWidth * 0.38)))
@@ -441,22 +441,18 @@ export function MonacoMirror({
     }
     return output;
   }, [activeFilePath]);
-
-  // rjit-ignore-next-line — Dep-driven: expands collapsed folders when active file ancestors change
-  useEffect(() => {
-    if (activeFolderAncestors.length === 0) return;
-    setCollapsedFolders((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const path of activeFolderAncestors) {
-        if (next[path]) {
-          next[path] = false;
-          changed = true;
-        }
+  const effectiveCollapsedFolders = useMemo(() => {
+    if (activeFolderAncestors.length === 0) return collapsedFolders;
+    let changed = false;
+    const next = { ...collapsedFolders };
+    for (const path of activeFolderAncestors) {
+      if (next[path]) {
+        next[path] = false;
+        changed = true;
       }
-      return changed ? next : prev;
-    });
-  }, [activeFolderAncestors]);
+    }
+    return changed ? next : collapsedFolders;
+  }, [activeFolderAncestors, collapsedFolders]);
 
   useMount(() => {
     return subscribeShoulderNavigationOwner((ownerId) => {
@@ -472,42 +468,35 @@ export function MonacoMirror({
       }
     };
   });
-
-  // rjit-ignore-next-line — Dep-driven: falls back to valid viewTarget when available targets change
-  useEffect(() => {
-    if (availableViewTargets.includes(viewTarget)) return;
-    if (availableViewTargets.includes('editor')) {
-      setViewTarget('editor');
-      return;
-    }
-    if (availableViewTargets.length > 0) setViewTarget(availableViewTargets[0]);
-  }, [availableViewTargets, viewTarget]);
+  const updateMirrorText = useCallback((next: string) => {
+    setUncontrolledText(next);
+  }, []);
 
   const handleLiveChange = useCallback((next: string) => {
-    setMirrorText(next);
+    updateMirrorText(next);
     onLiveChange?.(next);
-  }, [onLiveChange]);
+  }, [onLiveChange, updateMirrorText]);
 
   const handleEditorChange = useCallback((next: string) => {
-    setMirrorText(next);
+    updateMirrorText(next);
     onChange?.(next);
     onLiveChange?.(next);
-  }, [onChange, onLiveChange]);
+  }, [onChange, onLiveChange, updateMirrorText]);
 
   const handleChangeText = useCallback((next: string) => {
-    setMirrorText(next);
+    updateMirrorText(next);
     onChangeText?.(next);
-  }, [onChangeText]);
+  }, [onChangeText, updateMirrorText]);
 
   const handleSubmit = useCallback((next: string) => {
-    setMirrorText(next);
+    updateMirrorText(next);
     onSubmit?.(next);
-  }, [onSubmit]);
+  }, [onSubmit, updateMirrorText]);
 
   const handleBlur = useCallback((next: string) => {
-    setMirrorText(next);
+    updateMirrorText(next);
     onBlur?.(next);
-  }, [onBlur]);
+  }, [onBlur, updateMirrorText]);
 
   const claimShoulderNavigation = useCallback(() => {
     setShoulderNavigationOwner(instanceIdRef.current);
@@ -516,23 +505,20 @@ export function MonacoMirror({
   const targetView = useCallback((nextTarget: ViewTarget) => {
     if (!availableViewTargets.includes(nextTarget)) return;
     claimShoulderNavigation();
-    setViewTarget(nextTarget);
-    if (nextTarget === 'explorer' && showSidebar && !compact && widthCanShowSidebar) {
+    setPreferredViewTarget(nextTarget);
+    if (nextTarget === 'explorer' && sidebarAvailable) {
       setPanelPreferenceTouched(true);
-      setSidebarOpen(true);
+      setPreferredSidebarOpen(true);
     }
-    if (nextTarget === 'minimap' && showMinimap && !compact && widthCanShowMinimap) {
+    if (nextTarget === 'minimap' && minimapAvailable) {
       setPanelPreferenceTouched(true);
-      setMinimapOpen(true);
+      setPreferredMinimapOpen(true);
     }
   }, [
     availableViewTargets,
     claimShoulderNavigation,
-    compact,
-    showMinimap,
-    showSidebar,
-    widthCanShowMinimap,
-    widthCanShowSidebar,
+    minimapAvailable,
+    sidebarAvailable,
   ]);
 
   const cycleTargetedView = useCallback((direction: -1 | 1) => {
@@ -562,9 +548,14 @@ export function MonacoMirror({
   }, [claimShoulderNavigation]);
 
   const commitFileSelect = useCallback((path: string) => {
-    if (selectedFilePath === undefined) setInternalSelectedFile(path);
+    if (selectedFilePath === undefined) {
+      setLocalSelectedFile({
+        baseFilePath,
+        path,
+      });
+    }
     onFileSelect?.(path);
-  }, [onFileSelect, selectedFilePath]);
+  }, [baseFilePath, onFileSelect, selectedFilePath]);
 
   const handleTabSelect = useCallback((path: string) => {
     targetView('tabs');
@@ -578,7 +569,7 @@ export function MonacoMirror({
 
   const handleEditorFocus = useCallback(() => {
     claimShoulderNavigation();
-    setViewTarget('editor');
+    setPreferredViewTarget('editor');
     onFocus?.();
   }, [claimShoulderNavigation, onFocus]);
 
@@ -591,37 +582,38 @@ export function MonacoMirror({
   }, []);
 
   const handleEditorStateChange = useCallback((nextState: TextEditorViewState) => {
-    setEditorViewState((prev) => {
+    setEditorViewStateSnapshot((prev) => {
+      const prevState = prev?.filePath === activeFilePath ? prev.state : null;
       if (
-        prev &&
-        prev.cursorLine === nextState.cursorLine &&
-        prev.cursorCol === nextState.cursorCol &&
-        prev.scrollX === nextState.scrollX &&
-        prev.scrollY === nextState.scrollY &&
-        prev.lineCount === nextState.lineCount &&
-        prev.firstVisibleLine === nextState.firstVisibleLine &&
-        prev.visibleLineCount === nextState.visibleLineCount &&
-        prev.totalVisibleLines === nextState.totalVisibleLines &&
-        prev.lineHeight === nextState.lineHeight &&
-        prev.selectionStartLine === nextState.selectionStartLine &&
-        prev.selectionStartCol === nextState.selectionStartCol &&
-        prev.selectionEndLine === nextState.selectionEndLine &&
-        prev.selectionEndCol === nextState.selectionEndCol
+        prevState &&
+        prevState.cursorLine === nextState.cursorLine &&
+        prevState.cursorCol === nextState.cursorCol &&
+        prevState.scrollX === nextState.scrollX &&
+        prevState.scrollY === nextState.scrollY &&
+        prevState.lineCount === nextState.lineCount &&
+        prevState.firstVisibleLine === nextState.firstVisibleLine &&
+        prevState.visibleLineCount === nextState.visibleLineCount &&
+        prevState.totalVisibleLines === nextState.totalVisibleLines &&
+        prevState.lineHeight === nextState.lineHeight &&
+        prevState.selectionStartLine === nextState.selectionStartLine &&
+        prevState.selectionStartCol === nextState.selectionStartCol &&
+        prevState.selectionEndLine === nextState.selectionEndLine &&
+        prevState.selectionEndCol === nextState.selectionEndCol
       ) {
         return prev;
       }
-      return nextState;
+      return { filePath: activeFilePath, state: nextState };
     });
-  }, []);
+  }, [activeFilePath]);
 
   const handleToggleSidebarPanel = useCallback(() => {
     if (!widthCanShowSidebar) return;
     claimShoulderNavigation();
     setPanelPreferenceTouched(true);
-    setSidebarOpen((open) => {
+    setPreferredSidebarOpen((open) => {
       const next = !open;
-      if (next) setViewTarget('explorer');
-      else if (viewTarget === 'explorer') setViewTarget('editor');
+      if (next) setPreferredViewTarget('explorer');
+      else if (viewTarget === 'explorer') setPreferredViewTarget('editor');
       return next;
     });
   }, [claimShoulderNavigation, viewTarget, widthCanShowSidebar]);
@@ -630,10 +622,10 @@ export function MonacoMirror({
     if (!widthCanShowMinimap) return;
     claimShoulderNavigation();
     setPanelPreferenceTouched(true);
-    setMinimapOpen((open) => {
+    setPreferredMinimapOpen((open) => {
       const next = !open;
-      if (next) setViewTarget('minimap');
-      else if (viewTarget === 'minimap') setViewTarget('editor');
+      if (next) setPreferredViewTarget('minimap');
+      else if (viewTarget === 'minimap') setPreferredViewTarget('editor');
       return next;
     });
   }, [claimShoulderNavigation, viewTarget, widthCanShowMinimap]);
@@ -655,7 +647,7 @@ export function MonacoMirror({
   const renderExplorerNodes = (nodes: ExplorerTreeNode[], depth: number): React.ReactNode => (
     nodes.map((node) => {
       const isFolder = node.kind === 'folder';
-      const isCollapsed = isFolder ? (collapsedFolders[node.path] ?? false) : false;
+      const isCollapsed = isFolder ? (effectiveCollapsedFolders[node.path] ?? false) : false;
       const isSelected = !isFolder && node.path === activeFilePath;
       const isActiveBranch = isFolder && activeFolderAncestors.includes(node.path);
       const rowIndent = 2 + depth * 8;

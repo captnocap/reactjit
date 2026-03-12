@@ -24,16 +24,6 @@ package,packages/core/src/hooks.ts,534,3,useEffect,prev-line
 package,packages/core/src/hooks.ts,610,3,useEffect,prev-line
 package,packages/core/src/hooks.ts,675,3,useEffect,prev-line
 package,packages/core/src/Modal.tsx,41,3,useEffect,prev-line
-package,packages/core/src/MonacoMirror.tsx,263,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,267,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,273,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,319,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,323,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,327,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,438,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,453,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,459,3,useEffect,
-package,packages/core/src/MonacoMirror.tsx,468,3,useEffect,
 package,packages/core/src/overlay.ts,31,3,useEffect,prev-line
 package,packages/core/src/overlay.ts,36,3,useEffect,prev-line
 package,packages/core/src/Portal.tsx,80,3,useEffect,prev-line
