@@ -618,15 +618,67 @@ Capabilities.register("SemanticTerminal", {
       state.player:destroy()
       state.player = nil
     end
+    -- Auto-save on destroy: recording (.rec.lua) + annotated export (.txt)
+    local ts = state._sessionTimestamp or os.date("!%Y%m%d_%H%M%S")
+
     if state.recorder then
       state.recorder:stop()
-      -- Auto-save on destroy using session timestamp
-      local path = "recording_" .. (state._sessionTimestamp or os.date("!%Y%m%d_%H%M%S")) .. ".rec.lua"
-      local ok, err = state.recorder:save(path)
+      local recPath = "recording_" .. ts .. ".rec.lua"
+      local ok, err = state.recorder:save(recPath)
       if ok then
-        io.write("[semantic_terminal] recording saved: " .. path .. "\n"); io.flush()
+        io.write("[semantic_terminal] recording saved: " .. recPath .. "\n"); io.flush()
       else
         io.write("[semantic_terminal] recording save failed: " .. tostring(err) .. "\n"); io.flush()
+      end
+    end
+
+    -- Save annotated export with semantic debug info
+    local vterm = state.vterm
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then vterm = termAPI.getSessionVTerm(state.attachedSession) end
+    elseif state.player then
+      vterm = state.player and state.player:getVTerm()
+    end
+    if vterm then
+      local exportPath = "recording_" .. ts .. ".txt"
+      local rowLookup = {}
+      for _, entry in ipairs(state.classifiedCache) do
+        rowLookup[entry.row] = entry
+      end
+      local vtRows, vtCols = vterm:size()
+      local sbCount = vterm:scrollbackCount()
+      local f = io.open(exportPath, "w")
+      if f then
+        f:write("-- SemanticTerminal buffer export\n")
+        f:write(string.format("-- %s  classifier=%s  scrollback=%d  grid=%dx%d  frame=%d\n",
+          os.date("!%Y-%m-%dT%H:%M:%SZ"), state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
+        f:write("-- Format: [kind] <content>\\t<colors>\\t<grouping>\\t<row>\n")
+        f:write("--\n")
+        -- Scrollback rows
+        for i = 0, sbCount - 1 do
+          local sbRow = vterm:getScrollbackRow(i + 1)
+          local text, colors = "", sampleScrollbackColors(sbRow)
+          if sbRow then
+            local chars = {}
+            for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
+            text = table.concat(chars)
+          end
+          local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
+          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", "scrollback", stripAnsi(text), colorStr, "-", i))
+        end
+        -- Grid rows
+        for r = 0, vtRows - 1 do
+          local text = vterm:getRowText(r)
+          local entry = rowLookup[r]
+          local kind = entry and entry.kind or "output"
+          local nodeId = entry and entry.nodeId or "-"
+          local colors = sampleRowColors(vterm, r, vtCols)
+          local colorStr = #colors > 0 and table.concat(colors, ",") or "-"
+          f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n", kind, stripAnsi(text), colorStr, nodeId, sbCount + r))
+        end
+        f:close()
+        io.write("[semantic_terminal] export saved: " .. exportPath .. "\n"); io.flush()
       end
     end
   end,
