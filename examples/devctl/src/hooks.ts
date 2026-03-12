@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useLoveRPC } from '@reactjit/core';
+import { useState, useRef, useCallback } from 'react';
+import { useLoveRPC, useLuaInterval, useMount } from '@reactjit/core';
 
 // ── Types ────────────────────────────────────────────────────────────────────────
 
@@ -69,31 +69,24 @@ export function useProcessManager() {
   cachedRef.current = rpcCached;
 
   // Load cached config on mount so sidebar isn't empty before daemon responds
-  useEffect(() => {
+  useMount(() => {
     cachedRef.current().then(result => {
       if (Array.isArray(result) && result.length > 0) {
         setServers(sortServers(result));
       }
     }).catch(() => {});
-  }, []);
+  });
 
-  // Live poll
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const result = await listRef.current();
-        const list = Array.isArray(result) ? result : [];
-        setServers(sortServers(list));
-        setDaemonOnline(true);
-      } catch (_) {
-        setDaemonOnline(false);
-        // Keep showing last-known list — don't clear
-      }
-    };
-    poll();
-    const id = setInterval(poll, 1000);
-    return () => clearInterval(id);
-  }, []);
+  // Live poll — 2s is plenty for a server list
+  useLuaInterval(2000, () => {
+    listRef.current().then(result => {
+      const list = Array.isArray(result) ? result : [];
+      setServers(sortServers(list));
+      setDaemonOnline(true);
+    }).catch(() => {
+      setDaemonOnline(false);
+    });
+  });
 
   const startServer = useCallback(async (name: string, script?: string) => {
     return rpcStart({ name, script });
@@ -145,22 +138,20 @@ export function useServerLogs(name: string | null) {
   const rpcLogs = useLoveRPC<{ lines: LogEntry[] }>('pm:logs');
   const rpcRef = useRef(rpcLogs);
   rpcRef.current = rpcLogs;
+  const nameRef = useRef(name);
+  nameRef.current = name;
 
   const [filter, setFilter] = useState('');
 
-  useEffect(() => {
-    if (!name) { setLogs([]); return; }
-    const poll = async () => {
-      try {
-        const result = await rpcRef.current({ name, lines: 200 });
-        const lines = result?.lines;
-        setLogs(Array.isArray(lines) ? lines : []);
-      } catch (_) {}
-    };
-    poll();
-    const id = setInterval(poll, 500);
-    return () => clearInterval(id);
-  }, [name]);
+  // Only poll when a server is selected — 2s interval, not 500ms
+  useLuaInterval(2000, () => {
+    const current = nameRef.current;
+    if (!current) { setLogs([]); return; }
+    rpcRef.current({ name: current, lines: 200 }).then(result => {
+      const lines = result?.lines;
+      setLogs(Array.isArray(lines) ? lines : []);
+    }).catch(() => {});
+  });
 
   const filtered = filter
     ? logs.filter(l => l.text?.toLowerCase().includes(filter.toLowerCase()))
@@ -177,18 +168,13 @@ export function useAuditLog() {
   const rpcRef = useRef(rpc);
   rpcRef.current = rpc;
 
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const result = await rpcRef.current({ lines: 200 });
-        const list = result?.entries;
-        setEntries(Array.isArray(list) ? list : []);
-      } catch (_) {}
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => clearInterval(id);
-  }, []);
+  // 5s is fine for audit — it's a historical log, not real-time
+  useLuaInterval(5000, () => {
+    rpcRef.current({ lines: 200 }).then(result => {
+      const list = result?.entries;
+      setEntries(Array.isArray(list) ? list : []);
+    }).catch(() => {});
+  });
 
   return entries;
 }
@@ -200,11 +186,11 @@ export function useReservedPorts() {
   const rpcGet = useLoveRPC<{ ports: number[] }>('pm:getReservedPorts');
   const rpcSet = useLoveRPC('pm:setReservedPorts');
 
-  useEffect(() => {
+  useMount(() => {
     rpcGet().then(r => {
       if (Array.isArray(r?.ports)) setPorts(r.ports);
     }).catch(() => {});
-  }, []);
+  });
 
   const setReservedPorts = useCallback(async (newPorts: number[]) => {
     setPorts(newPorts);
@@ -225,22 +211,14 @@ export function useDaemonManager() {
   const statusRef = useRef(rpcStatus);
   statusRef.current = rpcStatus;
 
-  useEffect(() => {
-    let mounted = true;
-    const poll = async () => {
-      try {
-        const result = await statusRef.current();
-        if (!mounted) return;
-        setDaemonRunning(Boolean(result?.running));
-      } catch (_) {
-        if (!mounted) return;
-        setDaemonRunning(false);
-      }
-    };
-    poll();
-    const id = setInterval(poll, 1000);
-    return () => { mounted = false; clearInterval(id); };
-  }, []);
+  // 3s for daemon status — it barely changes
+  useLuaInterval(3000, () => {
+    statusRef.current().then(result => {
+      setDaemonRunning(Boolean(result?.running));
+    }).catch(() => {
+      setDaemonRunning(false);
+    });
+  });
 
   const toggleDaemon = useCallback(async () => {
     if (daemonBusy) return;
