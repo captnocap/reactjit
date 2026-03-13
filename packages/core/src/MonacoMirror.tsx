@@ -393,7 +393,13 @@ export function MonacoMirror({
   const resolvedMinimapWidth = explicitWidth !== undefined
     ? Math.max(58, Math.min(minimapWidth, Math.floor(explicitWidth * 0.18)))
     : minimapWidth;
-  const minimapRowCount = Math.max(editorViewState?.totalVisibleLines ?? minimapSourceLines.length, 1);
+  const minimapTotalLineEstimate = Math.max(
+    editorViewState?.totalVisibleLines ?? 0,
+    editorViewState?.lineCount ?? 0,
+    minimapSourceLines.length,
+    1,
+  );
+  const minimapRowCount = minimapTotalLineEstimate;
   const editorLineHeight = editorFontSize + 4;
   const chromeHeight = resolvedTopBarHeight + (renderBreadcrumbs ? breadcrumbBarHeight : 0) + (showStatusBar ? resolvedStatusBarHeight : 0);
   const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
@@ -439,8 +445,14 @@ export function MonacoMirror({
     });
   }, [minimapMaxLineLength, minimapRows]);
   const viewStateFirstVisibleLine = editorViewState?.firstVisibleLine ?? 1;
-  const viewStateVisibleLineCount = editorViewState?.visibleLineCount ?? minimapViewportRows;
-  const viewStateTotalVisibleLines = editorViewState?.totalVisibleLines ?? minimapRowCount;
+  const rawVisibleLineCount = editorViewState?.visibleLineCount ?? minimapViewportRows;
+  const viewStateTotalVisibleLines = minimapTotalLineEstimate;
+  const editorStateLineHeight = Math.max(1, editorViewState?.lineHeight ?? editorLineHeight);
+  const maxVisibleFromViewport = Math.max(1, Math.floor(effectiveEditorViewportHeight / editorStateLineHeight));
+  const viewStateVisibleLineCount = Math.max(
+    1,
+    Math.min(viewStateTotalVisibleLines, rawVisibleLineCount, maxVisibleFromViewport + 1),
+  );
   const minimapAllVisible = viewStateVisibleLineCount >= viewStateTotalVisibleLines;
   const minimapScrollableLines = Math.max(0, viewStateTotalVisibleLines - viewStateVisibleLineCount);
   const minimapViewportPx = minimapAllVisible
