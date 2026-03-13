@@ -1,7 +1,7 @@
     const main_window_id = c.SDL_GetWindowID(window);
     var running = true;
-    var win_w: f32 = 800;
-    var win_h: f32 = 600;
+    var win_w: f32 = 1280;
+    var win_h: f32 = 800;
 
     while (running) {
         var event: c.SDL_Event = undefined;
@@ -55,26 +55,17 @@
                         sel_end = 0;
                     } else if (ctrl and event.key.keysym.sym == c.SDLK_c) {
                         // Ctrl+C — copy selected text to clipboard
+                        var clip_buf: [16384]u8 = undefined;
+                        var clip_len: usize = 0;
                         if (sel_all) {
-                            // Collect all text from tree
-                            var clip_buf: [16384]u8 = undefined;
-                            const clip_len = collectAllText(&root, &clip_buf, 0);
-                            if (clip_len > 0 and clip_len < clip_buf.len) {
-                                clip_buf[clip_len] = 0;
-                                _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
-                            }
-                        } else if (sel_node) |sn| {
-                            if (sn.text) |txt| {
-                                const s0 = @min(sel_start, sel_end);
-                                const s1 = @max(sel_start, sel_end);
-                                if (s1 > s0 and s1 <= txt.len) {
-                                    var clip_buf: [4096]u8 = undefined;
-                                    const clip_len = @min(s1 - s0, clip_buf.len - 1);
-                                    @memcpy(clip_buf[0..clip_len], txt[s0..s0 + clip_len]);
-                                    clip_buf[clip_len] = 0;
-                                    _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
-                                }
-                            }
+                            clip_len = collectAllText(&root, &clip_buf, 0);
+                        } else if (sel_node != null and sel_end_node != null) {
+                            var copy_state: u8 = 0;
+                            clip_len = collectSelectedText(&root, &clip_buf, 0, &copy_state);
+                        }
+                        if (clip_len > 0 and clip_len < clip_buf.len) {
+                            clip_buf[clip_len] = 0;
+                            _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
                         }
                     } else if (event.key.keysym.sym == c.SDLK_ESCAPE) { running = false; }
                     else { if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym); } }
@@ -83,17 +74,18 @@
                     const mx: f32 = @floatFromInt(event.motion.x); const my: f32 = @floatFromInt(event.motion.y);
                     const prev = hovered_node; hovered_node = events.hitTest(&root, mx, my);
                     if (prev != hovered_node) { if (prev) |p| { if (p.handlers.on_hover_exit) |h| h(); } if (hovered_node) |n| { if (n.handlers.on_hover_enter) |h| h(); } }
-                    // Text selection drag
+                    // Text selection drag — may cross into different text nodes
                     if (sel_dragging) {
-                        if (sel_node) |sn| {
-                            if (sn.text) |txt| {
-                                const pad_l = sn.style.padLeft();
-                                const pad_r = sn.style.padRight();
-                                const pad_t = sn.style.padTop();
-                                const local_x = mx - sn.computed.x - pad_l;
-                                const local_y = my - sn.computed.y - pad_t;
-                                const text_max_w = sn.computed.w - pad_l - pad_r;
-                                sel_end = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, sn.font_size, text_max_w);
+                        if (events.hitTestText(&root, mx, my)) |tnode| {
+                            if (tnode.text) |txt| {
+                                const pad_l = tnode.style.padLeft();
+                                const pad_r = tnode.style.padRight();
+                                const pad_t = tnode.style.padTop();
+                                const local_x = mx - tnode.computed.x - pad_l;
+                                const local_y = my - tnode.computed.y - pad_t;
+                                const text_max_w = tnode.computed.w - pad_l - pad_r;
+                                sel_end_node = tnode;
+                                sel_end = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, tnode.font_size, text_max_w);
                             }
                         }
                     }
@@ -132,6 +124,7 @@
                             sel_last_click = now;
                             if (sel_click_count >= 3) {
                                 sel_node = tnode;
+                                sel_end_node = tnode;
                                 sel_start = 0;
                                 sel_end = txt.len;
                                 sel_anchor = 0;
@@ -139,12 +132,14 @@
                             } else if (sel_click_count == 2) {
                                 const wb = TextEngine.wordBoundsAt(txt, byte_idx);
                                 sel_node = tnode;
+                                sel_end_node = tnode;
                                 sel_start = wb.start;
                                 sel_end = wb.end;
                                 sel_anchor = wb.start;
                                 sel_dragging = false;
                             } else {
                                 sel_node = tnode;
+                                sel_end_node = tnode;
                                 sel_anchor = byte_idx;
                                 sel_start = byte_idx;
                                 sel_end = byte_idx;
@@ -153,6 +148,7 @@
                         }
                     } else {
                         sel_node = null;
+                        sel_end_node = null;
                         sel_start = 0;
                         sel_end = 0;
                     }

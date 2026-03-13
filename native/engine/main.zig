@@ -51,6 +51,7 @@ var hovered_node: ?*Node = null;
 
 // ── Text selection state ─────────────────────────────────────────────────
 var sel_node: ?*Node = null;
+var sel_end_node: ?*Node = null;
 var sel_start: usize = 0;
 var sel_end: usize = 0;
 var sel_anchor: usize = 0;
@@ -58,6 +59,7 @@ var sel_dragging: bool = false;
 var sel_last_click: u32 = 0;
 var sel_click_count: u32 = 0;
 var sel_all: bool = false;
+var sel_paint_state: u8 = 0;
 
 const Painter = struct {
     renderer: *c.SDL_Renderer,

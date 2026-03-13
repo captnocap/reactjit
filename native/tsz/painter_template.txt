@@ -35,11 +35,35 @@ const Painter = struct {
             const pad_t = node.style.padTop();
             const col = node.text_color orelse Color.rgb(255, 255, 255);
             const text_max_w = node.computed.w - pad_l - pad_r;
-            // Draw selection highlight behind text
+            // Draw selection highlight behind text (supports cross-node selection)
+            const sel_hi = Color.rgba(60, 120, 200, 140);
             if (sel_all) {
-                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, Color.rgba(60, 120, 200, 140));
-            } else if (sel_node == node and sel_start != sel_end) {
-                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
+                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, sel_hi);
+            } else if (sel_node != null and sel_end_node != null) {
+                const is_start = (sel_node == node);
+                const is_end = (sel_end_node == node);
+                if (is_start and is_end) {
+                    // Same node selection
+                    if (sel_start != sel_end) {
+                        self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, sel_hi);
+                    }
+                    sel_paint_state = 2;
+                } else if (sel_paint_state == 0 and (is_start or is_end)) {
+                    // First endpoint in tree order
+                    const byte = if (is_start) sel_start else sel_end;
+                    self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, byte, txt.len, sel_hi);
+                    sel_paint_state = 1;
+                } else if (sel_paint_state == 1) {
+                    if (is_start or is_end) {
+                        // Second endpoint — partial highlight
+                        const byte = if (is_start) sel_start else sel_end;
+                        self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, byte, sel_hi);
+                        sel_paint_state = 2;
+                    } else {
+                        // Between endpoints — full highlight
+                        self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, sel_hi);
+                    }
+                }
             }
             self.text_engine.drawTextWrapped(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col);
         }

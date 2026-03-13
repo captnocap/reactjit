@@ -79,6 +79,13 @@ pub const Generator = struct {
     input_count: u32,
     input_multiline: [16]bool,
 
+    // Classifiers: name → { primitive_type, style_fields_string }
+    classifier_names: [128][]const u8,
+    classifier_primitives: [128][]const u8,
+    classifier_styles: [128][]const u8,
+    classifier_text_props: [128][]const u8, // fontSize, color for Text classifiers
+    classifier_count: u32,
+
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
             .alloc = alloc,
@@ -103,6 +110,11 @@ pub const Generator = struct {
             .window_count = 0,
             .input_count = 0,
             .input_multiline = [_]bool{false} ** 16,
+            .classifier_names = undefined,
+            .classifier_primitives = undefined,
+            .classifier_styles = undefined,
+            .classifier_text_props = undefined,
+            .classifier_count = 0,
         };
     }
 
@@ -165,6 +177,21 @@ pub const Generator = struct {
         return false;
     }
 
+    /// Look up a classifier by name. Returns index or null.
+    fn findClassifier(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.classifier_count) |i| {
+            if (std.mem.eql(u8, self.classifier_names[i], name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Check if a tag name is a C.Name classifier reference.
+    /// Returns the classifier name (after "C.") or null.
+    fn isClassifierTag(tag: []const u8) ?[]const u8 {
+        if (tag.len > 2 and tag[0] == 'C' and tag[1] == '.') return tag[2..];
+        return null;
+    }
+
     // ── Top-level parsing ────────────────────────────────────────────
 
     pub fn generate(self: *Generator) ![]const u8 {
@@ -175,7 +202,11 @@ pub const Generator = struct {
         self.pos = 0;
         self.collectDeclaredFunctions();
 
-        // Phase 3: Find App function and collect useState
+        // Phase 3: Collect classifiers
+        self.pos = 0;
+        self.collectClassifiers();
+
+        // Phase 4: Find App function and collect useState
         self.pos = 0;
         const app_start = self.findAppFunction() orelse return error.NoAppFunction;
         self.collectStateHooks(app_start);
@@ -1162,10 +1193,57 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "fn brighten(color: Color) Color {\n    return .{ .r = @min(255, @as(u16, color.r) + 30), .g = @min(255, @as(u16, color.g) + 30), .b = @min(255, @as(u16, color.b) + 30), .a = color.a };\n}\n\n");
 
         // Text selection state
-        try out.appendSlice(self.alloc, "var sel_node: ?*Node = null;\nvar sel_start: usize = 0;\nvar sel_end: usize = 0;\nvar sel_anchor: usize = 0;\nvar sel_dragging: bool = false;\nvar sel_last_click: u32 = 0;\nvar sel_click_count: u32 = 0;\nvar sel_all: bool = false;\n\n");
+        try out.appendSlice(self.alloc, "var sel_node: ?*Node = null;\nvar sel_end_node: ?*Node = null;\nvar sel_start: usize = 0;\nvar sel_end: usize = 0;\nvar sel_anchor: usize = 0;\nvar sel_dragging: bool = false;\nvar sel_last_click: u32 = 0;\nvar sel_click_count: u32 = 0;\nvar sel_all: bool = false;\nvar sel_paint_state: u8 = 0;\n\n");
 
         // collectAllText helper for Ctrl+C with sel_all
         try out.appendSlice(self.alloc, "fn collectAllText(node: *Node, buf: []u8, pos: usize) usize {\n    var p = pos;\n    if (node.text) |txt| {\n        if (p > 0 and p < buf.len) { buf[p] = '\\n'; p += 1; }\n        const n = @min(txt.len, buf.len - p);\n        if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }\n    }\n    for (node.children) |*child| { p = collectAllText(child, buf, p); }\n    return p;\n}\n\n");
+
+        // collectSelectedText helper for cross-node Ctrl+C
+        try out.appendSlice(self.alloc,
+            \\fn collectSelectedText(node: *Node, buf: []u8, pos: usize, state: *u8) usize {
+            \\    var p = pos;
+            \\    if (node.text) |txt| {
+            \\        const is_start = (sel_node == node);
+            \\        const is_end = (sel_end_node == node);
+            \\        if (is_start and is_end) {
+            \\            const s0 = @min(sel_start, sel_end);
+            \\            const s1 = @max(sel_start, sel_end);
+            \\            if (s1 > s0) {
+            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+            \\                const n = @min(s1 - s0, buf.len - p);
+            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[s0..s0+n]); p += n; }
+            \\            }
+            \\            state.* = 2;
+            \\        } else if (state.* == 0 and (is_start or is_end)) {
+            \\            const byte = if (is_start) sel_start else sel_end;
+            \\            if (byte < txt.len) {
+            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+            \\                const n = @min(txt.len - byte, buf.len - p);
+            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[byte..byte+n]); p += n; }
+            \\            }
+            \\            state.* = 1;
+            \\        } else if (state.* == 1) {
+            \\            if (is_start or is_end) {
+            \\                const byte = if (is_start) sel_start else sel_end;
+            \\                if (byte > 0) {
+            \\                    if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+            \\                    const n = @min(byte, buf.len - p);
+            \\                    if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }
+            \\                }
+            \\                state.* = 2;
+            \\            } else {
+            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+            \\                const n = @min(txt.len, buf.len - p);
+            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }
+            \\            }
+            \\        }
+            \\    }
+            \\    for (node.children) |*child| { p = collectSelectedText(child, buf, p, state); }
+            \\    return p;
+            \\}
+            \\
+            \\
+        );
 
         // Painter (same as JS compiler template)
         try out.appendSlice(self.alloc, @embedFile("painter_template.txt"));
@@ -1208,6 +1286,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
         try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, win_h);\n");
         try out.appendSlice(self.alloc, "        painter.clear(Color.rgb(24, 24, 32));\n");
+        try out.appendSlice(self.alloc, "        sel_paint_state = 0;\n");
         try out.appendSlice(self.alloc, "        painter.paintTree(&root, 0, 0);\n");
         try out.appendSlice(self.alloc, "        painter.present();\n");
         try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
