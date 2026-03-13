@@ -68,6 +68,31 @@ local _lastSettleDmg = {}   -- nodeId -> lastDamageAt when last settle snapshot 
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
 local SCROLL_PAGE = 400  -- pixels per PgUp/PgDn (updated to viewport height at render)
 
+-- ── Phase derivation ─────────────────────────────────────────────
+-- Derives the session phase from classified rows in a snapshot.
+local function derivePhase(rows)
+  local has = {}
+  for _, entry in ipairs(rows) do
+    has[entry.kind] = true
+  end
+  -- Order matters: most specific phases first
+  if has["onboarding"] and has["menu_option"] then return "onboarding.theme" end
+  if has["auth:pending"] then return "auth.pending" end
+  if has["auth:success"] then return "auth.success" end
+  if has["security_notice"] then return "security.notice" end
+  if has["notice_title"] then return "workspace.trust" end
+  if has["splash_art"] and has["menu_title"] and has["menu_option"] then return "auth.login_method" end
+  if has["user_input"] then return "shell.ready" end
+  if has["thinking"] or has["task_active"] then return "shell.thinking" end
+  if has["tool"] then return "shell.tool_use" end
+  if has["assistant_text"] then return "shell.response" end
+  if has["permission"] then return "shell.permission" end
+  if has["menu_option"] and has["menu_title"] then return "shell.menu" end
+  if has["idle_prompt"] then return "shell.idle" end
+  if has["user_prompt"] then return "shell.prompt" end
+  return "unknown"
+end
+
 -- ── Input editing helpers ──────────────────────────────────────────
 
 local function insertText(inputState, text)
@@ -195,8 +220,9 @@ Capabilities.register("ClaudeCanvas", {
         f:write("-- Captured on submit (Enter) and slash (/) to preserve transient menus\n")
         f:write("--\n")
         for si, snap in ipairs(snaps) do
-          f:write(string.format("== snapshot %d  trigger=%s  frame=%d  %s ==\n",
-            si, snap.trigger, snap.frame, snap.timestamp))
+          local phase = snap.phase or derivePhase(snap.rows)
+          f:write(string.format("== snapshot %d  trigger=%s  phase=%s  frame=%d  %s ==\n",
+            si, snap.trigger, phase, snap.frame, snap.timestamp))
           for _, entry in ipairs(snap.rows) do
             local colorStr = #entry.colors > 0 and table.concat(entry.colors, " ") or "-"
             local nid = entry.nodeId or "-"
@@ -366,6 +392,7 @@ Capabilities.register("ClaudeCanvas", {
       local GROUP_TYPES = {
         menu_title = "menu", menu_option = "menu", menu_desc = "menu",
         menu_example = "menu", form_label = "menu", form_field = "menu", detail_text = "menu",
+        notice_title = "menu", context_path = "menu", link_text = "menu",
         list_selectable = "menu", list_selected = "menu", list_info = "menu",
         search_box = "menu", selector = "menu", confirmation = "menu",
         ["hint:navigate"] = "menu", ["hint:dismiss"] = "menu", ["hint:cancel"] = "menu",
@@ -385,6 +412,7 @@ Capabilities.register("ClaudeCanvas", {
         text = true, banner = true, thinking = true, plan_mode = true,
         status_bar = true, input_border = true, ["warning:large_prompt"] = true,
         tool = true, result = true, form_field = true, menu_example = true, detail_text = true,
+        context_path = true, link_text = true,
         ["hint:navigate"] = true, ["hint:dismiss"] = true, ["hint:cancel"] = true,
         ["hint:search"] = true, ["hint:shortcut"] = true,
         splash_art = true, ["auth:pending"] = true, ["auth:success"] = true,
@@ -917,6 +945,56 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
         end
+
+        -- Post-pass 2: Notice page detection
+        -- In groups WITH interactive elements, list_selectable rows ABOVE the first
+        -- menu_option are informational (not selectable) — reclassify them.
+        -- Pattern: notice_title + context_path + detail_text + link_text + menu_option + confirmation
+        for gid, entries in pairs(groupEntries) do
+          if groupHasInteractive[gid] then
+            -- Find the first menu_option index in this group
+            local firstMenuOptIdx = nil
+            for _, idx in ipairs(entries) do
+              if classifiedCache[idx].kind == "menu_option" then
+                firstMenuOptIdx = idx
+                break
+              end
+            end
+            if firstMenuOptIdx then
+              local reclassified = false
+              for _, idx in ipairs(entries) do
+                if idx >= firstMenuOptIdx then break end
+                local entry = classifiedCache[idx]
+                if entry.kind == "list_selectable" then
+                  -- Detect filesystem paths
+                  local trimmed = entry.text:match("^%s*(.-)%s*$")
+                  if trimmed:sub(1, 1) == "/" or trimmed:sub(1, 2) == "~/" then
+                    entry.kind = "context_path"
+                    entry.nodeId = "g" .. gid .. ":notice:path"
+                  else
+                    entry.kind = "detail_text"
+                    entry.nodeId = "g" .. gid .. ":notice:detail"
+                  end
+                  reclassified = true
+                elseif entry.kind == "list_info" then
+                  -- Dim text like "Security guide" → link_text
+                  entry.kind = "link_text"
+                  entry.nodeId = "g" .. gid .. ":notice:link"
+                  reclassified = true
+                end
+              end
+              -- If we found notice content above the options, title is notice_title
+              if reclassified then
+                for _, idx in ipairs(entries) do
+                  if classifiedCache[idx].kind == "menu_title" then
+                    classifiedCache[idx].kind = "notice_title"
+                    classifiedCache[idx].nodeId = "g" .. gid .. ":notice:title"
+                  end
+                end
+              end
+            end
+          end
+        end
       end
 
       -- Store classified cache for clipboard dump hotkey
@@ -945,6 +1023,7 @@ Capabilities.register("ClaudeCanvas", {
                 colors  = entry.colors,
               }
             end
+            snap.phase = derivePhase(snap.rows)
             _snapshots[nodeId][#_snapshots[nodeId] + 1] = snap
           else
             remaining[#remaining + 1] = pending
