@@ -627,6 +627,15 @@ class TszCompiler {
         return `_ = ffi.${callee}(${ffiArgs.join(', ')});`;
       }
 
+      // Built-in engine functions
+      if (callee === 'playVideo' && expr.arguments.length > 0) {
+        const arg = this.extractStringLiteral(expr.arguments[0], sf);
+        if (arg) return `mpv_mod.play("${this.escapeZigString(arg)}");`;
+      }
+      if (callee === 'stopVideo') return 'mpv_mod.stop();';
+      if (callee === 'pauseVideo') return 'mpv_mod.setPaused(true);';
+      if (callee === 'resumeVideo') return 'mpv_mod.setPaused(false);';
+
       if (callee === 'console.log' || callee === 'console.info') {
         const args = expr.arguments.map(a => {
           const s = this.extractStringLiteral(a, sf);
@@ -1151,7 +1160,8 @@ const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
 const image_mod = @import("image.zig");
 const ImageCache = image_mod.ImageCache;
-const events = @import("events.zig");${stateImport}${ffiImport}
+const events = @import("events.zig");
+const mpv_mod = @import("mpv.zig");${stateImport}${ffiImport}
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
@@ -1288,6 +1298,7 @@ pub fn main() !void {
 
     var image_cache = ImageCache.init(renderer);
     defer image_cache.deinit();
+    defer mpv_mod.deinit();
 
     g_text_engine = &text_engine;
     g_image_cache = &image_cache;
@@ -1354,6 +1365,7 @@ ${stateInitCode}${initialDynUpdate}
         }
 
 ${stateCheck}
+        mpv_mod.poll();
         layout.layout(&root, 0, 0, win_w, win_h);
         painter.clear(Color.rgb(24, 24, 32));
         painter.paintTree(&root, 0, 0);

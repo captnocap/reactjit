@@ -294,6 +294,7 @@ pub fn build(b: *std.Build) void {
         app_exe.linkSystemLibrary("SDL2");
         app_exe.linkSystemLibrary("GL");
         app_exe.linkSystemLibrary("freetype");
+        app_exe.linkSystemLibrary("mpv");
         app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
         app_exe.root_module.addIncludePath(b.path("native/engine"));
         app_exe.root_module.addCSourceFile(.{
