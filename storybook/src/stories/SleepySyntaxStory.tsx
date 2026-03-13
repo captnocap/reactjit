@@ -441,28 +441,16 @@ const EXAMPLES: { label: string; code: string }[] = [
 export function SleepySyntaxStory() {
   const c = useThemeColors();
   const [code, setCode] = useState(EXAMPLES[0].code);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [ast, setAst] = useState<SleepyNode | null>(parse(EXAMPLES[0].code));
 
-  const handleCodeChange = (text: string) => {
-    setCode(text);
-    try {
-      const result = parse(text);
-      if (result) {
-        setAst(result);
-        setParseError(null);
-      } else {
-        setParseError('Could not parse input');
-      }
-    } catch (e: unknown) {
-      setParseError(e instanceof Error ? e.message : 'Parse error');
-    }
-  };
-
-  const loadExample = (ex: typeof EXAMPLES[number]) => {
-    setCode(ex.code);
-    handleCodeChange(ex.code);
-  };
+  // Derive AST from code during render — no extra state, no feedback loop
+  let ast: SleepyNode | null = null;
+  let parseError: string | null = null;
+  try {
+    ast = parse(code);
+    if (!ast) parseError = 'Could not parse input';
+  } catch (e: unknown) {
+    parseError = e instanceof Error ? e.message : 'Parse error';
+  }
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, flexDirection: 'column' }}>
@@ -479,7 +467,7 @@ export function SleepySyntaxStory() {
           {EXAMPLES.map((ex) => (
             <Pressable
               key={ex.label}
-              onPress={() => loadExample(ex)}
+              onPress={() => setCode(ex.code)}
               style={({ hovered }: { hovered: boolean }) => ({
                 backgroundColor: hovered ? c.surface : c.bgElevated,
                 paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 5,
@@ -505,7 +493,7 @@ export function SleepySyntaxStory() {
           <Box style={{ flexGrow: 1, padding: 0 }}>
             <TextInput
               value={code}
-              onChangeText={handleCodeChange}
+              onChangeText={setCode}
               multiline
               style={{
                 width: '100%', height: '100%',
