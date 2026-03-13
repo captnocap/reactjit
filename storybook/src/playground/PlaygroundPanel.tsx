@@ -6,7 +6,7 @@
  * to go back to the picker.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, TextEditor, Pressable, useLocalStore, useMount } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Preview } from './Preview';
@@ -37,9 +37,10 @@ export function PlaygroundPanel() {
   // Expose for HMR state sync
   (globalThis as any).__currentPlaygroundCode = code;
 
-  const processCode = useCallback((src: string) => {
+  const processCode = (src: string) => {
     const msgs = lint(src);
     setLintMessages(msgs);
+    // rjit-ignore-next-line — trivial filter for error severity
     const errs = msgs.filter(m => m.severity === 'error');
     if (errs.length > 0) { setErrors(errs.map(e => `Line ${e.line}: ${e.message}`)); return; }
     const result = transformJSX(src);
@@ -49,28 +50,28 @@ export function PlaygroundPanel() {
     setErrors([]);
     setUserComponent(() => evalResult.component);
     setSavedCode(src);
-  }, [setSavedCode]);
+  };
 
   // Process code on mount if we have HMR code
   useMount(() => { if (code) processCode(code); });
 
-  const handleCodeChange = useCallback((src: string) => {
+  const handleCodeChange = (src: string) => {
     setCode(src);
     processCode(src);
-  }, [processCode]);
+  };
 
-  const handleJumpToLine = useCallback((line: number) => {
+  const handleJumpToLine = (line: number) => {
     setJumpToLine(line);
     setTimeout(() => setJumpToLine(undefined), 50);
-  }, []);
+  };
 
-  const handleTemplateSelect = useCallback((template: Template) => {
+  const handleTemplateSelect = (template: Template) => {
     setCode(template.code);
     setEditorKey(k => k + 1); // remount TextEditor with new initialValue
     setShowPicker(false);
     // Process immediately
     setTimeout(() => processCode(template.code), 0);
-  }, [processCode]);
+  };
 
   // ── Template picker mode ────────────────────────────────
 

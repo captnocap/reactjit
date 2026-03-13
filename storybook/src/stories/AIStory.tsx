@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, ExternalDependencyNotice, PageColumn} from './_shared/StoryScaffold';
@@ -393,7 +393,7 @@ function ConversationDemo() {
   const c = useThemeColors();
   const [visibleCount, setVisibleCount] = useState(0);
 
-  const replay = useCallback(() => {
+  const replay = () => {
     setVisibleCount(0);
     let i = 0;
     const show = () => {
@@ -404,7 +404,7 @@ function ConversationDemo() {
       }
     };
     setTimeout(show, 400);
-  }, []);
+  };
 
   useMount(() => { replay(); });
 
@@ -462,7 +462,7 @@ function AgenticLoopDemo() {
   const c = useThemeColors();
   const [step, setStep] = useState(0);
 
-  const replay = useCallback(() => {
+  const replay = () => {
     setStep(0);
     let i = 0;
     const advance = () => {
@@ -473,7 +473,7 @@ function AgenticLoopDemo() {
       }
     };
     setTimeout(advance, 400);
-  }, []);
+  };
 
   useMount(() => { replay(); });
 
@@ -550,7 +550,7 @@ function StreamingPipelineDemo() {
   const c = useThemeColors();
   const [active, setActive] = useState(-1);
 
-  const replay = useCallback(() => {
+  const replay = () => {
     setActive(-1);
     let i = -1;
     const advance = () => {
@@ -561,7 +561,7 @@ function StreamingPipelineDemo() {
       }
     };
     setTimeout(advance, 300);
-  }, []);
+  };
 
   useMount(() => { replay(); });
 

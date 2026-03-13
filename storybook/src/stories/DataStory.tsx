@@ -9,7 +9,7 @@
  * ────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box, Text, Image, Pressable, ScrollView, TextEditor, CodeBlock,
   Table, Badge, BarChart, ProgressBar, Sparkline,
@@ -38,6 +38,7 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
+  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -238,6 +239,7 @@ function PreviewSection({ label, children }: { label: string; children: React.Re
 
 function DataPreview() {
   const c = useThemeColors();
+  // rjit-ignore-next-line — table columns with render callbacks, non-trivial
   const tableColumns: TableColumn<Employee>[] = useMemo(() => [
     { key: 'name', title: 'Name' },
     { key: 'role', title: 'Role' },
@@ -321,7 +323,7 @@ export function DataStory() {
   const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const processCode = useCallback((src: string) => {
+  const processCode = (src: string) => {
     const result = transformJSX(src);
     if (result.errors.length > 0) {
       setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
@@ -331,16 +333,16 @@ export function DataStory() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-  }, []);
+  };
 
   useMount(() => {
     if (code) processCode(code);
   });
 
-  const handleCodeChange = useCallback((src: string) => {
+  const handleCodeChange = (src: string) => {
     setCode(src);
     processCode(src);
-  }, [processCode]);
+  };
 
   const mid = Math.ceil(PROPS.length / 2);
   const col1 = PROPS.slice(0, mid);

@@ -9,7 +9,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, ImageGallery, FileWatcher, classifiers as S} from '../../../packages/core/src';
 import type { LoveEvent } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
@@ -208,7 +208,7 @@ function FileDropDemo() {
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const handleDrop = useCallback((e: LoveEvent) => {
+  const handleDrop = (e: LoveEvent) => {
     setDragOver(false);
     setLastDrop({
       name: e.fileName || 'unknown',
@@ -218,10 +218,10 @@ function FileDropDemo() {
       mode: e.fileDropMode || 'upload',
       preview: e.filePreviewText ? e.filePreviewText.slice(0, 200) : undefined,
     });
-  }, []);
+  };
 
-  const handleDragEnter = useCallback(() => setDragOver(true), []);
-  const handleDragLeave = useCallback(() => setDragOver(false), []);
+  const handleDragEnter = () => setDragOver(true);
+  const handleDragLeave = () => setDragOver(false);
 
   return (
     <S.StackG6W100>
@@ -413,16 +413,16 @@ function FeatureCatalog() {
 
 // ── Gallery Demo ─────────────────────────────────────────
 
+const GALLERY_IMAGES = Array.from({ length: 8 }, (_, idx) => ({
+  id: idx,
+  src: GALLERY_STEMS[idx % GALLERY_STEMS.length],
+  title: `Photo ${idx + 1}`,
+  subtitle: `Gallery tile ${idx + 1}`,
+  description: 'Click to open modal viewer.',
+}));
+
 function GalleryDemo() {
-  const images = useMemo(() => {
-    return Array.from({ length: 8 }, (_, idx) => ({
-      id: idx,
-      src: GALLERY_STEMS[idx % GALLERY_STEMS.length],
-      title: `Photo ${idx + 1}`,
-      subtitle: `Gallery tile ${idx + 1}`,
-      description: 'Click to open modal viewer.',
-    }));
-  }, []);
+  const images = GALLERY_IMAGES;
 
   return (
     <S.StackG4W100>
@@ -438,12 +438,12 @@ function FileWatcherDemo() {
   const [events, setEvents] = useState<Array<{ changeType: string; path: string; time: string }>>([]);
   const [watching, setWatching] = useState(true);
 
-  const handleChange = useCallback((e: LoveEvent) => {
+  const handleChange = (e: LoveEvent) => {
     setEvents(prev => {
       const next = [{ changeType: e.changeType, path: e.path, time: new Date().toLocaleTimeString() }, ...prev];
       return next.length > 12 ? next.slice(0, 12) : next;
     });
-  }, []);
+  };
 
   const TYPE_COLORS: Record<string, string> = {
     created: C.green,

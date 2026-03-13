@@ -6,7 +6,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Render, Libretro, Input, Window, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
@@ -231,10 +231,10 @@ function WindowCaptureDemo() {
 
   const titles = ['Firefox', 'Code', 'Terminal', 'Chromium'];
 
-  const startCapture = useCallback((title: string) => {
+  const startCapture = (title: string) => {
     setTarget(title);
     setActive(true);
-  }, []);
+  };
 
   return (
     <S.CenterW100 style={{ gap: 8 }}>
@@ -286,15 +286,15 @@ function LibretroDemo() {
 
   const hasInputs = corePath.length > 0 && romPath.length > 0;
 
-  const onLoaded = useCallback((e: any) => {
+  const onLoaded = (e: any) => {
     setStatus(`${e.coreName} v${e.coreVersion}`);
     setActive(true);
-  }, []);
+  };
 
-  const onError = useCallback((e: any) => {
+  const onError = (e: any) => {
     setStatus(`Error: ${e.message}`);
     setActive(false);
-  }, []);
+  };
 
   return (
     <S.CenterW100 style={{ gap: 8 }}>
@@ -372,11 +372,11 @@ function CartridgeOSDemo() {
   const [vncPort, setVncPort] = useState(0);
   const [status, setStatus] = useState('Boot CartridgeOS');
 
-  const onReady = useCallback((e: any) => {
+  const onReady = (e: any) => {
     setStatus('VM running');
     if (e.vmInfo?.vncPort) setVncPort(e.vmInfo.vncPort);
-  }, []);
-  const onError = useCallback((e: any) => setStatus(`Error: ${e.message}`), []);
+  };
+  const onError = (e: any) => setStatus(`Error: ${e.message}`);
 
   return (
     <S.CenterW100 style={{ gap: 8 }}>

@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, Terminal, SemanticTerminal, Native, classifiers as S, useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useEnvironments, useEnvRun } from '../../../packages/environments/src';
@@ -499,19 +499,19 @@ function EnvCardsDemo() {
   const createRpc = useLoveRPC('env:create');
   const [busy, setBusy] = useState(false);
 
-  const createSamples = useCallback(async () => {
+  const createSamples = async () => {
     setBusy(true);
     for (const env of SAMPLE_ENVS) await createRpc(env);
     await refresh();
     setBusy(false);
-  }, [createRpc, refresh]);
+  };
 
-  const removeAll = useCallback(async () => {
+  const removeAll = async () => {
     setBusy(true);
     for (const env of environments) await remove(env.config.name);
     await refresh();
     setBusy(false);
-  }, [remove, environments, refresh]);
+  };
 
   return (
     <Box style={{ width: '100%', gap: 6 }}>
@@ -540,6 +540,7 @@ function EnvCardsDemo() {
         <Box style={{ gap: 6 }}>
           {environments.map(env => {
             const cfg = env.config;
+            // rjit-ignore-next-line
             const typeColor = ENV_TYPES.find(t => t.label === cfg.type)?.color || C.env;
             const statusColor = env.ready ? STATE_COLORS.ready : env.installing ? STATE_COLORS.installing : STATE_COLORS.creating;
             const statusLabel = env.ready ? 'ready' : env.installing ? 'installing' : 'creating';
@@ -577,10 +578,11 @@ function EnvCardsDemo() {
 function QuickRunDemo() {
   const c = useThemeColors();
   const { environments } = useEnvironments();
+  // rjit-ignore-next-line
   const hasEnv = environments.some(e => e.config.name === 'storybook-shell');
   const [started, setStarted] = useState(false);
   const proc = useEnvRun('storybook-shell', 'echo "Hello from environment!" && uname -a && date', { autoStart: false, onExit: () => {} });
-  const doRun = useCallback(() => { setStarted(true); proc.start(); }, [proc]);
+  const doRun = () => { setStarted(true); proc.start(); };
   const statusColor = !started ? c.muted : proc.running ? STATE_COLORS.running : proc.exitCode === 0 ? STATE_COLORS.exited : STATE_COLORS.failed;
   const statusLabel = !started ? 'idle' : proc.running ? 'running' : proc.exitCode === 0 ? 'exited (0)' : proc.exitCode !== null ? `failed (${proc.exitCode})` : 'spawning';
 
@@ -717,7 +719,7 @@ function ClaudeCanvasDemo() {
       </Pressable>
       {showLive ? (
         <Box style={{ width: '100%', height: 300 }}>
-          <Native type="ClaudeCode" sessionId="story-claude" workingDir={workingDir} />
+          <Native type="ClaudeCode" sessionId="story-claude" workingDir={workingDir} configDir="/tmp/claude-login-test" />
           <ClaudeCanvas sessionId="story-claude" recording style={{ width: '100%', height: 300, borderRadius: 6 }} />
         </Box>
       ) : (

@@ -8,7 +8,7 @@
  * Playground: editable JSX with live preview.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, TextInput, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors, ThemeSwitcher, useTheme, themeNames, themes } from '../../../packages/theme/src';
 import { Icon } from '../../../packages/icons/src';
@@ -49,6 +49,7 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
+  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) =>
@@ -390,6 +391,7 @@ export function StyleStory() {
   const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
   const [iconPage, setIconPage] = useState(0);
 
+  // rjit-ignore-next-line — icon filtering by search query
   const filteredIcons = useMemo(() => {
     if (!iconFilter) return iconNames;
     const lower = iconFilter.toLowerCase();
@@ -400,7 +402,7 @@ export function StyleStory() {
   const pageIcons = filteredIcons.slice(iconPage * ICONS_PER_PAGE, (iconPage + 1) * ICONS_PER_PAGE);
 
   // Playground helpers
-  const processCode = useCallback((src: string) => {
+  const processCode = (src: string) => {
     const result = transformJSX(src);
     if (result.errors.length > 0) {
       setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
@@ -410,16 +412,16 @@ export function StyleStory() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-  }, []);
+  };
 
   useMount(() => {
     if (code) processCode(code);
   });
 
-  const handleCodeChange = useCallback((src: string) => {
+  const handleCodeChange = (src: string) => {
     setCode(src);
     processCode(src);
-  }, [processCode]);
+  };
 
   return (
     <S.StoryRoot>

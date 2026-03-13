@@ -7,7 +7,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, ScrollView, CodeBlock, Pressable, TextInput, useBridge, useLuaInterval, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -268,9 +268,9 @@ function OskDemo() {
   const c = useThemeColors();
   const [text, setText] = useState('');
 
-  const handleTextChange = useCallback((e: any) => {
+  const handleTextChange = (e: any) => {
     setText(e.text || '');
-  }, []);
+  };
 
   return (
     <Box style={{
@@ -312,16 +312,16 @@ export function GamepadStory() {
   const [axes, setAxes] = useState<Record<string, number>>({});
   const [lastButton, setLastButton] = useState('(none)');
 
-  const handleGamepadPress = useCallback((e: any) => {
+  const handleGamepadPress = (e: any) => {
     const btn = e.gamepadButton || e.button || '?';
     setButtons(prev => ({ ...prev, [btn]: true }));
     setLastButton(btn);
-  }, []);
+  };
 
-  const handleGamepadRelease = useCallback((e: any) => {
+  const handleGamepadRelease = (e: any) => {
     const btn = e.gamepadButton || e.button || '?';
     setButtons(prev => ({ ...prev, [btn]: false }));
-  }, []);
+  };
 
   // Poll gamepad axes from Lua at ~10fps (no axis events cross the bridge)
   const axesRef = useRef<Record<string, number>>({});

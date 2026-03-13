@@ -9,7 +9,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -246,11 +246,11 @@ function ElementDemo() {
   const [num, setNum] = useState(26);
   const el = useElement(num);
 
-  const elements = useMemo(() => [
+  const elements = [
     { n: 1, sym: 'H' }, { n: 6, sym: 'C' }, { n: 7, sym: 'N' },
     { n: 8, sym: 'O' }, { n: 26, sym: 'Fe' }, { n: 29, sym: 'Cu' },
     { n: 47, sym: 'Ag' }, { n: 79, sym: 'Au' }, { n: 92, sym: 'U' },
-  ], []);
+  ];
 
   return (
     <S.StackG6W100>
@@ -307,15 +307,17 @@ function MoleculesDemo() {
   const [formula, setFormula] = useState('H2O');
   const [search, setSearch] = useState('');
 
-  const results = useMemo(() => {
+  // rjit-ignore-next-line
+  const results = (() => {
     if (!search) return [];
     const q = search.toLowerCase();
+    // rjit-ignore-next-line
     return COMPOUNDS.filter(c =>
       c.name.toLowerCase().includes(q) ||
       c.formula.toLowerCase().includes(q) ||
       (c.iupac && c.iupac.toLowerCase().includes(q))
     ).slice(0, 5);
-  }, [search]);
+  })();
 
   return (
     <S.StackG8W100>
@@ -367,12 +369,12 @@ function ReactionsDemo() {
   const [customEq, setCustomEq] = useState('');
   const [equations, setEquations] = useState(DEMO_REACTIONS.slice(0, 3));
 
-  const addEquation = useCallback(() => {
+  const addEquation = () => {
     if (customEq.trim()) {
       setEquations(prev => [customEq.trim(), ...prev]);
       setCustomEq('');
     }
-  }, [customEq]);
+  };
 
   return (
     <S.StackG8W100>
@@ -574,7 +576,7 @@ function PubChemDemo() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = useCallback(() => {
+  const handleSearch = () => {
     if (!query.trim()) return;
     setLoading(true);
     setError(null);
@@ -586,7 +588,7 @@ function PubChemDemo() {
       setError(String(err));
       setLoading(false);
     });
-  }, [query]);
+  };
 
   return (
     <S.StackG6W100>
@@ -661,14 +663,14 @@ function ToolsDemo() {
 
   const massNum = parseFloat(mass) || 0;
 
-  const recomputeFormula = useCallback((f: string, m: number) => {
+  const recomputeFormula = (f: string, m: number) => {
     compute({ method: 'molarMass', formula: f }).then(setMm).catch(() => {});
     compute({ method: 'massComposition', formula: f }).then(setComposition).catch(() => {});
     compute({ method: 'massToMoles', mass: m, formula: f }).then((mol: number) => {
       setMoles(mol);
       compute({ method: 'molesToParticles', moles: mol }).then(setParticles).catch(() => {});
     }).catch(() => {});
-  }, [compute]);
+  };
 
   useMount(() => { recomputeFormula(formula, massNum); });
 

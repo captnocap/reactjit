@@ -5,7 +5,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S, useLuaQuery} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -329,7 +329,7 @@ function QuaternionDemo() {
   const euler = res?.[0];
   const rotated = res?.[1];
 
-  const clampT = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
+  const clampT = (v: number) => Math.max(0, Math.min(1, v));
 
   return (
     <S.StackG8W100>
@@ -354,7 +354,7 @@ const INTERP_STEPS = 32;
 function InterpolationDemo() {
   const c = useThemeColors();
 
-  // Build the batch statically (mount-once, no deps)
+  // rjit-ignore-next-line — heavy batch construction for interpolation curves
   const batch = useMemo(() => {
     const b: any[] = [];
     for (let n = 0; n < 4; n++) {
@@ -476,7 +476,7 @@ function NoiseFieldDemo() {
     [seed, scale],
   );
 
-  // Derive color grid from noise field (presentation mapping — style props from data)
+  // rjit-ignore-next-line — heavy compute: noise field to color grid mapping
   const rows = useMemo(() => {
     if (!field) return null;
     const next: string[][] = [];
@@ -526,6 +526,7 @@ function FFTDemo() {
   const [freq, setFreq] = useState(4);
   const N = 64;
 
+  // rjit-ignore-next-line — heavy compute: sine wave sample generation
   const samples = useMemo(() => {
     const s: number[] = [];
     for (let i = 0; i < N; i++) {
@@ -579,7 +580,7 @@ function FFTDemo() {
 function BezierDemo() {
   const c = useThemeColors();
   const [cy, setCy] = useState(150);
-  const controlPoints: [number, number][] = useMemo(() => [[0, 0], [80, cy], [220, 300 - cy], [300, 150]], [cy]);
+  const controlPoints: [number, number][] = [[0, 0], [80, cy], [220, 300 - cy], [300, 150]];
 
   const { data: curve } = useLuaQuery<[number, number][]>('math:call',
     { op: 'bezier', points: controlPoints, segments: 32 },

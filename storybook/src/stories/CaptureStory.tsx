@@ -7,7 +7,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useGifRecorder, useRecorder, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
@@ -150,9 +150,9 @@ function StatBox({ label, value }: { label: string; value: string }) {
 function GifDemo() {
   const { recording, frames, gifPath, start, stop } = useGifRecorder();
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     if (recording) { stop(); } else { start({ fps: 15 }); }
-  }, [recording, start, stop]);
+  };
 
   return (
     <S.StackG10W100>
@@ -182,21 +182,21 @@ function VideoDemo() {
   const [selectedFormat, setSelectedFormat] = useState<'mp4' | 'webm'>('mp4');
   const [selectedFps, setSelectedFps] = useState(30);
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     if (recording) {
       stop();
     } else {
       start({ fps: selectedFps, format: selectedFormat });
     }
-  }, [recording, start, stop, selectedFps, selectedFormat]);
+  };
 
-  const cycleFps = useCallback(() => {
+  const cycleFps = () => {
     setSelectedFps(f => f === 15 ? 24 : f === 24 ? 30 : 15);
-  }, []);
+  };
 
-  const cycleFormat = useCallback(() => {
+  const cycleFormat = () => {
     setSelectedFormat(f => f === 'mp4' ? 'webm' : 'mp4');
-  }, []);
+  };
 
   return (
     <S.StackG10W100>

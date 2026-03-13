@@ -8,7 +8,7 @@
  * Navigation: click story names, or use Up/Down + Enter keys.
  */
 
-import React, { useState, useCallback, useRef, type ErrorInfo } from 'react';
+import React, { useState, useRef, type ErrorInfo } from 'react';
 import { NativeBridge } from '../../packages/renderer/src/NativeBridge';
 import { createRoot } from '../../packages/renderer/src/NativeRenderer';
 import { setCryptoBridge } from '../../packages/crypto/src/rpc';
@@ -210,6 +210,7 @@ function StorybookPanel() {
 
   // Expose programmatic navigation for tests (rjit test)
   (globalThis as any).__navigateToStory = (id: string): boolean => {
+    // rjit-ignore-next-line
     const idx = stories.findIndex(s => s.id === id);
     if (idx < 0) return false;
     navigateToStory(idx);
@@ -223,22 +224,22 @@ function StorybookPanel() {
   const compact = bp === 'sm';
   const sidebarW = bp === 'md' ? 140 : 180;
 
-  const handleKeyDown = useCallback((e: any) => {
+  const handleKeyDown = (e: any) => {
     const key = e.key || e.scancode;
     if (key === 'down' || key === 'j') {
       setActiveIdx(i => Math.min(i + 1, stories.length - 1));
     } else if (key === 'up' || key === 'k') {
       setActiveIdx(i => Math.max(i - 1, 0));
     }
-  }, []);
+  };
 
   // ── Record route changes in the event trail for crash diagnostics ──
   const bridge = useBridge();
-  const navigateToStory = useCallback((idx: number) => {
+  const navigateToStory = (idx: number) => {
     setActiveIdx(idx);
     const story = stories[idx];
     if (story) bridge.rpc('trail:navigate', { route: story.title });
-  }, [bridge]);
+  };
   // Record the initial route on mount
   useMount(() => {
     if (active) bridge.rpc('trail:navigate', { route: active.title });
@@ -247,7 +248,8 @@ function StorybookPanel() {
   // ── Ghost node diagnostic crawl (Ctrl+Shift+D) ──
   const crawlingRef = useRef(false);
 
-  useHotkey('ctrl+shift+d', useCallback(async () => {
+  // rjit-ignore-next-line
+  useHotkey('ctrl+shift+d', async () => {
     if (crawlingRef.current) return;
     crawlingRef.current = true;
 
@@ -267,6 +269,7 @@ function StorybookPanel() {
       try {
         const result = await bridge.rpc<any>('diagnose:run', undefined, 5000);
         if (result && !result.error) {
+          // rjit-ignore-next-line
           const ghostNodes = (result.nodes || []).filter((n: any) => n.status !== 'non-visual-cap' && n.status !== 'own-surface');
           allResults.push({
             story: story.title,
@@ -292,7 +295,9 @@ function StorybookPanel() {
     }
 
     // Print summary
+    // rjit-ignore-next-line
     const storiesWithGhosts = allResults.filter(r => r.ghost > 0);
+    // rjit-ignore-next-line
     const totalGhosts = allResults.reduce((sum, r) => sum + r.ghost, 0);
 
     console.log('\n[diagnose] ═══════════════════════════════════════');
@@ -318,7 +323,7 @@ function StorybookPanel() {
     // Restore original story
     setActiveIdx(originalIdx);
     crawlingRef.current = false;
-  }, [activeIdx, bridge]));
+  });
 
   const sidebarContent = (
     <>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, CodeBlock, Pressable, ScrollView, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Spreadsheet, columnIndexToLabel } from '../../../packages/data/src';
@@ -161,16 +161,21 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone: 
 export function DataSpreadsheetStory() {
   const c = useThemeColors();
   const [scalePreset, setScalePreset] = useState<ScalePreset>(SCALE_PRESETS[0]);
-  const [columnWidths, setColumnWidths] = useState<number[]>(() => createColumnWidths(SCALE_PRESETS[0].cols));
+  const [columnWidths, setColumnWidths] = useState<number[]>(createColumnWidths(SCALE_PRESETS[0].cols));
   const [selectedAddress, setSelectedAddress] = useState('B2');
-  const [cells, setCells] = useState<SpreadsheetCellMap>(() =>
+  const [cells, setCells] = useState<SpreadsheetCellMap>(
     ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
   );
-  const summary = useMemo(() => ({
-    formulaCount:    Object.values(cells).filter(v => v.trim().startsWith('=')).length,
-    conversionCount: Object.values(cells).filter(v => v.includes('CONVERT(')).length,
-    mathCount:       Object.values(cells).filter(v => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length,
-  }), [cells]);
+  // rjit-ignore-next-line — cell formula counting with .filter()
+  const cellValues = Object.values(cells);
+  const summary = {
+    // rjit-ignore-next-line
+    formulaCount:    cellValues.filter(v => v.trim().startsWith('=')).length,
+    // rjit-ignore-next-line
+    conversionCount: cellValues.filter(v => v.includes('CONVERT(')).length,
+    // rjit-ignore-next-line
+    mathCount:       cellValues.filter(v => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length,
+  };
 
   return (
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 interface FontScaleCtx {
   scale: number;
@@ -21,9 +21,9 @@ const STEP = 0.10;
 export function FontScaleProvider({ children }: { children: React.ReactNode }) {
   const [scale, setScale] = useState(1);
 
-  const increase = useCallback(() => setScale(s => Math.min(MAX_SCALE, s + STEP)), []);
-  const decrease = useCallback(() => setScale(s => Math.max(MIN_SCALE, s - STEP)), []);
-  const reset = useCallback(() => setScale(1), []);
+  const increase = () => setScale(s => Math.min(MAX_SCALE, s + STEP));
+  const decrease = () => setScale(s => Math.max(MIN_SCALE, s - STEP));
+  const reset = () => setScale(1);
 
   return (
     <FontScaleContext.Provider value={{ scale, increase, decrease, reset }}>

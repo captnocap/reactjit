@@ -9,7 +9,7 @@
  * All compute runs in Lua/GLSL. React just declares layout and buttons.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, Native, CodeBlock, classifiers as S } from '../../../packages/core/src';
 import type { LayoutEvent, LoveEvent } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -72,7 +72,7 @@ await compositeBackground(
 
 const BORDER_PRESETS: { label: string; params: DetectForegroundParams }[] = [
   { label: 'Auto', params: {} },
-  { label: 'Smart', params: { spatialWeight: 0.3, sharpWeight: 0.25, edgeWeight: 0.9, morphRadius: 3, featherRadius: 3 } },
+  { label: 'Smart', params: { spatialWeight: 0.4, sharpWeight: 0.35, threshold: 0.12, softness: 0.08, edgeWeight: 1.0, morphRadius: 4, featherRadius: 4 } },
   { label: 'Tight', params: { threshold: 0.15, softness: 0.04, morphRadius: 3, featherRadius: 2, edgeWeight: 1.0 } },
   { label: 'Soft', params: { threshold: 0.25, softness: 0.12, morphRadius: 2, featherRadius: 6, edgeWeight: 0.5 } },
   { label: 'Wide', params: { threshold: 0.35, softness: 0.15, morphRadius: 1, featherRadius: 4, edgeWeight: 0.3 } },
@@ -257,11 +257,11 @@ function FloodDetectPanel() {
   // Track the clickable box geometry so pointer coordinates map to source pixels.
   const imgRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  const handleImgLayout = useCallback((e: LayoutEvent) => {
+  const handleImgLayout = (e: LayoutEvent) => {
     imgRectRef.current = { x: e.x, y: e.y, w: e.width, h: e.height };
-  }, []);
+  };
 
-  const clearSelection = useCallback(async () => {
+  const clearSelection = async () => {
     if (maskId) {
       await releaseMask(maskId);
     }
@@ -270,9 +270,9 @@ function FloodDetectPanel() {
     setHasMask(false);
     setHasResult(false);
     setStatus('Click on the robot. Each click adds to the current selection.');
-  }, [maskId, releaseMask]);
+  };
 
-  const handleImgClick = useCallback(async (e: LoveEvent) => {
+  const handleImgClick = async (e: LoveEvent) => {
     const rect = imgRectRef.current;
     if (!rect || e.x == null || e.y == null || processing) return;
 
@@ -311,7 +311,7 @@ function FloodDetectPanel() {
 
     setHasResult(true);
     setStatus(`Selection has ${seeds.length + 1} seed${seeds.length + 1 === 1 ? '' : 's'} — ${comp.width}x${comp.height}`);
-  }, [compositeBackground, floodDetect, maskId, preset, processing, releaseMask, seeds.length]);
+  };
 
   const displayW = imgRectRef.current?.w || CLICK_IMG_SIZE;
   const displayH = imgRectRef.current?.h || CLICK_IMG_SIZE;

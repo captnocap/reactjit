@@ -6,7 +6,7 @@
  * At most one template is ever mounted at a time.
  */
 
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Box, Text, Pressable, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
@@ -49,6 +49,7 @@ class PreviewBoundary extends React.Component<
 }
 
 function useTemplateComponent(code: string): React.ComponentType | null {
+  // rjit-ignore-next-line — non-trivial compute: JSX transform + eval per template
   return useMemo(() => {
     const result = transformJSX(code);
     if (result.errors.length > 0) return null;
@@ -240,15 +241,15 @@ export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }
   const [overlayTemplate, setOverlayTemplate] = useState<Template | null>(null);
   const timerRef = useRef<any>(null);
 
-  const showOverlayFor = useCallback((t: Template) => {
+  const showOverlayFor = (t: Template) => {
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setOverlayTemplate(t), HOVER_DELAY_MS);
-  }, []);
+  };
 
-  const hideOverlay = useCallback(() => {
+  const hideOverlay = () => {
     clearTimeout(timerRef.current);
     setOverlayTemplate(null);
-  }, []);
+  };
 
   const lastSessionTemplate: Template | null = lastSessionCode ? {
     id: '__last-session',

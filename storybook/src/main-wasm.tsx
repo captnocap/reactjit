@@ -5,7 +5,7 @@
  * React communicates via Module.FS bridge (bridge_fs.lua <-> bridge.js).
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { createWasmApp } from '../../packages/renderer/src/WasmApp';
 import { BridgeProvider, useBridge, classifiers as S} from '../../packages/core/src/context';
 import { Box, Text, Pressable, ScaleProvider, PortalHost, useHotkey, useBreakpoint } from '../../packages/core/src';
@@ -31,6 +31,7 @@ function getInitialStoryIdx(): number {
   try {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
+      // rjit-ignore-next-line
       const idx = stories.findIndex(s => s.id === hash);
       if (idx >= 0) return idx;
     }
@@ -41,13 +42,13 @@ function getInitialStoryIdx(): number {
 function StorybookPanel() {
   const [activeIdx, _setActiveIdx] = useState(getInitialStoryIdx);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const setActiveIdx = useCallback((v: number | ((i: number) => number)) => {
+  const setActiveIdx = (v: number | ((i: number) => number)) => {
     _setActiveIdx(prev => {
       const next = typeof v === 'function' ? v(prev) : v;
       try { window.history.replaceState(null, '', '#' + stories[next]?.id); } catch {}
       return next;
     });
-  }, []);
+  };
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
@@ -55,14 +56,14 @@ function StorybookPanel() {
   const bp = useBreakpoint();
   const compact = bp === 'sm';
 
-  const handleKeyDown = useCallback((e: any) => {
+  const handleKeyDown = (e: any) => {
     const key = e.key || e.scancode;
     if (key === 'down' || key === 'j') {
       setActiveIdx(i => Math.min(i + 1, stories.length - 1));
     } else if (key === 'up' || key === 'k') {
       setActiveIdx(i => Math.max(i - 1, 0));
     }
-  }, []);
+  };
 
   const sidebarContent = (
     <>

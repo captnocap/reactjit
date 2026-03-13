@@ -6,7 +6,7 @@
  *         useFuzzySearch, useSearchHighlight, useSearchHistory, AppSearch
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Text,
@@ -59,6 +59,7 @@ function styleTooltip(style: Record<string, any>) {
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
+  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -171,7 +172,9 @@ const OPAQUE_DATA = [
   { id: 'u4', name: 'Diego Flores', email: 'diego@example.com', role: 'Engineer', department: 'Data', joined: 2023, avatar: 'x' },
 ];
 
+// rjit-ignore-next-line
 const LUA_FILES = FILES.filter((f) => f.meta === 'Lua');
+// rjit-ignore-next-line
 const TS_FILES = FILES.filter((f) => f.meta !== 'Lua');
 const FLAT_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false, limit: 6 };
 const SECTION_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false };
@@ -320,10 +323,7 @@ function TabsDemo() {
 function BreadcrumbsDemo() {
   const c = useThemeColors();
   const [activePage, setActivePage] = useState('settings');
-  const breadcrumbs = useMemo(
-    () => BREADCRUMB_MAP[activePage] ?? BREADCRUMB_MAP.home,
-    [activePage],
-  );
+  const breadcrumbs = BREADCRUMB_MAP[activePage] ?? BREADCRUMB_MAP.home;
   const containerStyle = { backgroundColor: c.surface, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12 };
 
   return (
@@ -788,7 +788,7 @@ export function NavigationStory() {
   const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const processCode = useCallback((src: string) => {
+  const processCode = (src: string) => {
     const result = transformJSX(src);
     if (result.errors.length > 0) {
       setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
@@ -798,16 +798,16 @@ export function NavigationStory() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-  }, []);
+  };
 
   useMount(() => {
     if (code) processCode(code);
   });
 
-  const handleCodeChange = useCallback((src: string) => {
+  const handleCodeChange = (src: string) => {
     setCode(src);
     processCode(src);
-  }, [processCode]);
+  };
 
 
   return (
