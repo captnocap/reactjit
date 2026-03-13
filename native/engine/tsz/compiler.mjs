@@ -823,7 +823,9 @@ const Painter = struct {
         const screen_y = node.computed.y - scroll_offset_y;
 
         if (node.style.background_color) |col| {
-            _ = c.SDL_SetRenderDrawColor(self.renderer, col.r, col.g, col.b, col.a);
+            const is_hovered = (hovered_node != null and hovered_node.? == node);
+            const paint_col = if (is_hovered) brighten(col) else col;
+            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_col.r, paint_col.g, paint_col.b, paint_col.a);
             var r = c.SDL_Rect{
                 .x = @intFromFloat(screen_x),
                 .y = @intFromFloat(screen_y),
@@ -924,7 +926,32 @@ ${arrays.join('\n')}
                         win_h = @floatFromInt(event.window.data2);
                     }
                 },
-                c.SDL_KEYDOWN => { if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false; },
+                c.SDL_KEYDOWN => {
+                    if (event.key.keysym.sym == c.SDLK_ESCAPE) {
+                        running = false;
+                    } else {
+                        if (hovered_node) |node| {
+                            if (node.handlers.on_key) |handler| handler(event.key.keysym.sym);
+                        }
+                    }
+                },
+                c.SDL_MOUSEMOTION => {
+                    const mx: f32 = @floatFromInt(event.motion.x);
+                    const my: f32 = @floatFromInt(event.motion.y);
+                    const prev = hovered_node;
+                    hovered_node = events.hitTest(&root, mx, my);
+                    if (prev != hovered_node) {
+                        if (prev) |p| { if (p.handlers.on_hover_exit) |h| h(); }
+                        if (hovered_node) |n| { if (n.handlers.on_hover_enter) |h| h(); }
+                    }
+                },
+                c.SDL_MOUSEBUTTONDOWN => {
+                    const mx: f32 = @floatFromInt(event.button.x);
+                    const my: f32 = @floatFromInt(event.button.y);
+                    if (events.hitTest(&root, mx, my)) |node| {
+                        if (node.handlers.on_press) |handler| handler();
+                    }
+                },
                 c.SDL_MOUSEWHEEL => {
                     var mx_i: c_int = undefined;
                     var my_i: c_int = undefined;
