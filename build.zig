@@ -258,6 +258,11 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkSystemLibrary("GL");
         engine_exe.linkSystemLibrary("freetype");
         engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        engine_exe.root_module.addIncludePath(b.path("native/engine"));
+        engine_exe.root_module.addCSourceFile(.{
+            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
 
         const engine_install = b.addInstallArtifact(engine_exe, .{});
 
@@ -290,6 +295,11 @@ pub fn build(b: *std.Build) void {
         app_exe.linkSystemLibrary("GL");
         app_exe.linkSystemLibrary("freetype");
         app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        app_exe.root_module.addIncludePath(b.path("native/engine"));
+        app_exe.root_module.addCSourceFile(.{
+            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
 
         const app_install = b.addInstallArtifact(app_exe, .{});
         const app_step = b.step("engine-app", "Build a tsz-compiled application");

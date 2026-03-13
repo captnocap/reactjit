@@ -10,14 +10,20 @@ const std = @import("std");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
+const events = @import("events.zig");
+const image_mod = @import("image.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
 const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
+const ImageCache = image_mod.ImageCache;
 
 // ── Global text engine (set during init, used by layout measure callback) ───
 var g_text_engine: ?*TextEngine = null;
+
+// ── Global image cache (set during init, used by layout measure callback) ───
+var g_image_cache: ?*ImageCache = null;
 
 fn measureCallback(t: []const u8, font_size: u16) layout.TextMetrics {
     if (g_text_engine) |te| {
@@ -26,11 +32,27 @@ fn measureCallback(t: []const u8, font_size: u16) layout.TextMetrics {
     return .{};
 }
 
+fn measureImageCallback(path: []const u8) layout.ImageDims {
+    if (g_image_cache) |cache| {
+        if (cache.load(path)) |img| {
+            return .{
+                .width = @floatFromInt(img.width),
+                .height = @floatFromInt(img.height),
+            };
+        }
+    }
+    return .{};
+}
+
 // ── Painter ─────────────────────────────────────────────────────────────────
+
+// ── Hover state (module-level so Painter can read it) ────────────────────
+var hovered_node: ?*Node = null;
 
 const Painter = struct {
     renderer: *c.SDL_Renderer,
     text_engine: *TextEngine,
+    image_cache: *ImageCache,
 
     pub fn clear(self: *Painter, color: Color) void {
         _ = c.SDL_SetRenderDrawColor(self.renderer, color.r, color.g, color.b, color.a);
@@ -52,13 +74,52 @@ const Painter = struct {
         c.SDL_RenderPresent(self.renderer);
     }
 
-    /// Walk the node tree and paint backgrounds + text.
-    pub fn paintTree(self: *Painter, node: *Node) void {
+    /// Brighten a color by ~20% for hover feedback.
+    fn brighten(color: Color) Color {
+        return .{
+            .r = @min(255, @as(u16, color.r) + 30),
+            .g = @min(255, @as(u16, color.g) + 30),
+            .b = @min(255, @as(u16, color.b) + 30),
+            .a = color.a,
+        };
+    }
+
+    /// Walk the node tree and paint backgrounds + text + images.
+    /// Nodes that are hovered get a brightened background.
+    /// Scroll/hidden overflow nodes use SDL clip rect for scissor clipping,
+    /// and offset their children by scroll_x/scroll_y.
+    pub fn paintTree(self: *Painter, node: *Node, scroll_offset_x: f32, scroll_offset_y: f32) void {
         if (node.style.display == .none) return;
 
-        // Paint background
+        // Apply accumulated scroll offset to get screen position
+        const screen_x = node.computed.x - scroll_offset_x;
+        const screen_y = node.computed.y - scroll_offset_y;
+
+        // Paint background (brighten if hovered)
         if (node.style.background_color) |color| {
-            self.fillRect(node.computed, color);
+            const is_hovered = (hovered_node != null and hovered_node.? == node);
+            const paint_color = if (is_hovered) brighten(color) else color;
+            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_color.r, paint_color.g, paint_color.b, paint_color.a);
+            var bg_rect = c.SDL_Rect{
+                .x = @intFromFloat(screen_x),
+                .y = @intFromFloat(screen_y),
+                .w = @intFromFloat(node.computed.w),
+                .h = @intFromFloat(node.computed.h),
+            };
+            _ = c.SDL_RenderFillRect(self.renderer, &bg_rect);
+        }
+
+        // Paint image
+        if (node.image_src) |src| {
+            if (self.image_cache.load(src)) |img| {
+                var dst = c.SDL_Rect{
+                    .x = @intFromFloat(screen_x),
+                    .y = @intFromFloat(screen_y),
+                    .w = @intFromFloat(node.computed.w),
+                    .h = @intFromFloat(node.computed.h),
+                };
+                _ = c.SDL_RenderCopy(self.renderer, img.texture, null, &dst);
+            }
         }
 
         // Paint text
@@ -68,16 +129,61 @@ const Painter = struct {
             const color = node.text_color orelse Color.rgb(255, 255, 255);
             self.text_engine.drawText(
                 txt,
-                node.computed.x + pad_l,
-                node.computed.y + pad_t,
+                screen_x + pad_l,
+                screen_y + pad_t,
                 node.font_size,
                 color,
             );
         }
 
-        // Paint children
+        // ── Scissor clipping for scroll/hidden containers ────────
+        var prev_clip: c.SDL_Rect = undefined;
+        var had_prev_clip = false;
+        const needs_clip = node.style.overflow != .visible;
+
+        if (needs_clip) {
+            // Save previous clip rect (for nested scroll containers)
+            c.SDL_RenderGetClipRect(self.renderer, &prev_clip);
+            had_prev_clip = (prev_clip.w > 0 and prev_clip.h > 0);
+
+            // Set clip to this node's screen bounds
+            var clip = c.SDL_Rect{
+                .x = @intFromFloat(screen_x),
+                .y = @intFromFloat(screen_y),
+                .w = @intFromFloat(node.computed.w),
+                .h = @intFromFloat(node.computed.h),
+            };
+
+            // Intersect with existing clip if present (nested clips)
+            if (had_prev_clip) {
+                const ix1 = @max(clip.x, prev_clip.x);
+                const iy1 = @max(clip.y, prev_clip.y);
+                const ix2 = @min(clip.x + clip.w, prev_clip.x + prev_clip.w);
+                const iy2 = @min(clip.y + clip.h, prev_clip.y + prev_clip.h);
+                clip.x = ix1;
+                clip.y = iy1;
+                clip.w = @max(0, ix2 - ix1);
+                clip.h = @max(0, iy2 - iy1);
+            }
+
+            _ = c.SDL_RenderSetClipRect(self.renderer, &clip);
+        }
+
+        // ── Paint children with scroll offset ────────────────────
+        const child_scroll_x = scroll_offset_x + if (needs_clip) node.scroll_x else @as(f32, 0);
+        const child_scroll_y = scroll_offset_y + if (needs_clip) node.scroll_y else @as(f32, 0);
+
         for (node.children) |*child| {
-            self.paintTree(child);
+            self.paintTree(child, child_scroll_x, child_scroll_y);
+        }
+
+        // ── Restore previous clip rect ───────────────────────────
+        if (needs_clip) {
+            if (had_prev_clip) {
+                _ = c.SDL_RenderSetClipRect(self.renderer, &prev_clip);
+            } else {
+                _ = c.SDL_RenderSetClipRect(self.renderer, null);
+            }
         }
     }
 };
@@ -131,7 +237,13 @@ pub fn main() !void {
     g_text_engine = &text_engine;
     layout.setMeasureFn(measureCallback);
 
-    var painter = Painter{ .renderer = renderer, .text_engine = &text_engine };
+    // Init image cache and wire up measurement for layout engine
+    var image_cache = ImageCache.init(renderer);
+    defer image_cache.deinit();
+    g_image_cache = &image_cache;
+    layout.setMeasureImageFn(measureImageCallback);
+
+    var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
 
     // ── Colors ──────────────────────────────────────────────────────
     const bg = Color.rgb(24, 24, 32);
@@ -235,7 +347,56 @@ pub fn main() !void {
                     }
                 },
                 c.SDL_KEYDOWN => {
-                    if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false;
+                    if (event.key.keysym.sym == c.SDLK_ESCAPE) {
+                        running = false;
+                    } else {
+                        // Dispatch to hovered node's on_key handler (or could be focused node)
+                        if (hovered_node) |node| {
+                            if (node.handlers.on_key) |handler| {
+                                handler(event.key.keysym.sym);
+                            }
+                        }
+                    }
+                },
+                c.SDL_MOUSEMOTION => {
+                    const mx: f32 = @floatFromInt(event.motion.x);
+                    const my: f32 = @floatFromInt(event.motion.y);
+                    const prev_hovered = hovered_node;
+                    hovered_node = events.hitTest(&container, mx, my);
+
+                    // Fire hover enter/exit callbacks
+                    if (prev_hovered != hovered_node) {
+                        if (prev_hovered) |prev| {
+                            if (prev.handlers.on_hover_exit) |handler| handler();
+                        }
+                        if (hovered_node) |node| {
+                            if (node.handlers.on_hover_enter) |handler| handler();
+                        }
+                    }
+                },
+                c.SDL_MOUSEBUTTONDOWN => {
+                    const mx: f32 = @floatFromInt(event.button.x);
+                    const my: f32 = @floatFromInt(event.button.y);
+                    if (events.hitTest(&container, mx, my)) |node| {
+                        if (node.handlers.on_press) |handler| handler();
+                    }
+                },
+                c.SDL_MOUSEWHEEL => {
+                    // Get current mouse position for hit test
+                    var mx_i: c_int = undefined;
+                    var my_i: c_int = undefined;
+                    _ = c.SDL_GetMouseState(&mx_i, &my_i);
+                    const mx: f32 = @floatFromInt(mx_i);
+                    const my: f32 = @floatFromInt(my_i);
+
+                    // Find the scroll container under the mouse
+                    if (events.findScrollContainer(&container, mx, my)) |scroll_node| {
+                        const scroll_amount: f32 = @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
+                        scroll_node.scroll_y -= scroll_amount;
+                        // Clamp to valid range [0, content_height - visible_height]
+                        const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
+                        scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+                    }
                 },
                 else => {},
             }
@@ -254,7 +415,7 @@ pub fn main() !void {
 
         // ── Paint pass ──────────────────────────────────────────────
         painter.clear(bg);
-        painter.paintTree(&container);
+        painter.paintTree(&container, 0, 0);
         painter.fillRect(pixel.computed, accent);
         painter.present();
     }

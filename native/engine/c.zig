@@ -10,4 +10,5 @@ pub const imports = @cImport({
     @cInclude("GL/gl.h");
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
+    @cInclude("stb/stb_image.h");
 });

@@ -19,6 +19,7 @@
 //! Arena-allocated: one frame = one arena = one bulk free.
 
 const std = @import("std");
+const events = @import("events.zig");
 
 // ── Style ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ pub const AlignItems = enum {
 };
 
 pub const Display = enum { flex, none };
+
+pub const Overflow = enum { visible, hidden, scroll };
 
 /// Style properties for a node. Mirrors the CSS-like style object from React.
 /// All dimensions are in pixels (Phase 1 — no percentages/vw/vh yet).
@@ -78,6 +81,9 @@ pub const Style = struct {
 
     // Display
     display: Display = .flex,
+
+    // Overflow
+    overflow: Overflow = .visible,
 
     // Visual
     background_color: ?Color = null,
@@ -138,6 +144,16 @@ pub const TextMetrics = struct {
 /// The layout engine calls this to measure text nodes.
 pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16) TextMetrics;
 
+/// Image dimensions returned by the image measurement callback.
+pub const ImageDims = struct {
+    width: f32 = 0,
+    height: f32 = 0,
+};
+
+/// Function pointer type for image measurement callback.
+/// The layout engine calls this to get natural image dimensions.
+pub const MeasureImageFn = *const fn (path: []const u8) ImageDims;
+
 // ── Layout Result ───────────────────────────────────────────────────────────
 
 pub const LayoutRect = struct {
@@ -160,6 +176,18 @@ pub const Node = struct {
     font_size: u16 = 16,
     /// Text color (separate from background_color)
     text_color: ?Color = null,
+
+    /// Image source path (null for non-image nodes)
+    image_src: ?[]const u8 = null,
+
+    /// Event handlers (onPress, onHover, onKey). Set at compile time.
+    handlers: events.EventHandler = .{},
+
+    /// Scroll state — per-node, mutated by mouse wheel events
+    scroll_x: f32 = 0,
+    scroll_y: f32 = 0,
+    /// Total content height (set by layout for scroll extent)
+    content_height: f32 = 0,
 
     // Internal: set by parent's flex pass, consumed by layoutNode
     _flex_w: ?f32 = null,
@@ -188,9 +216,23 @@ fn clamp(val: f32, min_val: ?f32, max_val: ?f32) f32 {
 
 // Thread-local (frame-local) measure function — set before each layout pass
 var _measure_fn: ?MeasureTextFn = null;
+var _measure_image_fn: ?MeasureImageFn = null;
 
 pub fn setMeasureFn(f: ?MeasureTextFn) void {
     _measure_fn = f;
+}
+
+pub fn setMeasureImageFn(f: ?MeasureImageFn) void {
+    _measure_image_fn = f;
+}
+
+fn measureNodeImage(node: *Node) ImageDims {
+    if (node.image_src) |src| {
+        if (_measure_image_fn) |measure| {
+            return measure(src);
+        }
+    }
+    return .{};
 }
 
 fn measureNodeText(node: *Node) TextMetrics {
@@ -215,6 +257,12 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
     if (node.text != null) {
         const m = measureNodeText(node);
         return m.width + pad_l + pad_r;
+    }
+
+    // Image nodes: use natural width
+    if (node.image_src != null) {
+        const dims = measureNodeImage(node);
+        return dims.width + pad_l + pad_r;
     }
 
     if (node.children.len == 0) return pad_l + pad_r;
@@ -258,6 +306,12 @@ fn estimateIntrinsicHeight(node: *Node) f32 {
     if (node.text != null) {
         const m = measureNodeText(node);
         return m.height + pad_t + pad_b;
+    }
+
+    // Image nodes: use natural height
+    if (node.image_src != null) {
+        const dims = measureNodeImage(node);
+        return dims.height + pad_t + pad_b;
     }
 
     if (node.children.len == 0) return pad_t + pad_b;
@@ -599,6 +653,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         if (h) |*hh| {
             hh.* = clamp(hh.*, s.min_height, s.max_height);
         }
+    }
+
+    // ── Scroll: record content extent for scroll containers ──────────
+    if (s.overflow == .scroll or s.overflow == .hidden) {
+        // content_height = full content extent (may exceed node height)
+        const full_content = if (is_row) content_cross_end + pad_t + pad_b else content_main_end + pad_b;
+        node.content_height = full_content;
     }
 
     // ── Write computed rect ─────────────────────────────────────────
