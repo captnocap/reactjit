@@ -159,74 +159,49 @@ pub fn main() !void {
     // ── Build the UI tree ───────────────────────────────────────────
     // A card-like layout with text content — no coordinates, just declarations.
 
-    // Title text
-    const title = Node{
-        .style = .{ .padding_bottom = 4 },
-        .text = "ReactJIT Engine",
-        .font_size = 28,
-        .text_color = Color.rgb(255, 255, 255),
+    // ── UI tree ───────────────────────────────────────────────────
+    // All arrays must be `var` because layout mutates .computed
+    // through pointers. Zig's comptime const arrays live in
+    // read-only memory — layout would segfault trying to write.
+
+    var stat1_children = [_]Node{
+        .{ .text = "Binary Size", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
+        .{ .text = "148 KB", .font_size = 22, .text_color = accent },
+    };
+    var stat2_children = [_]Node{
+        .{ .text = "Layout Engine", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
+        .{ .text = "Flexbox", .font_size = 22, .text_color = green },
+    };
+    var stat3_children = [_]Node{
+        .{ .text = "Renderer", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
+        .{ .text = "OpenGL", .font_size = 22, .text_color = blue },
     };
 
-    // Subtitle
-    const subtitle = Node{
-        .style = .{ .padding_bottom = 16 },
-        .text = "Zig + SDL2 + FreeType. No Love2D. No LuaJIT. No bridge.",
-        .font_size = 14,
-        .text_color = muted,
+    var stats_children = [_]Node{
+        .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 }, .children = &stat1_children },
+        .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 }, .children = &stat2_children },
+        .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 }, .children = &stat3_children },
     };
 
-    // Stat cards
-    const stat1 = Node{
-        .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 },
-        .children = @constCast(&[_]Node{
-            .{ .text = "Binary Size", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
-            .{ .text = "148 KB", .font_size = 22, .text_color = accent },
-        }),
+    var bar_children = [_]Node{
+        .{ .style = .{ .flex_grow = 1, .background_color = red, .padding = 8 }, .text = "Red", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
+        .{ .style = .{ .flex_grow = 1, .background_color = blue, .padding = 8 }, .text = "Blue", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
+        .{ .style = .{ .flex_grow = 1, .background_color = green, .padding = 8 }, .text = "Green", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
+        .{ .style = .{ .flex_grow = 1, .background_color = yellow, .padding = 8 }, .text = "Yellow", .font_size = 12, .text_color = Color.rgb(30, 30, 42) },
     };
 
-    const stat2 = Node{
-        .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 },
-        .children = @constCast(&[_]Node{
-            .{ .text = "Layout Engine", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
-            .{ .text = "Flexbox", .font_size = 22, .text_color = green },
-        }),
+    var container_children = [_]Node{
+        // Title
+        .{ .text = "ReactJIT Engine", .font_size = 28, .text_color = Color.rgb(255, 255, 255), .style = .{ .padding_bottom = 4 } },
+        // Subtitle
+        .{ .text = "Zig + SDL2 + FreeType. No Love2D. No LuaJIT. No bridge.", .font_size = 14, .text_color = muted, .style = .{ .padding_bottom = 16 } },
+        // Stats row
+        .{ .style = .{ .flex_direction = .row, .gap = 10 }, .children = &stats_children },
+        // Color bar
+        .{ .style = .{ .flex_direction = .row, .gap = 4, .height = 40 }, .children = &bar_children },
+        // Footer
+        .{ .text = "One pixel. Then the world.", .font_size = 12, .text_color = Color.rgb(80, 80, 100), .style = .{ .padding_top = 8 } },
     };
-
-    const stat3 = Node{
-        .style = .{ .flex_grow = 1, .background_color = Color.rgb(40, 40, 56), .padding = 12 },
-        .children = @constCast(&[_]Node{
-            .{ .text = "Renderer", .font_size = 11, .text_color = muted, .style = .{ .padding_bottom = 4 } },
-            .{ .text = "OpenGL", .font_size = 22, .text_color = blue },
-        }),
-    };
-
-    // Stats row
-    const stats_row = Node{
-        .style = .{ .flex_direction = .row, .gap = 10 },
-        .children = @constCast(&[_]Node{ stat1, stat2, stat3 }),
-    };
-
-    // Color bar (the original 3 rects — now with labels)
-    const color_bar = Node{
-        .style = .{ .flex_direction = .row, .gap = 4, .height = 40 },
-        .children = @constCast(&[_]Node{
-            .{ .style = .{ .flex_grow = 1, .background_color = red, .padding = 8, .align_items = .center, .justify_content = .center }, .text = "Red", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
-            .{ .style = .{ .flex_grow = 1, .background_color = blue, .padding = 8, .align_items = .center, .justify_content = .center }, .text = "Blue", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
-            .{ .style = .{ .flex_grow = 1, .background_color = green, .padding = 8, .align_items = .center, .justify_content = .center }, .text = "Green", .font_size = 12, .text_color = Color.rgb(255, 255, 255) },
-            .{ .style = .{ .flex_grow = 1, .background_color = yellow, .padding = 8, .align_items = .center, .justify_content = .center }, .text = "Yellow", .font_size = 12, .text_color = Color.rgb(30, 30, 42) },
-        }),
-    };
-
-    // Footer
-    const footer = Node{
-        .style = .{ .padding_top = 8 },
-        .text = "One pixel. Then the world.",
-        .font_size = 12,
-        .text_color = Color.rgb(80, 80, 100),
-    };
-
-    // Main container
-    var container_children = [_]Node{ title, subtitle, stats_row, color_bar, footer };
     var container = Node{
         .style = .{
             .width = 540,

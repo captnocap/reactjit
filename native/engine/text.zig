@@ -121,18 +121,19 @@ pub const TextEngine = struct {
         var texture: ?*c.SDL_Texture = null;
 
         if (bw > 0 and bh > 0) {
-            // Create an RGBA surface from the grayscale bitmap
+            // Create an ARGB surface from the grayscale bitmap.
+            // SDL_PIXELFORMAT_ARGB8888 on little-endian = bytes B, G, R, A in memory.
             const surface = c.SDL_CreateRGBSurfaceWithFormat(
                 0,
                 bw,
                 bh,
                 32,
-                c.SDL_PIXELFORMAT_RGBA8888,
+                c.SDL_PIXELFORMAT_ARGB8888,
             );
             if (surface == null) return null;
             defer c.SDL_FreeSurface(surface);
 
-            // Copy FreeType bitmap (8-bit alpha) into RGBA surface
+            // Copy FreeType bitmap (8-bit alpha) into ARGB surface
             const pixels: [*]u8 = @ptrCast(surface.*.pixels);
             const pitch: usize = @intCast(surface.*.pitch);
             const src_pitch: usize = @intCast(bitmap.pitch);
@@ -141,10 +142,10 @@ pub const TextEngine = struct {
                 for (0..@intCast(bw)) |col| {
                     const alpha = bitmap.buffer[row * src_pitch + col];
                     const dst_offset = row * pitch + col * 4;
-                    // RGBA8888: R, G, B, A
-                    pixels[dst_offset + 0] = 255; // R
+                    // ARGB8888 little-endian memory: B, G, R, A
+                    pixels[dst_offset + 0] = 255; // B
                     pixels[dst_offset + 1] = 255; // G
-                    pixels[dst_offset + 2] = 255; // B
+                    pixels[dst_offset + 2] = 255; // R
                     pixels[dst_offset + 3] = alpha; // A
                 }
             }
@@ -171,28 +172,29 @@ pub const TextEngine = struct {
     }
 
     /// Measure a string's width and height at the given font size.
+    /// Height uses the font's line metrics (consistent per font size),
+    /// not per-glyph ink bounds (which vary by character and cause overlap).
     pub fn measureText(self: *TextEngine, text: []const u8, size_px: u16) layout.TextMetrics {
         self.setSize(size_px);
 
-        var width: f32 = 0;
-        var max_ascent: f32 = 0;
-        var max_descent: f32 = 0;
+        // Font-level line metrics (26.6 fixed point → pixels)
+        const metrics = self.face.*.size.*.metrics;
+        const line_ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
+        const line_descent: f32 = @as(f32, @floatFromInt(-metrics.descender)) / 64.0;
+        const line_height: f32 = line_ascent + line_descent;
 
+        var width: f32 = 0;
         for (text) |byte| {
             const codepoint: u32 = byte; // ASCII for Phase 2
             if (self.rasterizeGlyph(codepoint, size_px)) |g| {
                 width += @floatFromInt(g.advance);
-                const ascent: f32 = @floatFromInt(g.bearing_y);
-                const descent: f32 = @floatFromInt(g.height - g.bearing_y);
-                if (ascent > max_ascent) max_ascent = ascent;
-                if (descent > max_descent) max_descent = descent;
             }
         }
 
         return .{
             .width = width,
-            .height = max_ascent + max_descent,
-            .ascent = max_ascent,
+            .height = line_height,
+            .ascent = line_ascent,
         };
     }
 
@@ -201,19 +203,12 @@ pub const TextEngine = struct {
     pub fn drawText(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, color: layout.Color) void {
         self.setSize(size_px);
 
-        // First pass: find max ascent for baseline calculation
-        var max_ascent: f32 = 0;
-        for (text) |byte| {
-            const codepoint: u32 = byte;
-            if (self.rasterizeGlyph(codepoint, size_px)) |g| {
-                const ascent: f32 = @floatFromInt(g.bearing_y);
-                if (ascent > max_ascent) max_ascent = ascent;
-            }
-        }
+        // Use font-level ascent for consistent baseline (matches measureText)
+        const metrics = self.face.*.size.*.metrics;
+        const line_ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
 
-        // Second pass: render
         var pen_x = x;
-        const baseline_y = y + max_ascent;
+        const baseline_y = y + line_ascent;
 
         for (text) |byte| {
             const codepoint: u32 = byte;

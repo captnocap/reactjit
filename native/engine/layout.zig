@@ -587,7 +587,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
 
     // ── Auto-height: shrink-wrap to content ─────────────────────────
     if (h == null) {
-        if (is_row) {
+        if (node.text != null) {
+            // Text nodes: use measured text height + padding
+            const m = measureNodeText(node);
+            h = m.height + pad_t + pad_b;
+        } else if (is_row) {
             h = content_cross_end + pad_t + pad_b;
         } else {
             h = content_main_end + pad_b;
