@@ -12,6 +12,8 @@
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
  *   no-use-effect               (error)   useEffect/useLayoutEffect banned — use Lua-managed alternatives
+ *   no-js-compute               (error)   useMemo/useReducer/useCallback/lazy useState banned — compute belongs in Lua
+ *                                (warning) .sort()/.filter()/.reduce() in component body — data transforms belong in Lua
  *
  *
  * Removed rules (layout engine handles these correctly now):
@@ -1443,6 +1445,124 @@ const STORAGE_HOOKS = new Set(['useCRUD', 'useStorage', 'createCRUD']);
 // Hooks banned in user code — useEffect must go through Lua-managed alternatives
 const BANNED_HOOKS = new Set(['useEffect', 'useLayoutEffect']);
 
+// Compute hooks banned in user code — all compute belongs in Lua (.tslx compute block or .tsl module)
+const BANNED_COMPUTE_HOOKS = new Set(['useMemo', 'useReducer', 'useCallback']);
+
+// Array methods that indicate compute when called outside JSX return context
+const COMPUTE_ARRAY_METHODS = new Set(['sort', 'filter', 'reduce', 'flatMap', 'find', 'findIndex', 'every', 'some']);
+
+/**
+ * Walk a source file's AST to find inline compute patterns in component bodies.
+ * Catches: .sort(), .filter(), .reduce() etc. in variable declarations (not in JSX return),
+ * useState with function initializer, and Math.* chains.
+ * Returns diagnostics directly (not call objects — these aren't simple hook calls).
+ */
+function findInlineCompute(sourceFile, filePath, ts) {
+  const diagnostics = [];
+  const sourceLines = sourceFile.getFullText().split('\n');
+
+  function isIgnored(lineNum) {
+    if (lineNum < 2) return false;
+    const prevLine = sourceLines[lineNum - 2];
+    return prevLine && /rjit-ignore-next-line/.test(prevLine);
+  }
+
+  // Check if a node is inside a JSX expression container (legitimate .map for rendering)
+  function isInsideJSX(node) {
+    let current = node.parent;
+    while (current) {
+      if (ts.isJsxExpression(current) || ts.isJsxElement(current) ||
+          ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current)) {
+        return true;
+      }
+      // Stop at function boundary — don't look past component/callback scope
+      if (ts.isFunctionDeclaration(current) || ts.isFunctionExpression(current) ||
+          ts.isArrowFunction(current)) {
+        return false;
+      }
+      current = current.parent;
+    }
+    return false;
+  }
+
+  // Check if a node is inside a useLuaInterval/useLuaEffect/useMount callback
+  // (these run in response to Lua events, so some compute is expected)
+  function isInsideLuaCallback(node) {
+    let current = node.parent;
+    while (current) {
+      if (ts.isCallExpression(current) && ts.isIdentifier(current.expression)) {
+        const name = current.expression.text;
+        if (name === 'useLuaInterval' || name === 'useLuaEffect' || name === 'useMount' ||
+            name === 'useLoveEvent' || name === 'useLuaQuery' || name === 'useLoveRPC') {
+          return true;
+        }
+      }
+      current = current.parent;
+    }
+    return false;
+  }
+
+  function visit(node) {
+    // Detect useState(() => compute()) — lazy initializer
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+        node.expression.text === 'useState' && node.arguments.length >= 1) {
+      const firstArg = node.arguments[0];
+      if (ts.isArrowFunction(firstArg) || ts.isFunctionExpression(firstArg)) {
+        const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
+        const line = pos.line + 1;
+        if (!isIgnored(line)) {
+          diagnostics.push({
+            rule: 'no-js-compute',
+            severity: 'error',
+            message: 'useState() with function initializer runs compute in JS. Use useState with a literal value, or move initialization to Lua.',
+            file: filePath,
+            line,
+            col: pos.character + 1,
+          });
+        }
+      }
+    }
+
+    // Detect .sort(), .filter(), .reduce() etc. in variable declarations (not JSX)
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const methodName = node.expression.name.text;
+      if (COMPUTE_ARRAY_METHODS.has(methodName) && !isInsideJSX(node) && !isInsideLuaCallback(node)) {
+        // Only flag if in a variable declaration or assignment (const sorted = data.sort(...))
+        let inVarDecl = false;
+        let current = node.parent;
+        while (current) {
+          if (ts.isVariableDeclaration(current) || ts.isBinaryExpression(current)) {
+            inVarDecl = true;
+            break;
+          }
+          // Stop at statement boundary
+          if (ts.isExpressionStatement(current) || ts.isReturnStatement(current)) break;
+          current = current.parent;
+        }
+        if (inVarDecl) {
+          const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
+          const line = pos.line + 1;
+          if (!isIgnored(line)) {
+            diagnostics.push({
+              rule: 'no-js-compute',
+              severity: 'warning',
+              message: `.${methodName}() in component body runs compute in JS during render. Move data transformations to a .tslx compute() block or .tsl module.`,
+              file: filePath,
+              line,
+              col: pos.character + 1,
+            });
+          }
+        }
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return diagnostics;
+}
+
 /**
  * Walk a source file's AST to find storage hook call expressions.
  * Returns a flat list of call context objects for rule analysis.
@@ -1464,7 +1584,7 @@ function findCallExpressions(sourceFile, filePath, ts) {
         funcName = node.expression.text;
       }
 
-      if (funcName && (STORAGE_HOOKS.has(funcName) || BANNED_HOOKS.has(funcName))) {
+      if (funcName && (STORAGE_HOOKS.has(funcName) || BANNED_HOOKS.has(funcName) || BANNED_COMPUTE_HOOKS.has(funcName))) {
         const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
         const line = pos.line + 1;
         calls.push({
@@ -1521,6 +1641,21 @@ const callRules = [
         'useLocalStore(key, initial)                                  — replaces persistence effects',
       ].join('\n        ');
       return `${call.funcName}() is banned — it runs in React's commit phase (async, batched, not frame-synced) which causes performance problems in ReactJIT. All effects must run in Lua's love.update(dt) loop. Use one of these instead:\n        ${alternatives}`;
+    },
+  },
+
+  // useMemo / useReducer / useCallback are banned — compute belongs in Lua
+  {
+    name: 'no-js-compute',
+    severity: 'error',
+    check(call) {
+      if (!BANNED_COMPUTE_HOOKS.has(call.funcName)) return null;
+      const reasons = {
+        useMemo: 'useMemo() is banned — it runs JS compute during render that should be in Lua. Every new reference it returns triggers a reconciler diff → mutation ops → bridge flood. Move compute to a .tslx compute() block or .tsl module.',
+        useReducer: 'useReducer() is banned — state machines belong in Lua, not the QuickJS interpreter. Use useState with simple values + Lua-side logic, or move the reducer to a .tslx compute() block.',
+        useCallback: 'useCallback() is banned — it stabilizes references to JS functions that should not exist. If the function does compute, move it to Lua. If it\'s an event handler, pass it directly (the reconciler handles handler identity).',
+      };
+      return reasons[call.funcName] || `${call.funcName}() is banned — compute belongs in Lua.`;
     },
   },
 ];
@@ -2458,6 +2593,10 @@ export async function runLint(cwd, options = {}) {
         }
       }
     }
+
+    // Inline compute detection (sort/filter/reduce in component bodies, lazy useState, etc.)
+    const inlineComputeDiags = findInlineCompute(sourceFile, filePath, ts);
+    fileDiagnostics.push(...inlineComputeDiags);
 
     // MCP server calls
     const mcpCalls = findMCPServerCalls(sourceFile, filePath, ts);
