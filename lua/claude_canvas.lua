@@ -375,7 +375,9 @@ Capabilities.register("ClaudeCanvas", {
       local scrollY = inputState.scrollY
       local prevKind = nil
       local blockKind = nil  -- first semantic kind in current blank-line-delimited block
+      local lastContentKind = nil  -- last non-blank kind (survives blank lines)
       local inMenu = false
+      local inResponseTable = false  -- box_drawing table inside assistant response
       local inSecurityNotice = false  -- carries security_notice across blank lines
       local rowColors = {}  -- row -> { fg, hasText }
       local rowMeta = {}    -- row -> { nodeId, turnId, groupId, groupType }
@@ -502,6 +504,31 @@ Capabilities.register("ClaudeCanvas", {
             rowColors[row] = { fg = sampledFg, hasText = hasTextContent, colors = colorList }
           end
 
+          -- Response table detection: ┌│└ table inside an assistant response
+          -- When box_drawing follows assistant_text (even across blank lines),
+          -- the table is part of the response — not a menu boundary.
+          if kind == "box_drawing" then
+            if (rowText:find("┌", 1, true) or rowText:find("┬", 1, true))
+               and lastContentKind == "assistant_text" then
+              inResponseTable = true
+            end
+            if rowText:find("└", 1, true) or rowText:find("┘", 1, true) then
+              -- Table bottom — stay in response table for this row, exit after
+              -- (handled after kind is finalized below)
+            end
+          end
+
+          -- Inside a response table: box_drawing content rows → assistant_text
+          if inResponseTable and kind == "box_drawing" then
+            if hasTextContent then
+              kind = "assistant_text"
+            end
+            -- Table bottom exits response table mode (after this row)
+            if rowText:find("└", 1, true) or rowText:find("┘", 1, true) then
+              inResponseTable = false
+            end
+          end
+
           -- Brightness-based reclassification for box_drawing rows with text content
           if kind == "box_drawing" and hasTextContent then
             if not sampledFg then
@@ -517,7 +544,9 @@ Capabilities.register("ClaudeCanvas", {
           end
 
           -- Adjacency: text after assistant_text = assistant_text (multi-line response)
-          if kind == "text" and (prevKind == "assistant_text") then
+          -- Also catches text after a response table (box_drawing with lastContentKind = assistant_text)
+          if kind == "text" and (prevKind == "assistant_text"
+             or (prevKind == "box_drawing" and lastContentKind == "assistant_text")) then
             kind = "assistant_text"
           end
 
@@ -841,6 +870,7 @@ Capabilities.register("ClaudeCanvas", {
 
           -- blockKind already updated by BLOCK_SETTERS above
           prevKind = kind
+          lastContentKind = kind  -- survives blank lines (for response table detection)
 
           -- Drawing: only for visible rows
           if inViewport then
