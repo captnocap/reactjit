@@ -444,15 +444,13 @@ export function MonacoMirror({
       return Math.max(8, Math.min(100, Math.round((len / minimapMaxLineLength) * 100)));
     });
   }, [minimapMaxLineLength, minimapRows]);
-  const viewStateFirstVisibleLine = editorViewState?.firstVisibleLine ?? 1;
-  const rawVisibleLineCount = editorViewState?.visibleLineCount ?? minimapViewportRows;
   const viewStateTotalVisibleLines = minimapTotalLineEstimate;
   const editorStateLineHeight = Math.max(1, editorViewState?.lineHeight ?? editorLineHeight);
-  const maxVisibleFromViewport = Math.max(1, Math.floor(effectiveEditorViewportHeight / editorStateLineHeight));
-  const viewStateVisibleLineCount = Math.max(
-    1,
-    Math.min(viewStateTotalVisibleLines, rawVisibleLineCount, maxVisibleFromViewport + 1),
-  );
+  const editorStateScrollY = Math.max(0, editorViewState?.scrollY ?? 0);
+  const derivedFirstVisibleLine = Math.floor(editorStateScrollY / editorStateLineHeight) + 1;
+  const derivedVisibleLineCount = Math.max(1, Math.ceil(effectiveEditorViewportHeight / editorStateLineHeight));
+  const viewStateFirstVisibleLine = Math.max(1, Math.min(viewStateTotalVisibleLines, derivedFirstVisibleLine));
+  const viewStateVisibleLineCount = Math.max(1, Math.min(viewStateTotalVisibleLines, derivedVisibleLineCount));
   const minimapAllVisible = viewStateVisibleLineCount >= viewStateTotalVisibleLines;
   const minimapScrollableLines = Math.max(0, viewStateTotalVisibleLines - viewStateVisibleLineCount);
   const minimapViewportPx = minimapAllVisible
