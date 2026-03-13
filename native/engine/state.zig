@@ -171,3 +171,73 @@ pub fn toggleSlot(id: usize) void {
 pub fn fmtInt(buf: []u8, val: i64) []const u8 {
     return std.fmt.bufPrint(buf, "{d}", .{val}) catch "?";
 }
+
+// ── State persistence for dev mode hot reload ────────────────────────────
+
+const STATE_FILE = "/tmp/tsz-state.bin";
+
+/// Save all state slots to disk. Called before app is killed during dev mode.
+pub fn saveState() void {
+    const file = std.fs.createFileAbsolute(STATE_FILE, .{}) catch return;
+    defer file.close();
+
+    // Write slot count
+    const count_bytes: [8]u8 = @bitCast(@as(u64, slot_count));
+    file.writeAll(&count_bytes) catch return;
+
+    // Write each slot's i64 value
+    for (0..slot_count) |i| {
+        const val = getSlot(i);
+        const val_bytes: [8]u8 = @bitCast(val);
+        file.writeAll(&val_bytes) catch return;
+    }
+}
+
+/// Load state slots from disk if available. Call after createSlot() calls.
+/// Overwrites initial values with saved values (preserves state across reload).
+/// Returns true if state was restored.
+pub fn loadState() bool {
+    const file = std.fs.openFileAbsolute(STATE_FILE, .{}) catch return false;
+    defer file.close();
+    // Delete the file after reading (one-shot restore)
+    defer std.fs.deleteFileAbsolute(STATE_FILE) catch {};
+
+    // Read slot count
+    var count_bytes: [8]u8 = undefined;
+    _ = file.readAll(&count_bytes) catch return false;
+    const saved_count: u64 = @bitCast(count_bytes);
+
+    // Restore values (only up to min of saved and current slot count)
+    const restore_count = @min(saved_count, slot_count);
+    for (0..restore_count) |i| {
+        var val_bytes: [8]u8 = undefined;
+        _ = file.readAll(&val_bytes) catch break;
+        const val: i64 = @bitCast(val_bytes);
+        slots[i].value = .{ .int = val };
+    }
+
+    if (restore_count > 0) {
+        _dirty = true; // trigger re-render with restored values
+        std.debug.print("[state] Restored {d} slots from previous session\n", .{restore_count});
+    }
+    return restore_count > 0;
+}
+
+// ── SIGUSR1 handler for dev mode state save ──────────────────────────────
+
+var _sigusr1_installed = false;
+
+pub fn installSignalHandler() void {
+    if (_sigusr1_installed) return;
+    const handler = std.posix.Sigaction{
+        .handler = .{ .handler = sigusr1Handler },
+        .mask = std.posix.sigemptyset(),
+        .flags = 0,
+    };
+    std.posix.sigaction(std.posix.SIG.USR1, &handler, null);
+    _sigusr1_installed = true;
+}
+
+fn sigusr1Handler(_: c_int) callconv(.c) void {
+    saveState();
+}

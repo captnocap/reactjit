@@ -1135,6 +1135,9 @@ pub const Generator = struct {
             for (0..self.state_count) |i| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlot({d});\n", .{self.state_slots[i].initial}));
             }
+            // Dev mode: restore state from previous session + install save-on-signal
+            try out.appendSlice(self.alloc, "    _ = state.loadState();\n");
+            try out.appendSlice(self.alloc, "    state.installSignalHandler();\n");
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
 

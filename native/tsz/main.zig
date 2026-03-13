@@ -99,7 +99,11 @@ fn spawnApp(alloc: std.mem.Allocator) ?posix.pid_t {
 }
 
 /// Kill a running child process by pid.
+/// Sends SIGUSR1 first (triggers state save), then SIGTERM.
 fn killApp(pid: posix.pid_t) void {
+    // Signal the app to save state before dying
+    posix.kill(pid, posix.SIG.USR1) catch {};
+    std.Thread.sleep(50 * std.time.ns_per_ms); // give it 50ms to save
     posix.kill(pid, posix.SIG.TERM) catch {};
     // Wait for it to die (reap zombie)
     _ = posix.waitpid(pid, 0);
