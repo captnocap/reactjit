@@ -25,6 +25,7 @@ import type { ViewId } from '../types';
 
 const NAV_ITEMS: { id: ViewId; label: string; icon: string }[] = [
   { id: 'chat',     label: 'Chat',     icon: '\u25C8' },  // ◈
+  { id: 'compare',  label: 'Compare',  icon: '\u2261' },  // ≡
   { id: 'terminal', label: 'Terminal',  icon: '\u25B7' },  // ▷
   { id: 'research', label: 'Research',  icon: '\u25CB' },  // ○
   { id: 'settings', label: 'Settings',  icon: '\u2699' },  // ⚙

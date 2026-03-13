@@ -7,7 +7,8 @@
  */
 
 import React, { useState } from 'react';
-import { Box, useHotkey, useMount, useLocalStore } from '@reactjit/core';
+import { Box, useHotkey, useMount, useLocalStore, CommandPalette } from '@reactjit/core';
+import type { CommandDef } from '@reactjit/core';
 import { ThemeProvider } from '@reactjit/theme';
 import { StorageProvider, MemoryAdapter } from '@reactjit/storage';
 import { useChat, useModels } from '@reactjit/ai';
@@ -15,14 +16,17 @@ import { useChat, useModels } from '@reactjit/ai';
 import './theme';  // side-effect: registers vesper theme
 import { Shell } from './layout/Shell';
 import { ChatView } from './views/ChatView';
+import { CompareView } from './views/CompareView';
 import { ConversationPanel } from './views/ConversationPanel';
 import { SettingsView } from './views/SettingsView';
 import { TerminalView } from './views/TerminalView';
 import { ResearchView } from './views/ResearchView';
+import { VesperBackground, VesperCRT } from './components/VesperEffects';
 import type {
   ViewId, ProviderConfig, Conversation, AppSettings,
 } from './types';
 import { DEFAULT_PROVIDERS, DEFAULT_SETTINGS } from './types';
+import { V } from './theme';
 
 // ── Storage adapter ──────────────────────────────────────
 
@@ -160,12 +164,27 @@ function VesperApp() {
     }, 0) / 4
   );
 
+  // ── Command Palette ─────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  const commands: CommandDef[] = [
+    { id: 'new-chat',      label: 'New Conversation',     shortcut: 'ctrl+n',  group: 'Chat',       action: newConversation },
+    { id: 'history',       label: 'Toggle History',       shortcut: 'ctrl+h',  group: 'Chat',       action: () => setHistoryOpen(prev => !prev) },
+    { id: 'view-chat',     label: 'Go to Chat',                                group: 'Navigate',   action: () => setActiveView('chat') },
+    { id: 'view-compare',  label: 'Go to Compare',                             group: 'Navigate',   action: () => setActiveView('compare') },
+    { id: 'view-terminal', label: 'Go to Terminal',                             group: 'Navigate',   action: () => setActiveView('terminal') },
+    { id: 'view-research', label: 'Go to Research',                             group: 'Navigate',   action: () => setActiveView('research') },
+    { id: 'view-settings', label: 'Go to Settings',       shortcut: 'ctrl+,',  group: 'Navigate',   action: () => setActiveView('settings') },
+  ];
+
   // ── Keyboard shortcuts ───────────────────────────────
+  useHotkey('ctrl+k', () => setPaletteOpen(prev => !prev));
   useHotkey('ctrl+n', newConversation);
   useHotkey('ctrl+h', () => setHistoryOpen(prev => !prev));
   useHotkey('ctrl+,', () => setActiveView('settings'));
   useHotkey('escape', () => {
-    if (historyOpen) setHistoryOpen(false);
+    if (paletteOpen) setPaletteOpen(false);
+    else if (historyOpen) setHistoryOpen(false);
     else if (activeView !== 'chat') setActiveView('chat');
   });
 
@@ -197,6 +216,9 @@ function VesperApp() {
         width: '100%',
         position: 'relative',
       }}>
+        {/* Ambient background effect */}
+        <VesperBackground />
+
         {/* Conversation history panel (overlay) */}
         <ConversationPanel
           conversations={conversations}
@@ -223,8 +245,19 @@ function VesperApp() {
             onDeleteMessage={deleteMessage}
           />
         )}
+        {activeView === 'compare' && (
+          <CompareView
+            providers={providers}
+            settings={settings}
+          />
+        )}
         {activeView === 'terminal' && <TerminalView />}
-        {activeView === 'research' && <ResearchView />}
+        {activeView === 'research' && (
+          <ResearchView
+            provider={activeProvider}
+            settings={settings}
+          />
+        )}
         {activeView === 'settings' && (
           <SettingsView
             providers={providers}
@@ -233,6 +266,23 @@ function VesperApp() {
             onUpdateSettings={setSettings}
           />
         )}
+
+        {/* CRT post-processing overlay */}
+        <VesperCRT />
+
+        {/* Command palette (full-screen overlay) */}
+        <CommandPalette
+          visible={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          commands={commands}
+          placeholder="Search commands..."
+          activeColor={V.accent}
+          textColor="rgba(255, 255, 255, 0.92)"
+          mutedColor="rgba(255, 255, 255, 0.40)"
+          backgroundColor="rgba(10, 10, 10, 0.98)"
+          overlayColor="rgba(0, 0, 0, 0.6)"
+          borderColor={V.border}
+        />
       </Box>
     </Shell>
   );

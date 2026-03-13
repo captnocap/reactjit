@@ -6,7 +6,7 @@ import type { AIProviderType, Message } from '@reactjit/ai';
 
 // ── Navigation ───────────────────────────────────────────
 
-export type ViewId = 'chat' | 'terminal' | 'research' | 'settings';
+export type ViewId = 'chat' | 'compare' | 'terminal' | 'research' | 'settings';
 
 // ── Providers ────────────────────────────────────────────
 
