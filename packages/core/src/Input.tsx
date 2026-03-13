@@ -155,10 +155,10 @@ export function Input(rawProps: InputProps) {
       readOnly: editable === false,
       lineNumbers: lineNumbers ?? false,
       syntaxHighlight: syntaxHighlight ?? false,
-      syntaxLanguage: syntaxLanguage ?? '',
       tooltipLevel: tooltipLevel ?? '',
     };
 
+    if (syntaxLanguage) props.syntaxLanguage = syntaxLanguage;
     if (spellCheck) props.spellCheck = true;
     if (wordWrap) props.wordWrap = true;
     if (keystrokeTarget) props.keystrokeTarget = keystrokeTarget;

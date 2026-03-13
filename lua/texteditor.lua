@@ -1333,7 +1333,8 @@ function TextEditor.draw(node, effectiveOpacity)
   local va = visibleArea(node, es)
   local lh = va.lineHeight
   local useSyntax = (node.props or {}).syntaxHighlight == true
-  local syntaxLang = (node.props or {}).syntaxLanguage or nil
+  local syntaxLang = (node.props or {}).syntaxLanguage
+  if syntaxLang == "" then syntaxLang = nil end
   local tooltipLevel = (node.props or {}).tooltipLevel
 
   -- Sync controlled value first (content may change, invalidating scroll)
