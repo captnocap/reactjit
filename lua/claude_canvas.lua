@@ -536,8 +536,8 @@ Capabilities.register("ClaudeCanvas", {
         local py = c.y + 8 + row * lineH - scrollY
         local inViewport = (py + lineH >= c.y) and (py <= contentBottom)
 
-        -- Alternating row background for visual tracking (draw-only)
-        if inViewport and row % 2 == 1 then
+        -- Alternating row background for visual tracking (debug mode only)
+        if debugVis and inViewport and row % 2 == 1 then
           love.graphics.setColor(1, 1, 1, 0.03 * effectiveOpacity)
           love.graphics.rectangle("fill", c.x, py, c.w, lineH)
         end
@@ -969,9 +969,8 @@ Capabilities.register("ClaudeCanvas", {
           prevKind = kind
           lastContentKind = kind  -- survives blank lines (for response table detection)
 
-          -- Drawing: only for visible rows
-          if inViewport then
-            if debugVis then
+          -- Drawing: only for visible rows (debug mode draws inline; styled mode defers to block pass)
+          if inViewport and debugVis then
               -- ── Debug mode: tag prefix + raw cells + row numbers ──
               love.graphics.setFont(tagFont)
               if row >= boundary then
@@ -995,63 +994,7 @@ Capabilities.register("ClaudeCanvas", {
                   love.graphics.print(cell.char, px, py)
                 end
               end
-            else
-              -- ── Styled mode: semantic backgrounds + accent bars + cells ──
-              local style = SEMANTIC_STYLES[kind]
-              if not style then
-                -- Try prefix match for subtypes (hint:navigate → hint:*)
-                local prefix = kind:match("^(%a+):")
-                if prefix then style = SEMANTIC_STYLES[prefix .. ":navigate"] end  -- fallback to any hint
-              end
-
-              -- Row background tint
-              if style and style.bg and style.bg[4] > 0 then
-                love.graphics.setColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] * effectiveOpacity)
-                love.graphics.rectangle("fill", c.x, py, c.w, lineH)
-              end
-
-              -- Left accent bar (3px)
-              if style and style.bar then
-                love.graphics.setColor(style.bar[1], style.bar[2], style.bar[3], style.bar[4] * effectiveOpacity)
-                love.graphics.rectangle("fill", c.x, py, 3, lineH)
-              end
-
-              -- Divider: draw a subtle horizontal rule instead of raw ──── chars
-              if kind == "divider" or kind == "input_border" then
-                love.graphics.setColor(0.3, 0.35, 0.45, 0.4 * effectiveOpacity)
-                local ruleY = py + math.floor(lineH / 2)
-                love.graphics.rectangle("fill", c.x + 8, ruleY, c.w - 16, 1)
-              elseif kind == "plan_border" then
-                -- Dashed rule (simulated with short segments)
-                love.graphics.setColor(0.4, 0.35, 0.55, 0.4 * effectiveOpacity)
-                local ruleY = py + math.floor(lineH / 2)
-                local dashW, gapW = 6, 4
-                local dx = c.x + 8
-                while dx < c.x + c.w - 8 do
-                  love.graphics.rectangle("fill", dx, ruleY, dashW, 1)
-                  dx = dx + dashW + gapW
-                end
-              elseif kind == "box_drawing" then
-                -- Suppress raw box chars — draw nothing (table borders handled by content rows)
-              else
-                -- Draw cell text
-                love.graphics.setFont(vtFont)
-                for col = 0, math.min(cols - 1, maxCellCols - 1) do
-                  local cell = vterm:getCell(row, col)
-                  if cell.char and #cell.char > 0 and cell.char ~= " " then
-                    local px = c.x + cellOffsetX + col * charW
-                    if cell.fg then
-                      love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
-                    else
-                      love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
-                                             COLORS.inputText[3], effectiveOpacity)
-                    end
-                    love.graphics.print(cell.char, px, py)
-                  end
-                end
-              end
-            end
-          end  -- inViewport drawing
+          end  -- debug drawing
         end
         ::continue_row::
       end
@@ -1242,6 +1185,269 @@ Capabilities.register("ClaudeCanvas", {
       local graph = Graph.build(classifiedCache, _rowHistory[nodeId], _frameCounter)
       _lastDiff[nodeId] = Graph.diff(prevGraph, graph)
       _lastGraph[nodeId] = graph
+
+      -- ── Block-based styled rendering (post-classification) ──────────────
+      -- Groups classified rows into blocks by nodeId, then renders each block
+      -- as a visual component: cards, bubbles, badges, styled dividers, etc.
+
+      -- Helper: draw vterm cell text for a block's rows
+      local function drawBlockCells(blockRows, alphaScale)
+        alphaScale = alphaScale or 1.0
+        love.graphics.setFont(vtFont)
+        for _, entry in ipairs(blockRows) do
+          local ry = c.y + 8 + entry.row * lineH - scrollY
+          if ry + lineH >= c.y and ry <= contentBottom then
+            for col = 0, math.min(cols - 1, maxCellCols - 1) do
+              local cell = vterm:getCell(entry.row, col)
+              if cell and cell.char and #cell.char > 0 and cell.char ~= " " then
+                local px = c.x + cellOffsetX + col * charW
+                if cell.fg then
+                  love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, alphaScale * effectiveOpacity)
+                else
+                  love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2], COLORS.inputText[3], alphaScale * effectiveOpacity)
+                end
+                love.graphics.print(cell.char, px, ry)
+              end
+            end
+          end
+        end
+      end
+
+      if not debugVis and #classifiedCache > 0 then
+        -- Re-apply scissor for block rendering (was restored after classification loop)
+        local blockScissor = Scissor.saveIntersected(contentRect.x, contentRect.y, contentRect.w, contentRect.h)
+
+        -- Step 1: Collect blocks — consecutive rows with same nodeId
+        local blocks = {}
+        local currentBlock = nil
+        for _, entry in ipairs(classifiedCache) do
+          if currentBlock and entry.nodeId == currentBlock.nodeId then
+            currentBlock.rows[#currentBlock.rows + 1] = entry
+            currentBlock.endRow = entry.row
+          else
+            currentBlock = {
+              nodeId   = entry.nodeId,
+              kind     = entry.kind,           -- kind of first row (block identity)
+              rows     = { entry },
+              startRow = entry.row,
+              endRow   = entry.row,
+              turnId   = entry.turnId,
+              groupId  = entry.groupId,
+              groupType = entry.groupType,
+            }
+            blocks[#blocks + 1] = currentBlock
+          end
+        end
+
+        -- Step 2: Render each block
+        local pad = 6             -- horizontal padding inside cards
+        local cardMargin = 2      -- vertical gap between cards
+        local cornerR = 4         -- corner radius for card backgrounds
+        local barW = 3            -- left accent bar width
+        local textIndent = barW + pad + 2  -- text starts after bar + padding
+
+        for _, block in ipairs(blocks) do
+          local startY = c.y + 8 + block.startRow * lineH - scrollY
+          local blockH = (#block.rows) * lineH
+          local endY = startY + blockH
+
+          -- Skip blocks entirely outside viewport
+          if endY < c.y or startY > contentBottom then goto continue_block end
+
+          local kind = block.kind
+          local style = SEMANTIC_STYLES[kind]
+          if not style then
+            local prefix = kind:match("^(%a+):")
+            if prefix then style = SEMANTIC_STYLES[prefix .. ":navigate"] end
+          end
+
+          -- ── Block-type specific rendering ──────────────────
+
+          -- Dividers: thin horizontal rule
+          if kind == "divider" or kind == "input_border" then
+            love.graphics.setColor(0.3, 0.35, 0.45, 0.35 * effectiveOpacity)
+            local ruleY = startY + math.floor(blockH / 2)
+            love.graphics.rectangle("fill", c.x + 12, ruleY, c.w - 24, 1)
+
+          -- Plan borders: dashed horizontal rule
+          elseif kind == "plan_border" then
+            love.graphics.setColor(0.4, 0.35, 0.55, 0.4 * effectiveOpacity)
+            local ruleY = startY + math.floor(blockH / 2)
+            local dashW, gapW = 6, 4
+            local dx = c.x + 12
+            while dx < c.x + c.w - 12 do
+              love.graphics.rectangle("fill", dx, ruleY, dashW, 1)
+              dx = dx + dashW + gapW
+            end
+
+          -- Box drawing: suppress entirely (structural only)
+          elseif kind == "box_drawing" then
+            -- no-op
+
+          -- Banner: header card with accent top border
+          elseif kind == "banner" then
+            love.graphics.setColor(0.12, 0.16, 0.22, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.84, 0.47, 0.34, 0.9 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, 2, cornerR, cornerR)
+            drawBlockCells(block.rows)
+
+          -- User prompt/text: blue message bubble
+          elseif kind == "user_prompt" or kind == "user_text" then
+            love.graphics.setColor(0.14, 0.20, 0.32, 0.65 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY - cardMargin, c.w - 8, blockH + cardMargin * 2, cornerR, cornerR)
+            love.graphics.setColor(0.35, 0.55, 0.95, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY - cardMargin, barW, blockH + cardMargin * 2, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Tool: compact green-accent badge
+          elseif kind == "tool" then
+            love.graphics.setColor(0.08, 0.18, 0.12, 0.55 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.31, 0.73, 0.40, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Result: indented result card with dimmer green accent
+          elseif kind == "result" then
+            love.graphics.setColor(0.07, 0.11, 0.09, 0.4 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 10, startY, c.w - 18, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.31, 0.73, 0.40, 0.4 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 10, startY, 2, blockH, 1, 1)
+            drawBlockCells(block.rows)
+
+          -- Warning: amber alert strip
+          elseif kind:sub(1, 7) == "warning" or kind == "permission" then
+            love.graphics.setColor(0.22, 0.17, 0.05, 0.5 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(1.0, 0.76, 0.03, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Error: red alert
+          elseif kind == "error" then
+            love.graphics.setColor(0.22, 0.07, 0.07, 0.55 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.95, 0.30, 0.30, 0.85 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Menu / picker groups: per-row styled cards with selection highlight
+          elseif kind == "menu_title" or kind == "menu_option" or kind == "menu_desc"
+              or kind == "list_selectable" or kind == "list_selected" or kind == "list_info"
+              or kind == "search_box" or kind == "selector" or kind == "confirmation"
+              or kind == "form_label" or kind == "form_field" or kind == "menu_example"
+              or kind == "notice_title" or kind == "context_path" or kind == "detail_text"
+              or kind == "link_text"
+              or kind == "picker_title" or kind == "picker_item"
+              or kind == "picker_selected" or kind == "picker_meta" then
+            for _, entry in ipairs(block.rows) do
+              local ry = c.y + 8 + entry.row * lineH - scrollY
+              if ry + lineH < c.y or ry > contentBottom then goto continue_menu_row end
+              local rowStyle = SEMANTIC_STYLES[entry.kind] or style
+              if rowStyle and rowStyle.bg and rowStyle.bg[4] > 0 then
+                love.graphics.setColor(rowStyle.bg[1], rowStyle.bg[2], rowStyle.bg[3], rowStyle.bg[4] * effectiveOpacity)
+                love.graphics.rectangle("fill", c.x + 4, ry, c.w - 8, lineH, 2, 2)
+              end
+              if entry.kind == "list_selected" or entry.kind == "picker_selected" then
+                love.graphics.setColor(0.70, 0.73, 0.97, 0.15 * effectiveOpacity)
+                love.graphics.rectangle("fill", c.x + 4, ry, c.w - 8, lineH, 2, 2)
+              end
+              if rowStyle and rowStyle.bar then
+                love.graphics.setColor(rowStyle.bar[1], rowStyle.bar[2], rowStyle.bar[3], rowStyle.bar[4] * effectiveOpacity)
+                love.graphics.rectangle("fill", c.x + 4, ry, barW, lineH, 1, 1)
+              end
+              drawBlockCells({ entry })
+              ::continue_menu_row::
+            end
+
+          -- Thinking: subtle block
+          elseif kind == "thinking" or kind == "thought_complete" then
+            love.graphics.setColor(0.12, 0.12, 0.16, 0.35 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            if kind == "thinking" then
+              love.graphics.setColor(0.50, 0.50, 0.60, 0.4 * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            end
+            drawBlockCells(block.rows)
+
+          -- Diff: code diff block
+          elseif kind == "diff" then
+            love.graphics.setColor(0.09, 0.12, 0.16, 0.5 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.55, 0.65, 0.80, 0.5 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Input zone: styled prompt area
+          elseif kind == "user_input" or kind == "input_zone" then
+            love.graphics.setColor(0.10, 0.13, 0.20, 0.75 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY - 1, c.w - 8, blockH + 2, cornerR, cornerR)
+            if kind == "user_input" then
+              love.graphics.setColor(0.40, 0.55, 0.90, 0.75 * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 4, startY - 1, barW, blockH + 2, 2, 2)
+            end
+            drawBlockCells(block.rows)
+
+          -- Status bar: dim footer strip
+          elseif kind == "status_bar" then
+            love.graphics.setColor(0.06, 0.08, 0.12, 0.6 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x, startY, c.w, blockH)
+            drawBlockCells(block.rows, 0.6)
+
+          -- Splash art / auth / onboarding: special session chrome
+          elseif kind == "splash_art" or kind == "auth:pending" or kind == "auth:success"
+              or kind == "security_notice" or kind == "onboarding" then
+            if style and style.bg and style.bg[4] > 0 then
+              love.graphics.setColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            end
+            if style and style.bar then
+              love.graphics.setColor(style.bar[1], style.bar[2], style.bar[3], style.bar[4] * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            end
+            drawBlockCells(block.rows)
+
+          -- Hints: subtle footer text
+          elseif kind:sub(1, 5) == "hint:" then
+            love.graphics.setColor(0.08, 0.10, 0.14, 0.25 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, 2, 2)
+            drawBlockCells(block.rows, 0.7)
+
+          -- Task blocks
+          elseif kind == "task_summary" or kind == "task_done" or kind == "task_open" or kind == "task_active" then
+            if style and style.bg and style.bg[4] > 0 then
+              love.graphics.setColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 8, startY, c.w - 16, blockH, cornerR, cornerR)
+            end
+            if style and style.bar then
+              love.graphics.setColor(style.bar[1], style.bar[2], style.bar[3], style.bar[4] * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x + 8, startY, 2, blockH, 1, 1)
+            end
+            drawBlockCells(block.rows)
+
+          -- Plan mode content
+          elseif kind == "plan_mode" then
+            love.graphics.setColor(0.13, 0.11, 0.19, 0.4 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, c.w - 8, blockH, cornerR, cornerR)
+            love.graphics.setColor(0.60, 0.50, 0.80, 0.5 * effectiveOpacity)
+            love.graphics.rectangle("fill", c.x + 4, startY, barW, blockH, 2, 2)
+            drawBlockCells(block.rows)
+
+          -- Default: assistant_text and anything else — clean text, no card
+          else
+            if style and style.bg and style.bg[4] > 0 then
+              love.graphics.setColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] * effectiveOpacity)
+              love.graphics.rectangle("fill", c.x, startY, c.w, blockH)
+            end
+            drawBlockCells(block.rows)
+          end
+
+          ::continue_block::
+        end
+
+        Scissor.restore(blockScissor)
+      end  -- block-based styled rendering
 
       -- Row numbers (debug only)
       if debugVis then
