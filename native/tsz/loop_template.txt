@@ -36,8 +36,15 @@
             switch (event.type) {
                 c.SDL_QUIT => running = false,
                 c.SDL_WINDOWEVENT => { if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) { win_w = @floatFromInt(event.window.data1); win_h = @floatFromInt(event.window.data2); } },
+                c.SDL_TEXTINPUT => {
+                    input_mod.handleTextInput(@ptrCast(&event.text.text));
+                },
                 c.SDL_KEYDOWN => {
-                    if (event.key.keysym.sym == c.SDLK_ESCAPE) { running = false; }
+                    // Route to focused input first
+                    if (input_mod.getFocusedId() != null) {
+                        if (event.key.keysym.sym == c.SDLK_ESCAPE) { input_mod.unfocus(); }
+                        else { _ = input_mod.handleKey(event.key.keysym.sym); }
+                    } else if (event.key.keysym.sym == c.SDLK_ESCAPE) { running = false; }
                     else { if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym); } }
                 },
                 c.SDL_MOUSEMOTION => {
@@ -47,7 +54,18 @@
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     const mx: f32 = @floatFromInt(event.button.x); const my: f32 = @floatFromInt(event.button.y);
-                    if (events.hitTest(&root, mx, my)) |node| { if (node.handlers.on_press) |handler| handler(); }
+                    if (events.hitTest(&root, mx, my)) |node| {
+                        // Focus TextInput if clicked
+                        if (node.input_id) |iid| {
+                            input_mod.focus(iid);
+                        } else {
+                            // Clicked non-input — unfocus and fire press handler
+                            input_mod.unfocus();
+                            if (node.handlers.on_press) |handler| handler();
+                        }
+                    } else {
+                        input_mod.unfocus();
+                    }
                 },
                 c.SDL_MOUSEWHEEL => {
                     var mx_i: c_int = undefined; var my_i: c_int = undefined;

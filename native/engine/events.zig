@@ -33,8 +33,8 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
         if (hitTest(&node.children[i], mx, my)) |hit| return hit;
     }
 
-    // Check self — only if this node has handlers
-    if (hasHandlers(&node.handlers)) {
+    // Check self — if this node has handlers or is a TextInput
+    if (hasHandlers(&node.handlers) or node.input_id != null) {
         const r = node.computed;
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;

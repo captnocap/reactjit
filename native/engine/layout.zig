@@ -277,6 +277,7 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
         return dims.width + pad_l + pad_r;
     }
 
+
     if (node.children.len == 0) return pad_l + pad_r;
 
     var total: f32 = 0;
@@ -336,6 +337,11 @@ fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
     if (node.image_src != null) {
         const dims = measureNodeImage(node);
         return dims.height + pad_t + pad_b;
+    }
+
+    // TextInput nodes: height = font_size + padding
+    if (node.input_id != null) {
+        return @as(f32, @floatFromInt(node.font_size)) + pad_t + pad_b;
     }
 
     if (node.children.len == 0) return pad_t + pad_b;
@@ -665,7 +671,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
 
     // ── Auto-height: shrink-wrap to content ─────────────────────────
     if (h == null) {
-        if (node.text != null) {
+        if (node.input_id != null) {
+            // TextInput: height = font_size + padding
+            h = @as(f32, @floatFromInt(node.font_size)) + pad_t + pad_b;
+        } else if (node.text != null) {
             // Text nodes: measure with wrapping constraint from allocated width
             const text_max_w = inner_w;
             const m = measureNodeTextW(node, text_max_w);
