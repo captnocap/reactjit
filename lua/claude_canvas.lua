@@ -833,25 +833,35 @@ Capabilities.register("ClaudeCanvas", {
       -- ── Post-pass: detect detail pages ─────────────────────────────
       -- A menu group with no interactive elements (no menu_option, no list_selected)
       -- is a detail/view page — reclassify list_selectable/form_label → detail_text.
-      -- This handles "View agent" output where all text is def-fg prose, not selectable items.
+      -- Groups within the same turn are on the same "page" — if ANY group in a turn
+      -- has interactive elements, ALL groups in that turn stay interactive.
+      -- (Edit agent form: box_drawing dividers split one form into g1/g2/g3,
+      --  but the ❯ cursor in g3 means g1/g2 should stay selectable too.)
       do
-        -- Collect groups and their interactive state
+        -- Collect groups, their turn, and interactive state
         local groupHasInteractive = {}  -- groupId -> bool
         local groupEntries = {}         -- groupId -> { idx, ... }
+        local groupTurn = {}            -- groupId -> turnId
         for idx, entry in ipairs(classifiedCache) do
           local gid = entry.groupId
           if gid then
             if not groupEntries[gid] then groupEntries[gid] = {} end
             groupEntries[gid][#groupEntries[gid] + 1] = idx
+            groupTurn[gid] = entry.turnId
             if entry.kind == "menu_option" or entry.kind == "list_selected"
                or entry.kind == "selector" or entry.kind == "confirmation" then
               groupHasInteractive[gid] = true
             end
           end
         end
-        -- Reclassify non-interactive groups
+        -- Propagate interactivity across all groups in the same turn
+        local turnHasInteractive = {}  -- turnId -> bool
+        for gid, _ in pairs(groupHasInteractive) do
+          turnHasInteractive[groupTurn[gid]] = true
+        end
+        -- Reclassify groups only if no group in the same turn is interactive
         for gid, entries in pairs(groupEntries) do
-          if not groupHasInteractive[gid] then
+          if not turnHasInteractive[groupTurn[gid]] then
             for _, idx in ipairs(entries) do
               local entry = classifiedCache[idx]
               if entry.kind == "list_selectable" or entry.kind == "form_label" then
