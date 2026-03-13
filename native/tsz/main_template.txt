@@ -2,8 +2,9 @@ pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
     defer c.SDL_Quit();
 
-    const window = c.SDL_CreateWindow("tsz app", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, 800, 600, c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE) orelse return error.WindowCreateFailed;
+    const window = c.SDL_CreateWindow("tsz app", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, 1280, 800, c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
+    c.SDL_SetWindowMinimumSize(window, 320, 240);
 
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse return error.RendererFailed;
     defer c.SDL_DestroyRenderer(renderer);

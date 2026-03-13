@@ -105,7 +105,9 @@
                     } else {
                         input_mod.unfocus();
                     }
-                    // Text selection — separate hit test that finds ANY text node
+                    // Text selection — only if no pressable/input was hit
+                    const pressed_handler = if (events.hitTest(&root, mx, my)) |n| (n.handlers.on_press != null or n.input_id != null) else false;
+                    if (!pressed_handler) {
                     if (events.hitTestText(&root, mx, my)) |tnode| {
                         if (tnode.text) |txt| {
                             const pad_l = tnode.style.padLeft();
@@ -151,6 +153,7 @@
                         sel_end_node = null;
                         sel_start = 0;
                         sel_end = 0;
+                    }
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
