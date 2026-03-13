@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
@@ -266,6 +266,7 @@ export function MonacoMirror({
     baseFilePath,
     path: baseFilePath,
   }));
+  const [sessionOpenFiles, setSessionOpenFiles] = useState<string[]>(() => uniquePaths([baseFilePath, ...(openFiles ?? [])]));
   const [preferredSidebarOpen, setPreferredSidebarOpen] = useState(showSidebar);
   const [preferredMinimapOpen, setPreferredMinimapOpen] = useState(showMinimap);
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
@@ -287,6 +288,14 @@ export function MonacoMirror({
   const editorViewState = editorViewStateSnapshot?.filePath === activeFilePath
     ? editorViewStateSnapshot.state
     : null;
+
+  useEffect(() => {
+    setSessionOpenFiles((prev) => uniquePaths([...prev, baseFilePath, ...(openFiles ?? [])]));
+  }, [baseFilePath, openFiles]);
+
+  useEffect(() => {
+    setSessionOpenFiles((prev) => uniquePaths([...prev, activeFilePath]));
+  }, [activeFilePath]);
 
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const breadcrumbs = useMemo(() => {
@@ -435,14 +444,14 @@ export function MonacoMirror({
   }, [activeFilePath, explorerFiles, filePath]);
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const tabPaths = useMemo(() => {
-    const sourcePaths = openFiles && openFiles.length > 0
-      ? openFiles
+    const sourcePaths = sessionOpenFiles.length > 0
+      ? sessionOpenFiles
       : candidateExplorerPaths;
     const normalized = uniquePaths([filePath, ...sourcePaths]);
     const visible = normalized.slice(0, Math.max(1, maxTabs));
     if (visible.includes(activeFilePath)) return visible;
     return uniquePaths([activeFilePath, ...visible]).slice(0, Math.max(1, maxTabs));
-  }, [activeFilePath, candidateExplorerPaths, filePath, maxTabs, openFiles]);
+  }, [activeFilePath, candidateExplorerPaths, filePath, maxTabs, sessionOpenFiles]);
 
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const explorerTree = useMemo(() => buildExplorerTree(candidateExplorerPaths), [candidateExplorerPaths]);
@@ -579,6 +588,7 @@ export function MonacoMirror({
 
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const commitFileSelect = useCallback((path: string) => {
+    setSessionOpenFiles((prev) => uniquePaths([...prev, path]));
     if (selectedFilePath === undefined) {
       setLocalSelectedFile({
         baseFilePath,
