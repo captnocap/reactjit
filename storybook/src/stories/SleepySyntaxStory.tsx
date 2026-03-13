@@ -2,6 +2,129 @@ import React, { useState } from 'react';
 import { Box, Text, Pressable, TextInput, ScrollView } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
+// ── Syntax Highlighting ─────────────────────────────────────────────
+
+const SYNTAX_COLORS: Record<TokenType, string> = {
+  lbrace: '#F59E0B',   // amber — root delimiters
+  rbrace: '#F59E0B',
+  lparen: '#A78BFA',   // purple — group delimiters
+  rparen: '#A78BFA',
+  lbracket: '#34D399',  // green — list delimiters
+  rbracket: '#34D399',
+  colon: '#6B7280',     // gray — structural
+  comma: '#6B7280',
+  string: '#F472B6',    // pink — string literals
+  ident: '#60A5FA',     // blue — identifiers
+  api: '#FB923C',       // orange — data bindings
+  eof: '#6B7280',
+};
+
+function SyntaxHighlightedCode({ source }: { source: string }) {
+  const tokens = tokenize(source);
+  // Build spans: for each token, include any whitespace/comments before it
+  const spans: { text: string; color: string }[] = [];
+  let lastEnd = 0;
+
+  for (const tok of tokens) {
+    if (tok.type === 'eof') break;
+    // Whitespace/comments between tokens
+    if (tok.pos > lastEnd) {
+      // For string tokens, pos points to the end of the string (after closing quote)
+      // so we need to find the actual start
+    }
+
+    // Figure out the actual source range for this token
+    let tokStart: number;
+    let tokEnd: number;
+
+    if (tok.type === 'string') {
+      // String token: pos is at the end (after closing quote), find the opening quote
+      // Search backwards from tok.pos for the opening quote
+      const quoteChar = source[tok.pos - 1] === "'" ? "'" : '"';
+      tokStart = source.lastIndexOf(quoteChar, tok.pos - tok.value.length - 2);
+      if (tokStart < 0) tokStart = tok.pos - tok.value.length - 2;
+      tokEnd = tok.pos;
+    } else {
+      tokStart = tok.pos;
+      tokEnd = tok.pos + tok.value.length;
+    }
+
+    // Gap (whitespace/comments) before this token
+    if (tokStart > lastEnd) {
+      spans.push({ text: source.slice(lastEnd, tokStart), color: '#4B5563' });
+    }
+
+    spans.push({ text: source.slice(tokStart, tokEnd), color: SYNTAX_COLORS[tok.type] });
+    lastEnd = tokEnd;
+  }
+
+  // Trailing content
+  if (lastEnd < source.length) {
+    spans.push({ text: source.slice(lastEnd), color: '#4B5563' });
+  }
+
+  // Render line by line for proper layout
+  const fullText = spans.map(s => s.text).join('');
+  const lines = fullText.split('\n');
+
+  // Map spans to lines
+  let spanIdx = 0;
+  let spanOffset = 0;
+  const lineSpans: { text: string; color: string }[][] = [];
+
+  for (const line of lines) {
+    const ls: { text: string; color: string }[] = [];
+    let remaining = line.length;
+
+    while (remaining > 0 && spanIdx < spans.length) {
+      const span = spans[spanIdx];
+      const available = span.text.length - spanOffset;
+      const take = Math.min(remaining, available);
+      const chunk = span.text.slice(spanOffset, spanOffset + take);
+
+      if (chunk.length > 0) {
+        ls.push({ text: chunk, color: span.color });
+      }
+
+      spanOffset += take;
+      remaining -= take;
+
+      if (spanOffset >= span.text.length) {
+        spanIdx++;
+        spanOffset = 0;
+      }
+    }
+
+    // Skip the \n character in the span stream
+    if (spanIdx < spans.length) {
+      const span = spans[spanIdx];
+      if (spanOffset < span.text.length && span.text[spanOffset] === '\n') {
+        spanOffset++;
+        if (spanOffset >= span.text.length) {
+          spanIdx++;
+          spanOffset = 0;
+        }
+      }
+    }
+
+    lineSpans.push(ls.length > 0 ? ls : [{ text: ' ', color: 'transparent' }]);
+  }
+
+  return (
+    <Box style={{ padding: 16 }}>
+      {lineSpans.map((ls, li) => (
+        <Box key={li} style={{ flexDirection: 'row', height: 20 }}>
+          {ls.map((span, si) => (
+            <Text key={si} style={{ color: span.color, fontSize: 13, fontFamily: 'monospace', lineHeight: 20 }}>
+              {span.text}
+            </Text>
+          ))}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 // ── SleepySyntax Parser ─────────────────────────────────────────────
 // Tokenizer + recursive descent parser for .sleepy notation.
 // Grammar:
@@ -514,22 +637,30 @@ export function SleepySyntaxStory() {
           }}>
             <Text style={{ color: c.muted, fontSize: 11, fontFamily: 'monospace' }}>editor.sleepy</Text>
           </Box>
-          <Box style={{ flexGrow: 1, padding: 0 }}>
+          <Box style={{ flexGrow: 1, position: 'relative' }}>
+            {/* Syntax-highlighted underlay */}
+            <Box style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+              <ScrollView style={{ flexGrow: 1 }}>
+                <SyntaxHighlightedCode source={code} />
+              </ScrollView>
+            </Box>
+            {/* Transparent text editor on top for actual editing */}
             <TextInput
               key={inputKey}
               defaultValue={code}
-              onLiveChange={handleChange}
-              liveChangeDebounce={150}
+              onChange={handleChange}
+              live
               multiline
               style={{
                 width: '100%', height: '100%',
-                backgroundColor: c.bgElevated,
-                color: c.text,
+                backgroundColor: 'transparent',
+                color: 'transparent',
                 fontSize: 13,
                 fontFamily: 'monospace',
                 padding: 16,
                 lineHeight: 20,
               }}
+              cursorColor={c.text}
             />
           </Box>
         </Box>
