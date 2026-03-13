@@ -169,8 +169,6 @@ Capabilities.register("MoleculeCard", {
     local node = Tree.getNodes()[nodeId]
     if node then
       if not node.style then node.style = {} end
-      node.style.width = "100%"
-      node.style.height = "100%"
     end
     local handles = Tree.declareChildren(nodeId, buildTemplate())
     updateTree(handles, props)

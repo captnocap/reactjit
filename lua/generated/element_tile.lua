@@ -9,6 +9,9 @@ local Chemistry = require("lua.generated.chemistry.elements")
 
 local function computeData(props)
   local el = Chemistry.getElement(props.element)
+  if not el then
+    return { el = { symbol = "?", number = 0, mass = 0, name = "Unknown", category = "unknown" }, bg = "#868e96", massStr = "0.00" }
+  end
   local CATEGORY_COLORS = {
     ["alkali-metal"] = "#7b6faa",
     ["alkaline-earth"] = "#9a9cc4",
@@ -69,8 +72,6 @@ Capabilities.register("ElementTile", {
     local node = Tree.getNodes()[nodeId]
     if node then
       if not node.style then node.style = {} end
-      node.style.width = "100%"
-      node.style.height = "100%"
     end
     local capState = { props = props }
     local h = {}

@@ -105,7 +105,7 @@ local function computeData(props)
   end
   local function formatEquation(reactants, products)
     local function fmtSide(sides)
-      return table.concat(__tsl.map(sides, function(s) return ((s.coefficient > 1 and tostring(s.coefficient) or "")) + s.formula end), " + ")
+      return table.concat(__tsl.map(sides, function(s) return ((s.coefficient > 1 and tostring(s.coefficient) or "")) .. s.formula end), " + ")
     end
     return fmtSide(reactants) .. " -> " .. fmtSide(products)
   end
@@ -302,9 +302,11 @@ end
 local function updateTree(handles, props)
   local data = computeData(props)
   Tree.updateChildProps(handles["n0_7_2_3_3"], { style = { display = (data.enthalpyChip) and "flex" or "none" } })
-  Tree.updateChildProps(handles["n0_7_2_3_3"], { style = { backgroundColor = data.enthalpyChip.bgColor } })
-  Tree.updateChildProps(handles["n0_7_2_3_3_1_4_0_t"], { text = data.enthalpyChip.label or "" })
-  Tree.updateChildProps(handles["n0_7_2_3_3_3_5_0_t"], { text = data.enthalpyChip.value or "" })
+  if data.enthalpyChip then
+    Tree.updateChildProps(handles["n0_7_2_3_3"], { style = { backgroundColor = data.enthalpyChip.bgColor } })
+    Tree.updateChildProps(handles["n0_7_2_3_3_1_4_0_t"], { text = data.enthalpyChip.label or "" })
+    Tree.updateChildProps(handles["n0_7_2_3_3_3_5_0_t"], { text = data.enthalpyChip.value or "" })
+  end
   rebuildList_0(handles["n0_3_1_1_list_0"], data.parts, data)
   rebuildList_1(handles["n0_7_2_1_list_1"], data.chips, data)
 end
@@ -325,8 +327,6 @@ Capabilities.register("ReactionView", {
     local node = Tree.getNodes()[nodeId]
     if node then
       if not node.style then node.style = {} end
-      node.style.width = "100%"
-      node.style.height = "100%"
     end
     local handles = Tree.declareChildren(nodeId, buildTemplate())
     updateTree(handles, props)

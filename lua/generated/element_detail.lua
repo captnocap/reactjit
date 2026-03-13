@@ -9,6 +9,9 @@ local Chemistry = require("lua.generated.chemistry.elements")
 
 local function computeData(props)
   local el = Chemistry.getElement(props.element)
+  if not el then
+    return { el = { symbol = "?", number = 0, mass = 0, name = "Unknown", category = "unknown" }, bg = "#868e96", valence = 0 }
+  end
   local valence = Chemistry.valenceElectrons(el.number)
   local CATEGORY_COLORS = {
     ["alkali-metal"] = "#7b6faa",
@@ -81,7 +84,7 @@ end
 
 local function buildTemplate()
   return {
-    { type = "View", key = "n0", style = { backgroundColor = "#363a4f", borderRadius = 8, paddingTop = 12, paddingBottom = 12, paddingLeft = 12, paddingRight = 12, width = "100%", height = "100%" }, children = {
+    { type = "View", key = "n0", style = { backgroundColor = "#363a4f", borderRadius = 8, paddingTop = 12, paddingBottom = 12, paddingLeft = 12, paddingRight = 12, width = "100%" }, children = {
       { type = "View", key = "n0_3_1", style = { flexDirection = "row", gap = 12, marginBottom = 10 }, children = {
         { type = "View", key = "n0_3_1_1_2", style = { width = 56, height = 56, borderRadius = 8, alignItems = "center", justifyContent = "center" }, children = {
           { type = "Text", key = "n0_3_1_1_2_1_3", style = { fontSize = 10, color = "rgba(0,0,0,0.6)" }, children = {
@@ -140,8 +143,6 @@ Capabilities.register("ElementDetail", {
     local node = Tree.getNodes()[nodeId]
     if node then
       if not node.style then node.style = {} end
-      node.style.width = "100%"
-      node.style.height = "100%"
     end
     local handles = Tree.declareChildren(nodeId, buildTemplate())
     updateTree(handles, props)
