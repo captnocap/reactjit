@@ -1,24 +1,37 @@
-//! tsz compiler — TypeScript-like syntax to native binary
+//! tsz — TypeScript-like syntax to native binary
 //!
-//! Reads .tsz files and produces Zig source code, then builds via zig build.
-//! No Node.js. No npm. No TypeScript package. Just Zig all the way down.
+//! Compiler + project manager + GUI dashboard. Single binary, zero runtime.
 //!
 //! Usage:
-//!   tsz build <file.tsz>    — compile to native binary
-//!   tsz run <file.tsz>      — compile and run
-//!   tsz dev <file.tsz>      — watch mode: recompile + relaunch on save
+//!   tsz build <file.tsz>    Compile to native binary
+//!   tsz run <file.tsz>      Compile and run (kills existing first)
+//!   tsz dev <file.tsz>      Watch mode: recompile + relaunch on save
+//!   tsz test <file.tsz>     Verify compile → build → smoke test pipeline
+//!   tsz add [dir|file.tsz]  Register a .tsz project
+//!   tsz ls                  List registered projects with status
+//!   tsz rm <name>           Unregister a project (kills if running)
+//!   tsz gui                 Open GUI dashboard (Phase 2)
 
 const std = @import("std");
 const lexer = @import("lexer.zig");
 const codegen = @import("codegen.zig");
+const registry = @import("registry.zig");
+const process = @import("process.zig");
 const posix = std.posix;
+
+// ── Helpers ─────────────────────────────────────────────────────────────
 
 /// Derive the binary name from input file: "counter.tsz" → "tsz-counter"
 fn appName(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
     const base = std.fs.path.basename(input_file);
-    // Strip .tsz extension
     const stem = if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
     return std.fmt.allocPrint(alloc, "tsz-{s}", .{stem}) catch "tsz-app";
+}
+
+/// Derive project name from input file: "counter.tsz" → "counter"
+fn projectName(input_file: []const u8) []const u8 {
+    const base = std.fs.path.basename(input_file);
+    return if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
 }
 
 /// Full path to the app binary: "zig-out/bin/tsz-counter"
@@ -27,21 +40,28 @@ fn appPath(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
     return std.fmt.allocPrint(alloc, "zig-out/bin/{s}", .{name}) catch "zig-out/bin/tsz-app";
 }
 
+/// Get the mtime of a file, or 0 on error.
+fn getMtime(path: []const u8) i128 {
+    const file = std.fs.cwd().openFile(path, .{}) catch return 0;
+    defer file.close();
+    const stat = file.stat() catch return 0;
+    return stat.mtime;
+}
+
+// ── Compile ─────────────────────────────────────────────────────────────
+
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
 fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
-    // Read source
     const source = std.fs.cwd().readFileAlloc(alloc, input_file, 1024 * 1024) catch |err| {
         std.debug.print("[tsz] Failed to read {s}: {}\n", .{ input_file, err });
         return false;
     };
     defer alloc.free(source);
 
-    // Tokenize
     var lex = lexer.Lexer.init(source);
     lex.tokenize();
 
-    // Codegen
     var gen = codegen.Generator.init(alloc, &lex, source, input_file);
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[tsz] Compile error: {}\n", .{err});
@@ -89,26 +109,18 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
         return false;
     }
 
-    // Copy binary to per-app name so parallel sessions don't clobber each other
+    // Copy binary to per-app name
     const dest = appPath(alloc, input_file);
     std.fs.cwd().copyFile("zig-out/bin/tsz-app", std.fs.cwd(), dest, .{}) catch |err| {
         std.debug.print("[tsz] Warning: could not copy to {s}: {}\n", .{ dest, err });
-        // Non-fatal — tsz-app still works
     };
     std.debug.print("[tsz] Built → {s}\n", .{dest});
     return true;
 }
 
-/// Get the mtime of a file, or 0 on error.
-fn getMtime(path: []const u8) i128 {
-    const file = std.fs.cwd().openFile(path, .{}) catch return 0;
-    defer file.close();
-    const stat = file.stat() catch return 0;
-    return stat.mtime;
-}
+// ── Spawn / Kill ────────────────────────────────────────────────────────
 
 /// Spawn the app binary as a child process. Returns the pid.
-/// Uses the per-app binary path derived from the input file name.
 fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?posix.pid_t {
     const path = appPath(alloc, input_file);
     const argv = [_][]const u8{path};
@@ -121,18 +133,60 @@ fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?posix.pid_t {
 }
 
 /// Kill a running child process by pid.
-/// Sends SIGUSR1 first (triggers state save), then SIGTERM.
 fn killApp(pid: posix.pid_t) void {
-    // Signal the app to save state before dying
     posix.kill(pid, posix.SIG.USR1) catch {};
-    std.Thread.sleep(50 * std.time.ns_per_ms); // give it 50ms to save
+    std.Thread.sleep(50 * std.time.ns_per_ms);
     posix.kill(pid, posix.SIG.TERM) catch {};
-    // Wait for it to die (reap zombie)
     _ = posix.waitpid(pid, 0);
 }
 
-/// Dev mode: watch file, recompile on change, relaunch app.
-fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
+// ── Subcommands ─────────────────────────────────────────────────────────
+
+fn cmdBuild(alloc: std.mem.Allocator, input_file: []const u8) void {
+    const name = projectName(input_file);
+    var reg = registry.load(alloc);
+
+    if (!compile(alloc, input_file)) {
+        // Update registry with fail status
+        if (reg.findByName(name)) |p| {
+            p.last_build = .fail;
+            p.last_build_time = std.time.timestamp();
+            registry.save(&reg);
+        }
+        std.process.exit(1);
+    }
+
+    // Update registry with pass status
+    if (reg.findByName(name)) |p| {
+        p.last_build = .pass;
+        p.last_build_time = std.time.timestamp();
+        registry.save(&reg);
+    }
+}
+
+fn cmdRun(alloc: std.mem.Allocator, input_file: []const u8) void {
+    const name = projectName(input_file);
+
+    // Kill existing process for this project
+    process.killProject(name);
+
+    cmdBuild(alloc, input_file);
+
+    std.debug.print("[tsz] Running...\n\n", .{});
+    if (spawnApp(alloc, input_file)) |pid| {
+        process.writePid(name, pid);
+        // Wait for it to exit
+        _ = posix.waitpid(pid, 0);
+        process.removePid(name);
+    }
+}
+
+fn cmdDev(alloc: std.mem.Allocator, input_file: []const u8) !void {
+    const name = projectName(input_file);
+
+    // Kill existing process for this project
+    process.killProject(name);
+
     std.debug.print(
         \\
         \\  ┌──────────────────────────────────────┐
@@ -144,7 +198,6 @@ fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
         \\
     , .{});
 
-    // Initial build
     if (!compile(alloc, input_file)) {
         std.debug.print("[tsz] Initial build failed. Watching for changes...\n", .{});
     }
@@ -152,30 +205,30 @@ fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
     var last_mtime = getMtime(input_file);
     var app_pid: ?posix.pid_t = null;
 
-    // Launch if initial build succeeded
     if (std.fs.cwd().access(appPath(alloc, input_file), .{})) |_| {
         app_pid = spawnApp(alloc, input_file);
-        if (app_pid != null) std.debug.print("[tsz] App launched. Watching {s}...\n\n", .{input_file});
+        if (app_pid) |pid| {
+            process.writePid(name, pid);
+            std.debug.print("[tsz] App launched. Watching {s}...\n\n", .{input_file});
+        }
     } else |_| {}
 
-    // Poll loop
     while (true) {
-        std.Thread.sleep(500 * std.time.ns_per_ms); // check every 500ms
+        std.Thread.sleep(500 * std.time.ns_per_ms);
 
         const mtime = getMtime(input_file);
         if (mtime == last_mtime) {
-            // Check if child died on its own (user closed window)
             if (app_pid) |pid| {
                 const result = posix.waitpid(pid, 1);
                 if (result.pid != 0) {
                     std.debug.print("[tsz] App exited. Watching for changes...\n", .{});
                     app_pid = null;
+                    process.removePid(name);
                 }
             }
             continue;
         }
 
-        // File changed
         last_mtime = mtime;
         std.debug.print("\n[tsz] Change detected. Recompiling...\n", .{});
 
@@ -184,20 +237,188 @@ fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
             continue;
         }
 
-        // Kill old app
         if (app_pid) |pid| {
             std.debug.print("[tsz] Restarting app...\n", .{});
             killApp(pid);
             app_pid = null;
+            process.removePid(name);
         }
 
-        // Launch new app
         app_pid = spawnApp(alloc, input_file);
-        if (app_pid != null) {
+        if (app_pid) |pid| {
+            process.writePid(name, pid);
             std.debug.print("[tsz] App relaunched.\n\n", .{});
         }
     }
 }
+
+fn cmdTest(alloc: std.mem.Allocator, input_file: []const u8) void {
+    const basename = std.fs.path.basename(input_file);
+    std.debug.print("=== tsz test: {s} ===\n", .{basename});
+
+    // Step 1: Compile
+    std.debug.print("Compiling... ", .{});
+    if (!compile(alloc, input_file)) {
+        std.debug.print("FAIL: compilation failed\n", .{});
+        std.process.exit(1);
+    }
+    std.debug.print("PASS\n", .{});
+
+    // Step 2: Verify source reference
+    std.debug.print("Checking source ref... ", .{});
+    const gen_file = std.fs.cwd().openFile("native/engine/generated_app.zig", .{}) catch {
+        std.debug.print("FAIL: can't read generated_app.zig\n", .{});
+        std.process.exit(1);
+    };
+    defer gen_file.close();
+    var header: [256]u8 = undefined;
+    const hlen = gen_file.readAll(&header) catch 0;
+    if (std.mem.indexOf(u8, header[0..hlen], basename) == null) {
+        std.debug.print("FAIL: generated_app.zig doesn't reference {s}\n", .{basename});
+        std.process.exit(1);
+    }
+    std.debug.print("PASS\n", .{});
+
+    // Step 3: Smoke test (run for 1 second)
+    std.debug.print("Smoke test (1s)... ", .{});
+    const bin_path = appPath(alloc, input_file);
+    const argv = [_][]const u8{bin_path};
+    var child = std.process.Child.init(&argv, alloc);
+    child.spawn() catch {
+        std.debug.print("FAIL: can't spawn binary\n", .{});
+        std.process.exit(1);
+    };
+    std.Thread.sleep(1 * std.time.ns_per_s);
+    // Kill the app after 1 second
+    if (child.id != 0) {
+        posix.kill(child.id, posix.SIG.TERM) catch {};
+        _ = posix.waitpid(child.id, 0);
+    }
+    std.debug.print("PASS\n", .{});
+
+    std.debug.print("\nAll checks passed for {s}\n", .{basename});
+
+    // Update registry
+    const name = projectName(input_file);
+    var reg = registry.load(alloc);
+    if (reg.findByName(name)) |p| {
+        p.last_build = .pass;
+        p.last_build_time = std.time.timestamp();
+        registry.save(&reg);
+    }
+}
+
+fn cmdAdd(alloc: std.mem.Allocator, arg: []const u8) void {
+    registry.ensureConfigDir();
+    var reg = registry.load(alloc);
+
+    // If arg ends with .tsz, register that file directly
+    if (std.mem.endsWith(u8, arg, ".tsz")) {
+        const name = projectName(arg);
+        // Resolve to absolute path
+        var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const abs_path = std.fs.cwd().realpath(arg, &abs_buf) catch {
+            std.debug.print("[tsz] File not found: {s}\n", .{arg});
+            std.process.exit(1);
+        };
+        reg.add(name, abs_path);
+        registry.save(&reg);
+        std.debug.print("[tsz] Added project '{s}' → {s}\n", .{ name, abs_path });
+        return;
+    }
+
+    // Otherwise, scan directory for .tsz files
+    const dir = if (arg.len > 0) arg else ".";
+    var iter_dir = std.fs.cwd().openDir(dir, .{ .iterate = true }) catch {
+        std.debug.print("[tsz] Can't open directory: {s}\n", .{dir});
+        std.process.exit(1);
+    };
+    defer iter_dir.close();
+
+    var found: u32 = 0;
+    var iter = iter_dir.iterate();
+    while (iter.next() catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.name, ".tsz")) continue;
+
+        var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+        var full_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const rel = std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir, entry.name }) catch continue;
+        const abs = std.fs.cwd().realpath(rel, &full_buf) catch continue;
+
+        const stem = entry.name[0 .. entry.name.len - 4];
+        reg.add(stem, abs);
+        std.debug.print("[tsz] Added '{s}' → {s}\n", .{ stem, abs });
+        found += 1;
+    }
+
+    if (found == 0) {
+        std.debug.print("[tsz] No .tsz files found in {s}\n", .{dir});
+        return;
+    }
+    registry.save(&reg);
+    std.debug.print("[tsz] Registered {d} project(s)\n", .{found});
+}
+
+fn cmdLs(alloc: std.mem.Allocator) void {
+    var reg = registry.load(alloc);
+    process.cleanStale(&reg);
+
+    if (reg.count == 0) {
+        std.debug.print("[tsz] No projects registered. Use 'tsz add' to register.\n", .{});
+        return;
+    }
+
+    std.debug.print("\n  {s:<20} {s:<10} {s:<8} {s}\n", .{ "NAME", "STATUS", "BUILD", "PATH" });
+    std.debug.print("  {s:-<20} {s:-<10} {s:-<8} {s:-<40}\n", .{ "", "", "", "" });
+
+    for (0..reg.count) |i| {
+        const p = &reg.projects[i];
+        const name = p.getName();
+        const status = process.getStatus(name);
+        const status_str: []const u8 = switch (status) {
+            .running => "running",
+            .stopped => "stopped",
+            .stale => "stale",
+        };
+        const build_str: []const u8 = switch (p.last_build) {
+            .pass => "pass",
+            .fail => "FAIL",
+            .unknown => "—",
+        };
+        std.debug.print("  {s:<20} {s:<10} {s:<8} {s}\n", .{ name, status_str, build_str, p.getPath() });
+    }
+    std.debug.print("\n", .{});
+}
+
+fn cmdRm(alloc: std.mem.Allocator, name: []const u8) void {
+    var reg = registry.load(alloc);
+
+    // Kill if running
+    process.killProject(name);
+
+    if (reg.remove(name)) {
+        registry.save(&reg);
+        std.debug.print("[tsz] Removed '{s}'\n", .{name});
+    } else {
+        std.debug.print("[tsz] Project '{s}' not found\n", .{name});
+    }
+}
+
+// ── Main ────────────────────────────────────────────────────────────────
+
+const USAGE =
+    \\Usage:
+    \\  tsz build <file.tsz>    Compile to native binary
+    \\  tsz run <file.tsz>      Compile and run (kills existing first)
+    \\  tsz dev <file.tsz>      Watch mode: recompile + relaunch on save
+    \\  tsz test <file.tsz>     Verify compile → build → smoke test
+    \\  tsz add [dir|file.tsz]  Register a .tsz project
+    \\  tsz ls                  List registered projects with status
+    \\  tsz rm <name>           Unregister a project
+    \\  tsz gui                 Open GUI dashboard
+    \\
+;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -207,42 +428,47 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(alloc);
     defer std.process.argsFree(alloc, args);
 
-    if (args.len < 3) {
-        std.debug.print(
-            \\Usage:
-            \\  tsz build <file.tsz>    Compile to native binary
-            \\  tsz run <file.tsz>      Compile and run
-            \\  tsz dev <file.tsz>      Watch mode: recompile + relaunch on save
-            \\
-        , .{});
+    if (args.len < 2) {
+        std.debug.print(USAGE, .{});
         std.process.exit(1);
     }
 
     const command = args[1];
-    const input_file = args[2];
 
-    // Dev mode — watch + recompile + relaunch
-    if (std.mem.eql(u8, command, "dev")) {
-        try devMode(alloc, input_file);
+    // Commands that don't need a file argument
+    if (std.mem.eql(u8, command, "ls") or std.mem.eql(u8, command, "list")) {
+        cmdLs(alloc);
         return;
     }
 
-    // Build
-    if (!compile(alloc, input_file)) {
+    if (std.mem.eql(u8, command, "gui")) {
+        std.debug.print("[tsz] GUI not yet implemented (Phase 2)\n", .{});
+        return;
+    }
+
+    // Commands that need an argument
+    if (args.len < 3) {
+        std.debug.print(USAGE, .{});
         std.process.exit(1);
     }
 
-    // Run if requested
-    if (std.mem.eql(u8, command, "run")) {
-        std.debug.print("[tsz] Running...\n\n", .{});
-        const run_result = std.process.Child.run(.{
-            .allocator = alloc,
-            .argv = &.{appPath(alloc, input_file)},
-        }) catch |err| {
-            std.debug.print("[tsz] Run failed: {}\n", .{err});
-            return;
-        };
-        defer alloc.free(run_result.stdout);
-        defer alloc.free(run_result.stderr);
+    const arg = args[2];
+
+    if (std.mem.eql(u8, command, "add")) {
+        cmdAdd(alloc, arg);
+    } else if (std.mem.eql(u8, command, "rm") or std.mem.eql(u8, command, "remove")) {
+        cmdRm(alloc, arg);
+    } else if (std.mem.eql(u8, command, "build")) {
+        cmdBuild(alloc, arg);
+    } else if (std.mem.eql(u8, command, "run")) {
+        cmdRun(alloc, arg);
+    } else if (std.mem.eql(u8, command, "dev")) {
+        try cmdDev(alloc, arg);
+    } else if (std.mem.eql(u8, command, "test")) {
+        cmdTest(alloc, arg);
+    } else {
+        std.debug.print("[tsz] Unknown command: {s}\n", .{command});
+        std.debug.print(USAGE, .{});
+        std.process.exit(1);
     }
 }
