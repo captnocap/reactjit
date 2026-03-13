@@ -596,9 +596,9 @@ export function MonacoMirror({
 
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleExplorerFileSelect = useCallback((path: string) => {
-    targetView('explorer');
+    claimShoulderNavigation();
     commitFileSelect(path);
-  }, [commitFileSelect, targetView]);
+  }, [claimShoulderNavigation, commitFileSelect]);
 
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleEditorFocus = useCallback(() => {
