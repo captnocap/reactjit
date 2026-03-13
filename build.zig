@@ -237,6 +237,39 @@ pub fn build(b: *std.Build) void {
         }
     }
 
+    // ── engine (Phase 0 — SDL2 + OpenGL native runtime) ─────────────────────
+    // The beginning of the native TypeScript runtime. SDL2 window, OpenGL 3.3
+    // core context, direct GPU painting. No Love2D, no LuaJIT, no QuickJS.
+    // This is what replaces all of them.
+    //
+    // Usage: zig build engine && ./zig-out/bin/rjit-engine
+    {
+        const engine_exe = b.addExecutable(.{
+            .name = "rjit-engine",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("native/engine/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        engine_exe.linkLibC();
+        engine_exe.linkSystemLibrary("SDL2");
+        engine_exe.linkSystemLibrary("GL");
+
+        const engine_install = b.addInstallArtifact(engine_exe, .{});
+
+        const engine_step = b.step("engine", "Build ReactJIT native engine (SDL2 + OpenGL)");
+        engine_step.dependOn(&engine_install.step);
+        all_step.dependOn(&engine_install.step);
+
+        // Run step: zig build run-engine
+        const run_cmd = b.addRunArtifact(engine_exe);
+        run_cmd.step.dependOn(b.getInstallStep());
+        const run_step = b.step("run-engine", "Build and run the ReactJIT engine");
+        run_step.dependOn(&run_cmd.step);
+    }
+
     // ── win-launcher ──────────────────────────────────────────────────────────
     // Self-extracting Windows launcher stub. Always targets x86_64-windows
     // regardless of the host -Dtarget flag. SUBSYSTEM:WINDOWS so no console.
