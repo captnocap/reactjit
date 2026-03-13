@@ -1,0 +1,64 @@
+const Painter = struct {
+    renderer: *c.SDL_Renderer,
+    text_engine: *TextEngine,
+    image_cache: *ImageCache,
+
+    pub fn clear(self: *Painter, color: Color) void {
+        _ = c.SDL_SetRenderDrawColor(self.renderer, color.r, color.g, color.b, color.a);
+        _ = c.SDL_RenderClear(self.renderer);
+    }
+
+    pub fn present(self: *Painter) void {
+        c.SDL_RenderPresent(self.renderer);
+    }
+
+    pub fn paintTree(self: *Painter, node: *Node, scroll_offset_x: f32, scroll_offset_y: f32) void {
+        if (node.style.display == .none) return;
+        const screen_x = node.computed.x - scroll_offset_x;
+        const screen_y = node.computed.y - scroll_offset_y;
+        if (node.style.background_color) |col| {
+            const is_hovered = (hovered_node != null and hovered_node.? == node);
+            const paint_col = if (is_hovered) brighten(col) else col;
+            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_col.r, paint_col.g, paint_col.b, paint_col.a);
+            var r = c.SDL_Rect{ .x = @intFromFloat(screen_x), .y = @intFromFloat(screen_y), .w = @intFromFloat(node.computed.w), .h = @intFromFloat(node.computed.h) };
+            _ = c.SDL_RenderFillRect(self.renderer, &r);
+        }
+        if (node.image_src) |src| {
+            if (self.image_cache.load(src)) |img| {
+                var dst = c.SDL_Rect{ .x = @intFromFloat(screen_x), .y = @intFromFloat(screen_y), .w = @intFromFloat(node.computed.w), .h = @intFromFloat(node.computed.h) };
+                _ = c.SDL_RenderCopy(self.renderer, img.texture, null, &dst);
+            }
+        }
+        if (node.text) |txt| {
+            const pad_l = node.style.padLeft();
+            const pad_r = node.style.padRight();
+            const pad_t = node.style.padTop();
+            const col = node.text_color orelse Color.rgb(255, 255, 255);
+            const text_max_w = node.computed.w - pad_l - pad_r;
+            self.text_engine.drawTextWrapped(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col);
+        }
+        var prev_clip: c.SDL_Rect = undefined;
+        var had_prev_clip = false;
+        const needs_clip = node.style.overflow != .visible;
+        if (needs_clip) {
+            c.SDL_RenderGetClipRect(self.renderer, &prev_clip);
+            had_prev_clip = (prev_clip.w > 0 and prev_clip.h > 0);
+            var clip = c.SDL_Rect{ .x = @intFromFloat(screen_x), .y = @intFromFloat(screen_y), .w = @intFromFloat(node.computed.w), .h = @intFromFloat(node.computed.h) };
+            if (had_prev_clip) {
+                const ix1 = @max(clip.x, prev_clip.x); const iy1 = @max(clip.y, prev_clip.y);
+                const ix2 = @min(clip.x + clip.w, prev_clip.x + prev_clip.w);
+                const iy2 = @min(clip.y + clip.h, prev_clip.y + prev_clip.h);
+                clip.x = ix1; clip.y = iy1; clip.w = @max(0, ix2 - ix1); clip.h = @max(0, iy2 - iy1);
+            }
+            _ = c.SDL_RenderSetClipRect(self.renderer, &clip);
+        }
+        const child_sx = scroll_offset_x + if (needs_clip) node.scroll_x else @as(f32, 0);
+        const child_sy = scroll_offset_y + if (needs_clip) node.scroll_y else @as(f32, 0);
+        for (node.children) |*child| { self.paintTree(child, child_sx, child_sy); }
+        if (needs_clip) {
+            if (had_prev_clip) { _ = c.SDL_RenderSetClipRect(self.renderer, &prev_clip); }
+            else { _ = c.SDL_RenderSetClipRect(self.renderer, null); }
+        }
+    }
+};
+

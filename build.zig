@@ -324,6 +324,30 @@ pub fn build(b: *std.Build) void {
         app_step.dependOn(&app_install.step);
     }
 
+    // ── tsz-compiler (native .tsz compiler — replaces Node.js) ─────────────
+    // Reads .tsz files, parses, emits Zig, invokes zig build engine-app.
+    // Zero dependencies. One binary. No npm.
+    {
+        const tsz_exe = b.addExecutable(.{
+            .name = "tsz",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("native/tsz/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        const tsz_install = b.addInstallArtifact(tsz_exe, .{});
+        const tsz_step = b.step("tsz-compiler", "Build the native .tsz compiler");
+        tsz_step.dependOn(&tsz_install.step);
+
+        const tsz_run = b.addRunArtifact(tsz_exe);
+        tsz_run.step.dependOn(b.getInstallStep());
+        if (b.args) |a| { for (a) |arg| tsz_run.addArg(arg); }
+        const run_tsz_step = b.step("run-tsz", "Run the native .tsz compiler");
+        run_tsz_step.dependOn(&tsz_run.step);
+    }
+
     // ── win-launcher ──────────────────────────────────────────────────────────
     // Self-extracting Windows launcher stub. Always targets x86_64-windows
     // regardless of the host -Dtarget flag. SUBSYSTEM:WINDOWS so no console.
