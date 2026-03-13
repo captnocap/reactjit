@@ -52,6 +52,31 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_key != null;
 }
 
+// ── Text Hit Test (finds any text node, not just ones with handlers) ────
+
+/// Find the deepest text node containing (mx, my).
+/// Used for text selection — text nodes don't need event handlers.
+pub fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
+    if (node.style.display == .none) return null;
+
+    // Check children in reverse order (last child = front-most)
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitTestText(&node.children[i], mx, my)) |hit| return hit;
+    }
+
+    // Check self — must be a text node within bounds
+    if (node.text != null) {
+        const r = node.computed;
+        if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
+            return node;
+        }
+    }
+
+    return null;
+}
+
 // ── Scroll Container Hit Test ───────────────────────────────────────────
 
 /// Find the deepest scroll container (overflow == .scroll) under (mx, my).

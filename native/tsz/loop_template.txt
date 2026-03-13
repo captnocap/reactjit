@@ -48,27 +48,26 @@
                         } else if (event.key.keysym.sym == c.SDLK_ESCAPE) { input_mod.unfocus(); }
                         else { _ = input_mod.handleKey(event.key.keysym.sym); }
                     } else if (ctrl and event.key.keysym.sym == c.SDLK_a) {
-                        // Ctrl+A — select all text in current node, or find first text node
-                        if (sel_node) |sn| {
-                            if (sn.text) |txt| {
-                                sel_start = 0;
-                                sel_end = txt.len;
-                            }
-                        } else if (hovered_node) |hn| {
-                            if (hn.text) |txt| {
-                                sel_node = hn;
-                                sel_start = 0;
-                                sel_end = txt.len;
-                            }
-                        }
+                        // Ctrl+A — select all text on the page
+                        sel_all = true;
+                        sel_node = null;
+                        sel_start = 0;
+                        sel_end = 0;
                     } else if (ctrl and event.key.keysym.sym == c.SDLK_c) {
                         // Ctrl+C — copy selected text to clipboard
-                        if (sel_node) |sn| {
+                        if (sel_all) {
+                            // Collect all text from tree
+                            var clip_buf: [16384]u8 = undefined;
+                            const clip_len = collectAllText(&root, &clip_buf, 0);
+                            if (clip_len > 0 and clip_len < clip_buf.len) {
+                                clip_buf[clip_len] = 0;
+                                _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
+                            }
+                        } else if (sel_node) |sn| {
                             if (sn.text) |txt| {
                                 const s0 = @min(sel_start, sel_end);
                                 const s1 = @max(sel_start, sel_end);
                                 if (s1 > s0 and s1 <= txt.len) {
-                                    // SDL_SetClipboardText needs null-terminated string
                                     var clip_buf: [4096]u8 = undefined;
                                     const clip_len = @min(s1 - s0, clip_buf.len - 1);
                                     @memcpy(clip_buf[0..clip_len], txt[s0..s0 + clip_len]);
@@ -101,63 +100,58 @@
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     const mx: f32 = @floatFromInt(event.button.x); const my: f32 = @floatFromInt(event.button.y);
+                    sel_all = false; // Any click clears select-all
+                    // Handler-based hit test (buttons, inputs, etc.)
                     if (events.hitTest(&root, mx, my)) |node| {
-                        // Focus TextInput if clicked
                         if (node.input_id) |iid| {
                             input_mod.focus(iid);
                             sel_node = null;
                         } else {
-                            // Clicked non-input — unfocus and fire press handler
                             input_mod.unfocus();
                             if (node.handlers.on_press) |handler| handler();
-                            // Text selection — start on text nodes
-                            if (node.text) |txt| {
-                                const pad_l = node.style.padLeft();
-                                const pad_r = node.style.padRight();
-                                const pad_t = node.style.padTop();
-                                const local_x = mx - node.computed.x - pad_l;
-                                const local_y = my - node.computed.y - pad_t;
-                                const text_max_w = node.computed.w - pad_l - pad_r;
-                                const now = c.SDL_GetTicks();
-                                const byte_idx = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, node.font_size, text_max_w);
-                                // Multi-click detection
-                                if (sel_node == node and now - sel_last_click < 400) {
-                                    sel_click_count += 1;
-                                } else {
-                                    sel_click_count = 1;
-                                }
-                                sel_last_click = now;
-                                if (sel_click_count >= 3) {
-                                    // Triple click — select all text in node
-                                    sel_node = node;
-                                    sel_start = 0;
-                                    sel_end = txt.len;
-                                    sel_anchor = 0;
-                                    sel_dragging = false;
-                                } else if (sel_click_count == 2) {
-                                    // Double click — select word
-                                    const wb = TextEngine.wordBoundsAt(txt, byte_idx);
-                                    sel_node = node;
-                                    sel_start = wb.start;
-                                    sel_end = wb.end;
-                                    sel_anchor = wb.start;
-                                    sel_dragging = false;
-                                } else {
-                                    // Single click — start cursor selection
-                                    sel_node = node;
-                                    sel_anchor = byte_idx;
-                                    sel_start = byte_idx;
-                                    sel_end = byte_idx;
-                                    sel_dragging = true;
-                                }
-                            } else {
-                                sel_node = null;
-                                sel_start = 0;
-                                sel_end = 0;
-                            }
                         }
                     } else {
                         input_mod.unfocus();
+                    }
+                    // Text selection — separate hit test that finds ANY text node
+                    if (events.hitTestText(&root, mx, my)) |tnode| {
+                        if (tnode.text) |txt| {
+                            const pad_l = tnode.style.padLeft();
+                            const pad_r = tnode.style.padRight();
+                            const pad_t = tnode.style.padTop();
+                            const local_x = mx - tnode.computed.x - pad_l;
+                            const local_y = my - tnode.computed.y - pad_t;
+                            const text_max_w = tnode.computed.w - pad_l - pad_r;
+                            const now = c.SDL_GetTicks();
+                            const byte_idx = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, tnode.font_size, text_max_w);
+                            if (sel_node == tnode and now -% sel_last_click < 400) {
+                                sel_click_count += 1;
+                            } else {
+                                sel_click_count = 1;
+                            }
+                            sel_last_click = now;
+                            if (sel_click_count >= 3) {
+                                sel_node = tnode;
+                                sel_start = 0;
+                                sel_end = txt.len;
+                                sel_anchor = 0;
+                                sel_dragging = false;
+                            } else if (sel_click_count == 2) {
+                                const wb = TextEngine.wordBoundsAt(txt, byte_idx);
+                                sel_node = tnode;
+                                sel_start = wb.start;
+                                sel_end = wb.end;
+                                sel_anchor = wb.start;
+                                sel_dragging = false;
+                            } else {
+                                sel_node = tnode;
+                                sel_anchor = byte_idx;
+                                sel_start = byte_idx;
+                                sel_end = byte_idx;
+                                sel_dragging = true;
+                            }
+                        }
+                    } else {
                         sel_node = null;
                         sel_start = 0;
                         sel_end = 0;

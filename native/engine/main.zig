@@ -49,6 +49,16 @@ fn measureImageCallback(path: []const u8) layout.ImageDims {
 // ── Hover state (module-level so Painter can read it) ────────────────────
 var hovered_node: ?*Node = null;
 
+// ── Text selection state ─────────────────────────────────────────────────
+var sel_node: ?*Node = null;
+var sel_start: usize = 0;
+var sel_end: usize = 0;
+var sel_anchor: usize = 0;
+var sel_dragging: bool = false;
+var sel_last_click: u32 = 0;
+var sel_click_count: u32 = 0;
+var sel_all: bool = false;
+
 const Painter = struct {
     renderer: *c.SDL_Renderer,
     text_engine: *TextEngine,
@@ -129,6 +139,12 @@ const Painter = struct {
             const pad_t = node.style.padTop();
             const color = node.text_color orelse Color.rgb(255, 255, 255);
             const text_max_w = node.computed.w - pad_l - pad_r;
+            // Draw selection highlight behind text
+            if (sel_all) {
+                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, Color.rgba(60, 120, 200, 140));
+            } else if (sel_node == node and sel_start != sel_end) {
+                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
+            }
             self.text_engine.drawTextWrapped(
                 txt,
                 screen_x + pad_l,

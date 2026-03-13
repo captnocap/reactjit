@@ -96,9 +96,8 @@ fn fcLoadFace(library: c.FT_Library, pattern: [*:0]const u8) ?c.FT_Face {
 
 /// Fontconfig patterns for fallback fonts (resolved at runtime).
 const FC_FALLBACK_PATTERNS = [_][*:0]const u8{
-    "Noto Sans CJK",
+    ":lang=ja", // CJK — :lang=ja reliably finds Noto Sans CJK
     "Noto Color Emoji",
-    "Noto Sans Symbols",
     "Noto Sans Symbols 2",
 };
 
@@ -619,5 +618,196 @@ pub const TextEngine = struct {
             const line_y = y + lm.height * @as(f32, @floatFromInt(li));
             self.drawText(line, x, line_y, size_px, color);
         }
+    }
+
+    // ── Text Selection ──────────────────────────────────────────────────
+
+    /// Map a local (x, y) coordinate (relative to text origin) to a byte
+    /// index in the text. Accounts for word wrapping and UTF-8.
+    /// Returns the byte index closest to the click position.
+    pub fn hitTestWrapped(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32) usize {
+        if (text.len == 0) return 0;
+
+        const lm = self.lineMetrics(size_px);
+        const wrap = if (max_width > 0)
+            self.wordWrap(text, size_px, max_width)
+        else blk: {
+            var w = WrapResult{};
+            w.addLine(0, text.len);
+            break :blk w;
+        };
+
+        // Determine which wrapped line was clicked
+        var line_idx: usize = 0;
+        if (lm.height > 0) {
+            const li = @as(usize, @intFromFloat(@max(0, local_y) / lm.height));
+            line_idx = @min(li, if (wrap.count > 0) wrap.count - 1 else 0);
+        }
+
+        // Hit test within that line
+        const line_start = wrap.line_starts[line_idx];
+        const line_end = wrap.line_ends[line_idx];
+        const line = text[line_start..line_end];
+
+        var pen_x: f32 = 0;
+        var i: usize = 0;
+        var last_byte: usize = 0;
+
+        while (i < line.len) {
+            const ch = decodeUtf8(line[i..]);
+            const adv = self.cpAdvance(ch.codepoint, size_px);
+
+            // If click is before the midpoint of this char, select before it
+            if (pen_x + adv / 2.0 > local_x) {
+                return line_start + last_byte;
+            }
+
+            pen_x += adv;
+            last_byte = i;
+            i += ch.len;
+        }
+
+        // Past end of line — return end
+        return line_end;
+    }
+
+    /// Get the x offset of a byte index within the text, on its wrapped line.
+    /// Returns {x_offset, line_y} relative to text origin.
+    pub fn byteToPos(self: *TextEngine, text: []const u8, byte_idx: usize, size_px: u16, max_width: f32) struct { x: f32, y: f32 } {
+        if (text.len == 0) return .{ .x = 0, .y = 0 };
+
+        const lm = self.lineMetrics(size_px);
+        const wrap = if (max_width > 0)
+            self.wordWrap(text, size_px, max_width)
+        else blk: {
+            var w = WrapResult{};
+            w.addLine(0, text.len);
+            break :blk w;
+        };
+
+        // Find which line contains this byte index
+        var line_idx: usize = 0;
+        for (0..wrap.count) |li| {
+            if (byte_idx >= wrap.line_starts[li] and byte_idx <= wrap.line_ends[li]) {
+                line_idx = li;
+                break;
+            }
+            // If past this line, keep going
+            if (li + 1 < wrap.count and byte_idx >= wrap.line_starts[li + 1]) {
+                continue;
+            }
+            line_idx = li;
+            break;
+        }
+
+        // Measure x within the line up to byte_idx
+        const line_start = wrap.line_starts[line_idx];
+        const target = if (byte_idx > line_start) byte_idx - line_start else 0;
+        const line = text[line_start..wrap.line_ends[line_idx]];
+
+        var pen_x: f32 = 0;
+        var i: usize = 0;
+        while (i < line.len and i < target) {
+            const ch = decodeUtf8(line[i..]);
+            pen_x += self.cpAdvance(ch.codepoint, size_px);
+            i += ch.len;
+        }
+
+        return .{
+            .x = pen_x,
+            .y = lm.height * @as(f32, @floatFromInt(line_idx)),
+        };
+    }
+
+    /// Draw selection highlight rectangles for the given byte range.
+    /// Handles multi-line selections across wrapped text.
+    pub fn drawSelectionRects(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, sel_start: usize, sel_end: usize, highlight_color: layout.Color) void {
+        if (sel_start == sel_end or text.len == 0) return;
+
+        const s0 = @min(sel_start, sel_end);
+        const s1 = @max(sel_start, sel_end);
+
+        const lm = self.lineMetrics(size_px);
+        const wrap = if (max_width > 0)
+            self.wordWrap(text, size_px, max_width)
+        else blk: {
+            var w = WrapResult{};
+            w.addLine(0, text.len);
+            break :blk w;
+        };
+
+        _ = c.SDL_SetRenderDrawBlendMode(self.renderer, c.SDL_BLENDMODE_BLEND);
+        _ = c.SDL_SetRenderDrawColor(self.renderer, highlight_color.r, highlight_color.g, highlight_color.b, highlight_color.a);
+
+        for (0..wrap.count) |li| {
+            const ls = wrap.line_starts[li];
+            const le = wrap.line_ends[li];
+
+            // Skip lines outside selection range
+            if (le <= s0 or ls >= s1) continue;
+
+            // Clamp selection to this line
+            const sel_line_start = if (s0 > ls) s0 - ls else 0;
+            const sel_line_end = if (s1 < le) s1 - ls else le - ls;
+
+            const line = text[ls..le];
+            const line_y = y + lm.height * @as(f32, @floatFromInt(li));
+
+            // Measure x at sel start and sel end within the line
+            var x0: f32 = 0;
+            var x1: f32 = 0;
+            var pen: f32 = 0;
+            var bi: usize = 0;
+            while (bi < line.len) {
+                if (bi == sel_line_start) x0 = pen;
+                const ch = decodeUtf8(line[bi..]);
+                pen += self.cpAdvance(ch.codepoint, size_px);
+                bi += ch.len;
+                if (bi == sel_line_end) {
+                    x1 = pen;
+                    break;
+                }
+            }
+            // If sel_line_end is at line end
+            if (sel_line_end >= line.len) x1 = pen;
+            if (sel_line_start == 0 and x0 == 0 and sel_line_end == 0) continue;
+
+            var rect = c.SDL_Rect{
+                .x = @intFromFloat(x + x0),
+                .y = @intFromFloat(line_y),
+                .w = @intFromFloat(x1 - x0),
+                .h = @intFromFloat(lm.height),
+            };
+            _ = c.SDL_RenderFillRect(self.renderer, &rect);
+        }
+    }
+
+    /// Find word boundaries around a byte index. Words are runs of non-space chars.
+    /// Returns {start, end} byte indices.
+    pub fn wordBoundsAt(text: []const u8, byte_idx: usize) struct { start: usize, end: usize } {
+        if (text.len == 0) return .{ .start = 0, .end = 0 };
+        const idx = @min(byte_idx, text.len -| 1);
+
+        // Scan backward to word start
+        var start: usize = idx;
+        while (start > 0 and text[start] != ' ' and text[start] != '\n') {
+            // Don't split UTF-8 sequences — only break at ASCII boundaries
+            if (text[start] >= 0x80 and start > 0 and text[start - 1] >= 0x80) {
+                start -= 1;
+            } else if (text[start] != ' ' and text[start] != '\n') {
+                start -= 1;
+            } else {
+                break;
+            }
+        }
+        if (start < text.len and (text[start] == ' ' or text[start] == '\n')) start += 1;
+
+        // Scan forward to word end
+        var end: usize = idx;
+        while (end < text.len and text[end] != ' ' and text[end] != '\n') {
+            end += 1;
+        }
+
+        return .{ .start = start, .end = end };
     }
 };

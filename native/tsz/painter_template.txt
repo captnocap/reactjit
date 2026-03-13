@@ -36,7 +36,9 @@ const Painter = struct {
             const col = node.text_color orelse Color.rgb(255, 255, 255);
             const text_max_w = node.computed.w - pad_l - pad_r;
             // Draw selection highlight behind text
-            if (sel_node == node and sel_start != sel_end) {
+            if (sel_all) {
+                self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, Color.rgba(60, 120, 200, 140));
+            } else if (sel_node == node and sel_start != sel_end) {
                 self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
             }
             self.text_engine.drawTextWrapped(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col);
