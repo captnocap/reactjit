@@ -1514,7 +1514,7 @@ function findInlineCompute(sourceFile, filePath, ts) {
           diagnostics.push({
             rule: 'no-js-compute',
             severity: 'error',
-            message: 'useState() with function initializer runs compute in JS. Use useState with a literal value, or move initialization to Lua.',
+            message: 'useState(() => fn) is banned — the initializer runs compute in JS. Use useState(literal) instead. If init needs heavy work, use useState(null) + useMount(() => setData(computedValue)).',
             file: filePath,
             line,
             col: pos.character + 1,
@@ -1546,7 +1546,7 @@ function findInlineCompute(sourceFile, filePath, ts) {
             diagnostics.push({
               rule: 'no-js-compute',
               severity: 'warning',
-              message: `.${methodName}() in component body runs compute in JS during render. Move data transformations to a .tslx compute() block or .tsl module.`,
+              message: `.${methodName}() in component body runs compute in JS during render. If trivial, inline it. If heavy, use useLuaQuery() to compute in Lua and receive the result.`,
               file: filePath,
               line,
               col: pos.character + 1,
@@ -1651,9 +1651,9 @@ const callRules = [
     check(call) {
       if (!BANNED_COMPUTE_HOOKS.has(call.funcName)) return null;
       const reasons = {
-        useMemo: 'useMemo() is banned — it runs JS compute during render that should be in Lua. Every new reference it returns triggers a reconciler diff → mutation ops → bridge flood. Move compute to a .tslx compute() block or .tsl module.',
-        useReducer: 'useReducer() is banned — state machines belong in Lua, not the QuickJS interpreter. Use useState with simple values + Lua-side logic, or move the reducer to a .tslx compute() block.',
-        useCallback: 'useCallback() is banned — it stabilizes references to JS functions that should not exist. If the function does compute, move it to Lua. If it\'s an event handler, pass it directly (the reconciler handles handler identity).',
+        useMemo: 'useMemo() is banned — every new reference triggers reconciler diffs → mutation ops → bridge flood. Alternatives:\n        • Trivial (clamp, ternary, lookup): inline it without useMemo\n        • Heavy compute (sort, filter, math): useLuaQuery("rpc:method", args, deps) — Lua computes, React receives\n        • Static derived data: compute in Lua, subscribe via useLoveEvent',
+        useReducer: 'useReducer() is banned — state machines belong in Lua, not the QuickJS interpreter. Use useState with simple values. If the state machine is complex, register a Lua capability and query via useLuaQuery.',
+        useCallback: 'useCallback() is banned — just remove it and pass the function directly. The reconciler re-extracts handlers on every commitUpdate — reference identity does not matter.',
       };
       return reasons[call.funcName] || `${call.funcName}() is banned — compute belongs in Lua.`;
     },
