@@ -637,14 +637,7 @@ export function SleepySyntaxStory() {
           }}>
             <Text style={{ color: c.muted, fontSize: 11, fontFamily: 'monospace' }}>editor.sleepy</Text>
           </Box>
-          <Box style={{ flexGrow: 1, position: 'relative' }}>
-            {/* Syntax-highlighted underlay */}
-            <Box style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-              <ScrollView style={{ flexGrow: 1 }}>
-                <SyntaxHighlightedCode source={code} />
-              </ScrollView>
-            </Box>
-            {/* Transparent text editor on top for actual editing */}
+          <Box style={{ flexGrow: 1 }}>
             <TextInput
               key={inputKey}
               defaultValue={code}
@@ -653,14 +646,13 @@ export function SleepySyntaxStory() {
               multiline
               style={{
                 width: '100%', height: '100%',
-                backgroundColor: 'transparent',
-                color: 'transparent',
+                backgroundColor: c.bgElevated,
+                color: c.text,
                 fontSize: 13,
                 fontFamily: 'monospace',
                 padding: 16,
                 lineHeight: 20,
               }}
-              cursorColor={c.text}
             />
           </Box>
         </Box>
