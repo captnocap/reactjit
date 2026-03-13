@@ -113,6 +113,15 @@ function parse(src: string): SleepyNode | null {
         eat('colon');
         const child = parseContent();
         if (child) {
+          // Handle name:api.ref:template pattern (forEach:api.items:[...])
+          if (child.type === 'api' && peek().type === 'colon') {
+            eat('colon');
+            const template = parseContent();
+            const children = [child];
+            if (template) children.push(...(template.type === 'group' ? template.children : [template]));
+            const node: SleepyNode = { type: 'element', name, children, variant };
+            return node;
+          }
           const node: SleepyNode = { type: 'element', name, children: child.type === 'group' ? child.children : [child] };
           if (variant) node.variant = variant;
           return node;
@@ -144,9 +153,11 @@ function parse(src: string): SleepyNode | null {
     eat('lparen');
     const children: SleepyNode[] = [];
     while (peek().type !== 'rparen' && peek().type !== 'eof') {
+      const before = pos;
       const child = parsePair();
       if (child) children.push(child);
       if (peek().type === 'comma') eat('comma');
+      if (pos === before) pos++; // safety: skip unparseable token to prevent infinite loop
     }
     eat('rparen');
     return { type: 'group', name: 'group', children };
@@ -156,9 +167,11 @@ function parse(src: string): SleepyNode | null {
     eat('lbracket');
     const children: SleepyNode[] = [];
     while (peek().type !== 'rbracket' && peek().type !== 'eof') {
+      const before = pos;
       const child = parsePair();
       if (child) children.push(child);
       if (peek().type === 'comma') eat('comma');
+      if (pos === before) pos++; // safety: skip unparseable token to prevent infinite loop
     }
     eat('rbracket');
     return { type: 'group', name: 'list', children };
