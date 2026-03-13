@@ -357,6 +357,12 @@ function Capabilities.loadAll()
   end
   -- Load generated capabilities (compiled from .tslx)
   local generated = {
+    "element_tile",
+    "element_card",
+    "element_detail",
+    "molecule_card",
+    "reaction_view",
+    "periodic_table",
     "chemistry_story",
   }
   for _, name in ipairs(generated) do
