@@ -1,19 +1,21 @@
 /**
- * TSLX Compare — Side-by-side: TSX ElementTile (hand-written Lua) vs TSLX ElementTile (compiled Lua).
+ * TSLX Compare — Three-way comparison of the same ElementTile:
  *
- * Left panel: ElementTile from packages/chemistry (React → <Native type="ElementTile">)
- * Right panel: TslxElementTile from lua/generated (compiled from .tslx)
+ * 1. Lua Capability: <Native type="ElementTile"> → hand-written love.graphics in Lua
+ * 2. Pure React TSX: Box/Text/Pressable composed directly in React
+ * 3. Compiled TSLX:  <Native type="TslxElementTile"> → .tslx compiled to Lua
  *
- * Same props, same elements — lets you see the visual diff.
+ * Same props, same elements — see the visual diff across all three approaches.
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Pressable, ScrollView, classifiers as S } from '../../../packages/core/src';
+import { Box, Text, Pressable, classifiers as S } from '../../../packages/core/src';
 import { Native } from '../../../packages/core/src/Native';
 import { useThemeColors } from '../../../packages/theme/src';
 import { ElementTile } from '../../../packages/chemistry/src';
+import { getElement } from '../../../packages/chemistry/src/elements';
 
-const ELEMENTS = [
+const SAMPLE_ELEMENTS = [
   { n: 1, sym: 'H' }, { n: 6, sym: 'C' }, { n: 7, sym: 'N' },
   { n: 8, sym: 'O' }, { n: 26, sym: 'Fe' }, { n: 29, sym: 'Cu' },
   { n: 47, sym: 'Ag' }, { n: 79, sym: 'Au' }, { n: 92, sym: 'U' },
@@ -24,9 +26,70 @@ const SIZES = [32, 48, 64, 80];
 const C = {
   accent: '#10b981',
   accentDim: 'rgba(16, 185, 129, 0.12)',
-  tsx: '#3b82f6',
+  lua: '#3b82f6',
+  react: '#a855f7',
   tslx: '#f59e0b',
 };
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'alkali-metal': '#7b6faa',
+  'alkaline-earth': '#9a9cc4',
+  'transition-metal': '#de9a9a',
+  'post-transition-metal': '#8fbc8f',
+  'metalloid': '#c8c864',
+  'nonmetal': '#59b5e6',
+  'halogen': '#d4a844',
+  'noble-gas': '#c87e4a',
+  'lanthanide': '#c45879',
+  'actinide': '#d4879a',
+};
+
+/** Pure React ElementTile — Box + Text, no <Native>, no Lua capability */
+function ReactElementTile({ element, selected, size }: { element: number; selected?: boolean; size: number }) {
+  const el = getElement(element);
+  if (!el) return null;
+  const bg = CATEGORY_COLORS[el.category] || '#868e96';
+  const s = size / 64;
+  const numFont = Math.max(7, Math.round(10 * s));
+  const symFont = Math.max(10, Math.round(16 * s));
+  const massFont = Math.max(7, Math.round(9 * s));
+  const pad = Math.max(1, Math.round(2 * s));
+  const massStr = el.mass.toFixed(2);
+
+  return (
+    <Box style={{ width: size, height: size * 36 / 32 }}>
+      <Box style={{
+        flexGrow: 1,
+        borderRadius: 3,
+        backgroundColor: '#2a2a3a',
+        borderWidth: selected ? 2 : 1,
+        borderColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: pad,
+        paddingBottom: pad,
+        gap: 0,
+        overflow: 'hidden',
+      }}>
+        <Text style={{ color: bg, fontSize: numFont }}>{`${el.number}`}</Text>
+        <Text style={{ color: '#ffffff', fontSize: symFont }}>{el.symbol}</Text>
+        <Text style={{ color: '#999999', fontSize: massFont }}>{massStr}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function ColumnHeader({ color, label, desc }: { color: string; label: string; desc: string }) {
+  return (
+    <>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+        <Text style={{ color, fontSize: 11, fontWeight: 'bold' }}>{label}</Text>
+      </Box>
+      <Text style={{ color: '#666', fontSize: 8 }}>{desc}</Text>
+    </>
+  );
+}
 
 export function TslxCompareStory() {
   const c = useThemeColors();
@@ -43,13 +106,13 @@ export function TslxCompareStory() {
           <Text style={{ color: C.accent, fontSize: 10 }}>{'ElementTile'}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }} />
-        <S.StoryMuted>{'Hand-written Lua vs compiled .tslx — same props, same elements'}</S.StoryMuted>
+        <S.StoryMuted>{'Three approaches — same component, same props'}</S.StoryMuted>
       </S.RowCenterBorder>
 
-      {/* Controls: element picker + size picker */}
+      {/* Controls */}
       <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8, gap: 10 }}>
         <S.StoryLabelText>{'Element'}</S.StoryLabelText>
-        {ELEMENTS.map(e => (
+        {SAMPLE_ELEMENTS.map(e => (
           <Pressable key={e.n} onPress={() => setSelected(e.n)}>
             <Box style={{
               paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
@@ -81,22 +144,14 @@ export function TslxCompareStory() {
         ))}
       </S.RowCenterBorder>
 
-      {/* Main: side by side */}
+      {/* Three columns */}
       <S.RowGrow>
-        {/* Left: TSX (hand-written Lua) */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.tsx }} />
-            <Text style={{ color: C.tsx, fontSize: 12, fontWeight: 'bold' }}>{'TSX → <Native type="ElementTile">'}</Text>
-          </Box>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'packages/chemistry → lua/capabilities/element_tile.lua'}</Text>
-
-          {/* Single selected tile */}
+        {/* 1: Lua Capability (hand-written love.graphics) */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+          <ColumnHeader color={C.lua} label={'Lua Capability'} desc={'<Native type="ElementTile"> → love.graphics'} />
           <ElementTile element={selected} selected size={tileSize} />
-
-          {/* Row of all elements */}
-          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 20, paddingRight: 20 }}>
-            {ELEMENTS.map(e => (
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 12, paddingRight: 12 }}>
+            {SAMPLE_ELEMENTS.map(e => (
               <Pressable key={e.n} onPress={() => setSelected(e.n)}>
                 <ElementTile element={e.n} selected={e.n === selected} size={32} />
               </Pressable>
@@ -104,23 +159,29 @@ export function TslxCompareStory() {
           </Box>
         </Box>
 
-        {/* Divider */}
         <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />
 
-        {/* Right: TSLX (compiled Lua) */}
-        <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.tslx }} />
-            <Text style={{ color: C.tslx, fontSize: 12, fontWeight: 'bold' }}>{'TSLX → TslxElementTile'}</Text>
+        {/* 2: Pure React TSX (Box + Text) */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+          <ColumnHeader color={C.react} label={'Pure React TSX'} desc={'Box + Text composed in React — no Lua'} />
+          <ReactElementTile element={selected} selected size={tileSize} />
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 12, paddingRight: 12 }}>
+            {SAMPLE_ELEMENTS.map(e => (
+              <Pressable key={e.n} onPress={() => setSelected(e.n)}>
+                <ReactElementTile element={e.n} selected={e.n === selected} size={32} />
+              </Pressable>
+            ))}
           </Box>
-          <Text style={{ color: c.muted, fontSize: 9 }}>{'examples/tslx-demo → lua/generated/element_tile.lua'}</Text>
+        </Box>
 
-          {/* Single selected tile */}
+        <S.VertDivider style={{ flexShrink: 0, alignSelf: 'stretch' }} />
+
+        {/* 3: Compiled TSLX (Box + Text via Lua Tree) */}
+        <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+          <ColumnHeader color={C.tslx} label={'Compiled TSLX'} desc={'.tslx → lua/generated/element_tile.lua'} />
           <Native type="TslxElementTile" element={selected} selected size={tileSize} />
-
-          {/* Row of all elements */}
-          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 20, paddingRight: 20 }}>
-            {ELEMENTS.map(e => (
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 12, paddingRight: 12 }}>
+            {SAMPLE_ELEMENTS.map(e => (
               <Pressable key={e.n} onPress={() => setSelected(e.n)}>
                 <Native type="TslxElementTile" element={e.n} selected={e.n === selected} size={32} />
               </Pressable>
