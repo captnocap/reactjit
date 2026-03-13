@@ -324,9 +324,11 @@ pub fn build(b: *std.Build) void {
         app_step.dependOn(&app_install.step);
     }
 
-    // ── tsz-compiler (native .tsz compiler — replaces Node.js) ─────────────
-    // Reads .tsz files, parses, emits Zig, invokes zig build engine-app.
-    // Zero dependencies. One binary. No npm.
+    // ── tsz (compiler + project manager + GUI dashboard) ───────────────────
+    // Compiler: reads .tsz files, parses, emits Zig, invokes zig build engine-app.
+    // Manager: project registry, process lifecycle, status tracking.
+    // GUI: SDL2 dashboard window using engine modules (layout, text, events).
+    // One binary. No npm. No Node.js. No Lua.
     {
         const tsz_exe = b.addExecutable(.{
             .name = "tsz",
@@ -335,6 +337,19 @@ pub fn build(b: *std.Build) void {
                 .target = target,
                 .optimize = optimize,
             }),
+        });
+
+        // GUI needs engine modules (layout, text, events, image)
+        // which depend on SDL2, GL, FreeType, stb_image
+        tsz_exe.linkLibC();
+        tsz_exe.linkSystemLibrary("SDL2");
+        tsz_exe.linkSystemLibrary("GL");
+        tsz_exe.linkSystemLibrary("freetype");
+        tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        tsz_exe.root_module.addIncludePath(b.path("native/engine"));
+        tsz_exe.root_module.addCSourceFile(.{
+            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
         });
 
         const tsz_install = b.addInstallArtifact(tsz_exe, .{});

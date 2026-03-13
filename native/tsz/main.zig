@@ -18,6 +18,7 @@ const codegen = @import("codegen.zig");
 const registry = @import("registry.zig");
 const process = @import("process.zig");
 pub const actions = @import("actions.zig");
+const gui = @import("gui.zig");
 const posix = std.posix;
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -441,7 +442,7 @@ pub fn execAction(alloc: std.mem.Allocator, action_name: []const u8, arg: []cons
     } else if (std.mem.eql(u8, action_name, "ls")) {
         cmdLs(alloc);
     } else if (std.mem.eql(u8, action_name, "gui")) {
-        std.debug.print("[tsz] GUI not yet implemented (Phase 2)\n", .{});
+        try gui.run(alloc);
     }
 }
 
