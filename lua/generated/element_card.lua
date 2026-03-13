@@ -126,7 +126,7 @@ local function updateTree(handles, props)
   rebuildList_0(handles["n0_7_list_0"], data.rows, data)
 end
 
-Capabilities.register("ElementCard", {
+Capabilities.register("TslxElementCard", {
   visual = false,
 
   schema = {

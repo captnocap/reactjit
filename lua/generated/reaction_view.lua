@@ -311,7 +311,7 @@ local function updateTree(handles, props)
   rebuildList_1(handles["n0_7_2_1_list_1"], data.chips, data)
 end
 
-Capabilities.register("ReactionView", {
+Capabilities.register("TslxReactionView", {
   visual = false,
 
   schema = {

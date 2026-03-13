@@ -134,13 +134,13 @@ local function buildTemplate()
           { type = "View", key = "n0_1_1_7_5_1_list_0", style = { flexDirection = "row", gap = 4 } },
           } },
         { type = "View", key = "n0_1_1_11_6", style = { gap = 16, display = "none" }, children = {
-          { type = "PeriodicTable", key = "n0_1_1_11_6_1_7", props = { tileSize = 32 } },
+          { type = "TslxPeriodicTable", key = "n0_1_1_11_6_1_7", props = { tileSize = 32 } },
           { type = "View", key = "n0_1_1_11_6_5_8", style = { flexDirection = "row", gap = 12, display = "none" }, children = {
             { type = "View", key = "n0_1_1_11_6_5_8_1_9", style = { flexGrow = 1, flexBasis = 0 }, children = {
-              { type = "ElementCard", key = "n0_1_1_11_6_5_8_1_9_1_10" },
+              { type = "TslxElementCard", key = "n0_1_1_11_6_5_8_1_9_1_10" },
               } },
             { type = "View", key = "n0_1_1_11_6_5_8_3_11", style = { flexGrow = 1, flexBasis = 0 }, children = {
-              { type = "ElementDetail", key = "n0_1_1_11_6_5_8_3_11_1_12" },
+              { type = "TslxElementDetail", key = "n0_1_1_11_6_5_8_3_11_1_12" },
               } },
             } },
           { type = "View", key = "n0_1_1_11_6_9_13", style = { flexDirection = "row", gap = 4, flexWrap = "wrap" }, children = {
@@ -151,13 +151,13 @@ local function buildTemplate()
           { type = "View", key = "n0_1_1_15_14_3_15", style = { flexDirection = "row", gap = 4, flexWrap = "wrap" }, children = {
             { type = "View", key = "n0_1_1_15_14_3_15_1_list_2", style = { flexDirection = "row", flexWrap = "wrap", gap = 4 } },
             } },
-          { type = "MoleculeCard", key = "n0_1_1_15_14_7_16" },
+          { type = "TslxMoleculeCard", key = "n0_1_1_15_14_7_16" },
           } },
         { type = "View", key = "n0_1_1_19_17", style = { gap = 12, display = "none" }, children = {
           { type = "View", key = "n0_1_1_19_17_3_18", style = { gap = 4 }, children = {
             { type = "View", key = "n0_1_1_19_17_3_18_1_list_3", style = { gap = 4 } },
             } },
-          { type = "ReactionView", key = "n0_1_1_19_17_7_19" },
+          { type = "TslxReactionView", key = "n0_1_1_19_17_7_19" },
           } },
         } },
       } },
@@ -181,7 +181,7 @@ local function updateTree(handles, props, state, refresh)
   rebuildList_3(handles["n0_1_1_19_17_3_18_1_list_3"], data.DEMO_REACTIONS, data, state, refresh)
 end
 
-Capabilities.register("ChemistryStory", {
+Capabilities.register("TslxChemistryStory", {
   visual = false,
 
   schema = {

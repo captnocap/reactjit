@@ -129,7 +129,7 @@ local function updateTree(handles, props)
   rebuildList_0(handles["n0_7_9_1_list_0"], data.chips, data)
 end
 
-Capabilities.register("ElementDetail", {
+Capabilities.register("TslxElementDetail", {
   visual = false,
 
   schema = {

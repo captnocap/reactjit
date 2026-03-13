@@ -14,7 +14,7 @@ import { Native } from '../../../packages/core/src/Native';
 export function ChemistryTslxStory() {
   return (
     <Box style={{ width: '100%', height: '100%' }}>
-      <Native type="ChemistryStory" />
+      <Native type="TslxChemistryStory" />
     </Box>
   );
 }

@@ -55,7 +55,7 @@ local function empiricalFormula(formula)
   end
   return table.concat(__tsl.map(atoms, function(a)
     local n = a.count / d
-    return a.symbol + ((n > 1 and tostring(math.floor(n)) or ""))
+    return a.symbol .. ((n > 1 and tostring(math.floor(n)) or ""))
   end), "")
 end
 local function electronegativityDiff(symbol1, symbol2)

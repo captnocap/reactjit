@@ -213,7 +213,7 @@ local function rebuildList_0(wrapperNodeId, items, data, props)
         { type = "View", key = "li_0_inner_1_" .. _i .. "_" .. _k, style = { width = data.s, height = data.h } }
         else
           inner_children[#inner_children + 1] =
-        { type = "ElementTile", key = "li_0_inner_2_" .. _i .. "_" .. _k, props = { element = z, selected = z == ((props.selected) or (0)), size = data.s } }
+        { type = "TslxElementTile", key = "li_0_inner_2_" .. _i .. "_" .. _k, props = { element = z, selected = z == ((props.selected) or (0)), size = data.s } }
         end
       end
     tmpl[#tmpl + 1] =
@@ -237,7 +237,7 @@ local function updateTree(handles, props)
   rebuildList_0(handles["n0_1_list_0"], data.TABLE_LAYOUT, data, props)
 end
 
-Capabilities.register("PeriodicTable", {
+Capabilities.register("TslxPeriodicTable", {
   visual = false,
 
   schema = {

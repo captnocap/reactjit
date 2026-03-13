@@ -154,7 +154,7 @@ local function updateTree(handles, props)
   rebuildList_1(handles["n0_11_5_3_7_1_list_1"], data.atoms, data)
 end
 
-Capabilities.register("MoleculeCard", {
+Capabilities.register("TslxMoleculeCard", {
   visual = false,
 
   schema = {

@@ -56,7 +56,7 @@ local function updateTree(handles, props)
   Tree.updateChildProps(handles["n0_1_1_5_4_0_t"], { text = data.massStr or "" })
 end
 
-Capabilities.register("ElementTile", {
+Capabilities.register("TslxElementTile", {
   visual = false,
 
   schema = {
