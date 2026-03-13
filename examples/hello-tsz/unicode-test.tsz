@@ -47,6 +47,17 @@ function App() {
         </Text>
       </Box>
 
+      <Box style={{ padding: 12, backgroundColor: '#16213e', textAlign: 'left' }}>
+        <Text fontSize={11} color="#e94560">Text Alignment</Text>
+        <Text fontSize={14} color="#ccccdd">Left aligned text (default)</Text>
+      </Box>
+      <Box style={{ padding: 12, backgroundColor: '#0f3460', textAlign: 'center' }}>
+        <Text fontSize={14} color="#ccccdd">Center aligned text</Text>
+      </Box>
+      <Box style={{ padding: 12, backgroundColor: '#16213e', textAlign: 'right' }}>
+        <Text fontSize={14} color="#ccccdd">Right aligned text</Text>
+      </Box>
+
       <Box style={{ padding: 12, backgroundColor: '#16213e' }}>
         <Text fontSize={11} color="#e94560">Symbols (dingbats)</Text>
         <Text fontSize={14} color="#ccccdd">

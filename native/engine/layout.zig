@@ -45,6 +45,8 @@ pub const Display = enum { flex, none };
 
 pub const Overflow = enum { visible, hidden, scroll };
 
+pub const TextAlign = enum { left, center, right };
+
 /// Style properties for a node. Mirrors the CSS-like style object from React.
 /// All dimensions are in pixels (Phase 1 — no percentages/vw/vh yet).
 pub const Style = struct {
@@ -84,6 +86,9 @@ pub const Style = struct {
 
     // Overflow
     overflow: Overflow = .visible,
+
+    // Text
+    text_align: TextAlign = .left,
 
     // Visual
     background_color: ?Color = null,
@@ -644,6 +649,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             if (child.style.width == null and align_items == .stretch) {
                 child._flex_w = cw_final;
             }
+        }
+
+        // Inherit text_align from parent if child is default
+        if (child.style.text_align == .left and s.text_align != .left) {
+            child.style.text_align = s.text_align;
         }
 
         // Recurse

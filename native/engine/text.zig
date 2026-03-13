@@ -605,6 +605,11 @@ pub const TextEngine = struct {
     /// Draw text with word wrapping within max_width.
     /// If max_width <= 0, falls back to single-line drawText.
     pub fn drawTextWrapped(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color) void {
+        self.drawTextWrappedAligned(text, x, y, size_px, max_width, color, .left);
+    }
+
+    /// Draw text with word wrapping and alignment within max_width.
+    pub fn drawTextWrappedAligned(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color, text_align: layout.TextAlign) void {
         if (max_width <= 0) {
             self.drawText(text, x, y, size_px, color);
             return;
@@ -616,16 +621,38 @@ pub const TextEngine = struct {
         for (0..wrap.count) |li| {
             const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
             const line_y = y + lm.height * @as(f32, @floatFromInt(li));
-            self.drawText(line, x, line_y, size_px, color);
+
+            // Compute line x offset for alignment
+            var line_x = x;
+            if (text_align != .left) {
+                var line_w: f32 = 0;
+                var j: usize = 0;
+                while (j < line.len) {
+                    const ch = decodeUtf8(line[j..]);
+                    line_w += self.cpAdvance(ch.codepoint, size_px);
+                    j += ch.len;
+                }
+                if (text_align == .center) {
+                    line_x = x + (max_width - line_w) / 2.0;
+                } else { // .right
+                    line_x = x + max_width - line_w;
+                }
+            }
+
+            self.drawText(line, line_x, line_y, size_px, color);
         }
     }
 
     // ── Text Selection ──────────────────────────────────────────────────
 
     /// Map a local (x, y) coordinate (relative to text origin) to a byte
-    /// index in the text. Accounts for word wrapping and UTF-8.
+    /// index in the text. Accounts for word wrapping, UTF-8, and alignment.
     /// Returns the byte index closest to the click position.
     pub fn hitTestWrapped(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32) usize {
+        return self.hitTestWrappedAligned(text, local_x, local_y, size_px, max_width, .left);
+    }
+
+    pub fn hitTestWrappedAligned(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32, text_align: layout.TextAlign) usize {
         if (text.len == 0) return 0;
 
         const lm = self.lineMetrics(size_px);
@@ -649,6 +676,26 @@ pub const TextEngine = struct {
         const line_end = wrap.line_ends[line_idx];
         const line = text[line_start..line_end];
 
+        // Compute alignment offset for this line
+        var align_offset: f32 = 0;
+        if (text_align != .left and max_width > 0) {
+            var line_w: f32 = 0;
+            var lj: usize = 0;
+            while (lj < line.len) {
+                const lch = decodeUtf8(line[lj..]);
+                line_w += self.cpAdvance(lch.codepoint, size_px);
+                lj += lch.len;
+            }
+            if (text_align == .center) {
+                align_offset = (max_width - line_w) / 2.0;
+            } else {
+                align_offset = max_width - line_w;
+            }
+        }
+
+        // Adjust click x by alignment offset
+        const adjusted_x = local_x - align_offset;
+
         var pen_x: f32 = 0;
         var i: usize = 0;
         var last_byte: usize = 0;
@@ -658,7 +705,7 @@ pub const TextEngine = struct {
             const adv = self.cpAdvance(ch.codepoint, size_px);
 
             // If click is before the midpoint of this char, select before it
-            if (pen_x + adv / 2.0 > local_x) {
+            if (pen_x + adv / 2.0 > adjusted_x) {
                 return line_start + last_byte;
             }
 
@@ -720,8 +767,13 @@ pub const TextEngine = struct {
     }
 
     /// Draw selection highlight rectangles for the given byte range.
-    /// Handles multi-line selections across wrapped text.
+    /// Handles multi-line selections across wrapped text and alignment.
     pub fn drawSelectionRects(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, sel_start: usize, sel_end: usize, highlight_color: layout.Color) void {
+        self.drawSelectionRectsAligned(text, x, y, size_px, max_width, sel_start, sel_end, highlight_color, .left);
+    }
+
+    /// Draw selection highlight rectangles with text alignment support.
+    pub fn drawSelectionRectsAligned(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, sel_start: usize, sel_end: usize, highlight_color: layout.Color, text_align: layout.TextAlign) void {
         if (sel_start == sel_end or text.len == 0) return;
 
         const s0 = @min(sel_start, sel_end);
@@ -753,6 +805,23 @@ pub const TextEngine = struct {
             const line = text[ls..le];
             const line_y = y + lm.height * @as(f32, @floatFromInt(li));
 
+            // Compute alignment offset for this line (same logic as drawTextWrappedAligned)
+            var align_offset: f32 = 0;
+            if (text_align != .left and max_width > 0) {
+                var line_w: f32 = 0;
+                var lj: usize = 0;
+                while (lj < line.len) {
+                    const lch = decodeUtf8(line[lj..]);
+                    line_w += self.cpAdvance(lch.codepoint, size_px);
+                    lj += lch.len;
+                }
+                if (text_align == .center) {
+                    align_offset = (max_width - line_w) / 2.0;
+                } else { // .right
+                    align_offset = max_width - line_w;
+                }
+            }
+
             // Measure x at sel start and sel end within the line
             var x0: f32 = 0;
             var x1: f32 = 0;
@@ -773,7 +842,7 @@ pub const TextEngine = struct {
             if (sel_line_start == 0 and x0 == 0 and sel_line_end == 0) continue;
 
             var rect = c.SDL_Rect{
-                .x = @intFromFloat(x + x0),
+                .x = @intFromFloat(x + align_offset + x0),
                 .y = @intFromFloat(line_y),
                 .w = @intFromFloat(x1 - x0),
                 .h = @intFromFloat(lm.height),

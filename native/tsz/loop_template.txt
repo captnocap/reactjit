@@ -85,7 +85,7 @@
                                 const local_y = my - tnode.computed.y - pad_t;
                                 const text_max_w = tnode.computed.w - pad_l - pad_r;
                                 sel_end_node = tnode;
-                                sel_end = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, tnode.font_size, text_max_w);
+                                sel_end = g_text_engine.?.hitTestWrappedAligned(txt, local_x, local_y, tnode.font_size, text_max_w, tnode.style.text_align);
                             }
                         }
                     }
@@ -115,7 +115,7 @@
                             const local_y = my - tnode.computed.y - pad_t;
                             const text_max_w = tnode.computed.w - pad_l - pad_r;
                             const now = c.SDL_GetTicks();
-                            const byte_idx = g_text_engine.?.hitTestWrapped(txt, local_x, local_y, tnode.font_size, text_max_w);
+                            const byte_idx = g_text_engine.?.hitTestWrappedAligned(txt, local_x, local_y, tnode.font_size, text_max_w, tnode.style.text_align);
                             if (sel_node == tnode and now -% sel_last_click < 400) {
                                 sel_click_count += 1;
                             } else {

@@ -147,13 +147,14 @@ const Painter = struct {
             } else if (sel_node == node and sel_start != sel_end) {
                 self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
             }
-            self.text_engine.drawTextWrapped(
+            self.text_engine.drawTextWrappedAligned(
                 txt,
                 screen_x + pad_l,
                 screen_y + pad_t,
                 node.font_size,
                 text_max_w,
                 color,
+                node.style.text_align,
             );
         }
 

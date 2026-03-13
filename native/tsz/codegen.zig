@@ -220,6 +220,94 @@ pub const Generator = struct {
         return self.emitZigSource(root_expr);
     }
 
+    /// Parse classifier({...}) blocks.
+    /// Format: classifier({ Name: { type: 'Primitive', style: { ... } }, ... })
+    fn collectClassifiers(self: *Generator) void {
+        while (self.pos < self.lex.count and self.curKind() != .eof) {
+            if (self.isIdent("classifier")) {
+                self.advance_token(); // skip "classifier"
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                if (self.curKind() == .lbrace) self.advance_token(); // {
+
+                // Parse entries: Name: { type: 'X', style: { ... } }
+                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                    if (self.curKind() == .identifier) {
+                        const name = self.curText();
+                        self.advance_token(); // skip name
+                        if (self.curKind() == .colon) self.advance_token(); // :
+                        if (self.curKind() == .lbrace) {
+                            self.advance_token(); // {
+
+                            var prim_type: []const u8 = "Box";
+                            var style_str: []const u8 = "";
+                            var text_props: []const u8 = "";
+
+                            // Parse fields: type, style, size, bold, color, grow
+                            while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                if (self.curKind() == .identifier) {
+                                    const field = self.curText();
+                                    self.advance_token();
+                                    if (self.curKind() == .colon) self.advance_token();
+
+                                    if (std.mem.eql(u8, field, "type")) {
+                                        prim_type = (self.parseStringAttrInline() catch "Box");
+                                    } else if (std.mem.eql(u8, field, "style")) {
+                                        style_str = (self.parseStyleAttr() catch "");
+                                    } else if (std.mem.eql(u8, field, "size")) {
+                                        const sz = self.curText();
+                                        self.advance_token();
+                                        text_props = std.fmt.allocPrint(self.alloc, ".font_size = {s}", .{sz}) catch "";
+                                    } else if (std.mem.eql(u8, field, "bold")) {
+                                        // Skip bool value
+                                        if (self.curKind() == .identifier) self.advance_token();
+                                    } else if (std.mem.eql(u8, field, "color")) {
+                                        const col = (self.parseStringAttrInline() catch "");
+                                        if (col.len > 0) {
+                                            const zig_col = self.parseColorValue(col) catch "Color.rgb(255,255,255)";
+                                            text_props = std.fmt.allocPrint(self.alloc, "{s}, .text_color = {s}", .{
+                                                if (text_props.len > 0) text_props else "",
+                                                zig_col,
+                                            }) catch "";
+                                        }
+                                    } else if (std.mem.eql(u8, field, "grow")) {
+                                        // grow: true → flexGrow: 1
+                                        if (self.curKind() == .identifier) self.advance_token();
+                                        if (style_str.len > 0) {
+                                            style_str = std.fmt.allocPrint(self.alloc, "{s}, .flex_grow = 1", .{style_str}) catch style_str;
+                                        } else {
+                                            style_str = ".flex_grow = 1";
+                                        }
+                                    } else {
+                                        // Skip unknown field value
+                                        if (self.curKind() == .string or self.curKind() == .number or self.curKind() == .identifier) {
+                                            self.advance_token();
+                                        }
+                                    }
+                                }
+                                if (self.curKind() == .comma) self.advance_token();
+                            }
+                            if (self.curKind() == .rbrace) self.advance_token(); // }
+
+                            // Register
+                            if (self.classifier_count < 128) {
+                                const idx = self.classifier_count;
+                                self.classifier_names[idx] = name;
+                                self.classifier_primitives[idx] = prim_type;
+                                self.classifier_styles[idx] = style_str;
+                                self.classifier_text_props[idx] = text_props;
+                                self.classifier_count += 1;
+                            }
+                        }
+                    }
+                    if (self.curKind() == .comma) self.advance_token();
+                }
+                if (self.curKind() == .rbrace) self.advance_token(); // }
+                if (self.curKind() == .rparen) self.advance_token(); // )
+            }
+            self.advance_token();
+        }
+    }
+
     fn collectFFIPragmas(self: *Generator) void {
         var i: u32 = 0;
         while (i < self.lex.count) : (i += 1) {
@@ -347,8 +435,23 @@ pub const Generator = struct {
         }
         self.advance_token(); // skip <
 
-        const tag_name = self.curText();
+        var tag_name = self.curText();
         self.advance_token(); // skip tag name
+
+        // Handle C.Name classifier references
+        var classifier_idx: ?u32 = null;
+        if (std.mem.eql(u8, tag_name, "C") and self.curKind() == .dot) {
+            self.advance_token(); // skip .
+            const cls_name = self.curText();
+            self.advance_token(); // skip classifier name
+            classifier_idx = self.findClassifier(cls_name);
+            if (classifier_idx) |idx| {
+                // Resolve to the underlying primitive
+                tag_name = self.classifier_primitives[idx];
+            } else {
+                std.debug.print("[tsz] Unknown classifier: C.{s}\n", .{cls_name});
+            }
+        }
 
         // Parse attributes
         var style_str: []const u8 = "";
@@ -361,6 +464,22 @@ pub const Generator = struct {
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
         var placeholder_str: []const u8 = "";
+
+        // Pre-populate from classifier defaults
+        if (classifier_idx) |idx| {
+            style_str = self.classifier_styles[idx];
+            const tp = self.classifier_text_props[idx];
+            // Parse text props: ".font_size = N, .text_color = Color.rgb(...)"
+            if (tp.len > 0) {
+                if (std.mem.indexOf(u8, tp, ".font_size = ")) |fs_pos| {
+                    const after = tp[fs_pos + 13 ..];
+                    const end = std.mem.indexOfAny(u8, after, &[_]u8{ ',', 0 }) orelse after.len;
+                    font_size = after[0..end];
+                }
+                // color_str stays empty — text_color is handled as a raw field below
+            }
+        }
+
         const is_window = std.mem.eql(u8, tag_name, "Window");
         const is_scroll = std.mem.eql(u8, tag_name, "ScrollView");
         const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
@@ -467,10 +586,16 @@ pub const Generator = struct {
                 }
             }
 
-            // Skip closing tag: </TagName>
+            // Skip closing tag: </TagName> or </C.Name>
             if (self.curKind() == .lt_slash) {
                 self.advance_token(); // </
-                if (self.curKind() == .identifier) self.advance_token(); // tag name
+                if (self.curKind() == .identifier) {
+                    self.advance_token(); // tag name or "C"
+                    if (self.curKind() == .dot) {
+                        self.advance_token(); // .
+                        if (self.curKind() == .identifier) self.advance_token(); // Name
+                    }
+                }
                 if (self.curKind() == .gt) self.advance_token(); // >
             }
         }
@@ -528,6 +653,15 @@ pub const Generator = struct {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".text_color = ");
             try fields.appendSlice(self.alloc, try self.parseColorValue(color_str));
+        }
+
+        // Classifier text props (font_size, text_color from classifier sheet)
+        if (classifier_idx) |idx| {
+            const tp = self.classifier_text_props[idx];
+            if (tp.len > 0) {
+                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                try fields.appendSlice(self.alloc, tp);
+            }
         }
 
         // Image src
@@ -1336,6 +1470,7 @@ fn mapEnumKey(key: []const u8) ?EnumMapping {
     if (std.mem.eql(u8, key, "justifyContent")) return .{ .field = "justify_content", .prefix = "jc" };
     if (std.mem.eql(u8, key, "alignItems")) return .{ .field = "align_items", .prefix = "ai" };
     if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
+    if (std.mem.eql(u8, key, "textAlign")) return .{ .field = "text_align", .prefix = "ta" };
     return null;
 }
 
@@ -1361,6 +1496,11 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, prefix, "d")) {
         if (std.mem.eql(u8, value, "flex")) return ".flex";
         if (std.mem.eql(u8, value, "none")) return ".none";
+    }
+    if (std.mem.eql(u8, prefix, "ta")) {
+        if (std.mem.eql(u8, value, "left")) return ".left";
+        if (std.mem.eql(u8, value, "center")) return ".center";
+        if (std.mem.eql(u8, value, "right")) return ".right";
     }
     return null;
 }
