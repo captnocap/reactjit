@@ -194,6 +194,7 @@ export function TradingViewBarsStory() {
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
   const [live, setLive] = useState(true);
   const [spin, setSpin] = useState(0);
+  // rjit-ignore-next-line — static initial candle generation, runs once
   const [candles, setCandles] = useState<Candle[]>(() => makeCandles('1h'));
 
   const prevTimeframe = useRef(timeframe);
@@ -243,6 +244,7 @@ export function TradingViewBarsStory() {
     });
   });
 
+  // rjit-ignore-next-line
   const { minPrice, maxPrice, last, prev } = useMemo(() => {
     let min = Infinity;
     let max = -Infinity;

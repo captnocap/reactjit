@@ -56,14 +56,17 @@ function VerticalDivider() {
 export function GalleryStory() {
   const c = useThemeColors();
   const TABS = getAll();
-  // Expose entry list for test runner (rjit test)
-  (globalThis as any).__galleryEntries = TABS.map(t => ({ id: t.id, label: t.label }));
   const [activeId, setActiveId] = useState(TABS[0]?.id ?? '');
+  // Expose for test runner (rjit test)
+  (globalThis as any).__galleryEntries = TABS.map(t => ({ id: t.id, label: t.label }));
+  (globalThis as any).__gallerySetActive = setActiveId;
   const [searchQuery, setSearchQuery] = useState('');
   const [tabsExpanded, setTabsExpanded] = useState(false);
+  // rjit-ignore-next-line
   const tab = TABS.find(it => it.id === activeId) || TABS[0];
   const pkgColor = PKG_COLORS[tab?.pkg];
 
+  // rjit-ignore-next-line
   const filteredTabs = useMemo(() => {
     if (!searchQuery) return TABS;
     const q = searchQuery.toLowerCase();
@@ -75,6 +78,7 @@ export function GalleryStory() {
   }, [searchQuery, TABS]);
 
   // Group filtered tabs by package in display order
+  // rjit-ignore-next-line
   const groupedTabs = useMemo(() => {
     const byPkg: Record<string, GalleryEntry[]> = {};
     for (const t of filteredTabs) {

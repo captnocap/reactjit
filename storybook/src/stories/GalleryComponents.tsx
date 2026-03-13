@@ -1198,16 +1198,16 @@ export function PreviewLoadingDots({ c }: { c: ThemeColors }) {
 }
 
 export function PreviewElementTile({ c }: { c: ThemeColors }) {
-  const representatives = [
-    'H', 'Li', 'Be', 'Fe', 'Al', 'Si', 'Cl', 'Ne', 'Nd', 'U',
-  ];
+  const reps = ['H', 'Fe', 'Au', 'Ne', 'U'];
+  const sz = 120;
+  const th = Math.floor(sz * (36 / 32));
   return (
     <S.GrowCenterAlign style={{ padding: 16 }}>
-      <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
-        {representatives.map(sym => (
-          <ElementTile key={sym} element={sym} size={96} />
+      <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+        {reps.map(sym => (
+          <ElementTile key={sym} element={sym} size={sz} style={{ width: sz, height: th }} />
         ))}
-      </S.RowG8>
+      </Box>
     </S.GrowCenterAlign>
   );
 }
@@ -1572,6 +1572,7 @@ export function PreviewPadButton({ c }: { c: ThemeColors }) {
 }
 
 export function PreviewStepSequencer({ c }: { c: ThemeColors }) {
+  // rjit-ignore-next-line — static initial pattern, runs once
   const [pattern, setPattern] = useState(() => {
     const p: boolean[][] = [];
     for (let t = 0; t < 4; t++) {
