@@ -35,6 +35,7 @@ Props (inherits all Input props except multiline, lineNumbers, syntaxHighlight, 
 | activityBarWidth  | number                      | 42              | Activity bar width in pixels             |
 | sidebarWidth      | number                      | 190             | Sidebar width in pixels                  |
 | minimapWidth      | number                      | 120             | Minimap panel width in pixels            |
+| minimapTrackHeight| number                      | auto            | Height of the compact minimap track      |
 | topBarHeight      | number                      | 42 / 28 compact | Top tab bar height in pixels             |
 | breadcrumbBarHeight | number                    | 24              | Breadcrumb bar height in pixels          |
 | statusBarHeight   | number                      | 22 / 18 compact | Status bar height in pixels              |

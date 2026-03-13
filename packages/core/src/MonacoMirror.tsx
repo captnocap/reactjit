@@ -204,6 +204,7 @@ export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineN
   activityBarWidth?: number;
   sidebarWidth?: number;
   minimapWidth?: number;
+  minimapTrackHeight?: number;
   topBarHeight?: number;
   breadcrumbBarHeight?: number;
   statusBarHeight?: number;
@@ -255,6 +256,7 @@ export function MonacoMirror({
   activityBarWidth = 42,
   sidebarWidth = 190,
   minimapWidth = 120,
+  minimapTrackHeight,
   topBarHeight,
   breadcrumbBarHeight = 24,
   statusBarHeight,
@@ -288,7 +290,7 @@ export function MonacoMirror({
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
-  const [minimapTrackHeight, setMinimapTrackHeight] = useState<number | undefined>(undefined);
+  const [minimapTrackMeasuredHeight, setMinimapTrackMeasuredHeight] = useState<number | undefined>(undefined);
   const [editorViewStateSnapshot, setEditorViewStateSnapshot] = useState<ViewStateSnapshot | null>(null);
   const [preferredViewTarget, setPreferredViewTarget] = useState<ViewTarget>('editor');
   const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
@@ -395,14 +397,15 @@ export function MonacoMirror({
   const editorLineHeight = editorFontSize + 4;
   const chromeHeight = resolvedTopBarHeight + (renderBreadcrumbs ? breadcrumbBarHeight : 0) + (showStatusBar ? resolvedStatusBarHeight : 0);
   const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
+  const resolvedMinimapTrackHeight = minimapTrackHeight ?? Math.max(48, Math.min(132, Math.round(approxEditorViewportHeight * 0.3)));
   // Prefer measured editor viewport height so minimap highlight matches what is visible.
   const effectiveEditorViewportHeight = editorViewportHeight !== undefined ? Math.max(editorViewportHeight, 60) : approxEditorViewportHeight;
   const editorVisibleRows = Math.max(1, Math.floor((effectiveEditorViewportHeight - 16) / editorLineHeight));
   const minimapViewportRows = Math.max(1, Math.min(minimapRowCount, editorVisibleRows));
   const minimapStripePitch = 3;
-  const minimapTrackHeightPx = minimapTrackHeight !== undefined
-    ? Math.max(12, minimapTrackHeight)
-    : Math.max(12, approxEditorViewportHeight - 8);
+  const minimapTrackHeightPx = minimapTrackMeasuredHeight !== undefined
+    ? Math.max(12, minimapTrackMeasuredHeight)
+    : Math.max(12, resolvedMinimapTrackHeight);
   const minimapSampleCount = Math.max(1, Math.min(
     minimapMaxLines,
     Math.max(1, Math.floor(minimapTrackHeightPx / minimapStripePitch)),
@@ -655,7 +658,7 @@ export function MonacoMirror({
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleMinimapTrackLayout = useCallback((event: LayoutEvent) => {
     const nextHeight = Math.max(0, Math.round(event.height));
-    setMinimapTrackHeight((prev) => {
+    setMinimapTrackMeasuredHeight((prev) => {
       if (prev !== undefined && Math.abs(prev - nextHeight) < 1) return prev;
       return nextHeight;
     });
@@ -1337,7 +1340,15 @@ export function MonacoMirror({
                     <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${editorViewState?.lineCount ?? lineCount}L`}</Text>
                   </Box>
                 </Box>
-                <Box style={{ position: 'relative', flexGrow: 1, minHeight: 12, overflow: 'hidden' }} onLayout={handleMinimapTrackLayout}>
+                <Box
+                  style={{
+                    position: 'relative',
+                    height: resolvedMinimapTrackHeight,
+                    minHeight: 12,
+                    overflow: 'hidden',
+                  }}
+                  onLayout={handleMinimapTrackLayout}
+                >
                   {minimapInkPercents.map((percent, index) => (
                     <Box
                       key={`minimap-ink:${index}`}
