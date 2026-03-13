@@ -256,6 +256,8 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkLibC();
         engine_exe.linkSystemLibrary("SDL2");
         engine_exe.linkSystemLibrary("GL");
+        engine_exe.linkSystemLibrary("freetype");
+        engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
 
         const engine_install = b.addInstallArtifact(engine_exe, .{});
 

@@ -126,6 +126,18 @@ pub const Color = struct {
     }
 };
 
+// ── Text Metrics ────────────────────────────────────────────────────────────
+
+pub const TextMetrics = struct {
+    width: f32 = 0,
+    height: f32 = 0,
+    ascent: f32 = 0,
+};
+
+/// Function pointer type for text measurement callback.
+/// The layout engine calls this to measure text nodes.
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16) TextMetrics;
+
 // ── Layout Result ───────────────────────────────────────────────────────────
 
 pub const LayoutRect = struct {
@@ -141,6 +153,13 @@ pub const Node = struct {
     style: Style = .{},
     children: []Node = &.{},
     computed: LayoutRect = .{},
+
+    /// Text content for text nodes (null for containers)
+    text: ?[]const u8 = null,
+    /// Font size in pixels (for text nodes)
+    font_size: u16 = 16,
+    /// Text color (separate from background_color)
+    text_color: ?Color = null,
 
     // Internal: set by parent's flex pass, consumed by layoutNode
     _flex_w: ?f32 = null,
@@ -167,6 +186,22 @@ fn clamp(val: f32, min_val: ?f32, max_val: ?f32) f32 {
 // For containers: sum children on main axis, max on cross axis.
 // Text measurement will be added in Phase 2.
 
+// Thread-local (frame-local) measure function — set before each layout pass
+var _measure_fn: ?MeasureTextFn = null;
+
+pub fn setMeasureFn(f: ?MeasureTextFn) void {
+    _measure_fn = f;
+}
+
+fn measureNodeText(node: *Node) TextMetrics {
+    if (node.text) |text| {
+        if (_measure_fn) |measure| {
+            return measure(text, node.font_size);
+        }
+    }
+    return .{};
+}
+
 fn estimateIntrinsicWidth(node: *Node) f32 {
     const s = node.style;
     if (s.width) |w| return w;
@@ -175,6 +210,12 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
     const pad_r = s.padRight();
     const gap = s.gap;
     const is_row = s.flex_direction == .row;
+
+    // Text nodes: measure text width
+    if (node.text != null) {
+        const m = measureNodeText(node);
+        return m.width + pad_l + pad_r;
+    }
 
     if (node.children.len == 0) return pad_l + pad_r;
 
@@ -212,6 +253,12 @@ fn estimateIntrinsicHeight(node: *Node) f32 {
     const pad_b = s.padBottom();
     const gap = s.gap;
     const is_row = s.flex_direction == .row;
+
+    // Text nodes: measure text height
+    if (node.text != null) {
+        const m = measureNodeText(node);
+        return m.height + pad_t + pad_b;
+    }
 
     if (node.children.len == 0) return pad_t + pad_b;
 
