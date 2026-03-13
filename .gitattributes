@@ -1,0 +1,24 @@
+# Language statistics — tell GitHub linguist what to skip
+
+# Examples and demos are documentation, not framework code
+examples/** linguist-documentation
+
+# Storybook stories are documentation/demos
+storybook/src/stories/** linguist-documentation
+storybook/tests/** linguist-documentation
+
+# Playground templates are documentation
+storybook/src/playground/templates.ts linguist-documentation
+
+# Generated Lua output (build artifacts)
+lua/generated/** linguist-generated
+
+# CLI runtime copies (vendored from source-of-truth)
+cli/runtime/** linguist-vendored
+
+# Icon data file (generated/bulk data)
+packages/icons/src/icons.ts linguist-generated
+
+# Documentation tooling
+scripts/docs/** linguist-documentation
+content/** linguist-documentation
