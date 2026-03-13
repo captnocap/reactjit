@@ -1246,6 +1246,13 @@ Capabilities.register("ClaudeCanvas", {
 
     -- Special keys with ANSI sequences
     if ANSI[key] then
+      -- Arrow keys change selector/menu state without Enter — schedule a snapshot
+      -- to capture the new selection (e.g. effort level ← → adjust, menu ↑↓ nav)
+      if key == "left" or key == "right" or key == "up" or key == "down" then
+        if not _pendingCaptures[nodeId] then _pendingCaptures[nodeId] = {} end
+        local pc = _pendingCaptures[nodeId]
+        pc[#pc + 1] = { trigger = "arrow", framesLeft = 10 }
+      end
       Session.writeRaw(ANSI[key])
       return true
     end
