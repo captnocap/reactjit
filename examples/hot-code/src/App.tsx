@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Native, CodeBlock, FileWatcher, Pressable, ScrollView, TextInput, useLoveRPC, useMount } from '@reactjit/core';
 import { ClaudeCanvas } from '@reactjit/terminal';
 import { useClaude, useSessionChrome } from '@reactjit/terminal';
@@ -89,7 +89,7 @@ function HotPanel() {
     return () => setElementClickHandler(null);
   });
 
-  const handleSteerSubmit = useCallback((text?: string) => {
+  const handleSteerSubmit = (text?: string) => {
     const val = (text ?? '').trim();
     if (!val || !selected) return;
     const shortPath = (filePathRef.current ?? 'unknown').replace(WORK_DIR + '/', '');
@@ -97,9 +97,9 @@ function HotPanel() {
     sendRef.current({ message: msg, session: 'default' });
     setSteerText('');
     setSelected(null);
-  }, [selected]);
+  };
 
-  const loadFile = useCallback(async (path: string, ct: string) => {
+  const loadFile = async (path: string, ct: string) => {
     const res = await readFileRef.current({ path });
     if (!res?.content) return;
     setFilePath(path);
@@ -120,14 +120,14 @@ function HotPanel() {
       setUserComponent(null);
       setEvalError(null);
     }
-  }, []);
+  };
 
-  const handleChange = useCallback((e: any) => {
+  const handleChange = (e: any) => {
     const path = e.path as string;
     if (!path) return;
     if (/\.(png|jpg|gif|svg|ico|woff|ttf|so|o|a|lock)$/i.test(path)) return;
     loadFile(path, e.changeType as string);
-  }, [loadFile]);
+  };
 
   const changeColor = changeType === 'created' ? C.green : changeType === 'deleted' ? C.red : C.yellow;
 

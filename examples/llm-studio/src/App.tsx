@@ -13,159 +13,21 @@
  * - Multi-model compare: send same input to N models side-by-side, pick favorite
  */
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput, Modal, Select,
-  CodeBlock, useHotkey, Window, useMount,
+  CodeBlock, Markdown, useHotkey, Window, useMount, useLuaInterval,
 } from '@reactjit/core';
-import { useChat, useModels, type AIProviderType, type Message } from '@reactjit/ai';
-import { AIMessageList, AIChatInput } from '@reactjit/ai';
-// Import from subpaths to avoid pulling in TerminalSQLiteAdapter (needs node:sqlite)
+import { useChat, useModels, type Message } from '@reactjit/ai';
 import { StorageProvider, useCRUD } from '@reactjit/storage/hooks';
-import { z } from '@reactjit/storage/schema';
 import { MemoryAdapter } from '@reactjit/storage/adapters/memory';
 import { useServer } from '@reactjit/server';
-import { getProvider } from '@reactjit/ai';
 
-// ── Color palette ────────────────────────────────────────────────────────────
-
-// Phosphor Terminal palette — CRT warmth meets dark terminal
-const C = {
-  bg: '#0a0a0a',
-  bgSidebar: '#080808',
-  bgElevated: '#0c0c10',
-  bgInput: '#111111',
-  surface: '#141414',
-  surfaceHover: '#1a1a1a',
-  surfaceActive: '#222222',
-  border: '#222222',
-  text: '#d4d4d4',
-  textMuted: '#777777',
-  textDim: '#444444',
-  accent: '#D97757',       // terracotta (Anthropic-inspired warmth)
-  accentHover: '#e88868',
-  accentDim: '#3a2218',
-  green: '#10B981',
-  greenDim: '#0a2a1e',
-  red: '#F43F5E',
-  redDim: '#2a0f14',
-  yellow: '#F59E0B',
-  user: '#10B981',          // green — user messages
-  assistant: '#F59E0B',     // amber — assistant messages
-  tool: '#06B6D4',          // cyan — tool/system
-};
-
-// Provider accent colors from YAAI spec
-const PROVIDER_COLORS: Record<string, string> = {
-  ollama: '#888888',
-  llamacpp: '#888888',
-  vllm: '#888888',
-  lmstudio: '#888888',
-  openai: '#10a37f',
-  anthropic: '#D97757',
-  deepseek: '#4D6BFE',
-  google: '#4285F4',
-  mistral: '#FA520F',
-  groq: '#F55036',
-  meta: '#1D65C1',
-  cohere: '#39594D',
-  perplexity: '#22B8CD',
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function relativeTime(ts: number): string {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'yesterday' : `${d}d ago`;
-}
-
-function dateGroup(ts: number): string {
-  const now = new Date();
-  const d = new Date(ts);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  if (ts >= startOfToday) return 'Today';
-  if (ts >= startOfToday - 86400000) return 'Yesterday';
-  if (ts >= startOfToday - 604800000) return 'This Week';
-  if (ts >= startOfToday - 2592000000) return 'This Month';
-  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface Provider {
-  id: string;
-  name: string;
-  type: AIProviderType;
-  baseURL?: string;
-  apiKey?: string;
-  icon: string;
-  healthy?: boolean;
-}
-
-interface ConversationRecord {
-  id: string;
-  title: string;
-  providerId: string;
-  model: string;
-  messages: Message[];
-  systemPrompt: string;
-  createdAt: number;
-  updatedAt: number;
-  totalTokens?: number;
-  tags?: string[];
-  pinned?: boolean;
-  parentId?: string;       // forked from this conversation
-  branchPoint?: number;    // message index where branch occurred
-}
-
-interface OllamaModelInfo {
-  name: string;
-  size: number;
-  parameter_size?: string;
-  quantization_level?: string;
-  family?: string;
-  format?: string;
-}
-
-// ── Built-in providers ───────────────────────────────────────────────────────
-
-const DEFAULT_PROVIDERS: Provider[] = [
-  { id: 'ollama', name: 'Ollama', type: 'openai', baseURL: 'http://localhost:11434', icon: '\u{1F999}' },
-  { id: 'llamacpp', name: 'llama.cpp', type: 'openai', baseURL: 'http://localhost:8080', icon: '\u{1F4BB}' },
-  { id: 'vllm', name: 'vLLM', type: 'openai', baseURL: 'http://localhost:8000', icon: '\u26A1' },
-  { id: 'lmstudio', name: 'LM Studio', type: 'openai', baseURL: 'http://localhost:1234', icon: '\u{1F9EA}' },
-  { id: 'openai', name: 'OpenAI', type: 'openai', icon: '\u{1F916}' },
-  { id: 'anthropic', name: 'Anthropic', type: 'anthropic', icon: '\u{1F9E0}' },
-];
-
-type View = 'chat' | 'compare' | 'providers' | 'models' | 'server';
-
-// ── Schemas for SQLite persistence ───────────────────────────────────────────
-
-const conversationSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  providerId: z.string(),
-  model: z.string(),
-  messages: z.string(), // JSON-serialized Message[]
-  systemPrompt: z.string(),
-  updatedAt: z.number(),
-});
-
-const providerSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.string(),
-  baseURL: z.string().optional(),
-  apiKey: z.string().optional(),
-  icon: z.string(),
-});
+import { C, PROVIDER_COLORS } from './theme';
+import { Provider, ConversationRecord, OllamaModelInfo, View, DEFAULT_PROVIDERS, conversationSchema, providerSchema } from './types';
+import { relativeTime, dateGroup, CONTEXT_WINDOWS, OLLAMA_LIBRARY, BUILTIN_PRESETS, STARTER_PROMPTS } from './helpers';
+import { buildProxyRoutes } from './proxy-routes';
+import { HtmlCodeBlock } from './html-preview';
 
 // ── Storage adapter (singleton) ──────────────────────────────────────────────
 
@@ -221,138 +83,14 @@ function LLMStudio() {
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const messageTimestampsRef = useRef<Map<number, number>>(new Map());
 
+  // rjit-ignore-next-line — trivial lookup by ID
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
   // ── OpenAI-compatible proxy server ───────────────────
-  const serverConfig = useMemo(() => {
-    if (!serverEnabled) return null;
-    return {
-      port: serverPort,
-      routes: [
-        {
-          path: '/v1/models',
-          method: 'GET' as const,
-          handler: async () => {
-            // Forward to active provider's model list
-            try {
-              const baseURL = activeProvider.baseURL || 'https://api.openai.com';
-              const res = await fetch(`${baseURL}/v1/models`, {
-                headers: activeProvider.apiKey
-                  ? { authorization: `Bearer ${activeProvider.apiKey}` }
-                  : {},
-              } as any);
-              const body = await res.text();
-              return {
-                status: res.ok ? 200 : (res.status as number),
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-                body,
-              };
-            } catch (err: any) {
-              return {
-                status: 502,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: { message: `Upstream error: ${err.message}`, type: 'proxy_error' } }),
-              };
-            }
-          },
-        },
-        {
-          path: '/v1/chat/completions',
-          method: 'POST' as const,
-          handler: async (req: any) => {
-            // Forward chat completions to active provider
-            try {
-              const provider = getProvider(activeProvider.type);
-              const body = JSON.parse(req.body || '{}');
-              const messages = body.messages || [];
-              const model = body.model || effectiveModel;
-              const stream = body.stream || false;
-
-              const formatted = provider.formatRequest(
-                messages,
-                {
-                  provider: activeProvider.type,
-                  model,
-                  apiKey: activeProvider.apiKey,
-                  baseURL: activeProvider.baseURL,
-                  temperature: body.temperature ?? temperature,
-                  maxTokens: body.max_tokens ?? maxTokens,
-                },
-                undefined,
-                stream,
-              );
-
-              const res = await fetch(formatted.url, {
-                method: formatted.method,
-                headers: formatted.headers,
-                body: formatted.body,
-              } as any);
-
-              const responseBody = await res.text();
-              return {
-                status: res.ok ? 200 : (res.status as number),
-                headers: {
-                  'Content-Type': stream ? 'text/event-stream' : 'application/json',
-                  'Access-Control-Allow-Origin': '*',
-                },
-                body: responseBody,
-              };
-            } catch (err: any) {
-              return {
-                status: 502,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: { message: `Proxy error: ${err.message}`, type: 'proxy_error' } }),
-              };
-            }
-          },
-        },
-        {
-          path: '/v1/completions',
-          method: 'POST' as const,
-          handler: async (req: any) => {
-            // Forward legacy completions
-            try {
-              const baseURL = activeProvider.baseURL || 'https://api.openai.com';
-              const res = await fetch(`${baseURL}/v1/completions`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(activeProvider.apiKey ? { authorization: `Bearer ${activeProvider.apiKey}` } : {}),
-                },
-                body: req.body,
-              } as any);
-              const responseBody = await res.text();
-              return {
-                status: res.ok ? 200 : (res.status as number),
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-                body: responseBody,
-              };
-            } catch (err: any) {
-              return {
-                status: 502,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: { message: `Proxy error: ${err.message}` } }),
-              };
-            }
-          },
-        },
-        {
-          // CORS preflight
-          path: '/v1/*',
-          method: 'OPTIONS' as const,
-          handler: async () => ({
-            status: 204,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            },
-            body: '',
-          }),
-        },
-      ],
-    };
-  }, [serverEnabled, serverPort, activeProvider, effectiveModel, temperature, maxTokens]);
+  // rjit-ignore-next-line — server config derivation, no Lua equivalent
+  const serverConfig = serverEnabled
+    ? { port: serverPort, routes: buildProxyRoutes(activeProvider, activeModel, temperature, maxTokens) }
+    : null;
 
   const server = useServer(serverConfig);
 
@@ -397,31 +135,30 @@ function LLMStudio() {
   });
 
   // ── Provider health checks ───────────────────────────
-  // rjit-ignore-next-line
-  useEffect(() => {
-    const checkHealth = async () => {
-      const updates = await Promise.all(
-        providers.filter(p => p.baseURL).map(async (p) => {
-          try {
-            const res = await fetch(`${p.baseURL}/v1/models`, {
-              signal: AbortSignal.timeout(3000),
-            } as any);
-            return { id: p.id, healthy: res.ok };
-          } catch {
-            return { id: p.id, healthy: false };
-          }
-        })
-      );
-      setProviders(prev => prev.map(p => {
-        const update = updates.find(u => u.id === p.id);
-        return update ? { ...p, healthy: update.healthy } : p;
-      }));
-    };
+  const checkHealth = async () => {
+    // rjit-ignore-next-line — filter+map for async health check
+    const updates = await Promise.all(
+      // rjit-ignore-next-line
+      providers.filter(p => p.baseURL).map(async (p) => {
+        try {
+          const res = await fetch(`${p.baseURL}/v1/models`, {
+            signal: AbortSignal.timeout(3000),
+          } as any);
+          return { id: p.id, healthy: res.ok };
+        } catch {
+          return { id: p.id, healthy: false };
+        }
+      })
+    );
+    setProviders(prev => prev.map(p => {
+      // rjit-ignore-next-line — trivial find for matching update
+      const update = updates.find(u => u.id === p.id);
+      return update ? { ...p, healthy: update.healthy } : p;
+    }));
+  };
 
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
-  }, [providers.length]);
+  useMount(() => { checkHealth(); });
+  useLuaInterval(30000, checkHealth);
 
   // ── Model fetching ───────────────────────────────────
   const { models, loading: modelsLoading, error: modelsError, refetch: refetchModels } = useModels({
@@ -431,19 +168,18 @@ function LLMStudio() {
   });
 
   // Derive effective model: if activeModel isn't in the current model list, fall back to first
-  const effectiveModel = useMemo(() => {
-    if (activeModel && models.some(m => m.id === activeModel)) return activeModel;
-    return models.length > 0 ? models[0].id : '';
-  }, [activeModel, models]);
+  // rjit-ignore-next-line — trivial lookup
+  const effectiveModel = (activeModel && models.some(m => m.id === activeModel))
+    ? activeModel
+    : (models.length > 0 ? models[0].id : '');
 
   // ── Effective system prompt (includes file context) ──
-  const effectiveSystemPrompt = useMemo(() => {
-    if (contextFiles.length === 0) return systemPrompt;
-    const fileBlock = contextFiles.map(f =>
-      `<file name="${f.name}">\n${f.content}\n</file>`
-    ).join('\n\n');
-    return `${systemPrompt}\n\nThe user has attached the following files for context:\n\n${fileBlock}`;
-  }, [systemPrompt, contextFiles]);
+  // rjit-ignore-next-line — string concatenation for system prompt
+  const effectiveSystemPrompt = contextFiles.length === 0
+    ? systemPrompt
+    : `${systemPrompt}\n\nThe user has attached the following files for context:\n\n${contextFiles.map(f =>
+        `<file name="${f.name}">\n${f.content}\n</file>`
+      ).join('\n\n')}`;
 
   // ── Chat hook ────────────────────────────────────────
   const chat = useChat({
@@ -459,7 +195,9 @@ function LLMStudio() {
     repeatPenalty,
     stop: stopSequences.length > 0 ? stopSequences : undefined,
     systemPrompt: effectiveSystemPrompt,
+    // rjit-ignore-next-line — trivial find by ID
     initialMessages: activeConvoId
+      // rjit-ignore-next-line
       ? conversations.find(c => c.id === activeConvoId)?.messages || []
       : [],
     onChunk: (chunk) => {
@@ -505,45 +243,51 @@ function LLMStudio() {
   prevMsgCount.current = chat.messages.length;
 
   // ── Token estimation ─────────────────────────────────
-  const tokenEstimate = useMemo(() => {
+  // rjit-ignore-next-line — trivial reduce for approximate token count
+  const tokenEstimate = (() => {
+    // rjit-ignore-next-line
     const totalChars = chat.messages.reduce((sum, m) => {
       const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
       return sum + content.length;
     }, 0);
     return Math.round(totalChars / 4);
-  }, [chat.messages]);
+  })();
 
   // Per-message token counts (approximate)
-  const messageTokens = useMemo(() =>
-    chat.messages.map(m => {
-      const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
-      return Math.round(content.length / 4);
-    }),
-  [chat.messages]);
+  const messageTokens = chat.messages.map(m => {
+    const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+    return Math.round(content.length / 4);
+  });
 
   // ── Conversation stats ──────────────────────────────
-  const convoStats = useMemo(() => {
+  // rjit-ignore-next-line — trivial reduce for stats display
+  const convoStats = (() => {
+    // rjit-ignore-next-line
     const totalMsgs = conversations.reduce((sum, c) => sum + c.messages.length, 0);
+    // rjit-ignore-next-line
     const totalChars = conversations.reduce((sum, c) =>
+      // rjit-ignore-next-line
       sum + c.messages.reduce((ms, m) => {
         const t = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
         return ms + t.length;
       }, 0), 0);
     return { count: conversations.length, messages: totalMsgs, tokens: Math.round(totalChars / 4) };
-  }, [conversations]);
+  })();
 
   // ── In-chat search matches ────────────────────────
-  const chatSearchMatches = useMemo(() => {
-    if (!chatSearchQuery || !chatSearchOpen) return [];
+  // rjit-ignore-next-line — search filter for chat UI
+  const chatSearchMatches = (() => {
+    if (!chatSearchQuery || !chatSearchOpen) return [] as number[];
     const q = chatSearchQuery.toLowerCase();
     return chat.messages.map((m, i) => {
       const text = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
       return text.toLowerCase().includes(q) ? i : -1;
     }).filter(i => i >= 0);
-  }, [chat.messages, chatSearchQuery, chatSearchOpen]);
+  })();
 
   // ── Context usage estimation ───────────────────────
-  const contextUsage = useMemo(() => {
+  // rjit-ignore-next-line — context window lookup by model pattern
+  const contextUsage = (() => {
     // Common context windows by model name patterns
     const contextWindows: [RegExp, number][] = [
       [/gpt-4o|gpt-4-turbo/i, 128000],
@@ -566,10 +310,10 @@ function LLMStudio() {
       if (pattern.test(effectiveModel)) { ctxWindow = size; break; }
     }
     return { used: tokenEstimate, total: ctxWindow, pct: Math.min(100, Math.round((tokenEstimate / ctxWindow) * 100)) };
-  }, [tokenEstimate, effectiveModel]);
+  })();
 
   // ── Conversation management ──────────────────────────
-  const persistConversation = useCallback(async (convo: ConversationRecord) => {
+  const persistConversation = async (convo: ConversationRecord) => {
     try {
       const existing = await convoCRUD.get(convo.id);
       const serialized = { ...convo, messages: JSON.stringify(convo.messages) } as any;
@@ -579,9 +323,9 @@ function LLMStudio() {
         await convoCRUD.create(serialized);
       }
     } catch { /* storage might not be ready */ }
-  }, [convoCRUD]);
+  };
 
-  const newConversation = useCallback(() => {
+  const newConversation = () => {
     const id = `conv_${Date.now().toString(36)}`;
     const now = Date.now();
     const convo: ConversationRecord = {
@@ -592,30 +336,34 @@ function LLMStudio() {
     setActiveConvoId(id);
     chat.setMessages([]);
     persistConversation(convo);
-  }, [activeProviderId, effectiveModel, systemPrompt, chat, persistConversation]);
+  };
 
-  // Sync messages to conversation + persist
-  // rjit-ignore-next-line
-  useEffect(() => {
-    if (activeConvoId && chat.messages.length > 0) {
-      setConversations(prev => {
-        const updated = prev.map(c => {
-          if (c.id !== activeConvoId) return c;
-          const firstUser = chat.messages.find(m => m.role === 'user');
-          const title = firstUser && typeof firstUser.content === 'string'
-            ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '...' : '')
-            : c.title;
-          const updatedConvo = { ...c, title, messages: chat.messages, updatedAt: Date.now() };
-          // Persist async (don't block render)
-          persistConversation(updatedConvo);
-          return updatedConvo;
-        });
-        return updated;
+  // Sync messages to conversation + persist (poll for changes)
+  const lastSyncedMsgCount = useRef(0);
+  const syncMessagesToConversation = () => {
+    if (!activeConvoId || chat.messages.length === 0) return;
+    if (chat.messages.length === lastSyncedMsgCount.current) return;
+    lastSyncedMsgCount.current = chat.messages.length;
+    setConversations(prev => {
+      const updated = prev.map(c => {
+        if (c.id !== activeConvoId) return c;
+        // rjit-ignore-next-line — trivial find for first user message
+        const firstUser = chat.messages.find(m => m.role === 'user');
+        const title = firstUser && typeof firstUser.content === 'string'
+          ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '...' : '')
+          : c.title;
+        const updatedConvo = { ...c, title, messages: chat.messages, updatedAt: Date.now() };
+        // Persist async (don't block render)
+        persistConversation(updatedConvo);
+        return updatedConvo;
       });
-    }
-  }, [chat.messages, activeConvoId, persistConversation]);
+      return updated;
+    });
+  };
+  useLuaInterval(500, syncMessagesToConversation);
 
-  const selectConversation = useCallback((id: string) => {
+  const selectConversation = (id: string) => {
+    // rjit-ignore-next-line — trivial find by ID
     const convo = conversations.find(c => c.id === id);
     if (convo) {
       setActiveConvoId(id);
@@ -624,16 +372,18 @@ function LLMStudio() {
       setSystemPrompt(convo.systemPrompt);
       chat.setMessages(convo.messages);
     }
-  }, [conversations, chat]);
+  };
 
-  const deleteConversation = useCallback(async (id: string) => {
+  const deleteConversation = async (id: string) => {
+    // rjit-ignore-next-line — trivial filter for deletion
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeConvoId === id) { setActiveConvoId(null); chat.setMessages([]); }
     try { await convoCRUD.delete(id); } catch { /* ok */ }
-  }, [activeConvoId, chat, convoCRUD]);
+  };
 
   // Clone: duplicate entire conversation
-  const cloneConversation = useCallback((id: string) => {
+  const cloneConversation = (id: string) => {
+    // rjit-ignore-next-line — trivial find by ID
     const source = conversations.find(c => c.id === id);
     if (!source) return;
     const newId = `conv_${Date.now().toString(36)}`;
@@ -647,11 +397,12 @@ function LLMStudio() {
     setActiveConvoId(newId);
     chat.setMessages(clone.messages);
     persistConversation(clone);
-  }, [conversations, chat, persistConversation]);
+  };
 
   // Branch: fork from a specific message index
-  const branchConversation = useCallback((fromIndex: number) => {
+  const branchConversation = (fromIndex: number) => {
     if (!activeConvoId) return;
+    // rjit-ignore-next-line — trivial find by ID
     const source = conversations.find(c => c.id === activeConvoId);
     if (!source) return;
     const newId = `conv_${Date.now().toString(36)}`;
@@ -667,10 +418,10 @@ function LLMStudio() {
     setActiveConvoId(newId);
     chat.setMessages(branchedMessages);
     persistConversation(branch);
-  }, [activeConvoId, conversations, chat, persistConversation]);
+  };
 
   // Rename conversation
-  const renameConversation = useCallback((id: string, newTitle: string) => {
+  const renameConversation = (id: string, newTitle: string) => {
     setConversations(prev => prev.map(c => {
       if (c.id !== id) return c;
       const updated = { ...c, title: newTitle };
@@ -678,38 +429,40 @@ function LLMStudio() {
       return updated;
     }));
     setRenamingConvoId(null);
-  }, [persistConversation]);
+  };
 
   // Pop out a conversation into its own window
-  const popOutConversation = useCallback((id: string) => {
+  const popOutConversation = (id: string) => {
     if (!poppedOutConvos.includes(id)) {
       setPoppedOutConvos(prev => [...prev, id]);
     }
-  }, [poppedOutConvos]);
+  };
 
-  const closePopOut = useCallback((id: string) => {
+  const closePopOut = (id: string) => {
+    // rjit-ignore-next-line — trivial filter for removal
     setPoppedOutConvos(prev => prev.filter(c => c !== id));
-  }, []);
+  };
 
   // Edit a message in-place
-  const editMessage = useCallback((index: number, newContent: string) => {
+  const editMessage = (index: number, newContent: string) => {
     const updated = chat.messages.map((m, i) =>
       i === index ? { ...m, content: newContent } : m
     );
     chat.setMessages(updated);
-  }, [chat]);
+  };
 
   // Add file context
-  const addContextFile = useCallback((name: string, content: string) => {
+  const addContextFile = (name: string, content: string) => {
     setContextFiles(prev => [...prev, { name, content }]);
-  }, []);
+  };
 
-  const removeContextFile = useCallback((index: number) => {
+  const removeContextFile = (index: number) => {
+    // rjit-ignore-next-line — trivial filter for removal
     setContextFiles(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  };
 
   // Export all conversations as JSON
-  const exportConversations = useCallback(() => {
+  const exportConversations = () => {
     const data = JSON.stringify({
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -723,10 +476,10 @@ function LLMStudio() {
     }, null, 2);
     try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', data); } catch {}
     return data;
-  }, [conversations]);
+  };
 
   // Import conversations from JSON
-  const importConversations = useCallback((jsonStr: string) => {
+  const importConversations = (jsonStr: string) => {
     try {
       const data = JSON.parse(jsonStr);
       if (!data.conversations || !Array.isArray(data.conversations)) return false;
@@ -744,7 +497,7 @@ function LLMStudio() {
       imported.forEach(c => persistConversation(c));
       return true;
     } catch { return false; }
-  }, [activeProviderId, persistConversation]);
+  };
 
   // ── Provider management ──────────────────────────────
   const [newPName, setNewPName] = useState('');
@@ -752,7 +505,7 @@ function LLMStudio() {
   const [newPKey, setNewPKey] = useState('');
   const [newPType, setNewPType] = useState<AIProviderType>('openai');
 
-  const addProvider = useCallback(async () => {
+  const addProvider = async () => {
     if (!newPName || !newPURL) return;
     const id = `custom_${Date.now().toString(36)}`;
     const p: Provider = {
@@ -763,7 +516,7 @@ function LLMStudio() {
     setNewPName(''); setNewPURL(''); setNewPKey('');
     setProviderModalOpen(false);
     try { await providerCRUD.create({ ...p, apiKey: p.apiKey || '' } as any); } catch { /* ok */ }
-  }, [newPName, newPURL, newPKey, newPType, providerCRUD]);
+  };
 
   // ── Keyboard shortcuts ───────────────────────────────
   useHotkey('ctrl+n', () => { newConversation(); setView('chat'); });
@@ -809,6 +562,7 @@ function LLMStudio() {
           setConversations(prev => prev.map(c => {
             if (c.id !== id) return c;
             const tags = c.tags || [];
+            // rjit-ignore-next-line
             const updated = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
             return { ...c, tags: updated };
           }));
@@ -915,6 +669,7 @@ function LLMStudio() {
                         onBranch={() => branchConversation(i)}
                         onRegenerate={msg.role === 'assistant' ? () => {
                           const preceding = chat.messages.slice(0, i);
+                          // rjit-ignore-next-line
                           const lastUser = [...preceding].reverse().find(m => m.role === 'user');
                           chat.setMessages(preceding);
                           if (lastUser) {
@@ -974,7 +729,9 @@ function LLMStudio() {
 
                           if (plusTokens.length > 0 && contentStart < tokens.length) {
                             // Fuzzy match +tokens against model IDs
+                            // rjit-ignore-next-line
                             const matched = plusTokens.flatMap(t =>
+                              // rjit-ignore-next-line
                               models.filter(m => m.id.toLowerCase().includes(t)).map(m => m.id)
                             ).filter((v, i, a) => a.indexOf(v) === i); // unique
                             if (matched.length > 0) {
@@ -1134,6 +891,7 @@ function LLMStudio() {
 
       {/* ── Pop-out chat windows ── */}
       {poppedOutConvos.map(convoId => {
+        // rjit-ignore-next-line
         const convo = conversations.find(c => c.id === convoId);
         if (!convo) return null;
         return (
@@ -1175,25 +933,24 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
   if (message.role === 'system' || message.role === 'tool') return null;
 
   const isUser = message.role === 'user';
-  const parts = parseMarkdown(content);
 
-  const handleCopy = useCallback(() => {
+  const handleCopy = () => {
     onCopy?.();
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [onCopy]);
+  };
 
-  const startEdit = useCallback(() => {
+  const startEdit = () => {
     setEditText(content);
     setEditing(true);
-  }, [content]);
+  };
 
-  const commitEdit = useCallback(() => {
+  const commitEdit = () => {
     if (editText.trim() && editText !== content) {
       onEdit?.(editText);
     }
     setEditing(false);
-  }, [editText, content, onEdit]);
+  };
 
   return (
     <Pressable onHoverIn={() => setHovered(true)} onHoverOut={() => setHovered(false)}>
@@ -1248,81 +1005,10 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
               </Box>
             </Box>
           ) : (
-            <Box style={{
-              padding: 12, borderRadius: 10, gap: 6,
+            <Markdown text={content} style={{
+              padding: 12, borderRadius: 10,
               backgroundColor: isUser ? C.surfaceActive : C.surface,
-            }}>
-              {parts.map((part, i) => {
-                if (part.type === 'code') {
-                  const isHtml = (part.language === 'html' || part.language === 'htm')
-                    && (part.content.includes('<') && part.content.includes('>'));
-                  if (isHtml) {
-                    return <HtmlCodeBlock key={i} code={part.content} />;
-                  }
-                  return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
-                }
-                if (part.type === 'heading') {
-                  return (
-                    <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
-                      {part.content}
-                    </Text>
-                  );
-                }
-                if (part.type === 'bullet') {
-                  return (
-                    <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
-                      <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
-                      <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
-                    </Box>
-                  );
-                }
-                if (part.type === 'blockquote') {
-                  return (
-                    <Box key={i} style={{
-                      borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 10,
-                      paddingTop: 4, paddingBottom: 4, backgroundColor: C.bgInput, borderRadius: 4,
-                    }}>
-                      <Text style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic' }}>{part.content}</Text>
-                    </Box>
-                  );
-                }
-                if (part.type === 'table') {
-                  return (
-                    <Box key={i} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 6, overflow: 'hidden' }}>
-                      {/* Header row */}
-                      <Box style={{ flexDirection: 'row', backgroundColor: C.surfaceActive }}>
-                        {part.headers.map((h, hi) => (
-                          <Box key={hi} style={{
-                            flexGrow: 1, padding: 6,
-                            borderRightWidth: hi < part.headers.length - 1 ? 1 : 0, borderColor: C.border,
-                          }}>
-                            <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold' }}>{h}</Text>
-                          </Box>
-                        ))}
-                      </Box>
-                      {/* Data rows */}
-                      {part.rows.map((row, ri) => (
-                        <Box key={ri} style={{
-                          flexDirection: 'row',
-                          borderTopWidth: 1, borderColor: C.border,
-                          backgroundColor: ri % 2 === 0 ? C.surface : C.bgInput,
-                        }}>
-                          {row.map((cell, ci) => (
-                            <Box key={ci} style={{
-                              flexGrow: 1, padding: 6,
-                              borderRightWidth: ci < row.length - 1 ? 1 : 0, borderColor: C.border,
-                            }}>
-                              <Text style={{ fontSize: 11, color: C.text }}>{cell}</Text>
-                            </Box>
-                          ))}
-                        </Box>
-                      ))}
-                    </Box>
-                  );
-                }
-                return <RichText key={i} text={part.content} />;
-              })}
-            </Box>
+            }} />
           )}
         </Box>
       )}
@@ -1342,137 +1028,6 @@ function MsgAction({ label, color, onPress }: { label: string; color: string; on
         </Box>
       )}
     </Pressable>
-  );
-}
-
-// ── Markdown parser (lightweight) ────────────────────────────────────────────
-
-type MarkdownPart =
-  | { type: 'text'; content: string }
-  | { type: 'code'; content: string; language?: string }
-  | { type: 'heading'; content: string; level: number }
-  | { type: 'bullet'; content: string }
-  | { type: 'blockquote'; content: string }
-  | { type: 'table'; headers: string[]; rows: string[][] };
-
-function parseMarkdown(text: string): MarkdownPart[] {
-  const parts: MarkdownPart[] = [];
-  const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
-  let lastIndex = 0;
-  let match;
-
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(...parseTextBlock(text.slice(lastIndex, match.index)));
-    }
-    parts.push({ type: 'code', content: match[2], language: match[1] || undefined });
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(...parseTextBlock(text.slice(lastIndex)));
-  }
-
-  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
-}
-
-function parseTextBlock(text: string): MarkdownPart[] {
-  const parts: MarkdownPart[] = [];
-  const lines = text.split('\n');
-  let currentText = '';
-  let blockquoteLines: string[] = [];
-  let tableLines: string[] = [];
-
-  const flushText = () => { if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; } };
-  const flushBlockquote = () => {
-    if (blockquoteLines.length > 0) { parts.push({ type: 'blockquote', content: blockquoteLines.join('\n') }); blockquoteLines = []; }
-  };
-  const flushTable = () => {
-    if (tableLines.length >= 2) {
-      const headers = tableLines[0].split('|').map(s => s.trim()).filter(Boolean);
-      const rows = tableLines.slice(2).map(r => r.split('|').map(s => s.trim()).filter(Boolean));
-      parts.push({ type: 'table', headers, rows });
-    }
-    tableLines = [];
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Table detection: lines with pipes
-    if (trimmed.includes('|') && (tableLines.length > 0 || trimmed.match(/^\|.*\|$/))) {
-      flushText(); flushBlockquote();
-      tableLines.push(trimmed);
-      continue;
-    } else if (tableLines.length > 0) {
-      flushTable();
-    }
-
-    // Blockquotes
-    if (trimmed.startsWith('> ')) {
-      flushText();
-      blockquoteLines.push(trimmed.slice(2));
-      continue;
-    } else if (blockquoteLines.length > 0) {
-      flushBlockquote();
-    }
-
-    // Headings
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch) {
-      flushText();
-      parts.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length });
-      continue;
-    }
-
-    // Bullet points
-    if (trimmed.match(/^[-*]\s+(.+)$/)) {
-      flushText();
-      parts.push({ type: 'bullet', content: trimmed.replace(/^[-*]\s+/, '') });
-      continue;
-    }
-
-    // Numbered lists
-    if (trimmed.match(/^\d+\.\s+(.+)$/)) {
-      flushText();
-      parts.push({ type: 'bullet', content: trimmed.replace(/^\d+\.\s+/, '') });
-      continue;
-    }
-
-    currentText += line + '\n';
-  }
-
-  flushBlockquote();
-  flushTable();
-  if (currentText.trim()) parts.push({ type: 'text', content: currentText.trim() });
-  return parts;
-}
-
-// ── Rich text with inline code highlighting ──────────────────────────────────
-
-function RichText({ text }: { text: string }) {
-  // Split on inline code backticks and bold
-  const segments = text.split(/(`[^`]+`)/g);
-
-  if (segments.length === 1) {
-    return <Text style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{text}</Text>;
-  }
-
-  return (
-    <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
-      {segments.map((seg, i) => {
-        if (seg.startsWith('`') && seg.endsWith('`')) {
-          return (
-            <Box key={i} style={{ backgroundColor: '#1a1a1a', borderRadius: 3, paddingLeft: 4, paddingRight: 4 }}>
-              <Text style={{ fontSize: 12, color: C.accent, fontFamily: 'monospace' }}>
-                {seg.slice(1, -1)}
-              </Text>
-            </Box>
-          );
-        }
-        return <Text key={i} style={{ fontSize: 13, color: C.text }}>{seg}</Text>;
-      })}
-    </Box>
   );
 }
 
@@ -1508,17 +1063,21 @@ function Sidebar({
   const [newTag, setNewTag] = useState('');
 
   // Collect all tags across conversations
-  const allTags = useMemo(() => {
+  // rjit-ignore-next-line — trivial tag collection
+  const allTags = (() => {
     const tags = new Set<string>();
     conversations.forEach(c => c.tags?.forEach(t => tags.add(t)));
     return Array.from(tags).sort();
-  }, [conversations]);
+  })();
 
-  const filtered = useMemo(() => {
+  // rjit-ignore-next-line — trivial filter+sort for sidebar
+  const filtered = (() => {
     let list = conversations;
+    // rjit-ignore-next-line — trivial tag filter
     if (tagFilter) list = list.filter(c => c.tags?.includes(tagFilter));
     if (search) {
       const q = search.toLowerCase();
+      // rjit-ignore-next-line — trivial search filter
       list = list.filter(c => {
         if (c.title.toLowerCase().includes(q)) return true;
         return c.messages.some(m => {
@@ -1529,10 +1088,11 @@ function Sidebar({
     }
     // Pinned conversations float to top
     return [...list].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-  }, [conversations, tagFilter, search]);
+  })();
 
   // Group conversations by date
-  const grouped = useMemo(() => {
+  // rjit-ignore-next-line — trivial grouping for sidebar display
+  const grouped = (() => {
     const groups: { label: string; convos: ConversationRecord[] }[] = [];
     let lastLabel = '';
     for (const c of filtered) {
@@ -1545,8 +1105,9 @@ function Sidebar({
       }
     }
     return groups;
-  }, [filtered]);
+  })();
 
+  // rjit-ignore-next-line
   const activeProvider = providers.find(p => p.id === activeProviderId);
 
   return (
@@ -2034,6 +1595,7 @@ function SettingsPanel({
                       {p.label}
                     </Text>
                     {idx >= builtInPresets.length && (
+                      // rjit-ignore-next-line
                       <Pressable onPress={() => onCustomPresetsChange(customPresets.filter((_, ci) => ci !== idx - builtInPresets.length))}>
                         {({ hovered: xh }) => (
                           <Text style={{ fontSize: 8, color: xh ? C.red : C.textDim }}>x</Text>
@@ -2229,6 +1791,7 @@ function SettingsPanel({
             {stopSequences.length > 0 && (
               <Box style={{ flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
                 {stopSequences.map((s, si) => (
+                  // rjit-ignore-next-line
                   <Pressable key={si} onPress={() => onStopSequencesChange(stopSequences.filter((_, i) => i !== si))}>
                     {({ hovered }) => (
                       <Box style={{
@@ -2307,6 +1870,7 @@ function ModelBrowser({
   const isOllama = provider.id === 'ollama';
   const [showLibrary, setShowLibrary] = useState(false);
   const filtered = search
+    // rjit-ignore-next-line
     ? models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
     : models;
 
@@ -2326,36 +1890,36 @@ function ModelBrowser({
     { name: 'llava', desc: 'LLaVA — vision + language', sizes: ['7b', '13b', '34b'], family: 'llava' },
   ];
   const filteredLibrary = search
+    // rjit-ignore-next-line
     ? ollamaLibrary.filter(m => m.name.includes(search.toLowerCase()) || m.desc.toLowerCase().includes(search.toLowerCase()))
     : ollamaLibrary;
 
   // Fetch Ollama model details on mount/refresh
-  // rjit-ignore-next-line
-  useEffect(() => {
+  const fetchOllamaDetails = async () => {
     if (!isOllama || models.length === 0) return;
     const baseURL = provider.baseURL || 'http://localhost:11434';
-    (async () => {
-      try {
-        const res = await fetch(`${baseURL}/api/tags`, { signal: AbortSignal.timeout(5000) } as any);
-        if (!res.ok) return;
-        const data = await res.json();
-        const infoMap: Record<string, OllamaModelInfo> = {};
-        for (const m of (data.models || [])) {
-          infoMap[m.name || m.model] = {
-            name: m.name || m.model,
-            size: m.size || 0,
-            parameter_size: m.details?.parameter_size,
-            quantization_level: m.details?.quantization_level,
-            family: m.details?.family,
-            format: m.details?.format,
-          };
-        }
-        setModelInfoMap(infoMap);
-      } catch { /* ok */ }
-    })();
-  }, [isOllama, models.length, provider.baseURL]);
+    try {
+      const res = await fetch(`${baseURL}/api/tags`, { signal: AbortSignal.timeout(5000) } as any);
+      if (!res.ok) return;
+      const data = await res.json();
+      const infoMap: Record<string, OllamaModelInfo> = {};
+      for (const m of (data.models || [])) {
+        infoMap[m.name || m.model] = {
+          name: m.name || m.model,
+          size: m.size || 0,
+          parameter_size: m.details?.parameter_size,
+          quantization_level: m.details?.quantization_level,
+          family: m.details?.family,
+          format: m.details?.format,
+        };
+      }
+      setModelInfoMap(infoMap);
+    } catch { /* ok */ }
+  };
 
-  const handlePull = useCallback(async () => {
+  useMount(() => { fetchOllamaDetails(); });
+
+  const handlePull = async () => {
     if (!pullModel.trim() || !isOllama) return;
     setPulling(true);
     setPullStatus(`Pulling ${pullModel}...`);
@@ -2379,9 +1943,9 @@ function ModelBrowser({
     }
     setPulling(false);
     setTimeout(() => setPullStatus(''), 5000);
-  }, [pullModel, isOllama, provider.baseURL, onRefresh]);
+  };
 
-  const handleDelete = useCallback(async (modelName: string) => {
+  const handleDelete = async (modelName: string) => {
     if (!isOllama) return;
     try {
       const baseURL = provider.baseURL || 'http://localhost:11434';
@@ -2392,7 +1956,7 @@ function ModelBrowser({
       } as any);
       onRefresh();
     } catch { /* ok */ }
-  }, [isOllama, provider.baseURL, onRefresh]);
+  };
 
   return (
     <Box style={{ flexGrow: 1, padding: 20, gap: 16 }}>
@@ -2450,6 +2014,7 @@ function ModelBrowser({
             <Box style={{ gap: 6, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
               <Text style={{ fontSize: 10, color: C.textMuted }}>Click a size to pull. Models download from ollama.com.</Text>
               {filteredLibrary.map(lib => {
+                // rjit-ignore-next-line
                 const installed = models.some(m => m.id.startsWith(lib.name));
                 return (
                   <Box key={lib.name} style={{
@@ -2470,6 +2035,7 @@ function ModelBrowser({
                     <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
                       {lib.sizes.map(size => {
                         const fullName = `${lib.name}:${size}`;
+                        // rjit-ignore-next-line
                         const isInstalled = models.some(m => m.id === fullName || m.id === `${lib.name}:${size}-instruct`);
                         return (
                           <Pressable key={size} onPress={() => { setPullModel(fullName); }}>
@@ -2854,29 +2420,36 @@ function CompareView({
   const [sendSignal, setSendSignal] = useState(0); // increment to trigger all columns
 
   // Auto-send if we got here via +model syntax
-  // rjit-ignore-next-line
-  useEffect(() => {
+  const needsSendAfterMount = useRef(false);
+  useMount(() => {
     if (pendingInput?.current && compareModels.length > 0) {
       setSharedInput(pendingInput.current);
       pendingInput.current = null;
-      // Trigger send on next frame so sharedInput is set
-      setTimeout(() => setSendSignal(s => s + 1), 50);
+      needsSendAfterMount.current = true;
     }
-  }, [compareModels.length]);
+  });
+  // Poll briefly to trigger send after sharedInput state has flushed
+  useLuaInterval(100, () => {
+    if (needsSendAfterMount.current) {
+      needsSendAfterMount.current = false;
+      setSendSignal(s => s + 1);
+    }
+  });
 
-  const toggleModel = useCallback((id: string) => {
+  const toggleModel = (id: string) => {
     onSetCompareModels(
+      // rjit-ignore-next-line — trivial filter for toggle
       compareModels.includes(id)
         ? compareModels.filter(m => m !== id)
         : compareModels.length < 8 ? [...compareModels, id] : compareModels
     );
-  }, [compareModels, onSetCompareModels]);
+  };
 
-  const sendToAll = useCallback(() => {
+  const sendToAll = () => {
     if (!sharedInput.trim() || compareModels.length === 0) return;
     setSendSignal(s => s + 1);
     setSharedInput('');
-  }, [sharedInput, compareModels.length]);
+  };
 
   return (
     <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
@@ -3000,21 +2573,18 @@ function CompareChatColumn({
   const lastSignal = useRef(0);
 
   // Send when signal changes (shared input broadcast)
-  // rjit-ignore-next-line
-  useEffect(() => {
+  useLuaInterval(50, () => {
     if (sendSignal > lastSignal.current && sharedInput.trim()) {
       lastSignal.current = sendSignal;
       chat.send(sharedInput);
     }
-  }, [sendSignal]);
+  });
 
   // Get latest assistant message for the "pick" action
-  const lastAssistant = useMemo(() => {
-    for (let i = chat.messages.length - 1; i >= 0; i--) {
-      if (chat.messages[i].role === 'assistant') return chat.messages[i];
-    }
-    return null;
-  }, [chat.messages]);
+  let lastAssistant: Message | null = null;
+  for (let i = chat.messages.length - 1; i >= 0; i--) {
+    if (chat.messages[i].role === 'assistant') { lastAssistant = chat.messages[i]; break; }
+  }
 
   return (
     <Box style={{
@@ -3077,16 +2647,7 @@ function CompareChatColumn({
                   <Text style={{ fontSize: 9, color: C.textDim, fontWeight: 'bold' }}>
                     {isUser ? 'You' : modelName}
                   </Text>
-                  {parseMarkdown(text).map((part, pi) => {
-                    if (part.type === 'code') {
-                      return <CodeBlock key={pi} code={part.content} language={part.language} style={{ borderRadius: 4 }} />;
-                    }
-                    return (
-                      <Text key={pi} style={{ fontSize: 12, color: C.text, lineHeight: 1.4 }}>
-                        {part.content}
-                      </Text>
-                    );
-                  })}
+                  <Markdown text={text} fontSize={12} />
                 </Box>
               );
             })}
@@ -3295,21 +2856,10 @@ function PopOutChatWindow({ conversation, provider, systemPrompt, temperature, m
                   <Text style={{ fontSize: 9, color: C.textDim, fontWeight: 'bold', paddingBottom: 2 }}>
                     {isUser ? 'You' : 'Assistant'}
                   </Text>
-                  <Box style={{
-                    padding: 10, borderRadius: 8, gap: 4,
+                  <Markdown text={text} fontSize={12} style={{
+                    padding: 10, borderRadius: 8,
                     backgroundColor: isUser ? C.surfaceActive : C.surface,
-                  }}>
-                    {parseMarkdown(text).map((part, pi) => {
-                      if (part.type === 'code') {
-                        return <CodeBlock key={pi} code={part.content} language={part.language} style={{ borderRadius: 4 }} />;
-                      }
-                      return (
-                        <Text key={pi} style={{ fontSize: 12, color: C.text, lineHeight: 1.4 }}>
-                          {part.content}
-                        </Text>
-                      );
-                    })}
-                  </Box>
+                  }} />
                 </Box>
               );
             })}
@@ -3344,13 +2894,13 @@ function FileContextButton({ onAddFile }: { onAddFile: (name: string, content: s
   const [fileName, setFileName] = useState('');
   const [fileContent, setFileContent] = useState('');
 
-  const handleAdd = useCallback(() => {
+  const handleAdd = () => {
     if (!fileName.trim() || !fileContent.trim()) return;
     onAddFile(fileName.trim(), fileContent);
     setFileName('');
     setFileContent('');
     setShowModal(false);
-  }, [fileName, fileContent, onAddFile]);
+  };
 
   return (
     <>
@@ -3394,520 +2944,7 @@ function FileContextButton({ onAddFile }: { onAddFile: (name: string, content: s
   );
 }
 
-// ── HTML code block with inline preview ──────────────────────────────────────
-
-function HtmlCodeBlock({ code }: { code: string }) {
-  const [showPreview, setShowPreview] = useState(true);
-
-  return (
-    <Box style={{ borderRadius: 6, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
-      {/* Toggle bar */}
-      <Box style={{
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        padding: 6, paddingLeft: 10, paddingRight: 10, backgroundColor: C.surfaceActive,
-      }}>
-        <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-          <Text style={{ fontSize: 10, color: C.accent, fontWeight: 'bold', fontFamily: 'monospace' }}>HTML</Text>
-          <Text style={{ fontSize: 9, color: C.textDim }}>
-            {`${Math.round(code.length / 1024)}kb`}
-          </Text>
-        </Box>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
-          <Pressable onPress={() => setShowPreview(true)}>
-            {({ hovered }) => (
-              <Box style={{
-                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
-                backgroundColor: showPreview ? C.accent : hovered ? C.surfaceHover : C.surface,
-              }}>
-                <Text style={{ fontSize: 9, color: showPreview ? '#fff' : C.textMuted, fontWeight: 'bold' }}>Preview</Text>
-              </Box>
-            )}
-          </Pressable>
-          <Pressable onPress={() => setShowPreview(false)}>
-            {({ hovered }) => (
-              <Box style={{
-                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
-                backgroundColor: !showPreview ? C.accent : hovered ? C.surfaceHover : C.surface,
-              }}>
-                <Text style={{ fontSize: 9, color: !showPreview ? '#fff' : C.textMuted, fontWeight: 'bold' }}>Code</Text>
-              </Box>
-            )}
-          </Pressable>
-          <Pressable onPress={() => {
-            try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', code); } catch {}
-          }}>
-            {({ hovered }) => (
-              <Box style={{
-                paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
-                backgroundColor: hovered ? C.surfaceHover : C.surface,
-              }}>
-                <Text style={{ fontSize: 9, color: C.textMuted, fontWeight: 'bold' }}>Copy</Text>
-              </Box>
-            )}
-          </Pressable>
-        </Box>
-      </Box>
-
-      {/* Content */}
-      {showPreview ? (
-        <Box style={{ padding: 12, backgroundColor: '#ffffff', minHeight: 100 }}>
-          <HtmlPreview html={code} />
-        </Box>
-      ) : (
-        <CodeBlock code={code} language="html" style={{ borderRadius: 0 }} />
-      )}
-    </Box>
-  );
-}
-
-// ── HTML parser → ReactJIT primitives ────────────────────────────────────────
-
-interface HtmlNode {
-  tag: string;
-  attrs: Record<string, string>;
-  children: (HtmlNode | string)[];
-}
-
-function parseHtml(html: string): HtmlNode[] {
-  // Extract body content if full document
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  const content = bodyMatch ? bodyMatch[1] : html;
-
-  // Extract <style> blocks for basic CSS
-  const styles: Record<string, Record<string, string>> = {};
-  const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
-  let styleMatch;
-  while ((styleMatch = styleRegex.exec(html)) !== null) {
-    const rules = styleMatch[1].matchAll(/([^{]+)\{([^}]+)\}/g);
-    for (const rule of rules) {
-      const selector = rule[1].trim();
-      const props = parseInlineStyle(rule[2]);
-      styles[selector] = props;
-    }
-  }
-
-  // Remove script and style tags from content
-  const cleaned = content
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '');
-
-  return parseNodes(cleaned, styles);
-}
-
-function parseNodes(html: string, styles: Record<string, Record<string, string>>): HtmlNode[] {
-  const nodes: (HtmlNode | string)[] = [];
-  let pos = 0;
-
-  while (pos < html.length) {
-    const tagStart = html.indexOf('<', pos);
-    if (tagStart === -1) {
-      const text = html.slice(pos).trim();
-      if (text) nodes.push(decodeEntities(text));
-      break;
-    }
-
-    // Text before tag
-    if (tagStart > pos) {
-      const text = html.slice(pos, tagStart).trim();
-      if (text) nodes.push(decodeEntities(text));
-    }
-
-    // Self-closing or void tags
-    const voidMatch = html.slice(tagStart).match(/^<(br|hr|img|input|meta|link|col|area|base|embed|source|track|wbr)\b([^>]*?)\/?\s*>/i);
-    if (voidMatch) {
-      const tag = voidMatch[1].toLowerCase();
-      const attrs = parseAttrs(voidMatch[2], styles);
-      nodes.push({ tag, attrs, children: [] });
-      pos = tagStart + voidMatch[0].length;
-      continue;
-    }
-
-    // Opening tag
-    const openMatch = html.slice(tagStart).match(/^<(\w[\w-]*)\b([^>]*)>/);
-    if (openMatch) {
-      const tag = openMatch[1].toLowerCase();
-      const attrs = parseAttrs(openMatch[2], styles);
-      pos = tagStart + openMatch[0].length;
-
-      // Find matching close tag (simple, non-nested)
-      const closeTag = `</${tag}>`;
-      const closeIdx = html.toLowerCase().indexOf(closeTag, pos);
-      if (closeIdx !== -1) {
-        const inner = html.slice(pos, closeIdx);
-        const children = parseNodes(inner, styles);
-        nodes.push({ tag, attrs, children });
-        pos = closeIdx + closeTag.length;
-      } else {
-        nodes.push({ tag, attrs, children: [] });
-      }
-      continue;
-    }
-
-    // Skip unrecognized
-    pos = tagStart + 1;
-  }
-
-  return nodes as HtmlNode[];
-}
-
-function parseAttrs(attrStr: string, styles: Record<string, Record<string, string>>): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const regex = /(\w[\w-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?/g;
-  let m;
-  while ((m = regex.exec(attrStr)) !== null) {
-    attrs[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
-  }
-
-  // Merge class-based styles into style attr
-  if (attrs.class) {
-    const classNames = attrs.class.split(/\s+/);
-    for (const cn of classNames) {
-      const classStyle = styles[`.${cn}`];
-      if (classStyle) {
-        const existing = attrs.style || '';
-        attrs.style = existing + ';' + Object.entries(classStyle).map(([k, v]) => `${k}:${v}`).join(';');
-      }
-    }
-  }
-  // Also check tag-level styles
-  return attrs;
-}
-
-function parseInlineStyle(style: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const decl of style.split(';')) {
-    const [prop, ...valParts] = decl.split(':');
-    if (prop && valParts.length > 0) {
-      result[prop.trim().toLowerCase()] = valParts.join(':').trim();
-    }
-  }
-  return result;
-}
-
-function decodeEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
-}
-
-function cssColorToHex(color: string): string | undefined {
-  if (!color) return undefined;
-  if (color.startsWith('#') || color.startsWith('rgb')) return color;
-  const named: Record<string, string> = {
-    white: '#ffffff', black: '#000000', red: '#ff0000', blue: '#0000ff',
-    green: '#008000', yellow: '#ffff00', orange: '#ffa500', purple: '#800080',
-    gray: '#808080', grey: '#808080', pink: '#ffc0cb', cyan: '#00ffff',
-    navy: '#000080', teal: '#008080', maroon: '#800000', lime: '#00ff00',
-    silver: '#c0c0c0', olive: '#808000', aqua: '#00ffff', fuchsia: '#ff00ff',
-    transparent: 'transparent', inherit: undefined,
-  };
-  return named[color.toLowerCase()];
-}
-
-function cssToStyle(cssStr: string | undefined): Record<string, any> {
-  if (!cssStr) return {};
-  const css = parseInlineStyle(cssStr);
-  const s: Record<string, any> = {};
-
-  if (css.color) s.color = cssColorToHex(css.color);
-  if (css['background-color'] || css.background) {
-    const bg = css['background-color'] || css.background;
-    // Only use simple color values, not gradients
-    if (!bg.includes('gradient') && !bg.includes('url')) s.backgroundColor = cssColorToHex(bg);
-  }
-  if (css['font-size']) {
-    const n = parseInt(css['font-size'], 10);
-    if (n > 0) s.fontSize = n;
-  }
-  if (css['font-weight'] === 'bold' || css['font-weight'] === '700' || css['font-weight'] === '800' || css['font-weight'] === '900') {
-    s.fontWeight = 'bold';
-  }
-  if (css['font-style'] === 'italic') s.fontStyle = 'italic';
-  if (css['text-align']) s.textAlign = css['text-align'] as any;
-  if (css.padding) { const n = parseInt(css.padding, 10); if (n >= 0) s.padding = n; }
-  if (css['padding-left']) { const n = parseInt(css['padding-left'], 10); if (n >= 0) s.paddingLeft = n; }
-  if (css['padding-right']) { const n = parseInt(css['padding-right'], 10); if (n >= 0) s.paddingRight = n; }
-  if (css['padding-top']) { const n = parseInt(css['padding-top'], 10); if (n >= 0) s.paddingTop = n; }
-  if (css['padding-bottom']) { const n = parseInt(css['padding-bottom'], 10); if (n >= 0) s.paddingBottom = n; }
-  if (css.margin) { const n = parseInt(css.margin, 10); if (n >= 0) s.margin = n; }
-  if (css['margin-top']) { const n = parseInt(css['margin-top'], 10); if (n >= 0) s.marginTop = n; }
-  if (css['margin-bottom']) { const n = parseInt(css['margin-bottom'], 10); if (n >= 0) s.marginBottom = n; }
-  if (css['border-radius']) { const n = parseInt(css['border-radius'], 10); if (n >= 0) s.borderRadius = n; }
-  if (css.width) { const n = parseInt(css.width, 10); if (n > 0) s.width = n; }
-  if (css.height) { const n = parseInt(css.height, 10); if (n > 0) s.height = n; }
-  if (css['max-width']) { const n = parseInt(css['max-width'], 10); if (n > 0) s.maxWidth = n; }
-  if (css.gap) { const n = parseInt(css.gap, 10); if (n >= 0) s.gap = n; }
-  if (css.display === 'flex') { /* already default */ }
-  if (css['flex-direction'] === 'row') s.flexDirection = 'row';
-  if (css['flex-direction'] === 'column') s.flexDirection = 'column';
-  if (css['flex-grow']) { const n = parseFloat(css['flex-grow']); if (n > 0) s.flexGrow = n; }
-  if (css['flex-wrap'] === 'wrap') s.flexWrap = 'wrap';
-  if (css['justify-content']) {
-    const jc = css['justify-content'].replace('flex-', '');
-    if (['start', 'center', 'end', 'space-between', 'space-around', 'space-evenly'].includes(jc)) s.justifyContent = jc;
-  }
-  if (css['align-items']) {
-    const ai = css['align-items'].replace('flex-', '');
-    if (['start', 'center', 'end', 'stretch'].includes(ai)) s.alignItems = ai;
-  }
-  if (css.border) {
-    const borderMatch = css.border.match(/(\d+)px\s+\w+\s+([\w#]+)/);
-    if (borderMatch) {
-      s.borderWidth = parseInt(borderMatch[1], 10);
-      s.borderColor = cssColorToHex(borderMatch[2]);
-    }
-  }
-  if (css['border-bottom']) {
-    const bm = css['border-bottom'].match(/(\d+)px\s+\w+\s+([\w#]+)/);
-    if (bm) { s.borderBottomWidth = parseInt(bm[1], 10); s.borderColor = cssColorToHex(bm[2]); }
-  }
-  if (css['box-shadow']) {
-    // Approximate box shadow as border
-  }
-
-  return s;
-}
-
-// Map HTML tags to ReactJIT rendering
-function HtmlPreview({ html }: { html: string }) {
-  const nodes = useMemo(() => parseHtml(html), [html]);
-  return (
-    <Box style={{ gap: 4 }}>
-      {nodes.map((node, i) => <HtmlNodeRenderer key={i} node={node} />)}
-    </Box>
-  );
-}
-
-function HtmlNodeRenderer({ node }: { node: HtmlNode | string }) {
-  if (typeof node === 'string') {
-    const trimmed = node.trim();
-    if (!trimmed) return null;
-    return <Text style={{ fontSize: 14, color: '#1a1a1a', lineHeight: 1.5 }}>{trimmed}</Text>;
-  }
-
-  const style = cssToStyle(node.attrs.style);
-  const children = node.children.map((child, i) => <HtmlNodeRenderer key={i} node={child} />);
-
-  switch (node.tag) {
-    // ── Block elements ──
-    case 'div':
-    case 'section':
-    case 'article':
-    case 'main':
-    case 'header':
-    case 'footer':
-    case 'nav':
-    case 'aside':
-    case 'form':
-      return <Box style={{ gap: 4, ...style }}>{children}</Box>;
-
-    case 'p':
-      return (
-        <Box style={{ paddingTop: 2, paddingBottom: 2, ...style }}>
-          {node.children.map((child, i) => {
-            if (typeof child === 'string') {
-              return <Text key={i} style={{ fontSize: 14, color: style.color || '#1a1a1a', lineHeight: 1.5, ...(style.fontWeight ? { fontWeight: style.fontWeight } : {}), ...(style.textAlign ? { textAlign: style.textAlign } : {}) }}>{child.trim()}</Text>;
-            }
-            return <HtmlNodeRenderer key={i} node={child} />;
-          })}
-        </Box>
-      );
-
-    case 'h1':
-      return <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#000000', paddingTop: 8, paddingBottom: 4, ...style }}>{textContent(node)}</Text>;
-    case 'h2':
-      return <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1a1a1a', paddingTop: 6, paddingBottom: 3, ...style }}>{textContent(node)}</Text>;
-    case 'h3':
-      return <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#2a2a2a', paddingTop: 4, paddingBottom: 2, ...style }}>{textContent(node)}</Text>;
-    case 'h4':
-      return <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#333333', paddingTop: 3, paddingBottom: 2, ...style }}>{textContent(node)}</Text>;
-    case 'h5':
-    case 'h6':
-      return <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#444444', paddingTop: 2, paddingBottom: 1, ...style }}>{textContent(node)}</Text>;
-
-    // ── Inline text ──
-    case 'span':
-      return <Text style={{ fontSize: 14, color: '#1a1a1a', ...style }}>{textContent(node)}</Text>;
-    case 'strong':
-    case 'b':
-      return <Text style={{ fontSize: 14, color: '#1a1a1a', fontWeight: 'bold', ...style }}>{textContent(node)}</Text>;
-    case 'em':
-    case 'i':
-      return <Text style={{ fontSize: 14, color: '#1a1a1a', fontStyle: 'italic', ...style }}>{textContent(node)}</Text>;
-    case 'code':
-      return (
-        <Box style={{ backgroundColor: '#f0f0f0', borderRadius: 3, paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1 }}>
-          <Text style={{ fontSize: 12, color: '#c7254e', fontFamily: 'monospace' }}>{textContent(node)}</Text>
-        </Box>
-      );
-    case 'pre':
-      return (
-        <Box style={{ backgroundColor: '#f5f5f5', borderRadius: 6, padding: 10, ...style }}>
-          <Text style={{ fontSize: 12, color: '#333333', fontFamily: 'monospace' }}>{textContent(node)}</Text>
-        </Box>
-      );
-    case 'a':
-      return <Text style={{ fontSize: 14, color: '#0066cc', ...style }}>{textContent(node)}</Text>;
-    case 'small':
-      return <Text style={{ fontSize: 11, color: '#666666', ...style }}>{textContent(node)}</Text>;
-    case 'label':
-      return <Text style={{ fontSize: 13, color: '#333333', fontWeight: 'bold', ...style }}>{textContent(node)}</Text>;
-
-    // ── Lists ──
-    case 'ul':
-    case 'ol':
-      return (
-        <Box style={{ paddingLeft: 16, gap: 2, ...style }}>
-          {node.children.filter(c => typeof c !== 'string' || c.trim()).map((child, i) => {
-            if (typeof child === 'string') return null;
-            const bullet = node.tag === 'ol' ? `${i + 1}.` : '\u2022';
-            return (
-              <Box key={i} style={{ flexDirection: 'row', gap: 6 }}>
-                <Text style={{ fontSize: 14, color: '#666666' }}>{bullet}</Text>
-                <Box style={{ flexGrow: 1 }}><HtmlNodeRenderer node={child} /></Box>
-              </Box>
-            );
-          })}
-        </Box>
-      );
-    case 'li':
-      return <Box style={{ gap: 2, ...style }}>{children}</Box>;
-
-    // ── Table ──
-    case 'table':
-      return (
-        <Box style={{ borderWidth: 1, borderColor: '#dddddd', borderRadius: 4, overflow: 'hidden', ...style }}>
-          {children}
-        </Box>
-      );
-    case 'thead':
-      return <Box style={{ backgroundColor: '#f5f5f5' }}>{children}</Box>;
-    case 'tbody':
-      return <Box>{children}</Box>;
-    case 'tr':
-      return <Box style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: '#eeeeee', ...style }}>{children}</Box>;
-    case 'th':
-      return (
-        <Box style={{ flexGrow: 1, padding: 6, borderRightWidth: 1, borderColor: '#eeeeee', ...style }}>
-          <Text style={{ fontSize: 12, color: '#333333', fontWeight: 'bold' }}>{textContent(node)}</Text>
-        </Box>
-      );
-    case 'td':
-      return (
-        <Box style={{ flexGrow: 1, padding: 6, borderRightWidth: 1, borderColor: '#eeeeee', ...style }}>
-          {children.length > 0 ? children : <Text style={{ fontSize: 12, color: '#333333' }}>{textContent(node)}</Text>}
-        </Box>
-      );
-
-    // ── Media ──
-    case 'img':
-      return (
-        <Box style={{
-          backgroundColor: '#f0f0f0', borderRadius: 4, padding: 8, alignItems: 'center', ...style,
-        }}>
-          <Text style={{ fontSize: 10, color: '#999999' }}>{`[Image: ${node.attrs.alt || node.attrs.src || 'image'}]`}</Text>
-        </Box>
-      );
-
-    // ── Form elements (visual only) ──
-    case 'button':
-      return (
-        <Box style={{
-          backgroundColor: style.backgroundColor || '#4a90d9', borderRadius: 6,
-          paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8,
-          alignItems: 'center', alignSelf: 'start', ...style,
-        }}>
-          <Text style={{ fontSize: 14, color: style.color || '#ffffff', fontWeight: 'bold' }}>{textContent(node)}</Text>
-        </Box>
-      );
-    case 'input':
-      return (
-        <Box style={{
-          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
-          padding: 8, backgroundColor: '#ffffff', ...style,
-        }}>
-          <Text style={{ fontSize: 13, color: '#999999' }}>
-            {node.attrs.placeholder || node.attrs.value || node.attrs.type || 'input'}
-          </Text>
-        </Box>
-      );
-    case 'textarea':
-      return (
-        <Box style={{
-          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
-          padding: 8, backgroundColor: '#ffffff', minHeight: 60, ...style,
-        }}>
-          <Text style={{ fontSize: 13, color: '#999999' }}>
-            {node.attrs.placeholder || textContent(node) || 'textarea'}
-          </Text>
-        </Box>
-      );
-    case 'select':
-      return (
-        <Box style={{
-          borderWidth: 1, borderColor: '#cccccc', borderRadius: 4,
-          padding: 8, backgroundColor: '#ffffff', flexDirection: 'row', justifyContent: 'space-between', ...style,
-        }}>
-          <Text style={{ fontSize: 13, color: '#333333' }}>
-            {textContent(node.children.find(c => typeof c !== 'string' && c.tag === 'option') as HtmlNode | undefined || node) || 'select'}
-          </Text>
-          <Text style={{ fontSize: 12, color: '#999999' }}>{'\u25BC'}</Text>
-        </Box>
-      );
-    case 'option':
-      return null; // handled by select
-
-    // ── Separators ──
-    case 'br':
-      return <Box style={{ height: 4 }} />;
-    case 'hr':
-      return <Box style={{ height: 1, backgroundColor: '#dddddd', marginTop: 4, marginBottom: 4, ...style }} />;
-
-    // ── Semantic ──
-    case 'blockquote':
-      return (
-        <Box style={{
-          borderLeftWidth: 3, borderColor: '#cccccc', paddingLeft: 12,
-          paddingTop: 4, paddingBottom: 4, backgroundColor: '#f9f9f9', borderRadius: 4, ...style,
-        }}>
-          {children}
-        </Box>
-      );
-
-    case 'details':
-    case 'summary':
-    case 'figure':
-    case 'figcaption':
-    case 'dl':
-    case 'dt':
-    case 'dd':
-      return <Box style={{ gap: 2, ...style }}>{children}</Box>;
-
-    // ── Head elements (skip) ──
-    case 'html':
-    case 'head':
-    case 'title':
-    case 'meta':
-    case 'link':
-    case 'script':
-    case 'style':
-      return null;
-
-    case 'body':
-      return <Box style={{ gap: 4, ...style }}>{children}</Box>;
-
-    default:
-      // Unknown tags: render as Box with children
-      return children.length > 0 ? <Box style={{ ...style }}>{children}</Box> : null;
-  }
-}
-
-function textContent(node: HtmlNode | undefined): string {
-  if (!node) return '';
-  return node.children.map(c => typeof c === 'string' ? c : textContent(c)).join('');
-}
+// HtmlCodeBlock imported from ./html-preview
 
 // ── Shared small components ──────────────────────────────────────────────────
 
@@ -3973,6 +3010,7 @@ function QuickModelPicker({
 }) {
   const [query, setQuery] = useState('');
   const filtered = query
+    // rjit-ignore-next-line
     ? models.filter(m => m.name.toLowerCase().includes(query.toLowerCase()) || m.id.toLowerCase().includes(query.toLowerCase()))
     : models;
 

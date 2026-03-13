@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Pressable, TextEditor } from '@reactjit/core';
 import { evalComponent } from './lib/eval-component';
 
@@ -50,7 +50,8 @@ class ErrorBoundary extends React.Component<
 // ── Section panel ─────────────────────────────────────────────────────────────
 
 function Section({ id, code }: { id: SectionId; code?: string }) {
-  const result = useMemo(() => code ? evalComponent(code) : null, [code]);
+  // rjit-ignore-next-line — eval result depends on code string, trivial derivation
+  const result = code ? evalComponent(code) : null;
   const UserComponent = result?.component ?? null;
 
   return (
