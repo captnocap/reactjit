@@ -6,10 +6,24 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Pressable, TextInput, ScrollView } from '@reactjit/core';
+import { Box, Text, Pressable, TextInput, ScrollView, useClipboard } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import { V } from '../theme';
 import type { Conversation } from '../types';
+import type { Message } from '@reactjit/ai';
+
+// ── Export Helpers ───────────────────────────────────────
+
+function conversationToMarkdown(convo: Conversation): string {
+  const lines = [`# ${convo.title}`, `Model: ${convo.model}`, ''];
+  for (const msg of convo.messages) {
+    if (msg.role === 'system') continue;
+    const label = msg.role === 'user' ? '**You**' : msg.role === 'assistant' ? '**Vesper**' : `**${msg.role}**`;
+    const text = typeof msg.content === 'string' ? msg.content : msg.content.map(b => b.text || '').join('');
+    lines.push(`${label}:`, '', text, '', '---', '');
+  }
+  return lines.join('\n');
+}
 
 // ── Time Grouping ────────────────────────────────────────
 
@@ -43,13 +57,15 @@ function groupConversations(convos: Conversation[]): Map<string, Conversation[]>
 
 // ── Conversation Card ────────────────────────────────────
 
-function ConvoCard({ convo, active, onSelect, onDelete }: {
+function ConvoCard({ convo, active, onSelect, onDelete, onExport }: {
   convo: Conversation;
   active: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onExport: () => void;
 }) {
   const c = useThemeColors();
+  // rjit-ignore-next-line
   const msgCount = convo.messages.filter(m => m.role !== 'system').length;
 
   return (
@@ -98,6 +114,32 @@ function ConvoCard({ convo, active, onSelect, onDelete }: {
         <Text style={{ fontSize: 10, color: c.textDim }}>
           {convo.model || 'no model'}
         </Text>
+        {active && (
+          <Box style={{ flexDirection: 'row', gap: 4 }}>
+            <Pressable
+              onPress={onExport}
+              style={(state) => ({
+                paddingLeft: 6, paddingRight: 6,
+                paddingTop: 2, paddingBottom: 2,
+                borderRadius: 3,
+                backgroundColor: state.hovered ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+              })}
+            >
+              <Text style={{ fontSize: 10, color: V.textDim }}>Export</Text>
+            </Pressable>
+            <Pressable
+              onPress={onDelete}
+              style={(state) => ({
+                paddingLeft: 6, paddingRight: 6,
+                paddingTop: 2, paddingBottom: 2,
+                borderRadius: 3,
+                backgroundColor: state.hovered ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+              })}
+            >
+              <Text style={{ fontSize: 10, color: V.error }}>Delete</Text>
+            </Pressable>
+          </Box>
+        )}
       </Box>
     </Pressable>
   );
@@ -124,6 +166,12 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const [search, setSearch] = useState('');
   const c = useThemeColors();
+  const { copy, copied } = useClipboard();
+
+  const exportConversation = (convo: Conversation) => {
+    const md = conversationToMarkdown(convo);
+    copy(md);
+  };
 
   if (!visible) return null;
 
@@ -162,9 +210,14 @@ export function ConversationPanel({
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>
-            Conversations
-          </Text>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: c.text }}>
+              Conversations
+            </Text>
+            {copied && (
+              <Text style={{ fontSize: 10, color: V.success }}>Copied!</Text>
+            )}
+          </Box>
           <Pressable
             onPress={onNew}
             style={(state) => ({
@@ -229,6 +282,7 @@ export function ConversationPanel({
                   active={cv.id === activeId}
                   onSelect={() => onSelect(cv.id)}
                   onDelete={() => onDelete(cv.id)}
+                  onExport={() => exportConversation(cv)}
                 />
               ))}
             </Box>
