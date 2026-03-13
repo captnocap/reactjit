@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultShaders, defaultSprites } from '../defaults';
 
 const oneDarkPalette: Record<string, string> = {
   mono1: '#abb2bf',
@@ -47,5 +47,8 @@ export const oneDarkThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: defaultShaders,
+    sprites: defaultSprites,
   },
 };

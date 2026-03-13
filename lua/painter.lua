@@ -34,6 +34,7 @@ local GameModule = nil    -- Injected at init time via Painter.init()
 local RenderSourceModule = nil -- Injected at init time via Painter.init()
 local EffectsModule = nil  -- Injected at init time via Painter.init()
 local MasksModule = nil    -- Injected at init time via Painter.init()
+local SpritesModule = nil  -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
@@ -109,6 +110,7 @@ function Painter.init(config)
   RenderSourceModule = config.render_source
   EffectsModule = config.effects
   MasksModule = config.masks
+  SpritesModule = config.sprites
   getFont = Measure.getFont
 end
 
@@ -1426,6 +1428,22 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         love.graphics.setColor(1, 0, 0, 0.8 * effectiveOpacity)
         love.graphics.rectangle("line", c.x, c.y, c.w, c.h)
       end
+    end
+
+  elseif not isHidden and node.type == "Sprite" and SpritesModule then
+    local props = node.props or {}
+    local src = props.src
+    if src and props.cols and props.rows and props.frameWidth and props.frameHeight then
+      SpritesModule.draw(
+        src,
+        props.frameIndex or 0,
+        props.cols,
+        props.rows,
+        props.frameWidth,
+        props.frameHeight,
+        c.x, c.y, c.w, c.h,
+        effectiveOpacity
+      )
     end
 
   elseif not isHidden and node.type == "Video" and Videos then

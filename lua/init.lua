@@ -811,6 +811,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.spritesmod = require("lua.sprites")
     M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
@@ -822,7 +823,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, sprites = M.spritesmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -900,6 +901,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.spritesmod = require("lua.sprites")
     -- render_source: SKIPPED in WASM (requires FFmpeg + v4l2)
 
     M.tree    = require("lua.tree")
@@ -911,7 +913,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, render_source = nil })
+    M.painter.init({ measure = M.measure, images = M.images, videos = nil, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = nil, effects = M.effectsmod, masks = M.masksmod, sprites = M.spritesmod, render_source = nil })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -990,6 +992,7 @@ function ReactJIT.init(config)
     M.effectsmod.loadAll()
     M.masksmod = require("lua.masks")
     M.masksmod.loadAll()
+    M.spritesmod = require("lua.sprites")
     M.rendersource = require("lua.render_source")
 
     M.tree    = require("lua.tree")
@@ -1001,7 +1004,7 @@ function ReactJIT.init(config)
     M.layout.init({ measure = M.measure })
 
     M.painter = require("lua.painter")
-    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+    M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, sprites = M.spritesmod, render_source = M.rendersource })
 
     M.events  = require("lua.events")
     M.events.setTreeModule(M.tree)
@@ -3325,6 +3328,9 @@ function ReactJIT.update(dt)
               resolvedTheme = themeMenu.getResolvedTheme(name)
             end
             M.currentTheme = resolvedTheme or M.themes[name]
+            -- Merge shader/effects data from React payload into theme
+            if payload.shaders then M.currentTheme.shaders = payload.shaders end
+            if payload.effects then M.currentTheme.effects = payload.effects end
             if M.painter then M.painter.setTheme(M.currentTheme) end
             if M.masksmod and M.masksmod.setTheme then M.masksmod.setTheme(M.currentTheme) end
             if M.textinput and M.textinput.setTheme then M.textinput.setTheme(M.currentTheme) end
@@ -6441,7 +6447,7 @@ function ReactJIT.reload()
       M.layout     = require("lua.layout")
       M.layout.init({ measure = M.measure })
       M.painter    = require("lua.painter")
-      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, render_source = M.rendersource })
+      M.painter.init({ measure = M.measure, images = M.images, videos = M.videos, scene3d = M.scene3d, map = M.mapmod, geoscene3d = M.geoscene3d, game = nil, emulator = M.emumod, effects = M.effectsmod, masks = M.masksmod, sprites = M.spritesmod, render_source = M.rendersource })
       M.events     = require("lua.events")
       M.events.setTreeModule(M.tree)
       M.texteditor = require("lua.texteditor")

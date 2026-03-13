@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultSprites } from '../defaults';
 
 const rosePinePalette: Record<string, string> = {
   base: '#191724',
@@ -65,6 +65,13 @@ export const rosePineThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: {
+      background: { type: 'Mycelium', props: { speed: 0.2, decay: 0.005 } },
+      mask: { type: 'Watercolor', props: { intensity: 0.3 } },
+      ambient: null,
+    },
+    shaders: { grade: { saturation: 0.9 } },
+    sprites: defaultSprites,
   },
   'rose-pine-dawn': {
     name: 'rose-pine-dawn',
@@ -93,5 +100,8 @@ export const rosePineThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { saturation: 0.9 } },
+    sprites: defaultSprites,
   },
 };

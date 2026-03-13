@@ -113,6 +113,15 @@ function Masks.setTheme(theme)
   currentTheme = theme
 end
 
+--- Get the theme's shader grade defaults (from theme.shaders.grade).
+--- @return table|nil  ShaderGrade config or nil if not set
+function Masks.getThemeShaderGrade()
+  if currentTheme and currentTheme.shaders and currentTheme.shaders.grade then
+    return currentTheme.shaders.grade
+  end
+  return nil
+end
+
 --- Get a raw theme color token value (usually a hex string).
 --- @param key string
 --- @param fallback any
@@ -428,6 +437,7 @@ function Masks.loadAll()
     "pixel_sort",
     "slit_scan",
     "halftone",
+    "shader_grade_mask",
   }
   for _, name in ipairs(maskFiles) do
     local ok, err = pcall(require, "lua.masks." .. name)

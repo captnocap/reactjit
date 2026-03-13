@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultSprites } from '../defaults';
 
 const tokyoNightPalette: Record<string, string> = {
   bg: '#1a1b26',
@@ -61,6 +61,13 @@ export const tokyoNightThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: {
+      background: { type: 'FlowParticles', props: { speed: 0.2, decay: 0.005 } },
+      mask: null,
+      ambient: null,
+    },
+    shaders: { grade: { saturation: 1.1, contrast: 1.05 } },
+    sprites: defaultSprites,
   },
   'tokyo-night-storm': {
     name: 'tokyo-night-storm',
@@ -89,5 +96,8 @@ export const tokyoNightThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { saturation: 1.1, contrast: 1.05 } },
+    sprites: defaultSprites,
   },
 };

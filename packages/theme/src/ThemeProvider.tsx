@@ -182,7 +182,7 @@ export function ThemeProvider({
       setThemeIdState(id);
       persistTheme(id);
       if (bridge) {
-        bridge.send('theme:set', { name: id });
+        bridge.send('theme:set', { name: id, shaders: themes[id]?.shaders, effects: themes[id]?.effects });
         bridge.flush();
       }
     },
@@ -197,7 +197,7 @@ export function ThemeProvider({
 
     const applyTheme = (id: string) => {
       setThemeIdState(id);
-      bridge.send('theme:set', { name: id });
+      bridge.send('theme:set', { name: id, shaders: themes[id]?.shaders, effects: themes[id]?.effects });
       bridge.flush();
     };
 
@@ -258,8 +258,11 @@ export function ThemeProvider({
       typography: resolved.typography,
       spacing: resolved.spacing,
       radii: resolved.radii,
+      effects: resolved.effects,
+      shaders: resolved.shaders,
+      sprites: resolved.sprites,
     }),
-    [themeId, setTheme, resolvedColors, resolved.typography, resolved.spacing, resolved.radii],
+    [themeId, setTheme, resolvedColors, resolved.typography, resolved.spacing, resolved.radii, resolved.effects, resolved.shaders, resolved.sprites],
   );
 
   // Build a flat Record<string, string> of all color tokens for primitive resolution.

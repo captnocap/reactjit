@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultSprites } from '../defaults';
 
 const solarizedPalette: Record<string, string> = {
   base03: '#002b36',
@@ -48,6 +48,9 @@ export const solarizedThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { contrast: 1.03 } },
+    sprites: defaultSprites,
   },
   'solarized-light': {
     name: 'solarized-light',
@@ -76,5 +79,8 @@ export const solarizedThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { contrast: 1.03 } },
+    sprites: defaultSprites,
   },
 };

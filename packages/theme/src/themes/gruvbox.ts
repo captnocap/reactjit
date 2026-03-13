@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultSprites } from '../defaults';
 
 const gruvboxDarkPalette: Record<string, string> = {
   bg0: '#282828',
@@ -71,6 +71,13 @@ export const gruvboxThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: {
+      background: null,
+      mask: { type: 'Dither', props: { intensity: 0.2 } },
+      ambient: null,
+    },
+    shaders: { grade: { saturation: 0.95, grain: 0.03 } },
+    sprites: defaultSprites,
   },
   'gruvbox-light': {
     name: 'gruvbox-light',
@@ -99,5 +106,8 @@ export const gruvboxThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { saturation: 0.95 } },
+    sprites: defaultSprites,
   },
 };

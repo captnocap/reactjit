@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultShaders, defaultSprites } from '../defaults';
 
 const lattePalette: Record<string, string> = {
   rosewater: '#dc8a78',
@@ -149,6 +149,9 @@ function fromCatppuccinPalette(
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { saturation: 1.05 } },
+    sprites: defaultSprites,
   };
 }
 

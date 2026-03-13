@@ -1,5 +1,5 @@
 import { themes } from './themes';
-import { defaultTypography, defaultSpacing, defaultRadii } from './defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultShaders, defaultSprites } from './defaults';
 import type { Theme, CreateThemeOptions } from './types';
 
 /**
@@ -53,6 +53,27 @@ export function createTheme(opts: CreateThemeOptions): Theme {
     },
     spacing: { ...(base?.spacing ?? defaultSpacing), ...opts.spacing },
     radii: { ...(base?.radii ?? defaultRadii), ...opts.radii },
+    effects: {
+      ...(base?.effects ?? defaultEffects),
+      ...opts.effects,
+    },
+    shaders: {
+      ...(base?.shaders ?? defaultShaders),
+      ...opts.shaders,
+      grade: opts.shaders?.grade !== undefined
+        ? opts.shaders.grade
+        : (base?.shaders?.grade ?? defaultShaders.grade),
+      surfaces: {
+        ...(base?.shaders?.surfaces),
+        ...opts.shaders?.surfaces,
+      },
+    },
+    sprites: {
+      atlases: {
+        ...(base?.sprites?.atlases ?? defaultSprites.atlases),
+        ...opts.sprites?.atlases,
+      },
+    },
   };
 }
 

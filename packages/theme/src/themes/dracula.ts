@@ -1,5 +1,5 @@
 import type { Theme } from '../types';
-import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
+import { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultShaders, defaultSprites } from '../defaults';
 
 const draculaPalette: Record<string, string> = {
   background: '#282a36',
@@ -43,6 +43,13 @@ export const draculaThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: {
+      background: { type: 'Constellation', props: { speed: 0.3, decay: 0.01 } },
+      mask: { type: 'Scanlines', props: { intensity: 0.15 } },
+      ambient: null,
+    },
+    shaders: { grade: { contrast: 1.08, grain: 0.02 } },
+    sprites: defaultSprites,
   },
   'dracula-soft': {
     name: 'dracula-soft',
@@ -71,5 +78,8 @@ export const draculaThemes: Record<string, Theme> = {
     typography: defaultTypography,
     spacing: defaultSpacing,
     radii: defaultRadii,
+    effects: defaultEffects,
+    shaders: { grade: { contrast: 1.05, grain: 0.01 } },
+    sprites: defaultSprites,
   },
 };

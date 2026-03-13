@@ -1,7 +1,10 @@
 export { ThemeProvider } from './ThemeProvider';
-export { useTheme, useThemeColors, useThemeTypography, useThemeSpacing, useThemeRadii, themeNames } from './useTheme';
+export { useTheme, useThemeColors, useThemeTypography, useThemeSpacing, useThemeRadii, useThemeEffects, useThemeShaders, useThemeSprites, themeNames } from './useTheme';
 export { createTheme, registerTheme } from './createTheme';
 export { themes, defaultThemeId } from './themes';
-export { defaultTypography, defaultSpacing, defaultRadii } from './defaults';
+export { defaultTypography, defaultSpacing, defaultRadii, defaultEffects, defaultShaders, defaultSprites } from './defaults';
 export { ThemeSwitcher, type ThemeSwitcherProps } from './ThemeSwitcher';
-export type { Theme, ThemeColors, ThemeTypography, ThemeSpacing, ThemeRadii, ThemeContextValue, CreateThemeOptions } from './types';
+export { ThemeEffect, type ThemeEffectProps } from './ThemeEffect';
+export { ThemeGrade, type ThemeGradeProps } from './ThemeGrade';
+export { ThemeSprite, type ThemeSpriteProps } from './ThemeSprite';
+export type { Theme, ThemeColors, ThemeTypography, ThemeSpacing, ThemeRadii, ThemeContextValue, CreateThemeOptions, ThemeEffects, ThemeEffectConfig, ThemeShaders, ThemeShaderGrade, ThemeSprites, ThemeSpriteAtlas } from './types';
