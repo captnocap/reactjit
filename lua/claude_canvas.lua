@@ -350,6 +350,7 @@ Capabilities.register("ClaudeCanvas", {
       local prevKind = nil
       local blockKind = nil  -- first semantic kind in current blank-line-delimited block
       local inMenu = false
+      local inSecurityNotice = false  -- carries security_notice across blank lines
       local rowColors = {}  -- row -> { fg, hasText }
       local rowMeta = {}    -- row -> { nodeId, turnId, groupId, groupType }
 
@@ -374,6 +375,8 @@ Capabilities.register("ClaudeCanvas", {
         task_summary = "task", task_done = "task", task_open = "task", task_active = "task",
         permission = "permission",
         plan_border = "plan", plan_mode = "plan", wizard_step = "plan",
+        ["auth:pending"] = "auth", ["auth:success"] = "auth",
+        security_notice = "notice", onboarding = "onboarding",
       }
 
       -- Block types: consecutive rows of same kind share one nodeId
@@ -384,6 +387,8 @@ Capabilities.register("ClaudeCanvas", {
         tool = true, result = true, form_field = true, menu_example = true, detail_text = true,
         ["hint:navigate"] = true, ["hint:dismiss"] = true, ["hint:cancel"] = true,
         ["hint:search"] = true, ["hint:shortcut"] = true,
+        splash_art = true, ["auth:pending"] = true, ["auth:success"] = true,
+        security_notice = true, onboarding = true,
       }
 
       -- Per-turn sequence counters (reset on turn change)
@@ -494,6 +499,16 @@ Capabilities.register("ClaudeCanvas", {
             kind = "user_text"
           end
 
+          -- Security notice: carries across blank lines until a menu/input/prompt appears
+          if kind == "security_notice" then inSecurityNotice = true end
+          if inSecurityNotice then
+            if kind == "text" or kind == "onboarding" then
+              kind = "security_notice"
+            elseif kind ~= "security_notice" then
+              inSecurityNotice = false  -- exit on any non-text token
+            end
+          end
+
           -- Block inheritance: blank lines delimit blocks, first major semantic
           -- row sets the kind for ALL other rows in the same block.
           -- Major kinds that SET the block (everything else inherits):
@@ -504,6 +519,8 @@ Capabilities.register("ClaudeCanvas", {
             status_bar = true, input_border = true, input_zone = true,
             idle_prompt = true, thought_complete = true, task_active = true,
             image_attachment = true, assistant_text = true,
+            splash_art = true, ["auth:pending"] = true, ["auth:success"] = true,
+            security_notice = true, onboarding = true,
           }
           if BLOCK_SETTERS[kind] then
             blockKind = kind
@@ -559,6 +576,9 @@ Capabilities.register("ClaudeCanvas", {
               end
             end
           end
+
+          -- Any menu_title activates menu context (not just after divider/box_drawing)
+          if kind == "menu_title" then inMenu = true end
 
           -- Inside a menu: reclassify text/user_prompt based on color
           if inMenu and row < boundary then
@@ -748,6 +768,12 @@ Capabilities.register("ClaudeCanvas", {
               nid = "g" .. currentGroupId .. ":pick:meta:" .. groupMetaIndex
             elseif kind == "slash_menu" then
               nid = "g" .. currentGroupId .. ":slash"
+            -- Auth/onboarding singletons (session-scoped)
+            elseif kind == "splash_art" then nid = "s:splash"
+            elseif kind == "auth:pending" then nid = "s:auth:pending"
+            elseif kind == "auth:success" then nid = "s:auth:success"
+            elseif kind == "security_notice" then nid = "s:security"
+            elseif kind == "onboarding" then nid = "s:onboarding"
             -- Fallback
             else
               nid = "t" .. currentTurnId .. ":" .. kind

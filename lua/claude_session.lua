@@ -322,6 +322,45 @@ local function classifyRow(text, row, totalRows)
   -- Error
   if text:match("^%s*[Ee]rror:") then return "error" end
 
+  -- Auth flow: pending sign-in (✢ sparkle prefix)
+  if text:find("✢", 1, true) and text:find("Opening browser", 1, true) then return "auth:pending" end
+
+  -- Auth flow: success confirmation
+  if text:find("Logged in as", 1, true) then return "auth:success" end
+  if text:find("Login successful", 1, true) then return "auth:success" end
+
+  -- Security notice page
+  if text:find("Security notes", 1, true) then return "security_notice" end
+
+  -- Onboarding wizard text
+  if text:find("get started", 1, true) and row <= 20 then return "onboarding" end
+  if text:find("Choose the text style", 1, true) then return "onboarding" end
+  if text:find("To change this later", 1, true) then return "onboarding" end
+  if text:find("Press Enter to continue", 1, true) then return "onboarding" end
+
+  -- Splash art: rows dominated by block drawing characters (░▒▓█▄▀▌▐▛▜▝▞▟)
+  -- and decorative symbols (*·…) during onboarding/login
+  if row <= 18 then
+    -- Count UTF-8 characters (not bytes) — match multi-byte sequences
+    local totalChars = 0
+    local artChars = 0
+    for char in stripped:gmatch("[\0-\127\194-\244][\128-\191]*") do
+      if char ~= " " then
+        totalChars = totalChars + 1
+        local b = char:byte()
+        -- Multi-byte UTF-8 = art (block elements, shade chars, box drawing, dots, geometric)
+        if b >= 0xC2 then
+          artChars = artChars + 1
+        elseif b == 0x2A then  -- ASCII * used as sparkle
+          artChars = artChars + 1
+        end
+      end
+    end
+    if totalChars > 0 and artChars / totalChars > 0.6 then
+      return "splash_art"
+    end
+  end
+
   return "text"
 end
 
@@ -387,6 +426,8 @@ local function spawnClaude(state, props)
       TERM            = "xterm-256color",
       FORCE_COLOR     = "1",
       COLORTERM       = "truecolor",
+      -- Override config dir (e.g. to trigger login flow for recording)
+      CLAUDE_CONFIG_DIR = props.configDir or false,
       -- Force tmux to use /bin/sh for spawning the command.
       -- Without this, tmux uses $SHELL (user's zsh/bash) which loads
       -- .zshrc/.bashrc on every session — adding 5-15s of startup delay.
@@ -907,6 +948,7 @@ Capabilities.register("ClaudeCode", {
     workingDir = { type = "string", desc = "Project directory for Claude to operate in" },
     model      = { type = "string", default = "sonnet", desc = "Model: sonnet, opus, haiku" },
     executable = { type = "string", default = "claude", desc = "Path to claude executable" },
+    configDir  = { type = "string", desc = "Override CLAUDE_CONFIG_DIR (e.g. /tmp/claude-login-test)" },
     sessionId  = { type = "string", default = "default", desc = "Session ID for renderer" },
   },
 
