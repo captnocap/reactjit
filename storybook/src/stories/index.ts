@@ -43,6 +43,7 @@ import { CapabilitiesStory } from './CapabilitiesStory';
 import { CaptureStory } from './CaptureStory';
 import { ChemistryStory } from './ChemistryStory';
 import { ChemistryTslxStory } from './ChemistryTslxStory';
+import { TslxCompareStory } from './TslxCompareStory';
 import { ConversionsStory } from './ConversionsStory';
 import { CryptoStory } from './CryptoStory';
 import { FilesStory } from './FilesStory';
@@ -126,6 +127,7 @@ export const stories: StoryDef[] = [
   { id: 'capture', title: 'Capture', section: 'Packages', component: CaptureStory },
   { id: 'chemistry', title: 'Chemistry', section: 'Packages', component: ChemistryStory },
   { id: 'chemistry-tslx', title: 'Chemistry (TSLX)', section: 'Packages', component: ChemistryTslxStory },
+  { id: 'tslx-compare', title: 'TSLX Compare', section: 'Dev', component: TslxCompareStory },
   { id: 'conversions', title: 'Conversions', section: 'Packages', component: ConversionsStory },
   { id: 'crypto', title: 'Crypto', section: 'Packages', component: CryptoStory },
   { id: 'files', title: 'Files', section: 'Packages', component: FilesStory },
