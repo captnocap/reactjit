@@ -181,26 +181,67 @@ function parse(src: string): SleepyNode | null {
 }
 
 // ── SleepyNode → ReactJIT Renderer ─────────────────────────────────
+// Primitives: box, text, pressable, input, image, scroll
+// Variants via $: box$card, box$row, text$h1, pressable$primary, image$avatar, etc.
 
-const VARIANT_COLORS: Record<string, Record<string, string>> = {
-  primary: { bg: '#3B82F6', text: '#FFFFFF' },
-  secondary: { bg: '#6B7280', text: '#FFFFFF' },
-  ghost: { bg: 'transparent', text: '#3B82F6' },
-  danger: { bg: '#EF4444', text: '#FFFFFF' },
-  success: { bg: '#10B981', text: '#FFFFFF' },
-  warning: { bg: '#F59E0B', text: '#1F2937' },
-  dark: { bg: '#1F2937', text: '#F9FAFB' },
+// Box variants
+const BOX_VARIANTS: Record<string, Record<string, unknown>> = {
+  card: { borderRadius: 10, borderWidth: 1 },
+  row: { flexDirection: 'row' },
+  col: { flexDirection: 'column' },
+  nav: { flexDirection: 'row', alignItems: 'center' },
+  modal: { borderRadius: 12, borderWidth: 1, padding: 20 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  center: { justifyContent: 'center', alignItems: 'center' },
 };
+
+// Text variants
+const TEXT_VARIANTS: Record<string, Record<string, unknown>> = {
+  h1: { fontSize: 28, fontWeight: 'bold' },
+  h2: { fontSize: 24, fontWeight: 'bold' },
+  h3: { fontSize: 20, fontWeight: 'bold' },
+  h4: { fontSize: 18, fontWeight: 'bold' },
+  h5: { fontSize: 16, fontWeight: 'bold' },
+  h6: { fontSize: 14, fontWeight: 'bold' },
+  muted: { opacity: 0.6 },
+  mono: { fontFamily: 'monospace' },
+  small: { fontSize: 11 },
+  lg: { fontSize: 18 },
+  xl: { fontSize: 24 },
+};
+
+// Pressable variants
+const PRESSABLE_VARIANTS: Record<string, { bg: string; fg: string }> = {
+  primary: { bg: '#3B82F6', fg: '#FFFFFF' },
+  secondary: { bg: '#6B7280', fg: '#FFFFFF' },
+  ghost: { bg: 'transparent', fg: '#3B82F6' },
+  danger: { bg: '#EF4444', fg: '#FFFFFF' },
+  success: { bg: '#10B981', fg: '#FFFFFF' },
+  warning: { bg: '#F59E0B', fg: '#1F2937' },
+};
+
+// Image variants
+const IMAGE_VARIANTS: Record<string, Record<string, unknown>> = {
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  thumb: { width: 64, height: 64, borderRadius: 6 },
+  cover: { width: '100%', height: 160, borderRadius: 8 },
+};
+
+function getTextChild(node: SleepyNode): string {
+  if (node.children.length > 0 && node.children[0].type === 'text') return node.children[0].value || '';
+  if (node.children.length > 0 && node.children[0].type === 'api') return node.children[0].value || '';
+  return '';
+}
 
 function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number }) {
   const c = useThemeColors();
 
+  // Literal string
   if (node.type === 'text') {
-    return (
-      <Text style={{ color: c.text, fontSize: 14 }}>{node.value || ''}</Text>
-    );
+    return <Text style={{ color: c.text, fontSize: 14 }}>{node.value || ''}</Text>;
   }
 
+  // Data binding placeholder
   if (node.type === 'api') {
     return (
       <Box style={{ backgroundColor: '#DBEAFE', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
@@ -210,36 +251,45 @@ function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number 
   }
 
   const n = node.name.toLowerCase();
-  const variant = node.variant ? VARIANT_COLORS[node.variant] : undefined;
+  const v = node.variant;
 
-  // Text elements
-  if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(n)) {
-    const sizes: Record<string, number> = { h1: 28, h2: 24, h3: 20, h4: 18, h5: 16, h6: 14 };
-    const textContent = node.children.length > 0 && node.children[0].type === 'text'
-      ? node.children[0].value : n.toUpperCase();
+  // ── box ──────────────────────────────────────────────────────────
+  if (n === 'box') {
+    const variantStyle = v ? BOX_VARIANTS[v] || {} : {};
+    const isCard = v === 'card' || v === 'modal';
     return (
-      <Text style={{ color: c.text, fontSize: sizes[n] || 16, fontWeight: 'bold' }}>
-        {textContent}
+      <Box style={{
+        gap: 8,
+        padding: isCard ? 12 : 4,
+        flexDirection: 'column' as const,
+        ...(isCard ? { backgroundColor: c.bgElevated, borderColor: c.border } : {}),
+        ...(v === 'nav' ? { backgroundColor: c.surface, paddingLeft: 16, paddingRight: 16 } : {}),
+        ...variantStyle,
+      }}>
+        {node.children.map((child, i) => (
+          <SleepyRenderer key={i} node={child} depth={depth + 1} />
+        ))}
+      </Box>
+    );
+  }
+
+  // ── text ─────────────────────────────────────────────────────────
+  if (n === 'text') {
+    const variantStyle = v ? TEXT_VARIANTS[v] || {} : {};
+    const content = getTextChild(node) || 'Text';
+    return (
+      <Text style={{ color: c.text, fontSize: 14, ...variantStyle }}>
+        {content}
       </Text>
     );
   }
 
-  if (n === 'p' || n === 'span' || n === 'text') {
-    const textContent = node.children.length > 0 && node.children[0].type === 'text'
-      ? node.children[0].value : node.children.length > 0 && node.children[0].type === 'api'
-      ? node.children[0].value : 'Text';
-    return (
-      <Text style={{ color: c.muted, fontSize: 14 }}>{textContent}</Text>
-    );
-  }
-
-  // Interactive elements
-  if (n === 'button') {
-    const bg = variant?.bg || c.primary;
-    const fg = variant?.text || '#FFFFFF';
-    const label = node.children.length > 0 && node.children[0].type === 'text'
-      ? node.children[0].value : node.children.length > 0
-      ? node.children[0].name : 'Button';
+  // ── pressable ────────────────────────────────────────────────────
+  if (n === 'pressable') {
+    const pv = v ? PRESSABLE_VARIANTS[v] : undefined;
+    const bg = pv?.bg || c.primary;
+    const fg = pv?.fg || '#FFFFFF';
+    const label = getTextChild(node) || 'Press';
     return (
       <Pressable
         style={({ hovered }: { hovered: boolean }) => ({
@@ -255,49 +305,51 @@ function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number 
     );
   }
 
-  if (n === 'input' || n === 'textarea') {
-    const placeholder = node.children.length > 0 && node.children[0].type === 'text'
-      ? node.children[0].value : n === 'textarea' ? 'Enter text...' : 'Input...';
+  // ── input ────────────────────────────────────────────────────────
+  if (n === 'input') {
+    const placeholder = getTextChild(node) || 'Input...';
+    const isMultiline = v === 'multiline';
     return (
       <Box style={{
         borderWidth: 1, borderColor: c.border, borderRadius: 6,
         paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8,
-        height: n === 'textarea' ? 80 : undefined,
+        height: isMultiline ? 80 : undefined,
       }}>
         <Text style={{ color: c.muted, fontSize: 14 }}>{placeholder}</Text>
       </Box>
     );
   }
 
-  // Media
-  if (n === 'img' || n === 'image') {
-    const isAvatar = node.variant === 'avatar';
+  // ── image ────────────────────────────────────────────────────────
+  if (n === 'image') {
+    const iv = v ? IMAGE_VARIANTS[v] || {} : {};
+    const defaultSize = { width: 120, height: 80, borderRadius: 8 };
     return (
       <Box style={{
-        width: isAvatar ? 48 : 120, height: isAvatar ? 48 : 80,
-        backgroundColor: '#E5E7EB', borderRadius: isAvatar ? 24 : 8,
+        backgroundColor: '#E5E7EB',
         justifyContent: 'center', alignItems: 'center',
+        ...defaultSize, ...iv,
       }}>
         <Text style={{ color: '#9CA3AF', fontSize: 10 }}>IMG</Text>
       </Box>
     );
   }
 
-  // Layout containers
-  const isRow = n === 'row';
-  const isColumn = n === 'column' || n === 'col';
-  const isCard = n === 'card';
-  const isSection = n === 'section' || n === 'panel' || n === 'box' || n === 'div' || n === 'container';
-  const isModal = n === 'modal';
-  const isNav = n === 'nav' || n === 'navbar' || n === 'header' || n === 'footer' || n === 'sidebar';
-  const isList = n === 'list' || node.name === 'list';
-  const isGroup = node.type === 'group';
-  const isForEach = n === 'foreach';
-  const isTabs = n === 'tabs';
-  const isGrid = n === 'grid' || n === 'masonry';
+  // ── scroll ───────────────────────────────────────────────────────
+  if (n === 'scroll') {
+    return (
+      <ScrollView style={{ flexGrow: 1 }}>
+        <Box style={{ gap: 8 }}>
+          {node.children.map((child, i) => (
+            <SleepyRenderer key={i} node={child} depth={depth + 1} />
+          ))}
+        </Box>
+      </ScrollView>
+    );
+  }
 
-  // forEach just renders its template with a badge
-  if (isForEach) {
+  // ── forEach ──────────────────────────────────────────────────────
+  if (n === 'foreach') {
     return (
       <Box style={{ gap: 4 }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -315,35 +367,10 @@ function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number 
     );
   }
 
-  // Container rendering
-  if (isCard || isSection || isRow || isColumn || isModal || isNav || isList || isGroup || isTabs || isGrid) {
-    const containerStyle: Record<string, unknown> = {
-      gap: 8,
-      padding: (isCard || isModal || isSection) ? 12 : isNav ? 10 : 4,
-      flexDirection: (isRow || isNav || isTabs || isGrid) ? 'row' : 'column',
-    };
-
-    if (isCard) {
-      containerStyle.backgroundColor = variant?.bg || c.bgElevated;
-      containerStyle.borderRadius = 10;
-      containerStyle.borderWidth = 1;
-      containerStyle.borderColor = c.border;
-    } else if (isModal) {
-      containerStyle.backgroundColor = c.bgElevated;
-      containerStyle.borderRadius = 12;
-      containerStyle.borderWidth = 1;
-      containerStyle.borderColor = c.border;
-      containerStyle.padding = 20;
-    } else if (isNav) {
-      containerStyle.backgroundColor = c.surface;
-      containerStyle.paddingLeft = 16; containerStyle.paddingRight = 16;
-      containerStyle.alignItems = 'center';
-    } else if (isGrid) {
-      containerStyle.flexWrap = 'wrap';
-    }
-
+  // ── group/list (structural, from parser) ─────────────────────────
+  if (node.type === 'group' || node.name === 'list') {
     return (
-      <Box style={containerStyle}>
+      <Box style={{ gap: 8, flexDirection: 'column' }}>
         {node.children.map((child, i) => (
           <SleepyRenderer key={i} node={child} depth={depth + 1} />
         ))}
@@ -351,13 +378,13 @@ function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number 
     );
   }
 
-  // Fallback: unknown element with children
+  // ── unknown element with children ────────────────────────────────
   if (node.children.length > 0) {
     return (
       <Box style={{ gap: 6, padding: 4 }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Box style={{ backgroundColor: c.surface, borderRadius: 3, paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1 }}>
-            <Text style={{ color: c.muted, fontSize: 10, fontFamily: 'monospace' }}>{`<${node.name}${node.variant ? `$${node.variant}` : ''}>`}</Text>
+            <Text style={{ color: c.muted, fontSize: 10, fontFamily: 'monospace' }}>{`<${node.name}${v ? `$${v}` : ''}>`}</Text>
           </Box>
         </Box>
         {node.children.map((child, i) => (
@@ -367,10 +394,10 @@ function SleepyRenderer({ node, depth = 0 }: { node: SleepyNode; depth?: number 
     );
   }
 
-  // Leaf element
+  // ── unknown leaf ─────────────────────────────────────────────────
   return (
     <Box style={{ backgroundColor: c.surface, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
-      <Text style={{ color: c.text, fontSize: 13 }}>{node.name}{node.variant ? `$${node.variant}` : ''}</Text>
+      <Text style={{ color: c.text, fontSize: 13 }}>{node.name}{v ? `$${v}` : ''}</Text>
     </Box>
   );
 }
@@ -389,62 +416,62 @@ function ParseError({ message }: { message: string }) {
 
 const EXAMPLES: { label: string; code: string }[] = [
   {
-    label: 'Card',
-    code: `{card:(column:[
-  img$avatar:api.user.avatar,
-  h3:"Jane Doe",
-  p:"Software Engineer",
-  button$primary:"Follow"
-])}`,
-  },
-  {
-    label: 'Nav + Content',
-    code: `{column:(
-  nav:(row:[h3:"MyApp", button$ghost:"Home", button$ghost:"About", button$ghost:"Contact"]),
-  card:(column:[
-    h2:"Welcome",
-    p:"Put the thing inside the other thing.",
-    row:[button$primary:"Get Started", button$secondary:"Learn More"]
-  ])
+    label: 'Profile',
+    code: `{box$card:(
+  image$avatar:api.user.avatar,
+  text$h3:"Jane Doe",
+  text:"Software Engineer",
+  pressable$primary:"Follow"
 )}`,
   },
   {
-    label: 'Login Form',
-    code: `{card:(column:[
-  h2:"Sign In",
+    label: 'Nav + Content',
+    code: `{box:(
+  box$nav:[text$h3:"MyApp", pressable$ghost:"Home", pressable$ghost:"About", pressable$ghost:"Contact"],
+  box$card:(
+    text$h2:"Welcome",
+    text:"Put the thing inside the other thing.",
+    box$row:[pressable$primary:"Get Started", pressable$secondary:"Learn More"]
+  )
+)}`,
+  },
+  {
+    label: 'Login',
+    code: `{box$card:(
+  text$h2:"Sign In",
   input:"Email",
   input:"Password",
-  button$primary:"Log In",
-  p:"Forgot password?"
-])}`,
+  pressable$primary:"Log In",
+  text$muted:"Forgot password?"
+)}`,
   },
   {
     label: 'Dashboard',
-    code: `{column:(
-  nav:(row:[h3:"Dashboard", button$ghost:"Settings"]),
-  row:[
-    card:(column:[h4:"Users", h2:"1,234", p:"12% increase"]),
-    card:(column:[h4:"Revenue", h2:"$45.6K", p:"8% increase"]),
-    card:(column:[h4:"Orders", h2:"567", p:"3% decrease"])
+    code: `{box:(
+  box$nav:[text$h3:"Dashboard", pressable$ghost:"Settings"],
+  box$row:[
+    box$card:(text$h5:"Users", text$h2:"1,234", text$muted:"12% increase"),
+    box$card:(text$h5:"Revenue", text$h2:"$45.6K", text$muted:"8% increase"),
+    box$card:(text$h5:"Orders", text$h2:"567", text$muted:"3% decrease")
   ],
-  card:(column:[
-    h3:"Recent Activity",
+  box$card:(
+    text$h3:"Recent Activity",
     forEach:api.activities:[
-      row:[p:api.activity.title, p:api.activity.time]
+      box$row:[text:api.activity.title, text$muted:api.activity.time]
     ]
-  ])
+  )
 )}`,
   },
   {
     label: 'Chat',
-    code: `{column:(
-  nav:(row:[h3:"Messages", button$ghost:"New"]),
-  card:(column:[
+    code: `{box:(
+  box$nav:[text$h3:"Messages", pressable$ghost:"New"],
+  box$card:(
     forEach:api.messages:[
-      row:[img$avatar:api.msg.avatar, column:[p:api.msg.sender, p:api.msg.text]]
+      box$row:[image$avatar:api.msg.avatar, box:(text:api.msg.sender, text$muted:api.msg.text)]
     ]
-  ]),
-  row:[input:"Type a message...", button$primary:"Send"]
+  ),
+  box$row:[input:"Type a message...", pressable$primary:"Send"]
 )}`,
   },
 ];
@@ -564,8 +591,8 @@ export function SleepySyntaxStory() {
         borderTopWidth: 1, borderColor: c.border, backgroundColor: c.surface,
       }}>
         {[
-          ['{} root', '() group', '[] list', ': nest'],
-          ['$ variant', 'api. data', '// comment', 'forEach: loop'],
+          ['box', 'text', 'pressable', 'input', 'image', 'scroll'],
+          ['{} root', '() group', '[] list', ': nest', '$ variant', 'api. bind'],
         ].map((row, ri) => (
           <Box key={ri} style={{ flexDirection: 'row', gap: 12 }}>
             {row.map((item) => (
