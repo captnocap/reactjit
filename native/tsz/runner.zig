@@ -49,30 +49,52 @@ pub const Runner = struct {
 
     /// Check if a line is noise that should be filtered out.
     fn isNoiseLine(line: []const u8) bool {
+        // Strip timestamp prefix if present for matching
+        const raw = if (line.len > 11 and line[0] == '[' and line[10] == ']') line[11..] else line;
+        const trimmed = std.mem.trimLeft(u8, raw, &[_]u8{ ' ', '\t' });
+
         // GPA memory leak debug spam
-        if (std.mem.indexOf(u8, line, "error(gpa):") != null) return true;
-        if (std.mem.indexOf(u8, line, "memory address 0x") != null) return true;
-        // Stack trace lines from GPA leaks
-        if (std.mem.indexOf(u8, line, "in toOwnedSlice (std.zig)") != null) return true;
-        if (std.mem.indexOf(u8, line, "in ensureTotalCapacity") != null) return true;
-        if (std.mem.indexOf(u8, line, "in ensureUnusedCapacity") != null) return true;
-        if (std.mem.indexOf(u8, line, "in growCapacity") != null) return true;
-        if (std.mem.indexOf(u8, line, "in addOrOom") != null) return true;
-        if (std.mem.indexOf(u8, line, "in allocPrint") != null) return true;
-        if (std.mem.indexOf(u8, line, "in initCapacity") != null) return true;
-        // Zig std lib internal trace lines (referenced by / note:)
-        if (std.mem.indexOf(u8, line, "reference(s) hidden") != null) return true;
-        // Lines that are just "^" pointer indicators from stack traces
-        if (line.len < 30) {
-            var only_spaces_and_caret = true;
-            for (line) |ch| {
-                if (ch != ' ' and ch != '^' and ch != '\r' and ch != '\n') {
-                    only_spaces_and_caret = false;
-                    break;
-                }
+        if (std.mem.indexOf(u8, trimmed, "error(gpa):") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "memory address 0x") != null) return true;
+
+        // Zig std lib stack trace frames (file:line:col: 0xADDR in funcName)
+        if (std.mem.indexOf(u8, trimmed, "/lib/zig/std/") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "linuxbrew") != null and std.mem.indexOf(u8, trimmed, ".zig:") != null) return true;
+
+        // Internal codegen stack traces (not user errors — these are from GPA leak traces)
+        if (std.mem.indexOf(u8, trimmed, "in parseJSXElement (main.zig)") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in parseStyleAttr (main.zig)") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in generate (main.zig)") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in compile (main.zig)") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in main (main.zig)") != null) return true;
+
+        // Generic patterns: "0x" hex address in trace lines
+        if (std.mem.indexOf(u8, trimmed, ": 0x") != null and std.mem.indexOf(u8, trimmed, " in ") != null) return true;
+
+        // Std lib function names that appear in leak traces
+        if (std.mem.indexOf(u8, trimmed, "in toOwnedSlice") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in ensureTotalCapacity") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in ensureUnusedCapacity") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in growCapacity") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in addOrOom") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in allocPrint") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in initCapacity") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in append ") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in appendSlice") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in addOne") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "in alignedAlloc") != null) return true;
+        if (std.mem.indexOf(u8, trimmed, "reference(s) hidden") != null) return true;
+
+        // Lines that are just "^" caret pointer indicators
+        var only_whitespace_caret = true;
+        for (trimmed) |ch| {
+            if (ch != ' ' and ch != '^' and ch != '\r' and ch != '\n' and ch != '\t') {
+                only_whitespace_caret = false;
+                break;
             }
-            if (only_spaces_and_caret) return true;
         }
+        if (only_whitespace_caret and trimmed.len > 0) return true;
+
         return false;
     }
 
