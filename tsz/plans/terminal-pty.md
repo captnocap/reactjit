@@ -1,5 +1,24 @@
 # Terminal & PTY — Semantic Terminal Port
 
+## CRITICAL: Terminal UI is .tsz — NOT hand-written Zig rendering
+
+Same rule as devtools: tsz has no React crash to survive. The terminal UI
+(cell grid, cursor, selection, scrollbar, token-colored rows) is a `.tsz` component
+using Box/Text/ScrollView primitives.
+
+**Only these are Zig:**
+- `pty.zig` — POSIX PTY spawning (fork, exec, read/write, resize)
+- `vterm.zig` — libvterm wrapper (ANSI parsing, damage callbacks, cell access)
+- `classifier.zig` — row classification logic (pattern matching on text)
+
+**Everything visual is .tsz:**
+- `Terminal.tsz` — cell grid rendering, cursor overlay, scroll
+- `SemanticTerminal.tsz` — classified rendering with token color bars
+
+The Zig modules expose built-in functions (`pollPty()`, `getRowText()`, `getCell()`,
+`writePty()`, `classifyRow()`) that the .tsz components call. Same pattern as devtools
+using telemetry getters.
+
 ## What This Is
 
 The most complex subsystem in ReactJIT. ~6,000 lines of Lua implementing a full PTY terminal with semantic classification — no actual terminal surface. Raw PTY bytes → libvterm → classified rows → semantic graph → rendered with token colors.
@@ -391,23 +410,30 @@ exe.linkSystemLibrary("vterm");
 
 ## Files
 
+**Zig (system-level only):**
 | File | Change |
 |------|--------|
 | `tsz/runtime/pty.zig` | **New** — POSIX PTY spawning + I/O |
-| `tsz/runtime/vterm.zig` | **New** — libvterm wrapper + damage callbacks |
-| `tsz/runtime/terminal.zig` | **New** — cell-by-cell rendering + keyboard + cursor |
-| `tsz/runtime/classifier.zig` | **New** — classifier interface + basic classifier |
-| `tsz/runtime/semantic_terminal.zig` | **New** — classified rendering + settle timer + token colors |
-| `tsz/compiler/codegen.zig` | Recognize `<Terminal>` / `<SemanticTerminal>` primitives |
+| `tsz/runtime/vterm.zig` | **New** — libvterm wrapper + damage callbacks + cell access |
+| `tsz/runtime/classifier.zig` | **New** — classifier interface + basic + claude_code classifiers |
+| `tsz/compiler/codegen.zig` | Register PTY/vterm built-in functions (pollPty, getCell, writePty, etc.) |
 | `build.zig` | Link libvterm |
+
+**.tsz (all UI):**
+| File | Change |
+|------|--------|
+| `tsz/components/Terminal.tsz` | **New** — cell grid, cursor, selection, keyboard, scroll |
+| `tsz/components/SemanticTerminal.tsz` | **New** — classified rendering with token color bars |
+
+**Rule: Only pty.zig, vterm.zig, and classifier.zig are Zig. All rendering is .tsz.**
 
 ## Agent Split
 
 | Agent | Phases | Files |
 |-------|--------|-------|
-| A | 0-1 | `pty.zig`, `vterm.zig` (foundation — PTY + ANSI parsing) |
-| B | 2-3 | `terminal.zig`, `classifier.zig` (rendering + classification framework) |
-| C | 4-6 | `semantic_terminal.zig`, claude_code classifier, compiler integration |
+| A | 0-1 | `pty.zig`, `vterm.zig`, built-in function registration (Zig foundation) |
+| B | 2-3 | `Terminal.tsz`, `classifier.zig` (.tsz UI + classification logic) |
+| C | 4-6 | `SemanticTerminal.tsz`, claude_code classifier, compiler integration |
 
 **A must complete first.** B and C can parallel after A.
 
