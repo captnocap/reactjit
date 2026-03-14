@@ -3,5 +3,9 @@
     .version = "0.1.0",
     .fingerprint = 0xda9e752d9eaebd0,
     .paths = .{"."},
-    .dependencies = .{},
+    .dependencies = .{
+        .wgpu_native_zig = .{
+            .path = "deps/wgpu_native_zig",
+        },
+    },
 }

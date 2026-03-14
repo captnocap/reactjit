@@ -20,6 +20,7 @@ const TextEngine = text_mod.TextEngine;
 const ImageCache = image_mod.ImageCache;
 const syntax = @import("syntax.zig");
 const ColorSpan = text_mod.ColorSpan;
+const gpu = @import("gpu.zig");
 
 // ── Global text engine (set during init, used by layout measure callback) ───
 var g_text_engine: ?*TextEngine = null;
@@ -495,6 +496,12 @@ pub fn main() !void {
 
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
+    // Init wgpu GPU backend
+    gpu.init(window) catch |err| {
+        std.debug.print("wgpu init failed: {}\n", .{err});
+    };
+    defer gpu.deinit();
+
     // Init text engine with bundled DejaVu Sans, system fallbacks per platform
     var text_engine = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
         TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
@@ -517,7 +524,7 @@ pub fn main() !void {
     g_image_cache = &image_cache;
     layout.setMeasureImageFn(measureImageCallback);
 
-    var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
+    _ = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
 
     // Init rounded corner texture
     initCircleTexture(renderer);
@@ -622,6 +629,7 @@ pub fn main() !void {
                     if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                         win_w = @floatFromInt(event.window.data1);
                         win_h = @floatFromInt(event.window.data2);
+                        gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
                     }
                 },
                 c.SDL_KEYDOWN => {
@@ -701,10 +709,17 @@ pub fn main() !void {
         };
 
         // ── Paint pass ──────────────────────────────────────────────
-        painter.clear(bg);
-        painter.paintTree(&container, 0, 0);
-        painter.fillRect(pixel.computed, accent);
-        painter.present();
+        // wgpu rendering (Step 1: clear to background color)
+        gpu.frame(
+            @as(f64, @floatFromInt(bg.r)) / 255.0,
+            @as(f64, @floatFromInt(bg.g)) / 255.0,
+            @as(f64, @floatFromInt(bg.b)) / 255.0,
+        );
+        // SDL fallback (kept temporarily until wgpu renders all primitives)
+        // painter.clear(bg);
+        // painter.paintTree(&container, 0, 0);
+        // painter.fillRect(pixel.computed, accent);
+        // painter.present();
     }
 
     std.debug.print("Engine shut down cleanly.\n", .{});

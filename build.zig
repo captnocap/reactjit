@@ -30,6 +30,13 @@ pub fn build(b: *std.Build) void {
 
     const all_step = b.step("all", "Build all native artifacts");
 
+    // ── wgpu-native dependency ───────────────────────────────────────────
+    const wgpu_dep = b.dependency("wgpu_native_zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const wgpu_mod = wgpu_dep.module("wgpu");
+
     // ── libquickjs ────────────────────────────────────────────────────────
     // QuickJS JS engine + FFI shim. Loaded by LuaJIT via ffi.load() in
     // lua/bridge_quickjs.lua. Compiled from quickjs-ng source + our shim.
@@ -263,20 +270,18 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkSystemLibrary("freetype");
         engine_exe.linkSystemLibrary("curl");
         if (tsz_os != .windows) engine_exe.linkSystemLibrary("vterm");
+        engine_exe.root_module.addImport("wgpu", wgpu_mod);
         if (tsz_os == .macos) {
-            engine_exe.linkFramework("OpenGL");
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
         } else if (tsz_os == .windows) {
-            engine_exe.linkSystemLibrary("opengl32");
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/lib/x64" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/include" });
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/release dll/win64" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include/freetype" });
         } else {
-            engine_exe.linkSystemLibrary("GL");
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }

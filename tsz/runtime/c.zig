@@ -10,13 +10,10 @@ const builtin = @import("builtin");
 pub const imports = @cImport({
     if (builtin.os.tag == .windows) {
         @cInclude("SDL.h");
+        @cInclude("SDL_syswm.h");
     } else {
         @cInclude("SDL2/SDL.h");
-    }
-    if (builtin.os.tag == .macos) {
-        @cInclude("OpenGL/gl.h");
-    } else {
-        @cInclude("GL/gl.h");
+        @cInclude("SDL2/SDL_syswm.h");
     }
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
