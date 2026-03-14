@@ -25,6 +25,8 @@ const MAX_EFFECTS = 32;
 const MAX_ANIM_HOOKS = 16;
 const MAX_ANIM_BINDINGS = 32;
 const MAX_ROUTES = 16;
+const MAX_MAPS = 16;
+const MAX_ARRAY_INIT = 32;
 
 const RouteInfo = struct {
     path: []const u8,
@@ -93,19 +95,58 @@ const DynText = struct {
     has_ref: bool,
 };
 
-const StateType = enum { int, float, boolean, string };
+const StateType = enum { int, float, boolean, string, array };
 
 const StateInitial = union(StateType) {
     int: i64,
     float: f64,
     boolean: bool,
     string: []const u8,
+    array: struct {
+        values: [MAX_ARRAY_INIT]i64,
+        count: u32,
+    },
 };
 
 const StateSlot = struct {
     getter: []const u8,
     setter: []const u8,
     initial: StateInitial,
+};
+
+const MapInnerNode = struct {
+    font_size: []const u8,
+    text_color: []const u8,
+    text_fmt: []const u8,
+    text_args: []const u8,
+    is_dynamic_text: bool,
+    static_text: []const u8,
+    style: []const u8,
+};
+
+const MapInfo = struct {
+    array_slot_id: u32,
+    item_param: []const u8,
+    index_param: ?[]const u8,
+    parent_arr_name: []const u8,
+    child_idx: u32,
+    outer_style: []const u8,
+    outer_font_size: []const u8,
+    outer_text_color: []const u8,
+    inner_nodes: [8]MapInnerNode,
+    inner_count: u32,
+    is_self_closing: bool,
+    is_text_element: bool,
+};
+
+const MapTemplateResult = struct {
+    outer_style: []const u8,
+    outer_font_size: []const u8,
+    outer_text_color: []const u8,
+    inner_nodes: [8]MapInnerNode,
+    inner_count: u32,
+    is_self_closing: bool,
+    is_text_element: bool,
 };
 
 const WindowInfo = struct {
@@ -175,8 +216,15 @@ pub const Generator = struct {
     routes: [MAX_ROUTES]RouteInfo,
     route_count: u32,
     has_routes: bool,
+    has_crypto: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
     routes_bind_from: ?u32, // set when entering Routes, consumed on array creation
+
+    // Maps (.map() dynamic lists)
+    maps: [MAX_MAPS]MapInfo,
+    map_count: u32,
+    map_item_param: ?[]const u8,
+    map_index_param: ?[]const u8,
 
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
@@ -224,8 +272,13 @@ pub const Generator = struct {
             .routes = undefined,
             .route_count = 0,
             .has_routes = false,
+            .has_crypto = false,
             .last_route_path = null,
             .routes_bind_from = null,
+            .maps = undefined,
+            .map_count = 0,
+            .map_item_param = null,
+            .map_index_param = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -295,6 +348,49 @@ pub const Generator = struct {
 
     fn stateTypeById(self: *Generator, slot_id: u32) StateType {
         return std.meta.activeTag(self.state_slots[slot_id].initial);
+    }
+
+    /// Returns hex output size for crypto built-in functions, or null if not a crypto function.
+    fn cryptoHexSize(_: *Generator, name: []const u8) ?u32 {
+        if (std.mem.eql(u8, name, "sha256")) return 64;
+        if (std.mem.eql(u8, name, "sha512")) return 128;
+        if (std.mem.eql(u8, name, "blake2b")) return 64; // blake2b256
+        if (std.mem.eql(u8, name, "blake2s")) return 64; // blake2s256
+        if (std.mem.eql(u8, name, "blake3")) return 64;
+        if (std.mem.eql(u8, name, "hmacSha256")) return 64;
+        if (std.mem.eql(u8, name, "hmacSha512")) return 128;
+        return null;
+    }
+
+    /// Maps .tsz crypto function name to the Zig runtime function name.
+    fn cryptoZigFn(_: *Generator, name: []const u8) []const u8 {
+        if (std.mem.eql(u8, name, "blake2b")) return "blake2b256";
+        if (std.mem.eql(u8, name, "blake2s")) return "blake2s256";
+        return name; // sha256, sha512, blake3, hmacSha256, hmacSha512 match directly
+    }
+
+    /// Returns 1 for hash functions, 2 for HMAC (key + message).
+    fn cryptoArgCount(_: *Generator, name: []const u8) u8 {
+        if (std.mem.eql(u8, name, "hmacSha256")) return 2;
+        if (std.mem.eql(u8, name, "hmacSha512")) return 2;
+        return 1;
+    }
+
+    fn isArrayState(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.state_count) |i| {
+            if (std.mem.eql(u8, self.state_slots[i].getter, name) and
+                std.meta.activeTag(self.state_slots[i].initial) == .array)
+                return @intCast(i);
+        }
+        return null;
+    }
+
+    fn arraySlotId(self: *Generator, state_idx: u32) u32 {
+        var count: u32 = 0;
+        for (0..state_idx) |j| {
+            if (std.meta.activeTag(self.state_slots[j].initial) == .array) count += 1;
+        }
+        return count;
     }
 
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
@@ -557,6 +653,34 @@ pub const Generator = struct {
                                         initial = .{ .boolean = false };
                                         self.advance_token();
                                     }
+                                } else if (self.curKind() == .lbracket) {
+                                    // Array literal: useState([1, 2, 3])
+                                    self.advance_token(); // [
+                                    var arr_vals: [MAX_ARRAY_INIT]i64 = undefined;
+                                    var arr_cnt: u32 = 0;
+                                    while (self.curKind() != .rbracket and self.curKind() != .eof) {
+                                        if (self.curKind() == .number) {
+                                            if (arr_cnt < MAX_ARRAY_INIT) {
+                                                arr_vals[arr_cnt] = std.fmt.parseInt(i64, self.curText(), 10) catch 0;
+                                                arr_cnt += 1;
+                                            }
+                                            self.advance_token();
+                                        } else if (self.curKind() == .minus) {
+                                            self.advance_token();
+                                            if (self.curKind() == .number) {
+                                                if (arr_cnt < MAX_ARRAY_INIT) {
+                                                    arr_vals[arr_cnt] = -(std.fmt.parseInt(i64, self.curText(), 10) catch 0);
+                                                    arr_cnt += 1;
+                                                }
+                                                self.advance_token();
+                                            }
+                                        } else {
+                                            self.advance_token();
+                                        }
+                                        if (self.curKind() == .comma) self.advance_token();
+                                    }
+                                    if (self.curKind() == .rbracket) self.advance_token();
+                                    initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
                                 }
                                 // Skip rparen
                                 if (self.curKind() == .rparen) self.advance_token();
@@ -1097,6 +1221,13 @@ pub const Generator = struct {
                             };
                             self.cond_count += 1;
                         }
+                    } else if (self.isMapAhead()) {
+                        // .map() expression: {items.map((item, index) => (...))}
+                        const map_result = try self.parseMapExpression();
+                        try child_exprs.append(self.alloc, map_result);
+                        if (self.map_count > 0) {
+                            self.maps[self.map_count - 1].child_idx = @intCast(child_exprs.items.len - 1);
+                        }
                     } else if (self.curKind() == .identifier) {
                         // Could be {children} or {varName}
                         self.advance_token();
@@ -1357,6 +1488,15 @@ pub const Generator = struct {
                 if (self.anim_bindings[bi].arr_name.len > 0) continue;
                 if (self.anim_bindings[bi].arr_index < child_exprs.items.len) {
                     self.anim_bindings[bi].arr_name = arr_name;
+                }
+            }
+
+            // Bind maps to this array
+            for (0..self.map_count) |mi| {
+                if (self.maps[mi].parent_arr_name.len == 0) {
+                    if (self.maps[mi].child_idx < child_exprs.items.len) {
+                        self.maps[mi].parent_arr_name = arr_name;
+                    }
                 }
             }
 
@@ -1699,7 +1839,21 @@ pub const Generator = struct {
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "state.getSlot({d})", .{slot_id}));
                         },
+                        .array => {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "state.getSlot({d})", .{slot_id}));
+                        },
                     }
+                } else if (self.map_item_param != null and std.mem.eql(u8, expr, self.map_item_param.?)) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "_item");
+                } else if (self.map_index_param != null and std.mem.eql(u8, expr, self.map_index_param.?)) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "_i");
                 } else {
                     // Static expression — just embed the text
                     try fmt.appendSlice(self.alloc, expr);
@@ -1744,13 +1898,114 @@ pub const Generator = struct {
         if (self.curKind() == .identifier) {
             const name = self.curText();
 
-            // Check for state setter: setCount(...)
+            // Check for state setter: setCount(...), setItems.push(...), etc.
             if (self.isSetter(name)) |slot_id| {
+                const st = self.stateTypeById(slot_id);
                 self.advance_token(); // skip setter name
+
+                // Array setter: setItems.push(expr)
+                if (st == .array and self.curKind() == .dot) {
+                    self.advance_token(); // .
+                    if (self.isIdent("push")) {
+                        self.advance_token(); // push
+                        if (self.curKind() == .lparen) self.advance_token();
+                        const arg = try self.emitStateExpr();
+                        if (self.curKind() == .rparen) self.advance_token();
+                        const arr_slot = self.arraySlotId(slot_id);
+                        return try std.fmt.allocPrint(self.alloc, "state.pushArraySlot({d}, {s});", .{ arr_slot, arg });
+                    }
+                }
+
                 if (self.curKind() == .lparen) self.advance_token();
+
+                // Check if arg is a crypto built-in: setHash(sha256("hello"))
+                if (self.curKind() == .identifier) {
+                    const inner_name = self.curText();
+                    if (self.cryptoHexSize(inner_name)) |hex_size| {
+                        const zig_fn = self.cryptoZigFn(inner_name);
+                        const argc = self.cryptoArgCount(inner_name);
+                        self.advance_token(); // crypto func name
+                        if (self.curKind() == .lparen) self.advance_token();
+
+                        // Parse first arg (string literal or expression)
+                        var arg1: []const u8 = "\"\"";
+                        if (self.curKind() == .string) {
+                            arg1 = self.curText(); // includes quotes
+                            self.advance_token();
+                        } else if (self.curKind() == .identifier) {
+                            const a = self.curText();
+                            if (std.mem.eql(u8, a, "getText")) {
+                                self.advance_token();
+                                if (self.curKind() == .lparen) self.advance_token();
+                                const id_t = self.curText();
+                                self.advance_token();
+                                if (self.curKind() == .rparen) self.advance_token();
+                                arg1 = try std.fmt.allocPrint(self.alloc, "input_mod.getText({s})", .{id_t});
+                            } else if (self.isState(a)) |inner_slot| {
+                                arg1 = try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{inner_slot});
+                                self.advance_token();
+                            }
+                        }
+
+                        // Parse optional second arg (for HMAC: key, message)
+                        var arg2: []const u8 = "";
+                        if (argc == 2 and self.curKind() == .comma) {
+                            self.advance_token(); // comma
+                            if (self.curKind() == .string) {
+                                arg2 = self.curText();
+                                self.advance_token();
+                            }
+                        }
+
+                        if (self.curKind() == .rparen) self.advance_token(); // inner )
+                        if (self.curKind() == .rparen) self.advance_token(); // outer )
+
+                        self.has_crypto = true;
+                        if (argc == 1) {
+                            return try std.fmt.allocPrint(self.alloc,
+                                "{{ var _ch: [{d}]u8 = undefined; crypto_mod.{s}({s}, &_ch); state.setSlotString({d}, &_ch); }}",
+                                .{ hex_size, zig_fn, arg1, slot_id });
+                        } else {
+                            return try std.fmt.allocPrint(self.alloc,
+                                "{{ var _ch: [{d}]u8 = undefined; crypto_mod.{s}({s}, {s}, &_ch); state.setSlotString({d}, &_ch); }}",
+                                .{ hex_size, zig_fn, arg1, arg2, slot_id });
+                        }
+                    }
+
+                    // randomToken(n) / randomId(n)
+                    if (std.mem.eql(u8, inner_name, "randomToken") or std.mem.eql(u8, inner_name, "randomId")) {
+                        const is_token = std.mem.eql(u8, inner_name, "randomToken");
+                        self.advance_token(); // func name
+                        if (self.curKind() == .lparen) self.advance_token();
+                        var n_arg: []const u8 = "32";
+                        if (self.curKind() == .number) {
+                            n_arg = self.curText();
+                            self.advance_token();
+                        }
+                        if (self.curKind() == .rparen) self.advance_token(); // inner )
+                        if (self.curKind() == .rparen) self.advance_token(); // outer )
+                        self.has_crypto = true;
+                        if (is_token) {
+                            return try std.fmt.allocPrint(self.alloc,
+                                "{{ var _cb: [512]u8 = undefined; const _tok = crypto_mod.randomToken({s}, &_cb); state.setSlotString({d}, _tok); }}",
+                                .{ n_arg, slot_id });
+                        } else {
+                            return try std.fmt.allocPrint(self.alloc,
+                                "{{ var _cb: [256]u8 = undefined; const _rid = crypto_mod.randomId({s}, &_cb); state.setSlotString({d}, _rid); }}",
+                                .{ n_arg, slot_id });
+                        }
+                    }
+                }
+
                 const arg = try self.emitStateExpr();
                 if (self.curKind() == .rparen) self.advance_token();
-                return try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, {s});", .{ slot_id, arg });
+                // Dispatch setter based on state type (st computed at top of isSetter block)
+                return switch (st) {
+                    .string => try std.fmt.allocPrint(self.alloc, "state.setSlotString({d}, {s});", .{ slot_id, arg }),
+                    .float => try std.fmt.allocPrint(self.alloc, "state.setSlotFloat({d}, {s});", .{ slot_id, arg }),
+                    .boolean => try std.fmt.allocPrint(self.alloc, "state.setSlotBool({d}, {s});", .{ slot_id, arg }),
+                    else => try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, {s});", .{ slot_id, arg }),
+                };
             }
 
             // navigate('/path') → router.push("/path")
@@ -2013,6 +2268,21 @@ pub const Generator = struct {
                 self.advance_token();
                 return name;
             }
+            // Array state getter: items.length
+            if (self.isArrayState(name)) |state_idx| {
+                self.advance_token();
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // .
+                    if (self.isIdent("length")) {
+                        self.advance_token(); // length
+                        const arr_slot = self.arraySlotId(state_idx);
+                        return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
+                    }
+                }
+                // Array getter without .length — return count as i64
+                const arr_slot = self.arraySlotId(state_idx);
+                return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
+            }
             // State getter
             if (self.isState(name)) |slot_id| {
                 self.advance_token();
@@ -2216,6 +2486,276 @@ pub const Generator = struct {
         };
     }
 
+    // ── Map (.map()) parsing ────────────────────────────────────────
+
+    fn isMapAhead(self: *Generator) bool {
+        if (self.curKind() != .identifier) return false;
+        var look = self.pos + 1;
+        if (look >= self.lex.count) return false;
+        if (self.lex.get(look).kind != .dot) return false;
+        look += 1;
+        if (look >= self.lex.count) return false;
+        const tok = self.lex.get(look);
+        if (tok.kind != .identifier) return false;
+        return std.mem.eql(u8, tok.text(self.source), "map");
+    }
+
+    fn parseMapExpression(self: *Generator) anyerror![]const u8 {
+        const array_name = self.curText();
+        const state_idx = self.isArrayState(array_name) orelse {
+            self.advance_token();
+            return ".{}";
+        };
+
+        self.advance_token(); // identifier (items)
+        self.advance_token(); // .
+        self.advance_token(); // map
+        if (self.curKind() == .lparen) self.advance_token(); // (
+
+        // Parse callback params: (item) or (item, index)
+        if (self.curKind() == .lparen) self.advance_token(); // (
+        const item_param = self.curText();
+        self.advance_token(); // item
+        var index_param: ?[]const u8 = null;
+        if (self.curKind() == .comma) {
+            self.advance_token(); // ,
+            index_param = self.curText();
+            self.advance_token(); // index
+        }
+        if (self.curKind() == .rparen) self.advance_token(); // )
+        if (self.curKind() == .arrow) self.advance_token(); // =>
+
+        // Skip optional ( around JSX
+        var had_paren = false;
+        if (self.curKind() == .lparen) {
+            self.advance_token();
+            had_paren = true;
+        }
+
+        // Set map context for template literal parsing
+        self.map_item_param = item_param;
+        self.map_index_param = index_param;
+
+        // Parse the JSX template
+        const template = try self.parseMapTemplate();
+
+        // Clear map context
+        self.map_item_param = null;
+        self.map_index_param = null;
+
+        // Skip optional ) after JSX
+        if (had_paren and self.curKind() == .rparen) self.advance_token();
+
+        // Skip ) closing map call
+        if (self.curKind() == .rparen) self.advance_token();
+
+        // Record map info
+        if (self.map_count < MAX_MAPS) {
+            self.maps[self.map_count] = .{
+                .array_slot_id = self.arraySlotId(state_idx),
+                .item_param = item_param,
+                .index_param = index_param,
+                .parent_arr_name = "",
+                .child_idx = 0,
+                .outer_style = template.outer_style,
+                .outer_font_size = template.outer_font_size,
+                .outer_text_color = template.outer_text_color,
+                .inner_nodes = template.inner_nodes,
+                .inner_count = template.inner_count,
+                .is_self_closing = template.is_self_closing,
+                .is_text_element = template.is_text_element,
+            };
+            self.map_count += 1;
+        }
+
+        return ".{}";
+    }
+
+    fn parseMapTemplate(self: *Generator) anyerror!MapTemplateResult {
+        if (self.curKind() != .lt) return .{
+            .outer_style = "", .outer_font_size = "", .outer_text_color = "",
+            .inner_nodes = undefined, .inner_count = 0,
+            .is_self_closing = true, .is_text_element = false,
+        };
+        self.advance_token(); // <
+
+        const tag = self.curText();
+        const is_text = std.mem.eql(u8, tag, "Text");
+        self.advance_token(); // tag name
+
+        var style_str: []const u8 = "";
+        var font_size: []const u8 = "";
+        var text_color: []const u8 = "";
+        var is_self_closing = false;
+
+        // Parse attributes
+        while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const attr = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token(); // =
+                    if (std.mem.eql(u8, attr, "style")) {
+                        style_str = try self.parseStyleAttr();
+                    } else if (std.mem.eql(u8, attr, "fontSize")) {
+                        if (self.curKind() == .lbrace) self.advance_token();
+                        font_size = self.curText();
+                        self.advance_token();
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    } else if (std.mem.eql(u8, attr, "color")) {
+                        const hex = try self.parseStringAttr();
+                        text_color = try self.parseColorValue(hex);
+                    } else {
+                        try self.skipAttrValue();
+                    }
+                }
+            } else {
+                self.advance_token();
+            }
+        }
+
+        if (self.curKind() == .slash_gt) {
+            self.advance_token();
+            is_self_closing = true;
+        } else {
+            if (self.curKind() == .gt) self.advance_token();
+        }
+
+        var inner_nodes: [8]MapInnerNode = undefined;
+        var inner_count: u32 = 0;
+
+        if (!is_self_closing) {
+            while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+                if (self.curKind() == .lt) {
+                    const child = try self.parseMapTemplateChild();
+                    if (inner_count < 8) {
+                        inner_nodes[inner_count] = child;
+                        inner_count += 1;
+                    }
+                } else if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    if (self.curKind() == .template_literal) {
+                        const tl = try self.parseTemplateLiteral();
+                        self.advance_token(); // template literal token
+                        // Text on the outer element itself (Text element case)
+                        if (is_text and inner_count < 8) {
+                            inner_nodes[inner_count] = .{
+                                .font_size = font_size,
+                                .text_color = text_color,
+                                .text_fmt = tl.fmt,
+                                .text_args = tl.args,
+                                .is_dynamic_text = tl.is_dynamic,
+                                .static_text = if (!tl.is_dynamic) tl.static_text else "",
+                                .style = "",
+                            };
+                            inner_count += 1;
+                        }
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                } else {
+                    self.advance_token();
+                }
+            }
+            // Skip closing tag
+            if (self.curKind() == .lt_slash) self.advance_token();
+            if (self.curKind() == .identifier) self.advance_token();
+            if (self.curKind() == .gt) self.advance_token();
+        }
+
+        return .{
+            .outer_style = style_str,
+            .outer_font_size = font_size,
+            .outer_text_color = text_color,
+            .inner_nodes = inner_nodes,
+            .inner_count = inner_count,
+            .is_self_closing = is_self_closing,
+            .is_text_element = is_text,
+        };
+    }
+
+    fn parseMapTemplateChild(self: *Generator) anyerror!MapInnerNode {
+        self.advance_token(); // <
+        self.advance_token(); // tag name
+
+        var font_size: []const u8 = "";
+        var text_color: []const u8 = "";
+        var style_str: []const u8 = "";
+        var is_self_closing = false;
+
+        while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const attr = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token();
+                    if (std.mem.eql(u8, attr, "style")) {
+                        style_str = try self.parseStyleAttr();
+                    } else if (std.mem.eql(u8, attr, "fontSize")) {
+                        if (self.curKind() == .lbrace) self.advance_token();
+                        font_size = self.curText();
+                        self.advance_token();
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    } else if (std.mem.eql(u8, attr, "color")) {
+                        const hex = try self.parseStringAttr();
+                        text_color = try self.parseColorValue(hex);
+                    } else {
+                        try self.skipAttrValue();
+                    }
+                }
+            } else {
+                self.advance_token();
+            }
+        }
+
+        if (self.curKind() == .slash_gt) {
+            self.advance_token();
+            is_self_closing = true;
+        } else {
+            if (self.curKind() == .gt) self.advance_token();
+        }
+
+        var text_fmt: []const u8 = "";
+        var text_args: []const u8 = "";
+        var is_dynamic_text = false;
+        var static_text: []const u8 = "";
+
+        if (!is_self_closing) {
+            while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    if (self.curKind() == .template_literal) {
+                        const tl = try self.parseTemplateLiteral();
+                        self.advance_token();
+                        if (tl.is_dynamic) {
+                            is_dynamic_text = true;
+                            text_fmt = tl.fmt;
+                            text_args = tl.args;
+                        } else {
+                            static_text = tl.static_text;
+                        }
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                } else if (self.curKind() != .lt_slash) {
+                    const raw = self.collectTextContent();
+                    if (raw.len > 0) static_text = raw;
+                }
+            }
+            if (self.curKind() == .lt_slash) self.advance_token();
+            if (self.curKind() == .identifier) self.advance_token();
+            if (self.curKind() == .gt) self.advance_token();
+        }
+
+        return .{
+            .font_size = font_size,
+            .text_color = text_color,
+            .text_fmt = text_fmt,
+            .text_args = text_args,
+            .is_dynamic_text = is_dynamic_text,
+            .static_text = static_text,
+            .style = style_str,
+        };
+    }
+
     // ── Route element parsing ──────────────────────────────────────
 
     fn parseRouteElement(self: *Generator) anyerror![]const u8 {
@@ -2323,6 +2863,7 @@ pub const Generator = struct {
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
+        if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"crypto.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -2363,6 +2904,34 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "\n// ── Dynamic text buffers ─────────────────────────────────────────\n");
             for (0..self.dyn_count) |i| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [256]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, i }));
+            }
+        }
+
+        // Map pools
+        if (self.map_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
+            for (0..self.map_count) |mi| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "const MAX_MAP_{d}: usize = 256;\n" ++
+                    "var _map_pool_{d}: [MAX_MAP_{d}]Node = [_]Node{{.{{}}}} ** MAX_MAP_{d};\n" ++
+                    "var _map_count_{d}: usize = 0;\n",
+                    .{ mi, mi, mi, mi, mi }));
+                const m = self.maps[mi];
+                if (m.inner_count > 0 and !m.is_self_closing) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
+                        .{ mi, mi, m.inner_count }));
+                }
+                var has_dyn_text = false;
+                for (0..m.inner_count) |ni| {
+                    if (m.inner_nodes[ni].is_dynamic_text) { has_dyn_text = true; break; }
+                }
+                if (has_dyn_text) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_text_bufs_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                        "var _map_texts_{d}: [MAX_MAP_{d}][]const u8 = [_][]const u8{{\"\"}} ** MAX_MAP_{d};\n",
+                        .{ mi, mi, mi, mi, mi }));
+                }
             }
         }
 
@@ -2475,6 +3044,132 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "            else => {},\n        }\n    }\n}\n\n");
         }
 
+        // Map rebuild functions
+        if (self.map_count > 0) {
+            for (0..self.map_count) |mi| {
+                const m = self.maps[mi];
+                if (m.parent_arr_name.len == 0) continue;
+
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _rebuildMap{d}() void {{\n" ++
+                    "    const items = state.getArraySlot({d});\n" ++
+                    "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
+                    "    for (0.._map_count_{d}) |_i| {{\n" ++
+                    "        const _item = items[_i];\n",
+                    .{ mi, m.array_slot_id, mi, mi, mi }));
+
+                // Find dynamic text in inner nodes
+                var has_dyn_text = false;
+                var dyn_ni: u32 = 0;
+                for (0..m.inner_count) |ni| {
+                    if (m.inner_nodes[ni].is_dynamic_text) {
+                        has_dyn_text = true;
+                        dyn_ni = @intCast(ni);
+                        break;
+                    }
+                }
+
+                if (has_dyn_text) {
+                    const inner = m.inner_nodes[dyn_ni];
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "        _map_texts_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                        .{ mi, mi, inner.text_fmt, inner.text_args }));
+                }
+
+                // Emit inner children array assignment
+                if (m.inner_count > 0 and !m.is_self_closing) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "        _map_inner_{d}[_i] = [{d}]Node{{ ", .{ mi, m.inner_count }));
+                    for (0..m.inner_count) |ni| {
+                        const inner = m.inner_nodes[ni];
+                        if (ni > 0) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, ".{ ");
+                        var has_field = false;
+                        if (inner.is_dynamic_text) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".text = _map_texts_{d}[_i]", .{mi}));
+                            has_field = true;
+                        } else if (inner.static_text.len > 0) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".text = \"{s}\"", .{inner.static_text}));
+                            has_field = true;
+                        }
+                        if (inner.font_size.len > 0) {
+                            if (has_field) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".font_size = {s}", .{inner.font_size}));
+                            has_field = true;
+                        }
+                        if (inner.text_color.len > 0) {
+                            if (has_field) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".text_color = {s}", .{inner.text_color}));
+                            has_field = true;
+                        }
+                        if (inner.style.len > 0) {
+                            if (has_field) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".style = .{{ {s} }}", .{inner.style}));
+                        }
+                        try out.appendSlice(self.alloc, " }");
+                    }
+                    try out.appendSlice(self.alloc, " };\n");
+                }
+
+                // Emit pool node
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _map_pool_{d}[_i] = .{{ ", .{mi}));
+                var has_outer_field = false;
+                if (m.outer_style.len > 0) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".style = .{{ {s} }}", .{m.outer_style}));
+                    has_outer_field = true;
+                }
+                if (m.is_text_element and m.inner_count > 0) {
+                    // Text element: text goes on the outer node directly
+                    const inner = m.inner_nodes[0];
+                    if (inner.is_dynamic_text) {
+                        if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = _map_texts_{d}[_i]", .{mi}));
+                        has_outer_field = true;
+                    } else if (inner.static_text.len > 0) {
+                        if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = \"{s}\"", .{inner.static_text}));
+                        has_outer_field = true;
+                    }
+                    if (m.outer_font_size.len > 0) {
+                        if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".font_size = {s}", .{m.outer_font_size}));
+                        has_outer_field = true;
+                    }
+                    if (m.outer_text_color.len > 0) {
+                        if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text_color = {s}", .{m.outer_text_color}));
+                        has_outer_field = true;
+                    }
+                } else if (m.inner_count > 0 and !m.is_self_closing) {
+                    if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".children = &_map_inner_{d}[_i]", .{mi}));
+                }
+                try out.appendSlice(self.alloc, " }};\n");
+
+                // Close for loop
+                try out.appendSlice(self.alloc, "    }\n");
+
+                // Update parent children slice
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].children = _map_pool_{d}[0.._map_count_{d}];\n",
+                    .{ m.parent_arr_name, m.child_idx, mi, mi }));
+
+                try out.appendSlice(self.alloc, "}\n\n");
+            }
+        }
+
         // Window open helpers
         for (0..self.window_count) |i| {
             const w = self.windows[i];
@@ -2571,6 +3266,14 @@ pub const Generator = struct {
                         "    _ = state.createSlotBool({});\n", .{v})),
                     .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                    .array => |v| {
+                        try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
+                        for (0..v.count) |j| {
+                            if (j > 0) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
+                        }
+                        try out.appendSlice(self.alloc, " });\n");
+                    },
                 }
             }
             // Dev mode: restore state from previous session + install save-on-signal
@@ -2598,6 +3301,12 @@ pub const Generator = struct {
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        if (self.map_count > 0) {
+            for (0..self.map_count) |mi| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _rebuildMap{d}();\n", .{mi}));
+            }
+        }
         if (self.has_routes) {
             try out.appendSlice(self.alloc, "    router.init(\"/\");\n");
             try out.appendSlice(self.alloc, "    updateRoutes();\n");
@@ -2647,10 +3356,16 @@ pub const Generator = struct {
             for (0..self.effect_count) |i| {
                 if (self.effects[i].kind == .watch) { has_watch = true; break; }
             }
-            if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0 or has_watch)) {
+            if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0)) {
                 try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
                 if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
                 if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
+                if (self.map_count > 0) {
+                    for (0..self.map_count) |mi| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "            _rebuildMap{d}();\n", .{mi}));
+                    }
+                }
                 // Watch effects — check per-slot dirty before clearDirty
                 for (0..self.effect_count) |i| {
                     if (self.effects[i].kind == .watch) {
