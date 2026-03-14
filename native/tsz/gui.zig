@@ -12,6 +12,15 @@ const TextEngine = engine.TextEngine;
 const registry = @import("registry.zig");
 const process = @import("process.zig");
 const actions_mod = @import("actions.zig");
+const tray = @import("tray.zig");
+const posix = std.posix;
+
+// Signal flag: set by SIGUSR2 handler to raise the window
+var sig_raise_window: bool = false;
+
+fn sigusr2Handler(_: c_int) callconv(.c) void {
+    sig_raise_window = true;
+}
 
 // ── Colors ──────────────────────────────────────────────────────────────
 
@@ -92,6 +101,33 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var reg = registry.load(alloc);
     process.cleanStale(&reg);
 
+    // Singleton: check if another GUI is already running
+    const gui_pid = process.readPid("__gui__");
+    if (gui_pid) |pid| {
+        if (process.isRunning(pid)) {
+            std.debug.print("[tsz] Dashboard already running (pid {d}). Raising window.\n", .{pid});
+            // Send SIGUSR2 to raise the existing window
+            std.posix.kill(pid, std.posix.SIG.USR2) catch {};
+            return;
+        }
+    }
+    // Write our PID + install SIGUSR2 handler for window raise
+    process.writePid("__gui__", std.os.linux.getpid());
+    defer process.removePid("__gui__");
+    const sa = posix.Sigaction{
+        .handler = .{ .handler = sigusr2Handler },
+        .mask = posix.sigemptyset(),
+        .flags = 0,
+    };
+    posix.sigaction(posix.SIG.USR2, &sa, null);
+
+    // Init system tray
+    const has_tray = tray.init();
+    if (has_tray) {
+        tray.buildMenu(&reg);
+    }
+    defer tray.deinit();
+
     var win_w: f32 = 900;
     var win_h: f32 = 500;
     var scroll_y: f32 = 0;
@@ -99,14 +135,32 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var frame: u32 = 0;
     var hover_mx: f32 = 0;
     var hover_my: f32 = 0;
+    var window_visible = true;
 
+    var dirty = true;
     while (running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
+            dirty = true; // any event triggers repaint
             switch (event.type) {
-                c.SDL_QUIT => running = false,
+                c.SDL_QUIT => {
+                    if (has_tray) {
+                        // Hide to tray instead of quitting
+                        c.SDL_HideWindow(window);
+                        window_visible = false;
+                    } else {
+                        running = false;
+                    }
+                },
                 c.SDL_WINDOWEVENT => {
-                    if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) {
+                        if (has_tray) {
+                            c.SDL_HideWindow(window);
+                            window_visible = false;
+                        } else {
+                            running = false;
+                        }
+                    } else if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                         win_w = @floatFromInt(event.window.data1);
                         win_h = @floatFromInt(event.window.data2);
                     }
@@ -163,12 +217,53 @@ pub fn run(alloc: std.mem.Allocator) !void {
             }
         }
 
+        // Pump GTK events for tray
+        if (has_tray) {
+            tray.update();
+            // Check tray flags
+            if (tray.should_show_gui) {
+                tray.should_show_gui = false;
+                c.SDL_ShowWindow(window);
+                c.SDL_RaiseWindow(window);
+                window_visible = true;
+            }
+            if (tray.should_quit) {
+                running = false;
+            }
+            // Process tray menu actions
+            tray.resolvePendingAction(&reg, alloc);
+        }
+
+        // SIGUSR2 from another `tsz gui` → raise window
+        if (sig_raise_window) {
+            sig_raise_window = false;
+            c.SDL_ShowWindow(window);
+            c.SDL_RaiseWindow(window);
+            window_visible = true;
+            dirty = true;
+        }
+
         // Periodic refresh
         frame += 1;
         if (frame % 120 == 0) {
             reg = registry.load(alloc);
             process.cleanStale(&reg);
+            if (has_tray) tray.buildMenu(&reg);
+            dirty = true;
         }
+
+        // Skip rendering when window is hidden (tray-only mode)
+        if (!window_visible) {
+            std.Thread.sleep(100 * std.time.ns_per_ms);
+            continue;
+        }
+
+        // Only repaint when something changed
+        if (!dirty) {
+            c.SDL_Delay(16); // ~60fps cap when idle
+            continue;
+        }
+        dirty = false;
 
         // ── Paint ─────────────────────────────────────────────────
         hit_count = 0;

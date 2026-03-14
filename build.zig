@@ -339,8 +339,7 @@ pub fn build(b: *std.Build) void {
             }),
         });
 
-        // GUI needs engine modules (layout, text, events, image)
-        // which depend on SDL2, GL, FreeType, stb_image
+        // GUI needs SDL2, GL, FreeType for rendering
         tsz_exe.linkLibC();
         tsz_exe.linkSystemLibrary("SDL2");
         tsz_exe.linkSystemLibrary("GL");
@@ -351,6 +350,11 @@ pub fn build(b: *std.Build) void {
             .file = b.path("native/engine/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
+
+        // System tray needs GTK3 + libayatana-appindicator3
+        tsz_exe.linkSystemLibrary("gtk-3");
+        tsz_exe.linkSystemLibrary("gobject-2.0");
+        tsz_exe.linkSystemLibrary("ayatana-appindicator3");
 
         const tsz_install = b.addInstallArtifact(tsz_exe, .{});
         const tsz_step = b.step("tsz-compiler", "Build the native .tsz compiler");
