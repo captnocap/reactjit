@@ -145,10 +145,17 @@ fn killApp(pid: posix.pid_t) void {
 // ── Subcommands ─────────────────────────────────────────────────────────
 
 fn findProject(reg: *registry.Registry, input_file: []const u8) ?*registry.Project {
-    // Try by derived name first, then by path
+    // Try by derived name first
     const name = projectName(input_file);
     if (reg.findByName(name)) |p| return p;
-    return reg.findByPath(input_file);
+    // Try by path (relative)
+    if (reg.findByPath(input_file)) |p| return p;
+    // Try by resolved absolute path
+    var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
+    if (std.fs.cwd().realpath(input_file, &abs_buf)) |abs| {
+        if (reg.findByPath(abs)) |p| return p;
+    } else |_| {}
+    return null;
 }
 
 fn cmdBuild(alloc: std.mem.Allocator, input_file: []const u8) void {
