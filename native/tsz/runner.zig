@@ -35,8 +35,38 @@ pub const Runner = struct {
         return self.output[0..self.output_len];
     }
 
-    /// Append text to the output ring buffer.
+    /// Get a timestamp string like "[12:34:56] "
+    fn timestamp() [12]u8 {
+        const epoch = std.time.timestamp();
+        const day_secs: u64 = @intCast(@mod(epoch, 86400));
+        const h: u8 = @intCast(day_secs / 3600);
+        const m: u8 = @intCast((day_secs % 3600) / 60);
+        const s: u8 = @intCast(day_secs % 60);
+        var buf: [12]u8 = undefined;
+        _ = std.fmt.bufPrint(&buf, "[{d:0>2}:{d:0>2}:{d:0>2}] ", .{ h, m, s }) catch {};
+        return buf;
+    }
+
+    /// Append text to the output ring buffer, prepending timestamps to each line.
     fn appendOutput(self: *Runner, data: []const u8) void {
+        if (data.len == 0) return;
+        // Prepend timestamp to each newline-delimited chunk
+        var pos: usize = 0;
+        while (pos < data.len) {
+            const nl = std.mem.indexOfScalar(u8, data[pos..], '\n');
+            const end = if (nl) |n| pos + n + 1 else data.len;
+            // Only timestamp non-empty lines at start of a new line
+            if (self.output_len == 0 or (self.output_len > 0 and self.output[self.output_len - 1] == '\n')) {
+                const ts = timestamp();
+                self.appendRaw(&ts);
+            }
+            self.appendRaw(data[pos..end]);
+            pos = end;
+        }
+    }
+
+    /// Raw append without timestamps.
+    fn appendRaw(self: *Runner, data: []const u8) void {
         if (data.len == 0) return;
         const space = BUFFER_SIZE - self.output_len;
         if (data.len <= space) {

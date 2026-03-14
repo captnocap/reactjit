@@ -54,6 +54,18 @@ const HitRegion = struct {
     action_idx: u8,
 };
 
+// Visible log lines (set during paint, used for selection hit testing)
+const LogLineInfo = struct {
+    text_start: usize, // byte offset into output
+    text_end: usize,
+    y: f32, // screen y of this line
+};
+const MAX_LOG_LINES = 256;
+var visible_log_lines: [MAX_LOG_LINES]LogLineInfo = undefined;
+var visible_log_count: usize = 0;
+var log_text_x: f32 = 12; // x offset where log text starts
+var log_font_size: u16 = 11;
+
 const MAX_HITS = 512;
 var hit_regions: [MAX_HITS]HitRegion = undefined;
 var hit_count: usize = 0;
@@ -144,6 +156,17 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var log_drag_start_h: f32 = 0;
     var log_last_len: usize = 0; // track output length for auto-scroll
 
+    // Log panel text selection
+    var log_sel_start_line: usize = 0;
+    var log_sel_start_char: usize = 0;
+    var log_sel_end_line: usize = 0;
+    var log_sel_end_char: usize = 0;
+    var log_sel_active: bool = false;
+    var log_sel_dragging: bool = false;
+    var log_sel_all: bool = false;
+    var log_click_time: u32 = 0;
+    var log_click_count: u32 = 0;
+
     var dirty = true;
     while (running) {
         var event: c.SDL_Event = undefined;
@@ -173,10 +196,69 @@ pub fn run(alloc: std.mem.Allocator) !void {
                     }
                 },
                 c.SDL_KEYDOWN => {
+                    const ctrl = (event.key.keysym.mod & c.KMOD_CTRL) != 0;
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false;
-                    if (event.key.keysym.sym == c.SDLK_r) {
+                    if (event.key.keysym.sym == c.SDLK_r and !ctrl) {
                         reg = registry.load(alloc);
                         process.cleanStale(&reg);
+                    }
+                    // Ctrl+A — select all log text
+                    if (ctrl and event.key.keysym.sym == c.SDLK_a) {
+                        if (runner.getActive() != null and visible_log_count > 0) {
+                            log_sel_all = true;
+                            log_sel_active = true;
+                            dirty = true;
+                        }
+                    }
+                    // Ctrl+C — copy selected log text
+                    if (ctrl and event.key.keysym.sym == c.SDLK_c) {
+                        if (runner.getActive()) |active| {
+                            const output = active.getOutput();
+                            if (log_sel_all) {
+                                // Copy all output
+                                if (output.len > 0 and output.len < 16383) {
+                                    var clip: [16384]u8 = undefined;
+                                    @memcpy(clip[0..output.len], output);
+                                    clip[output.len] = 0;
+                                    _ = c.SDL_SetClipboardText(@ptrCast(&clip));
+                                }
+                            } else if (log_sel_active and visible_log_count > 0) {
+                                // Copy selected range
+                                var clip: [16384]u8 = undefined;
+                                var cp: usize = 0;
+                                const lo_line = @min(log_sel_start_line, log_sel_end_line);
+                                const hi_line = @max(log_sel_start_line, log_sel_end_line);
+                                for (lo_line..hi_line + 1) |li| {
+                                    if (li >= visible_log_count) break;
+                                    const vl = &visible_log_lines[li];
+                                    var ls: usize = 0;
+                                    var le: usize = vl.text_end - vl.text_start;
+                                    if (li == lo_line) ls = @min(log_sel_start_char, log_sel_end_char);
+                                    if (li == hi_line) le = @max(log_sel_start_char, log_sel_end_char);
+                                    if (lo_line == hi_line) {
+                                        ls = @min(log_sel_start_char, log_sel_end_char);
+                                        le = @max(log_sel_start_char, log_sel_end_char);
+                                    }
+                                    const text = output[vl.text_start..vl.text_end];
+                                    const safe_le = @min(le, text.len);
+                                    const safe_ls = @min(ls, safe_le);
+                                    if (safe_le > safe_ls) {
+                                        const chunk = text[safe_ls..safe_le];
+                                        const n = @min(chunk.len, clip.len - cp - 2);
+                                        @memcpy(clip[cp .. cp + n], chunk[0..n]);
+                                        cp += n;
+                                        if (li < hi_line and cp < clip.len - 1) {
+                                            clip[cp] = '\n';
+                                            cp += 1;
+                                        }
+                                    }
+                                }
+                                if (cp > 0) {
+                                    clip[cp] = 0;
+                                    _ = c.SDL_SetClipboardText(@ptrCast(&clip));
+                                }
+                            }
+                        }
                     }
                 },
                 c.SDL_MOUSEMOTION => {
@@ -188,22 +270,85 @@ pub fn run(alloc: std.mem.Allocator) !void {
                         log_panel_h = @max(80, @min(win_h - 100, log_drag_start_h + delta));
                         dirty = true;
                     }
+                    // Drag text selection in log
+                    if (log_sel_dragging and runner.getActive() != null) {
+                        for (0..visible_log_count) |li| {
+                            const vl = &visible_log_lines[li];
+                            const lh = te.lineHeight(log_font_size);
+                            if (hover_my >= vl.y and hover_my < vl.y + lh) {
+                                const output = runner.getActive().?.getOutput();
+                                const line_text = output[vl.text_start..vl.text_end];
+                                log_sel_end_line = li;
+                                log_sel_end_char = te.hitTestLine(line_text, hover_mx - log_text_x, log_font_size);
+                                dirty = true;
+                                break;
+                            }
+                        }
+                    }
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     const mx: f32 = @floatFromInt(event.button.x);
                     const my: f32 = @floatFromInt(event.button.y);
 
-                    // Check log panel drag handle (top 6px of panel)
+                    // Check log panel interactions
                     if (runner.getActive() != null) {
                         const panel_top = win_h - log_panel_h - 30;
                         if (my >= panel_top - 3 and my <= panel_top + 3) {
+                            // Drag handle
                             log_dragging = true;
                             log_drag_start_y = my;
                             log_drag_start_h = log_panel_h;
-                        }
-                        // Pop-out button (top-right corner of panel)
-                        if (my >= panel_top and my <= panel_top + 20 and mx >= win_w - 70 and mx <= win_w - 10) {
+                        } else if (my >= panel_top and my <= panel_top + 20 and mx >= win_w - 70 and mx <= win_w - 10) {
+                            // Pop-out button
                             openLogPopout(&te, renderer);
+                        } else if (my > panel_top + 20 and my < win_h - 30) {
+                            // Click in log text area — start selection
+                            const now = c.SDL_GetTicks();
+                            log_sel_all = false;
+
+                            // Find which visible line was clicked
+                            var clicked_line: ?usize = null;
+                            for (0..visible_log_count) |li| {
+                                const vl = &visible_log_lines[li];
+                                const lh = te.lineHeight(log_font_size);
+                                if (my >= vl.y and my < vl.y + lh) {
+                                    clicked_line = li;
+                                    break;
+                                }
+                            }
+
+                            if (clicked_line) |cli| {
+                                const vl = &visible_log_lines[cli];
+                                const output = runner.getActive().?.getOutput();
+                                const line_text = output[vl.text_start..vl.text_end];
+                                const char_idx = te.hitTestLine(line_text, mx - log_text_x, log_font_size);
+
+                                // Multi-click detection
+                                if (now -% log_click_time < 400) {
+                                    log_click_count += 1;
+                                } else {
+                                    log_click_count = 1;
+                                }
+                                log_click_time = now;
+
+                                if (log_click_count >= 2) {
+                                    // Double click — select entire line
+                                    log_sel_start_line = cli;
+                                    log_sel_start_char = 0;
+                                    log_sel_end_line = cli;
+                                    log_sel_end_char = line_text.len;
+                                    log_sel_active = true;
+                                    log_sel_dragging = false;
+                                } else {
+                                    // Single click — start drag selection
+                                    log_sel_start_line = cli;
+                                    log_sel_start_char = char_idx;
+                                    log_sel_end_line = cli;
+                                    log_sel_end_char = char_idx;
+                                    log_sel_active = true;
+                                    log_sel_dragging = true;
+                                }
+                            }
                         }
                     }
 
@@ -234,6 +379,7 @@ pub fn run(alloc: std.mem.Allocator) !void {
                 },
                 c.SDL_MOUSEBUTTONUP => {
                     log_dragging = false;
+                    log_sel_dragging = false;
                 },
                 c.SDL_MOUSEWHEEL => {
                     const panel_top = win_h - log_panel_h - 30;
@@ -490,15 +636,51 @@ pub fn run(alloc: std.mem.Allocator) !void {
                 };
                 _ = c.SDL_RenderSetClipRect(renderer, &clip);
 
+                visible_log_count = 0;
                 var out_y = panel_y + 22;
                 var li = first_line;
+                var vis_idx: usize = 0;
                 while (li < total_lines and (out_y - panel_y - 22) < visible_h) {
                     const ls = all_starts[li];
                     const le = all_ends[li];
+
+                    // Store visible line info for selection hit testing
+                    if (vis_idx < MAX_LOG_LINES) {
+                        visible_log_lines[vis_idx] = .{ .text_start = ls, .text_end = le, .y = out_y };
+                        vis_idx += 1;
+                    }
+
                     if (le > ls) {
                         const line = output[ls..le];
                         const max_chars: usize = @intFromFloat(win_w / 6.5);
                         const display = if (line.len > max_chars) line[0..max_chars] else line;
+
+                        // Draw selection highlight behind text
+                        const vi = vis_idx - 1; // current visible index
+                        if (log_sel_all) {
+                            te.drawSelectionRect(display, log_text_x, out_y, log_font_size, 0, display.len, Color.rgba(60, 120, 200, 140));
+                        } else if (log_sel_active) {
+                            const lo = @min(log_sel_start_line, log_sel_end_line);
+                            const hi = @max(log_sel_start_line, log_sel_end_line);
+                            if (vi >= lo and vi <= hi) {
+                                var s0: usize = 0;
+                                var s1: usize = display.len;
+                                if (lo == hi) {
+                                    s0 = @min(log_sel_start_char, log_sel_end_char);
+                                    s1 = @max(log_sel_start_char, log_sel_end_char);
+                                } else if (vi == lo) {
+                                    s0 = if (log_sel_start_line <= log_sel_end_line) log_sel_start_char else log_sel_end_char;
+                                } else if (vi == hi) {
+                                    s1 = if (log_sel_start_line <= log_sel_end_line) log_sel_end_char else log_sel_start_char;
+                                }
+                                s0 = @min(s0, display.len);
+                                s1 = @min(s1, display.len);
+                                if (s1 > s0) {
+                                    te.drawSelectionRect(display, log_text_x, out_y, log_font_size, s0, s1, Color.rgba(60, 120, 200, 140));
+                                }
+                            }
+                        }
+
                         const line_col = if (std.mem.indexOf(u8, display, "FAIL") != null or std.mem.indexOf(u8, display, "error") != null)
                             danger
                         else if (std.mem.indexOf(u8, display, "PASS") != null or std.mem.indexOf(u8, display, "Built") != null or std.mem.indexOf(u8, display, "done") != null)
@@ -509,11 +691,12 @@ pub fn run(alloc: std.mem.Allocator) !void {
                             warning
                         else
                             Color.rgb(170, 170, 185);
-                        te.drawText(display, 12, out_y, 11, line_col);
+                        te.drawText(display, log_text_x, out_y, log_font_size, line_col);
                     }
                     out_y += line_h;
                     li += 1;
                 }
+                visible_log_count = vis_idx;
 
                 // Clear clip
                 _ = c.SDL_RenderSetClipRect(renderer, null);

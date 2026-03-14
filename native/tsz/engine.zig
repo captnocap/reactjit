@@ -201,4 +201,48 @@ pub const TextEngine = struct {
         const m = self.face.*.size.*.metrics;
         return @as(f32, @floatFromInt(m.ascender - m.descender)) / 64.0;
     }
+
+    /// Hit test: given a local x offset within a line of text, return the byte index.
+    pub fn hitTestLine(self: *TextEngine, text: []const u8, local_x: f32, size_px: u16) usize {
+        var pen: f32 = 0;
+        var i: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            const adv = if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| @as(f32, @floatFromInt(g.advance)) else @as(f32, 0);
+            if (pen + adv / 2.0 > local_x) return i;
+            pen += adv;
+            i += ch.len;
+        }
+        return text.len;
+    }
+
+    /// Draw a selection highlight rectangle for a range within a single line.
+    pub fn drawSelectionRect(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, sel_start: usize, sel_end: usize, color: Color) void {
+        if (sel_start >= sel_end) return;
+        const lh = self.lineHeight(size_px);
+        // Measure x at sel_start
+        var x0: f32 = 0;
+        var x1: f32 = 0;
+        var pen: f32 = 0;
+        var i: usize = 0;
+        while (i < text.len) {
+            if (i == sel_start) x0 = pen;
+            const ch = decodeUtf8(text[i..]);
+            const adv = if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| @as(f32, @floatFromInt(g.advance)) else @as(f32, 0);
+            pen += adv;
+            i += ch.len;
+            if (i >= sel_end) { x1 = pen; break; }
+        }
+        if (sel_end >= text.len) x1 = pen;
+
+        _ = c.SDL_SetRenderDrawBlendMode(self.renderer, c.SDL_BLENDMODE_BLEND);
+        _ = c.SDL_SetRenderDrawColor(self.renderer, color.r, color.g, color.b, color.a);
+        var rect = c.SDL_Rect{
+            .x = @intFromFloat(x + x0),
+            .y = @intFromFloat(y),
+            .w = @intFromFloat(x1 - x0),
+            .h = @intFromFloat(lh),
+        };
+        _ = c.SDL_RenderFillRect(self.renderer, &rect);
+    }
 };
