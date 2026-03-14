@@ -64,15 +64,25 @@ const ConnStatus = enum {
     closed,
 };
 
-// Atomic flag for thread-safe connect worker → main loop handoff
+// Thread-safe connect handoff: connect_state packs generation (upper 24 bits)
+// + flag (lower 8 bits) into a single u32 for atomic CAS. A worker can only
+// publish results if the generation hasn't changed (slot not reused).
 const ConnectFlag = enum(u8) { idle = 0, pending = 1, success = 2, failed = 3 };
+
+fn packState(gen: u24, flag: ConnectFlag) u32 {
+    return (@as(u32, gen) << 8) | @intFromEnum(flag);
+}
+fn unpackFlag(state: u32) ConnectFlag {
+    return @enumFromInt(@as(u8, @truncate(state)));
+}
 
 const Connection = struct {
     active: bool = false,
     id: u32 = 0,
     ws: ?websocket.WebSocket = null,
     pending_ws: ?websocket.WebSocket = null, // written by worker, consumed by poll
-    connect_flag: u8 = 0, // ConnectFlag, accessed via @atomicStore/@atomicLoad
+    connect_state: u32 = 0, // packed generation + ConnectFlag, atomic CAS
+    generation: u24 = 0, // incremented on each slot reuse, read by main thread only
     url: [MAX_URL]u8 = undefined,
     url_len: usize = 0,
     host: [256]u8 = undefined,
@@ -93,6 +103,7 @@ const Connection = struct {
 var connections: [MAX_CONNECTIONS]Connection = [_]Connection{.{}} ** MAX_CONNECTIONS;
 var event_queue: [MAX_EVENTS]NetEvent = undefined;
 var event_count: usize = 0;
+var active_workers: u32 = 0; // atomic count of in-flight connect threads
 var initialized = false;
 
 // ── Public API ───────────────────────────────────────────────────────────
@@ -141,11 +152,13 @@ pub fn sendMsg(id: u32, data: []const u8) void {
     }
 }
 
-/// Close a connection.
+/// Close a connection. Bumps generation to invalidate any in-flight worker.
 pub fn closeConn(id: u32) void {
     if (findById(id)) |conn| {
-        conn.reconnect = false; // prevent reconnect
-        if (conn.ws) |*ws| ws.close();
+        conn.reconnect = false;
+        conn.generation +%= 1; // invalidate any in-flight worker via CAS
+        if (conn.ws) |*ws| ws.shutdown();
+        conn.ws = null;
         conn.status = .closed;
         conn.active = false;
     }
@@ -158,15 +171,16 @@ pub fn poll(out: []NetEvent) usize {
     for (&connections) |*conn| {
         if (!conn.active) continue;
 
-        // Check for connect worker completion (thread → main handoff)
-        const flag: ConnectFlag = @enumFromInt(@atomicLoad(u8, &conn.connect_flag, .seq_cst));
+        // Check for connect worker completion (thread → main handoff via CAS)
+        const state = @atomicLoad(u32, &conn.connect_state, .seq_cst);
+        const flag = unpackFlag(state);
         if (flag == .success) {
             conn.ws = conn.pending_ws;
             conn.pending_ws = null;
             conn.status = .connecting; // WS upgrade will be driven by poll below
-            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.idle), .seq_cst);
+            @atomicStore(u32, &conn.connect_state, packState(conn.generation, .idle), .seq_cst);
         } else if (flag == .failed) {
-            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.idle), .seq_cst);
+            @atomicStore(u32, &conn.connect_state, packState(conn.generation, .idle), .seq_cst);
             handleDisconnect(conn);
             continue;
         } else if (flag == .pending) {
@@ -215,13 +229,21 @@ pub fn poll(out: []NetEvent) usize {
     return @min(event_count, out.len);
 }
 
-/// Shutdown all connections.
+/// Shutdown all connections. Waits for in-flight connect threads.
 pub fn destroy() void {
+    // Bump all generations to invalidate in-flight workers
     for (&connections) |*conn| {
+        conn.generation +%= 1;
         if (conn.active) {
             if (conn.ws) |*ws| ws.shutdown();
+            conn.ws = null;
             conn.active = false;
         }
+    }
+    // Wait for all in-flight connect threads to finish
+    var wait_count: u32 = 0;
+    while (@atomicLoad(u32, &active_workers, .seq_cst) > 0 and wait_count < 5000) : (wait_count += 1) {
+        std.Thread.sleep(1_000_000); // 1ms, max 5s total
     }
     initialized = false;
 }
@@ -243,41 +265,57 @@ fn findById(id: u32) ?*Connection {
 }
 
 fn startConnection(conn: *Connection) void {
-    // Set atomic flag to pending BEFORE spawning thread
-    @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.pending), .seq_cst);
-    // Spawn connection in a thread so it never blocks the main loop.
-    // This is critical for .onion connects where SOCKS5 handshake + Tor
-    // circuit setup can take seconds.
-    _ = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, connectWorker, .{conn}) catch {
-        @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
+    // Capture generation for CAS in worker
+    const gen = conn.generation;
+    @atomicStore(u32, &conn.connect_state, packState(gen, .pending), .seq_cst);
+    _ = @atomicRmw(u32, &active_workers, .Add, 1, .seq_cst);
+    _ = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, connectWorker, .{ conn, gen }) catch {
+        _ = @atomicRmw(u32, &active_workers, .Sub, 1, .seq_cst);
+        @atomicStore(u32, &conn.connect_state, packState(gen, .failed), .seq_cst);
     };
 }
 
-fn connectWorker(conn: *Connection) void {
-    // Worker thread: do blocking TCP/SOCKS5 connect, then hand off via atomic flag.
-    // ONLY writes pending_ws (before flag) and connect_flag (atomic). Never touches
-    // ws, status, or other main-thread fields.
+fn connectWorker(conn: *Connection, expected_gen: u24) void {
+    // Worker thread: do blocking TCP/SOCKS5 connect, then CAS to publish.
+    // CAS ensures stale workers can't corrupt a reused slot — if generation
+    // changed (closeConn/destroy bumped it), CAS fails and worker cleans up.
+    defer _ = @atomicRmw(u32, &active_workers, .Sub, 1, .seq_cst);
+
     const host = conn.host[0..conn.host_len];
     const path = conn.path[0..conn.path_len];
 
+    var new_ws: ?websocket.WebSocket = null;
+    var ok = false;
+
     if (conn.is_onion) {
         const stream = socks5.connect("127.0.0.1", conn.tor_proxy_port, host, conn.port, null, null) catch {
-            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
+            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
             return;
         };
-        conn.pending_ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
+        new_ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
             stream.close();
-            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
+            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
             return;
         };
+        ok = true;
     } else {
-        conn.pending_ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
-            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
+        new_ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
+            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
             return;
         };
+        ok = true;
     }
-    // pending_ws is fully written — now signal main thread
-    @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.success), .seq_cst);
+
+    if (ok) {
+        // Write pending_ws, then CAS to publish. If CAS fails, slot was
+        // reused — clean up the WebSocket we just created.
+        conn.pending_ws = new_ws;
+        if (@cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .success), .seq_cst, .seq_cst) != null) {
+            // Stale: slot was reused. Clean up.
+            if (new_ws) |*ws| ws.shutdown();
+            conn.pending_ws = null;
+        }
+    }
 }
 
 fn handleDisconnect(conn: *Connection) void {
