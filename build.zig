@@ -61,10 +61,10 @@ pub fn build(b: *std.Build) void {
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
 
-        // Our FFI shim — canonical copy in native/quickjs-shim/ (tracked in
+        // Our FFI shim — canonical copy in love2d/native/quickjs-shim/ (tracked in
         // git). build.zig references it directly — no manual cp step needed.
         mod.addCSourceFile(.{
-            .file = b.path("native/quickjs-shim/qjs_ffi_shim.c"),
+            .file = b.path("love2d/native/quickjs-shim/qjs_ffi_shim.c"),
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
 
@@ -220,7 +220,7 @@ pub fn build(b: *std.Build) void {
             });
 
             mod.addCSourceFile(.{
-                .file = b.path("native/overlay-hook/overlay_hook.c"),
+                .file = b.path("love2d/native/overlay-hook/overlay_hook.c"),
                 .flags = &.{ "-O2", "-D_GNU_SOURCE" },
             });
 
@@ -247,7 +247,7 @@ pub fn build(b: *std.Build) void {
         const engine_exe = b.addExecutable(.{
             .name = "rjit-engine",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("native/engine/main.zig"),
+                .root_source_file = b.path("tsz/runtime/main.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -258,9 +258,9 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkSystemLibrary("GL");
         engine_exe.linkSystemLibrary("freetype");
         engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
-        engine_exe.root_module.addIncludePath(b.path("native/engine"));
+        engine_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         engine_exe.root_module.addCSourceFile(.{
-            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
 
@@ -284,7 +284,7 @@ pub fn build(b: *std.Build) void {
         const app_exe = b.addExecutable(.{
             .name = "tsz-app",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("native/engine/generated_app.zig"),
+                .root_source_file = b.path("tsz/runtime/generated_app.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -296,16 +296,16 @@ pub fn build(b: *std.Build) void {
         app_exe.linkSystemLibrary("freetype");
         app_exe.linkSystemLibrary("mpv");
         app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
-        app_exe.root_module.addIncludePath(b.path("native/engine"));
+        app_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         app_exe.root_module.addCSourceFile(.{
-            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
 
         // ── FFI: link extra libraries from ffi_libs.txt ──────────────────
         // The tsz compiler writes one library name per line (e.g. "sqlite3").
         // If the file doesn't exist or is empty, no extra libs are linked.
-        if (std.fs.cwd().openFile("native/engine/ffi_libs.txt", .{})) |file| {
+        if (std.fs.cwd().openFile("tsz/runtime/ffi_libs.txt", .{})) |file| {
             defer file.close();
             var buf: [4096]u8 = undefined;
             const len = file.readAll(&buf) catch 0;
@@ -333,7 +333,7 @@ pub fn build(b: *std.Build) void {
         const tsz_exe = b.addExecutable(.{
             .name = "tsz",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("native/tsz/main.zig"),
+                .root_source_file = b.path("tsz/compiler/main.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -345,9 +345,9 @@ pub fn build(b: *std.Build) void {
         tsz_exe.linkSystemLibrary("GL");
         tsz_exe.linkSystemLibrary("freetype");
         tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
-        tsz_exe.root_module.addIncludePath(b.path("native/engine"));
+        tsz_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         tsz_exe.root_module.addCSourceFile(.{
-            .file = b.path("native/engine/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
 
@@ -388,7 +388,7 @@ pub fn build(b: *std.Build) void {
             .root_module = mod,
         });
 
-        exe.root_module.root_source_file = b.path("native/win-launcher/launcher.zig");
+        exe.root_module.root_source_file = b.path("love2d/native/win-launcher/launcher.zig");
         exe.subsystem = .Windows; // no console window
 
         const install = b.addInstallArtifact(exe, .{});

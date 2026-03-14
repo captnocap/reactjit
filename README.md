@@ -1,5 +1,6 @@
 # ReactJIT
-
+tl;dr - react, but native window. there are two 'projects' here, you can consider them as the TSZ (typescript-zig) version, and the love2d version. TSZ is typescript compiling to native code, no runtime, no bridge. love2d was the proof of concept, but there is a fundamental learning curve, in that it requires a lot of lua code to make it feasible. the layout, painter, and all the capabilties first were achieved in love2d.
+---
 Write UI in TypeScript. Get a native binary.
 
 ```
