@@ -67,6 +67,16 @@ pub const Overflow = enum { visible, hidden, scroll };
 
 pub const TextAlign = enum { left, center, right };
 
+pub const CodeLanguage = enum {
+    none,
+    zig,
+    typescript,
+    json,
+    bash,
+    markdown,
+    plain,
+};
+
 pub const GradientDirection = enum { none, vertical, horizontal };
 
 /// Style properties for a node. Mirrors the CSS-like style object from React.
@@ -245,6 +255,9 @@ pub const Node = struct {
     number_of_lines: u16 = 0,
     /// Force single-line (no word wrap)
     no_wrap: bool = false,
+
+    /// Syntax highlighting: set for CodeBlock nodes, .none for normal text
+    code_language: CodeLanguage = .none,
 
     /// Image source path (null for non-image nodes)
     image_src: ?[]const u8 = null,

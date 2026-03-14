@@ -702,6 +702,7 @@ pub const Generator = struct {
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
         var placeholder_str: []const u8 = "";
+        var language_str: []const u8 = "";
 
         // Pre-populate from classifier defaults
         if (classifier_idx) |idx| {
@@ -722,6 +723,7 @@ pub const Generator = struct {
         const is_scroll = std.mem.eql(u8, tag_name, "ScrollView");
         const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
         const is_multiline = std.mem.eql(u8, tag_name, "TextArea");
+        const is_code_block = std.mem.eql(u8, tag_name, "CodeBlock");
 
         while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
             if (self.curKind() == .identifier) {
@@ -751,6 +753,8 @@ pub const Generator = struct {
                         height_str = try self.parseExprAttr();
                     } else if (std.mem.eql(u8, attr_name, "placeholder")) {
                         placeholder_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "language")) {
+                        language_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "className")) {
                         const cls_str = try self.parseStringAttr();
                         if (cls_str.len > 0) {
@@ -957,6 +961,40 @@ pub const Generator = struct {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".font_size = ");
             try fields.appendSlice(self.alloc, font_size);
+        }
+
+        // Code language (CodeBlock)
+        if (is_code_block) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            if (language_str.len > 0) {
+                // Map language string to CodeLanguage enum
+                const lang_enum = if (std.mem.eql(u8, language_str, "zig"))
+                    ".zig"
+                else if (std.mem.eql(u8, language_str, "typescript") or
+                    std.mem.eql(u8, language_str, "ts") or
+                    std.mem.eql(u8, language_str, "tsx") or
+                    std.mem.eql(u8, language_str, "javascript") or
+                    std.mem.eql(u8, language_str, "js") or
+                    std.mem.eql(u8, language_str, "jsx"))
+                    ".typescript"
+                else if (std.mem.eql(u8, language_str, "json"))
+                    ".json"
+                else if (std.mem.eql(u8, language_str, "bash") or
+                    std.mem.eql(u8, language_str, "sh") or
+                    std.mem.eql(u8, language_str, "shell"))
+                    ".bash"
+                else if (std.mem.eql(u8, language_str, "markdown") or
+                    std.mem.eql(u8, language_str, "md"))
+                    ".markdown"
+                else
+                    ".plain";
+                try fields.appendSlice(self.alloc, ".code_language = ");
+                try fields.appendSlice(self.alloc, lang_enum);
+            } else {
+                try fields.appendSlice(self.alloc, ".code_language = .plain");
+            }
+            // CodeBlock defaults: no word wrap, monospace-friendly line height
+            try fields.appendSlice(self.alloc, ", .no_wrap = true");
         }
 
         // Letter spacing

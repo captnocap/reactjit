@@ -18,6 +18,8 @@ const Color = layout.Color;
 const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
 const ImageCache = image_mod.ImageCache;
+const syntax = @import("syntax.zig");
+const ColorSpan = text_mod.ColorSpan;
 
 // ── Global text engine (set during init, used by layout measure callback) ───
 var g_text_engine: ?*TextEngine = null;
@@ -330,18 +332,43 @@ const Painter = struct {
             } else if (sel_node == node and sel_start != sel_end) {
                 self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
             }
-            self.text_engine.drawTextWrappedFull(
-                txt,
-                screen_x + pad_l,
-                screen_y + pad_t,
-                node.font_size,
-                text_max_w,
-                color,
-                node.style.text_align,
-                node.letter_spacing,
-                node.line_height,
-                node.number_of_lines,
-            );
+
+            if (node.code_language != .none) {
+                // Syntax-highlighted rendering: tokenize each line, draw colored spans
+                const lang: syntax.Language = switch (node.code_language) {
+                    .zig => .zig,
+                    .typescript => .typescript,
+                    .json => .json,
+                    .bash => .bash,
+                    .markdown => .markdown,
+                    .plain => .plain,
+                    .none => unreachable,
+                };
+                const lm = self.text_engine.lineMetrics(node.font_size);
+                const line_h: f32 = if (node.line_height > 0) node.line_height else lm.height;
+                var line_y = screen_y + pad_t;
+                var spans: [256]ColorSpan = undefined;
+                var lines_iter = std.mem.splitScalar(u8, txt, '\n');
+                while (lines_iter.next()) |line| {
+                    const span_count = syntax.tokenizeLine(line, lang, &spans);
+                    self.text_engine.drawColorSpans(spans[0..span_count], screen_x + pad_l, line_y, node.font_size);
+                    line_y += line_h;
+                }
+            } else {
+                // Normal single-color text rendering
+                self.text_engine.drawTextWrappedFull(
+                    txt,
+                    screen_x + pad_l,
+                    screen_y + pad_t,
+                    node.font_size,
+                    text_max_w,
+                    color,
+                    node.style.text_align,
+                    node.letter_spacing,
+                    node.line_height,
+                    node.number_of_lines,
+                );
+            }
         }
 
         // ── Scissor clipping for scroll/hidden containers ────────

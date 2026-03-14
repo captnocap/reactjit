@@ -56,6 +56,13 @@ fn decodeUtf8(bytes: []const u8) Utf8Char {
     }
 }
 
+// ── Color Span (for syntax highlighting) ─────────────────────────────────────
+
+pub const ColorSpan = struct {
+    text: []const u8,
+    color: layout.Color,
+};
+
 // ── Text Engine ─────────────────────────────────────────────────────────────
 
 const MAX_FALLBACK_FONTS = 8;
@@ -444,7 +451,7 @@ pub const TextEngine = struct {
     }
 
     /// Get font-level line metrics for the current size.
-    fn lineMetrics(self: *TextEngine, size_px: u16) struct { ascent: f32, height: f32 } {
+    pub fn lineMetrics(self: *TextEngine, size_px: u16) struct { ascent: f32, height: f32 } {
         self.setSize(size_px);
         const metrics = self.face.*.size.*.metrics;
         const ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
