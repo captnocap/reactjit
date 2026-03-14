@@ -430,6 +430,13 @@ fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
     const s = node.style;
     if (s.height) |h| return h;
 
+    // Aspect ratio: derive height from width
+    if (s.aspect_ratio) |ar| {
+        if (ar > 0 and s.width != null) {
+            return s.width.? / ar;
+        }
+    }
+
     const pad_t = s.padTop();
     const pad_b = s.padBottom();
     const pad_l = s.padLeft();
@@ -485,6 +492,45 @@ fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
         const gaps = if (visible_count > 1) gap * @as(f32, @floatFromInt(visible_count - 1)) else 0;
         return total + gaps + pad_t + pad_b;
     }
+
+    // For wrapped rows, simulate line-breaking to get multi-line height
+    if (s.flex_wrap == .wrap and inner_w > 0) {
+        var line_main: f32 = 0;
+        var line_cross_max: f32 = 0;
+        var total_cross: f32 = 0;
+        var items_on_line: usize = 0;
+        var line_count: usize = 0;
+
+        for (node.children) |*child| {
+            if (child.style.display == .none) continue;
+            if (child.style.position == .absolute) continue;
+            const cw = estimateIntrinsicWidth(child);
+            const cm_l = child.style.marLeft();
+            const cm_r = child.style.marRight();
+            const item_main = cw + cm_l + cm_r;
+            const gap_before: f32 = if (items_on_line > 0) gap else 0;
+
+            if (items_on_line > 0 and (line_main + gap_before + item_main) > inner_w) {
+                total_cross += line_cross_max;
+                line_count += 1;
+                line_main = item_main;
+                line_cross_max = estimateIntrinsicHeight(child, inner_w) + child.style.marTop() + child.style.marBottom();
+                items_on_line = 1;
+            } else {
+                line_main += gap_before + item_main;
+                const ch_cross = estimateIntrinsicHeight(child, inner_w) + child.style.marTop() + child.style.marBottom();
+                if (ch_cross > line_cross_max) line_cross_max = ch_cross;
+                items_on_line += 1;
+            }
+        }
+        if (items_on_line > 0) {
+            total_cross += line_cross_max;
+            line_count += 1;
+        }
+        const line_gaps = if (line_count > 1) gap * @as(f32, @floatFromInt(line_count - 1)) else 0;
+        return total_cross + line_gaps + pad_t + pad_b;
+    }
+
     return max_cross + pad_t + pad_b;
 }
 
@@ -762,10 +808,48 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         const free_space = main_size - total_basis - line_gaps - total_main_margin;
 
         if (free_space > 0 and total_flex > 0) {
+            // Multi-pass flex-grow with min/max redistribution (CSS §9.7):
+            // When an item hits its max constraint, freeze it and redistribute
+            // the excess space to remaining unfrozen items.
+            var frozen: [max_children]bool = undefined;
+            var saved_basis: [max_children]f32 = undefined;
             for (ls..ls + lc) |i| {
-                if (child_grow[i] > 0) {
-                    child_basis[i] += (child_grow[i] / total_flex) * free_space;
+                frozen[i] = (child_grow[i] <= 0); // grow=0 items are pre-frozen
+                saved_basis[i] = child_basis[i];
+            }
+            var passes: u32 = 0;
+            while (passes < 10) {
+                passes += 1;
+                var used: f32 = 0;
+                var active_flex: f32 = 0;
+                for (ls..ls + lc) |i| {
+                    if (frozen[i]) {
+                        used += child_basis[i];
+                    } else {
+                        used += saved_basis[i];
+                        active_flex += child_grow[i];
+                    }
                 }
+                if (active_flex <= 0) break;
+                const space = main_size - used - line_gaps - total_main_margin;
+                if (space <= 0) break;
+
+                var any_clamped = false;
+                for (ls..ls + lc) |i| {
+                    if (frozen[i]) continue;
+                    child_basis[i] = saved_basis[i] + (child_grow[i] / active_flex) * space;
+                    const ci = visible_indices[i];
+                    const cs_g = node.children[ci].style;
+                    const mn = resolveMaybePct(if (is_row) cs_g.min_width else cs_g.min_height, if (is_row) inner_w else inner_h);
+                    const mx = resolveMaybePct(if (is_row) cs_g.max_width else cs_g.max_height, if (is_row) inner_w else inner_h);
+                    const clamped_val = clamp(child_basis[i], mn, mx);
+                    if (clamped_val != child_basis[i]) {
+                        child_basis[i] = clamped_val;
+                        frozen[i] = true;
+                        any_clamped = true;
+                    }
+                }
+                if (!any_clamped) break;
             }
         } else if (free_space < 0) {
             var total_shrink_scaled: f32 = 0;
@@ -815,7 +899,17 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     child_cross_size[i] = clamp(m_rm.height + cpad_t + cpad_b, resolveMaybePct(child_rm.style.min_height, inner_h), resolveMaybePct(child_rm.style.max_height, inner_h));
                 }
             } else {
-                const final_w = resolveMaybePct(child_rm.style.width, inner_w) orelse inner_w;
+                // For column text re-measurement, determine width based on alignment:
+                // stretch → use parent inner_w; center/start/end → keep intrinsic width
+                const eff_align_rm: AlignItems = switch (child_rm.style.align_self) {
+                    .auto => align_items,
+                    .start => .start,
+                    .center => .center,
+                    .end_ => .end_,
+                    .stretch => .stretch,
+                };
+                const final_w = resolveMaybePct(child_rm.style.width, inner_w) orelse
+                    if (eff_align_rm == .stretch) inner_w else child_cross_size[i];
                 const cpad_l = child_rm.style.padLeft();
                 const cpad_r = child_rm.style.padRight();
                 const cpad_t = child_rm.style.padTop();
@@ -840,6 +934,12 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         if (num_lines == 1) {
             if (is_row and h != null) {
                 line_cross = inner_h;
+            } else if (is_row and h == null) {
+                // CSS: min-height inflates the cross axis for stretch alignment
+                if (resolveMaybePct(s.min_height, ph)) |mh| {
+                    const min_inner = mh - pad_t - pad_b;
+                    if (min_inner > line_cross) line_cross = min_inner;
+                }
             } else if (!is_row) {
                 line_cross = inner_w;
             }
@@ -897,40 +997,42 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             };
 
             if (is_row) {
-                cx = x + pad_l + cursor + child_main_margin_start[i];
+                // Don't include margin in position — layoutNode adds it via x = px + mar_l
+                cx = x + pad_l + cursor;
                 cw_final = clamp(child_basis[i], resolveMaybePct(child.style.min_width, inner_w), resolveMaybePct(child.style.max_width, inner_w));
                 ch_final = child_cross_size[i];
 
                 const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
 
                 switch (eff_align) {
-                    .center => cy = y + pad_t + cross_cursor + child_cross_margin_start[i] + (cross_avail - ch_final) / 2.0,
-                    .end_ => cy = y + pad_t + cross_cursor + child_cross_margin_start[i] + cross_avail - ch_final,
+                    .center => cy = y + pad_t + cross_cursor + (cross_avail - ch_final) / 2.0,
+                    .end_ => cy = y + pad_t + cross_cursor + cross_avail - ch_final,
                     .stretch => {
-                        cy = y + pad_t + cross_cursor + child_cross_margin_start[i];
+                        cy = y + pad_t + cross_cursor;
                         if (child.style.height == null) {
                             ch_final = clamp(cross_avail, resolveMaybePct(child.style.min_height, inner_h), resolveMaybePct(child.style.max_height, inner_h));
                         }
                     },
-                    .start => cy = y + pad_t + cross_cursor + child_cross_margin_start[i],
+                    .start => cy = y + pad_t + cross_cursor,
                 }
             } else {
-                cy = y + pad_t + cursor + child_main_margin_start[i];
+                // Don't include margin in position — layoutNode adds it via y = py + mar_t
+                cy = y + pad_t + cursor;
                 ch_final = clamp(child_basis[i], resolveMaybePct(child.style.min_height, inner_h), resolveMaybePct(child.style.max_height, inner_h));
                 cw_final = child_cross_size[i];
 
                 const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
 
                 switch (eff_align) {
-                    .center => cx = x + pad_l + cross_cursor + child_cross_margin_start[i] + (cross_avail - cw_final) / 2.0,
-                    .end_ => cx = x + pad_l + cross_cursor + child_cross_margin_start[i] + cross_avail - cw_final,
+                    .center => cx = x + pad_l + cross_cursor + (cross_avail - cw_final) / 2.0,
+                    .end_ => cx = x + pad_l + cross_cursor + cross_avail - cw_final,
                     .stretch => {
-                        cx = x + pad_l + cross_cursor + child_cross_margin_start[i];
+                        cx = x + pad_l + cross_cursor;
                         if (child.style.width == null) {
                             cw_final = clamp(cross_avail, resolveMaybePct(child.style.min_width, inner_w), resolveMaybePct(child.style.max_width, inner_w));
                         }
                     },
-                    .start => cx = x + pad_l + cross_cursor + child_cross_margin_start[i],
+                    .start => cx = x + pad_l + cross_cursor,
                 }
             }
 
@@ -991,7 +1093,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             const m = measureNodeTextW(node, text_max_w);
             h = m.height + pad_t + pad_b;
         } else if (is_row) {
-            h = content_cross_end + pad_t + pad_b;
+            h = content_cross_end + pad_b;
         } else {
             h = content_main_end + pad_b;
         }
@@ -1003,7 +1105,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     // ── Scroll: record content extent for scroll containers ──────────
     if (s.overflow == .scroll or s.overflow == .hidden) {
         // content_height = full content extent (may exceed node height)
-        const full_content = if (is_row) content_cross_end + pad_t + pad_b else content_main_end + pad_b;
+        const full_content = if (is_row) content_cross_end + pad_b else content_main_end + pad_b;
         node.content_height = full_content;
     }
 

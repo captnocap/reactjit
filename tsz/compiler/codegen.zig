@@ -27,6 +27,7 @@ const MAX_CONDS = 32;
 const MAX_EFFECTS = 32;
 const MAX_ANIM_HOOKS = 16;
 const MAX_ANIM_BINDINGS = 32;
+const MAX_DYN_STYLES = 64;
 const MAX_ROUTES = 16;
 const MAX_MAPS = 16;
 const MAX_ARRAY_INIT = 32;
@@ -93,6 +94,19 @@ const DynText = struct {
     buf_id: u32,
     fmt_string: []const u8,
     fmt_args: []const u8,
+    arr_name: []const u8,
+    arr_index: u32,
+    has_ref: bool,
+};
+
+const PendingDynStyle = struct {
+    field: []const u8, // Zig style field: "width", "background_color"
+    expression: []const u8, // Zig expression: "@as(f32, ...)"
+};
+
+const DynStyle = struct {
+    field: []const u8,
+    expression: []const u8,
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
@@ -204,6 +218,13 @@ pub const Generator = struct {
     dyn_count: u32,
     last_dyn_id: ?u32,
 
+    // Dynamic styles (state-dependent style values)
+    dyn_styles: [MAX_DYN_STYLES]DynStyle,
+    dyn_style_count: u32,
+    pending_dyn_styles: [16]PendingDynStyle,
+    pending_dyn_style_count: u32,
+    emit_colors_as_rgb: bool,
+
     // FFI
     ffi_headers: std.ArrayListUnmanaged([]const u8),
     ffi_libs: std.ArrayListUnmanaged([]const u8),
@@ -288,6 +309,11 @@ pub const Generator = struct {
             .dyn_texts = undefined,
             .dyn_count = 0,
             .last_dyn_id = null,
+            .dyn_styles = undefined,
+            .dyn_style_count = 0,
+            .pending_dyn_styles = undefined,
+            .pending_dyn_style_count = 0,
+            .emit_colors_as_rgb = false,
             .ffi_headers = .{},
             .ffi_libs = .{},
             .ffi_funcs = .{},
@@ -376,6 +402,28 @@ pub const Generator = struct {
             if (std.mem.eql(u8, self.state_slots[i].getter, name)) return @intCast(i);
         }
         return null;
+    }
+
+    /// Lookahead: check if the current style value references state (making it dynamic).
+    /// Scans tokens until comma or closing brace without advancing the position.
+    fn isStateDependentStyleValue(self: *Generator) bool {
+        var look = self.pos;
+        var depth: u32 = 0;
+        while (look < self.lex.count) : (look += 1) {
+            const kind = self.lex.get(look).kind;
+            if (kind == .lbrace or kind == .lparen) {
+                depth += 1;
+            } else if (kind == .rbrace or kind == .rparen) {
+                if (depth == 0) break;
+                depth -= 1;
+            } else if (kind == .comma and depth == 0) {
+                break;
+            } else if (kind == .identifier) {
+                const name = self.lex.get(look).text(self.source);
+                if (self.isState(name) != null) return true;
+            }
+        }
+        return false;
     }
 
     fn isSetter(self: *Generator, name: []const u8) ?u32 {
@@ -509,6 +557,21 @@ pub const Generator = struct {
         self.pos = app_start;
         self.findReturnStatement();
         const root_expr = try self.parseJSXElement();
+
+        // Resolve root node's pending dynamic styles (root has no parent to resolve them)
+        for (0..self.pending_dyn_style_count) |pi| {
+            if (self.dyn_style_count < MAX_DYN_STYLES) {
+                self.dyn_styles[self.dyn_style_count] = .{
+                    .field = self.pending_dyn_styles[pi].field,
+                    .expression = self.pending_dyn_styles[pi].expression,
+                    .arr_name = "root",
+                    .arr_index = 0,
+                    .has_ref = true,
+                };
+                self.dyn_style_count += 1;
+            }
+        }
+        self.pending_dyn_style_count = 0;
 
         // Phase 5: Emit full Zig source
         return self.emitZigSource(root_expr);
@@ -1610,9 +1673,12 @@ pub const Generator = struct {
         var dyn_fmt: []const u8 = "";
         var dyn_args: []const u8 = "";
 
-        // Save pending anim count — bindings from THIS node's style should
+        // Save pending anim/dyn_style count — bindings from THIS node's style should
         // survive children processing and be consumed by the PARENT.
         const own_pending_anim = self.pending_anim_count;
+        const own_pending_dyn_style = self.pending_dyn_style_count;
+        // Save dyn_style_count so array binding only targets styles from THIS node's children
+        const dyn_style_start = self.dyn_style_count;
 
         // Mark route binding point for Routes element
         if (is_routes) self.routes_bind_from = self.route_count;
@@ -1639,6 +1705,20 @@ pub const Generator = struct {
                         }
                     }
                     self.pending_anim_count = own_pending_anim; // keep our own bindings
+                    // Resolve pending dynamic style bindings from CHILD's style
+                    for (own_pending_dyn_style..self.pending_dyn_style_count) |pi| {
+                        if (self.dyn_style_count < MAX_DYN_STYLES) {
+                            self.dyn_styles[self.dyn_style_count] = .{
+                                .field = self.pending_dyn_styles[pi].field,
+                                .expression = self.pending_dyn_styles[pi].expression,
+                                .arr_name = "",
+                                .arr_index = @intCast(child_exprs.items.len - 1),
+                                .has_ref = false,
+                            };
+                            self.dyn_style_count += 1;
+                        }
+                    }
+                    self.pending_dyn_style_count = own_pending_dyn_style;
                     // Track Route → Routes metadata
                     if (self.last_route_path) |path| {
                         if (self.route_count < MAX_ROUTES) {
@@ -1654,6 +1734,19 @@ pub const Generator = struct {
                 } else if (self.curKind() == .lbrace) {
                     // Expression: {`template`}, {children}, or conditionals
                     self.advance_token(); // skip {
+                    // {/* ... */} — JSX block comment, skip entirely
+                    if (self.curKind() == .slash and self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .star) {
+                        while (self.curKind() != .eof) {
+                            if (self.curKind() == .star and self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .slash) {
+                                self.advance_token(); // *
+                                self.advance_token(); // /
+                                break;
+                            }
+                            self.advance_token();
+                        }
+                        if (self.curKind() == .rbrace) self.advance_token();
+                        continue;
+                    }
                     // {children} — splice caller's children into this component
                     if (self.isIdent("children") and self.component_children_exprs != null) {
                         self.advance_token(); // skip "children"
@@ -2054,6 +2147,15 @@ pub const Generator = struct {
                 }
             }
 
+            // Bind dynamic style bindings to this array (only those from THIS node's children)
+            for (dyn_style_start..self.dyn_style_count) |si| {
+                if (self.dyn_styles[si].has_ref) continue;
+                if (self.dyn_styles[si].arr_index < child_exprs.items.len) {
+                    self.dyn_styles[si].arr_name = arr_name;
+                    self.dyn_styles[si].has_ref = true;
+                }
+            }
+
             // Bind maps to this array
             for (0..self.map_count) |mi| {
                 if (self.maps[mi].parent_arr_name.len == 0) {
@@ -2164,30 +2266,34 @@ pub const Generator = struct {
                 if (self.curKind() == .colon) self.advance_token();
 
                 // Get value — route through the appropriate handler
-                if (std.mem.eql(u8, key, "backgroundColor")) {
-                    const val = try self.parseStringAttrInline();
-                    const color = try self.parseColorValue(val);
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".background_color = ");
-                    try fields.appendSlice(self.alloc, color);
-                } else if (std.mem.eql(u8, key, "borderColor")) {
-                    const val = try self.parseStringAttrInline();
-                    const color = try self.parseColorValue(val);
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".border_color = ");
-                    try fields.appendSlice(self.alloc, color);
-                } else if (std.mem.eql(u8, key, "shadowColor")) {
-                    const val = try self.parseStringAttrInline();
-                    const color = try self.parseColorValue(val);
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".shadow_color = ");
-                    try fields.appendSlice(self.alloc, color);
-                } else if (std.mem.eql(u8, key, "gradientColorEnd")) {
-                    const val = try self.parseStringAttrInline();
-                    const color = try self.parseColorValue(val);
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".gradient_color_end = ");
-                    try fields.appendSlice(self.alloc, color);
+                // Color properties — check for dynamic (state-dependent) values
+                if (mapColorKey(key)) |color_field| {
+                    if (self.isStateDependentStyleValue()) {
+                        // Dynamic color expression (e.g., active ? '#4ec9b0' : '#2d2d3d')
+                        self.emit_colors_as_rgb = true;
+                        const expr = try self.emitStateExpr();
+                        self.emit_colors_as_rgb = false;
+                        if (self.pending_dyn_style_count < 16) {
+                            self.pending_dyn_styles[self.pending_dyn_style_count] = .{
+                                .field = color_field,
+                                .expression = expr,
+                            };
+                            self.pending_dyn_style_count += 1;
+                        }
+                        // Placeholder in static struct
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, color_field);
+                        try fields.appendSlice(self.alloc, " = Color.rgb(0, 0, 0)");
+                    } else {
+                        const val = try self.parseStringAttrInline();
+                        const color = try self.parseColorValue(val);
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, color_field);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, color);
+                    }
                 } else if (mapStyleKeyI16(key)) |zig_key| {
                     const val = self.curText();
                     self.advance_token();
@@ -2217,6 +2323,23 @@ pub const Generator = struct {
                             try fields.appendSlice(self.alloc, " = ");
                             try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{px}));
                         }
+                    } else if (self.isStateDependentStyleValue()) {
+                        // Dynamic numeric expression (e.g., count * 20, active ? 1.0 : 0.5)
+                        self.emit_float_as_f32 = true;
+                        const expr = try self.emitStateExpr();
+                        self.emit_float_as_f32 = false;
+                        if (self.pending_dyn_style_count < 16) {
+                            self.pending_dyn_styles[self.pending_dyn_style_count] = .{
+                                .field = zig_key,
+                                .expression = expr,
+                            };
+                            self.pending_dyn_style_count += 1;
+                        }
+                        // Placeholder in static struct
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = 0");
                     } else {
                         const val = self.curText();
                         self.advance_token();
@@ -3012,8 +3135,20 @@ pub const Generator = struct {
             const val = self.curText();
             self.advance_token();
             if (val.len >= 2 and val[0] == '\'') {
+                const inner = val[1 .. val.len - 1];
+                // In color expression context, convert hex strings to Color.rgb()
+                if (self.emit_colors_as_rgb and inner.len > 0 and (inner[0] == '#' or namedColor(inner) != null)) {
+                    return try self.parseColorValue(inner);
+                }
                 // Convert 'text' → "text"
-                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
+                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{inner});
+            }
+            // Double-quoted string — also check for color conversion
+            if (self.emit_colors_as_rgb and val.len >= 2 and val[0] == '"') {
+                const inner = val[1 .. val.len - 1];
+                if (inner.len > 0 and (inner[0] == '#' or namedColor(inner) != null)) {
+                    return try self.parseColorValue(inner);
+                }
             }
             return val;
         }
@@ -3806,6 +3941,25 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
+        // updateDynamicStyles
+        if (self.dyn_style_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateDynamicStyles() void {\n");
+            for (0..self.dyn_style_count) |i| {
+                const ds = self.dyn_styles[i];
+                if (!ds.has_ref) continue;
+                if (std.mem.eql(u8, ds.arr_name, "root")) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    root.style.{s} = {s};\n",
+                        .{ ds.field, ds.expression }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].style.{s} = {s};\n",
+                        .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // updateConditionals
         if (self.cond_count > 0) {
             try out.appendSlice(self.alloc, "fn updateConditionals() void {\n");
@@ -4146,6 +4300,7 @@ pub const Generator = struct {
             }
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
+        if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
         if (self.map_count > 0) {
             for (0..self.map_count) |mi| {
@@ -4203,9 +4358,10 @@ pub const Generator = struct {
             for (0..self.effect_count) |i| {
                 if (self.effects[i].kind == .watch) { has_watch = true; break; }
             }
-            if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0)) {
+            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0)) {
                 try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
                 if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
+                if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
                 if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
                 if (self.map_count > 0) {
                     for (0..self.map_count) |mi| {
@@ -4376,6 +4532,15 @@ fn mapStyleKey(key: []const u8) ?[]const u8 {
 /// Map style keys to i16 fields (zIndex).
 fn mapStyleKeyI16(key: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, key, "zIndex")) return "z_index";
+    return null;
+}
+
+/// Map color style keys to their Zig field names.
+fn mapColorKey(key: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, key, "backgroundColor")) return "background_color";
+    if (std.mem.eql(u8, key, "borderColor")) return "border_color";
+    if (std.mem.eql(u8, key, "shadowColor")) return "shadow_color";
+    if (std.mem.eql(u8, key, "gradientColorEnd")) return "gradient_color_end";
     return null;
 }
 

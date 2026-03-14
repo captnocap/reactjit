@@ -74,11 +74,7 @@
                             clip_buf[clip_len] = 0;
                             _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
                         }
-                    } else if (event.key.keysym.sym == c.SDLK_F12) { compositor.toggleDevtools(); }
-                    else if (event.key.keysym.sym == c.SDLK_ESCAPE) { if (compositor.isDevtoolsVisible()) compositor.toggleDevtools() else { running = false; } }
-                    else if (compositor.isDevtoolsVisible() and event.key.keysym.sym == c.SDLK_1) { compositor.setDevtoolsTab(0); }
-                    else if (compositor.isDevtoolsVisible() and event.key.keysym.sym == c.SDLK_2) { compositor.setDevtoolsTab(1); }
-                    else if (compositor.isDevtoolsVisible() and event.key.keysym.sym == c.SDLK_3) { compositor.setDevtoolsTab(2); }
+                    } else if (event.key.keysym.sym == c.SDLK_ESCAPE) { running = false; }
                     else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
                 },
                 c.SDL_MOUSEMOTION => {
