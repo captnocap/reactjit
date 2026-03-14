@@ -891,7 +891,20 @@ fn configureSurface(width: u32, height: u32) void {
 
     var caps: wgpu.SurfaceCapabilities = undefined;
     _ = surface.getCapabilities(adapter, &caps);
-    g_format = if (caps.format_count > 0) caps.formats[0] else .bgra8_unorm;
+
+    // Prefer non-sRGB format to avoid double gamma correction.
+    // Our colors are already in sRGB space (CSS hex values like #1e1e2a).
+    // An sRGB surface format would apply gamma encoding again → washed out.
+    g_format = .bgra8_unorm; // safe default
+    if (caps.format_count > 0) {
+        g_format = caps.formats[0]; // fallback to first supported
+        for (caps.formats[0..caps.format_count]) |fmt| {
+            if (fmt == .bgra8_unorm or fmt == .rgba8_unorm) {
+                g_format = fmt;
+                break;
+            }
+        }
+    }
 
     const config = wgpu.SurfaceConfiguration{
         .device = device,
