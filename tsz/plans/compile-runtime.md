@@ -1,5 +1,26 @@
 # `tsz compile-runtime` — Pre-compile .tsz to Runtime Zig Fragments
 
+## RULE: Never Edit Compiled Zig — Edit the .tsz Source
+
+The `.zig` output from `tsz compile-runtime` is **minified JS you would never edit in a browser.**
+It is a build artifact. The `.tsz` source file is the source of truth. ALWAYS.
+
+If the compiled output doesn't look right:
+- **Fix the .tsz source** and recompile
+- **Do NOT** hand-edit the generated .zig to tweak pixel values or adjust layout
+- If the compiler isn't generating what you expect, that's a compiler bug — fix the compiler
+
+The only exception: if there's a genuine layout engine bug (layout.zig), fix that separately
+with proper justification (see the death note on layout.zig).
+
+The .tsz source files MUST be kept alongside their compiled output. Deleting the .tsz
+and keeping only the .zig is forbidden — you lose the ability to iterate.
+
+```
+tsz/devtools/InspectorOverlay.tsz    ← SOURCE OF TRUTH — edit this
+tsz/runtime/compiled/framework/inspector_overlay.zig  ← BUILD ARTIFACT — never edit
+```
+
 ## What This Is
 
 A new CLI command that compiles a `.tsz` file into an embeddable Zig fragment — node definitions, style update functions, draw calls — suitable for freezing into the runtime. NOT a full app (no main loop, no SDL init, no event loop).
