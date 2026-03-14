@@ -247,9 +247,11 @@ pub fn main() !void {
 
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
-    // Init text engine with bundled DejaVu Sans
+    // Init text engine with bundled DejaVu Sans, system fallbacks per platform
     var text_engine = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
-        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch {
+        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch {
         std.debug.print("No font found!\n", .{});
         return error.FontNotFound;
     };

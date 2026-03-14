@@ -11,7 +11,9 @@ pub fn main() !void {
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
     var text_engine = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
-        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch return error.FontNotFound;
+        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch return error.FontNotFound;
     defer text_engine.deinit();
 
     var image_cache = ImageCache.init(renderer);

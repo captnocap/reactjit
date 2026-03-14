@@ -9,7 +9,7 @@ A compiler + runtime that takes `.tsz` files (React-like syntax) and compiles th
 ## Current State
 
 - **Linux x86_64**: fully working, daily driver
-- **macOS ARM (M4)**: not yet attempted
+- **macOS ARM (M-series)**: fully working — engine, compiler, app pipeline all pass
 - **Windows x86_64**: not yet attempted
 - **Linux ARM (RPi 3/4/5)**: not yet attempted
 

@@ -237,6 +237,11 @@ pub fn build(b: *std.Build) void {
         }
     }
 
+    // ── Shared helper: link SDL2 + OpenGL + FreeType for tsz targets ────────
+    // Platform-conditional: macOS uses frameworks + Homebrew paths,
+    // Linux uses system libraries + /usr/include paths.
+    const tsz_os = target.result.os.tag;
+
     // ── engine (Phase 0 — SDL2 + OpenGL native runtime) ─────────────────────
     // The beginning of the native TypeScript runtime. SDL2 window, OpenGL 3.3
     // core context, direct GPU painting. No Love2D, no LuaJIT, no QuickJS.
@@ -255,9 +260,16 @@ pub fn build(b: *std.Build) void {
 
         engine_exe.linkLibC();
         engine_exe.linkSystemLibrary("SDL2");
-        engine_exe.linkSystemLibrary("GL");
         engine_exe.linkSystemLibrary("freetype");
-        engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        if (tsz_os == .macos) {
+            engine_exe.linkFramework("OpenGL");
+            engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else {
+            engine_exe.linkSystemLibrary("GL");
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        }
         engine_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         engine_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
@@ -292,10 +304,17 @@ pub fn build(b: *std.Build) void {
 
         app_exe.linkLibC();
         app_exe.linkSystemLibrary("SDL2");
-        app_exe.linkSystemLibrary("GL");
         app_exe.linkSystemLibrary("freetype");
         app_exe.linkSystemLibrary("mpv");
-        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        if (tsz_os == .macos) {
+            app_exe.linkFramework("OpenGL");
+            app_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else {
+            app_exe.linkSystemLibrary("GL");
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        }
         app_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         app_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
@@ -342,19 +361,28 @@ pub fn build(b: *std.Build) void {
         // GUI needs SDL2, GL, FreeType for rendering
         tsz_exe.linkLibC();
         tsz_exe.linkSystemLibrary("SDL2");
-        tsz_exe.linkSystemLibrary("GL");
         tsz_exe.linkSystemLibrary("freetype");
-        tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        if (tsz_os == .macos) {
+            tsz_exe.linkFramework("OpenGL");
+            tsz_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else {
+            tsz_exe.linkSystemLibrary("GL");
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        }
         tsz_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         tsz_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
 
-        // System tray needs GTK3 + libayatana-appindicator3
-        tsz_exe.linkSystemLibrary("gtk-3");
-        tsz_exe.linkSystemLibrary("gobject-2.0");
-        tsz_exe.linkSystemLibrary("ayatana-appindicator3");
+        // System tray needs GTK3 + libayatana-appindicator3 (Linux only)
+        if (tsz_os == .linux) {
+            tsz_exe.linkSystemLibrary("gtk-3");
+            tsz_exe.linkSystemLibrary("gobject-2.0");
+            tsz_exe.linkSystemLibrary("ayatana-appindicator3");
+        }
 
         const tsz_install = b.addInstallArtifact(tsz_exe, .{});
         const tsz_step = b.step("tsz-compiler", "Build the native .tsz compiler");

@@ -5,9 +5,15 @@
 //! Usage: const c = @import("c.zig");
 //! Then: c.SDL_Init(...), c.FT_Init_FreeType(...), etc.
 
+const builtin = @import("builtin");
+
 pub const imports = @cImport({
     @cInclude("SDL2/SDL.h");
-    @cInclude("GL/gl.h");
+    if (builtin.os.tag == .macos) {
+        @cInclude("OpenGL/gl.h");
+    } else {
+        @cInclude("GL/gl.h");
+    }
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
     @cInclude("stb/stb_image.h");

@@ -108,7 +108,9 @@ pub fn run(alloc: std.mem.Allocator) !void {
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
     var te = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
-        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch return;
+        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
+        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch return;
     defer te.deinit();
 
     var reg = registry.load(alloc);
@@ -857,7 +859,10 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
     _ = c.SDL_SetRenderDrawBlendMode(pop_rend, c.SDL_BLENDMODE_BLEND);
 
     // Create a text engine for the popout (shares FreeType lib but needs own SDL renderer binding)
-    var pop_te = TextEngine.init(pop_rend, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch {
+    var pop_te = TextEngine.init(pop_rend, "fonts/base/DejaVuSans-Regular.ttf") catch
+        TextEngine.init(pop_rend, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
+        TextEngine.init(pop_rend, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
+        TextEngine.init(pop_rend, "/System/Library/Fonts/SFNS.ttf") catch {
         c.SDL_DestroyRenderer(pop_rend);
         c.SDL_DestroyWindow(pop_win);
         return;

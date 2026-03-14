@@ -6,10 +6,15 @@
 //! need the full flex engine.
 
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const c = @cImport({
     @cInclude("SDL2/SDL.h");
-    @cInclude("GL/gl.h");
+    if (builtin.os.tag == .macos) {
+        @cInclude("OpenGL/gl.h");
+    } else {
+        @cInclude("GL/gl.h");
+    }
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
 });

@@ -3,15 +3,61 @@
 //! Ported from lua/tray.lua (Lua FFI → Zig extern).
 //! Sits in the taskbar notification area with a right-click context menu.
 //! Menu is auto-generated from the project registry + actions table.
+//!
+//! Linux only. On other platforms, all public functions are no-ops that
+//! return safe defaults (init() → false, etc.).
 
 const std = @import("std");
+const builtin = @import("builtin");
 const registry = @import("registry.zig");
 const process = @import("process.zig");
 const actions_mod = @import("actions.zig");
 
-// ── GTK/GLib/AppIndicator extern declarations ───────────────────────────
-// Manual declarations instead of @cImport to avoid pulling in the entire
-// GTK header tree (which is huge and slows compilation dramatically).
+// Global flags set by GTK callbacks, read by the SDL event loop
+pub var should_show_gui: bool = false;
+pub var should_quit: bool = false;
+
+// Action dispatch from tray menu
+pub var pending_action: ?struct {
+    name: [16]u8,
+    name_len: u8,
+    path: [512]u8,
+    path_len: u16,
+} = null;
+
+// ── Platform gate: everything below is Linux-only ─────────────────────────
+// On non-Linux, the public API compiles to no-ops so callers don't need
+// their own #ifdefs.
+
+pub fn init() bool {
+    if (comptime builtin.os.tag != .linux) return false;
+    return initLinux();
+}
+
+pub fn buildMenu(reg: *const registry.Registry) void {
+    if (comptime builtin.os.tag != .linux) return;
+    buildMenuLinux(reg);
+}
+
+pub fn update() void {
+    if (comptime builtin.os.tag != .linux) return;
+    updateLinux();
+}
+
+pub fn resolvePendingAction(reg: *const registry.Registry, alloc: std.mem.Allocator) void {
+    if (comptime builtin.os.tag != .linux) return;
+    resolvePendingActionLinux(reg, alloc);
+}
+
+pub fn deinit() void {
+    if (comptime builtin.os.tag != .linux) return;
+    deinitLinux();
+}
+
+// ── Linux implementation ──────────────────────────────────────────────────
+
+// GTK/GLib/AppIndicator extern declarations — manual to avoid pulling the
+// entire GTK header tree (huge, slows compilation dramatically).
 
 const GCallback = *const fn () callconv(.c) void;
 const GClosureNotify = ?*const fn (?*anyopaque, ?*anyopaque) callconv(.c) void;
@@ -60,18 +106,6 @@ const APP_INDICATOR_CATEGORY_APPLICATION_STATUS = 0;
 var indicator_ptr: ?*anyopaque = null;
 var menu_ptr: ?*anyopaque = null;
 var gtk_initialized = false;
-
-// Global flags set by GTK callbacks, read by the SDL event loop
-pub var should_show_gui: bool = false;
-pub var should_quit: bool = false;
-
-// Action dispatch from tray menu
-pub var pending_action: ?struct {
-    name: [16]u8,
-    name_len: u8,
-    path: [512]u8,
-    path_len: u16,
-} = null;
 
 // ── Callbacks ───────────────────────────────────────────────────────────
 
@@ -133,9 +167,9 @@ const callbacks = blk: {
     break :blk cbs;
 };
 
-// ── Public API ──────────────────────────────────────────────────────────
+// ── Linux public API ────────────────────────────────────────────────────
 
-pub fn init() bool {
+fn initLinux() bool {
     if (gtk_initialized) return true;
 
     gtk_init(null, null);
@@ -155,7 +189,7 @@ pub fn init() bool {
 }
 
 /// Rebuild the tray menu from the current registry.
-pub fn buildMenu(reg: *const registry.Registry) void {
+fn buildMenuLinux(reg: *const registry.Registry) void {
     // Destroy old menu
     if (menu_ptr) |m| gtk_widget_destroy(m);
 
@@ -250,7 +284,7 @@ pub fn buildMenu(reg: *const registry.Registry) void {
 
 /// Pump GTK events (non-blocking, bounded). Call this from the SDL event loop.
 /// Processes up to 4 events per call to avoid stalling the render frame.
-pub fn update() void {
+fn updateLinux() void {
     if (!gtk_initialized) return;
     var i: u32 = 0;
     while (gtk_events_pending() != 0 and i < 4) : (i += 1) {
@@ -259,7 +293,7 @@ pub fn update() void {
 }
 
 /// Resolve a pending tray action — called by the GUI after checking pending_action.
-pub fn resolvePendingAction(reg: *const registry.Registry, alloc: std.mem.Allocator) void {
+fn resolvePendingActionLinux(reg: *const registry.Registry, alloc: std.mem.Allocator) void {
     if (pending_action) |pa| {
         pending_action = null;
         const aname = pa.name[0..pa.name_len];
@@ -278,7 +312,7 @@ pub fn resolvePendingAction(reg: *const registry.Registry, alloc: std.mem.Alloca
     }
 }
 
-pub fn deinit() void {
+fn deinitLinux() void {
     if (menu_ptr) |m| {
         gtk_widget_destroy(m);
         menu_ptr = null;
