@@ -266,41 +266,17 @@ pub fn spawn(shell: [*:0]const u8, rows: u16, cols: u16) void {
     std.debug.print("[pty] spawned PID={d} {d}x{d}\n", .{ g_pty.child_pid, cols, rows });
 }
 
-var g_poll_count: u64 = 0;
-var g_feed_count: u64 = 0;
-var g_feed_bytes: u64 = 0;
-var g_output_count: u64 = 0;
-var g_last_log: u32 = 0;
-
 /// Poll: read PTY → feed vterm → write back vterm output. Returns true if new data arrived.
 pub fn poll() bool {
     if (g_pty.closed) return false;
-    g_poll_count += 1;
 
-    const data = g_pty.read(&g_read_buf) orelse {
-        // Log every 5 seconds even when idle
-        const now = @as(u32, @intCast(@as(u64, @intCast(std.time.milliTimestamp())) & 0xFFFFFFFF));
-        if (now -% g_last_log > 5000) {
-            g_last_log = now;
-            std.debug.print("[pty-debug] IDLE polls={d} feeds={d} feed_bytes={d} outputs={d}\n", .{ g_poll_count, g_feed_count, g_feed_bytes, g_output_count });
-        }
-        return false;
-    };
-
-    g_feed_count += 1;
-    g_feed_bytes += data.len;
+    const data = g_pty.read(&g_read_buf) orelse return false;
     vterm_mod.feed(data);
 
     // Write back any vterm output (terminal query responses like device attributes)
     var out_buf: [1024]u8 = undefined;
     if (vterm_mod.readOutput(&out_buf)) |output| {
-        g_output_count += 1;
-        std.debug.print("[pty-debug] FEED {d}B → vterm OUTPUT {d}B (feed#{d})\n", .{ data.len, output.len, g_feed_count });
         g_pty.write(output) catch {};
-    } else {
-        if (g_feed_count <= 10 or g_feed_count % 100 == 0) {
-            std.debug.print("[pty-debug] FEED {d}B → no output (feed#{d})\n", .{ data.len, g_feed_count });
-        }
     }
 
     return true;
