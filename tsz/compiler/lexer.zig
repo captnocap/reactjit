@@ -33,6 +33,19 @@ pub const TokenKind = enum {
     percent,
     bang, // !
 
+    // Comparison
+    eq_eq, // ==
+    not_eq, // !=
+    gt_eq, // >=
+    lt_eq, // <=
+
+    // Logical
+    amp_amp, // &&
+    pipe_pipe, // ||
+
+    // Ternary
+    question, // ?
+
     // JSX
     lt, // <
     gt, // >
@@ -210,6 +223,18 @@ pub const Lexer = struct {
                 self.emit(.arrow, start, start + 2);
                 continue;
             }
+            // == (must check after =>)
+            if (ch == '=' and self.peekAt(1) == '=') {
+                self.pos += 2;
+                self.emit(.eq_eq, start, start + 2);
+                continue;
+            }
+            // !=
+            if (ch == '!' and self.peekAt(1) == '=') {
+                self.pos += 2;
+                self.emit(.not_eq, start, start + 2);
+                continue;
+            }
             if (ch == '/' and self.peekAt(1) == '>') {
                 self.pos += 2;
                 self.emit(.slash_gt, start, start + 2);
@@ -218,6 +243,30 @@ pub const Lexer = struct {
             if (ch == '<' and self.peekAt(1) == '/') {
                 self.pos += 2;
                 self.emit(.lt_slash, start, start + 2);
+                continue;
+            }
+            // >= (must check before single >)
+            if (ch == '>' and self.peekAt(1) == '=') {
+                self.pos += 2;
+                self.emit(.gt_eq, start, start + 2);
+                continue;
+            }
+            // <= (must check before single <)
+            if (ch == '<' and self.peekAt(1) == '=') {
+                self.pos += 2;
+                self.emit(.lt_eq, start, start + 2);
+                continue;
+            }
+            // &&
+            if (ch == '&' and self.peekAt(1) == '&') {
+                self.pos += 2;
+                self.emit(.amp_amp, start, start + 2);
+                continue;
+            }
+            // ||
+            if (ch == '|' and self.peekAt(1) == '|') {
+                self.pos += 2;
+                self.emit(.pipe_pipe, start, start + 2);
                 continue;
             }
 
@@ -242,6 +291,7 @@ pub const Lexer = struct {
                 '!' => .bang,
                 '<' => .lt,
                 '>' => .gt,
+                '?' => .question,
                 else => null,
             };
 

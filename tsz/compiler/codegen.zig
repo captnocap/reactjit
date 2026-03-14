@@ -28,10 +28,19 @@ const DynText = struct {
     has_ref: bool,
 };
 
+const StateType = enum { int, float, boolean, string };
+
+const StateInitial = union(StateType) {
+    int: i64,
+    float: f64,
+    boolean: bool,
+    string: []const u8,
+};
+
 const StateSlot = struct {
     getter: []const u8,
     setter: []const u8,
-    initial: i64,
+    initial: StateInitial,
 };
 
 const WindowInfo = struct {
@@ -168,6 +177,17 @@ pub const Generator = struct {
             if (std.mem.eql(u8, self.state_slots[i].setter, name)) return @intCast(i);
         }
         return null;
+    }
+
+    fn stateType(self: *Generator, name: []const u8) ?StateType {
+        for (0..self.state_count) |i| {
+            if (std.mem.eql(u8, self.state_slots[i].getter, name)) return std.meta.activeTag(self.state_slots[i].initial);
+        }
+        return null;
+    }
+
+    fn stateTypeById(self: *Generator, slot_id: u32) StateType {
+        return std.meta.activeTag(self.state_slots[slot_id].initial);
     }
 
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
@@ -394,10 +414,28 @@ pub const Generator = struct {
                             if (self.isIdent("useState")) {
                                 self.advance_token(); // useState
                                 if (self.curKind() == .lparen) self.advance_token();
-                                var initial: i64 = 0;
+                                var initial: StateInitial = .{ .int = 0 };
                                 if (self.curKind() == .number) {
-                                    initial = std.fmt.parseInt(i64, self.curText(), 10) catch 0;
+                                    const num_text = self.curText();
+                                    if (std.mem.indexOf(u8, num_text, ".") != null) {
+                                        initial = .{ .float = std.fmt.parseFloat(f64, num_text) catch 0.0 };
+                                    } else {
+                                        initial = .{ .int = std.fmt.parseInt(i64, num_text, 10) catch 0 };
+                                    }
                                     self.advance_token();
+                                } else if (self.curKind() == .string) {
+                                    const raw = self.curText();
+                                    initial = .{ .string = raw[1 .. raw.len - 1] };
+                                    self.advance_token();
+                                } else if (self.curKind() == .identifier) {
+                                    const val = self.curText();
+                                    if (std.mem.eql(u8, val, "true")) {
+                                        initial = .{ .boolean = true };
+                                        self.advance_token();
+                                    } else if (std.mem.eql(u8, val, "false")) {
+                                        initial = .{ .boolean = false };
+                                        self.advance_token();
+                                    }
                                 }
                                 // Skip rparen
                                 if (self.curKind() == .rparen) self.advance_token();
@@ -959,10 +997,33 @@ pub const Generator = struct {
 
                 // Check if expression is a state variable
                 if (self.isState(expr)) |slot_id| {
-                    try fmt.appendSlice(self.alloc, "{d}");
-                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-                    const arg = try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
-                    try args.appendSlice(self.alloc, arg);
+                    const st = self.stateTypeById(slot_id);
+                    switch (st) {
+                        .string => {
+                            try fmt.appendSlice(self.alloc, "{s}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "state.getSlotString({d})", .{slot_id}));
+                        },
+                        .float => {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "state.getSlotFloat({d})", .{slot_id}));
+                        },
+                        .boolean => {
+                            try fmt.appendSlice(self.alloc, "{s}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id}));
+                        },
+                        .int => {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "state.getSlot({d})", .{slot_id}));
+                        },
+                    }
                 } else {
                     // Static expression — just embed the text
                     try fmt.appendSlice(self.alloc, expr);
@@ -1103,41 +1164,147 @@ pub const Generator = struct {
     }
 
     fn emitStateExpr(self: *Generator) ![]const u8 {
-        // Parse a state expression: count + 1, count - 1, time(0), etc.
-        var result: std.ArrayListUnmanaged(u8) = .{};
+        return try self.emitTernary();
+    }
 
-        const first = try self.emitStateAtom();
-        try result.appendSlice(self.alloc, first);
+    fn emitTernary(self: *Generator) ![]const u8 {
+        const cond = try self.emitLogicalOr();
+        if (self.curKind() == .question) {
+            self.advance_token(); // skip ?
+            const then_val = try self.emitTernary(); // right-associative
+            if (self.curKind() != .colon) {
+                std.debug.print("[tsz] Ternary missing ':' at pos {d}\n", .{self.pos});
+                return error.ExpectedColonInTernary;
+            }
+            self.advance_token(); // skip :
+            const else_val = try self.emitTernary();
+            return try std.fmt.allocPrint(self.alloc, "(if ({s}) {s} else {s})", .{ cond, then_val, else_val });
+        }
+        return cond;
+    }
 
-        // Check for binary operator
-        if (self.curKind() == .plus or self.curKind() == .minus or
-            self.curKind() == .star)
+    fn emitLogicalOr(self: *Generator) ![]const u8 {
+        var left = try self.emitLogicalAnd();
+        while (self.curKind() == .pipe_pipe) {
+            self.advance_token();
+            const right = try self.emitLogicalAnd();
+            left = try std.fmt.allocPrint(self.alloc, "({s} or {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    fn emitLogicalAnd(self: *Generator) ![]const u8 {
+        var left = try self.emitEquality();
+        while (self.curKind() == .amp_amp) {
+            self.advance_token();
+            const right = try self.emitEquality();
+            left = try std.fmt.allocPrint(self.alloc, "({s} and {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    fn emitEquality(self: *Generator) ![]const u8 {
+        var left = try self.emitComparison();
+        while (self.curKind() == .eq_eq or self.curKind() == .not_eq) {
+            const op = if (self.curKind() == .eq_eq) "==" else "!=";
+            self.advance_token();
+            const right = try self.emitComparison();
+            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+        }
+        return left;
+    }
+
+    fn emitComparison(self: *Generator) ![]const u8 {
+        var left = try self.emitAdditive();
+        while (self.curKind() == .lt or self.curKind() == .gt or
+            self.curKind() == .lt_eq or self.curKind() == .gt_eq)
+        {
+            const op = switch (self.curKind()) {
+                .lt => "<",
+                .gt => ">",
+                .lt_eq => "<=",
+                .gt_eq => ">=",
+                else => unreachable,
+            };
+            self.advance_token();
+            const right = try self.emitAdditive();
+            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+        }
+        return left;
+    }
+
+    fn emitAdditive(self: *Generator) ![]const u8 {
+        var left = try self.emitMultiplicative();
+        while (self.curKind() == .plus or self.curKind() == .minus) {
+            const op = self.curText();
+            self.advance_token();
+            const right = try self.emitMultiplicative();
+            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+        }
+        return left;
+    }
+
+    fn emitMultiplicative(self: *Generator) ![]const u8 {
+        var left = try self.emitUnary();
+        while (self.curKind() == .star or self.curKind() == .slash or
+            self.curKind() == .percent)
         {
             const op = self.curText();
             self.advance_token();
-            try result.appendSlice(self.alloc, " ");
-            try result.appendSlice(self.alloc, op);
-            try result.appendSlice(self.alloc, " ");
-            const right = try self.emitStateAtom();
-            try result.appendSlice(self.alloc, right);
+            const right = try self.emitUnary();
+            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
         }
-
-        return try self.alloc.dupe(u8, result.items);
+        return left;
     }
 
-    fn emitStateAtom(self: *Generator) ![]const u8 {
+    fn emitUnary(self: *Generator) ![]const u8 {
+        if (self.curKind() == .bang) {
+            self.advance_token();
+            const operand = try self.emitUnary();
+            return try std.fmt.allocPrint(self.alloc, "(!{s})", .{operand});
+        }
+        if (self.curKind() == .minus) {
+            self.advance_token();
+            const operand = try self.emitUnary();
+            return try std.fmt.allocPrint(self.alloc, "(-{s})", .{operand});
+        }
+        return try self.emitStateAtom();
+    }
+
+    fn emitStateAtom(self: *Generator) anyerror![]const u8 {
+        // Parenthesized expression
+        if (self.curKind() == .lparen) {
+            self.advance_token(); // (
+            const inner = try self.emitStateExpr();
+            if (self.curKind() == .rparen) self.advance_token(); // )
+            return try std.fmt.allocPrint(self.alloc, "({s})", .{inner});
+        }
+        // Number literal
         if (self.curKind() == .number) {
+            const val = self.curText();
+            self.advance_token();
+            return val;
+        }
+        // String literal
+        if (self.curKind() == .string) {
             const val = self.curText();
             self.advance_token();
             return val;
         }
         if (self.curKind() == .identifier) {
             const name = self.curText();
+            // Boolean literals
+            if (std.mem.eql(u8, name, "true") or std.mem.eql(u8, name, "false")) {
+                self.advance_token();
+                return name;
+            }
+            // State getter
             if (self.isState(name)) |slot_id| {
                 self.advance_token();
                 return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
             }
             // FFI call in expression position
+            // NOTE: Intentionally narrow — only bare numbers and 0→null mapping.
             if (self.isFFIFunc(name)) {
                 self.advance_token();
                 if (self.curKind() == .lparen) self.advance_token();
@@ -1155,6 +1322,7 @@ pub const Generator = struct {
                 if (self.curKind() == .rparen) self.advance_token();
                 return try std.fmt.allocPrint(self.alloc, "ffi.{s}({s})", .{ name, ffi_args.items });
             }
+            // Bare identifier
             self.advance_token();
             return name;
         }
@@ -1398,7 +1566,17 @@ pub const Generator = struct {
         // State init
         if (self.has_state) {
             for (0..self.state_count) |i| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlot({d});\n", .{self.state_slots[i].initial}));
+                const slot = self.state_slots[i];
+                switch (slot.initial) {
+                    .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlot({d});\n", .{v})),
+                    .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotFloat({d});\n", .{v})),
+                    .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotBool({});\n", .{v})),
+                    .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                }
             }
             // Dev mode: restore state from previous session + install save-on-signal
             try out.appendSlice(self.alloc, "    _ = state.loadState();\n");
