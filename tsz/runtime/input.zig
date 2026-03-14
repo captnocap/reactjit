@@ -22,6 +22,7 @@ pub const InputState = struct {
 };
 
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;
+var on_change_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
 var focused_id: ?u8 = null;
 var cursor_blink: f32 = 0;
 var cursor_visible: bool = true;
@@ -30,6 +31,13 @@ var cursor_visible: bool = true;
 pub fn register(id: u8) void {
     if (id < MAX_INPUTS) {
         inputs[id].active = true;
+    }
+}
+
+/// Set a change callback for an input. Called when text content changes.
+pub fn setOnChange(id: u8, callback: *const fn () void) void {
+    if (id < MAX_INPUTS) {
+        on_change_callbacks[id] = callback;
     }
 }
 
@@ -112,6 +120,7 @@ pub fn handleTextInput(text: [*:0]const u8) void {
     inp.cursor += text_len;
     cursor_blink = 0;
     cursor_visible = true;
+    if (on_change_callbacks[id]) |cb| cb();
 }
 
 /// Handle key events for the focused input.
@@ -119,6 +128,7 @@ pub fn handleKey(sym: c_int) bool {
     const id = focused_id orelse return false;
     if (id >= MAX_INPUTS) return false;
     var inp = &inputs[id];
+    const prev_len = inp.len;
 
     if (sym == c.SDLK_BACKSPACE) {
         if (inp.has_selection) {
@@ -245,6 +255,10 @@ pub fn handleKey(sym: c_int) bool {
     if (sym == c.SDLK_ESCAPE) {
         unfocus();
         return true;
+    }
+
+    if (inp.len != prev_len) {
+        if (on_change_callbacks[id]) |cb| cb();
     }
 
     return false;
@@ -425,8 +439,14 @@ pub fn clear(id: u8) void {
 /// Set text programmatically (e.g. from state restoration).
 pub fn setText(id: u8, text: []const u8) void {
     if (id >= MAX_INPUTS) return;
-    const copy_len = @min(text.len, BUF_SIZE - 1);
-    @memcpy(inputs[id].buf[0..copy_len], text[0..copy_len]);
-    inputs[id].len = @intCast(copy_len);
-    inputs[id].cursor = @intCast(copy_len);
+    var inp = &inputs[id];
+    const prev_len = inp.len;
+    const copy_len: u16 = @intCast(@min(text.len, BUF_SIZE - 1));
+    @memcpy(inp.buf[0..copy_len], text[0..copy_len]);
+    inp.len = copy_len;
+    inp.cursor = copy_len;
+    inp.has_selection = false;
+    if (inp.len != prev_len) {
+        if (on_change_callbacks[id]) |cb| cb();
+    }
 }

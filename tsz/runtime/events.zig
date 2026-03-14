@@ -16,6 +16,8 @@ pub const EventHandler = struct {
     on_hover_enter: ?*const fn () void = null,
     on_hover_exit: ?*const fn () void = null,
     on_key: ?*const fn (key: c_int) void = null,
+    on_change_text: ?*const fn () void = null,
+    on_scroll: ?*const fn () void = null,
 };
 
 // ── Hit Testing ──────────────────────────────────────────────────────────
@@ -49,7 +51,9 @@ fn hasHandlers(h: *const EventHandler) bool {
     return h.on_press != null or
         h.on_hover_enter != null or
         h.on_hover_exit != null or
-        h.on_key != null;
+        h.on_key != null or
+        h.on_change_text != null or
+        h.on_scroll != null;
 }
 
 // ── Text Hit Test (finds any text node, not just ones with handlers) ────

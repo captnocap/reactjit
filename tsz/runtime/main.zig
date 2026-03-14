@@ -422,6 +422,7 @@ pub fn main() !void {
                         // Clamp to valid range [0, content_height - visible_height]
                         const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+                        if (scroll_node.handlers.on_scroll) |handler| handler();
                     }
                 },
                 else => {},

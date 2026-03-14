@@ -18,6 +18,20 @@ const MAX_FFI_HEADERS = 16;
 const MAX_FFI_LIBS = 16;
 const MAX_FFI_FUNCS = 64;
 const MAX_WINDOWS = 8;
+const MAX_CONDS = 32;
+
+const CondKind = enum {
+    ternary,
+    show_hide,
+};
+
+const CondInfo = struct {
+    kind: CondKind,
+    condition: []const u8,
+    arr_name: []const u8,
+    true_idx: u32,
+    false_idx: u32,
+};
 
 const DynText = struct {
     buf_id: u32,
@@ -89,6 +103,10 @@ pub const Generator = struct {
     input_multiline: [16]bool,
     input_change_handlers: [16]?[]const u8,
 
+    // Conditionals
+    conds: [MAX_CONDS]CondInfo,
+    cond_count: u32,
+
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
     classifier_primitives: [128][]const u8,
@@ -121,6 +139,8 @@ pub const Generator = struct {
             .input_count = 0,
             .input_multiline = [_]bool{false} ** 16,
             .input_change_handlers = [_]?[]const u8{null} ** 16,
+            .conds = undefined,
+            .cond_count = 0,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -628,6 +648,35 @@ pub const Generator = struct {
                             text_content = tl.static_text;
                         }
                         self.advance_token(); // skip template literal
+                    } else if (self.isLogicalAndAhead()) {
+                        // Logical AND: {condition && <Element/>}
+                        const result = try self.parseLogicalAndJSX();
+                        try child_exprs.append(self.alloc, result.element);
+                        if (self.cond_count < MAX_CONDS) {
+                            self.conds[self.cond_count] = .{
+                                .kind = .show_hide,
+                                .condition = result.condition,
+                                .arr_name = "",
+                                .true_idx = @intCast(child_exprs.items.len - 1),
+                                .false_idx = @intCast(child_exprs.items.len - 1),
+                            };
+                            self.cond_count += 1;
+                        }
+                    } else if (self.isTernaryAhead()) {
+                        // Ternary: {condition ? <TrueJSX/> : <FalseJSX/>}
+                        const ternary = try self.parseTernaryJSX();
+                        try child_exprs.append(self.alloc, ternary.true_expr);
+                        try child_exprs.append(self.alloc, ternary.false_expr);
+                        if (self.cond_count < MAX_CONDS) {
+                            self.conds[self.cond_count] = .{
+                                .kind = .ternary,
+                                .condition = ternary.condition,
+                                .arr_name = "",
+                                .true_idx = @intCast(child_exprs.items.len - 2),
+                                .false_idx = @intCast(child_exprs.items.len - 1),
+                            };
+                            self.cond_count += 1;
+                        }
                     } else if (self.curKind() == .identifier) {
                         // Could be {children} or {varName}
                         self.advance_token();
@@ -819,6 +868,14 @@ pub const Generator = struct {
             }
             try arr_content.appendSlice(self.alloc, " };");
             try self.array_decls.append(self.alloc, try arr_content.toOwnedSlice(self.alloc));
+
+            // Bind conditions whose indices belong to this child array
+            for (0..self.cond_count) |ci| {
+                if (self.conds[ci].arr_name.len > 0) continue; // already bound
+                if (self.conds[ci].true_idx < child_exprs.items.len) {
+                    self.conds[ci].arr_name = arr_name;
+                }
+            }
 
             // Track dynamic text references
             // (the last_dyn_id from the most recent child points into this array)
@@ -1157,6 +1214,16 @@ pub const Generator = struct {
                 return try std.fmt.allocPrint(self.alloc, "_ = ffi.{s}({s});", .{ name, ffi_args.items });
             }
 
+            // getText(id) — retrieve text from input by numeric ID
+            if (std.mem.eql(u8, name, "getText")) {
+                self.advance_token(); // getText
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                const id_text = self.curText(); // numeric literal ID
+                self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token(); // )
+                return try std.fmt.allocPrint(self.alloc, "input_mod.getText({s})", .{id_text});
+            }
+
             // Built-in functions
             if (std.mem.eql(u8, name, "playVideo")) {
                 self.advance_token();
@@ -1428,6 +1495,129 @@ pub const Generator = struct {
         return try self.alloc.dupe(u8, ".{ .style = .{ .display = .none } }");
     }
 
+    // ── Conditional JSX helpers ────────────────────────────────────
+
+    /// Lookahead: check if tokens from current pos to matching } contain a ? (ternary).
+    fn isTernaryAhead(self: *Generator) bool {
+        var look = self.pos;
+        var brace_depth: u32 = 0;
+        var paren_depth: u32 = 0;
+        while (look < self.lex.count) {
+            const kind = self.lex.get(look).kind;
+            if (kind == .lbrace) brace_depth += 1;
+            if (kind == .rbrace) {
+                if (brace_depth == 0) return false;
+                brace_depth -= 1;
+            }
+            if (kind == .lparen) paren_depth += 1;
+            if (kind == .rparen and paren_depth > 0) paren_depth -= 1;
+            if (kind == .question and brace_depth == 0 and paren_depth == 0) return true;
+            if (kind == .eof) return false;
+            look += 1;
+        }
+        return false;
+    }
+
+    /// Lookahead: check if tokens from current pos contain && before ? or }.
+    fn isLogicalAndAhead(self: *Generator) bool {
+        var look = self.pos;
+        var brace_depth: u32 = 0;
+        var paren_depth: u32 = 0;
+        while (look < self.lex.count) {
+            const kind = self.lex.get(look).kind;
+            if (kind == .lbrace) brace_depth += 1;
+            if (kind == .rbrace) {
+                if (brace_depth == 0) return false;
+                brace_depth -= 1;
+            }
+            if (kind == .lparen) paren_depth += 1;
+            if (kind == .rparen and paren_depth > 0) paren_depth -= 1;
+            if (kind == .amp_amp and brace_depth == 0 and paren_depth == 0) return true;
+            if (kind == .question and brace_depth == 0 and paren_depth == 0) return false;
+            if (kind == .eof) return false;
+            look += 1;
+        }
+        return false;
+    }
+
+    const TernaryResult = struct {
+        condition: []const u8,
+        true_expr: []const u8,
+        false_expr: []const u8,
+    };
+
+    const LogicalAndResult = struct {
+        condition: []const u8,
+        element: []const u8,
+    };
+
+    fn parseTernaryJSX(self: *Generator) anyerror!TernaryResult {
+        // Parse condition below ternary precedence (stops at ?)
+        const condition = try self.emitLogicalOr();
+
+        if (self.curKind() != .question) {
+            std.debug.print("[tsz] Expected '?' in ternary at pos {d}\n", .{self.pos});
+            return error.ExpectedQuestionInTernary;
+        }
+        self.advance_token(); // skip ?
+
+        // Skip optional ( around true branch
+        if (self.curKind() == .lparen) self.advance_token();
+
+        // Parse true branch — must be a JSX element
+        const true_expr = try self.parseJSXElement();
+
+        // Skip optional ) after true branch
+        if (self.curKind() == .rparen) self.advance_token();
+
+        // Expect : token
+        if (self.curKind() != .colon) {
+            std.debug.print("[tsz] Ternary missing ':' at pos {d}\n", .{self.pos});
+            return error.ExpectedColonInTernary;
+        }
+        self.advance_token(); // skip :
+
+        // Skip optional ( around false branch
+        if (self.curKind() == .lparen) self.advance_token();
+
+        // Parse false branch — must be a JSX element
+        const false_expr = try self.parseJSXElement();
+
+        // Skip optional ) after false branch
+        if (self.curKind() == .rparen) self.advance_token();
+
+        return .{
+            .condition = condition,
+            .true_expr = true_expr,
+            .false_expr = false_expr,
+        };
+    }
+
+    fn parseLogicalAndJSX(self: *Generator) anyerror!LogicalAndResult {
+        // Parse condition below && precedence (stops at &&)
+        const condition = try self.emitEquality();
+
+        if (self.curKind() != .amp_amp) {
+            std.debug.print("[tsz] Expected '&&' at pos {d}\n", .{self.pos});
+            return error.ExpectedLogicalAnd;
+        }
+        self.advance_token(); // skip &&
+
+        // Skip optional ( around element
+        if (self.curKind() == .lparen) self.advance_token();
+
+        // Parse the element
+        const element = try self.parseJSXElement();
+
+        // Skip optional ) after element
+        if (self.curKind() == .rparen) self.advance_token();
+
+        return .{
+            .condition = condition,
+            .element = element,
+        };
+    }
+
     // ── Color parsing ───────────────────────────────────────────────
 
     fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
@@ -1546,6 +1736,37 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
+        // updateConditionals
+        if (self.cond_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateConditionals() void {\n");
+            for (0..self.cond_count) |i| {
+                const ci = self.conds[i];
+                if (ci.arr_name.len == 0) continue;
+                switch (ci.kind) {
+                    .show_hide => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
+                            .{ ci.arr_name, ci.true_idx, ci.condition }));
+                    },
+                    .ternary => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    if ({s} != 0) {{\n", .{ci.condition}));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.true_idx }));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.false_idx }));
+                        try out.appendSlice(self.alloc, "    } else {\n");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.true_idx }));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.false_idx }));
+                        try out.appendSlice(self.alloc, "    }\n");
+                    },
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // Window open helpers
         for (0..self.window_count) |i| {
             const w = self.windows[i];
@@ -1645,16 +1866,31 @@ pub const Generator = struct {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
                 }
             }
+            // Register onChange callbacks
+            for (0..self.input_count) |i| {
+                if (i < 16) {
+                    if (self.input_change_handlers[i]) |handler_name| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    input_mod.setOnChange({d}, {s});\n", .{ i, handler_name }));
+                    }
+                }
+            }
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
+        if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
 
         // Window init + main loop
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n\n");
         try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
 
         // State check in loop
-        if (self.has_state and self.dyn_count > 0) {
-            try out.appendSlice(self.alloc, "        if (state.isDirty()) { updateDynamicTexts(); state.clearDirty(); }\n");
+        if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0)) {
+            var dirty_body: std.ArrayListUnmanaged(u8) = .{};
+            try dirty_body.appendSlice(self.alloc, "        if (state.isDirty()) { ");
+            if (self.dyn_count > 0) try dirty_body.appendSlice(self.alloc, "updateDynamicTexts(); ");
+            if (self.cond_count > 0) try dirty_body.appendSlice(self.alloc, "updateConditionals(); ");
+            try dirty_body.appendSlice(self.alloc, "state.clearDirty(); }\n");
+            try out.appendSlice(self.alloc, dirty_body.items);
         }
 
         // Layout + paint + present
