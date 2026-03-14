@@ -9,6 +9,8 @@ const lexer_mod = @import("lexer.zig");
 const Token = lexer_mod.Token;
 const TokenKind = lexer_mod.TokenKind;
 const Lexer = lexer_mod.Lexer;
+const tailwind = @import("tailwind.zig");
+const bootstrap = @import("bootstrap.zig");
 
 const MAX_ARRAYS = 256;
 const MAX_HANDLERS = 64;
@@ -519,6 +521,7 @@ pub const Generator = struct {
 
         // Parse attributes
         var style_str: []const u8 = "";
+        var className_str: []const u8 = "";
         var font_size: []const u8 = "";
         var color_str: []const u8 = "";
         var src_str: []const u8 = "";
@@ -575,6 +578,31 @@ pub const Generator = struct {
                         height_str = try self.parseExprAttr();
                     } else if (std.mem.eql(u8, attr_name, "placeholder")) {
                         placeholder_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "className")) {
+                        const cls_str = try self.parseStringAttr();
+                        if (cls_str.len > 0) {
+                            var cls_fields: std.ArrayListUnmanaged(u8) = .{};
+                            var cls_iter = std.mem.splitScalar(u8, cls_str, ' ');
+                            while (cls_iter.next()) |cls| {
+                                const trimmed = std.mem.trim(u8, cls, &[_]u8{ ' ', '\t' });
+                                if (trimmed.len == 0) continue;
+                                // Try Tailwind first, fall back to Bootstrap
+                                const tw = tailwind.parse(self.alloc, trimmed) catch "";
+                                if (tw.len > 0) {
+                                    if (cls_fields.items.len > 0) try cls_fields.appendSlice(self.alloc, ", ");
+                                    try cls_fields.appendSlice(self.alloc, tw);
+                                    continue;
+                                }
+                                const bs = bootstrap.parse(self.alloc, trimmed) catch "";
+                                if (bs.len > 0) {
+                                    if (cls_fields.items.len > 0) try cls_fields.appendSlice(self.alloc, ", ");
+                                    try cls_fields.appendSlice(self.alloc, bs);
+                                }
+                            }
+                            if (cls_fields.items.len > 0) {
+                                className_str = try self.alloc.dupe(u8, cls_fields.items);
+                            }
+                        }
                     } else if (std.mem.eql(u8, attr_name, "onPress")) {
                         // Record the token range for the handler
                         on_press_start = self.pos;
@@ -608,7 +636,12 @@ pub const Generator = struct {
         // Style
         var style_parts: std.ArrayListUnmanaged(u8) = .{};
         defer style_parts.deinit(self.alloc);
-        if (style_str.len > 0) try style_parts.appendSlice(self.alloc, style_str);
+        // className fields first (inline style wins on conflict by coming second)
+        if (className_str.len > 0) try style_parts.appendSlice(self.alloc, className_str);
+        if (style_str.len > 0) {
+            if (style_parts.items.len > 0) try style_parts.appendSlice(self.alloc, ", ");
+            try style_parts.appendSlice(self.alloc, style_str);
+        }
         if (is_scroll) {
             if (style_parts.items.len > 0) try style_parts.appendSlice(self.alloc, ", ");
             try style_parts.appendSlice(self.alloc, ".overflow = .scroll");
@@ -949,27 +982,51 @@ pub const Generator = struct {
         
 
         while (self.curKind() != .rbrace and self.curKind() != .eof) {
-            if (self.curKind() == .identifier) {
-                const key = self.curText();
+            if (self.curKind() == .identifier or self.curKind() == .string) {
+                // Get key — identifiers directly, strings with quote stripping
+                var key = self.curText();
+                const is_string_key = self.curKind() == .string;
                 self.advance_token();
+
+                // Strip quotes from string keys ('background-color' → background-color)
+                if (is_string_key and key.len >= 2) {
+                    key = key[1 .. key.len - 1];
+                }
+
+                // Normalize CSS kebab-case to camelCase (background-color → backgroundColor)
+                if (std.mem.indexOf(u8, key, "-") != null) {
+                    key = kebabToCamel(self.alloc, key) catch key;
+                }
+
                 if (self.curKind() == .colon) self.advance_token();
 
-                // Get value
+                // Get value — route through the appropriate handler
                 if (std.mem.eql(u8, key, "backgroundColor")) {
                     const val = try self.parseStringAttrInline();
                     const color = try self.parseColorValue(val);
                     if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                     try fields.appendSlice(self.alloc, ".background_color = ");
                     try fields.appendSlice(self.alloc, color);
-                    
                 } else if (mapStyleKey(key)) |zig_key| {
-                    const val = self.curText();
-                    self.advance_token();
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".");
-                    try fields.appendSlice(self.alloc, zig_key);
-                    try fields.appendSlice(self.alloc, " = ");
-                    try fields.appendSlice(self.alloc, val);
+                    // Numeric style property — handle bare numbers and CSS unit strings
+                    if (self.curKind() == .string) {
+                        const str_val = try self.parseStringAttrInline();
+                        if (parseCSSValue(str_val)) |px| {
+                            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                            try fields.appendSlice(self.alloc, ".");
+                            try fields.appendSlice(self.alloc, zig_key);
+                            try fields.appendSlice(self.alloc, " = ");
+                            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{px}));
+                        }
+                    } else {
+                        const val = self.curText();
+                        self.advance_token();
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, val);
+                    }
                 } else if (mapEnumKey(key)) |mapping| {
                     const val = try self.parseStringAttrInline();
                     if (mapEnumValue(mapping.prefix, val)) |zig_val| {
@@ -1622,6 +1679,12 @@ pub const Generator = struct {
 
     fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
         if (hex.len == 0) return "Color.rgb(255, 255, 255)";
+
+        // Check named CSS colors first
+        if (namedColor(hex)) |rgb| {
+            return try std.fmt.allocPrint(self.alloc, "Color.rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
+        }
+
         const h = if (hex[0] == '#') hex[1..] else hex;
         if (h.len == 6) {
             const r = std.fmt.parseInt(u8, h[0..2], 16) catch 0;
@@ -1980,5 +2043,67 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, value, "center")) return ".center";
         if (std.mem.eql(u8, value, "right")) return ".right";
     }
+    return null;
+}
+
+// ── CSS normalization helpers ───────────────────────────────────────────
+
+/// Convert CSS kebab-case to camelCase: "background-color" → "backgroundColor"
+fn kebabToCamel(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var capitalize_next = false;
+    for (input) |ch| {
+        if (ch == '-') {
+            capitalize_next = true;
+        } else if (capitalize_next) {
+            try result.append(alloc, if (ch >= 'a' and ch <= 'z') ch - 32 else ch);
+            capitalize_next = false;
+        } else {
+            try result.append(alloc, ch);
+        }
+    }
+    return try alloc.dupe(u8, result.items);
+}
+
+/// Parse a CSS value string and return the numeric pixel value.
+/// Handles: "32px" → 32, "2rem" → 32, "100%" → 100, "auto" → null
+fn parseCSSValue(value: []const u8) ?f32 {
+    if (value.len == 0) return null;
+    if (std.mem.eql(u8, value, "auto")) return null;
+    if (std.mem.endsWith(u8, value, "px")) {
+        return std.fmt.parseFloat(f32, value[0 .. value.len - 2]) catch null;
+    }
+    if (std.mem.endsWith(u8, value, "rem")) {
+        const num = std.fmt.parseFloat(f32, value[0 .. value.len - 3]) catch return null;
+        return num * 16.0;
+    }
+    if (std.mem.endsWith(u8, value, "%")) {
+        return std.fmt.parseFloat(f32, value[0 .. value.len - 1]) catch null;
+    }
+    return std.fmt.parseFloat(f32, value) catch null;
+}
+
+/// CSS named color lookup — the 17 basic CSS colors + common extras
+fn namedColor(name: []const u8) ?[3]u8 {
+    if (std.mem.eql(u8, name, "black")) return .{ 0, 0, 0 };
+    if (std.mem.eql(u8, name, "white")) return .{ 255, 255, 255 };
+    if (std.mem.eql(u8, name, "red")) return .{ 255, 0, 0 };
+    if (std.mem.eql(u8, name, "green")) return .{ 0, 128, 0 };
+    if (std.mem.eql(u8, name, "blue")) return .{ 0, 0, 255 };
+    if (std.mem.eql(u8, name, "yellow")) return .{ 255, 255, 0 };
+    if (std.mem.eql(u8, name, "cyan")) return .{ 0, 255, 255 };
+    if (std.mem.eql(u8, name, "aqua")) return .{ 0, 255, 255 };
+    if (std.mem.eql(u8, name, "magenta")) return .{ 255, 0, 255 };
+    if (std.mem.eql(u8, name, "fuchsia")) return .{ 255, 0, 255 };
+    if (std.mem.eql(u8, name, "gray")) return .{ 128, 128, 128 };
+    if (std.mem.eql(u8, name, "grey")) return .{ 128, 128, 128 };
+    if (std.mem.eql(u8, name, "silver")) return .{ 192, 192, 192 };
+    if (std.mem.eql(u8, name, "maroon")) return .{ 128, 0, 0 };
+    if (std.mem.eql(u8, name, "olive")) return .{ 128, 128, 0 };
+    if (std.mem.eql(u8, name, "navy")) return .{ 0, 0, 128 };
+    if (std.mem.eql(u8, name, "purple")) return .{ 128, 0, 128 };
+    if (std.mem.eql(u8, name, "teal")) return .{ 0, 128, 128 };
+    if (std.mem.eql(u8, name, "orange")) return .{ 255, 165, 0 };
+    if (std.mem.eql(u8, name, "transparent")) return .{ 0, 0, 0 }; // rgba(0,0,0,0) — alpha not supported yet
     return null;
 }

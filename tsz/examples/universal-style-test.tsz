@@ -1,0 +1,29 @@
+// Universal Style Parser test — CSS, Tailwind, and Bootstrap all working together
+
+function App() {
+  return (
+    <Box style={{ 'background-color': '#1e1e2a', 'flex-direction': 'column', padding: '32px' }}>
+      <Text fontSize={24} color="#ffffff">CSS Kebab-Case Properties</Text>
+
+      <Box style={{ backgroundColor: 'navy', padding: '16px', 'border-radius': '8px' }}>
+        <Text fontSize={16} color="white">Named color: navy + CSS border-radius</Text>
+      </Box>
+
+      <Box style={{ backgroundColor: 'red', 'margin-top': '2rem', padding: '1rem' }}>
+        <Text fontSize={16} color="yellow">Named colors + rem units</Text>
+      </Box>
+
+      <Box className="p-4 bg-blue-500 flex-col items-center rounded-lg">
+        <Text fontSize={16} color="#ffffff">Tailwind classes via className</Text>
+      </Box>
+
+      <Box className="d-flex justify-content-center p-3 bg-primary rounded-2">
+        <Text fontSize={16} color="#ffffff">Bootstrap classes via className</Text>
+      </Box>
+
+      <Box className="p-8 bg-slate-900 flex-col" style={{ gap: 8 }}>
+        <Text fontSize={16} color="cyan">Mixed: Tailwind className + inline style</Text>
+      </Box>
+    </Box>
+  );
+}
