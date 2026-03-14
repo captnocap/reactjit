@@ -262,6 +262,7 @@ pub const Generator = struct {
     has_routes: bool,
     has_crypto: bool,
     has_pty: bool,
+    has_inspector: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
     routes_bind_from: ?u32, // set when entering Routes, consumed on array creation
 
@@ -338,6 +339,7 @@ pub const Generator = struct {
             .has_routes = false,
             .has_crypto = false,
             .has_pty = false,
+            .has_inspector = false,
             .last_route_path = null,
             .routes_bind_from = null,
             .maps = undefined,
@@ -421,6 +423,11 @@ pub const Generator = struct {
             } else if (kind == .identifier) {
                 const name = self.lex.get(look).text(self.source);
                 if (self.isState(name) != null) return true;
+                // Inspector getters make style values dynamic
+                const inspector_names = [_][]const u8{ "hasHover", "getHoverX", "getHoverY", "getHoverW", "getHoverH", "hasSelect", "getSelectX", "getSelectY", "getSelectW", "getSelectH", "isInspectorEnabled" };
+                for (inspector_names) |builtin| {
+                    if (std.mem.eql(u8, name, builtin)) return true;
+                }
             }
         }
         return false;
@@ -525,6 +532,10 @@ pub const Generator = struct {
         // Phase 1b: Pre-scan for PTY built-in usage
         self.pos = 0;
         self.scanForPtyUsage();
+
+        // Phase 1c: Pre-scan for inspector built-in usage
+        self.pos = 0;
+        self.scanForInspectorUsage();
 
         // Phase 2: Collect declare functions
         self.pos = 0;
@@ -704,6 +715,23 @@ pub const Generator = struct {
                 for (pty_builtins) |builtin| {
                     if (std.mem.eql(u8, name, builtin)) {
                         self.has_pty = true;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn scanForInspectorUsage(self: *Generator) void {
+        const inspector_builtins = [_][]const u8{ "hasHover", "getHoverX", "getHoverY", "getHoverW", "getHoverH", "hasSelect", "getSelectX", "getSelectY", "getSelectW", "getSelectH", "isInspectorEnabled" };
+        var i: u32 = 0;
+        while (i < self.lex.count) : (i += 1) {
+            const tok = self.lex.get(i);
+            if (tok.kind == .identifier) {
+                const name = tok.text(self.source);
+                for (inspector_builtins) |builtin| {
+                    if (std.mem.eql(u8, name, builtin)) {
+                        self.has_inspector = true;
                         return;
                     }
                 }
@@ -2614,6 +2642,61 @@ pub const Generator = struct {
                     if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                     try args.appendSlice(self.alloc, "vterm_mod.getCursorCol()");
                     self.has_pty = true;
+                } else if (std.mem.eql(u8, expr, "hasHover()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "@intFromBool(inspector.hasHover())");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getHoverX()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getHoverX()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getHoverY()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getHoverY()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getHoverW()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getHoverW()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getHoverH()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getHoverH()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "hasSelect()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "@intFromBool(inspector.hasSelect())");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getSelectX()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getSelectX()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getSelectY()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getSelectY()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getSelectW()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getSelectW()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "getSelectH()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "inspector.getSelectH()");
+                    self.has_inspector = true;
+                } else if (std.mem.eql(u8, expr, "isInspectorEnabled()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "@intFromBool(inspector.isEnabled())");
+                    self.has_inspector = true;
                 } else if (std.mem.indexOf(u8, expr, "[")) |bracket_pos| {
                     // Array indexing: items[0] or items[i]
                     const arr_name = expr[0..bracket_pos];
@@ -3262,6 +3345,42 @@ pub const Generator = struct {
                 if (self.curKind() == .rparen) self.advance_token();
                 return try std.fmt.allocPrint(self.alloc, "@as(f64, @floatCast(telemetry.getFrameTime({s})))", .{idx_text});
             }
+            // Inspector getters (expression position for dynamic styles)
+            {
+                const inspector_f32 = [_]struct { tsz: []const u8, zig: []const u8 }{
+                    .{ .tsz = "getHoverX", .zig = "inspector.getHoverX()" },
+                    .{ .tsz = "getHoverY", .zig = "inspector.getHoverY()" },
+                    .{ .tsz = "getHoverW", .zig = "inspector.getHoverW()" },
+                    .{ .tsz = "getHoverH", .zig = "inspector.getHoverH()" },
+                    .{ .tsz = "getSelectX", .zig = "inspector.getSelectX()" },
+                    .{ .tsz = "getSelectY", .zig = "inspector.getSelectY()" },
+                    .{ .tsz = "getSelectW", .zig = "inspector.getSelectW()" },
+                    .{ .tsz = "getSelectH", .zig = "inspector.getSelectH()" },
+                };
+                for (inspector_f32) |entry| {
+                    if (std.mem.eql(u8, name, entry.tsz)) {
+                        self.advance_token();
+                        if (self.curKind() == .lparen) self.advance_token();
+                        if (self.curKind() == .rparen) self.advance_token();
+                        self.has_inspector = true;
+                        return try self.alloc.dupe(u8, entry.zig);
+                    }
+                }
+                const inspector_bool = [_]struct { tsz: []const u8, zig: []const u8 }{
+                    .{ .tsz = "hasHover", .zig = "inspector.hasHover()" },
+                    .{ .tsz = "hasSelect", .zig = "inspector.hasSelect()" },
+                    .{ .tsz = "isInspectorEnabled", .zig = "inspector.isEnabled()" },
+                };
+                for (inspector_bool) |entry| {
+                    if (std.mem.eql(u8, name, entry.tsz)) {
+                        self.advance_token();
+                        if (self.curKind() == .lparen) self.advance_token();
+                        if (self.curKind() == .rparen) self.advance_token();
+                        self.has_inspector = true;
+                        return try self.alloc.dupe(u8, entry.zig);
+                    }
+                }
+            }
             // Bare identifier
             self.advance_token();
             return name;
@@ -3812,6 +3931,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
         try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
         try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
+        try out.appendSlice(self.alloc, "const inspector = @import(\"inspector.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
@@ -4010,6 +4130,16 @@ pub const Generator = struct {
                         try out.appendSlice(self.alloc, "    }\n");
                     },
                 }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
+        // _onTextInput — forwards SDL_TEXTINPUT to input module + PTY if active
+        {
+            try out.appendSlice(self.alloc, "fn _onTextInput(text: [*:0]const u8) void {\n");
+            try out.appendSlice(self.alloc, "    input_mod.handleTextInput(text);\n");
+            if (self.has_pty) {
+                try out.appendSlice(self.alloc, "    pty_mod.handleTextInput(text);\n");
             }
             try out.appendSlice(self.alloc, "}\n\n");
         }
@@ -4349,6 +4479,9 @@ pub const Generator = struct {
         // Compositor + window init + main loop
         try out.appendSlice(self.alloc, "    compositor.init(renderer, &text_engine, &image_cache);\n    defer compositor.deinit();\n");
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n");
+        if (self.has_pty) {
+            try out.appendSlice(self.alloc, "    defer pty_mod.deinit();\n");
+        }
         try out.appendSlice(self.alloc, "    if (testharness.envEnabled()) testharness.enable();\n\n");
         try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
 
@@ -4383,6 +4516,11 @@ pub const Generator = struct {
                 try out.appendSlice(self.alloc, "            state.clearDirty();\n");
                 try out.appendSlice(self.alloc, "        }\n");
             }
+        }
+
+        // Inspector: update dynamic styles every frame (hover rect changes on mouse move, not state)
+        if (self.has_inspector and self.dyn_style_count > 0) {
+            try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
         }
 
         // Router dirty check
@@ -4459,6 +4597,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        telemetry.beginLayout();\n");
         try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, win_h);\n");
         try out.appendSlice(self.alloc, "        telemetry.endLayout();\n");
+        try out.appendSlice(self.alloc, "        inspector.updateHover(&root);\n");
         try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
         try out.appendSlice(self.alloc, "        telemetry.beginPaint();\n");
         try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
