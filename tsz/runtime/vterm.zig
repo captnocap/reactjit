@@ -477,93 +477,66 @@ const DEFAULT_FG = Color{ .r = 205, .g = 214, .b = 244 }; // #cdd6f4
 const DEFAULT_BG = Color{ .r = 17, .g = 17, .b = 27 }; // #11111b
 const CURSOR_COLOR = Color{ .r = 166, .g = 227, .b = 161 }; // #a6e3a1
 
-/// Paint terminal cells with vterm colors into a screen region.
-/// x, y, w, h define the terminal area in screen coordinates.
-/// Always paints — cells must persist since compositor clears each frame.
-pub fn paintTerminal(x: f32, y: f32, w: f32, h: f32) void {
+/// Paint terminal rows with per-row color into a screen region.
+/// Uses one drawTextLine per row (24 calls) instead of per-cell (1920 calls).
+/// Per-row color comes from the first non-default fg cell in each row.
+pub fn paintTerminal(x: f32, y: f32, _: f32, h: f32) void {
     const v = &(g_vterm orelse return);
 
-    // Compute cell dimensions from the available space
     const font_size: u16 = 13;
-    const char_w: f32 = 7.8; // approximate monospace width at 13px
+    const char_w: f32 = 7.8;
     const line_h: f32 = 18.0;
-    const max_col: u16 = @intFromFloat(@min(@as(f32, @floatFromInt(v.cols)), w / char_w));
-
-    var cell_buf: VTermScreenCell = .{};
-
     const max_row: u16 = @intFromFloat(@min(@as(f32, @floatFromInt(v.rows)), h / line_h));
+
+    var row_buf: [512]u8 = undefined;
+    var cell_buf: VTermScreenCell = .{};
 
     var row: u16 = 0;
     while (row < max_row) : (row += 1) {
         const cy = y + @as(f32, @floatFromInt(row)) * line_h;
 
-        var col: u16 = 0;
-        while (col < max_col) : (col += 1) {
-            const cx = x + @as(f32, @floatFromInt(col)) * char_w;
+        // Get row text
+        const rect = VTermRect{
+            .start_row = @intCast(row),
+            .end_row = @intCast(row + 1),
+            .start_col = 0,
+            .end_col = @intCast(v.cols),
+        };
+        const len = vterm_screen_get_text(v.screen, &row_buf, row_buf.len, rect);
+        if (len == 0) continue;
 
+        // Trim trailing spaces
+        var text_end: usize = len;
+        while (text_end > 0 and row_buf[text_end - 1] == ' ') text_end -= 1;
+        if (text_end == 0) continue;
+
+        // Find dominant fg color (first non-default fg in this row)
+        var row_color = DEFAULT_FG;
+        var col: u16 = 0;
+        while (col < v.cols) : (col += 1) {
             const pos = VTermPos{ .row = @intCast(row), .col = @intCast(col) };
             _ = vterm_screen_get_cell(v.screen, pos, &cell_buf);
-
-            // Background
-            const bg = resolveColor(v.screen, &cell_buf.bg);
-            if (bg) |bgc| {
-                gpu.drawRect(
-                    cx, cy, char_w, line_h,
-                    @as(f32, @floatFromInt(bgc.r)) / 255.0,
-                    @as(f32, @floatFromInt(bgc.g)) / 255.0,
-                    @as(f32, @floatFromInt(bgc.b)) / 255.0,
-                    1.0,
-                    0, 0, 0, 0, 0, 0,
-                );
-            }
-
-            // Character
-            const cp = cell_buf.chars[0];
-            if (cp > 0) {
-                var char_bytes: [4]u8 = .{ 0, 0, 0, 0 };
-                var char_len: u8 = 0;
-
-                if (cp < 0x80) {
-                    char_bytes[0] = @intCast(cp);
-                    char_len = 1;
-                } else if (cp < 0x800) {
-                    char_bytes[0] = @intCast(0xC0 | (cp >> 6));
-                    char_bytes[1] = @intCast(0x80 | (cp & 0x3F));
-                    char_len = 2;
-                } else if (cp < 0x10000) {
-                    char_bytes[0] = @intCast(0xE0 | (cp >> 12));
-                    char_bytes[1] = @intCast(0x80 | ((cp >> 6) & 0x3F));
-                    char_bytes[2] = @intCast(0x80 | (cp & 0x3F));
-                    char_len = 3;
-                } else if (cp <= 0x10FFFF) {
-                    char_bytes[0] = @intCast(0xF0 | (cp >> 18));
-                    char_bytes[1] = @intCast(0x80 | ((cp >> 12) & 0x3F));
-                    char_bytes[2] = @intCast(0x80 | ((cp >> 6) & 0x3F));
-                    char_bytes[3] = @intCast(0x80 | (cp & 0x3F));
-                    char_len = 4;
-                }
-
-                if (char_len > 0) {
-                    const fg = resolveColor(v.screen, &cell_buf.fg) orelse DEFAULT_FG;
-                    gpu.drawTextLine(
-                        char_bytes[0..char_len],
-                        cx, cy,
-                        font_size,
-                        @as(f32, @floatFromInt(fg.r)) / 255.0,
-                        @as(f32, @floatFromInt(fg.g)) / 255.0,
-                        @as(f32, @floatFromInt(fg.b)) / 255.0,
-                        1.0,
-                    );
+            if (cell_buf.chars[0] > 0x20) { // non-space character
+                if (resolveColor(v.screen, &cell_buf.fg)) |fg| {
+                    row_color = fg;
+                    break;
                 }
             }
-
-            // Skip wide char second cell
-            if (cell_buf.width > 1) col += @as(u16, cell_buf.width) - 1;
         }
+
+        gpu.drawTextLine(
+            row_buf[0..text_end],
+            x, cy,
+            font_size,
+            @as(f32, @floatFromInt(row_color.r)) / 255.0,
+            @as(f32, @floatFromInt(row_color.g)) / 255.0,
+            @as(f32, @floatFromInt(row_color.b)) / 255.0,
+            1.0,
+        );
     }
 
     // Cursor
-    if (v.cursor_visible) {
+    if (v.cursor_visible and v.cursor_row < max_row) {
         const cursor_x = x + @as(f32, @floatFromInt(v.cursor_col)) * char_w;
         const cursor_y = y + @as(f32, @floatFromInt(v.cursor_row)) * line_h;
         gpu.drawRect(
@@ -571,7 +544,7 @@ pub fn paintTerminal(x: f32, y: f32, w: f32, h: f32) void {
             @as(f32, @floatFromInt(CURSOR_COLOR.r)) / 255.0,
             @as(f32, @floatFromInt(CURSOR_COLOR.g)) / 255.0,
             @as(f32, @floatFromInt(CURSOR_COLOR.b)) / 255.0,
-            0.5, // semi-transparent cursor
+            0.5,
             0, 0, 0, 0, 0, 0,
         );
     }
