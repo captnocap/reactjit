@@ -176,6 +176,7 @@ pub const Generator = struct {
     route_count: u32,
     has_routes: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
+    routes_bind_from: ?u32, // set when entering Routes, consumed on array creation
 
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
@@ -224,6 +225,7 @@ pub const Generator = struct {
             .route_count = 0,
             .has_routes = false,
             .last_route_path = null,
+            .routes_bind_from = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -893,6 +895,7 @@ pub const Generator = struct {
             }
         }
 
+        const is_routes = std.mem.eql(u8, tag_name, "Routes");
         const is_window = std.mem.eql(u8, tag_name, "Window");
         const is_scroll = std.mem.eql(u8, tag_name, "ScrollView");
         const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
@@ -1014,6 +1017,9 @@ pub const Generator = struct {
         // Save pending anim count — bindings from THIS node's style should
         // survive children processing and be consumed by the PARENT.
         const own_pending_anim = self.pending_anim_count;
+
+        // Mark route binding point for Routes element
+        if (is_routes) self.routes_bind_from = self.route_count;
 
         if (!self_closing) {
             // Parse children until closing tag
@@ -1354,12 +1360,14 @@ pub const Generator = struct {
                 }
             }
 
-            // Bind routes to this array
-            for (0..self.route_count) |ri| {
-                if (self.routes[ri].arr_name.len > 0) continue;
-                if (self.routes[ri].child_idx < child_exprs.items.len) {
-                    self.routes[ri].arr_name = arr_name;
+            // Bind routes — only when this is the Routes element's own child array
+            if (self.routes_bind_from) |from| {
+                for (from..self.route_count) |ri| {
+                    if (self.routes[ri].arr_name.len == 0) {
+                        self.routes[ri].arr_name = arr_name;
+                    }
                 }
+                self.routes_bind_from = null;
             }
 
             // Track dynamic text references
@@ -2008,6 +2016,10 @@ pub const Generator = struct {
             // State getter
             if (self.isState(name)) |slot_id| {
                 self.advance_token();
+                // In animation target context, use float getter (getSlot returns i64, can't @floatCast)
+                if (self.emit_float_as_f32) {
+                    return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatCast(state.getSlotFloat({d})))", .{slot_id});
+                }
                 return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
             }
             // FFI call in expression position
@@ -2207,6 +2219,12 @@ pub const Generator = struct {
     // ── Route element parsing ──────────────────────────────────────
 
     fn parseRouteElement(self: *Generator) anyerror![]const u8 {
+        // Prevent intermediate arrays inside this Route's element from
+        // accidentally binding route metadata — save and null the marker.
+        const saved_bind = self.routes_bind_from;
+        self.routes_bind_from = null;
+        defer self.routes_bind_from = saved_bind;
+
         var path: []const u8 = "/";
         var element_expr: []const u8 = ".{}";
 
