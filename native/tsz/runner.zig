@@ -47,20 +47,53 @@ pub const Runner = struct {
         return buf;
     }
 
+    /// Check if a line is noise that should be filtered out.
+    fn isNoiseLine(line: []const u8) bool {
+        // GPA memory leak debug spam
+        if (std.mem.indexOf(u8, line, "error(gpa):") != null) return true;
+        if (std.mem.indexOf(u8, line, "memory address 0x") != null) return true;
+        // Stack trace lines from GPA leaks
+        if (std.mem.indexOf(u8, line, "in toOwnedSlice (std.zig)") != null) return true;
+        if (std.mem.indexOf(u8, line, "in ensureTotalCapacity") != null) return true;
+        if (std.mem.indexOf(u8, line, "in ensureUnusedCapacity") != null) return true;
+        if (std.mem.indexOf(u8, line, "in growCapacity") != null) return true;
+        if (std.mem.indexOf(u8, line, "in addOrOom") != null) return true;
+        if (std.mem.indexOf(u8, line, "in allocPrint") != null) return true;
+        if (std.mem.indexOf(u8, line, "in initCapacity") != null) return true;
+        // Zig std lib internal trace lines (referenced by / note:)
+        if (std.mem.indexOf(u8, line, "reference(s) hidden") != null) return true;
+        // Lines that are just "^" pointer indicators from stack traces
+        if (line.len < 30) {
+            var only_spaces_and_caret = true;
+            for (line) |ch| {
+                if (ch != ' ' and ch != '^' and ch != '\r' and ch != '\n') {
+                    only_spaces_and_caret = false;
+                    break;
+                }
+            }
+            if (only_spaces_and_caret) return true;
+        }
+        return false;
+    }
+
     /// Append text to the output ring buffer, prepending timestamps to each line.
+    /// Filters out noise (GPA leak traces, stack frames from successful builds).
     fn appendOutput(self: *Runner, data: []const u8) void {
         if (data.len == 0) return;
-        // Prepend timestamp to each newline-delimited chunk
         var pos: usize = 0;
         while (pos < data.len) {
             const nl = std.mem.indexOfScalar(u8, data[pos..], '\n');
             const end = if (nl) |n| pos + n + 1 else data.len;
-            // Only timestamp non-empty lines at start of a new line
-            if (self.output_len == 0 or (self.output_len > 0 and self.output[self.output_len - 1] == '\n')) {
-                const ts = timestamp();
-                self.appendRaw(&ts);
+            const line = data[pos..end];
+
+            // Filter noise
+            if (!isNoiseLine(line)) {
+                if (self.output_len == 0 or (self.output_len > 0 and self.output[self.output_len - 1] == '\n')) {
+                    const ts = timestamp();
+                    self.appendRaw(&ts);
+                }
+                self.appendRaw(line);
             }
-            self.appendRaw(data[pos..end]);
             pos = end;
         }
     }
