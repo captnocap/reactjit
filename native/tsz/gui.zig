@@ -137,6 +137,12 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var hover_mx: f32 = 0;
     var hover_my: f32 = 0;
     var window_visible = true;
+    var log_scroll: f32 = 0;
+    var log_panel_h: f32 = 160;
+    var log_dragging: bool = false;
+    var log_drag_start_y: f32 = 0;
+    var log_drag_start_h: f32 = 0;
+    var log_last_len: usize = 0; // track output length for auto-scroll
 
     var dirty = true;
     while (running) {
@@ -176,10 +182,31 @@ pub fn run(alloc: std.mem.Allocator) !void {
                 c.SDL_MOUSEMOTION => {
                     hover_mx = @floatFromInt(event.motion.x);
                     hover_my = @floatFromInt(event.motion.y);
+                    // Drag to resize log panel
+                    if (log_dragging) {
+                        const delta = log_drag_start_y - hover_my;
+                        log_panel_h = @max(80, @min(win_h - 100, log_drag_start_h + delta));
+                        dirty = true;
+                    }
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     const mx: f32 = @floatFromInt(event.button.x);
                     const my: f32 = @floatFromInt(event.button.y);
+
+                    // Check log panel drag handle (top 6px of panel)
+                    if (runner.getActive() != null) {
+                        const panel_top = win_h - log_panel_h - 30;
+                        if (my >= panel_top - 3 and my <= panel_top + 3) {
+                            log_dragging = true;
+                            log_drag_start_y = my;
+                            log_drag_start_h = log_panel_h;
+                        }
+                        // Pop-out button (top-right corner of panel)
+                        if (my >= panel_top and my <= panel_top + 20 and mx >= win_w - 70 and mx <= win_w - 10) {
+                            openLogPopout(&te, renderer);
+                        }
+                    }
+
                     if (findHit(mx, my)) |hit| {
                         // Find action name
                         var ai: u8 = 0;
@@ -205,12 +232,21 @@ pub fn run(alloc: std.mem.Allocator) !void {
                         }
                     }
                 },
+                c.SDL_MOUSEBUTTONUP => {
+                    log_dragging = false;
+                },
                 c.SDL_MOUSEWHEEL => {
-                    scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
-                    // Clamp: header(50) + col_header(28) + rows(38 each) + footer(30)
-                    const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38 + 30;
-                    const max_scroll = @max(0, content_h - win_h);
-                    scroll_y = @max(0, @min(scroll_y, max_scroll));
+                    const panel_top = win_h - log_panel_h - 30;
+                    const in_log_panel = (hover_my >= panel_top and runner.getActive() != null);
+                    if (in_log_panel) {
+                        log_scroll -= @as(f32, @floatFromInt(event.wheel.y)) * 20.0;
+                        log_scroll = @max(0, log_scroll);
+                    } else {
+                        scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
+                        const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38 + 30;
+                        const max_scroll = @max(0, content_h - win_h);
+                        scroll_y = @max(0, @min(scroll_y, max_scroll));
+                    }
                 },
                 else => {},
             }
@@ -382,13 +418,18 @@ pub fn run(alloc: std.mem.Allocator) !void {
 
         // ── Detail panel (live output from active runner) ─────────
         if (runner.getActive()) |active| {
-            const panel_h: f32 = 160;
-            const panel_y = win_h - panel_h - 30 + scroll_y;
+            const panel_y = win_h - log_panel_h - 30 + scroll_y;
 
             // Panel background
-            fillRect(renderer, 0, panel_y, win_w, panel_h, Color.rgb(18, 18, 24));
-            // Top border
-            fillRect(renderer, 0, panel_y, win_w, 1, Color.rgb(55, 55, 75));
+            fillRect(renderer, 0, panel_y, win_w, log_panel_h, Color.rgb(18, 18, 24));
+            // Drag handle (top border — thicker, highlighted on hover)
+            const handle_top = panel_y;
+            const handle_hovered = (hover_my >= handle_top - 3 and hover_my <= handle_top + 3);
+            fillRect(renderer, 0, handle_top, win_w, if (handle_hovered) 3 else 1, if (handle_hovered) accent else Color.rgb(55, 55, 75));
+
+            // Pop-out button
+            fillRect(renderer, win_w - 65, panel_y + 3, 55, 16, Color.rgb(45, 45, 60));
+            te.drawText("Pop out", win_w - 60, panel_y + 4, 10, muted);
 
             // Label + status
             const status_str: []const u8 = switch (active.status) {
@@ -406,38 +447,56 @@ pub fn run(alloc: std.mem.Allocator) !void {
             te.drawText(active.getLabel(), 12, panel_y + 6, 11, accent);
             te.drawText(status_str, 200, panel_y + 6, 11, status_col);
 
-            // Output text (last N lines that fit)
+            // Output text — split into lines, scrollable
             const output = active.getOutput();
             if (output.len > 0) {
                 const line_h = te.lineHeight(11);
-                const max_lines: usize = @intFromFloat((panel_h - 24) / line_h);
-                var lines_shown: usize = 0;
-                var out_y = panel_y + 22;
+                const visible_h = log_panel_h - 24;
+                const max_visible: usize = @intFromFloat(visible_h / line_h);
 
-                // Walk backwards to find line starts
-                var line_starts: [64]usize = undefined;
-                var line_count: usize = 0;
-                var pos: usize = output.len;
-                while (pos > 0 and line_count < 64) {
-                    const prev = if (std.mem.lastIndexOf(u8, output[0..pos -| 1], "\n")) |nl| nl + 1 else 0;
-                    line_starts[line_count] = prev;
-                    line_count += 1;
-                    if (prev == 0) break;
-                    pos = prev -| 1;
+                // Collect all lines (forward scan)
+                var all_starts: [256]usize = undefined;
+                var all_ends: [256]usize = undefined;
+                var total_lines: usize = 0;
+                var scan: usize = 0;
+                while (scan < output.len and total_lines < 256) {
+                    const nl = std.mem.indexOfScalar(u8, output[scan..], '\n');
+                    const end = if (nl) |n| scan + n else output.len;
+                    all_starts[total_lines] = scan;
+                    all_ends[total_lines] = end;
+                    total_lines += 1;
+                    scan = if (nl) |n| scan + n + 1 else output.len;
                 }
 
-                // Draw from bottom, last N lines
-                const start = if (line_count > max_lines) line_count - max_lines else 0;
-                var li = start;
-                while (li < line_count and lines_shown < max_lines) {
-                    const idx = line_count - 1 - li;
-                    const ls = line_starts[idx];
-                    // Find line end
-                    const le = if (idx > 0) line_starts[idx - 1] -| 1 else output.len;
-                    const safe_le = @min(le, output.len);
-                    if (ls < safe_le) {
-                        const line = output[ls..safe_le];
-                        // Truncate long lines
+                // Auto-scroll to bottom when new output arrives
+                const max_log_scroll = if (total_lines > max_visible) @as(f32, @floatFromInt(total_lines - max_visible)) * line_h else 0;
+                if (output.len != log_last_len) {
+                    log_last_len = output.len;
+                    log_scroll = max_log_scroll;
+                }
+                log_scroll = @min(log_scroll, max_log_scroll);
+
+                const skip_lines: usize = @intFromFloat(log_scroll / line_h);
+                const auto_bottom = (log_scroll >= max_log_scroll - line_h);
+                const first_line = if (auto_bottom and total_lines > max_visible) total_lines - max_visible else skip_lines;
+
+                // Clip to panel area
+                _ = c.SDL_SetRenderDrawColor(renderer, 18, 18, 24, 255);
+                var clip = c.SDL_Rect{
+                    .x = 0,
+                    .y = @intFromFloat(panel_y + 22),
+                    .w = @intFromFloat(win_w),
+                    .h = @intFromFloat(visible_h),
+                };
+                _ = c.SDL_RenderSetClipRect(renderer, &clip);
+
+                var out_y = panel_y + 22;
+                var li = first_line;
+                while (li < total_lines and (out_y - panel_y - 22) < visible_h) {
+                    const ls = all_starts[li];
+                    const le = all_ends[li];
+                    if (le > ls) {
+                        const line = output[ls..le];
                         const max_chars: usize = @intFromFloat(win_w / 6.5);
                         const display = if (line.len > max_chars) line[0..max_chars] else line;
                         const line_col = if (std.mem.indexOf(u8, display, "FAIL") != null or std.mem.indexOf(u8, display, "error") != null)
@@ -451,11 +510,13 @@ pub fn run(alloc: std.mem.Allocator) !void {
                         else
                             Color.rgb(170, 170, 185);
                         te.drawText(display, 12, out_y, 11, line_col);
-                        out_y += line_h;
-                        lines_shown += 1;
                     }
+                    out_y += line_h;
                     li += 1;
                 }
+
+                // Clear clip
+                _ = c.SDL_RenderSetClipRect(renderer, null);
             }
         }
 
@@ -469,15 +530,129 @@ pub fn run(alloc: std.mem.Allocator) !void {
     }
 }
 
+// ── Log pop-out window ──────────────────────────────────────────────────
+
+fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
+    const active = runner.getActive() orelse return;
+    const output = active.getOutput();
+    if (output.len == 0) return;
+
+    // Create a new window showing the full log
+    const pop_win = c.SDL_CreateWindow(
+        "tsz — build log",
+        c.SDL_WINDOWPOS_CENTERED,
+        c.SDL_WINDOWPOS_CENTERED,
+        800,
+        500,
+        c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
+    ) orelse return;
+
+    const pop_rend = c.SDL_CreateRenderer(pop_win, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse {
+        c.SDL_DestroyWindow(pop_win);
+        return;
+    };
+    _ = c.SDL_SetRenderDrawBlendMode(pop_rend, c.SDL_BLENDMODE_BLEND);
+
+    // Create a text engine for the popout (shares FreeType lib but needs own SDL renderer binding)
+    var pop_te = TextEngine.init(pop_rend, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch {
+        c.SDL_DestroyRenderer(pop_rend);
+        c.SDL_DestroyWindow(pop_win);
+        return;
+    };
+    _ = te; // suppress unused
+
+    defer {
+        pop_te.deinit();
+        c.SDL_DestroyRenderer(pop_rend);
+        c.SDL_DestroyWindow(pop_win);
+    }
+
+    var pop_scroll: f32 = 99999; // start at bottom
+    var pop_running = true;
+    var pop_w: f32 = 800;
+    var pop_h: f32 = 500;
+
+    while (pop_running) {
+        var event: c.SDL_Event = undefined;
+        while (c.SDL_PollEvent(&event) != 0) {
+            switch (event.type) {
+                c.SDL_QUIT, c.SDL_WINDOWEVENT => {
+                    if (event.type == c.SDL_QUIT) { pop_running = false; }
+                    else if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) { pop_running = false; }
+                    else if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                        pop_w = @floatFromInt(event.window.data1);
+                        pop_h = @floatFromInt(event.window.data2);
+                    }
+                },
+                c.SDL_KEYDOWN => {
+                    if (event.key.keysym.sym == c.SDLK_ESCAPE) pop_running = false;
+                },
+                c.SDL_MOUSEWHEEL => {
+                    pop_scroll -= @as(f32, @floatFromInt(event.wheel.y)) * 20.0;
+                    pop_scroll = @max(0, pop_scroll);
+                },
+                else => {},
+            }
+        }
+
+        // Re-read output (may have grown)
+        const cur_output = if (runner.getActive()) |a| a.getOutput() else output;
+
+        // Split into lines
+        var starts: [512]usize = undefined;
+        var ends: [512]usize = undefined;
+        var nlines: usize = 0;
+        var scan: usize = 0;
+        while (scan < cur_output.len and nlines < 512) {
+            const nl = std.mem.indexOfScalar(u8, cur_output[scan..], '\n');
+            const end = if (nl) |n| scan + n else cur_output.len;
+            starts[nlines] = scan;
+            ends[nlines] = end;
+            nlines += 1;
+            scan = if (nl) |n| scan + n + 1 else cur_output.len;
+        }
+
+        const lh = pop_te.lineHeight(12);
+        const max_vis: usize = @intFromFloat(pop_h / lh);
+        const max_scr = if (nlines > max_vis) @as(f32, @floatFromInt(nlines - max_vis)) * lh else 0;
+        pop_scroll = @min(pop_scroll, max_scr);
+        const first: usize = @intFromFloat(pop_scroll / lh);
+
+        _ = c.SDL_SetRenderDrawColor(pop_rend, 18, 18, 24, 255);
+        _ = c.SDL_RenderClear(pop_rend);
+
+        var py: f32 = 4;
+        var li = first;
+        while (li < nlines and py < pop_h) {
+            if (ends[li] > starts[li]) {
+                const line = cur_output[starts[li]..ends[li]];
+                const col = if (std.mem.indexOf(u8, line, "FAIL") != null or std.mem.indexOf(u8, line, "error") != null)
+                    Color.rgb(235, 87, 87)
+                else if (std.mem.indexOf(u8, line, "PASS") != null or std.mem.indexOf(u8, line, "Built") != null)
+                    Color.rgb(76, 204, 102)
+                else if (std.mem.indexOf(u8, line, "[tsz]") != null)
+                    Color.rgb(78, 201, 176)
+                else
+                    Color.rgb(170, 170, 185);
+                pop_te.drawText(line, 8, py, 12, col);
+            }
+            py += lh;
+            li += 1;
+        }
+
+        c.SDL_RenderPresent(pop_rend);
+    }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-fn fillRect(renderer: *c.SDL_Renderer, x: f32, y: f32, w: f32, h: f32, color: Color) void {
-    _ = c.SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+fn fillRect(rend: *c.SDL_Renderer, x: f32, y: f32, w: f32, h: f32, color: Color) void {
+    _ = c.SDL_SetRenderDrawColor(rend, color.r, color.g, color.b, color.a);
     var r = c.SDL_Rect{
         .x = @intFromFloat(x),
         .y = @intFromFloat(y),
         .w = @intFromFloat(w),
         .h = @intFromFloat(h),
     };
-    _ = c.SDL_RenderFillRect(renderer, &r);
+    _ = c.SDL_RenderFillRect(rend, &r);
 }
