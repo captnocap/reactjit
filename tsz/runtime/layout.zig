@@ -1,20 +1,28 @@
-//! ReactJIT Layout Engine — Phase 1
+//! ReactJIT Layout Engine
 //!
 //! Flexbox layout solver ported from lua/layout.lua.
 //! Computes {x, y, w, h} for every node in the tree.
 //!
-//! Supports (Phase 1):
-//!   - flexDirection: row (default), column
+//! Supports:
+//!   - flexDirection: row, column
 //!   - flexGrow, flexShrink, flexBasis
+//!   - flexWrap: nowrap, wrap (multi-line flex)
 //!   - justifyContent: start, center, end, space-between, space-around, space-evenly
 //!   - alignItems: start, center, end, stretch
+//!   - alignSelf: auto, start, center, end, stretch (per-child override)
 //!   - padding (all sides + per-side)
 //!   - margin (all sides + per-side)
-//!   - gap
+//!   - gap (between items and between lines)
 //!   - width, height (pixel values)
 //!   - minWidth, maxWidth, minHeight, maxHeight
+//!   - aspectRatio (derive missing dimension)
+//!   - position: relative, absolute (out-of-flow via top/left/right/bottom)
 //!   - display: none
+//!   - overflow: visible, hidden, scroll
+//!   - textAlign: left, center, right (inherited)
 //!   - Auto-sizing from children
+//!   - Text re-measurement after flex distribution
+//!   - Layout budget guard (100k nodes max)
 //!
 //! Arena-allocated: one frame = one arena = one bulk free.
 
@@ -41,6 +49,18 @@ pub const AlignItems = enum {
     stretch,
 };
 
+pub const AlignSelf = enum {
+    auto,
+    start,
+    center,
+    end_,
+    stretch,
+};
+
+pub const FlexWrap = enum { nowrap, wrap };
+
+pub const Position = enum { relative, absolute };
+
 pub const Display = enum { flex, none };
 
 pub const Overflow = enum { visible, hidden, scroll };
@@ -63,9 +83,21 @@ pub const Style = struct {
     flex_grow: f32 = 0,
     flex_shrink: ?f32 = null, // null = CSS default (1)
     flex_basis: ?f32 = null, // null = auto (use width/height)
+    flex_wrap: FlexWrap = .nowrap,
     justify_content: JustifyContent = .start,
     align_items: AlignItems = .stretch,
+    align_self: AlignSelf = .auto,
     gap: f32 = 0,
+
+    // Positioning
+    position: Position = .relative,
+    top: ?f32 = null,
+    left: ?f32 = null,
+    right: ?f32 = null,
+    bottom: ?f32 = null,
+
+    // Aspect ratio
+    aspect_ratio: ?f32 = null,
 
     // Padding
     padding: f32 = 0,
@@ -93,6 +125,17 @@ pub const Style = struct {
     // Visual
     background_color: ?Color = null,
     border_radius: f32 = 0,
+    opacity: f32 = 1.0,
+
+    // Border
+    border_width: f32 = 0,
+    border_color: ?Color = null,
+
+    // Box shadow
+    shadow_offset_x: f32 = 0,
+    shadow_offset_y: f32 = 0,
+    shadow_blur: f32 = 0,
+    shadow_color: ?Color = null,
 
     pub fn padLeft(self: Style) f32 {
         return self.padding_left orelse self.padding;
@@ -148,7 +191,10 @@ pub const TextMetrics = struct {
 /// Function pointer type for text measurement callback.
 /// The layout engine calls this to measure text nodes.
 /// max_width: wrapping constraint in pixels (0 = unconstrained single line).
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32) TextMetrics;
+/// letter_spacing: extra pixels between glyphs (0 = none).
+/// line_height: override line height in pixels (0 = use font default).
+/// max_lines: max number of lines to measure (0 = unlimited).
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16) TextMetrics;
 
 /// Image dimensions returned by the image measurement callback.
 pub const ImageDims = struct {
@@ -182,6 +228,12 @@ pub const Node = struct {
     font_size: u16 = 16,
     /// Text color (separate from background_color)
     text_color: ?Color = null,
+    /// Extra pixels between glyphs (0 = none)
+    letter_spacing: f32 = 0,
+    /// Override line height in pixels (0 = use font default)
+    line_height: f32 = 0,
+    /// Max visible lines (0 = unlimited)
+    number_of_lines: u16 = 0,
 
     /// Image source path (null for non-image nodes)
     image_src: ?[]const u8 = null,
@@ -229,6 +281,10 @@ fn clamp(val: f32, min_val: ?f32, max_val: ?f32) f32 {
 var _measure_fn: ?MeasureTextFn = null;
 var _measure_image_fn: ?MeasureImageFn = null;
 
+// Layout budget: cap node visits per pass to detect infinite loops
+const LAYOUT_BUDGET: u32 = 100_000;
+var _layout_count: u32 = 0;
+
 pub fn setMeasureFn(f: ?MeasureTextFn) void {
     _measure_fn = f;
 }
@@ -255,7 +311,7 @@ fn measureNodeText(node: *Node) TextMetrics {
 fn measureNodeTextW(node: *Node, max_width: f32) TextMetrics {
     if (node.text) |text| {
         if (_measure_fn) |measure| {
-            return measure(text, node.font_size, max_width);
+            return measure(text, node.font_size, max_width, node.letter_spacing, node.line_height, node.number_of_lines);
         }
     }
     return .{};
@@ -384,6 +440,11 @@ fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
 /// pw, ph: available width/height from parent
 pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     _ = ph; // Used in future for percentage resolution
+
+    // Budget guard: prevent infinite layout loops
+    _layout_count += 1;
+    if (_layout_count > LAYOUT_BUDGET) return;
+
     const s = node.style;
 
     // display:none — zero size, skip children
@@ -418,6 +479,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         hh.* = clamp(hh.*, s.min_height, s.max_height);
     }
 
+    // ── Aspect ratio ───────────────────────────────────────────────
+    if (s.aspect_ratio) |ar| {
+        if (ar > 0) {
+            if (s.width != null and s.height == null and h == null) {
+                h = w / ar;
+            } else if (s.height != null and s.width == null and node._flex_w == null) {
+                if (h) |hh| {
+                    w = hh * ar;
+                    w = clamp(w, s.min_width, s.max_width);
+                }
+            }
+        }
+    }
+
     // ── Padding & margins ───────────────────────────────────────────
     const pad_l = s.padLeft();
     const pad_r = s.padRight();
@@ -439,8 +514,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const main_size: f32 = if (is_row) inner_w else inner_h;
 
     // ── Collect visible children and compute their info ─────────────
-    // Use stack-allocated arrays for small child counts, otherwise just iterate
-    const max_children = 64;
+    const max_children = 512;
     var child_basis: [max_children]f32 = undefined;
     var child_grow: [max_children]f32 = undefined;
     var child_shrink: [max_children]f32 = undefined;
@@ -452,10 +526,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     var child_cross_margin_end: [max_children]f32 = undefined;
     var visible_indices: [max_children]usize = undefined;
     var visible_count: usize = 0;
+    var absolute_indices: [max_children]usize = undefined;
+    var absolute_count: usize = 0;
 
     for (node.children, 0..) |*child, i| {
         if (child.style.display == .none) {
             child.computed = .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+            continue;
+        }
+        // Absolute children are removed from flex flow
+        if (child.style.position == .absolute) {
+            if (absolute_count < max_children) {
+                absolute_indices[absolute_count] = i;
+                absolute_count += 1;
+            }
             continue;
         }
         if (visible_count >= max_children) break;
@@ -492,191 +576,278 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         visible_count += 1;
     }
 
-    // ── Flex distribution ───────────────────────────────────────────
-    var total_basis: f32 = 0;
-    var total_flex: f32 = 0;
-    var total_main_margin: f32 = 0;
+    // ── Split into flex lines ──────────────────────────────────────
+    const max_lines = 64;
+    var line_starts: [max_lines]usize = undefined;
+    var line_counts: [max_lines]usize = undefined;
+    var num_lines: usize = 0;
 
-    for (0..visible_count) |i| {
-        total_basis += child_basis[i];
-        total_main_margin += child_main_margin_start[i] + child_main_margin_end[i];
-        if (child_grow[i] > 0) {
-            total_flex += child_grow[i];
-        }
-    }
+    if (s.flex_wrap == .wrap and visible_count > 0) {
+        var line_main: f32 = 0;
+        var line_start_idx: usize = 0;
+        var items_on_line: usize = 0;
 
-    const total_gaps: f32 = if (visible_count > 1)
-        gap * @as(f32, @floatFromInt(visible_count - 1))
-    else
-        0;
-
-    const free_space = main_size - total_basis - total_gaps - total_main_margin;
-
-    // Distribute free space
-    if (free_space > 0 and total_flex > 0) {
-        // Grow
         for (0..visible_count) |i| {
-            if (child_grow[i] > 0) {
-                child_basis[i] += (child_grow[i] / total_flex) * free_space;
+            const item_main = child_basis[i] + child_main_margin_start[i] + child_main_margin_end[i];
+            const gap_before: f32 = if (items_on_line > 0) gap else 0;
+
+            if (items_on_line > 0 and (line_main + gap_before + item_main) > main_size) {
+                if (num_lines < max_lines) {
+                    line_starts[num_lines] = line_start_idx;
+                    line_counts[num_lines] = items_on_line;
+                    num_lines += 1;
+                }
+                line_start_idx = i;
+                line_main = item_main;
+                items_on_line = 1;
+            } else {
+                line_main += gap_before + item_main;
+                items_on_line += 1;
             }
         }
-    } else if (free_space < 0) {
-        // Shrink
-        var total_shrink_scaled: f32 = 0;
-        for (0..visible_count) |i| {
-            total_shrink_scaled += child_shrink[i] * child_basis[i];
+        if (items_on_line > 0 and num_lines < max_lines) {
+            line_starts[num_lines] = line_start_idx;
+            line_counts[num_lines] = items_on_line;
+            num_lines += 1;
         }
-        if (total_shrink_scaled > 0) {
-            const overflow = -free_space;
-            for (0..visible_count) |i| {
-                const amount = (child_shrink[i] * child_basis[i] / total_shrink_scaled) * overflow;
-                child_basis[i] -= amount;
-            }
-        }
+    } else {
+        // Single line (nowrap)
+        line_starts[0] = 0;
+        line_counts[0] = visible_count;
+        num_lines = if (visible_count > 0) 1 else 0;
     }
 
-    // ── Line cross size (max cross extent) ──────────────────────────
-    var line_cross: f32 = 0;
-    for (0..visible_count) |i| {
-        const child_cross = child_cross_size[i] + child_cross_margin_start[i] + child_cross_margin_end[i];
-        if (child_cross > line_cross) line_cross = child_cross;
-    }
-
-    // For non-wrapping, use the full cross-axis if definite
-    if (is_row and h != null) {
-        line_cross = inner_h;
-    } else if (!is_row) {
-        line_cross = inner_w;
-    }
-
-    // ── Justify content ─────────────────────────────────────────────
-    var used_main: f32 = 0;
-    for (0..visible_count) |i| {
-        used_main += child_basis[i] + child_main_margin_start[i] + child_main_margin_end[i];
-    }
-    const free_main = main_size - used_main - total_gaps;
-    var main_offset: f32 = 0;
-    var extra_gap: f32 = 0;
-    const vc_f: f32 = @floatFromInt(visible_count);
-
-    switch (justify) {
-        .center => main_offset = free_main / 2.0,
-        .end_ => main_offset = free_main,
-        .space_between => {
-            if (visible_count > 1) {
-                extra_gap = free_main / @as(f32, @floatFromInt(visible_count - 1));
-            }
-        },
-        .space_around => {
-            if (visible_count > 0) {
-                extra_gap = free_main / vc_f;
-                main_offset = extra_gap / 2.0;
-            }
-        },
-        .space_evenly => {
-            if (visible_count > 0) {
-                extra_gap = free_main / (vc_f + 1.0);
-                main_offset = extra_gap;
-            }
-        },
-        .start => {},
-    }
-
-    // ── Position children ───────────────────────────────────────────
-    var cursor = main_offset;
+    // ── Process each flex line ──────────────────────────────────────
+    var cross_cursor: f32 = 0;
     var content_main_end: f32 = 0;
     var content_cross_end: f32 = 0;
 
-    for (0..visible_count) |i| {
-        const child_idx = visible_indices[i];
-        const child = &node.children[child_idx];
+    for (0..num_lines) |line_idx| {
+        const ls = line_starts[line_idx];
+        const lc = line_counts[line_idx];
 
-        var cx: f32 = undefined;
-        var cy: f32 = undefined;
-        var cw_final: f32 = undefined;
-        var ch_final: f32 = undefined;
+        // ── Flex distribution for this line ─────────────────────────
+        var total_basis: f32 = 0;
+        var total_flex: f32 = 0;
+        var total_main_margin: f32 = 0;
 
-        if (is_row) {
-            cx = x + pad_l + cursor + child_main_margin_start[i];
-            cw_final = clamp(child_basis[i], child.style.min_width, child.style.max_width);
-            ch_final = child_cross_size[i];
-
-            const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
-
-            switch (align_items) {
-                .center => cy = y + pad_t + child_cross_margin_start[i] + (cross_avail - ch_final) / 2.0,
-                .end_ => cy = y + pad_t + child_cross_margin_start[i] + cross_avail - ch_final,
-                .stretch => {
-                    cy = y + pad_t + child_cross_margin_start[i];
-                    if (child.style.height == null) {
-                        ch_final = clamp(cross_avail, child.style.min_height, child.style.max_height);
-                    }
-                },
-                .start => cy = y + pad_t + child_cross_margin_start[i],
-            }
-        } else {
-            cy = y + pad_t + cursor + child_main_margin_start[i];
-            ch_final = clamp(child_basis[i], child.style.min_height, child.style.max_height);
-            cw_final = child_cross_size[i];
-
-            const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
-
-            switch (align_items) {
-                .center => cx = x + pad_l + child_cross_margin_start[i] + (cross_avail - cw_final) / 2.0,
-                .end_ => cx = x + pad_l + child_cross_margin_start[i] + cross_avail - cw_final,
-                .stretch => {
-                    cx = x + pad_l + child_cross_margin_start[i];
-                    if (child.style.width == null) {
-                        cw_final = clamp(cross_avail, child.style.min_width, child.style.max_width);
-                    }
-                },
-                .start => cx = x + pad_l + child_cross_margin_start[i],
+        for (ls..ls + lc) |i| {
+            total_basis += child_basis[i];
+            total_main_margin += child_main_margin_start[i] + child_main_margin_end[i];
+            if (child_grow[i] > 0) {
+                total_flex += child_grow[i];
             }
         }
 
-        // Signal flex-adjusted sizes to child
-        if (is_row) {
-            if (child.style.width == null or cw_final != (child.style.width orelse 0)) {
-                child._flex_w = cw_final;
+        const line_gaps: f32 = if (lc > 1)
+            gap * @as(f32, @floatFromInt(lc - 1))
+        else
+            0;
+
+        const free_space = main_size - total_basis - line_gaps - total_main_margin;
+
+        if (free_space > 0 and total_flex > 0) {
+            for (ls..ls + lc) |i| {
+                if (child_grow[i] > 0) {
+                    child_basis[i] += (child_grow[i] / total_flex) * free_space;
+                }
             }
-            if (child.style.height == null and align_items == .stretch) {
-                child._stretch_h = ch_final;
+        } else if (free_space < 0) {
+            var total_shrink_scaled: f32 = 0;
+            for (ls..ls + lc) |i| {
+                total_shrink_scaled += child_shrink[i] * child_basis[i];
             }
-        } else {
-            if (child.style.height == null and child.style.flex_grow > 0) {
-                child._stretch_h = ch_final;
-            }
-            if (child.style.width == null and align_items == .stretch) {
-                child._flex_w = cw_final;
+            if (total_shrink_scaled > 0) {
+                const shrink_overflow = -free_space;
+                for (ls..ls + lc) |i| {
+                    const amount = (child_shrink[i] * child_basis[i] / total_shrink_scaled) * shrink_overflow;
+                    child_basis[i] -= amount;
+                }
             }
         }
 
-        // Inherit text_align from parent if child is default
-        if (child.style.text_align == .left and s.text_align != .left) {
-            child.style.text_align = s.text_align;
+        // ── Re-measure text nodes after flex distribution ───────────
+        for (ls..ls + lc) |i| {
+            const child_idx_rm = visible_indices[i];
+            const child_rm = &node.children[child_idx_rm];
+            if (child_rm.text == null) continue;
+            if (is_row) {
+                if (child_rm.style.height != null) continue;
+                const final_w = clamp(child_basis[i], child_rm.style.min_width, child_rm.style.max_width);
+                const prev_w = child_main_size[i];
+                if (@abs(final_w - prev_w) > 0.5) {
+                    const cpad_l = child_rm.style.padLeft();
+                    const cpad_r = child_rm.style.padRight();
+                    const cpad_t = child_rm.style.padTop();
+                    const cpad_b = child_rm.style.padBottom();
+                    const constrain_w = final_w - cpad_l - cpad_r;
+                    const m_rm = measureNodeTextW(child_rm, if (constrain_w > 0) constrain_w else 0);
+                    child_cross_size[i] = clamp(m_rm.height + cpad_t + cpad_b, child_rm.style.min_height, child_rm.style.max_height);
+                }
+            } else {
+                const final_w = child_rm.style.width orelse inner_w;
+                const cpad_l = child_rm.style.padLeft();
+                const cpad_r = child_rm.style.padRight();
+                const cpad_t = child_rm.style.padTop();
+                const cpad_b = child_rm.style.padBottom();
+                const constrain_w = final_w - cpad_l - cpad_r;
+                const m_rm = measureNodeTextW(child_rm, if (constrain_w > 0) constrain_w else 0);
+                const new_h = clamp(m_rm.height + cpad_t + cpad_b, child_rm.style.min_height, child_rm.style.max_height);
+                if (child_rm.style.height == null) {
+                    child_basis[i] = new_h;
+                    child_main_size[i] = new_h;
+                }
+                child_cross_size[i] = final_w;
+            }
         }
 
-        // Recurse
-        child._parent_inner_w = inner_w;
-        child._parent_inner_h = inner_h;
-        layoutNode(child, cx, cy, cw_final, ch_final);
-
-        // Advance cursor
-        const actual_main = if (is_row) child.computed.w else child.computed.h;
-        cursor += child_main_margin_start[i] + actual_main + child_main_margin_end[i] + gap + extra_gap;
-
-        // Track content extents
-        if (is_row) {
-            const me = (child.computed.x - x) + child.computed.w + child_main_margin_end[i];
-            const ce = child.computed.h + child_cross_margin_start[i] + child_cross_margin_end[i];
-            if (me > content_main_end) content_main_end = me;
-            if (ce > content_cross_end) content_cross_end = ce;
-        } else {
-            const me = (child.computed.y - y) + child.computed.h + child_main_margin_end[i];
-            const ce = child.computed.w + child_cross_margin_start[i] + child_cross_margin_end[i];
-            if (me > content_main_end) content_main_end = me;
-            if (ce > content_cross_end) content_cross_end = ce;
+        // ── Line cross size ────────────────────────────────────────
+        var line_cross: f32 = 0;
+        for (ls..ls + lc) |i| {
+            const child_cross = child_cross_size[i] + child_cross_margin_start[i] + child_cross_margin_end[i];
+            if (child_cross > line_cross) line_cross = child_cross;
         }
+        if (num_lines == 1) {
+            if (is_row and h != null) {
+                line_cross = inner_h;
+            } else if (!is_row) {
+                line_cross = inner_w;
+            }
+        }
+
+        // ── Justify content ────────────────────────────────────────
+        var used_main: f32 = 0;
+        for (ls..ls + lc) |i| {
+            used_main += child_basis[i] + child_main_margin_start[i] + child_main_margin_end[i];
+        }
+        const free_main = main_size - used_main - line_gaps;
+        var main_offset: f32 = 0;
+        var extra_gap: f32 = 0;
+        const lc_f: f32 = @floatFromInt(lc);
+
+        switch (justify) {
+            .center => main_offset = free_main / 2.0,
+            .end_ => main_offset = free_main,
+            .space_between => {
+                if (lc > 1) extra_gap = free_main / @as(f32, @floatFromInt(lc - 1));
+            },
+            .space_around => {
+                if (lc > 0) {
+                    extra_gap = free_main / lc_f;
+                    main_offset = extra_gap / 2.0;
+                }
+            },
+            .space_evenly => {
+                if (lc > 0) {
+                    extra_gap = free_main / (lc_f + 1.0);
+                    main_offset = extra_gap;
+                }
+            },
+            .start => {},
+        }
+
+        // ── Position children on this line ─────────────────────────
+        var cursor = main_offset;
+
+        for (ls..ls + lc) |i| {
+            const child_idx = visible_indices[i];
+            const child = &node.children[child_idx];
+
+            var cx: f32 = undefined;
+            var cy: f32 = undefined;
+            var cw_final: f32 = undefined;
+            var ch_final: f32 = undefined;
+
+            const eff_align: AlignItems = switch (child.style.align_self) {
+                .auto => align_items,
+                .start => .start,
+                .center => .center,
+                .end_ => .end_,
+                .stretch => .stretch,
+            };
+
+            if (is_row) {
+                cx = x + pad_l + cursor + child_main_margin_start[i];
+                cw_final = clamp(child_basis[i], child.style.min_width, child.style.max_width);
+                ch_final = child_cross_size[i];
+
+                const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
+
+                switch (eff_align) {
+                    .center => cy = y + pad_t + cross_cursor + child_cross_margin_start[i] + (cross_avail - ch_final) / 2.0,
+                    .end_ => cy = y + pad_t + cross_cursor + child_cross_margin_start[i] + cross_avail - ch_final,
+                    .stretch => {
+                        cy = y + pad_t + cross_cursor + child_cross_margin_start[i];
+                        if (child.style.height == null) {
+                            ch_final = clamp(cross_avail, child.style.min_height, child.style.max_height);
+                        }
+                    },
+                    .start => cy = y + pad_t + cross_cursor + child_cross_margin_start[i],
+                }
+            } else {
+                cy = y + pad_t + cursor + child_main_margin_start[i];
+                ch_final = clamp(child_basis[i], child.style.min_height, child.style.max_height);
+                cw_final = child_cross_size[i];
+
+                const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
+
+                switch (eff_align) {
+                    .center => cx = x + pad_l + cross_cursor + child_cross_margin_start[i] + (cross_avail - cw_final) / 2.0,
+                    .end_ => cx = x + pad_l + cross_cursor + child_cross_margin_start[i] + cross_avail - cw_final,
+                    .stretch => {
+                        cx = x + pad_l + cross_cursor + child_cross_margin_start[i];
+                        if (child.style.width == null) {
+                            cw_final = clamp(cross_avail, child.style.min_width, child.style.max_width);
+                        }
+                    },
+                    .start => cx = x + pad_l + cross_cursor + child_cross_margin_start[i],
+                }
+            }
+
+            // Signal flex-adjusted sizes to child
+            if (is_row) {
+                if (child.style.width == null or cw_final != (child.style.width orelse 0)) {
+                    child._flex_w = cw_final;
+                }
+                if (child.style.height == null and eff_align == .stretch) {
+                    child._stretch_h = ch_final;
+                }
+            } else {
+                if (child.style.height == null and child.style.flex_grow > 0) {
+                    child._stretch_h = ch_final;
+                }
+                if (child.style.width == null and eff_align == .stretch) {
+                    child._flex_w = cw_final;
+                }
+            }
+
+            if (child.style.text_align == .left and s.text_align != .left) {
+                child.style.text_align = s.text_align;
+            }
+
+            child._parent_inner_w = inner_w;
+            child._parent_inner_h = inner_h;
+            layoutNode(child, cx, cy, cw_final, ch_final);
+
+            const actual_main = if (is_row) child.computed.w else child.computed.h;
+            cursor += child_main_margin_start[i] + actual_main + child_main_margin_end[i] + gap + extra_gap;
+
+            // Track content extents
+            if (is_row) {
+                const me = (child.computed.x - x) + child.computed.w + child_main_margin_end[i];
+                const ce = (child.computed.y - y) + child.computed.h + child_cross_margin_end[i];
+                if (me > content_main_end) content_main_end = me;
+                if (ce > content_cross_end) content_cross_end = ce;
+            } else {
+                const me = (child.computed.y - y) + child.computed.h + child_main_margin_end[i];
+                const ce = (child.computed.x - x) + child.computed.w + child_cross_margin_end[i];
+                if (me > content_main_end) content_main_end = me;
+                if (ce > content_cross_end) content_cross_end = ce;
+            }
+        }
+
+        // Advance cross cursor for next line (gap between lines)
+        cross_cursor += line_cross + if (line_idx + 1 < num_lines) gap else @as(f32, 0);
     }
 
     // ── Auto-height: shrink-wrap to content ─────────────────────────
@@ -706,17 +877,72 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         node.content_height = full_content;
     }
 
+    // ── Position absolute children ────────────────────────────────
+    // Absolute children are out of flex flow. They are positioned relative
+    // to the parent's padding box using top/left/right/bottom.
+    const resolved_h = h orelse 0;
+    for (0..absolute_count) |ai| {
+        const abs_idx = absolute_indices[ai];
+        const abs_child = &node.children[abs_idx];
+        const acs = abs_child.style;
+
+        // Resolve width: explicit > (left+right constraint) > intrinsic
+        var abs_w: f32 = undefined;
+        if (acs.width) |ew| {
+            abs_w = ew;
+        } else if (acs.left != null and acs.right != null) {
+            abs_w = inner_w - (acs.left orelse 0) - (acs.right orelse 0);
+        } else {
+            abs_w = estimateIntrinsicWidth(abs_child);
+        }
+        abs_w = clamp(abs_w, acs.min_width, acs.max_width);
+
+        // Resolve height: explicit > (top+bottom constraint) > intrinsic
+        const abs_inner_h = resolved_h - pad_t - pad_b;
+        var abs_h: f32 = undefined;
+        if (acs.height) |eh| {
+            abs_h = eh;
+        } else if (acs.top != null and acs.bottom != null) {
+            abs_h = abs_inner_h - (acs.top orelse 0) - (acs.bottom orelse 0);
+        } else {
+            abs_h = estimateIntrinsicHeight(abs_child, abs_w);
+        }
+        abs_h = clamp(abs_h, acs.min_height, acs.max_height);
+
+        // Position: top/left/right/bottom relative to parent padding box
+        var abs_x: f32 = x + pad_l;
+        var abs_y: f32 = y + pad_t;
+
+        if (acs.left) |l| {
+            abs_x = x + pad_l + l;
+        } else if (acs.right) |r| {
+            abs_x = x + pad_l + inner_w - abs_w - r;
+        }
+
+        if (acs.top) |t| {
+            abs_y = y + pad_t + t;
+        } else if (acs.bottom) |b| {
+            abs_y = y + pad_t + abs_inner_h - abs_h - b;
+        }
+
+        abs_child._flex_w = abs_w;
+        abs_child._stretch_h = abs_h;
+        layoutNode(abs_child, abs_x, abs_y, abs_w, abs_h);
+    }
+
     // ── Write computed rect ─────────────────────────────────────────
     node.computed = .{
         .x = x,
         .y = y,
         .w = w,
-        .h = h orelse 0,
+        .h = resolved_h,
     };
 }
 
 /// Entry point: lay out a tree from the root.
 pub fn layout(root: *Node, x: f32, y: f32, w: f32, h_val: f32) void {
+    // Reset layout budget for this pass
+    _layout_count = 0;
     // Root always gets full viewport dimensions
     root._flex_w = w;
     root._stretch_h = h_val;

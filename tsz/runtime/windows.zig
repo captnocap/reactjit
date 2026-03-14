@@ -238,47 +238,103 @@ fn paintNode(
     hovered: ?*Node,
     brighten_fn: *const fn (Color) Color,
 ) void {
+    paintNodeWithOpacity(rend, te, ic, node, sx, sy, hovered, brighten_fn, 1.0);
+}
+
+fn paintNodeWithOpacity(
+    rend: *c.SDL_Renderer,
+    te: *TextEngine,
+    ic: *ImageCache,
+    node: *Node,
+    sx: f32,
+    sy: f32,
+    hovered: ?*Node,
+    brighten_fn: *const fn (Color) Color,
+    parent_opacity: f32,
+) void {
     if (node.style.display == .none) return;
+    const effective_opacity = parent_opacity * node.style.opacity;
+    if (effective_opacity <= 0) return;
+
     const screen_x = node.computed.x - sx;
     const screen_y = node.computed.y - sy;
+    const ix = @as(i32, @intFromFloat(screen_x));
+    const iy = @as(i32, @intFromFloat(screen_y));
+    const iw = @as(i32, @intFromFloat(node.computed.w));
+    const ih = @as(i32, @intFromFloat(node.computed.h));
 
+    // Box shadow
+    if (node.style.shadow_color) |shadow_col| {
+        if (node.style.shadow_blur > 0) {
+            var steps: i32 = @intFromFloat(@ceil(node.style.shadow_blur));
+            if (steps > 10) steps = 10;
+            if (steps < 1) steps = 1;
+            var step: i32 = steps;
+            while (step >= 1) : (step -= 1) {
+                const expand: i32 = step;
+                const alpha_f = @as(f32, @floatFromInt(shadow_col.a)) *
+                    (1.0 - @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps + 1))) * effective_opacity;
+                const sa: u8 = @intFromFloat(@max(0, @min(255, alpha_f)));
+                _ = c.SDL_SetRenderDrawColor(rend, shadow_col.r, shadow_col.g, shadow_col.b, sa);
+                var sr = c.SDL_Rect{
+                    .x = ix + @as(i32, @intFromFloat(node.style.shadow_offset_x)) - expand,
+                    .y = iy + @as(i32, @intFromFloat(node.style.shadow_offset_y)) - expand,
+                    .w = iw + expand * 2,
+                    .h = ih + expand * 2,
+                };
+                _ = c.SDL_RenderFillRect(rend, &sr);
+            }
+        }
+    }
+
+    // Background
     if (node.style.background_color) |col| {
         const is_hovered = (hovered != null and hovered.? == node);
         const paint_col = if (is_hovered) brighten_fn(col) else col;
-        _ = c.SDL_SetRenderDrawColor(rend, paint_col.r, paint_col.g, paint_col.b, paint_col.a);
-        var r = c.SDL_Rect{
-            .x = @intFromFloat(screen_x),
-            .y = @intFromFloat(screen_y),
-            .w = @intFromFloat(node.computed.w),
-            .h = @intFromFloat(node.computed.h),
-        };
+        const a: u8 = @intFromFloat(@as(f32, @floatFromInt(paint_col.a)) * effective_opacity);
+        _ = c.SDL_SetRenderDrawColor(rend, paint_col.r, paint_col.g, paint_col.b, a);
+        var r = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = ih };
         _ = c.SDL_RenderFillRect(rend, &r);
     }
 
+    // Border
+    if (node.style.border_width > 0) {
+        const bw = @as(i32, @intFromFloat(node.style.border_width));
+        const bc = node.style.border_color orelse Color.rgb(255, 255, 255);
+        const ba: u8 = @intFromFloat(@as(f32, @floatFromInt(bc.a)) * effective_opacity);
+        _ = c.SDL_SetRenderDrawColor(rend, bc.r, bc.g, bc.b, ba);
+        var top_r = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = bw };
+        _ = c.SDL_RenderFillRect(rend, &top_r);
+        var bot_r = c.SDL_Rect{ .x = ix, .y = iy + ih - bw, .w = iw, .h = bw };
+        _ = c.SDL_RenderFillRect(rend, &bot_r);
+        var left_r = c.SDL_Rect{ .x = ix, .y = iy + bw, .w = bw, .h = ih - bw * 2 };
+        _ = c.SDL_RenderFillRect(rend, &left_r);
+        var right_r = c.SDL_Rect{ .x = ix + iw - bw, .y = iy + bw, .w = bw, .h = ih - bw * 2 };
+        _ = c.SDL_RenderFillRect(rend, &right_r);
+    }
+
+    // Image
     if (node.image_src) |src| {
         if (ic.load(src)) |img| {
-            var dst = c.SDL_Rect{
-                .x = @intFromFloat(screen_x),
-                .y = @intFromFloat(screen_y),
-                .w = @intFromFloat(node.computed.w),
-                .h = @intFromFloat(node.computed.h),
-            };
+            var dst = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = ih };
             _ = c.SDL_RenderCopy(rend, img.texture, null, &dst);
         }
     }
 
+    // Text
     if (node.text) |txt| {
         const pad_l = node.style.padLeft();
         const pad_r = node.style.padRight();
         const pad_t = node.style.padTop();
-        const col = node.text_color orelse Color.rgb(255, 255, 255);
+        var col = node.text_color orelse Color.rgb(255, 255, 255);
+        col.a = @intFromFloat(@as(f32, @floatFromInt(col.a)) * effective_opacity);
         const text_max_w = node.computed.w - pad_l - pad_r;
-        te.drawTextWrapped(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col);
+        te.drawTextWrappedFull(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col, node.style.text_align, node.letter_spacing, node.line_height, node.number_of_lines);
     }
 
-    // Recurse children (simplified — no scissor clipping for now)
+    // Recurse children
     for (node.children) |*child| {
-        paintNode(rend, te, ic, child, sx, sy, hovered, brighten_fn);
+        paintNodeWithOpacity(rend, te, ic, child, sx, sy, hovered, brighten_fn, effective_opacity);
     }
 }
 

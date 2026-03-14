@@ -494,25 +494,43 @@ pub const TextEngine = struct {
 
     // ── Measurement ─────────────────────────────────────────────────────
 
-    /// Measure a string's width and height at the given font size.
-    /// Height uses the font's line metrics (consistent per font size),
-    /// not per-glyph ink bounds (which vary by character and cause overlap).
-    pub fn measureText(self: *TextEngine, text: []const u8, size_px: u16) layout.TextMetrics {
-        const lm = self.lineMetrics(size_px);
-
+    /// Measure a line's width accounting for letter spacing.
+    fn measureLineWidth(self: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32) f32 {
         var width: f32 = 0;
+        var char_count: usize = 0;
         var i: usize = 0;
         while (i < text.len) {
             const ch = decodeUtf8(text[i..]);
             if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 width += @floatFromInt(g.advance);
             }
+            char_count += 1;
             i += ch.len;
         }
+        // Add letter spacing between characters (not after the last)
+        if (letter_spacing != 0 and char_count > 1) {
+            width += letter_spacing * @as(f32, @floatFromInt(char_count - 1));
+        }
+        return width;
+    }
+
+    /// Measure a string's width and height at the given font size.
+    /// Height uses the font's line metrics (consistent per font size),
+    /// not per-glyph ink bounds (which vary by character and cause overlap).
+    pub fn measureText(self: *TextEngine, text: []const u8, size_px: u16) layout.TextMetrics {
+        return self.measureTextEx(text, size_px, 0, 0, 0);
+    }
+
+    /// Measure text with extended parameters: letter spacing, line height override, max lines.
+    pub fn measureTextEx(self: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32, line_height_override: f32, _: u16) layout.TextMetrics {
+        const lm = self.lineMetrics(size_px);
+        const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
+
+        const width = self.measureLineWidth(text, size_px, letter_spacing);
 
         return .{
             .width = width,
-            .height = lm.height,
+            .height = effective_lh,
             .ascent = lm.ascent,
         };
     }
@@ -521,34 +539,79 @@ pub const TextEngine = struct {
     /// Returns the widest wrapped line's width and total wrapped height.
     /// If max_width <= 0, falls back to unwrapped measureText.
     pub fn measureTextWrapped(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) layout.TextMetrics {
+        return self.measureTextWrappedEx(text, size_px, max_width, 0, 0, 0);
+    }
+
+    /// Measure text with wrapping + extended params.
+    pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16) layout.TextMetrics {
         if (max_width <= 0) {
-            return self.measureText(text, size_px);
+            return self.measureTextEx(text, size_px, letter_spacing, line_height_override, max_lines);
         }
 
         const lm = self.lineMetrics(size_px);
-        const wrap = self.wordWrap(text, size_px, max_width);
+        const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
 
-        // Find the widest line (UTF-8 aware)
-        var widest: f32 = 0;
-        for (0..wrap.count) |li| {
-            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
-            var lw: f32 = 0;
-            var j: usize = 0;
-            while (j < line.len) {
-                const ch = decodeUtf8(line[j..]);
-                if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
-                    lw += @floatFromInt(g.advance);
-                }
-                j += ch.len;
+        // When letter spacing is set, reduce wrap width to account for wider chars
+        var wrap_width = max_width;
+        if (letter_spacing > 0) {
+            // Approximate: each char is wider by letter_spacing
+            const avg_adv = self.cpAdvance('M', size_px);
+            if (avg_adv > 0) {
+                const ratio = avg_adv / (avg_adv + letter_spacing);
+                wrap_width = max_width * ratio;
             }
+        }
+
+        const wrap = self.wordWrap(text, size_px, wrap_width);
+
+        // Clamp line count
+        var line_count = wrap.count;
+        if (max_lines > 0 and line_count > max_lines) {
+            line_count = max_lines;
+        }
+
+        // Find the widest line
+        var widest: f32 = 0;
+        for (0..line_count) |li| {
+            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
+            const lw = self.measureLineWidth(line, size_px, letter_spacing);
             if (lw > widest) widest = lw;
         }
 
         return .{
             .width = @min(widest, max_width),
-            .height = lm.height * @as(f32, @floatFromInt(wrap.count)),
+            .height = effective_lh * @as(f32, @floatFromInt(line_count)),
             .ascent = lm.ascent,
         };
+    }
+
+    /// Measure the min-content width of text (width of the longest word).
+    /// Used by layout for CSS min-width: auto floor in flex items.
+    pub fn measureMinContentWidth(self: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32) f32 {
+        var max_word_w: f32 = 0;
+        var i: usize = 0;
+
+        while (i < text.len) {
+            // Skip whitespace
+            while (i < text.len and (text[i] == ' ' or text[i] == '\n')) : (i += 1) {}
+            if (i >= text.len) break;
+
+            // Measure word
+            var word_w: f32 = 0;
+            var char_count: usize = 0;
+            while (i < text.len and text[i] != ' ' and text[i] != '\n') {
+                const ch = decodeUtf8(text[i..]);
+                word_w += self.cpAdvance(ch.codepoint, size_px);
+                char_count += 1;
+                i += ch.len;
+            }
+            if (letter_spacing != 0 and char_count > 1) {
+                word_w += letter_spacing * @as(f32, @floatFromInt(char_count - 1));
+            }
+            if (word_w > max_word_w) max_word_w = word_w;
+        }
+
+        return max_word_w;
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────
@@ -556,6 +619,11 @@ pub const TextEngine = struct {
     /// Draw a single line of text at (x, y) with the given color and size.
     /// y is the top of the text bounding box (not baseline).
     pub fn drawText(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, color: layout.Color) void {
+        self.drawTextEx(text, x, y, size_px, color, 0);
+    }
+
+    /// Draw a single line of text with letter spacing.
+    pub fn drawTextEx(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, color: layout.Color, letter_spacing: f32) void {
         const lm = self.lineMetrics(size_px);
 
         var pen_x = x;
@@ -597,6 +665,7 @@ pub const TextEngine = struct {
                     _ = c.SDL_RenderCopy(self.renderer, tex, null, &dst);
                 }
                 pen_x += @floatFromInt(g.advance);
+                pen_x += letter_spacing;
             }
             i += ch.len;
         }
@@ -606,6 +675,51 @@ pub const TextEngine = struct {
     /// If max_width <= 0, falls back to single-line drawText.
     pub fn drawTextWrapped(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color) void {
         self.drawTextWrappedAligned(text, x, y, size_px, max_width, color, .left);
+    }
+
+    /// Draw text with word wrapping, alignment, letter spacing, line height, and line limit.
+    pub fn drawTextWrappedFull(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color, text_align: layout.TextAlign, letter_spacing: f32, line_height_override: f32, max_lines: u16) void {
+        if (max_width <= 0) {
+            self.drawTextEx(text, x, y, size_px, color, letter_spacing);
+            return;
+        }
+
+        const lm = self.lineMetrics(size_px);
+        const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
+
+        // Adjust wrap width for letter spacing
+        var wrap_width = max_width;
+        if (letter_spacing > 0) {
+            const avg_adv = self.cpAdvance('M', size_px);
+            if (avg_adv > 0) {
+                const ratio = avg_adv / (avg_adv + letter_spacing);
+                wrap_width = max_width * ratio;
+            }
+        }
+
+        const wrap = self.wordWrap(text, size_px, wrap_width);
+        var line_count = wrap.count;
+        if (max_lines > 0 and line_count > max_lines) {
+            line_count = max_lines;
+        }
+
+        for (0..line_count) |li| {
+            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
+            const line_y = y + effective_lh * @as(f32, @floatFromInt(li));
+
+            var line_x = x;
+            if (text_align != .left) {
+                const line_w = self.measureLineWidth(line, size_px, letter_spacing);
+                if (text_align == .center) {
+                    line_x = x + (max_width - line_w) / 2.0;
+                } else {
+                    line_x = x + max_width - line_w;
+                }
+            }
+
+            self.drawTextEx(line, line_x, line_y, size_px, color, letter_spacing);
+        }
+        return;
     }
 
     /// Draw text with word wrapping and alignment within max_width.

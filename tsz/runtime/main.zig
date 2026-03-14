@@ -25,9 +25,9 @@ var g_text_engine: ?*TextEngine = null;
 // ── Global image cache (set during init, used by layout measure callback) ───
 var g_image_cache: ?*ImageCache = null;
 
-fn measureCallback(t: []const u8, font_size: u16, max_width: f32) layout.TextMetrics {
+fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16) layout.TextMetrics {
     if (g_text_engine) |te| {
-        return te.measureTextWrapped(t, font_size, max_width);
+        return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines);
     }
     return .{};
 }
@@ -97,57 +97,114 @@ const Painter = struct {
     }
 
     /// Walk the node tree and paint backgrounds + text + images.
-    /// Nodes that are hovered get a brightened background.
-    /// Scroll/hidden overflow nodes use SDL clip rect for scissor clipping,
-    /// and offset their children by scroll_x/scroll_y.
+    /// Supports opacity propagation, box shadows, borders, and scissor clipping.
     pub fn paintTree(self: *Painter, node: *Node, scroll_offset_x: f32, scroll_offset_y: f32) void {
+        self.paintTreeWithOpacity(node, scroll_offset_x, scroll_offset_y, 1.0);
+    }
+
+    fn paintTreeWithOpacity(self: *Painter, node: *Node, scroll_offset_x: f32, scroll_offset_y: f32, parent_opacity: f32) void {
         if (node.style.display == .none) return;
 
-        // Apply accumulated scroll offset to get screen position
+        // Opacity propagation: multiply down the tree
+        const effective_opacity = parent_opacity * node.style.opacity;
+        if (effective_opacity <= 0) return;
+
         const screen_x = node.computed.x - scroll_offset_x;
         const screen_y = node.computed.y - scroll_offset_y;
+        const sx = @as(i32, @intFromFloat(screen_x));
+        const sy = @as(i32, @intFromFloat(screen_y));
+        const sw = @as(i32, @intFromFloat(node.computed.w));
+        const sh = @as(i32, @intFromFloat(node.computed.h));
+        const opacity_byte: u8 = @intFromFloat(@min(255.0, effective_opacity * 255.0));
 
-        // Paint background (brighten if hovered)
-        if (node.style.background_color) |color| {
-            const is_hovered = (hovered_node != null and hovered_node.? == node);
-            const paint_color = if (is_hovered) brighten(color) else color;
-            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_color.r, paint_color.g, paint_color.b, paint_color.a);
-            var bg_rect = c.SDL_Rect{
-                .x = @intFromFloat(screen_x),
-                .y = @intFromFloat(screen_y),
-                .w = @intFromFloat(node.computed.w),
-                .h = @intFromFloat(node.computed.h),
-            };
-            _ = c.SDL_RenderFillRect(self.renderer, &bg_rect);
-        }
+        // ── Box shadow (painted before background) ──────────────
+        if (node.style.shadow_color) |shadow_col| {
+            if (node.style.shadow_blur > 0) {
+                const blur = node.style.shadow_blur;
+                const off_x = node.style.shadow_offset_x;
+                const off_y = node.style.shadow_offset_y;
+                var steps: i32 = @intFromFloat(@ceil(blur));
+                if (steps > 10) steps = 10;
+                if (steps < 1) steps = 1;
 
-        // Paint image
-        if (node.image_src) |src| {
-            if (self.image_cache.load(src)) |img| {
-                var dst = c.SDL_Rect{
-                    .x = @intFromFloat(screen_x),
-                    .y = @intFromFloat(screen_y),
-                    .w = @intFromFloat(node.computed.w),
-                    .h = @intFromFloat(node.computed.h),
-                };
-                _ = c.SDL_RenderCopy(self.renderer, img.texture, null, &dst);
+                var step: i32 = steps;
+                while (step >= 1) : (step -= 1) {
+                    const expand: i32 = step;
+                    const alpha_f = @as(f32, @floatFromInt(shadow_col.a)) *
+                        (1.0 - @as(f32, @floatFromInt(step)) / @as(f32, @floatFromInt(steps + 1))) *
+                        effective_opacity;
+                    const sa: u8 = @intFromFloat(@max(0, @min(255, alpha_f)));
+                    _ = c.SDL_SetRenderDrawColor(self.renderer, shadow_col.r, shadow_col.g, shadow_col.b, sa);
+                    var sr = c.SDL_Rect{
+                        .x = sx + @as(i32, @intFromFloat(off_x)) - expand,
+                        .y = sy + @as(i32, @intFromFloat(off_y)) - expand,
+                        .w = sw + expand * 2,
+                        .h = sh + expand * 2,
+                    };
+                    _ = c.SDL_RenderFillRect(self.renderer, &sr);
+                }
             }
         }
 
-        // Paint text (with word wrapping to node width)
+        // ── Background ──────────────────────────────────────────
+        if (node.style.background_color) |color| {
+            const is_hovered = (hovered_node != null and hovered_node.? == node);
+            const paint_color = if (is_hovered) brighten(color) else color;
+            const a: u8 = @intFromFloat(@as(f32, @floatFromInt(paint_color.a)) * effective_opacity);
+            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_color.r, paint_color.g, paint_color.b, a);
+            var bg_rect = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
+            _ = c.SDL_RenderFillRect(self.renderer, &bg_rect);
+        }
+
+        // ── Border ──────────────────────────────────────────────
+        if (node.style.border_width > 0) {
+            const bw = @as(i32, @intFromFloat(node.style.border_width));
+            const bc = node.style.border_color orelse Color.rgb(255, 255, 255);
+            const ba: u8 = @intFromFloat(@as(f32, @floatFromInt(bc.a)) * effective_opacity);
+            _ = c.SDL_SetRenderDrawColor(self.renderer, bc.r, bc.g, bc.b, ba);
+            // Top
+            var top_r = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = bw };
+            _ = c.SDL_RenderFillRect(self.renderer, &top_r);
+            // Bottom
+            var bot_r = c.SDL_Rect{ .x = sx, .y = sy + sh - bw, .w = sw, .h = bw };
+            _ = c.SDL_RenderFillRect(self.renderer, &bot_r);
+            // Left
+            var left_r = c.SDL_Rect{ .x = sx, .y = sy + bw, .w = bw, .h = sh - bw * 2 };
+            _ = c.SDL_RenderFillRect(self.renderer, &left_r);
+            // Right
+            var right_r = c.SDL_Rect{ .x = sx + sw - bw, .y = sy + bw, .w = bw, .h = sh - bw * 2 };
+            _ = c.SDL_RenderFillRect(self.renderer, &right_r);
+        }
+
+        // ── Image ───────────────────────────────────────────────
+        if (node.image_src) |src| {
+            if (self.image_cache.load(src)) |img| {
+                var dst = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
+                if (opacity_byte < 255) {
+                    _ = c.SDL_SetTextureAlphaMod(img.texture, opacity_byte);
+                }
+                _ = c.SDL_RenderCopy(self.renderer, img.texture, null, &dst);
+                if (opacity_byte < 255) {
+                    _ = c.SDL_SetTextureAlphaMod(img.texture, 255);
+                }
+            }
+        }
+
+        // ── Text ────────────────────────────────────────────────
         if (node.text) |txt| {
             const pad_l = node.style.padLeft();
             const pad_r = node.style.padRight();
             const pad_t = node.style.padTop();
-            const color = node.text_color orelse Color.rgb(255, 255, 255);
+            var color = node.text_color orelse Color.rgb(255, 255, 255);
+            color.a = @intFromFloat(@as(f32, @floatFromInt(color.a)) * effective_opacity);
             const text_max_w = node.computed.w - pad_l - pad_r;
-            // Draw selection highlight behind text
+            // Selection highlights
             if (sel_all) {
                 self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, 0, txt.len, Color.rgba(60, 120, 200, 140));
             } else if (sel_node == node and sel_start != sel_end) {
                 self.text_engine.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, sel_start, sel_end, Color.rgba(60, 120, 200, 140));
             }
-            self.text_engine.drawTextWrappedAligned(
+            self.text_engine.drawTextWrappedFull(
                 txt,
                 screen_x + pad_l,
                 screen_y + pad_t,
@@ -155,6 +212,9 @@ const Painter = struct {
                 text_max_w,
                 color,
                 node.style.text_align,
+                node.letter_spacing,
+                node.line_height,
+                node.number_of_lines,
             );
         }
 
@@ -164,19 +224,11 @@ const Painter = struct {
         const needs_clip = node.style.overflow != .visible;
 
         if (needs_clip) {
-            // Save previous clip rect (for nested scroll containers)
             c.SDL_RenderGetClipRect(self.renderer, &prev_clip);
             had_prev_clip = (prev_clip.w > 0 and prev_clip.h > 0);
 
-            // Set clip to this node's screen bounds
-            var clip = c.SDL_Rect{
-                .x = @intFromFloat(screen_x),
-                .y = @intFromFloat(screen_y),
-                .w = @intFromFloat(node.computed.w),
-                .h = @intFromFloat(node.computed.h),
-            };
+            var clip = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
 
-            // Intersect with existing clip if present (nested clips)
             if (had_prev_clip) {
                 const ix1 = @max(clip.x, prev_clip.x);
                 const iy1 = @max(clip.y, prev_clip.y);
@@ -196,7 +248,7 @@ const Painter = struct {
         const child_scroll_y = scroll_offset_y + if (needs_clip) node.scroll_y else @as(f32, 0);
 
         for (node.children) |*child| {
-            self.paintTree(child, child_scroll_x, child_scroll_y);
+            self.paintTreeWithOpacity(child, child_scroll_x, child_scroll_y, effective_opacity);
         }
 
         // ── Restore previous clip rect ───────────────────────────
