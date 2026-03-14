@@ -1,8 +1,22 @@
-# Native Devtools — Port from Love2D
+# Native Devtools — Built in .tsz
 
-## What We're Porting
+## CRITICAL: Do NOT hand-write devtools UI in Zig
 
-The Love2D devtools (`love2d/lua/devtools/`) are ~3,700 lines of Lua across 8 files with 7 tabs, live telemetry, pop-out window support, and an inspector overlay system. This is a phased port — each phase is independently useful.
+In the Love2D stack, devtools were pure Lua because they needed to survive a React crash.
+**tsz has no React crash.** It either compiles or it doesn't. A running binary is stable.
+
+**The devtools UI must be written in .tsz files** using the same primitives as any app
+(Box, Text, Pressable, ScrollView, etc.). The ONLY Zig-level code is `telemetry.zig` —
+the measurement module that wraps layout/paint timing. Everything else is .tsz components.
+
+A tab bar is `<Pressable>` elements with conditional rendering. A sparkline is a row of
+colored `<Box>` elements. A tree inspector is indented `<Text>` lines. A scrollable list
+is `<ScrollView>`. Do not reinvent these in raw Zig — use the framework.
+
+## What We're Building
+
+The Love2D devtools (`love2d/lua/devtools/`) are ~3,700 lines of hand-drawn Lua UI.
+The tsz version will be dramatically simpler because we use .tsz components, not hand-drawn rendering.
 
 ## Love2D Reference Files
 
@@ -120,197 +134,183 @@ if (frame_count % 30 == 0) telemetry.countNodes(&root);
 
 ---
 
-## Phase 1: Status Bar Overlay
+## Phase 1: Status Bar Component
 
-**New file: `tsz/runtime/devtools.zig`** (starts small, grows in later phases)
+**New file: `tsz/devtools/StatusBar.tsz`** (a .tsz component, NOT hand-written Zig)
 
-A single-line HUD at the bottom of the window showing live metrics. Toggled with F12.
+A status bar component that reads from `telemetry.zig` via built-in getters.
 
-### What it shows
+```tsx
+function StatusBar() {
+  const [fps, setFps] = useState(0);
+  const [layoutMs, setLayoutMs] = useState(0);
+  const [paintMs, setPaintMs] = useState(0);
+  const [nodes, setNodes] = useState(0);
+  const [rss, setRss] = useState(0);
 
+  // Poll telemetry every 500ms
+  useEffect(() => {
+    setFps(getFps());
+    setLayoutMs(getLayoutMs());
+    setPaintMs(getPaintMs());
+    setNodes(getNodeCount());
+    setRss(getRssMb());
+  }, 500);
+
+  return (
+    <Box style={{ flexDirection: 'row', height: 22, backgroundColor: '#1a1a2e', padding: 4, gap: 16 }}>
+      <Text fontSize={12} color={fps >= 55 ? '#4ec9b0' : fps >= 30 ? '#dcdcaa' : '#f44747'}>{`FPS: ${fps}`}</Text>
+      <Text fontSize={12} color="#888888">{`Layout: ${layoutMs}ms`}</Text>
+      <Text fontSize={12} color="#888888">{`Paint: ${paintMs}ms`}</Text>
+      <Text fontSize={12} color="#888888">{`Nodes: ${nodes}`}</Text>
+      <Text fontSize={12} color="#888888">{`RSS: ${rss}MB`}</Text>
+    </Box>
+  );
+}
 ```
-FPS: 60 | Layout: 0.12ms | Paint: 0.34ms | Nodes: 12 | RSS: 18MB | 800x600
-```
 
-Reference: `love2d/lua/devtools/main.lua` status bar — 22px tall, bottom of panel. Shows FPS (green if ≥55, yellow if slower), layout/paint ms, node count, RSS, window dimensions.
+The only Zig needed: expose `getFps()`, `getLayoutMs()`, etc. as built-in functions
+the compiler recognizes (like `getText()` for TextInput). These read from `telemetry.zig`.
 
-### Implementation
+**Files changed:** `tsz/devtools/StatusBar.tsz` (new .tsz component), `tsz/compiler/codegen.zig` (recognize telemetry getters as built-ins)
 
-- 22px bar at bottom of window
-- Renders text using existing `text.zig` TextEngine
-- Background: dark semi-transparent rectangle (OpenGL quad)
-- FPS color: green if ≥55, yellow if ≥30, red if <30
-- Reads all values from `telemetry.zig` getters
-- F12 key toggles visibility (add to SDL_KEYDOWN in event loop)
-- When visible, reduce app viewport height by 22px (layout gets `win_h - 22`)
-
-### Format string
-
-```zig
-const status = std.fmt.bufPrint(&buf, "FPS: {d:.0}  |  Layout: {d:.2}ms  |  Paint: {d:.2}ms  |  Nodes: {d}  |  RSS: {d:.0}MB  |  {d}x{d}", .{
-    telemetry.getFps(), telemetry.getLayoutMs(), telemetry.getPaintMs(),
-    telemetry.getNodeCount(), watchdog.getRssMb(), @as(u32, @intFromFloat(win_w)), @as(u32, @intFromFloat(win_h)),
-});
-```
-
-**Files changed:** `tsz/runtime/devtools.zig` (new), `tsz/runtime/main.zig` or templates (F12 toggle + draw call + viewport reduction)
-
-**Verification:** Run any tsz app, press F12, status bar appears with live metrics.
+**Verification:** Import StatusBar into any app, see live metrics.
 
 ---
 
 ## Phase 2: Devtools Panel Shell
 
-Expand `devtools.zig` into a docked panel with tab bar.
+**New file: `tsz/devtools/DevtoolsPanel.tsz`** — a .tsz component, NOT Zig
 
-### Panel behavior
+```tsx
+function DevtoolsPanel() {
+  const [activeTab, setActiveTab] = useState(0);
+  const [panelHeight, setPanelHeight] = useState(300);
 
-- Docked at bottom of window (like browser devtools)
-- Default: 40% of viewport height
-- Resizable: drag top edge (6px handle zone)
-- Min height: 200px, max: 90% of viewport
-- App viewport height reduced by panel height
-- Tab bar: 26px tall at top of panel
-- Status bar: 22px at bottom of panel (moved from Phase 1 overlay into panel)
-- Content area: between tab bar and status bar, clipped
+  return (
+    <Box style={{ height: panelHeight, backgroundColor: '#1a1a2e', flexDirection: 'column' }}>
+      {/* Tab bar */}
+      <Box style={{ flexDirection: 'row', height: 26, backgroundColor: '#12121e', gap: 0 }}>
+        <Pressable onPress={() => setActiveTab(0)} style={{ padding: 8 }}>
+          <Text fontSize={12} color={activeTab == 0 ? '#ffffff' : '#666666'}>Perf</Text>
+        </Pressable>
+        <Pressable onPress={() => setActiveTab(1)} style={{ padding: 8 }}>
+          <Text fontSize={12} color={activeTab == 1 ? '#ffffff' : '#666666'}>Elements</Text>
+        </Pressable>
+      </Box>
 
-Reference: `love2d/lua/devtools/main.lua` lines 66-92 (state variables), panel height calculation, resize drag handling.
+      {/* Tab content — conditional rendering (already works!) */}
+      {activeTab == 0 && <PerfTab />}
+      {activeTab == 1 && <ElementsTab />}
 
-### Tab bar
+      {/* Status bar at bottom */}
+      <StatusBar />
+    </Box>
+  );
+}
+```
 
-Initial tabs: **Perf** | **Wireframe** | **Elements**
+This uses **existing primitives**: Box, Text, Pressable, conditional rendering, useState.
+No hand-drawn Zig UI. The framework IS the devtools framework.
 
-- Each tab: text label, clickable, active tab has accent underline
-- Right-side buttons: Pick mode (+), Refresh (o), Pop-out (<), Close (x)
-- Reference: `love2d/lua/devtools/main.lua` tab bar drawing (26px height, accent underline on active)
-
-### Input routing
-
-- Mouse clicks in panel region → route to active tab
-- Mouse clicks in app region → normal app handling
-- F12 toggles panel
-- Tab clicks switch active tab
-- Top edge drag resizes panel
-
-**Files changed:** `tsz/runtime/devtools.zig` (expand), templates (panel height reduction in layout call)
+Reference: `love2d/lua/devtools/main.lua` lines 66-92 — same concept, but Love2D had to draw everything by hand because it couldn't use React (crash safety). We don't have that constraint.
 
 ---
 
 ## Phase 3: Perf Tab
 
-Render performance data inside the devtools panel.
-
-### Frame budget bar
-
-Reference: `love2d/lua/devtools/tab_perf.lua:151-220`
-
-- Horizontal bar showing layout (blue) + paint (green) against 16.6ms target
-- Width proportional to time/budget ratio
-- Colors: green background (<80% budget), yellow (80-100%), red (>100%)
-- Label: `"Layout: 0.12ms + Paint: 0.34ms = 0.46ms (2.8% of 16.6ms)"`
+**New file: `tsz/devtools/PerfTab.tsz`** — .tsz component
 
 ### Sparkline
 
-Reference: `love2d/lua/devtools/tab_perf.lua:222-280`
+120 thin `<Box>` elements in a row, each with height proportional to frame time and color based on budget:
 
-- 120 vertical bars (one per frame from ring buffer)
-- Height proportional to total_ms
-- 16.6ms threshold line (red dashed)
-- Color: green if under budget, red if over
-- 60px tall
+```tsx
+function Sparkline() {
+  // Read frame history from telemetry (built-in getter)
+  // Render as colored boxes
+  return (
+    <Box style={{ flexDirection: 'row', height: 60, alignItems: 'end', gap: 1 }}>
+      {/* Each bar is a Box with computed height and color */}
+    </Box>
+  );
+}
+```
+
+### Frame budget bar
+
+A `<Box>` with width proportional to `(layoutMs + paintMs) / 16.6`:
+- Green background if <80% budget
+- Yellow if 80-100%
+- Red if >100%
 
 ### Stats row
 
-- FPS, Node count, Lua/RSS memory, Mutation count
-- Reference: `love2d/lua/devtools/tab_perf.lua:77-100` (stats display)
+`<Text>` elements showing FPS, node count, RSS — same as StatusBar but with more detail.
 
-### Costliest nodes (future)
+Reference: `love2d/lua/devtools/tab_perf.lua:151-280` — same data, but rendered with Box/Text instead of love.graphics calls.
 
-- Top 20 nodes by layout+paint time
-- Requires per-node timing (optional Node struct field)
-- Defer to Phase 3b if per-node timing not ready
-
-**Files changed:** `tsz/runtime/devtools.zig` (add perf tab rendering)
+**Note:** The sparkline needs `.map()` or a compile-time loop to generate 120 boxes. If `.map()` isn't landed yet, a fixed set of boxes with useEffect updating their heights works too.
 
 ---
 
 ## Phase 4: Wireframe Tab
 
-Scaled miniature of the entire node tree.
+**New file: `tsz/devtools/WireframeTab.tsz`** — .tsz component
 
-Reference: `love2d/lua/devtools/tab_wireframe.lua` (514 lines)
+Needs a **built-in function** to walk the node tree and return computed bounds:
+`getNodeTree()` → array of `{ x, y, w, h, depth, hasText, childCount }`
 
-### What it renders
+The wireframe renders these as scaled `<Box>` elements with depth-colored borders.
 
-- All nodes as colored outlines, scaled to fit panel
-- Depth-based coloring (7 colors cycling by tree depth)
-- Hover highlight: thicker outline on mouseover
-- Selected node: accent-colored outline
-- Text nodes: different shade
-- Scale percentage indicator (bottom right)
+This is the one tab where a Zig-side helper is needed — not for rendering, but for **tree introspection**. The .tsz component calls `getNodeTree()`, gets data, renders boxes.
 
-### Implementation
-
-- Walk the node tree recursively
-- Scale factor: `min(panel_w / root_w, panel_h / root_h)`
-- For each node: draw scaled rectangle outline with depth color
-- Hit test mouse position against scaled rects for hover/select
-
-**Files changed:** `tsz/runtime/devtools.zig` (add wireframe tab rendering)
+Reference: `love2d/lua/devtools/tab_wireframe.lua` — same concept, 514 lines of Lua drawing. The .tsz version would be much shorter.
 
 ---
 
 ## Phase 5: Elements/Inspector Tab
 
-The most complex tab — tree view + property panel.
-
-Reference: `love2d/lua/devtools/main.lua` Elements tab sections
+**New file: `tsz/devtools/ElementsTab.tsz`** — .tsz component
 
 ### Left panel: Node tree
 
-- Indented hierarchy view
-- Each line: `▶ Box (400×300)` or `▼ Box (400×300)` (collapsed/expanded)
-- Click to select, arrow keys to navigate
-- Scrollable
-- Hover highlights corresponding node on canvas
+`<ScrollView>` containing indented `<Text>` lines. Each line is a `<Pressable>`:
+```tsx
+<Pressable onPress={() => selectNode(nodeId)}>
+  <Text fontSize={12} color="#cccccc">{`${"  ".repeat(depth)}▶ Box (${w}×${h})`}</Text>
+</Pressable>
+```
 
 ### Right panel: Properties
 
-- Selected node's properties:
-  - Type, dimensions, position
-  - Style fields (all non-default values)
-  - Text content (if text node)
-  - Computed bounds (x, y, w, h)
-  - Handlers (which events are attached)
-  - Children count
+Selected node's properties displayed as `<Text>` key-value pairs in a `<ScrollView>`.
 
 ### Canvas overlay
 
-- Hover: semi-transparent highlight over hovered node
-- Selected: outline + tooltip with dimensions
-- Reference: `love2d/lua/inspector.lua` overlay drawing
+This is the ONE place that needs Zig-level rendering — drawing a highlight rectangle
+over the app's canvas at the selected node's computed bounds. This is a single
+`SDL_RenderDrawRect` call in the main loop, gated by a "selected node" state variable.
 
-**Files changed:** `tsz/runtime/devtools.zig` (add elements tab), `tsz/runtime/events.zig` (may need devtools-specific hit testing)
+Reference: `love2d/lua/inspector.lua` overlay drawing — same single-rect overlay.
 
 ---
 
 ## Phase 6: Pop-out Window
 
-Devtools as a secondary SDL window using `windows.zig`.
+The devtools panel as a `<Window>` element (multi-window already works!):
 
-### tsz advantage
+```tsx
+{poppedOut && (
+  <Window title="DevTools" width={800} height={400}>
+    <DevtoolsPanel />
+  </Window>
+)}
+```
 
-Love2D needs TCP IPC because child windows are separate processes. tsz windows share the same address space — the devtools window can read the app's node tree and telemetry directly. No serialization needed.
+Shared address space means the devtools window reads the same telemetry and node tree directly. No IPC needed — this is just conditional rendering of a `<Window>`.
 
-Implementation:
-- Create secondary window via `windows.zig`
-- Devtools rendering redirected to secondary window's renderer
-- App window gets full viewport back
-- Button to dock back (close secondary window, re-dock panel)
-
-Reference: `love2d/lua/devtools/main.lua` pop-out sections — but most of this code (TCP server, NDJSON sync, mutation batching) is unnecessary for tsz.
-
-**Files changed:** `tsz/runtime/devtools.zig` (pop-out logic), `tsz/runtime/windows.zig` (devtools window lifecycle)
+Reference: `love2d/lua/devtools/main.lua` pop-out — 400 lines of TCP IPC code that we don't need.
 
 ---
 
@@ -327,21 +327,31 @@ These become relevant as the corresponding infrastructure is built.
 
 ---
 
-## Implementation Order for Agents
+## Files
 
-This can be split into **3 parallel agents** after Phase 0:
+| File | Type | What |
+|------|------|------|
+| `tsz/runtime/telemetry.zig` | **Zig** | Measurement only — timing hooks, ring buffer, getters |
+| `tsz/devtools/StatusBar.tsz` | **.tsz** | Status bar component |
+| `tsz/devtools/DevtoolsPanel.tsz` | **.tsz** | Panel shell with tab bar |
+| `tsz/devtools/PerfTab.tsz` | **.tsz** | Sparkline, budget bar, stats |
+| `tsz/devtools/WireframeTab.tsz` | **.tsz** | Scaled node rectangles |
+| `tsz/devtools/ElementsTab.tsz` | **.tsz** | Tree view + property panel |
+| `tsz/compiler/codegen.zig` | **Zig** | Recognize telemetry getters as built-ins |
+
+**Rule: Only `telemetry.zig` and built-in getter wiring are Zig. All UI is .tsz.**
+
+## Implementation Order for Agents
 
 | Agent | Phases | Files |
 |-------|--------|-------|
-| A: Telemetry + Status Bar | 0, 1 | `telemetry.zig` (new), `devtools.zig` (new, minimal), templates |
-| B: Panel Shell + Perf Tab | 2, 3 | `devtools.zig` (expand), templates |
-| C: Wireframe + Elements | 4, 5 | `devtools.zig` (expand), `events.zig` |
+| A: Telemetry + built-in getters | 0 | `telemetry.zig`, `codegen.zig` (register getFps/etc as built-ins) |
+| B: Panel + Perf + Status | 1, 2, 3 | `StatusBar.tsz`, `DevtoolsPanel.tsz`, `PerfTab.tsz` |
+| C: Wireframe + Elements | 4, 5 | `WireframeTab.tsz`, `ElementsTab.tsz` |
 
-**Agent A must complete first** — B and C depend on the telemetry API and devtools.zig scaffold.
-
-Then Agent B and C can work in parallel (perf tab vs wireframe/elements are independent rendering functions within devtools.zig).
-
-Phase 6 (pop-out) comes after all tabs work docked.
+**Agent A must complete first** — B and C need the telemetry getters.
+B and C can parallel after A (independent .tsz components).
+Phase 6 (pop-out) is trivial once tabs work — just wrap in `<Window>`.
 
 ## Verification
 
