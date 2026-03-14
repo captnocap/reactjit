@@ -11,18 +11,34 @@ Currently `useState()` only supports integer initial values. `useState("")` (str
 1. Add string support to the runtime state system
 2. Make the compiler detect the type of the initial value
 3. Emit the correct typed slot creation calls
+4. Make template literals format state values according to their type
 
 **Other agents are working on other parts of codegen.zig in parallel.** Your changes should be confined to:
 - `tsz/runtime/state.zig` (full ownership)
-- `tsz/compiler/codegen.zig` lines 31-35 (`StateSlot` struct) and lines 373-422 (`collectStateHooks`) and lines 1398-1406 (state init in `emitZigSource`)
-- `tsz/compiler/codegen.zig` lines 1105-1163 (`emitStateExpr`/`emitStateAtom`) — coordinate with Agent 1 who also touches this. If you need type-aware getters (e.g., `getSlotBool` instead of `getSlot`), add a `stateType()` lookup function near `isState()`/`isSetter()` (lines 159-171) and let Agent 1's expression parser call it.
+- `tsz/compiler/codegen.zig`:
+  - `StateSlot` struct (lines 31-35)
+  - `collectStateHooks` (lines 373-422)
+  - `parseTemplateLiteral` (lines 931-985) — type-aware formatting
+  - State init emission in `emitZigSource` (lines 1398-1406)
+  - A `stateType()` lookup helper near `isState()`/`isSetter()` (lines 159-171)
 - A new test example `tsz/examples/string-state-test.tsz`
+
+## Important Constraints
+
+- **Do not modify `emitStateExpr` or `emitStateAtom`** (lines 1105-1163) — Agent 1 owns those. You expose metadata (`stateType()` helper) that Agent 1 can use later.
+- **Do not modify `emitHandlerExpr`** (lines 1006-1103) — Agent 4 owns that. Typed getter/setter wiring into handlers is a future task, not this one.
+- **Do not modify the JSX children loop** (lines 558-604) — Agent 3 owns that.
+- **Do not modify `lexer.zig`** — Agent 1 owns that.
+- **Do not modify `events.zig`, `input.zig`, or `main.zig`** — Agent 4 owns those.
+- **String state is fixed-capacity.** Max 256 bytes per slot. Truncation is allowed. Strings are UTF-8 byte sequences, not grapheme-aware. No heap allocation.
+- **Preserve current simple string literal handling.** Do not implement full escape decoding in this task. Quote stripping (`raw[1..raw.len-1]`) is adequate for now.
+- **State persistence format change invalidates existing state files.** This is acceptable — `/tmp/tsz-state.bin` is ephemeral. Document that saved state from previous versions will be ignored after this change.
 
 ## Step 1: Runtime — Add String State
 
 File: `tsz/runtime/state.zig`
 
-### Current Value union (line 17-21):
+### Current Value union (lines 17-21):
 ```zig
 pub const Value = union(enum) {
     int: i64,
@@ -33,9 +49,6 @@ pub const Value = union(enum) {
 
 ### Add string variant:
 
-The challenge: strings need memory. The current design is zero-heap-alloc. For string state, use a fixed buffer per slot — same pattern as `input.zig` which uses `[256]u8` buffers.
-
-Add a string buffer type:
 ```zig
 const STRING_BUF_SIZE = 256;
 
@@ -45,7 +58,7 @@ pub const Value = union(enum) {
     boolean: bool,
     string: struct {
         buf: [STRING_BUF_SIZE]u8,
-        len: u16,
+        len: u8, // max 256, u8 is sufficient
     },
 };
 ```
@@ -58,24 +71,19 @@ pub fn createSlotString(initial: []const u8) usize {
     const id = slot_count;
     std.debug.assert(id < MAX_SLOTS);
     var str_val: Value = .{ .string = .{ .buf = [_]u8{0} ** STRING_BUF_SIZE, .len = 0 } };
-    const copy_len = @min(initial.len, STRING_BUF_SIZE);
+    const copy_len: u8 = @intCast(@min(initial.len, STRING_BUF_SIZE));
     @memcpy(str_val.string.buf[0..copy_len], initial[0..copy_len]);
-    str_val.string.len = @intCast(copy_len);
+    str_val.string.len = copy_len;
     slots[id] = .{ .value = str_val, .dirty = false };
     slot_count += 1;
     return id;
 }
 
-/// Read a string state value.
+/// Read a string state value. Only valid for string-type slots.
+/// Returns empty string for non-string slots — does NOT format other types as strings.
 pub fn getSlotString(id: usize) []const u8 {
     return switch (slots[id].value) {
         .string => |s| s.buf[0..s.len],
-        .int => |v| blk: {
-            // Format int as string into a scratch buffer
-            var buf: [32]u8 = undefined;
-            const s = std.fmt.bufPrint(&buf, "{d}", .{v}) catch "";
-            break :blk s;
-        },
         else => "",
     };
 }
@@ -85,9 +93,9 @@ pub fn setSlotString(id: usize, val: []const u8) void {
     const current = getSlotString(id);
     if (!std.mem.eql(u8, current, val)) {
         var str_val: Value = .{ .string = .{ .buf = [_]u8{0} ** STRING_BUF_SIZE, .len = 0 } };
-        const copy_len = @min(val.len, STRING_BUF_SIZE);
+        const copy_len: u8 = @intCast(@min(val.len, STRING_BUF_SIZE));
         @memcpy(str_val.string.buf[0..copy_len], val[0..copy_len]);
-        str_val.string.len = @intCast(copy_len);
+        str_val.string.len = copy_len;
         slots[id].value = str_val;
         slots[id].dirty = true;
         _dirty = true;
@@ -95,17 +103,21 @@ pub fn setSlotString(id: usize, val: []const u8) void {
 }
 ```
 
-**Note on `getSlotString` returning a slice into the slot buffer:** This is safe because the slot buffer is module-level static memory. The slice is valid until the next `setSlotString` call on the same slot. For template literal formatting, the value is copied into the format buffer immediately, so this is fine.
+**Critical: `getSlotString` must NOT format non-string types into stack-local buffers and return slices to them.** That would be returning a dangling pointer — instant UB. If the slot isn't a string, return `""`. Type-to-string conversion belongs at template formatting time, not in the getter.
 
 ### Update `saveState` and `loadState`:
 
-The current save/load only handles i64. You need to handle the type tag:
+The current save/load only handles i64. Add a type tag byte.
 
-For `saveState` (line 180): Write a type byte (0=int, 1=float, 2=bool, 3=string), then the value data.
+**`saveState`:** For each slot, write 1 byte for the type tag (0=int, 1=float, 2=bool, 3=string), then the value data:
+- int: 8 bytes (i64)
+- float: 8 bytes (f64)
+- bool: 1 byte
+- string: 1 byte length + N bytes content
 
-For `loadState` (line 199): Read the type byte, then restore the correct type.
+**`loadState`:** Read the type byte, restore the correct type. If the file format doesn't match (e.g., stale file from before this change), the read will fail gracefully and return false — existing behavior handles this via `catch return false`.
 
-This is a breaking change to the state file format, but that's fine — the state file is ephemeral (`/tmp/tsz-state.bin`) and gets deleted after read.
+**Note:** This is a breaking change to the state file format. Previous state files will be silently ignored (read fails, returns false, app starts with fresh state). This is acceptable.
 
 ## Step 2: Compiler — State Type Detection
 
@@ -113,17 +125,51 @@ File: `tsz/compiler/codegen.zig`
 
 ### Update StateSlot struct (lines 31-35):
 
+Use a tagged union for the initial value — cleaner and harder to misuse than separate fields:
+
 ```zig
 const StateType = enum { int, float, boolean, string };
+
+const StateInitial = union(StateType) {
+    int: i64,
+    float: f64,
+    boolean: bool,
+    string: []const u8,
+};
 
 const StateSlot = struct {
     getter: []const u8,
     setter: []const u8,
-    initial_int: i64,
-    initial_float: f64,
-    initial_string: []const u8,
-    slot_type: StateType,
+    initial: StateInitial,
 };
+```
+
+### Add type lookup helper (near lines 159-171):
+
+This exposes type metadata so other agents can use it later without touching your code:
+
+```zig
+fn stateType(self: *Generator, name: []const u8) ?StateType {
+    for (0..self.state_count) |i| {
+        if (std.mem.eql(u8, self.state_slots[i].getter, name)) return self.state_slots[i].initial;
+    }
+    return null;
+}
+```
+
+Wait — `stateType` should return the `StateType` enum, not the union. Use the active tag:
+
+```zig
+fn stateType(self: *Generator, name: []const u8) ?StateType {
+    for (0..self.state_count) |i| {
+        if (std.mem.eql(u8, self.state_slots[i].getter, name)) return std.meta.activeTag(self.state_slots[i].initial);
+    }
+    return null;
+}
+
+fn stateTypeById(self: *Generator, slot_id: u32) StateType {
+    return std.meta.activeTag(self.state_slots[slot_id].initial);
+}
 ```
 
 ### Update collectStateHooks (lines 373-422):
@@ -139,37 +185,30 @@ if (self.curKind() == .number) {
 
 Replace with type-detecting logic:
 ```zig
-var slot_type: StateType = .int;
-var initial_int: i64 = 0;
-var initial_float: f64 = 0;
-var initial_string: []const u8 = "";
+var initial: StateInitial = .{ .int = 0 };
 
 if (self.curKind() == .number) {
     const num_text = self.curText();
     // Check if float (contains '.')
     if (std.mem.indexOf(u8, num_text, ".") != null) {
-        initial_float = std.fmt.parseFloat(f64, num_text) catch 0.0;
-        slot_type = .float;
+        initial = .{ .float = std.fmt.parseFloat(f64, num_text) catch 0.0 };
     } else {
-        initial_int = std.fmt.parseInt(i64, num_text, 10) catch 0;
-        slot_type = .int;
+        initial = .{ .int = std.fmt.parseInt(i64, num_text, 10) catch 0 };
     }
     self.advance_token();
 } else if (self.curKind() == .string) {
     // useState("hello") or useState('')
+    // Simple quote stripping — no full escape decode in this task
     const raw = self.curText();
-    initial_string = raw[1..raw.len - 1]; // strip quotes
-    slot_type = .string;
+    initial = .{ .string = raw[1 .. raw.len - 1] };
     self.advance_token();
 } else if (self.curKind() == .identifier) {
     const val = self.curText();
     if (std.mem.eql(u8, val, "true")) {
-        initial_int = 1;
-        slot_type = .boolean;
+        initial = .{ .boolean = true };
         self.advance_token();
     } else if (std.mem.eql(u8, val, "false")) {
-        initial_int = 0;
-        slot_type = .boolean;
+        initial = .{ .boolean = false };
         self.advance_token();
     }
 }
@@ -180,22 +219,8 @@ Then update the slot storage:
 self.state_slots[self.state_count] = .{
     .getter = getter,
     .setter = setter,
-    .initial_int = initial_int,
-    .initial_float = initial_float,
-    .initial_string = initial_string,
-    .slot_type = slot_type,
+    .initial = initial,
 };
-```
-
-### Add type lookup helper (near lines 159-171):
-
-```zig
-fn stateType(self: *Generator, name: []const u8) ?StateType {
-    for (0..self.state_count) |i| {
-        if (std.mem.eql(u8, self.state_slots[i].getter, name)) return self.state_slots[i].slot_type;
-    }
-    return null;
-}
 ```
 
 ### Update state init emission in emitZigSource (lines 1398-1406):
@@ -210,22 +235,22 @@ Replace with type-aware emission:
 ```zig
 for (0..self.state_count) |i| {
     const slot = self.state_slots[i];
-    switch (slot.slot_type) {
-        .int => try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    _ = state.createSlot({d});\n", .{slot.initial_int})),
-        .float => try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    _ = state.createSlotFloat({d:.6});\n", .{slot.initial_float})),
-        .boolean => try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    _ = state.createSlotBool({s});\n", .{if (slot.initial_int != 0) "true" else "false"})),
-        .string => try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    _ = state.createSlotString(\"{s}\");\n", .{slot.initial_string})),
+    switch (slot.initial) {
+        .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    _ = state.createSlot({d});\n", .{v})),
+        .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    _ = state.createSlotFloat({d});\n", .{v})),
+        .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    _ = state.createSlotBool({});\n", .{v})),
+        .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    _ = state.createSlotString(\"{s}\");\n", .{v})),
     }
 }
 ```
 
-### Update template literal rendering for string state
+### Update template literal rendering for typed state
 
-In `parseTemplateLiteral` (line 931-985), when a state variable appears in `${name}`, it currently emits `state.getSlot({id})` with `{d}` format. For string state, it should emit `state.getSlotString({id})` with `{s}` format.
+In `parseTemplateLiteral` (lines 931-985), when a state variable appears in `${name}`, it currently emits `state.getSlot({id})` with `{d}` format. For typed state, use the correct getter and format specifier.
 
 At line 961-965:
 ```zig
@@ -240,75 +265,37 @@ if (self.isState(expr)) |slot_id| {
 Replace with type-aware version:
 ```zig
 if (self.isState(expr)) |slot_id| {
-    const st = self.stateType(expr) orelse .int;
+    const st = self.stateTypeById(slot_id);
     switch (st) {
         .string => {
             try fmt.appendSlice(self.alloc, "{s}");
             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-            const arg = try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{slot_id});
-            try args.appendSlice(self.alloc, arg);
+            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "state.getSlotString({d})", .{slot_id}));
         },
         .float => {
-            try fmt.appendSlice(self.alloc, "{d:.2}");
+            try fmt.appendSlice(self.alloc, "{d}");
             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-            const arg = try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{slot_id});
-            try args.appendSlice(self.alloc, arg);
+            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "state.getSlotFloat({d})", .{slot_id}));
         },
         .boolean => {
             try fmt.appendSlice(self.alloc, "{s}");
             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-            const arg = try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id});
-            try args.appendSlice(self.alloc, arg);
+            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id}));
         },
         .int => {
             try fmt.appendSlice(self.alloc, "{d}");
             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-            const arg = try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
-            try args.appendSlice(self.alloc, arg);
+            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "state.getSlot({d})", .{slot_id}));
         },
     }
 }
 ```
 
-### Update handler setter emission
-
-In `emitHandlerExpr` (line 1011-1016), the setter currently uses `state.setSlot`. For typed state, it should use the correct setter. However, **Agent 4 owns emitHandlerExpr**. Instead, add a helper that Agent 4 can call:
-
-Near the type lookup helper, add:
-```zig
-fn stateSetterCall(self: *Generator, slot_id: u32, value_expr: []const u8) ![]const u8 {
-    const st = self.state_slots[slot_id].slot_type;
-    return switch (st) {
-        .int => try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, {s});", .{ slot_id, value_expr }),
-        .float => try std.fmt.allocPrint(self.alloc, "state.setSlotFloat({d}, {s});", .{ slot_id, value_expr }),
-        .boolean => try std.fmt.allocPrint(self.alloc, "state.setSlotBool({d}, {s});", .{ slot_id, value_expr }),
-        .string => try std.fmt.allocPrint(self.alloc, "state.setSlotString({d}, {s});", .{ slot_id, value_expr }),
-    };
-}
-
-fn stateGetterCall(self: *Generator, slot_id: u32) ![]const u8 {
-    const st = self.state_slots[slot_id].slot_type;
-    return switch (st) {
-        .int => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}),
-        .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{slot_id}),
-        .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{slot_id}),
-        .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{slot_id}),
-    };
-}
-```
-
-Then update `emitStateAtom` (line 1136-1138) to use `stateGetterCall`:
-```zig
-if (self.isState(name)) |slot_id| {
-    self.advance_token();
-    return try self.stateGetterCall(slot_id);
-}
-```
-
-And update `emitHandlerExpr` line 1016 to use `stateSetterCall`:
-```zig
-return try self.stateSetterCall(slot_id, arg);
-```
+**Note on float formatting:** `{d}` is used (Zig's default numeric format), not `{d:.2}`. Display precision is a formatting policy decision, not a type system concern. If fixed decimal display is wanted later, that's a separate feature.
 
 ## Step 3: Test Example
 
@@ -336,7 +323,7 @@ function App() {
 }
 ```
 
-This tests: string state display, integer state, float state, boolean state display, all in template literals.
+This tests: string state display in template literal, integer state, float state, boolean state display. All four types should render correctly with their appropriate format.
 
 ## Verification
 
@@ -345,15 +332,24 @@ cd /home/siah/creative/reactjit
 zig build tsz-compiler && ./zig-out/bin/tsz build tsz/examples/string-state-test.tsz
 ```
 
-If the compiler builds and the example compiles, check that the generated code in `tsz/runtime/generated_app.zig` uses the correct slot creation calls (`createSlot`, `createSlotFloat`, `createSlotBool`, `createSlotString`) and getter/setter variants.
+Check the generated code in `tsz/runtime/generated_app.zig` — verify it uses:
+- `state.createSlotString("World")` for the name slot
+- `state.createSlot(0)` for the count slot
+- `state.createSlotFloat(...)` for the pi slot
+- `state.createSlotBool(true)` for the active slot
+- Template formatting uses `getSlotString`, `getSlot`, `getSlotFloat`, `getSlotBool` respectively
 
-## What NOT to Touch
+Run the binary to confirm all four values display correctly.
 
-- Do not modify the lexer (`lexer.zig`) — Agent 1 owns that
-- Do not modify the JSX children loop (lines 558-604) — Agent 3 owns that
-- Do not modify `emitHandlerExpr` beyond the one setter line (line 1016) — Agent 4 owns that
-- Do not modify `events.zig`, `input.zig`, or `main.zig` — Agent 4 owns those
+## What This Plan Does NOT Do
+
+These are explicitly deferred — not forgotten, just not in scope:
+- **Typed getter/setter in expression parser** — Agent 1 owns `emitStateAtom`. The `stateType()`/`stateTypeById()` helpers exist for Agent 1 to use later.
+- **Typed setter in handler emission** — Agent 4 owns `emitHandlerExpr`. Handlers currently use `state.setSlot()` (integer). Wiring typed setters into handlers is a follow-up task.
+- **Full string escape decoding** — quote stripping is adequate for now.
+- **String operations in expressions** — concatenation, `.length`, etc. are future work.
+- **Rich float formatting** — `{d}` default format, no fixed precision.
 
 ## Commit
 
-After verification, commit with: `feat(tsz): add string/float/bool state type detection and typed slot creation`
+After verification, commit with: `feat(tsz): add typed state (string/float/bool) with detection and template formatting`

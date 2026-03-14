@@ -1,8 +1,8 @@
-# Agent 3: Conditional Rendering + Dynamic Lists
+# Agent 3: Conditional JSX Rendering (Ternary + Logical AND)
 
 ## What This Is
 
-tsz is a compiler that takes `.tsz` files (React-like syntax) and compiles them to native Zig binaries. The compiler is in `tsz/compiler/`, the runtime is in `tsz/runtime/`. You're working on the **compiler's JSX parser** to add conditional rendering and dynamic lists.
+tsz is a compiler that takes `.tsz` files (React-like syntax) and compiles them to native Zig binaries. The compiler is in `tsz/compiler/`, the runtime is in `tsz/runtime/`. You're working on the **compiler's JSX parser** to add conditional rendering.
 
 ## Your Mission
 
@@ -12,20 +12,35 @@ Currently the JSX children loop (codegen.zig lines 558-604) only handles:
 - Bare identifiers (`{children}`)
 - Raw text content
 
-It cannot handle:
-- Ternary in JSX: `{condition ? <A/> : <B/>}`
-- Logical AND in JSX: `{condition && <A/>}`
-- Map: `{items.map(item => <Text>{item}</Text>)}`
+You're adding:
+- **Ternary in JSX:** `{condition ? <A/> : <B/>}`
+- **Logical AND in JSX:** `{condition && <A/>}`
 
-You need to add these patterns.
+Dynamic lists (`.map()`) are **not in scope** for this task — they need their own plan.
+
+**This is tricky work with multiple failure modes.** Work incrementally:
+1. Get ternary parsing working first with a minimal test
+2. Verify the generated Zig compiles and runs correctly
+3. Then add logical AND
+4. Then review your own generated output for edge cases
+
+Do not try to implement everything at once.
 
 **Other agents are working on other parts of codegen.zig in parallel.** Your changes should be confined to:
 - `tsz/compiler/codegen.zig` lines 558-604 (JSX children parsing loop)
 - `tsz/compiler/codegen.zig` lines 715-764 (children array construction)
 - New helper functions you add (place them after `emitWindowElement`, around line 1208)
+- Generator struct fields (for condition tracking)
+- `emitZigSource` — new `updateConditionals()` function emission
 - A new test example `tsz/examples/conditional-test.tsz`
 
-Do NOT modify the lexer, state system, handler parsing, or expression parser functions.
+## Important Constraints
+
+- **Do not build a second expression parser.** Agent 1 is building `emitStateExpr()` as a proper recursive descent parser. Your condition parsing should call `emitStateExpr()` to parse the condition expression, not re-implement expression assembly by token-splicing. This keeps one expression language, not three divergent ones.
+- **Do not modify `emitStateExpr`/`emitStateAtom`** — Agent 1 owns those. You call them, you don't change them.
+- **Do not modify the lexer** — Agent 1 owns that. You need `.question` and `.amp_amp` tokens; see Token Dependencies below.
+- **Do not modify `state.zig`, `events.zig`, `input.zig`, `main.zig`**.
+- **Ternary requires `:`.** If `:` is missing after the true branch, fail with an error, don't silently continue.
 
 ## Design Approach: Display Toggle
 
@@ -38,147 +53,29 @@ This means:
 2. A function runs each frame that sets `.style.display` on each branch based on state
 3. Layout skips `display: none` nodes (already implemented in `layout.zig`)
 
-## Step 1: Parse Ternary in JSX Children
+## Step 1: Condition Tracking Data Structures
 
-In the JSX children loop (line 558-604), inside the `else if (self.curKind() == .lbrace)` branch (line 566), after checking for template literals and identifiers, add ternary detection.
-
-### How to detect ternary
-
-When you see `{` followed by an identifier that is a state getter, followed by tokens that lead to `?`, it's a ternary. The pattern is:
-
-```
-{ identifier (operator identifier/number)* ? <JSXElement> : <JSXElement> }
-```
-
-But since we don't have a full expression parser in JSX context yet, use a **lookahead scan**: after `{`, scan forward (without consuming) looking for a `?` token before hitting `}`. If found, it's a ternary expression.
-
-### Implementation
-
-Add a helper function `isTernaryAhead`:
-
-```zig
-/// Lookahead: check if the expression between { and } contains a ? (ternary)
-fn isTernaryAhead(self: *Generator) bool {
-    var look = self.pos;
-    var depth: u32 = 0;
-    while (look < self.lex.count) {
-        const kind = self.lex.get(look).kind;
-        if (kind == .lbrace) depth += 1;
-        if (kind == .rbrace) {
-            if (depth == 0) return false;
-            depth -= 1;
-        }
-        if (kind == .question and depth == 0) return true;
-        if (kind == .eof) return false;
-        look += 1;
-    }
-    return false;
-}
-```
-
-**Note:** This requires the `?` token to exist in the lexer. Agent 1 is adding it as `.question`. If you're building before Agent 1's changes are merged, you'll need to add `.question` to the TokenKind enum and the `?` case to the single-char switch in the lexer yourself (it's one line each).
-
-### Parse the ternary
-
-```zig
-// Inside the {expression} branch of children parsing:
-if (self.curKind() == .lbrace) {
-    self.advance_token(); // skip {
-
-    if (self.curKind() == .template_literal) {
-        // ... existing template literal handling ...
-    } else if (self.isTernaryAhead()) {
-        // Ternary: {condition ? <TrueJSX/> : <FalseJSX/>}
-        const ternary = try self.parseTernaryJSX();
-        try child_exprs.append(self.alloc, ternary.true_expr);
-        try child_exprs.append(self.alloc, ternary.false_expr);
-        // Track condition for runtime display toggle
-        if (self.cond_count < MAX_CONDS) {
-            self.conds[self.cond_count] = .{
-                .condition = ternary.condition,
-                .true_arr = "", // filled when array is created
-                .true_idx = @intCast(child_exprs.items.len - 2),
-                .false_idx = @intCast(child_exprs.items.len - 1),
-            };
-            self.cond_count += 1;
-        }
-    } else if (self.curKind() == .identifier) {
-        // ... existing identifier handling ...
-    }
-
-    if (self.curKind() == .rbrace) self.advance_token();
-}
-```
-
-### The parseTernaryJSX function
-
-Add near line 1208:
-
-```zig
-const TernaryResult = struct {
-    condition: []const u8,
-    true_expr: []const u8,
-    false_expr: []const u8,
-};
-
-fn parseTernaryJSX(self: *Generator) !TernaryResult {
-    // Parse condition tokens until ?
-    var cond: std.ArrayListUnmanaged(u8) = .{};
-
-    while (self.curKind() != .question and self.curKind() != .eof) {
-        const name = self.curText();
-        if (self.curKind() == .identifier) {
-            if (self.isState(name)) |slot_id| {
-                try cond.appendSlice(self.alloc,
-                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}));
-            } else {
-                try cond.appendSlice(self.alloc, name);
-            }
-        } else {
-            // Operators: ==, !=, >, <, etc.
-            try cond.appendSlice(self.alloc, " ");
-            try cond.appendSlice(self.alloc, self.curText());
-            try cond.appendSlice(self.alloc, " ");
-        }
-        self.advance_token();
-    }
-
-    if (self.curKind() == .question) self.advance_token(); // skip ?
-
-    // Parse true branch — should be a JSX element
-    const true_expr = try self.parseJSXElement();
-
-    // Skip : (colon token)
-    if (self.curKind() == .colon) self.advance_token();
-
-    // Parse false branch — should be a JSX element
-    const false_expr = try self.parseJSXElement();
-
-    return .{
-        .condition = try self.alloc.dupe(u8, cond.items),
-        .true_expr = true_expr,
-        .false_expr = false_expr,
-    };
-}
-```
-
-## Step 2: Conditional Display Toggle
-
-### Add tracking state to Generator
-
-At the top of the Generator struct (around line 46), add:
+Add to the Generator struct (around line 46). This is a meaningful struct addition — it affects `init` and all codegen passes, so be deliberate about it.
 
 ```zig
 const MAX_CONDS = 32;
 
-const CondInfo = struct {
-    condition: []const u8,  // Zig expression that returns i64 or bool
-    true_arr: []const u8,   // array name
-    true_idx: u32,          // index of true branch in array
-    false_idx: u32,         // index of false branch in array
+const CondKind = enum {
+    ternary,    // show one, hide other
+    show_hide,  // show or hide single element
 };
 
-// Add to Generator struct fields:
+const CondInfo = struct {
+    kind: CondKind,
+    condition: []const u8,  // Zig expression (from emitStateExpr)
+    arr_name: []const u8,   // array containing the conditional nodes
+    true_idx: u32,          // index of true branch in array
+    false_idx: u32,         // index of false branch (same as true_idx for show_hide)
+};
+```
+
+Add to Generator struct fields:
+```zig
 conds: [MAX_CONDS]CondInfo,
 cond_count: u32,
 ```
@@ -189,53 +86,188 @@ Initialize in `Generator.init`:
 .cond_count = 0,
 ```
 
-### Wire up array names
+## Step 2: Parse Ternary in JSX Children
 
-In the children array construction (lines 715-764), after the array is created, update the condition tracking with the actual array name:
+### Lookahead detection
 
-After line 729 (`try self.array_decls.append(...)`) add:
+Add a helper to detect ternary patterns. Called after consuming the `{` token, scanning forward without consuming to find `?` before `}`:
+
 ```zig
-// Update conditional display references
+/// Lookahead: check if tokens from current pos to matching } contain a ? (ternary).
+/// Tracks brace/paren/bracket depth to avoid false matches inside nested expressions.
+fn isTernaryAhead(self: *Generator) bool {
+    var look = self.pos;
+    var brace_depth: u32 = 0;
+    var paren_depth: u32 = 0;
+    while (look < self.lex.count) {
+        const kind = self.lex.get(look).kind;
+        if (kind == .lbrace) brace_depth += 1;
+        if (kind == .rbrace) {
+            if (brace_depth == 0) return false;
+            brace_depth -= 1;
+        }
+        if (kind == .lparen) paren_depth += 1;
+        if (kind == .rparen and paren_depth > 0) paren_depth -= 1;
+        if (kind == .question and brace_depth == 0 and paren_depth == 0) return true;
+        if (kind == .eof) return false;
+        look += 1;
+    }
+    return false;
+}
+```
+
+### Parse the condition using Agent 1's expression parser
+
+The key insight: **call `emitStateExpr()`** to parse the condition, don't token-splice it yourself. `emitStateExpr` already knows how to resolve state getters, handle operators, and emit valid Zig.
+
+```zig
+const TernaryResult = struct {
+    condition: []const u8,
+    true_expr: []const u8,
+    false_expr: []const u8,
+};
+
+fn parseTernaryJSX(self: *Generator) !TernaryResult {
+    // Parse condition using the real expression parser
+    const condition = try self.emitStateExpr();
+
+    // Expect ? token
+    if (self.curKind() != .question) {
+        std.debug.print("[tsz] Expected '?' in ternary at pos {d}\n", .{self.pos});
+        return error.ExpectedQuestionInTernary;
+    }
+    self.advance_token(); // skip ?
+
+    // Skip optional ( around true branch
+    if (self.curKind() == .lparen) self.advance_token();
+
+    // Parse true branch — must be a JSX element
+    const true_expr = try self.parseJSXElement();
+
+    // Skip optional ) after true branch
+    if (self.curKind() == .rparen) self.advance_token();
+
+    // Expect : token
+    if (self.curKind() != .colon) {
+        std.debug.print("[tsz] Ternary missing ':' at pos {d}\n", .{self.pos});
+        return error.ExpectedColonInTernary;
+    }
+    self.advance_token(); // skip :
+
+    // Skip optional ( around false branch
+    if (self.curKind() == .lparen) self.advance_token();
+
+    // Parse false branch — must be a JSX element
+    const false_expr = try self.parseJSXElement();
+
+    // Skip optional ) after false branch
+    if (self.curKind() == .rparen) self.advance_token();
+
+    return .{
+        .condition = condition,
+        .true_expr = true_expr,
+        .false_expr = false_expr,
+    };
+}
+```
+
+### Wire into the JSX children loop
+
+In the `else if (self.curKind() == .lbrace)` branch (line 566), after consuming `{`:
+
+```zig
+if (self.curKind() == .lbrace) {
+    self.advance_token(); // skip {
+
+    if (self.curKind() == .template_literal) {
+        // ... existing template literal handling (lines 569-578) ...
+    } else if (self.isTernaryAhead()) {
+        // Ternary: {condition ? <TrueJSX/> : <FalseJSX/>}
+        const ternary = try self.parseTernaryJSX();
+        // Both branches become children; display toggled at runtime
+        try child_exprs.append(self.alloc, ternary.true_expr);
+        try child_exprs.append(self.alloc, ternary.false_expr);
+        // Record condition — array name assigned during array construction below
+        if (self.cond_count < MAX_CONDS) {
+            self.conds[self.cond_count] = .{
+                .kind = .ternary,
+                .condition = ternary.condition,
+                .arr_name = "",  // assigned in Step 3
+                .true_idx = @intCast(child_exprs.items.len - 2),
+                .false_idx = @intCast(child_exprs.items.len - 1),
+            };
+            self.cond_count += 1;
+        }
+    } else if (self.curKind() == .identifier) {
+        // ... existing identifier handling (lines 579-582) ...
+    }
+
+    if (self.curKind() == .rbrace) self.advance_token();
+}
+```
+
+## Step 3: Bind Conditions to Their Array
+
+This is the trickiest part. The condition's `true_idx`/`false_idx` refer to positions in `child_exprs` — which becomes a specific `_arr_N` array. The binding must happen **at array construction time**, not via global late-binding.
+
+In the children array construction (lines 715-764), after the array declaration is appended to `self.array_decls` (line 729), bind any pending conditions that belong to THIS array:
+
+```zig
+// After: try self.array_decls.append(self.alloc, ...);
+
+// Bind conditions whose indices belong to this child array.
+// A condition belongs here if its true_idx is within [0, child_exprs.items.len).
+// Conditions are created during this parseJSXElement call, so unbound conditions
+// (arr_name == "") with valid indices belong to the array we just created.
 for (0..self.cond_count) |ci| {
-    if (!std.mem.eql(u8, self.conds[ci].true_arr, "")) continue; // already assigned
-    // Check if this condition's indices fall within this array
+    if (self.conds[ci].arr_name.len > 0) continue; // already bound
     if (self.conds[ci].true_idx < child_exprs.items.len) {
-        self.conds[ci].true_arr = arr_name;
+        self.conds[ci].arr_name = arr_name;
     }
 }
 ```
 
-### Emit updateConditionals function
+**Why this works for now:** Each `parseJSXElement` call processes one element and its direct children. Conditions created during that call have indices relative to that element's `child_exprs`. The array is created immediately after, so unbound conditions map to the most recently created array.
 
-In `emitZigSource`, after the `updateDynamicTexts` function (around line 1325), emit a new function:
+**Where this breaks:** Deeply nested conditionals (conditional inside conditional) or conditionals split across imported components. Those are future problems — this task handles flat conditionals in a single component.
+
+**After getting this working, manually inspect the generated Zig output** (`tsz/runtime/generated_app.zig`) to verify the array names and indices are correct. This is the most likely failure point.
+
+## Step 4: Emit `updateConditionals`
+
+In `emitZigSource`, after the `updateDynamicTexts` function (around line 1325), emit the toggle function:
 
 ```zig
 if (self.cond_count > 0) {
     try out.appendSlice(self.alloc, "fn updateConditionals() void {\n");
     for (0..self.cond_count) |i| {
         const ci = self.conds[i];
-        if (ci.true_arr.len == 0) continue;
-        // If condition is truthy, show true branch, hide false branch
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    if ({s} != 0) {{ {s}[{d}].style.display = .flex; {s}[{d}].style.display = .none; }}" ++
-            " else {{ {s}[{d}].style.display = .none; {s}[{d}].style.display = .flex; }}\n",
-            .{ ci.condition, ci.true_arr, ci.true_idx, ci.true_arr, ci.false_idx,
-               ci.true_arr, ci.true_idx, ci.true_arr, ci.false_idx }));
+        if (ci.arr_name.len == 0) continue; // unbound, skip
+        switch (ci.kind) {
+            .show_hide => {
+                // && pattern: single element, show/hide
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
+                    .{ ci.arr_name, ci.true_idx, ci.condition }));
+            },
+            .ternary => {
+                // ternary pattern: show one, hide other
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    if ({s} != 0) {{ {s}[{d}].style.display = .flex; {s}[{d}].style.display = .none; }}" ++
+                    " else {{ {s}[{d}].style.display = .none; {s}[{d}].style.display = .flex; }}\n",
+                    .{ ci.condition, ci.arr_name, ci.true_idx, ci.arr_name, ci.false_idx,
+                       ci.arr_name, ci.true_idx, ci.arr_name, ci.false_idx }));
+            },
+        }
     }
     try out.appendSlice(self.alloc, "}\n\n");
 }
 ```
 
-### Call updateConditionals in the main loop
+### Call updateConditionals
 
-In the state dirty check (line 1424-1426):
-```zig
-if (self.has_state and self.dyn_count > 0) {
-    try out.appendSlice(self.alloc, "        if (state.isDirty()) { updateDynamicTexts(); state.clearDirty(); }\n");
-}
-```
+In the state dirty check (line 1424-1426), expand to include conditionals:
 
-Expand to also call updateConditionals:
 ```zig
 if (self.has_state) {
     var dirty_body: std.ArrayListUnmanaged(u8) = .{};
@@ -247,31 +279,33 @@ if (self.has_state) {
 }
 ```
 
-Also call updateConditionals at init time (after `updateDynamicTexts()` at line 1417):
+Also call at init time (after `updateDynamicTexts()` at line 1417):
 ```zig
 if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
 ```
 
-## Step 3: Logical AND in JSX
+## Step 5: Logical AND in JSX
 
-The pattern `{condition && <Element/>}` is simpler — it's just the true branch with no false branch. The false branch is an invisible placeholder node.
+The pattern `{condition && <Element/>}` is simpler — one element, show or hide.
 
 ### Detection
 
-Add another lookahead:
 ```zig
 fn isLogicalAndAhead(self: *Generator) bool {
     var look = self.pos;
-    var depth: u32 = 0;
+    var brace_depth: u32 = 0;
+    var paren_depth: u32 = 0;
     while (look < self.lex.count) {
         const kind = self.lex.get(look).kind;
-        if (kind == .lbrace) depth += 1;
+        if (kind == .lbrace) brace_depth += 1;
         if (kind == .rbrace) {
-            if (depth == 0) return false;
-            depth -= 1;
+            if (brace_depth == 0) return false;
+            brace_depth -= 1;
         }
-        if (kind == .amp_amp and depth == 0) return true;
-        if (kind == .question and depth == 0) return false; // it's a ternary, not &&
+        if (kind == .lparen) paren_depth += 1;
+        if (kind == .rparen and paren_depth > 0) paren_depth -= 1;
+        if (kind == .amp_amp and brace_depth == 0 and paren_depth == 0) return true;
+        if (kind == .question and brace_depth == 0 and paren_depth == 0) return false; // ternary, not &&
         if (kind == .eof) return false;
         look += 1;
     }
@@ -279,75 +313,59 @@ fn isLogicalAndAhead(self: *Generator) bool {
 }
 ```
 
-**Note:** This requires `.amp_amp` token from Agent 1. Same caveat as ternary — add it yourself if building before merge.
-
-### Parse:
-
-In the children loop, add before the ternary check:
-```zig
-} else if (self.isLogicalAndAhead()) {
-    // Logical AND: {condition && <Element/>}
-    const result = try self.parseLogicalAndJSX();
-    try child_exprs.append(self.alloc, result.element);
-    // Track as conditional (true branch only, false is hidden)
-    if (self.cond_count < MAX_CONDS) {
-        self.conds[self.cond_count] = .{
-            .condition = result.condition,
-            .true_arr = "",
-            .true_idx = @intCast(child_exprs.items.len - 1),
-            .false_idx = @intCast(child_exprs.items.len - 1), // same index, just hide it
-        };
-        self.cond_count += 1;
-    }
-}
-```
-
-For the `&&` case, the `updateConditionals` emission changes: when true_idx == false_idx, just toggle one element:
-```zig
-if (ci.true_idx == ci.false_idx) {
-    // && pattern: single element, show/hide
-    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
-        .{ ci.true_arr, ci.true_idx, ci.condition }));
-} else {
-    // ternary pattern: two elements, swap visibility
-    // ... existing code ...
-}
-```
+### Parse
 
 ```zig
 fn parseLogicalAndJSX(self: *Generator) !struct { condition: []const u8, element: []const u8 } {
-    var cond: std.ArrayListUnmanaged(u8) = .{};
+    // Parse condition using the real expression parser
+    const condition = try self.emitStateExpr();
 
-    while (self.curKind() != .amp_amp and self.curKind() != .eof) {
-        const name = self.curText();
-        if (self.curKind() == .identifier) {
-            if (self.isState(name)) |slot_id| {
-                try cond.appendSlice(self.alloc,
-                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}));
-            } else {
-                try cond.appendSlice(self.alloc, name);
-            }
-        } else {
-            try cond.appendSlice(self.alloc, " ");
-            try cond.appendSlice(self.alloc, self.curText());
-            try cond.appendSlice(self.alloc, " ");
-        }
-        self.advance_token();
+    // Expect && token
+    if (self.curKind() != .amp_amp) {
+        std.debug.print("[tsz] Expected '&&' at pos {d}\n", .{self.pos});
+        return error.ExpectedLogicalAnd;
     }
+    self.advance_token(); // skip &&
 
-    if (self.curKind() == .amp_amp) self.advance_token(); // skip &&
+    // Skip optional ( around element
+    if (self.curKind() == .lparen) self.advance_token();
 
+    // Parse the element
     const element = try self.parseJSXElement();
 
+    // Skip optional ) after element
+    if (self.curKind() == .rparen) self.advance_token();
+
     return .{
-        .condition = try self.alloc.dupe(u8, cond.items),
+        .condition = condition,
         .element = element,
     };
 }
 ```
 
-## Step 4: Test Example
+### Wire into children loop
+
+Add the `&&` check **before** the ternary check (since `isLogicalAndAhead` returns false for ternaries, the order doesn't strictly matter, but checking `&&` first avoids unnecessary lookahead):
+
+```zig
+} else if (self.isLogicalAndAhead()) {
+    const result = try self.parseLogicalAndJSX();
+    try child_exprs.append(self.alloc, result.element);
+    if (self.cond_count < MAX_CONDS) {
+        self.conds[self.cond_count] = .{
+            .kind = .show_hide,
+            .condition = result.condition,
+            .arr_name = "",
+            .true_idx = @intCast(child_exprs.items.len - 1),
+            .false_idx = @intCast(child_exprs.items.len - 1),
+        };
+        self.cond_count += 1;
+    }
+} else if (self.isTernaryAhead()) {
+    // ... ternary handling ...
+```
+
+## Step 6: Test Example
 
 Create `tsz/examples/conditional-test.tsz`:
 
@@ -388,23 +406,38 @@ function App() {
 }
 ```
 
-**Note about parentheses in JSX ternary:** The `(` and `)` around JSX branches are common in React. They're just grouping — the lexer already handles `(` and `)` as tokens. You may need to skip them in `parseTernaryJSX`: after `?`, check for `(` and skip it; before `:`, check for `)` and skip it. Same for the false branch.
-
 ## Verification
 
-```bash
-cd /home/siah/creative/reactjit
-zig build tsz-compiler && ./zig-out/bin/tsz build tsz/examples/conditional-test.tsz
-```
+**Do this incrementally, not all at once:**
 
-Run the binary. Click "Toggle Mode" — the green/pink boxes should swap. Click "Toggle Show" — the blue box should appear/disappear.
+### Phase 1: Ternary only
+1. Implement Steps 1-4 (ternary parsing + display toggle)
+2. Build: `zig build tsz-compiler`
+3. Create a minimal test with just the ternary (no `&&` yet)
+4. Compile: `./zig-out/bin/tsz build tsz/examples/conditional-test.tsz`
+5. **Inspect `tsz/runtime/generated_app.zig`** — verify:
+   - Both branches exist in the array
+   - `updateConditionals()` function exists
+   - Array name and indices match what you expect
+6. Run the binary, toggle the mode button
+
+### Phase 2: Logical AND
+7. Add Step 5 (logical AND)
+8. Rebuild compiler, recompile test
+9. Inspect generated code again — verify the show/hide toggle
+10. Run, test both buttons
+
+### Phase 3: Edge cases
+11. Try nested elements inside conditional branches
+12. Try conditionals with multi-word conditions (if Agent 1's expression parser is merged)
+13. Check that non-conditional siblings still render correctly
 
 ## What NOT to Touch
 
 - Do not modify `lexer.zig` — Agent 1 owns that
 - Do not modify `state.zig` — Agent 2 owns that
 - Do not modify `collectStateHooks` (lines 373-422) — Agent 2 owns that
-- Do not modify `emitStateExpr`/`emitStateAtom` (lines 1105-1163) — Agent 1 owns that
+- Do not modify `emitStateExpr`/`emitStateAtom` (lines 1105-1163) — Agent 1 owns that (you CALL `emitStateExpr`, you don't modify it)
 - Do not modify `emitHandlerExpr` (lines 1006-1103) — Agent 4 owns that
 - Do not modify `events.zig`, `input.zig`, `main.zig` — Agent 4 owns those
 
@@ -416,6 +449,13 @@ Your work needs `.question` and `.amp_amp` tokens. Agent 1 is adding these. If y
 3. Add the `&&` multi-char check to `tokenize()`
 
 Keep these changes minimal so they merge cleanly with Agent 1's full lexer overhaul.
+
+## Known Limitations
+
+These are NOT bugs — they're explicit scope boundaries:
+- **No `.map()` / dynamic lists** — that needs its own plan (requires runtime array resizing or pre-allocated pools)
+- **Nested conditionals** (conditional inside a conditional branch) may produce incorrect array bindings — test and fix if hit, but don't over-engineer for it
+- **Condition must evaluate to integer for `!= 0` check** — boolean state will need `state.getSlotBool()` once Agent 2's typed state is merged
 
 ## Commit
 

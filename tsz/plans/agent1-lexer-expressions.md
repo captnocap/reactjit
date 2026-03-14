@@ -8,7 +8,7 @@ tsz is a compiler that takes `.tsz` files (React-like syntax) and compiles them 
 
 The lexer (`tsz/compiler/lexer.zig`) is missing tokens for comparison operators, logical operators, ternary, and keywords. The expression parser (`codegen.zig:1105-1163`) only handles `+`, `-`, `*` with flat two-operand expressions. You need to:
 
-1. Add all missing tokens to the lexer
+1. Add missing tokens to the lexer
 2. Replace the flat expression parser with a proper recursive descent expression parser
 
 **Other agents are working on other parts of codegen.zig in parallel.** Your changes should be confined to:
@@ -17,6 +17,16 @@ The lexer (`tsz/compiler/lexer.zig`) is missing tokens for comparison operators,
 - A new test example `tsz/examples/expressions-test.tsz`
 
 Do NOT modify other functions in codegen.zig. Other agents own those regions.
+
+## Important Constraints
+
+- **No JS truthiness.** `&&` and `||` are only supported when both operands are boolean/comparison expressions. TSZ does not implement JavaScript truthiness coercion. `count && mode` (integer && integer) is NOT valid. `count > 0 && mode == 1` IS valid.
+- **Do not expand FFI argument parsing** beyond the current simple behavior (bare numbers and `0` → `null` mapping). This task is not an FFI argument parser upgrade.
+- **Do not add single-character `&` or `|` tokens.** Only support `&&` and `||`. No bitwise operators in this task.
+- **Parenthesized expressions must preserve grouping** in emitted Zig — wrap in `()` for clarity.
+- **Ternary requires `:`.** If `:` is missing after the true branch, emit a compile error, do not silently continue.
+- Preserve the current fallback behavior for unknown atoms (`return "0"`) — do not attempt a general error system in this task.
+- The `<`/`>` dual role (JSX delimiters vs comparison operators) works because JSX tags always follow `<identifier` / `</` patterns, while comparisons appear inside expression contexts (handler bodies, ternaries). This is adequate for now but is noted as a future consideration.
 
 ## Step 1: Lexer — Add Missing Tokens
 
@@ -50,14 +60,30 @@ pipe_pipe,    // ||
 question,     // ?
 ```
 
+That's it. No single `&`, no single `|`, no other new tokens.
+
 ### Where to add multi-char operator scanning
 
 In the `tokenize()` function (line 110), there's a multi-char section starting at line 207. The order matters — **multi-char operators must be checked before single-char fallbacks**. Currently it checks `=>`, `/>`, `</`.
 
-Add these checks BEFORE the single-char switch (line 224). Be careful with `<` and `>` — they're already used as JSX delimiters (`lt`, `gt`). The key insight: `<=` and `>=` only appear in expression context, never in JSX tag context. But the lexer is context-free, so you must handle them by checking the next character:
+Add these checks BEFORE the single-char switch (line 224). The `=>` check (arrow, line 208) must come BEFORE the `==` check since `=>` is arrow, not `=` then `>`.
+
+**Full order of multi-char checks:**
+1. `=>` (arrow) — already exists at line 208
+2. `==` (eq_eq) — new
+3. `!=` (not_eq) — new
+4. `/>` (slash_gt) — already exists at line 213
+5. `</` (lt_slash) — already exists at line 218
+6. `>=` (gt_eq) — new
+7. `<=` (lt_eq) — new
+8. `&&` (amp_amp) — new
+9. `||` (pipe_pipe) — new
+10. Single-char fallback switch — already exists at line 224
 
 ```zig
-// == and =>
+// After the existing => check (line 208-212):
+
+// ==
 if (ch == '=' and self.peekAt(1) == '=') {
     self.pos += 2;
     self.emit(.eq_eq, start, start + 2);
@@ -69,13 +95,16 @@ if (ch == '!' and self.peekAt(1) == '=') {
     self.emit(.not_eq, start, start + 2);
     continue;
 }
+
+// After the existing /> and </ checks (lines 213-222):
+
 // >= (must check before single >)
 if (ch == '>' and self.peekAt(1) == '=') {
     self.pos += 2;
     self.emit(.gt_eq, start, start + 2);
     continue;
 }
-// <= (must check before </ which is already handled)
+// <= (must check before single <)
 if (ch == '<' and self.peekAt(1) == '=') {
     self.pos += 2;
     self.emit(.lt_eq, start, start + 2);
@@ -93,8 +122,6 @@ if (ch == '|' and self.peekAt(1) == '|') {
     self.emit(.pipe_pipe, start, start + 2);
     continue;
 }
-// ?
-// (single char, add to the switch below)
 ```
 
 Add `?` to the single-char switch at line 225:
@@ -102,25 +129,7 @@ Add `?` to the single-char switch at line 225:
 '?' => .question,
 ```
 
-Also add `&` and `|` as single-char tokens (they may appear in bitwise contexts later, and the `&&`/`||` check above catches the double versions first):
-```zig
-'&' => .ampersand,   // single & (bitwise, future use)
-'|' => .pipe,        // single | (bitwise, future use)
-```
-
-Or simpler: just skip single `&` and `|` as unknown chars for now. The double versions (`&&`, `||`) are what matter.
-
-**IMPORTANT ordering:** The `=>` check (arrow, line 208) must come BEFORE the `==` check. Currently `=>` is checked at line 208 — leave it there. Add `==` after it. The full order should be:
-1. `=>` (arrow) — already exists at line 208
-2. `==` (eq_eq) — new
-3. `!=` (not_eq) — new
-4. `/>` (slash_gt) — already exists at line 213
-5. `</` (lt_slash) — already exists at line 218
-6. `>=` (gt_eq) — new
-7. `<=` (lt_eq) — new
-8. `&&` (amp_amp) — new
-9. `||` (pipe_pipe) — new
-10. Single-char fallback switch — already exists at line 224
+Bare `&` and `|` remain unhandled (they fall through as unknown characters and get skipped). This is intentional — we only support `&&` and `||`.
 
 ## Step 2: Expression Parser — Recursive Descent
 
@@ -142,7 +151,7 @@ The standard precedence levels (low to high):
 6. Additive: `+`, `-`
 7. Multiplicative: `*`, `/`, `%`
 8. Unary: `!`, `-`
-9. Atom: number, string, state getter, FFI call, identifier, `(expr)`
+9. Atom: number, string, boolean literal, state getter, FFI call, identifier, `(expr)`
 
 Replace `emitStateExpr` and `emitStateAtom` with these functions:
 
@@ -156,11 +165,15 @@ fn emitTernary(self: *Generator) ![]const u8 {
     if (self.curKind() == .question) {
         self.advance_token(); // skip ?
         const then_val = try self.emitTernary(); // right-associative
-        // expect : (it's the colon token)
-        if (self.curKind() == .colon) self.advance_token();
+        // Ternary requires colon — fail if missing
+        if (self.curKind() != .colon) {
+            std.debug.print("[tsz] Ternary missing ':' at pos {d}\n", .{self.pos});
+            return error.ExpectedColonInTernary;
+        }
+        self.advance_token(); // skip :
         const else_val = try self.emitTernary();
         return try std.fmt.allocPrint(self.alloc,
-            "if ({s}) {s} else {s}", .{ cond, then_val, else_val });
+            "(if ({s}) {s} else {s})", .{ cond, then_val, else_val });
     }
     return cond;
 }
@@ -170,6 +183,8 @@ fn emitLogicalOr(self: *Generator) ![]const u8 {
     while (self.curKind() == .pipe_pipe) {
         self.advance_token();
         const right = try self.emitLogicalAnd();
+        // Zig uses `or` for logical OR (not `||` which is bitwise)
+        // Both operands must be bool (comparison results, boolean state, or ! expressions)
         left = try std.fmt.allocPrint(self.alloc,
             "({s} or {s})", .{ left, right });
     }
@@ -181,6 +196,8 @@ fn emitLogicalAnd(self: *Generator) ![]const u8 {
     while (self.curKind() == .amp_amp) {
         self.advance_token();
         const right = try self.emitEquality();
+        // Zig uses `and` for logical AND (not `&&` which is bitwise)
+        // Both operands must be bool (comparison results, boolean state, or ! expressions)
         left = try std.fmt.allocPrint(self.alloc,
             "({s} and {s})", .{ left, right });
     }
@@ -201,7 +218,9 @@ fn emitEquality(self: *Generator) ![]const u8 {
 
 fn emitComparison(self: *Generator) ![]const u8 {
     var left = try self.emitAdditive();
-    // Note: lt and gt are also JSX tokens, but in expression context they're comparisons
+    // Note: .lt and .gt are also JSX tokens, but in expression context they're comparisons.
+    // This works because expression parsing only runs inside handler bodies and ternaries,
+    // never during JSX tag scanning.
     while (self.curKind() == .lt or self.curKind() == .gt or
            self.curKind() == .lt_eq or self.curKind() == .gt_eq)
     {
@@ -250,12 +269,12 @@ fn emitUnary(self: *Generator) ![]const u8 {
     if (self.curKind() == .bang) {
         self.advance_token();
         const operand = try self.emitUnary();
-        return try std.fmt.allocPrint(self.alloc, "!{s}", .{operand});
+        return try std.fmt.allocPrint(self.alloc, "(!{s})", .{operand});
     }
     if (self.curKind() == .minus) {
         self.advance_token();
         const operand = try self.emitUnary();
-        return try std.fmt.allocPrint(self.alloc, "-{s}", .{operand});
+        return try std.fmt.allocPrint(self.alloc, "(-{s})", .{operand});
     }
     return try self.emitStateAtom();
 }
@@ -263,20 +282,16 @@ fn emitUnary(self: *Generator) ![]const u8 {
 
 ### Update `emitStateAtom` (line 1128):
 
-Keep the existing logic but add:
-- Parenthesized expressions: `(expr)` — if `curKind() == .lparen`, skip `(`, call `emitStateExpr()`, skip `)`
-- Boolean literals: if identifier is `"true"` return `"true"`, if `"false"` return `"false"`
-- String literals: if `curKind() == .string`, return the raw text (keep quotes for Zig string)
+Keep the existing FFI call logic **exactly as-is** (intentionally narrow — this task does not upgrade FFI argument parsing). Add parenthesized expressions, boolean literals, and string literals.
 
-Updated version:
 ```zig
 fn emitStateAtom(self: *Generator) ![]const u8 {
-    // Parenthesized expression
+    // Parenthesized expression — preserve grouping in emitted Zig
     if (self.curKind() == .lparen) {
         self.advance_token(); // (
         const inner = try self.emitStateExpr();
         if (self.curKind() == .rparen) self.advance_token(); // )
-        return inner;
+        return try std.fmt.allocPrint(self.alloc, "({s})", .{inner});
     }
     // Number literal
     if (self.curKind() == .number) {
@@ -303,6 +318,8 @@ fn emitStateAtom(self: *Generator) ![]const u8 {
             return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
         }
         // FFI call in expression position
+        // NOTE: This is intentionally narrow — only bare numbers and 0→null mapping.
+        // Do not attempt full argument expression parsing here.
         if (self.isFFIFunc(name)) {
             self.advance_token();
             if (self.curKind() == .lparen) self.advance_token();
@@ -320,7 +337,7 @@ fn emitStateAtom(self: *Generator) ![]const u8 {
             if (self.curKind() == .rparen) self.advance_token();
             return try std.fmt.allocPrint(self.alloc, "ffi.{s}({s})", .{ name, ffi_args.items });
         }
-        // Bare identifier
+        // Bare identifier — return as-is
         self.advance_token();
         return name;
     }
@@ -331,16 +348,19 @@ fn emitStateAtom(self: *Generator) ![]const u8 {
 
 ### Important: Zig expression mapping
 
-JavaScript `&&`/`||` map to Zig `and`/`or` (not `&&`/`||` which are bitwise in Zig).
-JavaScript `!` maps to Zig `!` (same).
-JavaScript ternary `a ? b : c` maps to Zig `if (a) b else c`.
-JavaScript `===`/`!==` map to Zig `==`/`!=` (Zig is already strict typed, no loose equality).
-
-**For comparison results used in ternary:** Zig comparisons return `bool`. Ternary `if` in Zig expects `bool`. This works naturally.
+| JavaScript | Zig | Notes |
+|-----------|-----|-------|
+| `&&` | `and` | Both operands must be `bool`. No truthiness. |
+| `\|\|` | `or` | Both operands must be `bool`. No truthiness. |
+| `!` | `!` | Same. |
+| `a ? b : c` | `if (a) b else c` | `a` must be `bool`. |
+| `===` / `!==` | `==` / `!=` | Zig is strict typed, no loose equality. |
 
 **For comparisons on state values:** `state.getSlot(0)` returns `i64`. Comparing `i64 > i64` returns `bool`. This works.
 
 **For ternary returning values to state setters:** `state.setSlot(0, if (x > 5) 0 else 1)` — this works because both branches are `i64`.
+
+**What does NOT work:** `count && mode` where both are `i64`. Zig `and` requires `bool` operands. Users must write `count != 0 && mode != 0` or use comparison expressions. This is intentional — we do not support JS truthiness.
 
 ## Step 3: Test Example
 
