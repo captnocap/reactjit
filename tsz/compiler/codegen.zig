@@ -1896,6 +1896,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const bsod = @import(\"bsod.zig\");\n");
         try out.appendSlice(self.alloc, "const leaktest = @import(\"leaktest.zig\");\n");
         try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
+        try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
 
         // FFI imports
@@ -1911,7 +1912,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\n\n");
 
         // Measure callbacks
-        try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrapped(t, font_size, max_width); }\n    return .{};\n}\n\n");
+        try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines); }\n    return .{};\n}\n\n");
         try out.appendSlice(self.alloc, "fn measureImageCallback(img_path: []const u8) layout.ImageDims {\n    if (g_image_cache) |cache| { if (cache.load(img_path)) |img| { return .{ .width = @floatFromInt(img.width), .height = @floatFromInt(img.height) }; } }\n    return .{};\n}\n\n");
 
         // Node tree arrays
@@ -2090,6 +2091,21 @@ pub const Generator = struct {
         // Main function
         try out.appendSlice(self.alloc, @embedFile("main_template.txt"));
 
+        // Window geometry restore
+        {
+            const basename = std.fs.path.basename(self.input_file);
+            const app_name = if (std.mem.endsWith(u8, basename, ".tsz")) basename[0 .. basename.len - 4] else basename;
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    geometry.init(\"{s}\");\n" ++
+                "    if (geometry.load()) |geom| {{\n" ++
+                "        c.SDL_SetWindowPosition(window, geom.x, geom.y);\n" ++
+                "        c.SDL_SetWindowSize(window, @intCast(geom.width), @intCast(geom.height));\n" ++
+                "        win_w = @floatFromInt(geom.width);\n" ++
+                "        win_h = @floatFromInt(geom.height);\n" ++
+                "        geometry.blockSaves();\n" ++
+                "    }}\n\n", .{app_name}));
+        }
+
         // State init
         if (self.has_state) {
             for (0..self.state_count) |i| {
@@ -2199,7 +2215,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        painter.present();\n");
         try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
         try out.appendSlice(self.alloc, "        win_mgr.paintAndPresent(brighten);\n");
-        try out.appendSlice(self.alloc, "    }\n}\n");
+        try out.appendSlice(self.alloc, "    }\n    geometry.save(window);\n}\n");
 
         return try out.toOwnedSlice(self.alloc);
     }

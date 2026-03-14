@@ -1,7 +1,5 @@
     const main_window_id = c.SDL_GetWindowID(window);
     var running = true;
-    var win_w: f32 = 1280;
-    var win_h: f32 = 800;
 
     while (running) {
         var event: c.SDL_Event = undefined;
@@ -35,7 +33,16 @@
             }
             switch (event.type) {
                 c.SDL_QUIT => running = false,
-                c.SDL_WINDOWEVENT => { if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) { win_w = @floatFromInt(event.window.data1); win_h = @floatFromInt(event.window.data2); } },
+                c.SDL_WINDOWEVENT => {
+                    if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                        win_w = @floatFromInt(event.window.data1);
+                        win_h = @floatFromInt(event.window.data2);
+                        geometry.save(window);
+                    }
+                    if (event.window.event == c.SDL_WINDOWEVENT_MOVED) {
+                        geometry.save(window);
+                    }
+                },
                 c.SDL_TEXTINPUT => {
                     input_mod.handleTextInput(@ptrCast(&event.text.text));
                 },
