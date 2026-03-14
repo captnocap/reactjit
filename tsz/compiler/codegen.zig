@@ -632,7 +632,7 @@ pub const Generator = struct {
     }
 
     fn scanForPtyUsage(self: *Generator) void {
-        const pty_builtins = [_][]const u8{ "spawnPty", "pollPty", "writePty", "writePtyByte", "writePtyEscape", "resizePty", "closePty" };
+        const pty_builtins = [_][]const u8{ "spawnPty", "pollPty", "writePty", "writePtyByte", "writePtyEscape", "resizePty", "closePty", "handleTerminalKey", "getRowText" };
         var i: u32 = 0;
         while (i < self.lex.count) : (i += 1) {
             const tok = self.lex.get(i);
@@ -1970,7 +1970,10 @@ pub const Generator = struct {
             key_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_key_{d}", .{self.handler_counter});
             self.handler_counter += 1;
             const body = try self.emitHandlerBody(start, on_key_end.?);
-            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(_key: c_int, _mods: u16) void {{\n    _ = _key;\n    _ = _mods;\n    {s}\n}}", .{ key_handler_name.?, body });
+            // Only discard params if body doesn't reference them
+            const uses_key = std.mem.indexOf(u8, body, "_key") != null;
+            const discard = if (uses_key) "" else "    _ = _key;\n    _ = _mods;\n";
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(_key: c_int, _mods: u16) void {{\n{s}    {s}\n}}", .{ key_handler_name.?, discard, body });
             try self.handler_decls.append(self.alloc, handler_fn);
         }
 
@@ -2819,6 +2822,13 @@ pub const Generator = struct {
                 if (self.curKind() == .rparen) self.advance_token();
                 self.has_pty = true;
                 return try self.alloc.dupe(u8, "pty_mod.closePty();");
+            }
+            if (std.mem.eql(u8, name, "handleTerminalKey")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try self.alloc.dupe(u8, "pty_mod.handleKey(_key, _mods);");
             }
             if (std.mem.eql(u8, name, "console")) {
                 // console.log(...)

@@ -299,6 +299,55 @@ pub fn writeEscape(seq: [*:0]const u8) void {
     g_pty.write(seq[0..len]) catch {};
 }
 
+/// Handle a key event from SDL — translate keysym + mods to PTY bytes.
+/// Reference: love2d/lua/capabilities/terminal.lua:766-914
+pub fn handleKey(sym: c_int, mods: u16) void {
+    if (g_pty.closed) return;
+
+    const ctrl = (mods & 0x00C0) != 0; // KMOD_CTRL = LCTRL|RCTRL
+    const SCANCODE_MASK: c_int = 1 << 30; // SDL_SCANCODE_TO_KEYCODE
+
+    if (ctrl) {
+        // Ctrl + letter → control character (0x01-0x1A)
+        if (sym >= 'a' and sym <= 'z') {
+            const ctrl_byte: u8 = @intCast(sym - 'a' + 1);
+            writeByte(ctrl_byte);
+            return;
+        }
+    }
+
+    // Special keys → escape sequences
+    if (sym == '\r') { writePty("\r"); return; }
+    if (sym == '\x08') { writePty("\x7f"); return; } // Backspace → DEL
+    if (sym == '\t') { writePty("\t"); return; }
+    if (sym == '\x7f') { writePty("\x1b[3~"); return; } // Delete
+    if (sym == '\x1b') { writePty("\x1b"); return; } // Escape
+
+    // Arrow keys, Home/End, PgUp/PgDown (SDL_SCANCODE_TO_KEYCODE range)
+    if (sym >= SCANCODE_MASK) {
+        const sc = sym & ~SCANCODE_MASK;
+        switch (sc) {
+            79 => writePty("\x1b[C"), // RIGHT
+            80 => writePty("\x1b[D"), // LEFT
+            81 => writePty("\x1b[B"), // DOWN
+            82 => writePty("\x1b[A"), // UP
+            74 => writePty("\x1b[H"), // HOME
+            77 => writePty("\x1b[F"), // END
+            75 => writePty("\x1b[5~"), // PAGEUP
+            78 => writePty("\x1b[6~"), // PAGEDOWN
+            73 => writePty("\x1b[2~"), // INSERT
+            else => {},
+        }
+    }
+}
+
+/// Handle SDL_TEXTINPUT — forward raw text to PTY.
+pub fn handleTextInput(text: [*:0]const u8) void {
+    if (g_pty.closed) return;
+    const len = std.mem.len(text);
+    if (len > 0) g_pty.write(text[0..len]) catch {};
+}
+
 /// Resize terminal.
 pub fn resizePty(rows: u16, cols: u16) void {
     g_pty.resize(rows, cols);
