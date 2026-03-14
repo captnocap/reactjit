@@ -46,27 +46,12 @@ fn measureImageCallback(img_path: []const u8) layout.ImageDims {
 
 // ── Generated node tree ─────────────────────────────────────────
 var _arr_0 = [_]Node{ .{ .text = "", .font_size = 12, .text_color = Color.rgb(88, 91, 112) } };
-var _arr_1 = [_]Node{ .{} };
-var _arr_2 = [_]Node{ .{ .style = .{ .padding = 8, .background_color = Color.rgb(24, 24, 37) }, .children = &_arr_0 }, .{ .style = .{ .flex_grow = 1, .padding = 4, .background_color = Color.rgb(17, 17, 27) }, .handlers = .{ .on_key = _handler_key_0 }, .children = &_arr_1 } };
-var root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(30, 30, 46), .flex_direction = .column }, .children = &_arr_2 };
+var _arr_1 = [_]Node{ .{ .style = .{ .padding = 8, .background_color = Color.rgb(24, 24, 37) }, .children = &_arr_0 }, .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(17, 17, 27) }, .test_id = "terminal" } };
+var root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(30, 30, 46), .flex_direction = .column }, .children = &_arr_1 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [256]u8 = undefined;
 var _dyn_text_0: []const u8 = "";
-
-// ── Map pools ───────────────────────────────────────────────────
-const MAX_MAP_0: usize = 256;
-var _map_pool_0: [MAX_MAP_0]Node = [_]Node{.{}} ** MAX_MAP_0;
-var _map_count_0: usize = 0;
-var _map_inner_0: [MAX_MAP_0][1]Node = undefined;
-var _map_text_bufs_0: [MAX_MAP_0][256]u8 = undefined;
-var _map_texts_0: [MAX_MAP_0][]const u8 = [_][]const u8{""} ** MAX_MAP_0;
-
-// ── Generated event handlers ────────────────────────────────────
-fn _handler_key_0(_key: c_int, _mods: u16) void {
-    pty_mod.handleKey(_key, _mods);
-}
-
 
 // ── Effect timer variables ──────────────────────────────────────
 var _timer_1: u32 = 0;
@@ -83,29 +68,16 @@ fn _effect_1() void {
 }
 
 fn updateDynamicTexts() void {
-    _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "Terminal 24x80 | Frame: {d} | Cursor: {d},{d}", .{ state.getSlot(0), vterm_mod.getCursorRow(), vterm_mod.getCursorCol() }) catch "";
+    _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "Terminal 24x80 | Frame: {d}", .{ state.getSlot(0) }) catch "";
     _arr_0[0].text = _dyn_text_0;
 }
 
 fn _onTextInput(text: [*:0]const u8) void {
     input_mod.handleTextInput(text);
-    pty_mod.handleTextInput(text);
 }
 
 fn _onKeyDown(sym: c_int, mods: u16) void {
     pty_mod.handleKey(sym, mods);
-}
-
-fn _rebuildMap0() void {
-    const items = state.getArraySlot(0);
-    _map_count_0 = @min(items.len, MAX_MAP_0);
-    for (0.._map_count_0) |_i| {
-        const _item = items[_i];
-        _map_texts_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0[_i], "{s}", .{ vterm_mod.getRowText(@intCast(_item)) }) catch "";
-        _map_inner_0[_i] = [1]Node{ .{ .text = _map_texts_0[_i], .font_size = 13, .text_color = Color.rgb(205, 214, 244) } };
-        _map_pool_0[_i] = .{ .style = .{ .height = 18 }, .children = &_map_inner_0[_i] };
-    }
-    _arr_1[0].children = _map_pool_0[0.._map_count_0];
 }
 
 var hovered_node: ?*Node = null;
@@ -218,12 +190,10 @@ pub fn main() !void {
         geometry.blockSaves();
     }
 
-    _ = state.createArraySlot(&[_]i64{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 });
     _ = state.createSlot(0);
     _ = state.loadState();
     state.installSignalHandler();
     updateDynamicTexts();
-    _rebuildMap0();
     _effect_0();
     _timer_1 = c.SDL_GetTicks();
     compositor.init(renderer, &text_engine, &image_cache);
@@ -231,6 +201,7 @@ pub fn main() !void {
     defer win_mgr.deinitAll();
     watchdog.init(512);
     c.SDL_StartTextInput();
+    compositor.setOverlay("terminal", vterm_mod.paintTerminal);
     defer pty_mod.deinit();
     if (testharness.envEnabled()) testharness.enable();
 
@@ -429,7 +400,6 @@ pub fn main() !void {
 
         if (state.isDirty()) {
             updateDynamicTexts();
-            _rebuildMap0();
             state.clearDirty();
         }
         {

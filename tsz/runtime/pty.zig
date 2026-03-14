@@ -338,6 +338,12 @@ pub fn handleKey(sym: c_int, mods: u16) void {
             73 => writePty("\x1b[2~"), // INSERT
             else => {},
         }
+        return;
+    }
+
+    // Printable ASCII → write directly (SDL_TEXTINPUT may double)
+    if (!ctrl and sym >= 0x20 and sym <= 0x7E) {
+        writeByte(@intCast(sym));
     }
 }
 

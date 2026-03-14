@@ -1808,6 +1808,20 @@ pub const Generator = struct {
                         // Logical AND: {condition && <Element/>}
                         const result = try self.parseLogicalAndJSX();
                         try child_exprs.append(self.alloc, result.element);
+                        // Resolve pending dynamic style bindings from conditional CHILD's style
+                        for (own_pending_dyn_style..self.pending_dyn_style_count) |pi| {
+                            if (self.dyn_style_count < MAX_DYN_STYLES) {
+                                self.dyn_styles[self.dyn_style_count] = .{
+                                    .field = self.pending_dyn_styles[pi].field,
+                                    .expression = self.pending_dyn_styles[pi].expression,
+                                    .arr_name = "",
+                                    .arr_index = @intCast(child_exprs.items.len - 1),
+                                    .has_ref = false,
+                                };
+                                self.dyn_style_count += 1;
+                            }
+                        }
+                        self.pending_dyn_style_count = own_pending_dyn_style;
                         if (self.cond_count < MAX_CONDS) {
                             self.conds[self.cond_count] = .{
                                 .kind = .show_hide,
@@ -3895,6 +3909,13 @@ pub const Generator = struct {
         }
 
         const h = if (hex[0] == '#') hex[1..] else hex;
+        if (h.len == 8) {
+            const r = std.fmt.parseInt(u8, h[0..2], 16) catch 0;
+            const g = std.fmt.parseInt(u8, h[2..4], 16) catch 0;
+            const b = std.fmt.parseInt(u8, h[4..6], 16) catch 0;
+            const a = std.fmt.parseInt(u8, h[6..8], 16) catch 255;
+            return try std.fmt.allocPrint(self.alloc, "Color.rgba({d}, {d}, {d}, {d})", .{ r, g, b, a });
+        }
         if (h.len == 6) {
             const r = std.fmt.parseInt(u8, h[0..2], 16) catch 0;
             const g = std.fmt.parseInt(u8, h[2..4], 16) catch 0;
@@ -4106,7 +4127,9 @@ pub const Generator = struct {
                             std.mem.indexOf(u8, ci.condition, "< ") != null or
                             std.mem.indexOf(u8, ci.condition, "> ") != null or
                             std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                            std.mem.indexOf(u8, ci.condition, ">=") != null or
+                            std.mem.indexOf(u8, ci.condition, "inspector.has") != null or
+                            std.mem.indexOf(u8, ci.condition, "inspector.isEnabled") != null;
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
@@ -4123,7 +4146,9 @@ pub const Generator = struct {
                             std.mem.indexOf(u8, ci.condition, "< ") != null or
                             std.mem.indexOf(u8, ci.condition, "> ") != null or
                             std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                            std.mem.indexOf(u8, ci.condition, ">=") != null or
+                            std.mem.indexOf(u8, ci.condition, "inspector.has") != null or
+                            std.mem.indexOf(u8, ci.condition, "inspector.isEnabled") != null;
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    if ({s}) {{\n", .{ci.condition}));
@@ -4147,13 +4172,12 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
-        // _onTextInput — forwards SDL_TEXTINPUT to input module + PTY if active
+        // _onTextInput — forwards SDL_TEXTINPUT to input module
+        // PTY text input is handled via _onKeyDown → handleKey (printable ASCII)
+        // to avoid doubling (SDL fires both KEYDOWN and TEXTINPUT for each key)
         {
             try out.appendSlice(self.alloc, "fn _onTextInput(text: [*:0]const u8) void {\n");
             try out.appendSlice(self.alloc, "    input_mod.handleTextInput(text);\n");
-            if (self.has_pty) {
-                try out.appendSlice(self.alloc, "    pty_mod.handleTextInput(text);\n");
-            }
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
@@ -4505,6 +4529,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n");
         if (self.has_pty) {
             try out.appendSlice(self.alloc, "    c.SDL_StartTextInput();\n");
+            try out.appendSlice(self.alloc, "    compositor.setOverlay(\"terminal\", vterm_mod.paintTerminal);\n");
             try out.appendSlice(self.alloc, "    defer pty_mod.deinit();\n");
         }
         try out.appendSlice(self.alloc, "    if (testharness.envEnabled()) testharness.enable();\n\n");

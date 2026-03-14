@@ -1,8 +1,7 @@
-// Terminal test — PTY + libvterm integration
-// Spawns a bash shell, renders rows, handles keyboard input.
+// Terminal test — PTY + libvterm with colored cell rendering
+// Cells painted directly by vterm.paintTerminal via compositor overlay.
 
 function App() {
-  const [rows, setRows] = useState([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
   const [frame, setFrame] = useState(0);
 
   // Spawn shell on mount
@@ -17,15 +16,9 @@ function App() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#1e1e2e', flexDirection: 'column' }}>
       <Box style={{ padding: 8, backgroundColor: '#181825' }}>
-        <Text fontSize={12} color="#585b70">{`Terminal 24x80 | Frame: ${frame} | Cursor: ${getCursorRow()},${getCursorCol()}`}</Text>
+        <Text fontSize={12} color="#585b70">{`Terminal 24x80 | Frame: ${frame}`}</Text>
       </Box>
-      <Box onKeyDown={() => handleTerminalKey()} style={{ flexGrow: 1, padding: 4, backgroundColor: '#11111b' }}>
-        {rows.map((row) => (
-          <Box style={{ height: 18 }}>
-            <Text fontSize={13} color="#cdd6f4">{`${getRowText(row)}`}</Text>
-          </Box>
-        ))}
-      </Box>
+      <Box testId="terminal" style={{ flexGrow: 1, backgroundColor: '#11111b' }} />
     </Box>
   );
 }

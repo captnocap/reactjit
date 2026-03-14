@@ -71,6 +71,18 @@ pub fn setHoveredNode(node: ?*Node) void {
 }
 
 /// Composite the entire tree and present to screen via wgpu.
+// Optional overlay callback — called after node tree paint, before GPU present.
+// Used by terminal to paint colored cells directly.
+var g_overlay_fn: ?*const fn (f32, f32, f32, f32) void = null;
+var g_overlay_node_id: ?[]const u8 = null;
+var g_overlay_rect: [4]f32 = .{ 0, 0, 0, 0 };
+
+/// Register an overlay painter that fires on the node with the given test_id.
+pub fn setOverlay(test_id: []const u8, func: *const fn (f32, f32, f32, f32) void) void {
+    g_overlay_node_id = test_id;
+    g_overlay_fn = func;
+}
+
 pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
     g_app_root = root;
     g_app_w = win_w;
@@ -78,6 +90,11 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
 
     // Walk tree and emit draw commands
     paintNode(root, 0, 0, 1.0);
+
+    // Overlay (terminal cell painting, etc.)
+    if (g_overlay_fn) |func| {
+        func(g_overlay_rect[0], g_overlay_rect[1], g_overlay_rect[2], g_overlay_rect[3]);
+    }
 
     // Present via wgpu
     gpu.frame(
@@ -100,6 +117,15 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
     const screen_x = node.computed.x - scroll_x;
     const screen_y = node.computed.y - scroll_y;
     const w = node.computed.w;
+
+    // Capture overlay rect if this node matches the overlay test_id
+    if (g_overlay_node_id) |overlay_id| {
+        if (node.test_id) |tid| {
+            if (std.mem.eql(u8, tid, overlay_id)) {
+                g_overlay_rect = .{ screen_x, screen_y, w, node.computed.h };
+            }
+        }
+    }
     const h = node.computed.h;
 
     // ── Background ──────────────────────────────────────────────
