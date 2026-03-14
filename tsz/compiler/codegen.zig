@@ -4157,6 +4157,17 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
+        // _onKeyDown — global key dispatch (always called, unlike per-node on_key)
+        {
+            try out.appendSlice(self.alloc, "fn _onKeyDown(sym: c_int, mods: u16) void {\n");
+            if (self.has_pty) {
+                try out.appendSlice(self.alloc, "    pty_mod.handleKey(sym, mods);\n");
+            } else {
+                try out.appendSlice(self.alloc, "    _ = sym; _ = mods;\n");
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // updateRoutes — display-toggle routing
         if (self.route_count > 0) {
             try out.appendSlice(self.alloc, "fn updateRoutes() void {\n");
@@ -4493,6 +4504,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "    compositor.init(renderer, &text_engine, &image_cache);\n    defer compositor.deinit();\n");
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n");
         if (self.has_pty) {
+            try out.appendSlice(self.alloc, "    c.SDL_StartTextInput();\n");
             try out.appendSlice(self.alloc, "    defer pty_mod.deinit();\n");
         }
         try out.appendSlice(self.alloc, "    if (testharness.envEnabled()) testharness.enable();\n\n");

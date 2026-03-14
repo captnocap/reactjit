@@ -84,7 +84,7 @@
                             }
                         } else { running = false; }
                     }
-                    else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
+                    else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); _onKeyDown(event.key.keysym.sym, mods); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
                 },
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x); const my: f32 = @floatFromInt(event.motion.y);

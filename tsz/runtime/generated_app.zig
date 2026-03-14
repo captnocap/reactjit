@@ -92,6 +92,10 @@ fn _onTextInput(text: [*:0]const u8) void {
     pty_mod.handleTextInput(text);
 }
 
+fn _onKeyDown(sym: c_int, mods: u16) void {
+    pty_mod.handleKey(sym, mods);
+}
+
 fn _rebuildMap0() void {
     const items = state.getArraySlot(0);
     _map_count_0 = @min(items.len, MAX_MAP_0);
@@ -226,6 +230,7 @@ pub fn main() !void {
     defer compositor.deinit();
     defer win_mgr.deinitAll();
     watchdog.init(512);
+    c.SDL_StartTextInput();
     defer pty_mod.deinit();
     if (testharness.envEnabled()) testharness.enable();
 
@@ -315,7 +320,7 @@ pub fn main() !void {
                             }
                         } else { running = false; }
                     }
-                    else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
+                    else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); _onKeyDown(event.key.keysym.sym, mods); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
                 },
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x); const my: f32 = @floatFromInt(event.motion.y);
