@@ -21,6 +21,22 @@ const MAX_FFI_LIBS = 16;
 const MAX_FFI_FUNCS = 64;
 const MAX_WINDOWS = 8;
 const MAX_CONDS = 32;
+const MAX_EFFECTS = 32;
+
+const EffectKind = enum {
+    mount, // useEffect(fn, [])       — run once at init
+    watch, // useEffect(fn, [deps])   — run when deps change
+    every_frame, // useEffect(fn)           — run every frame
+    interval, // useEffect(fn, 1000)     — run at ms interval
+};
+
+const EffectInfo = struct {
+    kind: EffectKind,
+    body_start: u32, // token position at start of arrow fn params
+    dep_slots: [8]u32, // state slot IDs for watched deps
+    dep_count: u32,
+    interval_ms: u32, // for interval kind
+};
 
 const CondKind = enum {
     ternary,
@@ -109,6 +125,10 @@ pub const Generator = struct {
     conds: [MAX_CONDS]CondInfo,
     cond_count: u32,
 
+    // Effects
+    effects: [MAX_EFFECTS]EffectInfo,
+    effect_count: u32,
+
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
     classifier_primitives: [128][]const u8,
@@ -143,6 +163,8 @@ pub const Generator = struct {
             .input_change_handlers = [_]?[]const u8{null} ** 16,
             .conds = undefined,
             .cond_count = 0,
+            .effects = undefined,
+            .effect_count = 0,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -255,7 +277,11 @@ pub const Generator = struct {
         const app_start = self.findAppFunction() orelse return error.NoAppFunction;
         self.collectStateHooks(app_start);
 
-        // Phase 4: Find return JSX and generate node tree
+        // Phase 5: Collect useEffect calls
+        self.pos = app_start;
+        self.collectEffects(app_start);
+
+        // Phase 6: Find return JSX and generate node tree
         self.pos = app_start;
         self.findReturnStatement();
         const root_expr = try self.parseJSXElement();
@@ -481,6 +507,144 @@ pub const Generator = struct {
             if (self.isIdent("return")) break;
             self.advance_token();
         }
+    }
+
+    fn collectEffects(self: *Generator, func_start: u32) void {
+        self.pos = func_start;
+        // Skip past function header to body
+        while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
+        if (self.curKind() == .lbrace) self.advance_token();
+
+        while (self.pos < self.lex.count) {
+            if (self.isIdent("useEffect")) {
+                self.advance_token(); // skip "useEffect"
+                if (self.curKind() == .lparen) self.advance_token(); // skip (
+
+                // Record body start — at the ( of the arrow function params
+                const body_start = self.pos;
+
+                // Skip the arrow function: () => BODY
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                if (self.curKind() == .rparen) self.advance_token(); // )
+                if (self.curKind() == .arrow) self.advance_token(); // =>
+
+                // Skip body — either { ... } block or single expression
+                if (self.curKind() == .lbrace) {
+                    var depth: u32 = 1;
+                    self.advance_token();
+                    while (depth > 0 and self.curKind() != .eof) {
+                        if (self.curKind() == .lbrace) depth += 1;
+                        if (self.curKind() == .rbrace) depth -= 1;
+                        if (depth > 0) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                } else {
+                    // Single expression — skip until , or ) at depth 0
+                    var paren_depth: u32 = 0;
+                    while (self.curKind() != .eof) {
+                        if (self.curKind() == .lparen) paren_depth += 1;
+                        if (self.curKind() == .rparen) {
+                            if (paren_depth == 0) break;
+                            paren_depth -= 1;
+                        }
+                        if (self.curKind() == .comma and paren_depth == 0) break;
+                        self.advance_token();
+                    }
+                }
+
+                // Determine kind based on what follows the body
+                var kind: EffectKind = .every_frame;
+                var dep_slots: [8]u32 = undefined;
+                var dep_count: u32 = 0;
+                var interval_ms: u32 = 0;
+
+                if (self.curKind() == .comma) {
+                    self.advance_token(); // skip ,
+
+                    if (self.curKind() == .lbracket) {
+                        self.advance_token(); // skip [
+                        if (self.curKind() == .rbracket) {
+                            // Empty deps → mount
+                            kind = .mount;
+                            self.advance_token(); // skip ]
+                        } else {
+                            // Dependencies → watch
+                            kind = .watch;
+                            while (self.curKind() != .rbracket and self.curKind() != .eof) {
+                                if (self.curKind() == .identifier) {
+                                    const dep_name = self.curText();
+                                    if (self.isState(dep_name)) |slot_id| {
+                                        if (dep_count < 8) {
+                                            dep_slots[dep_count] = slot_id;
+                                            dep_count += 1;
+                                        }
+                                    }
+                                }
+                                self.advance_token();
+                                if (self.curKind() == .comma) self.advance_token();
+                            }
+                            if (self.curKind() == .rbracket) self.advance_token();
+                        }
+                    } else if (self.curKind() == .number) {
+                        // Number → interval
+                        kind = .interval;
+                        interval_ms = std.fmt.parseInt(u32, self.curText(), 10) catch 1000;
+                        self.advance_token();
+                    }
+                }
+
+                // Skip closing )
+                if (self.curKind() == .rparen) self.advance_token();
+                // Skip optional ;
+                if (self.curKind() == .semicolon) self.advance_token();
+
+                if (self.effect_count < MAX_EFFECTS) {
+                    self.effects[self.effect_count] = .{
+                        .kind = kind,
+                        .body_start = body_start,
+                        .dep_slots = dep_slots,
+                        .dep_count = dep_count,
+                        .interval_ms = interval_ms,
+                    };
+                    self.effect_count += 1;
+                }
+                continue; // don't advance_token at bottom
+            }
+            if (self.isIdent("return")) break;
+            self.advance_token();
+        }
+    }
+
+    fn emitEffectBody(self: *Generator, start: u32) ![]const u8 {
+        const saved_pos = self.pos;
+        self.pos = start;
+        defer self.pos = saved_pos;
+
+        // Skip () =>
+        if (self.curKind() == .lparen) self.advance_token();
+        if (self.curKind() == .rparen) self.advance_token();
+        if (self.curKind() == .arrow) self.advance_token();
+
+        // Block body: { stmt; stmt; }
+        if (self.curKind() == .lbrace) {
+            self.advance_token(); // skip {
+            var stmts: std.ArrayListUnmanaged(u8) = .{};
+            var safety: u32 = 0;
+            while (self.curKind() != .rbrace and self.curKind() != .eof and safety < 100) : (safety += 1) {
+                const before = self.pos;
+                const stmt = try self.emitHandlerExpr();
+                try stmts.appendSlice(self.alloc, "    ");
+                try stmts.appendSlice(self.alloc, stmt);
+                try stmts.appendSlice(self.alloc, "\n");
+                if (self.curKind() == .semicolon) self.advance_token();
+                // Guard against no progress
+                if (self.pos == before) self.advance_token();
+            }
+            return try self.alloc.dupe(u8, stmts.items);
+        }
+
+        // Single expression
+        return try std.fmt.allocPrint(self.alloc, "    {s}", .{try self.emitHandlerExpr()});
     }
 
     fn findReturnStatement(self: *Generator) void {
@@ -1785,6 +1949,31 @@ pub const Generator = struct {
             }
         }
 
+        // Effect timer variables (module-level)
+        if (self.effect_count > 0) {
+            var has_any_timer = false;
+            for (0..self.effect_count) |i| {
+                if (self.effects[i].kind == .interval) { has_any_timer = true; break; }
+            }
+            if (has_any_timer) {
+                try out.appendSlice(self.alloc, "\n// ── Effect timer variables ──────────────────────────────────────\n");
+                for (0..self.effect_count) |i| {
+                    if (self.effects[i].kind == .interval) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _timer_{d}: u32 = 0;\n", .{i}));
+                    }
+                }
+            }
+        }
+
+        // Effect functions
+        if (self.effect_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Generated effect functions ──────────────────────────────────\n");
+            for (0..self.effect_count) |i| {
+                const body = try self.emitEffectBody(self.effects[i].body_start);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "fn _effect_{d}() void {{\n{s}\n}}\n\n", .{ i, body }));
+            }
+        }
+
         // updateDynamicTexts
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
@@ -1942,18 +2131,62 @@ pub const Generator = struct {
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
 
+        // Mount effects — run once at init
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .mount) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
+            }
+        }
+        // Interval timer init
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .interval) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _timer_{d} = c.SDL_GetTicks();\n", .{i}));
+            }
+        }
+
         // Window init + main loop
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n\n");
         try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
 
-        // State check in loop
-        if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0)) {
-            var dirty_body: std.ArrayListUnmanaged(u8) = .{};
-            try dirty_body.appendSlice(self.alloc, "        if (state.isDirty()) { ");
-            if (self.dyn_count > 0) try dirty_body.appendSlice(self.alloc, "updateDynamicTexts(); ");
-            if (self.cond_count > 0) try dirty_body.appendSlice(self.alloc, "updateConditionals(); ");
-            try dirty_body.appendSlice(self.alloc, "state.clearDirty(); }\n");
-            try out.appendSlice(self.alloc, dirty_body.items);
+        // State check in loop (with watch effects)
+        {
+            var has_watch = false;
+            for (0..self.effect_count) |i| {
+                if (self.effects[i].kind == .watch) { has_watch = true; break; }
+            }
+            if (self.has_state and (self.dyn_count > 0 or self.cond_count > 0 or has_watch)) {
+                try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
+                if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
+                if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
+                // Watch effects — check per-slot dirty before clearDirty
+                for (0..self.effect_count) |i| {
+                    if (self.effects[i].kind == .watch) {
+                        try out.appendSlice(self.alloc, "            if (");
+                        for (0..self.effects[i].dep_count) |d| {
+                            if (d > 0) try out.appendSlice(self.alloc, " or ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.slotDirty({d})", .{self.effects[i].dep_slots[d]}));
+                        }
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ") {{ _effect_{d}(); }}\n", .{i}));
+                    }
+                }
+                try out.appendSlice(self.alloc, "            state.clearDirty();\n");
+                try out.appendSlice(self.alloc, "        }\n");
+            }
+        }
+
+        // Every-frame effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .every_frame) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "        _effect_{d}();\n", .{i}));
+            }
+        }
+        // Interval effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .interval) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        {{\n            const _now = c.SDL_GetTicks();\n            if (_now -% _timer_{d} >= {d}) {{ _timer_{d} = _now; _effect_{d}(); }}\n        }}\n",
+                    .{ i, self.effects[i].interval_ms, i, i }));
+            }
         }
 
         // Layout + paint + present

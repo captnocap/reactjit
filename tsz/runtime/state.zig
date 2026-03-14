@@ -165,6 +165,12 @@ pub fn setSlotBool(id: usize, val: bool) void {
     }
 }
 
+/// Check if a specific slot has changed since last clearDirty().
+pub fn slotDirty(id: usize) bool {
+    if (id >= slot_count) return false;
+    return slots[id].dirty;
+}
+
 /// Check if any state has changed since last clearDirty().
 pub fn isDirty() bool {
     return _dirty;
