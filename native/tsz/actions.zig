@@ -82,6 +82,14 @@ pub const ALL = [_]Action{
         .icon = "X",
     },
     .{
+        .name = "init",
+        .label = "Init",
+        .description = "Scaffold a new .tsz project",
+        .target = .path,
+        .show_in_gui = false,
+        .icon = "I",
+    },
+    .{
         .name = "gui",
         .label = "Dashboard",
         .description = "Open GUI dashboard",
