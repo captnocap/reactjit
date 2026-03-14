@@ -87,6 +87,7 @@ pub const Generator = struct {
     // TextInputs
     input_count: u32,
     input_multiline: [16]bool,
+    input_change_handlers: [16]?[]const u8,
 
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
@@ -119,6 +120,7 @@ pub const Generator = struct {
             .window_count = 0,
             .input_count = 0,
             .input_multiline = [_]bool{false} ** 16,
+            .input_change_handlers = [_]?[]const u8{null} ** 16,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -502,6 +504,10 @@ pub const Generator = struct {
         var src_str: []const u8 = "";
         var on_press_start: ?u32 = null;
         var on_press_end: ?u32 = null;
+        var on_change_text_start: ?u32 = null;
+        var on_change_text_end: ?u32 = null;
+        var on_scroll_start: ?u32 = null;
+        var on_scroll_end: ?u32 = null;
         var title_str: []const u8 = "";
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
@@ -554,6 +560,14 @@ pub const Generator = struct {
                         on_press_start = self.pos;
                         try self.skipBalanced();
                         on_press_end = self.pos;
+                    } else if (std.mem.eql(u8, attr_name, "onChangeText")) {
+                        on_change_text_start = self.pos;
+                        try self.skipBalanced();
+                        on_change_text_end = self.pos;
+                    } else if (std.mem.eql(u8, attr_name, "onScroll")) {
+                        on_scroll_start = self.pos;
+                        try self.skipBalanced();
+                        on_scroll_end = self.pos;
                     } else {
                         try self.skipAttrValue();
                     }
@@ -721,18 +735,55 @@ pub const Generator = struct {
             try fields.appendSlice(self.alloc, "\"");
         }
 
-        // Handler
+        // Handlers — create handler functions and collect their names
+        var press_handler_name: ?[]const u8 = null;
+        var change_handler_name: ?[]const u8 = null;
+        var scroll_handler_name: ?[]const u8 = null;
+
         if (on_press_start) |start| {
-            const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
+            press_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
             self.handler_counter += 1;
-
             const body = try self.emitHandlerBody(start, on_press_end.?);
-            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ handler_name, body });
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ press_handler_name.?, body });
             try self.handler_decls.append(self.alloc, handler_fn);
+        }
 
+        if (on_change_text_start) |start| {
+            change_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_change_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start, on_change_text_end.?);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ change_handler_name.?, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+        }
+
+        if (on_scroll_start) |start| {
+            scroll_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_scroll_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start, on_scroll_end.?);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ scroll_handler_name.?, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+        }
+
+        // Emit combined .handlers struct
+        var hf: std.ArrayListUnmanaged(u8) = .{};
+        if (press_handler_name) |n| {
+            try hf.appendSlice(self.alloc, ".on_press = ");
+            try hf.appendSlice(self.alloc, n);
+        }
+        if (change_handler_name) |n| {
+            if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
+            try hf.appendSlice(self.alloc, ".on_change_text = ");
+            try hf.appendSlice(self.alloc, n);
+        }
+        if (scroll_handler_name) |n| {
+            if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
+            try hf.appendSlice(self.alloc, ".on_scroll = ");
+            try hf.appendSlice(self.alloc, n);
+        }
+        if (hf.items.len > 0) {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-            try fields.appendSlice(self.alloc, ".handlers = .{ .on_press = ");
-            try fields.appendSlice(self.alloc, handler_name);
+            try fields.appendSlice(self.alloc, ".handlers = .{ ");
+            try fields.appendSlice(self.alloc, hf.items);
             try fields.appendSlice(self.alloc, " }");
         }
 
@@ -747,6 +798,9 @@ pub const Generator = struct {
                 try fields.appendSlice(self.alloc, ", .placeholder = \"");
                 try fields.appendSlice(self.alloc, placeholder_str);
                 try fields.appendSlice(self.alloc, "\"");
+            }
+            if (change_handler_name != null) {
+                if (iid < 16) self.input_change_handlers[iid] = change_handler_name;
             }
         }
 
