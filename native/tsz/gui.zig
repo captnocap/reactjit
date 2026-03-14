@@ -460,8 +460,10 @@ pub fn run(alloc: std.mem.Allocator) !void {
             // Check tray flags
             if (tray.should_show_gui) {
                 tray.should_show_gui = false;
+                c.SDL_RestoreWindow(window);
                 c.SDL_ShowWindow(window);
                 c.SDL_RaiseWindow(window);
+                _ = c.SDL_SetWindowInputFocus(window);
                 window_visible = true;
             }
             if (tray.should_quit) {
@@ -486,8 +488,10 @@ pub fn run(alloc: std.mem.Allocator) !void {
         // SIGUSR2 from another `tsz gui` → raise window
         if (sig_raise_window) {
             sig_raise_window = false;
+            c.SDL_RestoreWindow(window);
             c.SDL_ShowWindow(window);
             c.SDL_RaiseWindow(window);
+            _ = c.SDL_SetWindowInputFocus(window);
             window_visible = true;
             dirty = true;
         }
