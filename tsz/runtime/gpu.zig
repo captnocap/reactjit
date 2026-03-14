@@ -47,6 +47,49 @@ pub const RectInstance = extern struct {
 
 const MAX_RECTS = 4096;
 
+/// Per-instance glyph data — matches the text WGSL struct layout.
+pub const GlyphInstance = extern struct {
+    pos_x: f32,
+    pos_y: f32,
+    size_w: f32,
+    size_h: f32,
+    uv_x: f32,
+    uv_y: f32,
+    uv_w: f32,
+    uv_h: f32,
+    color_r: f32,
+    color_g: f32,
+    color_b: f32,
+    color_a: f32,
+};
+
+const MAX_GLYPHS = 8192;
+
+// Atlas dimensions
+const ATLAS_SIZE = 2048;
+
+// Glyph atlas cache entry
+const AtlasGlyphKey = struct {
+    codepoint: u32,
+    size_px: u16,
+};
+
+const AtlasGlyphInfo = struct {
+    // Atlas UV coords (normalized 0..1)
+    uv_x: f32,
+    uv_y: f32,
+    uv_w: f32,
+    uv_h: f32,
+    // Glyph metrics (pixels)
+    bearing_x: i32,
+    bearing_y: i32,
+    advance: i32,
+    width: i32,
+    height: i32,
+};
+
+const MAX_ATLAS_GLYPHS = 2048;
+
 // ════════════════════════════════════════════════════════════════════════
 // State
 // ════════════════════════════════════════════════════════════════════════
@@ -69,6 +112,35 @@ var g_bind_group: ?*wgpu.BindGroup = null;
 // CPU-side rect batch
 var g_rects: [MAX_RECTS]RectInstance = undefined;
 var g_rect_count: usize = 0;
+
+// Text pipeline
+var g_text_pipeline: ?*wgpu.RenderPipeline = null;
+var g_text_buffer: ?*wgpu.Buffer = null;
+var g_text_bind_group: ?*wgpu.BindGroup = null;
+var g_atlas_texture: ?*wgpu.Texture = null;
+var g_atlas_view: ?*wgpu.TextureView = null;
+var g_atlas_sampler: ?*wgpu.Sampler = null;
+
+// CPU-side glyph batch
+var g_glyphs: [MAX_GLYPHS]GlyphInstance = undefined;
+var g_glyph_count: usize = 0;
+
+// Atlas packer state
+var g_atlas_row_x: u32 = 0;
+var g_atlas_row_y: u32 = 0;
+var g_atlas_row_h: u32 = 0;
+
+// Atlas glyph cache
+var g_atlas_keys: [MAX_ATLAS_GLYPHS]AtlasGlyphKey = undefined;
+var g_atlas_vals: [MAX_ATLAS_GLYPHS]AtlasGlyphInfo = undefined;
+var g_atlas_count: usize = 0;
+
+// FreeType handles (set by initText)
+var g_ft_library: c.FT_Library = null;
+var g_ft_face: c.FT_Face = null;
+var g_ft_fallbacks: [8]c.FT_Face = undefined;
+var g_ft_fallback_count: usize = 0;
+var g_ft_current_size: u16 = 0;
 
 // ════════════════════════════════════════════════════════════════════════
 // Public API
@@ -144,6 +216,12 @@ pub fn init(window: *c.SDL_Window) !void {
 }
 
 pub fn deinit() void {
+    if (g_text_bind_group) |bg| bg.release();
+    if (g_text_buffer) |b| b.release();
+    if (g_text_pipeline) |p| p.release();
+    if (g_atlas_sampler) |s| s.release();
+    if (g_atlas_view) |v| v.release();
+    if (g_atlas_texture) |t| t.destroy();
     if (g_bind_group) |bg| bg.release();
     if (g_globals_buffer) |b| b.release();
     if (g_rect_buffer) |b| b.release();
@@ -211,6 +289,104 @@ pub fn drawRect(
     g_rect_count += 1;
 }
 
+/// Initialize text rendering. Call after init() and after TextEngine is created.
+pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fallback_count: usize) void {
+    g_ft_library = library;
+    g_ft_face = face;
+    g_ft_fallback_count = @min(fallback_count, 8);
+    for (0..g_ft_fallback_count) |i| {
+        g_ft_fallbacks[i] = fallbacks[i];
+    }
+    g_ft_current_size = 0;
+
+    const device = g_device orelse return;
+
+    // Create atlas texture (RGBA8, 2048x2048)
+    g_atlas_texture = device.createTexture(&.{
+        .label = wgpu.StringView.fromSlice("glyph_atlas"),
+        .size = .{ .width = ATLAS_SIZE, .height = ATLAS_SIZE, .depth_or_array_layers = 1 },
+        .mip_level_count = 1,
+        .sample_count = 1,
+        .dimension = .@"2d",
+        .format = .rgba8_unorm,
+        .usage = wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.copy_dst,
+    });
+
+    if (g_atlas_texture) |tex| {
+        g_atlas_view = tex.createView(null);
+    }
+
+    g_atlas_sampler = device.createSampler(&.{
+        .address_mode_u = .clamp_to_edge,
+        .address_mode_v = .clamp_to_edge,
+        .mag_filter = .linear,
+        .min_filter = .linear,
+    });
+
+    // Create text instance buffer
+    g_text_buffer = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("glyph_instances"),
+        .size = MAX_GLYPHS * @sizeOf(GlyphInstance),
+        .usage = wgpu.BufferUsages.vertex | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    });
+
+    initTextPipeline(device);
+}
+
+/// Draw a single line of text at (x, y) with the given font size and color.
+pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg: f32, cb: f32, ca: f32) void {
+    if (g_ft_face == null) return;
+
+    // Set FreeType size
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+
+    // Get line metrics (ascent) from FreeType
+    const face = g_ft_face;
+    const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
+
+    var pen_x = x;
+    const baseline_y = y + ascent;
+
+    var i: usize = 0;
+    while (i < text.len) {
+        const ch = decodeUtf8(text[i..]);
+        if (ch.codepoint == '\n') {
+            i += ch.len;
+            continue;
+        }
+
+        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+            if (glyph.width > 0 and glyph.height > 0) {
+                if (g_glyph_count < MAX_GLYPHS) {
+                    const gx = pen_x + @as(f32, @floatFromInt(glyph.bearing_x));
+                    const gy = baseline_y - @as(f32, @floatFromInt(glyph.bearing_y));
+                    g_glyphs[g_glyph_count] = .{
+                        .pos_x = gx,
+                        .pos_y = gy,
+                        .size_w = @floatFromInt(glyph.width),
+                        .size_h = @floatFromInt(glyph.height),
+                        .uv_x = glyph.uv_x,
+                        .uv_y = glyph.uv_y,
+                        .uv_w = glyph.uv_w,
+                        .uv_h = glyph.uv_h,
+                        .color_r = cr,
+                        .color_g = cg,
+                        .color_b = cb,
+                        .color_a = ca,
+                    };
+                    g_glyph_count += 1;
+                }
+            }
+            pen_x += @floatFromInt(glyph.advance);
+        }
+        i += ch.len;
+    }
+}
+
 /// Render all queued primitives and present.
 pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const surface = g_surface orelse return;
@@ -244,6 +420,14 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
     }
 
+    // Upload glyph instance data
+    if (g_glyph_count > 0) {
+        if (g_text_buffer) |buf| {
+            const byte_size = g_glyph_count * @sizeOf(GlyphInstance);
+            queue.writeBuffer(buf, 0, @ptrCast(&g_glyphs), byte_size);
+        }
+    }
+
     const encoder = device.createCommandEncoder(&.{}) orelse return;
 
     // Render pass
@@ -274,6 +458,20 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
     }
 
+    // Draw text glyphs
+    if (g_glyph_count > 0) {
+        if (g_text_pipeline) |pipeline| {
+            render_pass.setPipeline(pipeline);
+            if (g_text_bind_group) |bg| {
+                render_pass.setBindGroup(0, bg, 0, null);
+            }
+            if (g_text_buffer) |buf| {
+                render_pass.setVertexBuffer(0, buf, 0, g_glyph_count * @sizeOf(GlyphInstance));
+            }
+            render_pass.draw(6, @intCast(g_glyph_count), 0, 0);
+        }
+    }
+
     render_pass.end();
     render_pass.release();
 
@@ -285,8 +483,9 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
 
     _ = surface.present();
 
-    // Reset batch for next frame
+    // Reset batches for next frame
     g_rect_count = 0;
+    g_glyph_count = 0;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -409,6 +608,276 @@ fn initRectPipeline(device: *wgpu.Device) void {
     if (g_rect_pipeline == null) {
         std.debug.print("Failed to create rect render pipeline\n", .{});
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Text pipeline setup
+// ════════════════════════════════════════════════════════════════════════
+
+fn initTextPipeline(device: *wgpu.Device) void {
+    const shader_desc = wgpu.shaderModuleWGSLDescriptor(.{
+        .label = "text_shader",
+        .code = shaders.text_wgsl,
+    });
+    const shader_module = device.createShaderModule(&shader_desc) orelse {
+        std.debug.print("Failed to create text shader module\n", .{});
+        return;
+    };
+    defer shader_module.release();
+
+    const atlas_view = g_atlas_view orelse return;
+    const atlas_sampler = g_atlas_sampler orelse return;
+
+    // Bind group layout: globals uniform + atlas texture + sampler
+    const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+        .{ // binding 0: globals uniform
+            .binding = 0,
+            .visibility = wgpu.ShaderStages.vertex,
+            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
+        },
+        .{ // binding 1: atlas texture
+            .binding = 1,
+            .visibility = wgpu.ShaderStages.fragment,
+            .texture = .{
+                .sample_type = .float,
+                .view_dimension = .@"2d",
+                .multisampled = 0,
+            },
+        },
+        .{ // binding 2: sampler
+            .binding = 2,
+            .visibility = wgpu.ShaderStages.fragment,
+            .sampler = .{ .@"type" = .filtering },
+        },
+    };
+
+    const bind_group_layout = device.createBindGroupLayout(&.{
+        .entry_count = layout_entries.len,
+        .entries = &layout_entries,
+    }) orelse return;
+    defer bind_group_layout.release();
+
+    // Bind group with actual resources
+    const bind_entries = [_]wgpu.BindGroupEntry{
+        .{ .binding = 0, .buffer = g_globals_buffer, .offset = 0, .size = 8 },
+        .{ .binding = 1, .texture_view = atlas_view },
+        .{ .binding = 2, .sampler = atlas_sampler },
+    };
+
+    g_text_bind_group = device.createBindGroup(&.{
+        .layout = bind_group_layout,
+        .entry_count = bind_entries.len,
+        .entries = &bind_entries,
+    });
+
+    const pipeline_layout = device.createPipelineLayout(&.{
+        .bind_group_layout_count = 1,
+        .bind_group_layouts = @ptrCast(&bind_group_layout),
+    }) orelse return;
+    defer pipeline_layout.release();
+
+    // Glyph instance vertex attributes
+    const glyph_attrs = [_]wgpu.VertexAttribute{
+        .{ .format = .float32x2, .offset = 0, .shader_location = 0 }, // pos
+        .{ .format = .float32x2, .offset = 8, .shader_location = 1 }, // size
+        .{ .format = .float32x2, .offset = 16, .shader_location = 2 }, // uv_pos
+        .{ .format = .float32x2, .offset = 24, .shader_location = 3 }, // uv_size
+        .{ .format = .float32x4, .offset = 32, .shader_location = 4 }, // color
+    };
+
+    const glyph_buffer_layout = wgpu.VertexBufferLayout{
+        .step_mode = .instance,
+        .array_stride = @sizeOf(GlyphInstance),
+        .attribute_count = glyph_attrs.len,
+        .attributes = &glyph_attrs,
+    };
+
+    const blend_state = wgpu.BlendState.premultiplied_alpha_blending;
+    const color_target = wgpu.ColorTargetState{
+        .format = g_format,
+        .blend = &blend_state,
+        .write_mask = wgpu.ColorWriteMasks.all,
+    };
+
+    const fragment_state = wgpu.FragmentState{
+        .module = shader_module,
+        .entry_point = wgpu.StringView.fromSlice("fs_main"),
+        .target_count = 1,
+        .targets = @ptrCast(&color_target),
+    };
+
+    g_text_pipeline = device.createRenderPipeline(&.{
+        .layout = pipeline_layout,
+        .vertex = .{
+            .module = shader_module,
+            .entry_point = wgpu.StringView.fromSlice("vs_main"),
+            .buffer_count = 1,
+            .buffers = @ptrCast(&glyph_buffer_layout),
+        },
+        .primitive = .{ .topology = .triangle_list },
+        .multisample = .{},
+        .fragment = &fragment_state,
+    });
+
+    if (g_text_pipeline == null) {
+        std.debug.print("Failed to create text render pipeline\n", .{});
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Glyph atlas — FreeType rasterization → wgpu texture
+// ════════════════════════════════════════════════════════════════════════
+
+fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
+    // Check cache
+    for (0..g_atlas_count) |i| {
+        if (g_atlas_keys[i].codepoint == codepoint and g_atlas_keys[i].size_px == size_px) {
+            return &g_atlas_vals[i];
+        }
+    }
+    if (g_atlas_count >= MAX_ATLAS_GLYPHS) return null;
+
+    const face = g_ft_face orelse return null;
+
+    // Set size
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+
+    // Load glyph — try primary face, then fallbacks
+    var use_face = face;
+    if (c.FT_Get_Char_Index(face, codepoint) == 0) {
+        for (0..g_ft_fallback_count) |fi| {
+            const fb = g_ft_fallbacks[fi];
+            if (c.FT_Get_Char_Index(fb, codepoint) != 0) {
+                _ = c.FT_Set_Pixel_Sizes(fb, 0, size_px);
+                use_face = fb;
+                break;
+            }
+        }
+    }
+
+    if (c.FT_Load_Char(use_face, codepoint, c.FT_LOAD_RENDER) != 0) {
+        return null;
+    }
+
+    const glyph = use_face.*.glyph;
+    const bitmap = glyph.*.bitmap;
+    const bw: u32 = @intCast(bitmap.width);
+    const bh: u32 = @intCast(bitmap.rows);
+
+    // Pack into atlas (row-based)
+    var atlas_x: u32 = 0;
+    var atlas_y: u32 = 0;
+
+    if (bw > 0 and bh > 0) {
+        // Check if glyph fits in current row
+        if (g_atlas_row_x + bw + 1 > ATLAS_SIZE) {
+            // Start new row
+            g_atlas_row_y += g_atlas_row_h + 1;
+            g_atlas_row_x = 0;
+            g_atlas_row_h = 0;
+        }
+        if (g_atlas_row_y + bh > ATLAS_SIZE) {
+            // Atlas full
+            return null;
+        }
+
+        atlas_x = g_atlas_row_x;
+        atlas_y = g_atlas_row_y;
+        g_atlas_row_x += bw + 1;
+        if (bh > g_atlas_row_h) g_atlas_row_h = bh;
+
+        // Upload glyph bitmap to atlas texture
+        uploadGlyphToAtlas(bitmap, atlas_x, atlas_y, bw, bh);
+    }
+
+    const idx = g_atlas_count;
+    g_atlas_keys[idx] = .{ .codepoint = codepoint, .size_px = size_px };
+    g_atlas_vals[idx] = .{
+        .uv_x = @as(f32, @floatFromInt(atlas_x)) / @as(f32, ATLAS_SIZE),
+        .uv_y = @as(f32, @floatFromInt(atlas_y)) / @as(f32, ATLAS_SIZE),
+        .uv_w = @as(f32, @floatFromInt(bw)) / @as(f32, ATLAS_SIZE),
+        .uv_h = @as(f32, @floatFromInt(bh)) / @as(f32, ATLAS_SIZE),
+        .bearing_x = glyph.*.bitmap_left,
+        .bearing_y = glyph.*.bitmap_top,
+        .advance = @intCast(glyph.*.advance.x >> 6),
+        .width = @intCast(bw),
+        .height = @intCast(bh),
+    };
+    g_atlas_count += 1;
+
+    return &g_atlas_vals[idx];
+}
+
+fn uploadGlyphToAtlas(bitmap: anytype, atlas_x: u32, atlas_y: u32, bw: u32, bh: u32) void {
+    const queue = g_queue orelse return;
+    const atlas = g_atlas_texture orelse return;
+
+    // Convert grayscale bitmap to RGBA
+    const pixel_count = bw * bh;
+    if (pixel_count == 0) return;
+
+    // Stack buffer for small glyphs, otherwise skip (most glyphs are small)
+    var rgba_buf: [256 * 256 * 4]u8 = undefined;
+    if (pixel_count * 4 > rgba_buf.len) return;
+
+    const src_pitch: usize = @intCast(bitmap.pitch);
+    for (0..bh) |row| {
+        for (0..bw) |col| {
+            const alpha = bitmap.buffer[row * src_pitch + col];
+            const dst = (row * bw + col) * 4;
+            rgba_buf[dst + 0] = 255; // R
+            rgba_buf[dst + 1] = 255; // G
+            rgba_buf[dst + 2] = 255; // B
+            rgba_buf[dst + 3] = alpha; // A
+        }
+    }
+
+    // Upload to atlas via queue.writeTexture
+    queue.writeTexture(
+        &.{
+            .texture = atlas,
+            .mip_level = 0,
+            .origin = .{ .x = atlas_x, .y = atlas_y, .z = 0 },
+            .aspect = .all,
+        },
+        @ptrCast(&rgba_buf),
+        bw * bh * 4,
+        &.{
+            .offset = 0,
+            .bytes_per_row = bw * 4,
+            .rows_per_image = bh,
+        },
+        &.{ .width = bw, .height = bh, .depth_or_array_layers = 1 },
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// UTF-8 decoding (shared with text.zig, duplicated for independence)
+// ════════════════════════════════════════════════════════════════════════
+
+const Utf8Char = struct {
+    codepoint: u32,
+    len: u3,
+};
+
+fn decodeUtf8(bytes: []const u8) Utf8Char {
+    if (bytes.len == 0) return .{ .codepoint = 0xFFFD, .len = 1 };
+    const b0 = bytes[0];
+    if (b0 < 0x80) return .{ .codepoint = b0, .len = 1 };
+    if (b0 < 0xC0) return .{ .codepoint = 0xFFFD, .len = 1 };
+    if (b0 < 0xE0) {
+        if (bytes.len < 2) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x1F) << 6) | @as(u32, bytes[1] & 0x3F), .len = 2 };
+    }
+    if (b0 < 0xF0) {
+        if (bytes.len < 3) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x0F) << 12) | (@as(u32, bytes[1] & 0x3F) << 6) | @as(u32, bytes[2] & 0x3F), .len = 3 };
+    }
+    if (bytes.len < 4) return .{ .codepoint = 0xFFFD, .len = 1 };
+    return .{ .codepoint = (@as(u32, b0 & 0x07) << 18) | (@as(u32, bytes[1] & 0x3F) << 12) | (@as(u32, bytes[2] & 0x3F) << 6) | @as(u32, bytes[3] & 0x3F), .len = 4 };
 }
 
 // ════════════════════════════════════════════════════════════════════════

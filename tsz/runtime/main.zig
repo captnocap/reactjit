@@ -526,6 +526,9 @@ pub fn main() !void {
 
     _ = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
 
+    // Wire up GPU text rendering with FreeType handles from text engine
+    gpu.initText(text_engine.library, text_engine.face, text_engine.fallback_faces, text_engine.fallback_count);
+
     // Init rounded corner texture
     initCircleTexture(renderer);
     defer if (g_circle_tex) |t| c.SDL_DestroyTexture(t);
@@ -754,6 +757,19 @@ pub fn main() !void {
             2.0, // border
             1.0, 1.0, 1.0, 0.5, // white semi-transparent border
         );
+
+        // ── Text ────────────────────────────────────────────────────
+        const text_x = (win_w - 540) / 2.0 + 24;
+        const text_y = (win_h - 400) / 2.0 + 24;
+        gpu.drawTextLine("ReactJIT Engine", text_x, text_y, 28, 1.0, 1.0, 1.0, 1.0);
+        gpu.drawTextLine("wgpu + FreeType + Zig flex layout. Pixel-perfect.", text_x, text_y + 36, 14, 120.0 / 255.0, 120.0 / 255.0, 140.0 / 255.0, 1.0);
+
+        // Stat labels
+        gpu.drawTextLine("148 KB", cards_start + 12, card_y + 28, 22, 1.0, 121.0 / 255.0, 198.0 / 255.0, 1.0);
+        gpu.drawTextLine("Flexbox", cards_start + card_w + card_gap + 12, card_y + 28, 22, 78.0 / 255.0, 201.0 / 255.0, 176.0 / 255.0, 1.0);
+        gpu.drawTextLine("wgpu", cards_start + (card_w + card_gap) * 2 + 12, card_y + 28, 22, 86.0 / 255.0, 156.0 / 255.0, 214.0 / 255.0, 1.0);
+
+        gpu.drawTextLine("One pixel. Then the world.", text_x, bar_y + 48, 12, 80.0 / 255.0, 80.0 / 255.0, 100.0 / 255.0, 1.0);
 
         // Render and present
         gpu.frame(

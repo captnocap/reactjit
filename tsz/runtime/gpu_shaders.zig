@@ -2,6 +2,7 @@
 //!
 //! SDF-based rounded rectangles with borders, anti-aliasing,
 //! gradients, and shadows — all in the fragment shader.
+//! Glyph atlas text rendering with per-glyph color tinting.
 
 /// Rect pipeline: instanced fullscreen quads with SDF rounded-rect fragment shader.
 /// Each instance is one rectangle with position, size, colors, border-radius, border.
@@ -108,5 +109,66 @@ pub const rect_wgsl =
     \\
     \\    // Premultiply alpha for correct blending
     \\    return vec4f(final_color.rgb * final_color.a, final_color.a);
+    \\}
+;
+
+/// Text pipeline: instanced textured quads sampling from a glyph atlas.
+/// Each instance is one glyph with screen position, atlas UV, and color.
+pub const text_wgsl =
+    \\// ── Uniforms ───────────────────────────────────────────────────
+    \\struct Globals {
+    \\    screen_size: vec2f,
+    \\};
+    \\@group(0) @binding(0) var<uniform> globals: Globals;
+    \\@group(0) @binding(1) var atlas_tex: texture_2d<f32>;
+    \\@group(0) @binding(2) var atlas_sampler: sampler;
+    \\
+    \\// ── Per-instance data ─────────────────────────────────────────
+    \\struct GlyphInstance {
+    \\    @location(0) pos: vec2f,     // screen position (top-left)
+    \\    @location(1) size: vec2f,    // glyph size on screen
+    \\    @location(2) uv_pos: vec2f,  // atlas UV offset [0..1]
+    \\    @location(3) uv_size: vec2f, // atlas UV extent [0..1]
+    \\    @location(4) color: vec4f,   // text color RGBA
+    \\};
+    \\
+    \\struct VertexOutput {
+    \\    @builtin(position) clip_pos: vec4f,
+    \\    @location(0) uv: vec2f,
+    \\    @location(1) color: vec4f,
+    \\};
+    \\
+    \\@vertex
+    \\fn vs_main(
+    \\    @builtin(vertex_index) vertex_index: u32,
+    \\    inst: GlyphInstance,
+    \\) -> VertexOutput {
+    \\    var quad_x = array<f32, 6>(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
+    \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+    \\    let corner = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
+    \\
+    \\    let pixel_pos = inst.pos + corner * inst.size;
+    \\    let ndc = vec2f(
+    \\        pixel_pos.x / globals.screen_size.x * 2.0 - 1.0,
+    \\        1.0 - pixel_pos.y / globals.screen_size.y * 2.0,
+    \\    );
+    \\
+    \\    var out: VertexOutput;
+    \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
+    \\    out.uv = inst.uv_pos + corner * inst.uv_size;
+    \\    out.color = inst.color;
+    \\    return out;
+    \\}
+    \\
+    \\@fragment
+    \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    \\    let atlas_sample = textureSample(atlas_tex, atlas_sampler, in.uv);
+    \\    // Atlas stores white glyphs with alpha — tint with text color
+    \\    let alpha = atlas_sample.a * in.color.a;
+    \\    if alpha <= 0.0 {
+    \\        discard;
+    \\    }
+    \\    let rgb = in.color.rgb * alpha;
+    \\    return vec4f(rgb, alpha);
     \\}
 ;
