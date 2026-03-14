@@ -55,6 +55,9 @@ fn getMtime(path: []const u8) i128 {
 
 // ── Compile ─────────────────────────────────────────────────────────────
 
+// Build mode — set by CLI flags, read by compile()
+var g_release_mode: bool = false;
+
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
 fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
@@ -101,7 +104,10 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     // Build with zig
     const build_result = std.process.Child.run(.{
         .allocator = alloc,
-        .argv = &.{ "zig", "build", "engine-app" },
+        .argv = if (g_release_mode)
+            &.{ "zig", "build", "engine-app", "-Doptimize=ReleaseSmall" }
+        else
+            &.{ "zig", "build", "engine-app" },
     }) catch |err| {
         std.debug.print("[tsz] Build failed to start: {}\n", .{err});
         return false;
@@ -737,6 +743,13 @@ pub fn main() !void {
     if (action.target == .global) {
         try execAction(alloc, action.name, "");
         return;
+    }
+
+    // Check for --release flag anywhere in args
+    for (args) |arg| {
+        if (std.mem.eql(u8, arg, "--release")) {
+            g_release_mode = true;
+        }
     }
 
     // Project/path actions need an argument
