@@ -1037,7 +1037,6 @@ pub const Generator = struct {
 
     /// Inline a component at its call site: collect props, jump to body, parse JSX.
     fn inlineComponent(self: *Generator, comp: *const ComponentInfo) anyerror![]const u8 {
-        std.debug.print("[tsz-debug] inlineComponent: {s} at pos {d}\n", .{ comp.name, self.pos });
         // 1. Collect attribute values from the call site as prop bindings
         const saved_prop_count = self.prop_stack_count;
         while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) {
@@ -1140,7 +1139,6 @@ pub const Generator = struct {
         const result = try self.parseJSXElement();
 
         // 5. Restore
-        std.debug.print("[tsz-debug] inlineComponent done: {s}, saved_pos={d}, result_len={d}, arrays={d}\n", .{ comp.name, saved_pos, result.len, self.array_counter });
         self.pos = saved_pos;
         self.prop_stack_count = saved_prop_count;
         self.component_children_exprs = saved_children;
@@ -1433,7 +1431,6 @@ pub const Generator = struct {
         }
 
         // Custom component — inline at compile time
-        std.debug.print("[tsz-debug] parseJSXElement tag='{s}' pos={d} comp_count={d}\n", .{ tag_name, self.pos, self.component_count });
         if (self.findComponent(tag_name)) |comp| {
             return try self.inlineComponent(comp);
         }
