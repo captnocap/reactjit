@@ -153,6 +153,18 @@ fn fillRoundedRect(renderer: *c.SDL_Renderer, ix: i32, iy: i32, iw: i32, ih: i32
     _ = c.SDL_RenderCopy(renderer, tex, &br_src, &br_dst);
 }
 
+/// Walk the tree and dispatch on_key to all nodes that have it, skipping the already-dispatched hovered node.
+fn dispatchGlobalKeyHandlers(node: *layout.Node, key: c_int, mods: u16, skip: ?*layout.Node) void {
+    if (node.style.display == .none) return;
+    if (skip != null and node == skip.?) return;
+    if (node.handlers.on_key) |handler| {
+        handler(key, mods);
+    }
+    for (node.children) |*child| {
+        dispatchGlobalKeyHandlers(child, key, mods, skip);
+    }
+}
+
 fn lerpU8(a: u8, b: u8, t: f32) u8 {
     const fa: f32 = @floatFromInt(a);
     const fb: f32 = @floatFromInt(b);
@@ -616,12 +628,20 @@ pub fn main() !void {
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) {
                         running = false;
                     } else {
+                        // Build modifier bitfield: bit0=ctrl, bit1=shift, bit2=alt, bit3=meta
+                        const sdl_mod = event.key.keysym.mod;
+                        const mods: u16 = (if (sdl_mod & c.KMOD_CTRL != 0) @as(u16, 1) else @as(u16, 0)) |
+                            (if (sdl_mod & c.KMOD_SHIFT != 0) @as(u16, 2) else @as(u16, 0)) |
+                            (if (sdl_mod & c.KMOD_ALT != 0) @as(u16, 4) else @as(u16, 0)) |
+                            (if (sdl_mod & c.KMOD_GUI != 0) @as(u16, 8) else @as(u16, 0));
                         // Dispatch to hovered node's on_key handler (or could be focused node)
                         if (hovered_node) |node| {
                             if (node.handlers.on_key) |handler| {
-                                handler(event.key.keysym.sym);
+                                handler(event.key.keysym.sym, mods);
                             }
                         }
+                        // Also walk the tree for global key handlers on non-hovered nodes
+                        dispatchGlobalKeyHandlers(&container, event.key.keysym.sym, mods, hovered_node);
                     }
                 },
                 c.SDL_MOUSEMOTION => {

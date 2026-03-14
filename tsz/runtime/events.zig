@@ -15,7 +15,7 @@ pub const EventHandler = struct {
     on_press: ?*const fn () void = null,
     on_hover_enter: ?*const fn () void = null,
     on_hover_exit: ?*const fn () void = null,
-    on_key: ?*const fn (key: c_int) void = null,
+    on_key: ?*const fn (key: c_int, mods: u16) void = null,
     on_change_text: ?*const fn () void = null,
     on_scroll: ?*const fn () void = null,
 };

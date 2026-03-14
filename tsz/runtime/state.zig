@@ -283,6 +283,22 @@ pub fn getArrayLen(id: usize) usize {
     return array_slots[id].count;
 }
 
+/// Get a single element from an array slot by index.
+/// Returns 0 for out-of-bounds access (safe default).
+pub fn getArrayElement(id: usize, index: usize) i64 {
+    if (index >= array_slots[id].count) return 0;
+    return array_slots[id].values[index];
+}
+
+/// Set a single element in an array slot by index.
+/// No-op for out-of-bounds access.
+pub fn setArrayElement(id: usize, index: usize, value: i64) void {
+    if (index >= array_slots[id].count) return;
+    array_slots[id].values[index] = value;
+    array_slots[id].dirty = true;
+    _dirty = true;
+}
+
 // ── State persistence for dev mode hot reload ────────────────────────────
 
 const STATE_FILE = "/tmp/tsz-state.bin";
