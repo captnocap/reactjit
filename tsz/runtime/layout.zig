@@ -131,6 +131,9 @@ pub const Style = struct {
     border_width: f32 = 0,
     border_color: ?Color = null,
 
+    // Stacking
+    z_index: i16 = 0,
+
     // Box shadow
     shadow_offset_x: f32 = 0,
     shadow_offset_y: f32 = 0,
@@ -433,6 +436,67 @@ fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
     return max_cross + pad_t + pad_b;
 }
 
+// ── Min-Content Width ────────────────────────────────────────────────────────
+// CSS min-width: auto floor for flex items. Prevents flex-shrink from
+// crushing a node below its content's natural minimum width.
+// For text: width of the longest word. For containers: recursive.
+// Ported from layout.lua computeMinContentW.
+
+fn computeMinContentW(node: *Node) f32 {
+    const s = node.style;
+    const pad_l = s.padLeft();
+    const pad_r = s.padRight();
+
+    // Explicit width = min-content is that width
+    if (s.width) |w| return w;
+
+    // Text nodes: measure each word, return widest
+    if (node.text) |text| {
+        if (_measure_fn) |measure| {
+            var max_word_w: f32 = 0;
+            var i: usize = 0;
+            while (i < text.len) {
+                // Skip whitespace
+                while (i < text.len and (text[i] == ' ' or text[i] == '\n')) : (i += 1) {}
+                if (i >= text.len) break;
+                // Find word end
+                const word_start = i;
+                while (i < text.len and text[i] != ' ' and text[i] != '\n') : (i += 1) {}
+                const word = text[word_start..i];
+                const m = measure(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines);
+                if (m.width > max_word_w) max_word_w = m.width;
+            }
+            return max_word_w + pad_l + pad_r;
+        }
+        return pad_l + pad_r;
+    }
+
+    if (node.children.len == 0) return pad_l + pad_r;
+
+    const is_row = s.flex_direction == .row;
+    const gap = s.gap;
+    var min_w: f32 = 0;
+    var vis_count: usize = 0;
+
+    for (node.children) |*child| {
+        if (child.style.display == .none) continue;
+        if (child.style.position == .absolute) continue;
+        const child_min = computeMinContentW(child);
+        if (is_row) {
+            min_w += child_min;
+            vis_count += 1;
+        } else {
+            if (child_min > min_w) min_w = child_min;
+        }
+    }
+
+    if (is_row and vis_count > 1) {
+        min_w += @as(f32, @floatFromInt(vis_count - 1)) * gap;
+    }
+
+    return min_w + pad_l + pad_r;
+}
+
 // ── Layout ──────────────────────────────────────────────────────────────────
 
 /// Lay out a node and all its descendants.
@@ -662,6 +726,21 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 for (ls..ls + lc) |i| {
                     const amount = (child_shrink[i] * child_basis[i] / total_shrink_scaled) * shrink_overflow;
                     child_basis[i] -= amount;
+                }
+            }
+
+            // Min-content floor: in row layout, prevent items from shrinking
+            // below their minimum content width (CSS min-width: auto).
+            // Only applies when child has no explicit minWidth set.
+            if (is_row) {
+                for (ls..ls + lc) |i| {
+                    const child_idx_mc = visible_indices[i];
+                    const child_mc = &node.children[child_idx_mc];
+                    if (child_mc.style.min_width != null) continue;
+                    const mcw = computeMinContentW(child_mc);
+                    if (child_basis[i] < mcw) {
+                        child_basis[i] = mcw;
+                    }
                 }
             }
         }

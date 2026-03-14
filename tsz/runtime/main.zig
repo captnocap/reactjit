@@ -243,12 +243,43 @@ const Painter = struct {
             _ = c.SDL_RenderSetClipRect(self.renderer, &clip);
         }
 
-        // ── Paint children with scroll offset ────────────────────
+        // ── Paint children with scroll offset (z-index sorted) ────
         const child_scroll_x = scroll_offset_x + if (needs_clip) node.scroll_x else @as(f32, 0);
         const child_scroll_y = scroll_offset_y + if (needs_clip) node.scroll_y else @as(f32, 0);
 
+        // Check if any child has non-zero z_index
+        var needs_zsort = false;
         for (node.children) |*child| {
-            self.paintTreeWithOpacity(child, child_scroll_x, child_scroll_y, effective_opacity);
+            if (child.style.z_index != 0) {
+                needs_zsort = true;
+                break;
+            }
+        }
+
+        if (needs_zsort and node.children.len <= 512) {
+            // Build sorted index array
+            var indices: [512]u16 = undefined;
+            for (0..node.children.len) |ci| {
+                indices[ci] = @intCast(ci);
+            }
+            // Insertion sort by z_index (stable, small N)
+            var si: usize = 1;
+            while (si < node.children.len) : (si += 1) {
+                const key_idx = indices[si];
+                const key_z = node.children[key_idx].style.z_index;
+                var sj: usize = si;
+                while (sj > 0 and node.children[indices[sj - 1]].style.z_index > key_z) : (sj -= 1) {
+                    indices[sj] = indices[sj - 1];
+                }
+                indices[sj] = key_idx;
+            }
+            for (0..node.children.len) |ci| {
+                self.paintTreeWithOpacity(&node.children[indices[ci]], child_scroll_x, child_scroll_y, effective_opacity);
+            }
+        } else {
+            for (node.children) |*child| {
+                self.paintTreeWithOpacity(child, child_scroll_x, child_scroll_y, effective_opacity);
+            }
         }
 
         // ── Restore previous clip rect ───────────────────────────

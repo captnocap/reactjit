@@ -110,6 +110,20 @@ const HARDCODED_FALLBACK_PATHS = [_][*:0]const u8{
     "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
 };
 
+// ── Measurement cache types ──────────────────────────────────────────────────
+
+const MCACHE_SIZE = 512;
+
+const MeasureCacheKey = struct {
+    text_ptr: usize,
+    text_len: usize,
+    size_px: u16,
+    max_width_i: i32,
+    letter_spacing_i: i16,
+    line_height_i: i16,
+    max_lines: u16,
+};
+
 pub const TextEngine = struct {
     library: c.FT_Library,
     face: c.FT_Face,
@@ -125,6 +139,11 @@ pub const TextEngine = struct {
     cache_keys: [MAX_CACHED_GLYPHS]GlyphKey,
     cache_vals: [MAX_CACHED_GLYPHS]GlyphInfo,
     cache_count: usize,
+
+    // Text measurement cache — avoids re-measuring identical text every frame
+    measure_cache_keys: [MCACHE_SIZE]MeasureCacheKey,
+    measure_cache_vals: [MCACHE_SIZE]layout.TextMetrics,
+    measure_cache_valid: [MCACHE_SIZE]bool,
 
     pub fn init(renderer: *c.SDL_Renderer, font_path: [*:0]const u8) !TextEngine {
         var library: c.FT_Library = undefined;
@@ -178,7 +197,43 @@ pub const TextEngine = struct {
             .cache_keys = undefined,
             .cache_vals = undefined,
             .cache_count = 0,
+            .measure_cache_keys = undefined,
+            .measure_cache_vals = undefined,
+            .measure_cache_valid = [_]bool{false} ** MCACHE_SIZE,
         };
+    }
+
+    /// Clear the measurement cache (call on font changes or major state resets).
+    pub fn clearMeasureCache(self: *TextEngine) void {
+        @memset(&self.measure_cache_valid, false);
+    }
+
+    fn measureCacheHash(key: MeasureCacheKey) usize {
+        var h: usize = key.text_ptr;
+        h = h *% 31 +% key.text_len;
+        h = h *% 31 +% @as(usize, key.size_px);
+        h = h *% 31 +% @as(usize, @intCast(@as(u32, @bitCast(key.max_width_i))));
+        h = h *% 31 +% @as(usize, @intCast(@as(u16, @bitCast(key.letter_spacing_i))));
+        h = h *% 31 +% @as(usize, @intCast(@as(u16, @bitCast(key.line_height_i))));
+        h = h *% 31 +% @as(usize, key.max_lines);
+        return h % MCACHE_SIZE;
+    }
+
+    fn measureCacheLookup(self: *TextEngine, key: MeasureCacheKey) ?layout.TextMetrics {
+        const idx = measureCacheHash(key);
+        if (self.measure_cache_valid[idx] and
+            std.meta.eql(self.measure_cache_keys[idx], key))
+        {
+            return self.measure_cache_vals[idx];
+        }
+        return null;
+    }
+
+    fn measureCacheStore(self: *TextEngine, key: MeasureCacheKey, val: layout.TextMetrics) void {
+        const idx = measureCacheHash(key);
+        self.measure_cache_keys[idx] = key;
+        self.measure_cache_vals[idx] = val;
+        self.measure_cache_valid[idx] = true;
     }
 
     pub fn deinit(self: *TextEngine) void {
@@ -542,10 +597,24 @@ pub const TextEngine = struct {
         return self.measureTextWrappedEx(text, size_px, max_width, 0, 0, 0);
     }
 
-    /// Measure text with wrapping + extended params.
+    /// Measure text with wrapping + extended params. Uses measurement cache.
     pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16) layout.TextMetrics {
         if (max_width <= 0) {
             return self.measureTextEx(text, size_px, letter_spacing, line_height_override, max_lines);
+        }
+
+        // Check measurement cache
+        const cache_key = MeasureCacheKey{
+            .text_ptr = @intFromPtr(text.ptr),
+            .text_len = text.len,
+            .size_px = size_px,
+            .max_width_i = @intFromFloat(max_width * 10),
+            .letter_spacing_i = @intFromFloat(letter_spacing * 10),
+            .line_height_i = @intFromFloat(line_height_override * 10),
+            .max_lines = max_lines,
+        };
+        if (self.measureCacheLookup(cache_key)) |cached| {
+            return cached;
         }
 
         const lm = self.lineMetrics(size_px);
@@ -578,11 +647,13 @@ pub const TextEngine = struct {
             if (lw > widest) widest = lw;
         }
 
-        return .{
+        const result = layout.TextMetrics{
             .width = @min(widest, max_width),
             .height = effective_lh * @as(f32, @floatFromInt(line_count)),
             .ascent = lm.ascent,
         };
+        self.measureCacheStore(cache_key, result);
+        return result;
     }
 
     /// Measure the min-content width of text (width of the longest word).
