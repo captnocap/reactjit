@@ -36,13 +36,13 @@ pub const Runner = struct {
     }
 
     /// Get a timestamp string like "[12:34:56] "
-    fn timestamp() [12]u8 {
+    fn timestamp() [11]u8 {
         const epoch = std.time.timestamp();
         const day_secs: u64 = @intCast(@mod(epoch, 86400));
         const h: u8 = @intCast(day_secs / 3600);
         const m: u8 = @intCast((day_secs % 3600) / 60);
         const s: u8 = @intCast(day_secs % 60);
-        var buf: [12]u8 = undefined;
+        var buf: [11]u8 = undefined;
         _ = std.fmt.bufPrint(&buf, "[{d:0>2}:{d:0>2}:{d:0>2}] ", .{ h, m, s }) catch {};
         return buf;
     }

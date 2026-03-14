@@ -754,22 +754,125 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
     var pop_running = true;
     var pop_w: f32 = 800;
     var pop_h: f32 = 500;
+    var pop_dirty = true;
+    var pop_mx: f32 = 0;
+    var pop_my: f32 = 0;
+
+    // Selection state for popout
+    var psel_start_line: usize = 0;
+    var psel_start_char: usize = 0;
+    var psel_end_line: usize = 0;
+    var psel_end_char: usize = 0;
+    var psel_active: bool = false;
+    var psel_dragging: bool = false;
+    var psel_all: bool = false;
+    var psel_click_time: u32 = 0;
+    var psel_click_count: u32 = 0;
+
+    // Visible line tracking for hit testing
+    var pop_vis_starts: [512]usize = undefined;
+    var pop_vis_ends: [512]usize = undefined;
+    var pop_vis_ys: [512]f32 = undefined;
+    var pop_vis_count: usize = 0;
+
+    const pop_font: u16 = 12;
+    const pop_text_x: f32 = 8;
 
     while (pop_running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
+            pop_dirty = true;
             switch (event.type) {
-                c.SDL_QUIT, c.SDL_WINDOWEVENT => {
-                    if (event.type == c.SDL_QUIT) { pop_running = false; }
-                    else if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) { pop_running = false; }
+                c.SDL_QUIT => pop_running = false,
+                c.SDL_WINDOWEVENT => {
+                    if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) pop_running = false
                     else if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                         pop_w = @floatFromInt(event.window.data1);
                         pop_h = @floatFromInt(event.window.data2);
                     }
                 },
                 c.SDL_KEYDOWN => {
+                    const ctrl = (event.key.keysym.mod & c.KMOD_CTRL) != 0;
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) pop_running = false;
+                    if (ctrl and event.key.keysym.sym == c.SDLK_a) {
+                        psel_all = true;
+                        psel_active = true;
+                    }
+                    if (ctrl and event.key.keysym.sym == c.SDLK_c) {
+                        const cur = if (runner.getActive()) |a| a.getOutput() else output;
+                        if (psel_all) {
+                            if (cur.len > 0 and cur.len < 16383) {
+                                var clip: [16384]u8 = undefined;
+                                @memcpy(clip[0..cur.len], cur);
+                                clip[cur.len] = 0;
+                                _ = c.SDL_SetClipboardText(@ptrCast(&clip));
+                            }
+                        } else if (psel_active and pop_vis_count > 0) {
+                            var clip: [16384]u8 = undefined;
+                            var cp: usize = 0;
+                            const lo = @min(psel_start_line, psel_end_line);
+                            const hi = @max(psel_start_line, psel_end_line);
+                            for (lo..hi + 1) |pli| {
+                                if (pli >= pop_vis_count) break;
+                                const cur2 = if (runner.getActive()) |a| a.getOutput() else output;
+                                const txt = cur2[pop_vis_starts[pli]..pop_vis_ends[pli]];
+                                var s0: usize = 0;
+                                var s1: usize = txt.len;
+                                if (lo == hi) { s0 = @min(psel_start_char, psel_end_char); s1 = @max(psel_start_char, psel_end_char); } else if (pli == lo) { s0 = if (psel_start_line <= psel_end_line) psel_start_char else psel_end_char; } else if (pli == hi) { s1 = if (psel_start_line <= psel_end_line) psel_end_char else psel_start_char; }
+                                s0 = @min(s0, txt.len);
+                                s1 = @min(s1, txt.len);
+                                if (s1 > s0) {
+                                    const n = @min(s1 - s0, clip.len - cp - 2);
+                                    @memcpy(clip[cp .. cp + n], txt[s0 .. s0 + n]);
+                                    cp += n;
+                                    if (pli < hi and cp < clip.len - 1) { clip[cp] = '\n'; cp += 1; }
+                                }
+                            }
+                            if (cp > 0) { clip[cp] = 0; _ = c.SDL_SetClipboardText(@ptrCast(&clip)); }
+                        }
+                    }
                 },
+                c.SDL_MOUSEMOTION => {
+                    pop_mx = @floatFromInt(event.motion.x);
+                    pop_my = @floatFromInt(event.motion.y);
+                    if (psel_dragging) {
+                        const lh2 = pop_te.lineHeight(pop_font);
+                        for (0..pop_vis_count) |pli| {
+                            if (pop_my >= pop_vis_ys[pli] and pop_my < pop_vis_ys[pli] + lh2) {
+                                const cur = if (runner.getActive()) |a| a.getOutput() else output;
+                                const txt = cur[pop_vis_starts[pli]..pop_vis_ends[pli]];
+                                psel_end_line = pli;
+                                psel_end_char = pop_te.hitTestLine(txt, pop_mx - pop_text_x, pop_font);
+                                break;
+                            }
+                        }
+                    }
+                },
+                c.SDL_MOUSEBUTTONDOWN => {
+                    psel_all = false;
+                    const lh2 = pop_te.lineHeight(pop_font);
+                    const now = c.SDL_GetTicks();
+                    for (0..pop_vis_count) |pli| {
+                        if (pop_my >= pop_vis_ys[pli] and pop_my < pop_vis_ys[pli] + lh2) {
+                            const cur = if (runner.getActive()) |a| a.getOutput() else output;
+                            const txt = cur[pop_vis_starts[pli]..pop_vis_ends[pli]];
+                            const ci = pop_te.hitTestLine(txt, pop_mx - pop_text_x, pop_font);
+                            if (now -% psel_click_time < 400) { psel_click_count += 1; } else { psel_click_count = 1; }
+                            psel_click_time = now;
+                            if (psel_click_count >= 2) {
+                                psel_start_line = pli; psel_start_char = 0;
+                                psel_end_line = pli; psel_end_char = txt.len;
+                                psel_active = true; psel_dragging = false;
+                            } else {
+                                psel_start_line = pli; psel_start_char = ci;
+                                psel_end_line = pli; psel_end_char = ci;
+                                psel_active = true; psel_dragging = true;
+                            }
+                            break;
+                        }
+                    }
+                },
+                c.SDL_MOUSEBUTTONUP => { psel_dragging = false; },
                 c.SDL_MOUSEWHEEL => {
                     pop_scroll -= @as(f32, @floatFromInt(event.wheel.y)) * 20.0;
                     pop_scroll = @max(0, pop_scroll);
@@ -778,10 +881,12 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
             }
         }
 
-        // Re-read output (may have grown)
-        const cur_output = if (runner.getActive()) |a| a.getOutput() else output;
+        if (!pop_dirty) { c.SDL_Delay(16); continue; }
+        pop_dirty = false;
 
-        // Split into lines
+        const cur_output = if (runner.getActive()) |a| a.getOutput() else output;
+        if (runner.getActive() != null) pop_dirty = true; // keep refreshing while running
+
         var starts: [512]usize = undefined;
         var ends: [512]usize = undefined;
         var nlines: usize = 0;
@@ -795,7 +900,7 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
             scan = if (nl) |n| scan + n + 1 else cur_output.len;
         }
 
-        const lh = pop_te.lineHeight(12);
+        const lh = pop_te.lineHeight(pop_font);
         const max_vis: usize = @intFromFloat(pop_h / lh);
         const max_scr = if (nlines > max_vis) @as(f32, @floatFromInt(nlines - max_vis)) * lh else 0;
         pop_scroll = @min(pop_scroll, max_scr);
@@ -804,11 +909,37 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
         _ = c.SDL_SetRenderDrawColor(pop_rend, 18, 18, 24, 255);
         _ = c.SDL_RenderClear(pop_rend);
 
+        pop_vis_count = 0;
         var py: f32 = 4;
         var li = first;
         while (li < nlines and py < pop_h) {
+            const vi = pop_vis_count;
+            if (vi < 512) {
+                pop_vis_starts[vi] = starts[li];
+                pop_vis_ends[vi] = ends[li];
+                pop_vis_ys[vi] = py;
+                pop_vis_count += 1;
+            }
+
             if (ends[li] > starts[li]) {
                 const line = cur_output[starts[li]..ends[li]];
+
+                // Selection highlight
+                if (psel_all) {
+                    pop_te.drawSelectionRect(line, pop_text_x, py, pop_font, 0, line.len, Color.rgba(60, 120, 200, 140));
+                } else if (psel_active) {
+                    const lo = @min(psel_start_line, psel_end_line);
+                    const hi = @max(psel_start_line, psel_end_line);
+                    if (vi >= lo and vi <= hi) {
+                        var s0: usize = 0;
+                        var s1: usize = line.len;
+                        if (lo == hi) { s0 = @min(psel_start_char, psel_end_char); s1 = @max(psel_start_char, psel_end_char); } else if (vi == lo) { s0 = if (psel_start_line <= psel_end_line) psel_start_char else psel_end_char; } else if (vi == hi) { s1 = if (psel_start_line <= psel_end_line) psel_end_char else psel_start_char; }
+                        s0 = @min(s0, line.len);
+                        s1 = @min(s1, line.len);
+                        if (s1 > s0) pop_te.drawSelectionRect(line, pop_text_x, py, pop_font, s0, s1, Color.rgba(60, 120, 200, 140));
+                    }
+                }
+
                 const col = if (std.mem.indexOf(u8, line, "FAIL") != null or std.mem.indexOf(u8, line, "error") != null)
                     Color.rgb(235, 87, 87)
                 else if (std.mem.indexOf(u8, line, "PASS") != null or std.mem.indexOf(u8, line, "Built") != null)
@@ -817,7 +948,7 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
                     Color.rgb(78, 201, 176)
                 else
                     Color.rgb(170, 170, 185);
-                pop_te.drawText(line, 8, py, 12, col);
+                pop_te.drawText(line, pop_text_x, py, pop_font, col);
             }
             py += lh;
             li += 1;
