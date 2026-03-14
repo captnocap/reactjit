@@ -261,6 +261,7 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkLibC();
         engine_exe.linkSystemLibrary("SDL2");
         engine_exe.linkSystemLibrary("freetype");
+        engine_exe.linkSystemLibrary("curl");
         if (tsz_os == .macos) {
             engine_exe.linkFramework("OpenGL");
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
@@ -276,6 +277,7 @@ pub fn build(b: *std.Build) void {
         } else {
             engine_exe.linkSystemLibrary("GL");
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
         engine_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         engine_exe.root_module.addCSourceFile(.{
@@ -313,6 +315,7 @@ pub fn build(b: *std.Build) void {
         app_exe.linkSystemLibrary("SDL2");
         app_exe.linkSystemLibrary("freetype");
         if (tsz_os != .windows) app_exe.linkSystemLibrary("mpv");
+        app_exe.linkSystemLibrary("curl");
         if (tsz_os == .macos) {
             app_exe.linkFramework("OpenGL");
             app_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
@@ -328,6 +331,7 @@ pub fn build(b: *std.Build) void {
         } else {
             app_exe.linkSystemLibrary("GL");
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
         app_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         app_exe.root_module.addCSourceFile(.{
