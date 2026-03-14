@@ -13,7 +13,7 @@
 //!   - padding (all sides + per-side)
 //!   - margin (all sides + per-side)
 //!   - gap (between items and between lines)
-//!   - width, height (pixel values)
+//!   - width, height (pixels and percentages)
 //!   - minWidth, maxWidth, minHeight, maxHeight
 //!   - aspectRatio (derive missing dimension)
 //!   - position: relative, absolute (out-of-flow via top/left/right/bottom)
@@ -266,6 +266,16 @@ pub const Node = struct {
 
 // ── Clamp ───────────────────────────────────────────────────────────────────
 
+// ── Percentage Resolution ────────────────────────────────────────────────────
+// Percentages are encoded as negative values: -0.5 = 50% of parent.
+// Pixel values are always positive. This avoids needing a Dimension union type.
+
+fn resolveMaybePct(val: ?f32, parent: f32) ?f32 {
+    const v = val orelse return null;
+    if (v < 0) return (-v) * parent; // percentage (e.g. -0.5 = 50%)
+    return v; // pixels
+}
+
 fn clamp(val: f32, min_val: ?f32, max_val: ?f32) f32 {
     var v = val;
     if (min_val) |mn| {
@@ -505,8 +515,6 @@ fn computeMinContentW(node: *Node) f32 {
 /// px, py: position allocated by parent
 /// pw, ph: available width/height from parent
 pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
-    _ = ph; // Used in future for percentage resolution
-
     // Budget guard: prevent infinite layout loops
     _layout_count += 1;
     if (_layout_count > LAYOUT_BUDGET) return;
@@ -519,7 +527,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         return;
     }
 
-    // ── Resolve own dimensions ──────────────────────────────────────
+    // ── Resolve own dimensions (with percentage support) ────────────
+    // Percentages are encoded as negative values: -0.5 = 50% of parent.
     var w: f32 = undefined;
     var h: ?f32 = null;
 
@@ -527,22 +536,22 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (node._flex_w) |fw| {
         w = fw;
         node._flex_w = null;
-    } else if (s.width) |ew| {
+    } else if (resolveMaybePct(s.width, pw)) |ew| {
         w = ew;
     } else {
         w = pw; // fill parent
     }
-    w = clamp(w, s.min_width, s.max_width);
+    w = clamp(w, resolveMaybePct(s.min_width, pw), resolveMaybePct(s.max_width, pw));
 
     // Height
     if (node._stretch_h) |sh| {
         h = sh;
         node._stretch_h = null;
-    } else if (s.height) |eh| {
+    } else if (resolveMaybePct(s.height, ph)) |eh| {
         h = eh;
     }
     if (h) |*hh| {
-        hh.* = clamp(hh.*, s.min_height, s.max_height);
+        hh.* = clamp(hh.*, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
     }
 
     // ── Aspect ratio ───────────────────────────────────────────────
@@ -553,7 +562,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             } else if (s.height != null and s.width == null and node._flex_w == null) {
                 if (h) |hh| {
                     w = hh * ar;
-                    w = clamp(w, s.min_width, s.max_width);
+                    w = clamp(w, resolveMaybePct(s.min_width, pw), resolveMaybePct(s.max_width, pw));
                 }
             }
         }
@@ -611,16 +620,16 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         if (visible_count >= max_children) break;
 
         const cs = child.style;
-        const cw = cs.width orelse estimateIntrinsicWidth(child);
-        const ch_val = cs.height orelse estimateIntrinsicHeight(child, inner_w);
-        const cw_clamped = clamp(cw, cs.min_width, cs.max_width);
-        const ch_clamped = clamp(ch_val, cs.min_height, cs.max_height);
+        const cw = resolveMaybePct(cs.width, inner_w) orelse estimateIntrinsicWidth(child);
+        const ch_val = resolveMaybePct(cs.height, inner_h) orelse estimateIntrinsicHeight(child, inner_w);
+        const cw_clamped = clamp(cw, resolveMaybePct(cs.min_width, inner_w), resolveMaybePct(cs.max_width, inner_w));
+        const ch_clamped = clamp(ch_val, resolveMaybePct(cs.min_height, inner_h), resolveMaybePct(cs.max_height, inner_h));
 
         const grow = cs.flex_grow;
         const shrink = cs.flex_shrink orelse 1.0; // CSS default
 
         // Basis: flexBasis > width/height > intrinsic
-        const basis = cs.flex_basis orelse if (is_row) cw_clamped else ch_clamped;
+        const basis = resolveMaybePct(cs.flex_basis, if (is_row) inner_w else inner_h) orelse if (is_row) cw_clamped else ch_clamped;
 
         const cm_l = cs.marLeft();
         const cm_r = cs.marRight();
@@ -754,7 +763,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             if (child_rm.text == null) continue;
             if (is_row) {
                 if (child_rm.style.height != null) continue;
-                const final_w = clamp(child_basis[i], child_rm.style.min_width, child_rm.style.max_width);
+                const final_w = clamp(child_basis[i], resolveMaybePct(child_rm.style.min_width, inner_w), resolveMaybePct(child_rm.style.max_width, inner_w));
                 const prev_w = child_main_size[i];
                 if (@abs(final_w - prev_w) > 0.5) {
                     const cpad_l = child_rm.style.padLeft();
@@ -763,17 +772,17 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     const cpad_b = child_rm.style.padBottom();
                     const constrain_w = final_w - cpad_l - cpad_r;
                     const m_rm = measureNodeTextW(child_rm, if (constrain_w > 0) constrain_w else 0);
-                    child_cross_size[i] = clamp(m_rm.height + cpad_t + cpad_b, child_rm.style.min_height, child_rm.style.max_height);
+                    child_cross_size[i] = clamp(m_rm.height + cpad_t + cpad_b, resolveMaybePct(child_rm.style.min_height, inner_h), resolveMaybePct(child_rm.style.max_height, inner_h));
                 }
             } else {
-                const final_w = child_rm.style.width orelse inner_w;
+                const final_w = resolveMaybePct(child_rm.style.width, inner_w) orelse inner_w;
                 const cpad_l = child_rm.style.padLeft();
                 const cpad_r = child_rm.style.padRight();
                 const cpad_t = child_rm.style.padTop();
                 const cpad_b = child_rm.style.padBottom();
                 const constrain_w = final_w - cpad_l - cpad_r;
                 const m_rm = measureNodeTextW(child_rm, if (constrain_w > 0) constrain_w else 0);
-                const new_h = clamp(m_rm.height + cpad_t + cpad_b, child_rm.style.min_height, child_rm.style.max_height);
+                const new_h = clamp(m_rm.height + cpad_t + cpad_b, resolveMaybePct(child_rm.style.min_height, inner_h), resolveMaybePct(child_rm.style.max_height, inner_h));
                 if (child_rm.style.height == null) {
                     child_basis[i] = new_h;
                     child_main_size[i] = new_h;
@@ -849,7 +858,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
 
             if (is_row) {
                 cx = x + pad_l + cursor + child_main_margin_start[i];
-                cw_final = clamp(child_basis[i], child.style.min_width, child.style.max_width);
+                cw_final = clamp(child_basis[i], resolveMaybePct(child.style.min_width, inner_w), resolveMaybePct(child.style.max_width, inner_w));
                 ch_final = child_cross_size[i];
 
                 const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
@@ -860,14 +869,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     .stretch => {
                         cy = y + pad_t + cross_cursor + child_cross_margin_start[i];
                         if (child.style.height == null) {
-                            ch_final = clamp(cross_avail, child.style.min_height, child.style.max_height);
+                            ch_final = clamp(cross_avail, resolveMaybePct(child.style.min_height, inner_h), resolveMaybePct(child.style.max_height, inner_h));
                         }
                     },
                     .start => cy = y + pad_t + cross_cursor + child_cross_margin_start[i],
                 }
             } else {
                 cy = y + pad_t + cursor + child_main_margin_start[i];
-                ch_final = clamp(child_basis[i], child.style.min_height, child.style.max_height);
+                ch_final = clamp(child_basis[i], resolveMaybePct(child.style.min_height, inner_h), resolveMaybePct(child.style.max_height, inner_h));
                 cw_final = child_cross_size[i];
 
                 const cross_avail = line_cross - child_cross_margin_start[i] - child_cross_margin_end[i];
@@ -878,7 +887,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     .stretch => {
                         cx = x + pad_l + cross_cursor + child_cross_margin_start[i];
                         if (child.style.width == null) {
-                            cw_final = clamp(cross_avail, child.style.min_width, child.style.max_width);
+                            cw_final = clamp(cross_avail, resolveMaybePct(child.style.min_width, inner_w), resolveMaybePct(child.style.max_width, inner_w));
                         }
                     },
                     .start => cx = x + pad_l + cross_cursor + child_cross_margin_start[i],
@@ -947,7 +956,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             h = content_main_end + pad_b;
         }
         if (h) |*hh| {
-            hh.* = clamp(hh.*, s.min_height, s.max_height);
+            hh.* = clamp(hh.*, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
         }
     }
 
@@ -969,26 +978,26 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
 
         // Resolve width: explicit > (left+right constraint) > intrinsic
         var abs_w: f32 = undefined;
-        if (acs.width) |ew| {
+        if (resolveMaybePct(acs.width, inner_w)) |ew| {
             abs_w = ew;
         } else if (acs.left != null and acs.right != null) {
             abs_w = inner_w - (acs.left orelse 0) - (acs.right orelse 0);
         } else {
             abs_w = estimateIntrinsicWidth(abs_child);
         }
-        abs_w = clamp(abs_w, acs.min_width, acs.max_width);
+        abs_w = clamp(abs_w, resolveMaybePct(acs.min_width, inner_w), resolveMaybePct(acs.max_width, inner_w));
 
         // Resolve height: explicit > (top+bottom constraint) > intrinsic
         const abs_inner_h = resolved_h - pad_t - pad_b;
         var abs_h: f32 = undefined;
-        if (acs.height) |eh| {
+        if (resolveMaybePct(acs.height, abs_inner_h)) |eh| {
             abs_h = eh;
         } else if (acs.top != null and acs.bottom != null) {
             abs_h = abs_inner_h - (acs.top orelse 0) - (acs.bottom orelse 0);
         } else {
             abs_h = estimateIntrinsicHeight(abs_child, abs_w);
         }
-        abs_h = clamp(abs_h, acs.min_height, acs.max_height);
+        abs_h = clamp(abs_h, resolveMaybePct(acs.min_height, abs_inner_h), resolveMaybePct(acs.max_height, abs_inner_h));
 
         // Position: top/left/right/bottom relative to parent padding box
         var abs_x: f32 = x + pad_l;

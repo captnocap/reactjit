@@ -1223,9 +1223,19 @@ pub const Generator = struct {
                     try fields.appendSlice(self.alloc, val);
                 } else if (mapStyleKey(key)) |zig_key| {
                     // Numeric style property — handle bare numbers and CSS unit strings
+                    // Percentages are encoded as negative values: 50% → -0.5
                     if (self.curKind() == .string) {
                         const str_val = try self.parseStringAttrInline();
-                        if (parseCSSValue(str_val)) |px| {
+                        if (std.mem.endsWith(u8, str_val, "%")) {
+                            // Percentage: "50%" → -0.5 (negative = percentage encoding)
+                            if (std.fmt.parseFloat(f32, str_val[0 .. str_val.len - 1]) catch null) |pct| {
+                                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                                try fields.appendSlice(self.alloc, ".");
+                                try fields.appendSlice(self.alloc, zig_key);
+                                try fields.appendSlice(self.alloc, " = ");
+                                try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{-(pct / 100.0)}));
+                            }
+                        } else if (parseCSSValue(str_val)) |px| {
                             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                             try fields.appendSlice(self.alloc, ".");
                             try fields.appendSlice(self.alloc, zig_key);
