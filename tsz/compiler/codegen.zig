@@ -3100,9 +3100,22 @@ pub const Generator = struct {
                         },
                     }
                 } else if (std.mem.indexOf(u8, expr, ".")) |dot_pos| blk: {
-                    // Object property in template: ${user.name}
+                    // Dotted expression in template: ${obj.field} or ${array.length}
                     const obj_name = expr[0..dot_pos];
                     const field_name = expr[dot_pos + 1 ..];
+
+                    // Array state property: ${items.length}
+                    if (self.isArrayState(obj_name)) |arr_state_idx| {
+                        if (std.mem.eql(u8, field_name, "length")) {
+                            const arr_slot = self.arraySlotId(arr_state_idx);
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot}));
+                            break :blk;
+                        }
+                    }
+
                     if (self.isObjectState(obj_name)) |obj_idx| {
                         if (self.resolveObjectField(obj_idx, field_name)) |state_idx| {
                             const rid = self.regularSlotId(state_idx);
