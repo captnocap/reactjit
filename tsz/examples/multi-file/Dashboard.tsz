@@ -1,0 +1,44 @@
+// Dashboard — the root component
+//
+// THIS IS THE SINGLE SOURCE OF TRUTH.
+//
+// Run: tsz build tsz/examples/multi-file/Dashboard.tsz
+//
+// What happens:
+//   1. Compiler reads Dashboard.tsz
+//   2. Finds imports → reads style.cls.tsz, StatusBar.tsz, etc.
+//   3. Transitive imports: InfoCard imports style.cls too — deduped
+//   4. Merges all source into one token stream
+//   5. Produces ONE generated_app.zig → ONE native binary
+//
+// 5 .tsz files → 1 .zig file → 1 binary.
+// No Zig. No inline styles. No god files. Just components + classifiers.
+
+import { Page, Section, Row, Spacer, Title, Subtitle } from './style.cls';
+import { StatusBar } from './StatusBar';
+import { InfoCard } from './InfoCard';
+import { ActionButton } from './ActionButton';
+
+function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <C.Page>
+      <C.Section>
+        <C.Title>Multi-File Dashboard</C.Title>
+        <C.Subtitle>5 files compiled into 1 binary</C.Subtitle>
+
+        <C.Row>
+          <InfoCard title="COUNT" value={count} color="#4ec9b0" />
+          <InfoCard title="DOUBLED" value={count * 2} color="#e94560" />
+          <InfoCard title="SQUARED" value={count * count} color="#f5a623" />
+        </C.Row>
+
+        <ActionButton label="Increment" onPress={() => setCount(count + 1)} />
+      </C.Section>
+
+      <C.Spacer />
+      <StatusBar />
+    </C.Page>
+  );
+}

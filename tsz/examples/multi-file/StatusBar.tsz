@@ -1,0 +1,10 @@
+import { Bar, BarText, BarDim } from './style.cls';
+
+function StatusBar() {
+  return (
+    <C.Bar>
+      <C.BarText>Ready</C.BarText>
+      <C.BarDim>tsz v0.1</C.BarDim>
+    </C.Bar>
+  );
+}
