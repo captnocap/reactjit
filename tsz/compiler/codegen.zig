@@ -129,6 +129,20 @@ const LocalVar = struct {
     state_type: StateType, // type hint for template literal formatting
 };
 
+const MAX_COMPUTED_ARRAYS = 8;
+
+const ComputedArrayKind = enum { filter, split };
+
+const ComputedArray = struct {
+    name: []const u8, // .tsz variable name ("filtered", "parts")
+    kind: ComputedArrayKind,
+    element_type: StateType, // .int for filter of int array, .string for split
+    source_slot: u32, // state array slot (filter) or regular string slot (split)
+    predicate_expr: []const u8, // Zig expression for filter predicate (e.g., "_item > 25")
+    predicate_param: []const u8, // lambda param name ("item") — for documentation only
+    separator: []const u8, // split separator (e.g., ",")
+};
+
 const MAX_LET_VARS = 16;
 
 const LetVar = struct {
@@ -207,6 +221,10 @@ const MapInfo = struct {
     inner_count: u32,
     is_self_closing: bool,
     is_text_element: bool,
+    // Computed array source (for filtered.map(), parts.map())
+    is_computed: bool = false,
+    computed_idx: u32 = 0,
+    computed_element_type: StateType = .int,
 };
 
 const MapTemplateResult = struct {
@@ -333,6 +351,11 @@ pub const Generator = struct {
     map_item_param: ?[]const u8,
     map_index_param: ?[]const u8,
 
+    // Computed arrays (.filter(), .split() results)
+    computed_arrays: [MAX_COMPUTED_ARRAYS]ComputedArray,
+    computed_count: u32,
+    map_item_type: ?StateType, // element type of current .map() source (null = i64 default)
+
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
     classifier_primitives: [128][]const u8,
@@ -426,6 +449,9 @@ pub const Generator = struct {
             .map_count = 0,
             .map_item_param = null,
             .map_index_param = null,
+            .computed_arrays = undefined,
+            .computed_count = 0,
+            .map_item_type = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -636,6 +662,13 @@ pub const Generator = struct {
         if (std.mem.eql(u8, name, "hmacSha256")) return 2;
         if (std.mem.eql(u8, name, "hmacSha512")) return 2;
         return 1;
+    }
+
+    fn isComputedArray(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.computed_count) |i| {
+            if (std.mem.eql(u8, self.computed_arrays[i].name, name)) return @intCast(i);
+        }
+        return null;
     }
 
     fn isArrayState(self: *Generator, name: []const u8) ?u32 {
@@ -1946,6 +1979,93 @@ pub const Generator = struct {
                             if (self.curKind() == .semicolon) self.advance_token();
                             continue;
                         }
+
+                        // Computed arrays: items.filter(...) or text.split(...)
+                        if (self.curKind() == .identifier) {
+                            const source_name = self.curText();
+                            const look = self.pos + 1;
+                            if (look + 1 < self.lex.count and self.lex.get(look).kind == .dot) {
+                                const method_tok = self.lex.get(look + 1);
+                                if (method_tok.kind == .identifier) {
+                                    const method = method_tok.text(self.source);
+
+                                    // .filter(): const filtered = items.filter(item => item > 25)
+                                    if (std.mem.eql(u8, method, "filter")) {
+                                        if (self.isArrayState(source_name)) |state_idx| {
+                                            self.advance_token(); // source identifier
+                                            self.advance_token(); // .
+                                            self.advance_token(); // filter
+                                            if (self.curKind() == .lparen) self.advance_token(); // (
+                                            if (self.curKind() == .lparen) self.advance_token(); // optional inner (
+                                            const param_name = self.curText();
+                                            self.advance_token(); // param
+                                            if (self.curKind() == .rparen) self.advance_token(); // optional inner )
+                                            if (self.curKind() == .arrow) self.advance_token(); // =>
+
+                                            // Push param as local var to resolve in predicate
+                                            const saved_lc = self.local_count;
+                                            if (self.local_count < MAX_LOCALS) {
+                                                self.local_vars[self.local_count] = .{ .name = param_name, .expr = "_item", .state_type = .int };
+                                                self.local_count += 1;
+                                            }
+                                            const pred_expr = self.emitStateExpr() catch "";
+                                            self.local_count = saved_lc;
+
+                                            if (self.curKind() == .rparen) self.advance_token(); // closing )
+                                            if (self.computed_count < MAX_COMPUTED_ARRAYS) {
+                                                self.computed_arrays[self.computed_count] = .{
+                                                    .name = var_name,
+                                                    .kind = .filter,
+                                                    .element_type = .int,
+                                                    .source_slot = self.arraySlotId(state_idx),
+                                                    .predicate_expr = pred_expr,
+                                                    .predicate_param = param_name,
+                                                    .separator = "",
+                                                };
+                                                self.computed_count += 1;
+                                            }
+                                            if (self.curKind() == .semicolon) self.advance_token();
+                                            continue;
+                                        }
+                                    }
+
+                                    // .split(): const parts = text.split(",")
+                                    if (std.mem.eql(u8, method, "split")) {
+                                        if (self.isState(source_name)) |state_idx| {
+                                            if (self.stateTypeById(state_idx) == .string) {
+                                                self.advance_token(); // source identifier
+                                                self.advance_token(); // .
+                                                self.advance_token(); // split
+                                                if (self.curKind() == .lparen) self.advance_token(); // (
+                                                var sep: []const u8 = ",";
+                                                if (self.curKind() == .string) {
+                                                    const raw = self.curText();
+                                                    // Strip quotes
+                                                    sep = if (raw.len >= 2) raw[1 .. raw.len - 1] else raw;
+                                                    self.advance_token();
+                                                }
+                                                if (self.curKind() == .rparen) self.advance_token(); // )
+                                                if (self.computed_count < MAX_COMPUTED_ARRAYS) {
+                                                    self.computed_arrays[self.computed_count] = .{
+                                                        .name = var_name,
+                                                        .kind = .split,
+                                                        .element_type = .string,
+                                                        .source_slot = self.regularSlotId(state_idx),
+                                                        .predicate_expr = "",
+                                                        .predicate_param = "",
+                                                        .separator = sep,
+                                                    };
+                                                    self.computed_count += 1;
+                                                }
+                                                if (self.curKind() == .semicolon) self.advance_token();
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         const expr = self.emitStateExpr() catch {
                             self.advance_token();
                             continue;
@@ -3277,6 +3397,17 @@ pub const Generator = struct {
                     const obj_name = expr[0..dot_pos];
                     const field_name = expr[dot_pos + 1 ..];
 
+                    // Computed array property: ${filtered.length}
+                    if (self.isComputedArray(obj_name)) |ci| {
+                        if (std.mem.eql(u8, field_name, "length")) {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, @intCast(_computed_{d}_count))", .{ci}));
+                            break :blk;
+                        }
+                    }
+
                     // Array state property: ${items.length}
                     if (self.isArrayState(obj_name)) |arr_state_idx| {
                         if (std.mem.eql(u8, field_name, "length")) {
@@ -3358,7 +3489,11 @@ pub const Generator = struct {
                         },
                     }
                 } else if (self.map_item_param != null and std.mem.eql(u8, expr, self.map_item_param.?)) {
-                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (self.map_item_type != null and self.map_item_type.? == .string) {
+                        try fmt.appendSlice(self.alloc, "{s}");
+                    } else {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                    }
                     if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                     try args.appendSlice(self.alloc, "_item");
                 } else if (self.map_index_param != null and std.mem.eql(u8, expr, self.map_index_param.?)) {
@@ -4522,6 +4657,105 @@ pub const Generator = struct {
                 }
                 return try self.alloc.dupe(u8, "\"undefined\"");
             }
+            // Computed array: filtered.length, filtered.includes(), filtered[i]
+            if (self.isComputedArray(name)) |ci| {
+                self.advance_token(); // identifier
+                if (self.curKind() == .lbracket) {
+                    self.advance_token(); // [
+                    const index_expr = try self.emitStateExpr();
+                    if (self.curKind() == .rbracket) self.advance_token(); // ]
+                    if (self.computed_arrays[ci].element_type == .string) {
+                        return try std.fmt.allocPrint(self.alloc, "_computed_{d}[@intCast({s})]", .{ ci, index_expr });
+                    }
+                    return try std.fmt.allocPrint(self.alloc, "@as(i64, _computed_{d}[@intCast({s})])", .{ ci, index_expr });
+                }
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // .
+                    if (self.curKind() == .identifier) {
+                        const method = self.curText();
+                        if (std.mem.eql(u8, method, "length")) {
+                            self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(_computed_{d}_count))", .{ci});
+                        }
+                        if (std.mem.eql(u8, method, "includes")) {
+                            self.advance_token(); // includes
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const val_expr = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "(blk_{d}: {{ for (_computed_{d}[0.._computed_{d}_count]) |_el| {{ if (_el == {s}) break :blk_{d} true; }} break :blk_{d} false; }})",
+                                .{ lbl, ci, ci, val_expr, lbl, lbl });
+                        }
+                        if (std.mem.eql(u8, method, "indexOf")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const val_expr = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ for (_computed_{d}[0.._computed_{d}_count], 0..) |_el, _idx| {{ if (_el == {s}) break :blk_{d} @as(i64, @intCast(_idx)); }} break :blk_{d} -1; }})",
+                                .{ lbl, ci, ci, val_expr, lbl, lbl });
+                        }
+                        if (std.mem.eql(u8, method, "find")) {
+                            self.advance_token(); // find
+                            if (self.curKind() == .lparen) self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const item_name = self.curText();
+                            self.advance_token();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            if (self.curKind() == .arrow) self.advance_token();
+                            const saved_lc = self.local_count;
+                            if (self.local_count < MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{ .name = item_name, .expr = "_el", .state_type = self.computed_arrays[ci].element_type };
+                                self.local_count += 1;
+                            }
+                            const pred_expr = try self.emitStateExpr();
+                            self.local_count = saved_lc;
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ for (_computed_{d}[0.._computed_{d}_count]) |_el| {{ if ({s}) break :blk_{d} _el; }} break :blk_{d} 0; }})",
+                                .{ lbl, ci, ci, pred_expr, lbl, lbl });
+                        }
+                        if (std.mem.eql(u8, method, "reduce")) {
+                            self.advance_token(); // reduce
+                            if (self.curKind() == .lparen) self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const acc_name = self.curText();
+                            self.advance_token();
+                            if (self.curKind() == .comma) self.advance_token();
+                            const item_name = self.curText();
+                            self.advance_token();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            if (self.curKind() == .arrow) self.advance_token();
+                            const saved_lc = self.local_count;
+                            if (self.local_count + 1 < MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{ .name = acc_name, .expr = "_acc", .state_type = .int };
+                                self.local_count += 1;
+                                self.local_vars[self.local_count] = .{ .name = item_name, .expr = "_el", .state_type = self.computed_arrays[ci].element_type };
+                                self.local_count += 1;
+                            }
+                            const body_expr = try self.emitStateExpr();
+                            self.local_count = saved_lc;
+                            if (self.curKind() == .comma) self.advance_token();
+                            const initial = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ var _acc: i64 = {s}; for (_computed_{d}[0.._computed_{d}_count]) |_el| {{ _acc = {s}; }} break :blk_{d} _acc; }})",
+                                .{ lbl, initial, ci, ci, body_expr, lbl });
+                        }
+                    }
+                }
+                // Bare computed array name — return count (same as array without .length)
+                return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(_computed_{d}_count))", .{ci});
+            }
+
             // Array state getter: items.length
             if (self.isArrayState(name)) |state_idx| {
                 self.advance_token();
@@ -5206,10 +5440,13 @@ pub const Generator = struct {
 
     fn parseMapExpression(self: *Generator) anyerror![]const u8 {
         const array_name = self.curText();
-        const state_idx = self.isArrayState(array_name) orelse {
+        const computed_idx = self.isComputedArray(array_name);
+        const state_idx = if (computed_idx == null) self.isArrayState(array_name) else null;
+
+        if (computed_idx == null and state_idx == null) {
             self.advance_token();
             return ".{}";
-        };
+        }
 
         self.advance_token(); // identifier (items)
         self.advance_token(); // .
@@ -5239,6 +5476,9 @@ pub const Generator = struct {
         // Set map context for template literal parsing
         self.map_item_param = item_param;
         self.map_index_param = index_param;
+        if (computed_idx) |ci| {
+            self.map_item_type = self.computed_arrays[ci].element_type;
+        }
 
         // Parse the JSX template
         const template = try self.parseMapTemplate();
@@ -5246,6 +5486,7 @@ pub const Generator = struct {
         // Clear map context
         self.map_item_param = null;
         self.map_index_param = null;
+        self.map_item_type = null;
 
         // Skip optional ) after JSX
         if (had_paren and self.curKind() == .rparen) self.advance_token();
@@ -5255,20 +5496,40 @@ pub const Generator = struct {
 
         // Record map info
         if (self.map_count < MAX_MAPS) {
-            self.maps[self.map_count] = .{
-                .array_slot_id = self.arraySlotId(state_idx),
-                .item_param = item_param,
-                .index_param = index_param,
-                .parent_arr_name = "",
-                .child_idx = 0,
-                .outer_style = template.outer_style,
-                .outer_font_size = template.outer_font_size,
-                .outer_text_color = template.outer_text_color,
-                .inner_nodes = template.inner_nodes,
-                .inner_count = template.inner_count,
-                .is_self_closing = template.is_self_closing,
-                .is_text_element = template.is_text_element,
-            };
+            if (computed_idx) |ci| {
+                self.maps[self.map_count] = .{
+                    .array_slot_id = 0,
+                    .item_param = item_param,
+                    .index_param = index_param,
+                    .parent_arr_name = "",
+                    .child_idx = 0,
+                    .outer_style = template.outer_style,
+                    .outer_font_size = template.outer_font_size,
+                    .outer_text_color = template.outer_text_color,
+                    .inner_nodes = template.inner_nodes,
+                    .inner_count = template.inner_count,
+                    .is_self_closing = template.is_self_closing,
+                    .is_text_element = template.is_text_element,
+                    .is_computed = true,
+                    .computed_idx = ci,
+                    .computed_element_type = self.computed_arrays[ci].element_type,
+                };
+            } else {
+                self.maps[self.map_count] = .{
+                    .array_slot_id = self.arraySlotId(state_idx.?),
+                    .item_param = item_param,
+                    .index_param = index_param,
+                    .parent_arr_name = "",
+                    .child_idx = 0,
+                    .outer_style = template.outer_style,
+                    .outer_font_size = template.outer_font_size,
+                    .outer_text_color = template.outer_text_color,
+                    .inner_nodes = template.inner_nodes,
+                    .inner_count = template.inner_count,
+                    .is_self_closing = template.is_self_closing,
+                    .is_text_element = template.is_text_element,
+                };
+            }
             self.map_count += 1;
         }
 
@@ -5818,6 +6079,11 @@ pub const Generator = struct {
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        if (self.computed_count > 0) {
+            for (0..self.computed_count) |ci| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _rebuildComputed{d}();\n", .{ci}));
+            }
+        }
         // Mount effects
         for (0..self.effect_count) |i| {
             if (self.effects[i].kind == .mount) {
@@ -5829,11 +6095,16 @@ pub const Generator = struct {
         // ── pub fn tick() ──
         try out.appendSlice(self.alloc, "pub fn tick() void {\n");
         // State dirty check
-        if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0)) {
+        if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or self.computed_count > 0)) {
             try out.appendSlice(self.alloc, "    if (state.isDirty()) {\n");
             if (self.dyn_count > 0) try out.appendSlice(self.alloc, "        updateDynamicTexts();\n");
             if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
             if (self.cond_count > 0) try out.appendSlice(self.alloc, "        updateConditionals();\n");
+            if (self.computed_count > 0) {
+                for (0..self.computed_count) |ci| {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "        _rebuildComputed{d}();\n", .{ci}));
+                }
+            }
             // Watch effects
             for (0..self.effect_count) |i| {
                 if (self.effects[i].kind == .watch) {
@@ -6113,6 +6384,30 @@ pub const Generator = struct {
             }
         }
 
+        // Computed array pools (.filter(), .split() results)
+        if (self.computed_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Computed arrays ─────────────────────────────────────────────\n");
+            for (0..self.computed_count) |ci| {
+                const ca = self.computed_arrays[ci];
+                switch (ca.kind) {
+                    .filter => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "const MAX_COMPUTED_{d}: usize = 256;\n" ++
+                            "var _computed_{d}: [MAX_COMPUTED_{d}]i64 = undefined;\n" ++
+                            "var _computed_{d}_count: usize = 0;\n",
+                            .{ ci, ci, ci, ci }));
+                    },
+                    .split => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "const MAX_COMPUTED_{d}: usize = 64;\n" ++
+                            "var _computed_{d}: [MAX_COMPUTED_{d}][]const u8 = undefined;\n" ++
+                            "var _computed_{d}_count: usize = 0;\n",
+                            .{ ci, ci, ci, ci }));
+                    },
+                }
+            }
+        }
+
         // Map pools
         if (self.map_count > 0) {
             try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
@@ -6333,19 +6628,71 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "            else => {},\n        }\n    }\n}\n\n");
         }
 
+        // Computed array rebuild functions
+        if (self.computed_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Computed array rebuild ──────────────────────────────────────\n");
+            for (0..self.computed_count) |ci| {
+                const ca = self.computed_arrays[ci];
+                switch (ca.kind) {
+                    .filter => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "fn _rebuildComputed{d}() void {{\n" ++
+                            "    const _src = state.getArraySlot({d});\n" ++
+                            "    _computed_{d}_count = 0;\n" ++
+                            "    for (_src) |_item| {{\n" ++
+                            "        if ({s}) {{\n" ++
+                            "            _computed_{d}[_computed_{d}_count] = _item;\n" ++
+                            "            _computed_{d}_count += 1;\n" ++
+                            "            if (_computed_{d}_count >= MAX_COMPUTED_{d}) break;\n" ++
+                            "        }}\n" ++
+                            "    }}\n" ++
+                            "}}\n\n",
+                            .{ ci, ca.source_slot, ci, ca.predicate_expr, ci, ci, ci, ci, ci }));
+                    },
+                    .split => {
+                        // Separator is a single char (common case)
+                        const sep_char: u8 = if (ca.separator.len > 0) ca.separator[0] else ',';
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "fn _rebuildComputed{d}() void {{\n" ++
+                            "    const _str = state.getSlotString({d});\n" ++
+                            "    _computed_{d}_count = 0;\n" ++
+                            "    var _iter = std.mem.splitScalar(u8, _str, '{c}');\n" ++
+                            "    while (_iter.next()) |_part| {{\n" ++
+                            "        if (_computed_{d}_count >= MAX_COMPUTED_{d}) break;\n" ++
+                            "        _computed_{d}[_computed_{d}_count] = _part;\n" ++
+                            "        _computed_{d}_count += 1;\n" ++
+                            "    }}\n" ++
+                            "}}\n\n",
+                            .{ ci, ca.source_slot, ci, sep_char, ci, ci, ci, ci, ci }));
+                    },
+                }
+            }
+        }
+
         // Map rebuild functions
         if (self.map_count > 0) {
             for (0..self.map_count) |mi| {
                 const m = self.maps[mi];
                 if (m.parent_arr_name.len == 0) continue;
 
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "fn _rebuildMap{d}() void {{\n" ++
-                    "    const items = state.getArraySlot({d});\n" ++
-                    "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
-                    "    for (0.._map_count_{d}) |_i| {{\n" ++
-                    "        const _item = items[_i];\n",
-                    .{ mi, m.array_slot_id, mi, mi, mi }));
+                if (m.is_computed) {
+                    // Source is a computed array
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildMap{d}() void {{\n" ++
+                        "    const items = _computed_{d}[0.._computed_{d}_count];\n" ++
+                        "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
+                        "    for (0.._map_count_{d}) |_i| {{\n" ++
+                        "        const _item = items[_i];\n",
+                        .{ mi, m.computed_idx, m.computed_idx, mi, mi, mi }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildMap{d}() void {{\n" ++
+                        "    const items = state.getArraySlot({d});\n" ++
+                        "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
+                        "    for (0.._map_count_{d}) |_i| {{\n" ++
+                        "        const _item = items[_i];\n",
+                        .{ mi, m.array_slot_id, mi, mi, mi }));
+                }
 
                 // Find dynamic text in inner nodes
                 var has_dyn_text = false;
@@ -6635,6 +6982,13 @@ pub const Generator = struct {
                 }
             }
         }
+        // Initial computed array build (before maps, since maps may read from computed arrays)
+        if (self.computed_count > 0) {
+            for (0..self.computed_count) |ci| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _rebuildComputed{d}();\n", .{ci}));
+            }
+        }
         if (self.map_count > 0) {
             for (0..self.map_count) |mi| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -6696,13 +7050,20 @@ pub const Generator = struct {
             for (0..self.effect_count) |i| {
                 if (self.effects[i].kind == .watch) { has_watch = true; break; }
             }
-            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0 or self.let_count > 0)) {
+            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0 or self.let_count > 0 or self.computed_count > 0)) {
                 try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
                 if (self.let_count > 0) try out.appendSlice(self.alloc, "            computeBody();\n");
                 if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
                 if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
                 if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
                 if (self.overlay_count > 0) try out.appendSlice(self.alloc, "            updateOverlays();\n");
+                // Computed arrays must rebuild BEFORE maps (maps may read from computed arrays)
+                if (self.computed_count > 0) {
+                    for (0..self.computed_count) |ci| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "            _rebuildComputed{d}();\n", .{ci}));
+                    }
+                }
                 if (self.map_count > 0) {
                     for (0..self.map_count) |mi| {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
