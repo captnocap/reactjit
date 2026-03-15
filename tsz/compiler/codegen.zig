@@ -129,6 +129,15 @@ const LocalVar = struct {
     state_type: StateType, // type hint for template literal formatting
 };
 
+const MAX_LET_VARS = 16;
+
+const LetVar = struct {
+    name: []const u8, // .tsz name (e.g., "label")
+    initial: []const u8, // initial value expression
+    state_type: StateType, // inferred type
+    zig_name: []const u8, // runtime var name (e.g., "_let_0")
+};
+
 const ComponentInfo = struct {
     name: []const u8,
     prop_names: [MAX_COMPONENT_PROPS][]const u8,
@@ -335,6 +344,13 @@ pub const Generator = struct {
     local_vars: [MAX_LOCALS]LocalVar,
     local_count: u32,
 
+    // Mutable let vars (runtime variables, not compile-time substitution)
+    let_vars: [MAX_LET_VARS]LetVar,
+    let_count: u32,
+    // Token range of imperative body (let decls + blocks between hooks and return)
+    body_imperative_start: u32,
+    body_imperative_end: u32,
+
     // Components (compile-time inlining)
     components: [MAX_COMPONENTS]ComponentInfo,
     component_count: u32,
@@ -417,6 +433,10 @@ pub const Generator = struct {
             .classifier_count = 0,
             .local_vars = undefined,
             .local_count = 0,
+            .let_vars = undefined,
+            .let_count = 0,
+            .body_imperative_start = 0,
+            .body_imperative_end = 0,
             .components = undefined,
             .component_count = 0,
             .util_funcs = undefined,
@@ -1728,6 +1748,13 @@ pub const Generator = struct {
         return null;
     }
 
+    fn isLetVar(self: *Generator, name: []const u8) ?*const LetVar {
+        for (0..self.let_count) |i| {
+            if (std.mem.eql(u8, self.let_vars[i].name, name)) return &self.let_vars[i];
+        }
+        return null;
+    }
+
     /// Infer the result type of a Zig expression for template literal formatting.
     /// Checks output type (what the expression produces), not input type (what it reads).
     fn inferExprType(self: *Generator, expr: []const u8) StateType {
@@ -1766,19 +1793,93 @@ pub const Generator = struct {
     }
 
     /// Collect local variable declarations between hooks and return.
-    /// Pattern: const <ident> = <expr>;  (not useState/useEffect/useTransition/useSpring)
+    /// const → compile-time substitution. let → runtime mutable var.
+    /// Also records imperative block ranges (switch, if, while, for in body).
     fn collectLocalVars(self: *Generator, func_start: u32) void {
         self.pos = func_start;
         // Skip past function header to body
         while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
         if (self.curKind() == .lbrace) self.advance_token();
 
+        // Track where imperative body starts (after hooks/const, before return)
+        var imperative_start: u32 = 0;
+        var found_imperative = false;
+
         while (self.pos < self.lex.count) {
             if (self.isIdent("return")) break;
 
-            if (self.isIdent("const") or self.isIdent("let")) {
+            // let declaration → mutable runtime variable
+            if (self.isIdent("let")) {
+                if (!found_imperative) {
+                    imperative_start = self.pos;
+                    found_imperative = true;
+                }
+                self.advance_token(); // skip 'let'
+                if (self.curKind() == .lbracket) {
+                    // Skip array destructuring (useState): let [x, y] = ...
+                    self.advance_token();
+                    continue;
+                }
+                if (self.curKind() == .identifier) {
+                    const var_name = self.curText();
+                    self.advance_token();
+                    if (self.curKind() == .equals) {
+                        self.advance_token();
+                        // Skip hooks
+                        if (self.isIdent("useState") or self.isIdent("useEffect") or
+                            self.isIdent("useTransition") or self.isIdent("useSpring"))
+                        {
+                            while (self.pos < self.lex.count and
+                                self.curKind() != .semicolon and !self.isIdent("const") and
+                                !self.isIdent("let") and !self.isIdent("return"))
+                            {
+                                self.advance_token();
+                            }
+                            if (self.curKind() == .semicolon) self.advance_token();
+                            continue;
+                        }
+                        // Parse initial value
+                        const expr = self.emitStateExpr() catch {
+                            self.advance_token();
+                            continue;
+                        };
+                        const st = self.inferExprType(expr);
+                        // Infer type from initial value
+                        const is_string = (expr.len >= 2 and expr[0] == '"') or
+                            std.mem.indexOf(u8, expr, "getSlotString") != null;
+
+                        if (self.let_count < MAX_LET_VARS) {
+                            const zig_name = std.fmt.allocPrint(self.alloc, "_let_{d}", .{self.let_count}) catch "_let_x";
+                            self.let_vars[self.let_count] = .{
+                                .name = var_name,
+                                .initial = expr,
+                                .state_type = if (is_string) .string else st,
+                                .zig_name = zig_name,
+                            };
+                            // Also register as a local var so expressions resolve it
+                            if (self.local_count < MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{
+                                    .name = var_name,
+                                    .expr = if (is_string)
+                                        (std.fmt.allocPrint(self.alloc, "{s}_text", .{zig_name}) catch "_let_x_text")
+                                    else
+                                        zig_name,
+                                    .state_type = if (is_string) .string else st,
+                                };
+                                self.local_count += 1;
+                            }
+                            self.let_count += 1;
+                        }
+                        if (self.curKind() == .semicolon) self.advance_token();
+                        continue;
+                    }
+                }
+                continue;
+            }
+
+            // const declaration → compile-time substitution (existing logic)
+            if (self.isIdent("const")) {
                 self.advance_token();
-                // Skip array destructuring (useState): const [x, y] = ...
                 if (self.curKind() == .lbracket) {
                     self.advance_token();
                     continue;
@@ -1788,11 +1889,9 @@ pub const Generator = struct {
                     self.advance_token();
                     if (self.curKind() == .equals) {
                         self.advance_token();
-                        // Skip known hook calls — these are handled by other phases
                         if (self.isIdent("useState") or self.isIdent("useEffect") or
                             self.isIdent("useTransition") or self.isIdent("useSpring"))
                         {
-                            // Skip to semicolon or next statement
                             while (self.pos < self.lex.count and
                                 self.curKind() != .semicolon and !self.isIdent("const") and
                                 !self.isIdent("let") and !self.isIdent("return") and
@@ -1803,12 +1902,10 @@ pub const Generator = struct {
                             if (self.curKind() == .semicolon) self.advance_token();
                             continue;
                         }
-                        // Parse the expression to get its Zig translation
                         const expr = self.emitStateExpr() catch {
                             self.advance_token();
                             continue;
                         };
-                        // Infer type from expression for template literal formatting
                         const st = self.inferExprType(expr);
 
                         if (self.local_count < MAX_LOCALS) {
@@ -1823,8 +1920,40 @@ pub const Generator = struct {
                         continue;
                     }
                 }
+                continue;
             }
+
+            // Imperative blocks: switch, if, while, for in function body
+            if (self.isIdent("switch") or self.isIdent("if") or
+                self.isIdent("while") or self.isIdent("for"))
+            {
+                if (!found_imperative) {
+                    imperative_start = self.pos;
+                    found_imperative = true;
+                }
+                // Skip past the block (balanced braces)
+                var depth: u32 = 0;
+                while (self.pos < self.lex.count) {
+                    if (self.curKind() == .lbrace) depth += 1;
+                    if (self.curKind() == .rbrace) {
+                        depth -= 1;
+                        if (depth == 0) {
+                            self.advance_token();
+                            break;
+                        }
+                    }
+                    self.advance_token();
+                }
+                continue;
+            }
+
             self.advance_token();
+        }
+
+        // Record imperative body range
+        if (found_imperative) {
+            self.body_imperative_start = imperative_start;
+            self.body_imperative_end = self.pos; // current pos is at 'return'
         }
     }
 
@@ -3531,6 +3660,22 @@ pub const Generator = struct {
                             .float => try std.fmt.allocPrint(self.alloc, "state.setSlotFloat({d}, ({s} {s} {s}));", .{ slot_id, getter, op, rhs }),
                             else => try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, ({s} {s} {s}));", .{ slot_id, getter, op, rhs }),
                         };
+                    }
+                }
+            }
+
+            // Let var assignment: label = expr
+            if (self.isLetVar(name)) |lv| {
+                const peek1 = self.pos + 1;
+                if (peek1 < self.lex.count and self.lex.tokens[peek1].kind == .equals) {
+                    self.advance_token(); // skip identifier
+                    self.advance_token(); // skip =
+                    if (lv.state_type == .string) {
+                        const rhs = try self.emitStateExpr();
+                        return try std.fmt.allocPrint(self.alloc, "{s}_text = {s};", .{ lv.zig_name, rhs });
+                    } else {
+                        const rhs = try self.emitStateExpr();
+                        return try std.fmt.allocPrint(self.alloc, "{s} = {s};", .{ lv.zig_name, rhs });
                     }
                 }
             }
@@ -5742,6 +5887,79 @@ pub const Generator = struct {
             }
         }
 
+        // Let var declarations (mutable runtime variables)
+        if (self.let_count > 0) {
+            try out.appendSlice(self.alloc, "// ── Mutable let vars ────────────────────────────────────────────\n");
+            for (0..self.let_count) |i| {
+                const lv = &self.let_vars[i];
+                if (lv.state_type == .string) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var {s}_text: []const u8 = \"\";\n", .{lv.zig_name}));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var {s}: i64 = 0;\n", .{lv.zig_name}));
+                }
+            }
+            try out.appendSlice(self.alloc, "\n");
+        }
+
+        // computeBody — imperative statements from function body
+        if (self.body_imperative_start > 0 and self.body_imperative_end > self.body_imperative_start) {
+            try out.appendSlice(self.alloc, "fn computeBody() void {\n");
+
+            const saved_pos = self.pos;
+            self.pos = self.body_imperative_start;
+            while (self.pos < self.body_imperative_end and self.curKind() != .eof) {
+                // Skip const declarations (already handled as compile-time subs)
+                if (self.isIdent("const")) {
+                    while (self.pos < self.body_imperative_end and
+                        self.curKind() != .semicolon and !self.isIdent("return"))
+                    {
+                        self.advance_token();
+                    }
+                    if (self.curKind() == .semicolon) self.advance_token();
+                    continue;
+                }
+                if (self.isIdent("return")) break;
+
+                // let x = expr → initialize the let var
+                if (self.isIdent("let")) {
+                    self.advance_token(); // skip 'let'
+                    if (self.curKind() == .identifier) {
+                        const var_name = self.curText();
+                        self.advance_token(); // name
+                        if (self.curKind() == .equals) {
+                            self.advance_token(); // =
+                            if (self.isLetVar(var_name)) |lv| {
+                                const init_expr = self.emitStateExpr() catch "";
+                                if (lv.state_type == .string) {
+                                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "    {s}_text = {s};\n", .{ lv.zig_name, init_expr }));
+                                } else {
+                                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "    {s} = {s};\n", .{ lv.zig_name, init_expr }));
+                                }
+                            }
+                        }
+                    }
+                    if (self.curKind() == .semicolon) self.advance_token();
+                    continue;
+                }
+
+                // Imperative statements (switch, if, while, for, assignments)
+                const stmt = self.emitHandlerExpr() catch break;
+                if (stmt.len > 0) {
+                    try out.appendSlice(self.alloc, "    ");
+                    try out.appendSlice(self.alloc, stmt);
+                    try out.appendSlice(self.alloc, "\n");
+                }
+                while (self.curKind() == .semicolon) self.advance_token();
+            }
+            self.pos = saved_pos;
+
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // Node tree arrays
         try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
         for (self.array_decls.items) |decl| {
@@ -6259,6 +6477,7 @@ pub const Generator = struct {
                 }
             }
         }
+        if (self.let_count > 0) try out.appendSlice(self.alloc, "    computeBody();\n");
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
@@ -6350,8 +6569,9 @@ pub const Generator = struct {
             for (0..self.effect_count) |i| {
                 if (self.effects[i].kind == .watch) { has_watch = true; break; }
             }
-            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0)) {
+            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0 or self.let_count > 0)) {
                 try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
+                if (self.let_count > 0) try out.appendSlice(self.alloc, "            computeBody();\n");
                 if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
                 if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
                 if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
