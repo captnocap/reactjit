@@ -2,17 +2,17 @@
 //
 // THIS IS THE SINGLE SOURCE OF TRUTH.
 //
-// Run: tsz build tsz/examples/multi-file/Dashboard.tsz
+// Run: tsz compile-runtime tsz/examples/multi-file/Dashboard.tsz
 //
 // What happens:
 //   1. Compiler reads Dashboard.tsz
 //   2. Finds imports → reads style.cls.tsz, StatusBar.tsz, etc.
 //   3. Transitive imports: InfoCard imports style.cls too — deduped
 //   4. Merges all source into one token stream
-//   5. Produces ONE generated_app.zig → ONE native binary
+//   5. Produces ONE .gen.zig file
 //
-// 5 .tsz files → 1 .zig file → 1 binary.
-// No Zig. No inline styles. No god files. Just components + classifiers.
+// 5 .tsz files → 1 .gen.zig. That's it.
+// No hand-written Zig. No inline styles. No god files. Just components + classifiers.
 
 import { Page, Section, Row, Spacer, Title, Subtitle } from './style.cls';
 import { StatusBar } from './StatusBar';
@@ -26,7 +26,7 @@ function App() {
     <C.Page>
       <C.Section>
         <C.Title>Multi-File Dashboard</C.Title>
-        <C.Subtitle>5 files compiled into 1 binary</C.Subtitle>
+        <C.Subtitle>5 .tsz files compiled into 1 .gen.zig</C.Subtitle>
 
         <C.Row>
           <InfoCard title="COUNT" value={count} color="#4ec9b0" />
