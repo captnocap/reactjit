@@ -100,7 +100,7 @@ pub fn createSlotString(initial: []const u8) usize {
 /// Read a string state value. Returns empty string for non-string slots.
 pub fn getSlotString(id: usize) []const u8 {
     return switch (slots[id].value) {
-        .string => |s| s.buf[0..s.len],
+        .string => |*s| s.buf[0..s.len],
         else => "",
     };
 }
