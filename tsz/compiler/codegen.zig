@@ -130,6 +130,8 @@ const ComponentInfo = struct {
 const PropBinding = struct {
     name: []const u8,
     value: []const u8, // raw .tsz value (string literal, number, state ref)
+    handler_start: ?u32 = null, // if this prop is a forwarded handler, token range
+    handler_end: ?u32 = null,
 };
 
 const StateType = enum { int, float, boolean, string, array };
@@ -195,12 +197,15 @@ const WindowInfo = struct {
     root_expr: []const u8,
 };
 
+pub const OutputMode = enum { full_app, runtime_fragment };
+
 pub const Generator = struct {
     alloc: std.mem.Allocator,
     lex: *const Lexer,
     source: []const u8,
     input_file: []const u8,
     pos: u32, // token index
+    mode: OutputMode = .full_app,
 
     // Collected outputs
     array_decls: std.ArrayListUnmanaged([]const u8),
@@ -594,8 +599,11 @@ pub const Generator = struct {
         }
         self.pending_dyn_style_count = 0;
 
-        // Phase 5: Emit full Zig source
-        return self.emitZigSource(root_expr);
+        // Phase 5: Emit Zig source
+        return switch (self.mode) {
+            .full_app => self.emitZigSource(root_expr),
+            .runtime_fragment => self.emitRuntimeFragment(root_expr),
+        };
     }
 
     /// Parse classifier({...}) blocks.
@@ -1136,6 +1144,45 @@ pub const Generator = struct {
         return null;
     }
 
+    /// Look up a forwarded handler prop by name. Returns handler token range if found.
+    fn findPropHandler(self: *Generator, name: []const u8) ?struct { start: u32, end: u32 } {
+        var i: u32 = self.prop_stack_count;
+        while (i > 0) {
+            i -= 1;
+            if (std.mem.eql(u8, self.prop_stack[i].name, name)) {
+                if (self.prop_stack[i].handler_start) |hs| {
+                    return .{ .start = hs, .end = self.prop_stack[i].handler_end orelse hs };
+                }
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /// Check if current handler attribute value is a forwarded prop reference.
+    /// Pattern: `={propName}` where propName has a stored handler range.
+    /// If found, sets start/end and skips past, returns true.
+    fn resolveHandlerProp(self: *Generator, start_out: *?u32, end_out: *?u32) bool {
+        // Check pattern: { identifier }
+        if (self.curKind() != .lbrace) return false;
+        const peek1 = self.pos + 1;
+        const peek2 = self.pos + 2;
+        if (peek1 >= self.lex.count or peek2 >= self.lex.count) return false;
+        if (self.lex.tokens[peek1].kind != .identifier) return false;
+        if (self.lex.tokens[peek2].kind != .rbrace) return false;
+
+        const prop_name = self.lex.tokens[peek1].text(self.source);
+        if (self.findPropHandler(prop_name)) |range| {
+            start_out.* = range.start;
+            end_out.* = range.end;
+            self.advance_token(); // {
+            self.advance_token(); // identifier
+            self.advance_token(); // }
+            return true;
+        }
+        return false;
+    }
+
     /// Inline a component at its call site: collect props, jump to body, parse JSX.
     fn inlineComponent(self: *Generator, comp: *const ComponentInfo) anyerror![]const u8 {
         // 1. Collect attribute values from the call site as prop bindings
@@ -1147,6 +1194,8 @@ pub const Generator = struct {
                 if (self.curKind() == .equals) {
                     self.advance_token();
                     var val: []const u8 = "";
+                    var h_start: ?u32 = null;
+                    var h_end: ?u32 = null;
                     if (self.curKind() == .string) {
                         val = self.curText();
                         if (val.len >= 2 and val[0] == '\'') {
@@ -1154,9 +1203,18 @@ pub const Generator = struct {
                         }
                         self.advance_token();
                     } else if (self.curKind() == .lbrace) {
-                        self.advance_token(); // {
-                        val = try self.emitStateExpr();
-                        if (self.curKind() == .rbrace) self.advance_token(); // }
+                        // Check if this is a handler prop (onPress, onChangeText, etc.)
+                        const is_handler = attr_name.len > 2 and attr_name[0] == 'o' and attr_name[1] == 'n' and attr_name[2] >= 'A' and attr_name[2] <= 'Z';
+                        if (is_handler) {
+                            // Store handler token range — don't try to parse as expression
+                            h_start = self.pos;
+                            try self.skipBalanced();
+                            h_end = self.pos;
+                        } else {
+                            self.advance_token(); // {
+                            val = try self.emitStateExpr();
+                            if (self.curKind() == .rbrace) self.advance_token(); // }
+                        }
                     }
                     // Match to a component prop
                     for (0..comp.prop_count) |pi| {
@@ -1165,6 +1223,8 @@ pub const Generator = struct {
                                 self.prop_stack[self.prop_stack_count] = .{
                                     .name = attr_name,
                                     .value = val,
+                                    .handler_start = h_start,
+                                    .handler_end = h_end,
                                 };
                                 self.prop_stack_count += 1;
                             }
@@ -1651,22 +1711,32 @@ pub const Generator = struct {
                             }
                         }
                     } else if (std.mem.eql(u8, attr_name, "onPress")) {
-                        // Record the token range for the handler
-                        on_press_start = self.pos;
-                        try self.skipBalanced();
-                        on_press_end = self.pos;
+                        // Check if this is a forwarded handler prop: onPress={onPress}
+                        if (self.resolveHandlerProp(&on_press_start, &on_press_end)) {
+                            // Resolved from prop — range already set
+                        } else {
+                            on_press_start = self.pos;
+                            try self.skipBalanced();
+                            on_press_end = self.pos;
+                        }
                     } else if (std.mem.eql(u8, attr_name, "onChangeText")) {
-                        on_change_text_start = self.pos;
-                        try self.skipBalanced();
-                        on_change_text_end = self.pos;
+                        if (self.resolveHandlerProp(&on_change_text_start, &on_change_text_end)) {} else {
+                            on_change_text_start = self.pos;
+                            try self.skipBalanced();
+                            on_change_text_end = self.pos;
+                        }
                     } else if (std.mem.eql(u8, attr_name, "onKeyDown")) {
-                        on_key_start = self.pos;
-                        try self.skipBalanced();
-                        on_key_end = self.pos;
+                        if (self.resolveHandlerProp(&on_key_start, &on_key_end)) {} else {
+                            on_key_start = self.pos;
+                            try self.skipBalanced();
+                            on_key_end = self.pos;
+                        }
                     } else if (std.mem.eql(u8, attr_name, "onScroll")) {
-                        on_scroll_start = self.pos;
-                        try self.skipBalanced();
-                        on_scroll_end = self.pos;
+                        if (self.resolveHandlerProp(&on_scroll_start, &on_scroll_end)) {} else {
+                            on_scroll_start = self.pos;
+                            try self.skipBalanced();
+                            on_scroll_end = self.pos;
+                        }
                     } else {
                         try self.skipAttrValue();
                     }
@@ -1861,6 +1931,29 @@ pub const Generator = struct {
                             self.advance_token();
                             if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
                                 text_content = val[1 .. val.len - 1];
+                            } else if (std.mem.startsWith(u8, val, "state.getSlot(")) {
+                                // Dynamic state reference from prop — create dynamic text
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotString(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotFloat(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotBool(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
+                                dyn_args = try std.fmt.allocPrint(self.alloc,
+                                    "if ({s}) \"true\" else \"false\"", .{val});
+                            } else if (std.mem.indexOf(u8, val, "state.getSlot") != null) {
+                                // Expression containing state ref (e.g. "state.getSlot(0) * 2")
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
                             } else {
                                 text_content = val;
                             }
@@ -3938,6 +4031,304 @@ pub const Generator = struct {
         prefix: []const u8,
     };
 
+    // ── Runtime fragment emission ─────────────────────────────────────
+
+    fn emitRuntimeFragment(self: *Generator, root_expr: []const u8) ![]const u8 {
+        var out: std.ArrayListUnmanaged(u8) = .{};
+
+        // Self-describing header
+        const basename = std.fs.path.basename(self.input_file);
+        try out.appendSlice(self.alloc, "//! ──── GENERATED FILE — DO NOT EDIT ────\n//!\n");
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "//! Source: {s}\n", .{self.input_file}));
+        try out.appendSlice(self.alloc, "//! Generated by: tsz compile-runtime\n");
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "//!\n//! To regenerate: tsz compile-runtime {s}\n", .{self.input_file}));
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "//! To modify: edit {s} and recompile\n\n", .{basename}));
+
+        // Imports — relative paths (fragment lives in runtime/compiled/framework/)
+        try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
+        try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.zig\");\n");
+        try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
+        try out.appendSlice(self.alloc, "const gpu = @import(\"../../gpu.zig\");\n");
+        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../state.zig\");\n");
+        if (self.dyn_count > 0 or self.has_state) {
+            try out.appendSlice(self.alloc, "const text_mod = @import(\"../../text.zig\");\n");
+            try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
+        }
+        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/inspector/panel.zig\");\n");
+        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../animate.zig\");\n");
+
+        // FFI imports
+        if (self.ffi_headers.items.len > 0) {
+            try out.appendSlice(self.alloc, "const ffi = @cImport({\n");
+            for (self.ffi_headers.items) |h| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    @cInclude(\"{s}\");\n", .{h}));
+            }
+            try out.appendSlice(self.alloc, "});\n");
+        }
+
+        // State slot base offset
+        try out.appendSlice(self.alloc, "\n// ── State slots (offset by caller) ──────────────────────────\n");
+        try out.appendSlice(self.alloc, "var slot_base: usize = 0;\n");
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "pub const SLOT_COUNT: usize = {d};\n\n", .{self.state_count}));
+
+        // Node tree arrays
+        try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
+        for (self.array_decls.items) |decl| {
+            try out.appendSlice(self.alloc, decl);
+            try out.appendSlice(self.alloc, "\n");
+        }
+        try out.appendSlice(self.alloc, "var root = Node{");
+        try out.appendSlice(self.alloc, root_expr[2..]);
+        try out.appendSlice(self.alloc, ";\n");
+
+        // Dynamic text buffers
+        if (self.dyn_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Dynamic text buffers ─────────────────────────────────────────\n");
+            for (0..self.dyn_count) |i| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [256]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, i }));
+            }
+        }
+
+        // Handler functions
+        if (self.handler_decls.items.len > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Generated event handlers ────────────────────────────────────\n");
+            for (self.handler_decls.items) |h| {
+                try out.appendSlice(self.alloc, h);
+                try out.appendSlice(self.alloc, "\n\n");
+            }
+        }
+
+        // Effect timer variables
+        if (self.effect_count > 0) {
+            for (0..self.effect_count) |i| {
+                if (self.effects[i].kind == .interval) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _timer_{d}: u32 = 0;\n", .{i}));
+                }
+            }
+        }
+
+        // Effect functions
+        if (self.effect_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Generated effect functions ──────────────────────────────────\n");
+            for (0..self.effect_count) |i| {
+                const body = try self.emitEffectBody(self.effects[i].body_start);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "fn _effect_{d}() void {{\n{s}\n}}\n\n", .{ i, body }));
+            }
+        }
+
+        // updateDynamicTexts
+        if (self.dyn_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
+            for (0..self.dyn_count) |i| {
+                const dt = self.dyn_texts[i];
+                if (dt.has_ref) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
+                        .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
+        // updateDynamicStyles
+        if (self.dyn_style_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateDynamicStyles() void {\n");
+            for (0..self.dyn_style_count) |i| {
+                const ds = self.dyn_styles[i];
+                if (!ds.has_ref) continue;
+                if (std.mem.eql(u8, ds.arr_name, "root")) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    root.style.{s} = {s};\n",
+                        .{ ds.field, ds.expression }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].style.{s} = {s};\n",
+                        .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
+        // updateConditionals
+        if (self.cond_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateConditionals() void {\n");
+            for (0..self.cond_count) |i| {
+                const ci = self.conds[i];
+                if (ci.arr_name.len == 0) continue;
+                switch (ci.kind) {
+                    .show_hide => {
+                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
+                            std.mem.indexOf(u8, ci.condition, "!=") != null or
+                            std.mem.indexOf(u8, ci.condition, "< ") != null or
+                            std.mem.indexOf(u8, ci.condition, "> ") != null or
+                            std.mem.indexOf(u8, ci.condition, "<=") != null or
+                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        if (cond_is_bool) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
+                                .{ ci.arr_name, ci.true_idx, ci.condition }));
+                        } else {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
+                                .{ ci.arr_name, ci.true_idx, ci.condition }));
+                        }
+                    },
+                    .ternary => {
+                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
+                            std.mem.indexOf(u8, ci.condition, "!=") != null or
+                            std.mem.indexOf(u8, ci.condition, "< ") != null or
+                            std.mem.indexOf(u8, ci.condition, "> ") != null or
+                            std.mem.indexOf(u8, ci.condition, "<=") != null or
+                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        if (cond_is_bool) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    if ({s}) {{\n", .{ci.condition}));
+                        } else {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    if ({s} != 0) {{\n", .{ci.condition}));
+                        }
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.true_idx }));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.false_idx }));
+                        try out.appendSlice(self.alloc, "    } else {\n");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.true_idx }));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.false_idx }));
+                        try out.appendSlice(self.alloc, "    }\n");
+                    },
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
+        // ── pub fn init(base: usize) ──
+        try out.appendSlice(self.alloc, "// ── Public API ──────────────────────────────────────────────────\n\n");
+        try out.appendSlice(self.alloc, "pub fn init(base: usize) void {\n");
+        try out.appendSlice(self.alloc, "    slot_base = base;\n");
+        if (self.has_state) {
+            for (0..self.state_count) |i| {
+                const slot = self.state_slots[i];
+                switch (slot.initial) {
+                    .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlot({d});\n", .{v})),
+                    .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotFloat({d});\n", .{v})),
+                    .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotBool({});\n", .{v})),
+                    .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                    .array => |v| {
+                        try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
+                        for (0..v.count) |j| {
+                            if (j > 0) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
+                        }
+                        try out.appendSlice(self.alloc, " });\n");
+                    },
+                }
+            }
+        }
+        if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
+        if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
+        if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        // Mount effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .mount) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
+            }
+        }
+        try out.appendSlice(self.alloc, "}\n\n");
+
+        // ── pub fn tick() ──
+        try out.appendSlice(self.alloc, "pub fn tick() void {\n");
+        // State dirty check
+        if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0)) {
+            try out.appendSlice(self.alloc, "    if (state.isDirty()) {\n");
+            if (self.dyn_count > 0) try out.appendSlice(self.alloc, "        updateDynamicTexts();\n");
+            if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
+            if (self.cond_count > 0) try out.appendSlice(self.alloc, "        updateConditionals();\n");
+            // Watch effects
+            for (0..self.effect_count) |i| {
+                if (self.effects[i].kind == .watch) {
+                    try out.appendSlice(self.alloc, "        if (");
+                    for (0..self.effects[i].dep_count) |d| {
+                        if (d > 0) try out.appendSlice(self.alloc, " or ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.slotDirty(slot_base + {d})", .{self.effects[i].dep_slots[d]}));
+                    }
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ") {{ _effect_{d}(); }}\n", .{i}));
+                }
+            }
+            try out.appendSlice(self.alloc, "    }\n");
+        }
+        // Every-frame effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .every_frame) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
+            }
+        }
+        // Inspector-driven style updates (hover rect changes on mouse move)
+        if (self.has_inspector and self.dyn_style_count > 0) {
+            try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
+        }
+        if (self.has_inspector and self.cond_count > 0) {
+            try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        }
+        try out.appendSlice(self.alloc, "}\n\n");
+
+        // ── pub fn getRoot() ──
+        try out.appendSlice(self.alloc, "pub fn getRoot() *Node {\n");
+        try out.appendSlice(self.alloc, "    return &root;\n");
+        try out.appendSlice(self.alloc, "}\n");
+
+        // Post-process: rewrite state slot references to use slot_base offset
+        if (self.has_state) {
+            const result = try out.toOwnedSlice(self.alloc);
+            return try rewriteSlotRefs(self.alloc, result);
+        }
+
+        return try out.toOwnedSlice(self.alloc);
+    }
+
+    /// Rewrite bare state slot IDs to use slot_base offset in fragment mode.
+    /// "state.getSlot(0)" → "state.getSlot(slot_base + 0)"
+    /// "state.setSlot(0," → "state.setSlot(slot_base + 0,"
+    fn rewriteSlotRefs(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+        const patterns = [_][]const u8{
+            "state.getSlot(", "state.setSlot(", "state.getSlotString(", "state.setSlotString(",
+            "state.getSlotFloat(", "state.setSlotFloat(", "state.getSlotBool(", "state.setSlotBool(",
+            "state.slotDirty(",
+        };
+
+        var result: std.ArrayListUnmanaged(u8) = .{};
+        var i: usize = 0;
+        while (i < input.len) {
+            var matched = false;
+            for (patterns) |pat| {
+                if (i + pat.len <= input.len and std.mem.eql(u8, input[i .. i + pat.len], pat)) {
+                    try result.appendSlice(alloc, pat);
+                    i += pat.len;
+                    // Check if next char is a digit (bare slot ID, not already "slot_base + ")
+                    if (i < input.len and input[i] >= '0' and input[i] <= '9') {
+                        try result.appendSlice(alloc, "slot_base + ");
+                    }
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                try result.append(alloc, input[i]);
+                i += 1;
+            }
+        }
+        return try result.toOwnedSlice(alloc);
+    }
+
     // ── Zig source emission ─────────────────────────────────────────
 
     fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
@@ -3966,7 +4357,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
         try out.appendSlice(self.alloc, "const gpu = @import(\"gpu.zig\");\n");
         try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
-        try out.appendSlice(self.alloc, "const inspector = @import(\"inspector.zig\");\n");
+        try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector/panel.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
@@ -4671,9 +5062,9 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            bsod.show(watchdog.getLastReason(), watchdog.getLastDetail());\n            return;\n        }\n");
         try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
         try out.appendSlice(self.alloc, "        telemetry.beginLayout();\n");
-        try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, win_h);\n");
+        try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, inspector.getAppHeight(win_h));\n");
         try out.appendSlice(self.alloc, "        telemetry.endLayout();\n");
-        try out.appendSlice(self.alloc, "        inspector.updateHover(&root);\n");
+        try out.appendSlice(self.alloc, "        inspector.updateHover(&root, win_w, win_h);\n");
         try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
         try out.appendSlice(self.alloc, "        telemetry.beginPaint();\n");
         try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");

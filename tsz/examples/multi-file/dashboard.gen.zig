@@ -21,9 +21,9 @@ var slot_base: usize = 0;
 pub const SLOT_COUNT: usize = 1;
 
 // ── Generated node tree ─────────────────────────────────────────
-var _arr_0 = [_]Node{ .{ .text = "COUNT", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "state.getSlot(0)", .font_size = 28 } };
-var _arr_1 = [_]Node{ .{ .text = "DOUBLED", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "(state.getSlot(0) * 2)", .font_size = 28 } };
-var _arr_2 = [_]Node{ .{ .text = "SQUARED", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "(state.getSlot(0) * state.getSlot(0))", .font_size = 28 } };
+var _arr_0 = [_]Node{ .{ .text = "COUNT", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "", .font_size = 28 } };
+var _arr_1 = [_]Node{ .{ .text = "DOUBLED", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "", .font_size = 28 } };
+var _arr_2 = [_]Node{ .{ .text = "SQUARED", .text_color = Color.rgb(85, 85, 85) }, .{ .text = "", .font_size = 28 } };
 var _arr_3 = [_]Node{ .{ .style = .{ .padding = 16, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .flex_grow = 1, .flex_basis = 0, .margin_left = 4, .margin_right = 4 }, .children = &_arr_0 }, .{ .style = .{ .padding = 16, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .flex_grow = 1, .flex_basis = 0, .margin_left = 4, .margin_right = 4 }, .children = &_arr_1 }, .{ .style = .{ .padding = 16, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .flex_grow = 1, .flex_basis = 0, .margin_left = 4, .margin_right = 4 }, .children = &_arr_2 } };
 var _arr_4 = [_]Node{ .{ .text = "Increment", .text_color = Color.rgb(255, 255, 255) } };
 var _arr_5 = [_]Node{ .{ .text = "Multi-File Dashboard", .text_color = Color.rgb(233, 69, 96) }, .{ .text = "5 files compiled into 1 binary", .text_color = Color.rgb(85, 85, 85) }, .{ .style = .{ .flex_direction = .row, .margin_top = 16 }, .children = &_arr_3 }, .{ .style = .{ .padding = 12, .background_color = Color.rgb(15, 52, 96), .border_radius = 6, .margin_top = 8 }, .handlers = .{ .on_press = _handler_press_0 }, .children = &_arr_4 } };
@@ -31,9 +31,26 @@ var _arr_6 = [_]Node{ .{ .text = "Ready", .text_color = Color.rgb(78, 201, 176) 
 var _arr_7 = [_]Node{ .{ .style = .{ .padding = 24 }, .children = &_arr_5 }, .{ .style = .{ .flex_grow = 1 } }, .{ .style = .{ .height = 28, .background_color = Color.rgb(10, 10, 22), .padding_left = 12, .padding_right = 12, .flex_direction = .row, .align_items = .center, .justify_content = .space_between }, .children = &_arr_6 } };
 var root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(26, 26, 46) }, .children = &_arr_7 };
 
+// ── Dynamic text buffers ─────────────────────────────────────────
+var _dyn_buf_0: [256]u8 = undefined;
+var _dyn_text_0: []const u8 = "";
+var _dyn_buf_1: [256]u8 = undefined;
+var _dyn_text_1: []const u8 = "";
+var _dyn_buf_2: [256]u8 = undefined;
+var _dyn_text_2: []const u8 = "";
+
 // ── Generated event handlers ────────────────────────────────────
 fn _handler_press_0() void {
-    std.debug.print("[handler]\n", .{});
+    state.setSlot(slot_base + 0, (state.getSlot(slot_base + 0) + 1));
+}
+
+fn updateDynamicTexts() void {
+    _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "{d}", .{ state.getSlot(slot_base + 0) }) catch "";
+    _arr_0[1].text = _dyn_text_0;
+    _dyn_text_1 = std.fmt.bufPrint(&_dyn_buf_1, "{d}", .{ (state.getSlot(slot_base + 0) * 2) }) catch "";
+    _arr_1[1].text = _dyn_text_1;
+    _dyn_text_2 = std.fmt.bufPrint(&_dyn_buf_2, "{d}", .{ (state.getSlot(slot_base + 0) * state.getSlot(slot_base + 0)) }) catch "";
+    _arr_2[1].text = _dyn_text_2;
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -41,9 +58,13 @@ fn _handler_press_0() void {
 pub fn init(base: usize) void {
     slot_base = base;
     _ = state.createSlot(0);
+    updateDynamicTexts();
 }
 
 pub fn tick() void {
+    if (state.isDirty()) {
+        updateDynamicTexts();
+    }
 }
 
 pub fn getRoot() *Node {
