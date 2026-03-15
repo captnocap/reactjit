@@ -77,7 +77,15 @@
                         }
                     } else if (event.key.keysym.sym == c.SDLK_F12) { inspector.toggle(); }
                     else if (event.key.keysym.sym == c.SDLK_ESCAPE) {
-                        if (inspector.isEnabled()) {
+                        // Escape dismisses overlays first, then inspector, then quits
+                        var any_overlay_visible = false;
+                        var ov_i: usize = 0;
+                        while (ov_i < overlay_mod.MAX_OVERLAYS) : (ov_i += 1) {
+                            if (overlay_mod.isVisible(ov_i)) { any_overlay_visible = true; break; }
+                        }
+                        if (any_overlay_visible) {
+                            overlay_mod.hideAll();
+                        } else if (inspector.isEnabled()) {
                             if (inspector.getSelectedNode() != null) {
                                 inspector.clearSelection();
                             } else {
@@ -90,7 +98,10 @@
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x); const my: f32 = @floatFromInt(event.motion.y);
                     inspector.mouseMoved(mx, my);
-                    const prev = hovered_node; hovered_node = events.hitTest(&root, mx, my);
+                    // Check overlay hover first, then app tree
+                    const overlay_hover = overlay_mod.hitTestOverlays(mx, my);
+                    const prev = hovered_node;
+                    hovered_node = if (overlay_hover != null) overlay_hover else events.hitTest(&root, mx, my);
                     if (prev != hovered_node) { if (prev) |p| { if (p.handlers.on_hover_exit) |h| h(); } if (hovered_node) |n| { if (n.handlers.on_hover_enter) |h| h(); } }
                     // Text selection drag — may cross into different text nodes
                     if (sel_dragging) {
@@ -111,6 +122,15 @@
                 c.SDL_MOUSEBUTTONDOWN => {
                     const mx: f32 = @floatFromInt(event.button.x); const my: f32 = @floatFromInt(event.button.y);
                     if (inspector.handleClick(&root, mx, my)) { continue; }
+                    // Right-click dispatch
+                    if (event.button.button == c.SDL_BUTTON_RIGHT) {
+                        if (events.hitTest(&root, mx, my)) |node| {
+                            if (node.handlers.on_right_click) |handler| handler(mx, my);
+                        }
+                        continue;
+                    }
+                    // Overlay click dispatch — runs before app hit testing
+                    if (overlay_mod.handleClick(mx, my)) { continue; }
                     sel_all = false; // Any click clears select-all
                     // Handler-based hit test (buttons, inputs, etc.)
                     if (events.hitTest(&root, mx, my)) |node| {
@@ -177,6 +197,7 @@
                 },
                 c.SDL_MOUSEBUTTONUP => {
                     sel_dragging = false;
+                    inspector.mouseReleased();
                 },
                 c.SDL_MOUSEWHEEL => {
                     var mx_i: c_int = undefined; var my_i: c_int = undefined;

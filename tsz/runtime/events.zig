@@ -18,6 +18,7 @@ pub const EventHandler = struct {
     on_key: ?*const fn (key: c_int, mods: u16) void = null,
     on_change_text: ?*const fn () void = null,
     on_scroll: ?*const fn () void = null,
+    on_right_click: ?*const fn (x: f32, y: f32) void = null,
 };
 
 // ── Hit Testing ──────────────────────────────────────────────────────────
@@ -35,8 +36,8 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
         if (hitTest(&node.children[i], mx, my)) |hit| return hit;
     }
 
-    // Check self — if this node has handlers or is a TextInput
-    if (hasHandlers(&node.handlers) or node.input_id != null) {
+    // Check self — if this node has handlers, is a TextInput, or is a Canvas
+    if (hasHandlers(&node.handlers) or node.input_id != null or node.canvas_type != null) {
         const r = node.computed;
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
@@ -53,7 +54,8 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_hover_exit != null or
         h.on_key != null or
         h.on_change_text != null or
-        h.on_scroll != null;
+        h.on_scroll != null or
+        h.on_right_click != null;
 }
 
 // ── Text Hit Test (finds any text node, not just ones with handlers) ────

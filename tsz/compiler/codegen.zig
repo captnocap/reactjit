@@ -197,6 +197,19 @@ const WindowInfo = struct {
     root_expr: []const u8,
 };
 
+const MAX_OVERLAYS = 8;
+
+const OverlayInfo = struct {
+    kind: []const u8 = "context_menu", // context_menu, modal, tooltip, popover
+    root_expr: []const u8 = "",
+    visible_expr: []const u8 = "", // Zig expression for visibility (state slot)
+    x_expr: []const u8 = "", // Zig expression for x position
+    y_expr: []const u8 = "", // Zig expression for y position
+    dismiss_handler: ?[]const u8 = null, // handler function name
+    arrays_start: u32 = 0,
+    arrays_end: u32 = 0,
+};
+
 pub const OutputMode = enum { full_app, runtime_fragment };
 
 pub const Generator = struct {
@@ -238,6 +251,11 @@ pub const Generator = struct {
     // Windows
     windows: [MAX_WINDOWS]WindowInfo,
     window_count: u32,
+
+    // Overlays
+    overlays: [MAX_OVERLAYS]OverlayInfo,
+    overlay_count: u32,
+    has_overlays: bool,
 
     // TextInputs
     input_count: u32,
@@ -328,6 +346,9 @@ pub const Generator = struct {
             .ffi_funcs = .{},
             .windows = undefined,
             .window_count = 0,
+            .overlays = undefined,
+            .overlay_count = 0,
+            .has_overlays = false,
             .input_count = 0,
             .input_multiline = [_]bool{false} ** 16,
             .input_change_handlers = [_]?[]const u8{null} ** 16,
@@ -1677,6 +1698,14 @@ pub const Generator = struct {
         var on_scroll_end: ?u32 = null;
         var on_key_start: ?u32 = null;
         var on_key_end: ?u32 = null;
+        var on_right_click_start: ?u32 = null;
+        var on_right_click_end: ?u32 = null;
+        var on_dismiss_start: ?u32 = null;
+        var on_dismiss_end: ?u32 = null;
+        var overlay_type_str: []const u8 = "";
+        var overlay_visible_expr: []const u8 = "";
+        var overlay_x_expr: []const u8 = "";
+        var overlay_y_expr: []const u8 = "";
         var title_str: []const u8 = "";
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
@@ -1684,6 +1713,7 @@ pub const Generator = struct {
         var language_str: []const u8 = "";
         var debug_name_str: []const u8 = "";
         var test_id_str: []const u8 = "";
+        var canvas_type_str: []const u8 = "";
 
         // Pre-populate from classifier defaults
         if (classifier_idx) |idx| {
@@ -1709,6 +1739,8 @@ pub const Generator = struct {
         const is_sparkline = std.mem.eql(u8, tag_name, "Sparkline");
         const is_wireframe = std.mem.eql(u8, tag_name, "Wireframe");
         const is_node_tree = std.mem.eql(u8, tag_name, "NodeTree");
+        const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
+        const is_overlay = std.mem.eql(u8, tag_name, "Overlay");
 
         while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
             if (self.curKind() == .identifier) {
@@ -1744,6 +1776,8 @@ pub const Generator = struct {
                         debug_name_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "testId")) {
                         test_id_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "type") and is_canvas) {
+                        canvas_type_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "className")) {
                         const cls_str = try self.parseStringAttr();
                         if (cls_str.len > 0) {
@@ -1796,6 +1830,31 @@ pub const Generator = struct {
                             try self.skipBalanced();
                             on_scroll_end = self.pos;
                         }
+                    } else if (std.mem.eql(u8, attr_name, "onRightClick")) {
+                        if (self.resolveHandlerProp(&on_right_click_start, &on_right_click_end)) {} else {
+                            on_right_click_start = self.pos;
+                            try self.skipBalanced();
+                            on_right_click_end = self.pos;
+                        }
+                    } else if (std.mem.eql(u8, attr_name, "onDismiss") and is_overlay) {
+                        if (self.resolveHandlerProp(&on_dismiss_start, &on_dismiss_end)) {} else {
+                            on_dismiss_start = self.pos;
+                            try self.skipBalanced();
+                            on_dismiss_end = self.pos;
+                        }
+                    } else if (std.mem.eql(u8, attr_name, "type") and is_overlay) {
+                        const type_val = try self.parseStringAttr();
+                        if (std.mem.eql(u8, type_val, "context-menu")) overlay_type_str = "context_menu"
+                        else if (std.mem.eql(u8, type_val, "modal")) overlay_type_str = "modal"
+                        else if (std.mem.eql(u8, type_val, "tooltip")) overlay_type_str = "tooltip"
+                        else if (std.mem.eql(u8, type_val, "popover")) overlay_type_str = "popover"
+                        else overlay_type_str = "context_menu";
+                    } else if (std.mem.eql(u8, attr_name, "visible") and is_overlay) {
+                        overlay_visible_expr = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "x") and is_overlay) {
+                        overlay_x_expr = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "y") and is_overlay) {
+                        overlay_y_expr = try self.parseExprAttr();
                     } else {
                         try self.skipAttrValue();
                     }
@@ -2077,6 +2136,20 @@ pub const Generator = struct {
             return try self.emitWindowElement(title_str, width_str, height_str, &child_exprs, style_parts.items);
         }
 
+        // Overlay element → separate overlay layer, not a normal child
+        if (is_overlay) {
+            // Emit dismiss handler early (before normal handler emission)
+            var ov_dismiss_name: ?[]const u8 = null;
+            if (on_dismiss_start) |start| {
+                ov_dismiss_name = try std.fmt.allocPrint(self.alloc, "_handler_dismiss_{d}", .{self.handler_counter});
+                self.handler_counter += 1;
+                const body = try self.emitHandlerBody(start, on_dismiss_end.?);
+                const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ ov_dismiss_name.?, body });
+                try self.handler_decls.append(self.alloc, handler_fn);
+            }
+            return try self.emitOverlayElement(overlay_type_str, overlay_visible_expr, overlay_x_expr, overlay_y_expr, ov_dismiss_name, &child_exprs);
+        }
+
         // Build node expression
         // Add text
         if (is_dynamic_text) {
@@ -2234,11 +2307,21 @@ pub const Generator = struct {
             }
         }
 
+        // Canvas type
+        if (is_canvas and canvas_type_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".canvas_type = \"");
+            try fields.appendSlice(self.alloc, canvas_type_str);
+            try fields.appendSlice(self.alloc, "\"");
+        }
+
         // Handlers — create handler functions and collect their names
         var press_handler_name: ?[]const u8 = null;
         var change_handler_name: ?[]const u8 = null;
         var scroll_handler_name: ?[]const u8 = null;
         var key_handler_name: ?[]const u8 = null;
+        var right_click_handler_name: ?[]const u8 = null;
+        var dismiss_handler_name: ?[]const u8 = null;
 
         if (on_press_start) |start| {
             press_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
@@ -2275,6 +2358,37 @@ pub const Generator = struct {
             try self.handler_decls.append(self.alloc, handler_fn);
         }
 
+        if (on_right_click_start) |start| {
+            right_click_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_rclick_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start, on_right_click_end.?);
+            // Declare f32 params as _fx/_fy, then cast to i64 x/y for state slot compat
+            const uses_x = std.mem.indexOf(u8, body, "x") != null;
+            const uses_y = std.mem.indexOf(u8, body, "y") != null;
+            var preamble_buf: std.ArrayListUnmanaged(u8) = .{};
+            if (uses_x) {
+                try preamble_buf.appendSlice(self.alloc, "    const x: i64 = @intFromFloat(_fx);\n");
+            } else {
+                try preamble_buf.appendSlice(self.alloc, "    _ = _fx;\n");
+            }
+            if (uses_y) {
+                try preamble_buf.appendSlice(self.alloc, "    const y: i64 = @intFromFloat(_fy);\n");
+            } else {
+                try preamble_buf.appendSlice(self.alloc, "    _ = _fy;\n");
+            }
+            const preamble = try self.alloc.dupe(u8, preamble_buf.items);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(_fx: f32, _fy: f32) void {{\n{s}    {s}\n}}", .{ right_click_handler_name.?, preamble, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+        }
+
+        if (on_dismiss_start) |start| {
+            dismiss_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_dismiss_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start, on_dismiss_end.?);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n    {s}\n}}", .{ dismiss_handler_name.?, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+        }
+
         // Emit combined .handlers struct
         var hf: std.ArrayListUnmanaged(u8) = .{};
         if (press_handler_name) |n| {
@@ -2294,6 +2408,11 @@ pub const Generator = struct {
         if (key_handler_name) |n| {
             if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
             try hf.appendSlice(self.alloc, ".on_key = ");
+            try hf.appendSlice(self.alloc, n);
+        }
+        if (right_click_handler_name) |n| {
+            if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
+            try hf.appendSlice(self.alloc, ".on_right_click = ");
             try hf.appendSlice(self.alloc, n);
         }
         if (hf.items.len > 0) {
@@ -2921,9 +3040,11 @@ pub const Generator = struct {
 
         // Skip opening {
         if (self.curKind() == .lbrace) self.advance_token();
-        // Skip () => or (param) =>
+        // Skip () => or (param) => or (param1, param2) =>
         if (self.curKind() == .lparen) self.advance_token();
-        if (self.curKind() == .identifier) self.advance_token(); // skip handler param if present
+        while (self.curKind() == .identifier or self.curKind() == .comma) {
+            self.advance_token();
+        }
         if (self.curKind() == .rparen) self.advance_token();
         if (self.curKind() == .arrow) self.advance_token();
 
@@ -3623,6 +3744,78 @@ pub const Generator = struct {
         return try self.alloc.dupe(u8, ".{ .style = .{ .display = .none } }");
     }
 
+    fn emitOverlayElement(self: *Generator, kind_str: []const u8, visible_expr: []const u8, x_expr: []const u8, y_expr: []const u8, dismiss_handler: ?[]const u8, child_exprs: *std.ArrayListUnmanaged([]const u8)) ![]const u8 {
+        const ov_idx = self.overlay_count;
+        if (ov_idx >= MAX_OVERLAYS) {
+            self.last_dyn_id = null;
+            return try self.alloc.dupe(u8, ".{ .style = .{ .display = .none } }");
+        }
+        const arrays_start: u32 = @intCast(self.array_decls.items.len);
+
+        // Create array for overlay children
+        if (child_exprs.items.len > 0) {
+            const arr_name = try std.fmt.allocPrint(self.alloc, "_ov{d}_arr_{d}", .{ ov_idx, self.array_counter });
+            self.array_counter += 1;
+
+            var arr_content: std.ArrayListUnmanaged(u8) = .{};
+            try arr_content.appendSlice(self.alloc, "var ");
+            try arr_content.appendSlice(self.alloc, arr_name);
+            try arr_content.appendSlice(self.alloc, " = [_]Node{ ");
+            for (child_exprs.items, 0..) |expr, idx| {
+                if (idx > 0) try arr_content.appendSlice(self.alloc, ", ");
+                try arr_content.appendSlice(self.alloc, expr);
+            }
+            try arr_content.appendSlice(self.alloc, " };");
+            try self.array_decls.append(self.alloc, try arr_content.toOwnedSlice(self.alloc));
+
+            const root_name = try std.fmt.allocPrint(self.alloc, "_ov{d}_root", .{ov_idx});
+            const root_decl = try std.fmt.allocPrint(self.alloc, "var {s} = Node{{ .children = &{s} }};", .{ root_name, arr_name });
+            try self.array_decls.append(self.alloc, root_decl);
+
+            const root_expr = try std.fmt.allocPrint(self.alloc, "&{s}", .{root_name});
+
+            // Resolve state variable names to state.getSlot() calls
+            const resolved_visible = if (visible_expr.len > 0)
+                (if (self.isState(visible_expr)) |slot|
+                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot})
+                else
+                    visible_expr)
+            else
+                visible_expr;
+            const resolved_x = if (x_expr.len > 0)
+                (if (self.isState(x_expr)) |slot|
+                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot})
+                else
+                    x_expr)
+            else
+                x_expr;
+            const resolved_y = if (y_expr.len > 0)
+                (if (self.isState(y_expr)) |slot|
+                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot})
+                else
+                    y_expr)
+            else
+                y_expr;
+
+            self.overlays[ov_idx] = .{
+                .kind = if (kind_str.len > 0) kind_str else "context_menu",
+                .root_expr = root_expr,
+                .visible_expr = resolved_visible,
+                .x_expr = resolved_x,
+                .y_expr = resolved_y,
+                .dismiss_handler = dismiss_handler,
+                .arrays_start = arrays_start,
+                .arrays_end = @intCast(self.array_decls.items.len),
+            };
+            self.overlay_count += 1;
+            self.has_overlays = true;
+        }
+
+        // Return invisible placeholder in main tree
+        self.last_dyn_id = null;
+        return try self.alloc.dupe(u8, ".{ .style = .{ .display = .none } }");
+    }
+
     // ── Conditional JSX helpers ────────────────────────────────────
 
     /// Lookahead: check if tokens from current pos to matching } contain a ? (ternary).
@@ -4128,6 +4321,7 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
         }
         if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/inspector/panel.zig\");\n");
+        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"../../overlay.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../animate.zig\");\n");
 
         // FFI imports
@@ -4445,6 +4639,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const gpu = @import(\"gpu.zig\");\n");
         try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
         try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector/panel.zig\");\n");
+        try out.appendSlice(self.alloc, "const overlay_mod = @import(\"overlay.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
@@ -4652,6 +4847,23 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
+        // updateOverlays — show/hide overlays based on visible state
+        if (self.overlay_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateOverlays() void {\n");
+            for (0..self.overlay_count) |i| {
+                const ov = self.overlays[i];
+                if (ov.visible_expr.len > 0) {
+                    // Position args
+                    const x_arg = if (ov.x_expr.len > 0) ov.x_expr else "0";
+                    const y_arg = if (ov.y_expr.len > 0) ov.y_expr else "0";
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    if ({s} != 0) {{ overlay_mod.show({d}, @floatFromInt({s}), @floatFromInt({s})); }} else {{ overlay_mod.hide({d}); }}\n",
+                        .{ ov.visible_expr, i, x_arg, y_arg, i }));
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // _onTextInput — forwards SDL_TEXTINPUT to input module
         // PTY text input is handled via _onKeyDown → handleKey (printable ASCII)
         // to avoid doubling (SDL fires both KEYDOWN and TEXTINPUT for each key)
@@ -4836,6 +5048,22 @@ pub const Generator = struct {
                 .{ i, i, w.title, w.width, w.height, i }));
         }
 
+        // Overlay registration
+        if (self.overlay_count > 0) {
+            try out.appendSlice(self.alloc, "// ── Overlay registration ──────────────────────────────────────────\n");
+            for (0..self.overlay_count) |i| {
+                const ov = self.overlays[i];
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _initOverlay{d}() void {{\n    const ov_id = overlay_mod.register(.{s});\n    overlay_mod.setRoot(ov_id, {s});\n",
+                    .{ i, ov.kind, ov.root_expr }));
+                if (ov.dismiss_handler) |dh| {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    overlay_mod.setOnDismiss(ov_id, {s});\n", .{dh}));
+                }
+                try out.appendSlice(self.alloc, "}\n\n");
+            }
+        }
+
         // Hover + brighten
         try out.appendSlice(self.alloc, "var hovered_node: ?*Node = null;\n\n");
         try out.appendSlice(self.alloc, "fn brighten(color: Color) Color {\n    return .{ .r = @min(255, @as(u16, color.r) + 30), .g = @min(255, @as(u16, color.g) + 30), .b = @min(255, @as(u16, color.b) + 30), .a = color.a };\n}\n\n");
@@ -4960,6 +5188,11 @@ pub const Generator = struct {
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        if (self.overlay_count > 0) try out.appendSlice(self.alloc, "    updateOverlays();\n");
+        // Init overlays
+        for (0..self.overlay_count) |ov_i| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _initOverlay{d}();\n", .{ov_i}));
+        }
         // Mark inspector overlay nodes so hit test skips them
         if (self.has_inspector) {
             var marked: [16]u32 = undefined;
@@ -5048,6 +5281,7 @@ pub const Generator = struct {
                 if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
                 if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
                 if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
+                if (self.overlay_count > 0) try out.appendSlice(self.alloc, "            updateOverlays();\n");
                 if (self.map_count > 0) {
                     for (0..self.map_count) |mi| {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -5076,6 +5310,9 @@ pub const Generator = struct {
         }
         if (self.has_inspector and self.cond_count > 0) {
             try out.appendSlice(self.alloc, "        updateConditionals();\n");
+        }
+        if (self.overlay_count > 0) {
+            try out.appendSlice(self.alloc, "        updateOverlays();\n");
         }
 
         // Router dirty check

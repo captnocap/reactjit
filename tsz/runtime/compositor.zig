@@ -11,6 +11,9 @@ const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const image_mod = @import("image.zig");
 const gpu = @import("gpu.zig");
+const canvas = @import("canvas.zig");
+const overlay_mod = @import("overlay.zig");
+const inspector = @import("framework/inspector/panel.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
@@ -96,6 +99,13 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
         func(g_overlay_rect[0], g_overlay_rect[1], g_overlay_rect[2], g_overlay_rect[3]);
     }
 
+    // Contextual overlays (menus, modals, tooltips, popovers)
+    overlay_mod.setViewport(win_w, win_h);
+    overlay_mod.render();
+
+    // Inspector panel + overlay (pre-compiled from .tsz)
+    inspector.render();
+
     // Present via wgpu
     gpu.frame(
         @as(f64, @floatFromInt(bg_color.r)) / 255.0,
@@ -127,6 +137,15 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         }
     }
     const h = node.computed.h;
+
+    // ── Canvas ─────────────────────────────────────────────────
+    // Canvas nodes delegate rendering to the canvas system entirely.
+    // They still participate in flex layout — the computed bounds are
+    // passed through to the canvas renderer.
+    if (node.canvas_type) |ct| {
+        canvas.renderCanvas(ct, screen_x, screen_y, w, h);
+        return; // Canvas handles its own children/content
+    }
 
     // ── Background ──────────────────────────────────────────────
     if (node.style.background_color) |color| {
