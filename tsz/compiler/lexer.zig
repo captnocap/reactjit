@@ -52,8 +52,9 @@ pub const TokenKind = enum {
     amp_amp, // &&
     pipe_pipe, // ||
 
-    // Ternary
+    // Ternary / nullish
     question, // ?
+    question_question, // ??
 
     // JSX
     lt, // <
@@ -295,6 +296,13 @@ pub const Lexer = struct {
             if (ch == '.' and self.peekAt(1) == '.' and self.peekAt(2) == '.') {
                 self.pos += 3;
                 self.emit(.spread, start, start + 3);
+                continue;
+            }
+
+            // ?? (nullish coalescing, must check before single ?)
+            if (ch == '?' and self.peekAt(1) == '?') {
+                self.pos += 2;
+                self.emit(.question_question, start, start + 2);
                 continue;
             }
 

@@ -278,6 +278,18 @@ pub fn pushArraySlot(id: usize, value: i64) void {
     }
 }
 
+/// Remove the last element from an array slot. Returns the removed value (0 if empty).
+pub fn popArraySlot(id: usize) i64 {
+    if (array_slots[id].count > 0) {
+        array_slots[id].count -= 1;
+        const val = array_slots[id].values[array_slots[id].count];
+        array_slots[id].dirty = true;
+        _dirty = true;
+        return val;
+    }
+    return 0;
+}
+
 /// Get the current length of an array slot.
 pub fn getArrayLen(id: usize) usize {
     return array_slots[id].count;

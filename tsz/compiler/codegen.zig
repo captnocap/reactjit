@@ -1884,6 +1884,50 @@ pub const Generator = struct {
                     self.advance_token();
                     continue;
                 }
+                // Object destructuring: const { name, age } = user
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    var destr_names: [8][]const u8 = undefined;
+                    var destr_count: u32 = 0;
+                    while (self.curKind() == .identifier and destr_count < 8) {
+                        destr_names[destr_count] = self.curText();
+                        destr_count += 1;
+                        self.advance_token();
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token(); // }
+                    if (self.curKind() == .equals) {
+                        self.advance_token(); // =
+                        if (self.curKind() == .identifier) {
+                            const obj_name = self.curText();
+                            self.advance_token();
+                            // Resolve from object state
+                            if (self.isObjectState(obj_name)) |obj_idx| {
+                                for (0..destr_count) |di| {
+                                    if (self.resolveObjectField(obj_idx, destr_names[di])) |state_idx| {
+                                        const rid = self.regularSlotId(state_idx);
+                                        const ft = self.stateTypeById(state_idx);
+                                        if (self.local_count < MAX_LOCALS) {
+                                            self.local_vars[self.local_count] = .{
+                                                .name = destr_names[di],
+                                                .expr = switch (ft) {
+                                                    .string => std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}) catch "",
+                                                    .float => std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}) catch "",
+                                                    .boolean => std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}) catch "",
+                                                    else => std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}) catch "",
+                                                },
+                                                .state_type = ft,
+                                            };
+                                            self.local_count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (self.curKind() == .semicolon) self.advance_token();
+                    continue;
+                }
                 if (self.curKind() == .identifier) {
                     const var_name = self.curText();
                     self.advance_token();
@@ -3737,6 +3781,12 @@ pub const Generator = struct {
                         if (self.curKind() == .rparen) self.advance_token();
                         return try std.fmt.allocPrint(self.alloc, "state.pushArraySlot({d}, {s});", .{ slot_id, arg });
                     }
+                    if (self.isIdent("pop")) {
+                        self.advance_token(); // pop
+                        if (self.curKind() == .lparen) self.advance_token();
+                        if (self.curKind() == .rparen) self.advance_token();
+                        return try std.fmt.allocPrint(self.alloc, "_ = state.popArraySlot({d});", .{slot_id});
+                    }
                 }
 
                 if (self.curKind() == .lparen) self.advance_token();
@@ -4182,6 +4232,17 @@ pub const Generator = struct {
 
     fn emitTernary(self: *Generator) ![]const u8 {
         const cond = try self.emitLogicalOr();
+        // Nullish coalescing: expr ?? default
+        if (self.curKind() == .question_question) {
+            self.advance_token(); // skip ??
+            const fallback = try self.emitTernary();
+            // String: non-empty check. Int: non-zero check.
+            if (self.isStringExpr(cond)) {
+                return try std.fmt.allocPrint(self.alloc, "(if ({s}.len > 0) {s} else {s})", .{ cond, cond, fallback });
+            } else {
+                return try std.fmt.allocPrint(self.alloc, "(if (({s}) != 0) {s} else {s})", .{ cond, cond, fallback });
+            }
+        }
         if (self.curKind() == .question) {
             self.advance_token(); // skip ?
             const then_val = try self.emitTernary(); // right-associative
@@ -4437,6 +4498,29 @@ pub const Generator = struct {
             if (std.mem.eql(u8, name, "true") or std.mem.eql(u8, name, "false")) {
                 self.advance_token();
                 return name;
+            }
+            // typeof → resolve statically to type string
+            if (std.mem.eql(u8, name, "typeof")) {
+                self.advance_token(); // skip 'typeof'
+                if (self.curKind() == .identifier) {
+                    const type_name = self.curText();
+                    self.advance_token();
+                    // Resolve type from state, local var, or default
+                    const resolved_type: []const u8 = if (self.isState(type_name)) |sid|
+                        switch (self.stateTypeById(sid)) {
+                            .string => "\"string\"",
+                            .float => "\"number\"",
+                            .boolean => "\"boolean\"",
+                            .int => "\"number\"",
+                            .array => "\"object\"",
+                        }
+                    else if (self.isArrayState(type_name) != null)
+                        "\"object\""
+                    else
+                        "\"undefined\"";
+                    return try self.alloc.dupe(u8, resolved_type);
+                }
+                return try self.alloc.dupe(u8, "\"undefined\"");
             }
             // Array state getter: items.length
             if (self.isArrayState(name)) |state_idx| {
