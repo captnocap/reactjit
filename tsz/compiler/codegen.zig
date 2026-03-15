@@ -137,6 +137,17 @@ const ComponentInfo = struct {
     has_children: bool,
 };
 
+const MAX_UTIL_FUNCS = 16;
+const MAX_UTIL_PARAMS = 8;
+
+const UtilFunc = struct {
+    name: []const u8,
+    params: [MAX_UTIL_PARAMS][]const u8,
+    param_count: u32,
+    body_start: u32, // token pos of opening {
+    body_end: u32, // token pos of closing }
+};
+
 /// Active prop substitution (pushed when entering a component, popped on exit)
 const PropBinding = struct {
     name: []const u8,
@@ -328,6 +339,10 @@ pub const Generator = struct {
     components: [MAX_COMPONENTS]ComponentInfo,
     component_count: u32,
 
+    // Utility functions (non-component, non-App, lowercase)
+    util_funcs: [MAX_UTIL_FUNCS]UtilFunc,
+    util_func_count: u32,
+
     // Prop substitution stack (active during component inlining)
     prop_stack: [MAX_COMPONENT_PROPS]PropBinding,
     prop_stack_count: u32,
@@ -404,6 +419,8 @@ pub const Generator = struct {
             .local_count = 0,
             .components = undefined,
             .component_count = 0,
+            .util_funcs = undefined,
+            .util_func_count = 0,
             .prop_stack = undefined,
             .prop_stack_count = 0,
             .component_children_exprs = null,
@@ -685,6 +702,10 @@ pub const Generator = struct {
         // Phase 3.5: Collect component definitions (non-App functions)
         self.pos = 0;
         self.collectComponents();
+
+        // Phase 3.6: Collect utility functions (lowercase, non-App)
+        self.pos = 0;
+        self.collectUtilFunctions();
 
         // Phase 4: Find App function and collect useState
         self.pos = 0;
@@ -1503,6 +1524,92 @@ pub const Generator = struct {
         self.component_children_exprs = saved_children;
 
         return result;
+    }
+
+    /// Collect utility functions (lowercase, non-App, non-component).
+    /// These are emitted as standalone Zig functions.
+    fn collectUtilFunctions(self: *Generator) void {
+        self.pos = 0;
+        while (self.pos < self.lex.count and self.curKind() != .eof) {
+            if (self.isIdent("function")) {
+                self.advance_token(); // skip "function"
+                if (self.curKind() != .identifier) continue;
+                const name = self.curText();
+                // Skip App and uppercase (components)
+                if (std.mem.eql(u8, name, "App") or (name.len > 0 and name[0] >= 'A' and name[0] <= 'Z')) {
+                    self.advance_token();
+                    continue;
+                }
+                self.advance_token(); // skip name
+
+                // Parse params: (a, b, c) — skip type annotations
+                var params: [MAX_UTIL_PARAMS][]const u8 = undefined;
+                var param_count: u32 = 0;
+                if (self.curKind() == .lparen) {
+                    self.advance_token(); // (
+                    while (self.curKind() != .rparen and self.curKind() != .eof) {
+                        if (self.curKind() == .identifier) {
+                            if (param_count < MAX_UTIL_PARAMS) {
+                                params[param_count] = self.curText();
+                                param_count += 1;
+                            }
+                        }
+                        self.advance_token();
+                        if (self.curKind() == .comma) self.advance_token();
+                        // Skip type annotation: param: type
+                        if (self.curKind() == .colon) {
+                            self.advance_token(); // :
+                            if (self.curKind() == .identifier) self.advance_token(); // type
+                        }
+                    }
+                    if (self.curKind() == .rparen) self.advance_token(); // )
+                }
+
+                // Skip optional return type annotation
+                if (self.curKind() == .colon) {
+                    self.advance_token(); // :
+                    if (self.curKind() == .identifier) self.advance_token(); // type
+                }
+
+                // Find body bounds { ... }
+                if (self.curKind() == .lbrace) {
+                    const body_start = self.pos;
+                    self.advance_token(); // {
+                    var depth: u32 = 1;
+                    while (self.pos < self.lex.count and depth > 0) {
+                        if (self.curKind() == .lbrace) depth += 1;
+                        if (self.curKind() == .rbrace) {
+                            depth -= 1;
+                            if (depth == 0) break;
+                        }
+                        self.advance_token();
+                    }
+                    const body_end = self.pos;
+                    if (self.curKind() == .rbrace) self.advance_token();
+
+                    if (self.util_func_count < MAX_UTIL_FUNCS) {
+                        self.util_funcs[self.util_func_count] = .{
+                            .name = name,
+                            .params = params,
+                            .param_count = param_count,
+                            .body_start = body_start,
+                            .body_end = body_end,
+                        };
+                        self.util_func_count += 1;
+                    }
+                }
+                continue;
+            }
+            self.advance_token();
+        }
+    }
+
+    /// Look up a utility function by name.
+    fn isUtilFunc(self: *Generator, name: []const u8) ?*const UtilFunc {
+        for (0..self.util_func_count) |i| {
+            if (std.mem.eql(u8, self.util_funcs[i].name, name)) return &self.util_funcs[i];
+        }
+        return null;
     }
 
     /// Collect function components (non-App functions with JSX return).
@@ -3239,6 +3346,99 @@ pub const Generator = struct {
         if (self.curKind() == .identifier) {
             const name = self.curText();
 
+            // ── Control flow ─────────────────────────────────────────
+            // while (condition) { body }
+            if (std.mem.eql(u8, name, "while")) {
+                self.advance_token(); // skip 'while'
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                const condition = try self.emitStateExpr();
+                if (self.curKind() == .rparen) self.advance_token(); // )
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    var body = std.ArrayListUnmanaged(u8){};
+                    try body.appendSlice(self.alloc, "while (");
+                    try body.appendSlice(self.alloc, condition);
+                    try body.appendSlice(self.alloc, ") {\n");
+                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                        const stmt = try self.emitHandlerExpr();
+                        if (stmt.len > 0) {
+                            try body.appendSlice(self.alloc, "        ");
+                            try body.appendSlice(self.alloc, stmt);
+                            try body.appendSlice(self.alloc, "\n");
+                        }
+                        while (self.curKind() == .semicolon) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    try body.appendSlice(self.alloc, "    }");
+                    return try self.alloc.dupe(u8, body.items);
+                }
+            }
+
+            // if (condition) { body } [else if (...) { ... }]* [else { ... }]
+            if (std.mem.eql(u8, name, "if")) {
+                return try self.emitIfStatement();
+            }
+
+            // switch (expr) { case val: stmts; break; ... default: stmts; }
+            if (std.mem.eql(u8, name, "switch")) {
+                return try self.emitSwitchStatement();
+            }
+
+            // break / continue
+            if (std.mem.eql(u8, name, "break")) {
+                self.advance_token();
+                return try self.alloc.dupe(u8, "break;");
+            }
+            if (std.mem.eql(u8, name, "continue")) {
+                self.advance_token();
+                return try self.alloc.dupe(u8, "continue;");
+            }
+            if (std.mem.eql(u8, name, "return")) {
+                self.advance_token();
+                if (self.curKind() == .semicolon or self.curKind() == .rbrace or self.curKind() == .eof) {
+                    return try self.alloc.dupe(u8, "return;");
+                }
+                const expr = try self.emitStateExpr();
+                return try std.fmt.allocPrint(self.alloc, "return {s};", .{expr});
+            }
+
+            // Compound assignment: count += expr, count -= expr, count *= expr
+            if (self.isState(name)) |raw_slot_id| {
+                const peek1 = self.pos + 1;
+                const peek2 = self.pos + 2;
+                if (peek1 < self.lex.count and peek2 < self.lex.count and
+                    self.lex.tokens[peek2].kind == .equals)
+                {
+                    const op_kind = self.lex.tokens[peek1].kind;
+                    const op_str: ?[]const u8 = switch (op_kind) {
+                        .plus => "+",
+                        .minus => "-",
+                        .star => "*",
+                        .slash => "/",
+                        .percent => "%",
+                        else => null,
+                    };
+                    if (op_str) |op| {
+                        const st = self.stateTypeById(raw_slot_id);
+                        const slot_id = self.regularSlotId(raw_slot_id);
+                        self.advance_token(); // skip identifier
+                        self.advance_token(); // skip + - * / %
+                        self.advance_token(); // skip =
+                        const rhs = try self.emitStateExpr();
+                        const getter = switch (st) {
+                            .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{slot_id}),
+                            .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{slot_id}),
+                            .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{slot_id}),
+                            else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}),
+                        };
+                        return switch (st) {
+                            .float => try std.fmt.allocPrint(self.alloc, "state.setSlotFloat({d}, ({s} {s} {s}));", .{ slot_id, getter, op, rhs }),
+                            else => try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, ({s} {s} {s}));", .{ slot_id, getter, op, rhs }),
+                        };
+                    }
+                }
+            }
+
             // Check for object setter: setUser({ ...user, age: user.age + 1 })
             if (self.isObjectSetter(name)) |obj_idx| {
                 self.advance_token(); // skip setter name
@@ -3579,6 +3779,162 @@ pub const Generator = struct {
         return try self.alloc.dupe(u8, "std.debug.print(\"[handler]\\n\", .{});");
     }
 
+    /// Parse if/else if/else chain → Zig if/else chain
+    fn emitIfStatement(self: *Generator) anyerror![]const u8 {
+        self.advance_token(); // skip 'if'
+        if (self.curKind() == .lparen) self.advance_token(); // (
+        const condition = try self.emitStateExpr();
+        if (self.curKind() == .rparen) self.advance_token(); // )
+
+        var result = std.ArrayListUnmanaged(u8){};
+        try result.appendSlice(self.alloc, "if (");
+        try result.appendSlice(self.alloc, condition);
+        try result.appendSlice(self.alloc, ") {\n");
+
+        // Parse body
+        if (self.curKind() == .lbrace) {
+            self.advance_token(); // {
+            while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                const stmt = try self.emitHandlerExpr();
+                if (stmt.len > 0) {
+                    try result.appendSlice(self.alloc, "        ");
+                    try result.appendSlice(self.alloc, stmt);
+                    try result.appendSlice(self.alloc, "\n");
+                }
+                while (self.curKind() == .semicolon) self.advance_token();
+            }
+            if (self.curKind() == .rbrace) self.advance_token();
+        } else {
+            // Brace-less single statement: if (cond) return expr;
+            const stmt = try self.emitHandlerExpr();
+            if (stmt.len > 0) {
+                try result.appendSlice(self.alloc, "        ");
+                try result.appendSlice(self.alloc, stmt);
+                try result.appendSlice(self.alloc, "\n");
+            }
+            while (self.curKind() == .semicolon) self.advance_token();
+        }
+
+        // Handle else / else if
+        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "else")) {
+            self.advance_token(); // skip 'else'
+            if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "if")) {
+                // else if — recurse
+                try result.appendSlice(self.alloc, "    } else ");
+                const else_if = try self.emitIfStatement();
+                try result.appendSlice(self.alloc, else_if);
+                return try self.alloc.dupe(u8, result.items);
+            } else {
+                // else { ... }
+                try result.appendSlice(self.alloc, "    } else {\n");
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                        const stmt = try self.emitHandlerExpr();
+                        if (stmt.len > 0) {
+                            try result.appendSlice(self.alloc, "        ");
+                            try result.appendSlice(self.alloc, stmt);
+                            try result.appendSlice(self.alloc, "\n");
+                        }
+                        while (self.curKind() == .semicolon) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                }
+                try result.appendSlice(self.alloc, "    }");
+                return try self.alloc.dupe(u8, result.items);
+            }
+        }
+
+        try result.appendSlice(self.alloc, "    }");
+        return try self.alloc.dupe(u8, result.items);
+    }
+
+    /// Parse switch/case → chained if/else if/else
+    fn emitSwitchStatement(self: *Generator) anyerror![]const u8 {
+        self.advance_token(); // skip 'switch'
+        if (self.curKind() == .lparen) self.advance_token(); // (
+        const switch_expr = try self.emitStateExpr();
+        if (self.curKind() == .rparen) self.advance_token(); // )
+        if (self.curKind() == .lbrace) self.advance_token(); // {
+
+        var result = std.ArrayListUnmanaged(u8){};
+        var first_case = true;
+
+        while (self.curKind() != .rbrace and self.curKind() != .eof) {
+            if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "case")) {
+                self.advance_token(); // skip 'case'
+                const case_val = try self.emitStateExpr();
+                if (self.curKind() == .colon) self.advance_token(); // :
+
+                if (first_case) {
+                    try result.appendSlice(self.alloc, "if (");
+                    first_case = false;
+                } else {
+                    try result.appendSlice(self.alloc, " else if (");
+                }
+                try result.appendSlice(self.alloc, switch_expr);
+                try result.appendSlice(self.alloc, " == ");
+                try result.appendSlice(self.alloc, case_val);
+                try result.appendSlice(self.alloc, ") {\n");
+
+                // Parse statements until break/case/default/}
+                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                    if (self.curKind() == .identifier) {
+                        const kw = self.curText();
+                        if (std.mem.eql(u8, kw, "break")) {
+                            self.advance_token();
+                            if (self.curKind() == .semicolon) self.advance_token();
+                            break;
+                        }
+                        if (std.mem.eql(u8, kw, "case") or std.mem.eql(u8, kw, "default")) break;
+                    }
+                    const stmt = try self.emitHandlerExpr();
+                    if (stmt.len > 0) {
+                        try result.appendSlice(self.alloc, "        ");
+                        try result.appendSlice(self.alloc, stmt);
+                        try result.appendSlice(self.alloc, "\n");
+                    }
+                    while (self.curKind() == .semicolon) self.advance_token();
+                }
+                try result.appendSlice(self.alloc, "    }");
+            } else if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "default")) {
+                self.advance_token(); // skip 'default'
+                if (self.curKind() == .colon) self.advance_token(); // :
+
+                if (first_case) {
+                    try result.appendSlice(self.alloc, "{\n");
+                } else {
+                    try result.appendSlice(self.alloc, " else {\n");
+                }
+
+                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                    if (self.curKind() == .identifier) {
+                        const kw = self.curText();
+                        if (std.mem.eql(u8, kw, "break")) {
+                            self.advance_token();
+                            if (self.curKind() == .semicolon) self.advance_token();
+                            break;
+                        }
+                        if (std.mem.eql(u8, kw, "case")) break;
+                    }
+                    const stmt = try self.emitHandlerExpr();
+                    if (stmt.len > 0) {
+                        try result.appendSlice(self.alloc, "        ");
+                        try result.appendSlice(self.alloc, stmt);
+                        try result.appendSlice(self.alloc, "\n");
+                    }
+                    while (self.curKind() == .semicolon) self.advance_token();
+                }
+                try result.appendSlice(self.alloc, "    }");
+            } else {
+                self.advance_token(); // skip unexpected tokens
+            }
+        }
+        if (self.curKind() == .rbrace) self.advance_token(); // closing }
+
+        return try self.alloc.dupe(u8, result.items);
+    }
+
     fn emitStateExpr(self: *Generator) ![]const u8 {
         return try self.emitTernary();
     }
@@ -3795,11 +4151,80 @@ pub const Generator = struct {
             if (self.isState(name)) |slot_id| {
                 self.advance_token();
                 const rid = self.regularSlotId(slot_id);
+                const st = self.stateTypeById(slot_id);
+
+                // String method calls: name.method() or name.length
+                if (st == .string and self.curKind() == .dot) {
+                    const getter = try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid});
+                    const dot_pos = self.pos;
+                    self.advance_token(); // skip .
+                    if (self.curKind() == .identifier) {
+                        const method = self.curText();
+
+                        // .length → str.len (returns i64)
+                        if (std.mem.eql(u8, method, "length")) {
+                            self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast({s}.len))", .{getter});
+                        }
+
+                        // .includes(sub) → std.mem.indexOf(u8, str, sub) != null
+                        if (std.mem.eql(u8, method, "includes")) {
+                            self.advance_token(); // method
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "(std.mem.indexOf(u8, {s}, {s}) != null)", .{ getter, arg });
+                        }
+
+                        // .indexOf(sub) → indexOf or -1
+                        if (std.mem.eql(u8, method, "indexOf")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "@as(i64, if (std.mem.indexOf(u8, {s}, {s})) |idx| @as(i64, @intCast(idx)) else -1)", .{ getter, arg });
+                        }
+
+                        // .startsWith(prefix) → std.mem.startsWith
+                        if (std.mem.eql(u8, method, "startsWith")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "std.mem.startsWith(u8, {s}, {s})", .{ getter, arg });
+                        }
+
+                        // .endsWith(suffix) → std.mem.endsWith
+                        if (std.mem.eql(u8, method, "endsWith")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "std.mem.endsWith(u8, {s}, {s})", .{ getter, arg });
+                        }
+
+                        // .trim() → std.mem.trim
+                        if (std.mem.eql(u8, method, "trim")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "std.mem.trim(u8, {s}, \" \\t\\n\\r\")", .{getter});
+                        }
+                    }
+                    // Not a known method — rewind dot
+                    self.pos = dot_pos;
+                }
+
                 // In animation target context, use float getter (getSlot returns i64, can't @floatCast)
                 if (self.emit_float_as_f32) {
                     return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatCast(state.getSlotFloat({d})))", .{rid});
                 }
-                return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid});
+                return switch (st) {
+                    .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                    .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                    .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+                    else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                };
             }
             // Component prop (compile-time substitution from call site)
             if (self.findProp(name)) |val| {
@@ -3814,6 +4239,25 @@ pub const Generator = struct {
             if (self.isLocalVar(name)) |lv| {
                 self.advance_token();
                 return try self.alloc.dupe(u8, lv.expr);
+            }
+            // Utility function call: clamp(a, b, c)
+            if (self.isUtilFunc(name)) |_| {
+                self.advance_token(); // skip function name
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                var call_args = std.ArrayListUnmanaged(u8){};
+                try call_args.appendSlice(self.alloc, name);
+                try call_args.appendSlice(self.alloc, "(");
+                var arg_idx: u32 = 0;
+                while (self.curKind() != .rparen and self.curKind() != .eof) {
+                    if (arg_idx > 0) try call_args.appendSlice(self.alloc, ", ");
+                    const arg = try self.emitStateExpr();
+                    try call_args.appendSlice(self.alloc, arg);
+                    arg_idx += 1;
+                    if (self.curKind() == .comma) self.advance_token();
+                }
+                if (self.curKind() == .rparen) self.advance_token(); // )
+                try call_args.appendSlice(self.alloc, ")");
+                return try self.alloc.dupe(u8, call_args.items);
             }
             // FFI call in expression position
             // NOTE: Intentionally narrow — only bare numbers and 0→null mapping.
@@ -4573,6 +5017,55 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "pub const SLOT_COUNT: usize = {d};\n\n", .{self.state_count}));
 
+        // Utility functions
+        if (self.util_func_count > 0) {
+            try out.appendSlice(self.alloc, "// ── Utility functions ────────────────────────────────────────────\n");
+            for (0..self.util_func_count) |fi| {
+                const uf = &self.util_funcs[fi];
+                // Emit signature: fn name(p1: i64, p2: i64) i64 {
+                try out.appendSlice(self.alloc, "fn ");
+                try out.appendSlice(self.alloc, uf.name);
+                try out.appendSlice(self.alloc, "(");
+                for (0..uf.param_count) |pi| {
+                    if (pi > 0) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, uf.params[pi]);
+                    try out.appendSlice(self.alloc, ": i64");
+                }
+                try out.appendSlice(self.alloc, ") i64 {\n");
+
+                // Push params as local vars so expression parser resolves them
+                const saved_local_count = self.local_count;
+                for (0..uf.param_count) |pi| {
+                    if (self.local_count < MAX_LOCALS) {
+                        self.local_vars[self.local_count] = .{
+                            .name = uf.params[pi],
+                            .expr = uf.params[pi],
+                            .state_type = .int,
+                        };
+                        self.local_count += 1;
+                    }
+                }
+
+                // Emit body
+                const saved_pos = self.pos;
+                self.pos = uf.body_start;
+                if (self.curKind() == .lbrace) self.advance_token();
+                while (self.curKind() != .rbrace and self.curKind() != .eof and self.pos < uf.body_end) {
+                    const stmt = self.emitHandlerExpr() catch break;
+                    if (stmt.len > 0) {
+                        try out.appendSlice(self.alloc, "    ");
+                        try out.appendSlice(self.alloc, stmt);
+                        try out.appendSlice(self.alloc, "\n");
+                    }
+                    while (self.curKind() == .semicolon) self.advance_token();
+                }
+                self.pos = saved_pos;
+                self.local_count = saved_local_count;
+
+                try out.appendSlice(self.alloc, "}\n\n");
+            }
+        }
+
         // Node tree arrays
         try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
         for (self.array_decls.items) |decl| {
@@ -4884,6 +5377,52 @@ pub const Generator = struct {
         // Measure callbacks
         try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
         try out.appendSlice(self.alloc, "fn measureImageCallback(img_path: []const u8) layout.ImageDims {\n    if (g_image_cache) |cache| { if (cache.load(img_path)) |img| { return .{ .width = @floatFromInt(img.width), .height = @floatFromInt(img.height) }; } }\n    return .{};\n}\n\n");
+
+        // Utility functions
+        if (self.util_func_count > 0) {
+            try out.appendSlice(self.alloc, "// ── Utility functions ────────────────────────────────────────────\n");
+            for (0..self.util_func_count) |fi| {
+                const uf = &self.util_funcs[fi];
+                try out.appendSlice(self.alloc, "fn ");
+                try out.appendSlice(self.alloc, uf.name);
+                try out.appendSlice(self.alloc, "(");
+                for (0..uf.param_count) |pi| {
+                    if (pi > 0) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, uf.params[pi]);
+                    try out.appendSlice(self.alloc, ": i64");
+                }
+                try out.appendSlice(self.alloc, ") i64 {\n");
+
+                const saved_local_count = self.local_count;
+                for (0..uf.param_count) |pi| {
+                    if (self.local_count < MAX_LOCALS) {
+                        self.local_vars[self.local_count] = .{
+                            .name = uf.params[pi],
+                            .expr = uf.params[pi],
+                            .state_type = .int,
+                        };
+                        self.local_count += 1;
+                    }
+                }
+
+                const saved_pos = self.pos;
+                self.pos = uf.body_start;
+                if (self.curKind() == .lbrace) self.advance_token();
+                while (self.curKind() != .rbrace and self.curKind() != .eof and self.pos < uf.body_end) {
+                    const stmt = self.emitHandlerExpr() catch break;
+                    if (stmt.len > 0) {
+                        try out.appendSlice(self.alloc, "    ");
+                        try out.appendSlice(self.alloc, stmt);
+                        try out.appendSlice(self.alloc, "\n");
+                    }
+                    while (self.curKind() == .semicolon) self.advance_token();
+                }
+                self.pos = saved_pos;
+                self.local_count = saved_local_count;
+
+                try out.appendSlice(self.alloc, "}\n\n");
+            }
+        }
 
         // Node tree arrays
         try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
