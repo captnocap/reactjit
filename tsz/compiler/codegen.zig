@@ -4118,10 +4118,105 @@ pub const Generator = struct {
                 }
                 if (self.curKind() == .dot) {
                     self.advance_token(); // .
-                    if (self.isIdent("length")) {
-                        self.advance_token(); // length
+                    if (self.curKind() == .identifier) {
+                        const method = self.curText();
                         const arr_slot = self.arraySlotId(state_idx);
-                        return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
+
+                        if (std.mem.eql(u8, method, "length")) {
+                            self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
+                        }
+
+                        // .includes(value) → block expr loop with equality check
+                        if (std.mem.eql(u8, method, "includes")) {
+                            self.advance_token(); // includes
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const val_expr = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "(blk_{d}: {{ const _sl = state.getArraySlot({d}); for (_sl) |_el| {{ if (_el == {s}) break :blk_{d} true; }} break :blk_{d} false; }})",
+                                .{ lbl, arr_slot, val_expr, lbl, lbl });
+                        }
+
+                        // .indexOf(value) → block expr loop, returns index or -1
+                        if (std.mem.eql(u8, method, "indexOf")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const val_expr = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ const _sl = state.getArraySlot({d}); for (_sl, 0..) |_el, _idx| {{ if (_el == {s}) break :blk_{d} @as(i64, @intCast(_idx)); }} break :blk_{d} -1; }})",
+                                .{ lbl, arr_slot, val_expr, lbl, lbl });
+                        }
+
+                        // .find(item => expr) → block expr loop, returns first match or 0
+                        if (std.mem.eql(u8, method, "find")) {
+                            self.advance_token(); // find
+                            if (self.curKind() == .lparen) self.advance_token(); // (
+                            // Parse callback: (item) => expr  or  item => expr
+                            if (self.curKind() == .lparen) self.advance_token(); // optional (
+                            const item_name = self.curText();
+                            self.advance_token(); // param
+                            if (self.curKind() == .rparen) self.advance_token(); // optional )
+                            if (self.curKind() == .arrow) self.advance_token(); // =>
+
+                            // Push param as local var
+                            const saved_lc = self.local_count;
+                            if (self.local_count < MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{ .name = item_name, .expr = "_el", .state_type = .int };
+                                self.local_count += 1;
+                            }
+                            const pred_expr = try self.emitStateExpr();
+                            self.local_count = saved_lc;
+
+                            if (self.curKind() == .rparen) self.advance_token(); // closing )
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ const _sl = state.getArraySlot({d}); for (_sl) |_el| {{ if ({s}) break :blk_{d} _el; }} break :blk_{d} 0; }})",
+                                .{ lbl, arr_slot, pred_expr, lbl, lbl });
+                        }
+
+                        // .reduce((acc, item) => expr, initial) → block expr with accumulator
+                        if (std.mem.eql(u8, method, "reduce")) {
+                            self.advance_token(); // reduce
+                            if (self.curKind() == .lparen) self.advance_token(); // (
+                            // Parse callback: (acc, item) => expr
+                            if (self.curKind() == .lparen) self.advance_token(); // (
+                            const acc_name = self.curText();
+                            self.advance_token(); // acc
+                            if (self.curKind() == .comma) self.advance_token(); // ,
+                            const item_name = self.curText();
+                            self.advance_token(); // item
+                            if (self.curKind() == .rparen) self.advance_token(); // )
+                            if (self.curKind() == .arrow) self.advance_token(); // =>
+
+                            // Push acc and item as local vars
+                            const saved_lc = self.local_count;
+                            if (self.local_count + 1 < MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{ .name = acc_name, .expr = "_acc", .state_type = .int };
+                                self.local_count += 1;
+                                self.local_vars[self.local_count] = .{ .name = item_name, .expr = "_el", .state_type = .int };
+                                self.local_count += 1;
+                            }
+                            const body_expr = try self.emitStateExpr();
+                            self.local_count = saved_lc;
+
+                            // Parse initial value
+                            if (self.curKind() == .comma) self.advance_token(); // ,
+                            const initial = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token(); // closing )
+
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "@as(i64, blk_{d}: {{ var _acc: i64 = {s}; const _sl = state.getArraySlot({d}); for (_sl) |_el| {{ _acc = {s}; }} break :blk_{d} _acc; }})",
+                                .{ lbl, initial, arr_slot, body_expr, lbl });
+                        }
                     }
                 }
                 // Array getter without .length — return count as i64
