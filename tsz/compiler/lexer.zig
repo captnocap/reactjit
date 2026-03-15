@@ -40,6 +40,14 @@ pub const TokenKind = enum {
     gt_eq, // >=
     lt_eq, // <=
 
+    // Bitwise
+    ampersand, // &
+    pipe, // |
+    caret, // ^
+    tilde, // ~
+    shift_left, // <<
+    shift_right, // >>
+
     // Logical
     amp_amp, // &&
     pipe_pipe, // ||
@@ -246,10 +254,22 @@ pub const Lexer = struct {
                 self.emit(.lt_slash, start, start + 2);
                 continue;
             }
+            // >> (must check before >=)
+            if (ch == '>' and self.peekAt(1) == '>') {
+                self.pos += 2;
+                self.emit(.shift_right, start, start + 2);
+                continue;
+            }
             // >= (must check before single >)
             if (ch == '>' and self.peekAt(1) == '=') {
                 self.pos += 2;
                 self.emit(.gt_eq, start, start + 2);
+                continue;
+            }
+            // << (must check before <=)
+            if (ch == '<' and self.peekAt(1) == '<') {
+                self.pos += 2;
+                self.emit(.shift_left, start, start + 2);
                 continue;
             }
             // <= (must check before single <)
@@ -297,6 +317,10 @@ pub const Lexer = struct {
                 '/' => .slash,
                 '%' => .percent,
                 '!' => .bang,
+                '&' => .ampersand,
+                '|' => .pipe,
+                '^' => .caret,
+                '~' => .tilde,
                 '<' => .lt,
                 '>' => .gt,
                 '?' => .question,

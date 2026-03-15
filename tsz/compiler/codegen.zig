@@ -3374,6 +3374,86 @@ pub const Generator = struct {
                 }
             }
 
+            // for (let i = 0; i < n; i++) { body }
+            // → { var i: i64 = 0; while (i < n) : (i += 1) { body } }
+            if (std.mem.eql(u8, name, "for")) {
+                self.advance_token(); // skip 'for'
+                if (self.curKind() == .lparen) self.advance_token(); // (
+
+                // Init: let i = 0 or const i = 0
+                var init_name: []const u8 = "_i";
+                var init_val: []const u8 = "0";
+                if (self.isIdent("let") or self.isIdent("const") or self.isIdent("var")) {
+                    self.advance_token(); // let/const/var
+                }
+                if (self.curKind() == .identifier) {
+                    init_name = self.curText();
+                    self.advance_token();
+                }
+                if (self.curKind() == .equals) {
+                    self.advance_token(); // =
+                    init_val = try self.emitStateExpr();
+                }
+                if (self.curKind() == .semicolon) self.advance_token();
+
+                // Push loop var as local so condition/body can resolve it
+                const saved_lc = self.local_count;
+                if (self.local_count < MAX_LOCALS) {
+                    self.local_vars[self.local_count] = .{ .name = init_name, .expr = init_name, .state_type = .int };
+                    self.local_count += 1;
+                }
+
+                // Condition: i < n
+                const condition = try self.emitStateExpr();
+                if (self.curKind() == .semicolon) self.advance_token();
+
+                // Update: i++ or i += 1
+                var update_str: []const u8 = try std.fmt.allocPrint(self.alloc, "{s} += 1", .{init_name});
+                if (self.curKind() == .identifier) {
+                    const upd_name = self.curText();
+                    self.advance_token();
+                    if (self.curKind() == .plus and self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .plus) {
+                        // i++ → i += 1
+                        self.advance_token(); // +
+                        self.advance_token(); // +
+                        update_str = try std.fmt.allocPrint(self.alloc, "{s} += 1", .{upd_name});
+                    } else if (self.curKind() == .minus and self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .minus) {
+                        // i-- → i -= 1
+                        self.advance_token(); // -
+                        self.advance_token(); // -
+                        update_str = try std.fmt.allocPrint(self.alloc, "{s} -= 1", .{upd_name});
+                    } else if (self.curKind() == .plus and self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .equals) {
+                        // i += expr
+                        self.advance_token(); // +
+                        self.advance_token(); // =
+                        const inc = try self.emitStateExpr();
+                        update_str = try std.fmt.allocPrint(self.alloc, "{s} += {s}", .{ upd_name, inc });
+                    }
+                }
+                if (self.curKind() == .rparen) self.advance_token(); // )
+
+                // Body
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    var body = std.ArrayListUnmanaged(u8){};
+                    try body.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{{ var {s}: i64 = {s}; while ({s}) : ({s}) {{\n", .{ init_name, init_val, condition, update_str }));
+                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                        const stmt = try self.emitHandlerExpr();
+                        if (stmt.len > 0) {
+                            try body.appendSlice(self.alloc, "        ");
+                            try body.appendSlice(self.alloc, stmt);
+                            try body.appendSlice(self.alloc, "\n");
+                        }
+                        while (self.curKind() == .semicolon) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    try body.appendSlice(self.alloc, "    } }");
+                    self.local_count = saved_lc;
+                    return try self.alloc.dupe(u8, body.items);
+                }
+                self.local_count = saved_lc;
+            }
+
             // if (condition) { body } [else if (...) { ... }]* [else { ... }]
             if (std.mem.eql(u8, name, "if")) {
                 return try self.emitIfStatement();
@@ -3982,11 +4062,41 @@ pub const Generator = struct {
     }
 
     fn emitLogicalAnd(self: *Generator) ![]const u8 {
-        var left = try self.emitEquality();
+        var left = try self.emitBitwiseOr();
         while (self.curKind() == .amp_amp) {
             self.advance_token();
-            const right = try self.emitEquality();
+            const right = try self.emitBitwiseOr();
             left = try std.fmt.allocPrint(self.alloc, "({s} and {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    fn emitBitwiseOr(self: *Generator) ![]const u8 {
+        var left = try self.emitBitwiseXor();
+        while (self.curKind() == .pipe) {
+            self.advance_token();
+            const right = try self.emitBitwiseXor();
+            left = try std.fmt.allocPrint(self.alloc, "({s} | {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    fn emitBitwiseXor(self: *Generator) ![]const u8 {
+        var left = try self.emitBitwiseAnd();
+        while (self.curKind() == .caret) {
+            self.advance_token();
+            const right = try self.emitBitwiseAnd();
+            left = try std.fmt.allocPrint(self.alloc, "({s} ^ {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    fn emitBitwiseAnd(self: *Generator) ![]const u8 {
+        var left = try self.emitEquality();
+        while (self.curKind() == .ampersand) {
+            self.advance_token();
+            const right = try self.emitEquality();
+            left = try std.fmt.allocPrint(self.alloc, "({s} & {s})", .{ left, right });
         }
         return left;
     }
@@ -4003,7 +4113,7 @@ pub const Generator = struct {
     }
 
     fn emitComparison(self: *Generator) ![]const u8 {
-        var left = try self.emitAdditive();
+        var left = try self.emitShift();
         while (self.curKind() == .lt or self.curKind() == .gt or
             self.curKind() == .lt_eq or self.curKind() == .gt_eq)
         {
@@ -4015,8 +4125,19 @@ pub const Generator = struct {
                 else => unreachable,
             };
             self.advance_token();
-            const right = try self.emitAdditive();
+            const right = try self.emitShift();
             left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+        }
+        return left;
+    }
+
+    fn emitShift(self: *Generator) ![]const u8 {
+        var left = try self.emitAdditive();
+        while (self.curKind() == .shift_left or self.curKind() == .shift_right) {
+            const op: []const u8 = if (self.curKind() == .shift_left) "<<" else ">>";
+            self.advance_token();
+            const right = try self.emitAdditive();
+            left = try std.fmt.allocPrint(self.alloc, "({s} {s} @intCast({s}))", .{ left, op, right });
         }
         return left;
     }
@@ -4055,6 +4176,11 @@ pub const Generator = struct {
             self.advance_token();
             const operand = try self.emitUnary();
             return try std.fmt.allocPrint(self.alloc, "(-{s})", .{operand});
+        }
+        if (self.curKind() == .tilde) {
+            self.advance_token();
+            const operand = try self.emitUnary();
+            return try std.fmt.allocPrint(self.alloc, "(~{s})", .{operand});
         }
         return try self.emitStateAtom();
     }
@@ -4304,6 +4430,42 @@ pub const Generator = struct {
                             if (self.curKind() == .lparen) self.advance_token();
                             if (self.curKind() == .rparen) self.advance_token();
                             return try std.fmt.allocPrint(self.alloc, "std.mem.trim(u8, {s}, \" \\t\\n\\r\")", .{getter});
+                        }
+
+                        // .slice(start, end) → str[start..end]
+                        if (std.mem.eql(u8, method, "slice")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const start_expr = try self.emitStateExpr();
+                            var end_expr: []const u8 = try std.fmt.allocPrint(self.alloc, "{s}.len", .{getter});
+                            if (self.curKind() == .comma) {
+                                self.advance_token();
+                                end_expr = try self.emitStateExpr();
+                            }
+                            if (self.curKind() == .rparen) self.advance_token();
+                            return try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})..@intCast({s})]", .{ getter, start_expr, end_expr });
+                        }
+
+                        // .toUpperCase() / .toLowerCase() → inline block with buffer
+                        if (std.mem.eql(u8, method, "toUpperCase")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "(blk_{d}: {{ const _src = {s}; var _ub: [256]u8 = undefined; for (_src, 0..) |ch, ci| {{ _ub[ci] = std.ascii.toUpper(ch); }} break :blk_{d} _ub[0.._src.len]; }})",
+                                .{ lbl, getter, lbl });
+                        }
+                        if (std.mem.eql(u8, method, "toLowerCase")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "(blk_{d}: {{ const _src = {s}; var _lb: [256]u8 = undefined; for (_src, 0..) |ch, ci| {{ _lb[ci] = std.ascii.toLower(ch); }} break :blk_{d} _lb[0.._src.len]; }})",
+                                .{ lbl, getter, lbl });
                         }
                     }
                     // Not a known method — rewind dot

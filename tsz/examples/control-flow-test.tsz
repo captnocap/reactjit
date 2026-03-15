@@ -40,6 +40,14 @@ function App() {
         <Text fontSize={16} color="#ffffff">Switch: name the count</Text>
       </Pressable>
 
+      <Pressable onPress={() => {
+        for (let i = 0; i < 3; i++) {
+          count += 1;
+        }
+      }} style={{ padding: 16, backgroundColor: '#0984e3' }}>
+        <Text fontSize={16} color="#ffffff">For: count += 1 x3</Text>
+      </Pressable>
+
       <Pressable onPress={() => { count += 5; }} style={{ padding: 16, backgroundColor: '#e17055' }}>
         <Text fontSize={16} color="#ffffff">count += 5</Text>
       </Pressable>
