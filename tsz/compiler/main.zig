@@ -160,7 +160,7 @@ fn buildMergedSource(alloc: std.mem.Allocator, input_file: []const u8, source: [
 // ── Compile ─────────────────────────────────────────────────────────────
 
 // Build mode — set by CLI flags, read by compile()
-var g_release_mode: bool = false;
+var g_release_mode: bool = true;
 var g_framework_mode: bool = false; // --framework flag for compile-runtime
 
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
@@ -924,8 +924,8 @@ pub fn main() !void {
 
     // Check for flags anywhere in args
     for (args) |arg| {
-        if (std.mem.eql(u8, arg, "--release")) {
-            g_release_mode = true;
+        if (std.mem.eql(u8, arg, "--debug")) {
+            g_release_mode = false;
         } else if (std.mem.eql(u8, arg, "--framework")) {
             g_framework_mode = true;
         }
