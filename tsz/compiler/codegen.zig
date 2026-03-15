@@ -266,6 +266,7 @@ pub const Generator = struct {
     route_count: u32,
     has_routes: bool,
     has_crypto: bool,
+    has_panels: bool,
     has_pty: bool,
     has_inspector: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
@@ -343,6 +344,7 @@ pub const Generator = struct {
             .route_count = 0,
             .has_routes = false,
             .has_crypto = false,
+            .has_panels = false,
             .has_pty = false,
             .has_inspector = false,
             .last_route_path = null,
@@ -3185,6 +3187,21 @@ pub const Generator = struct {
                 if (self.curKind() == .rparen) self.advance_token();
                 return try std.fmt.allocPrint(self.alloc, "std.debug.print(\"{s}\\n\", .{{}});", .{msg});
             }
+
+            // Unknown function call: name() → panel toggle
+            // The name IS the function. If a .gen.zig fragment exists with this ID,
+            // calling it from a handler toggles it.
+            if (self.curKind() == .lparen or
+                (self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .lparen))
+            {
+                const panel_name = name;
+                self.advance_token(); // name
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                if (self.curKind() == .rparen) self.advance_token(); // )
+                self.has_panels = true;
+                return try std.fmt.allocPrint(self.alloc,
+                    "panels.toggle(\"{s}\");", .{panel_name});
+            }
         }
 
         return try self.alloc.dupe(u8, "std.debug.print(\"[handler]\\n\", .{});");
@@ -4069,8 +4086,25 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "});\n");
         }
 
+        // Panel identity — this string is the callable name from .tsz handlers
+        const panel_base = std.fs.path.basename(self.input_file);
+        const stem = if (std.mem.endsWith(u8, panel_base, ".tsz")) panel_base[0 .. panel_base.len - 4] else panel_base;
+        // Lowercase the stem for the panel ID
+        var id_buf: [128]u8 = undefined;
+        var id_len: usize = 0;
+        for (stem) |c| {
+            if (id_len < id_buf.len) {
+                id_buf[id_len] = if (c >= 'A' and c <= 'Z') c + 32 else c;
+                id_len += 1;
+            }
+        }
+        const panel_id = id_buf[0..id_len];
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "\n// ── Panel identity ───────────────────────────────────────────\n" ++
+            "pub const PANEL_ID = \"{s}\";\n\n", .{panel_id}));
+
         // State slot base offset
-        try out.appendSlice(self.alloc, "\n// ── State slots (offset by caller) ──────────────────────────\n");
+        try out.appendSlice(self.alloc, "// ── State slots (offset by caller) ──────────────────────────\n");
         try out.appendSlice(self.alloc, "var slot_base: usize = 0;\n");
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "pub const SLOT_COUNT: usize = {d};\n\n", .{self.state_count}));
@@ -4362,6 +4396,7 @@ pub const Generator = struct {
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
         if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"crypto.zig\");\n");
+        if (self.has_panels) try out.appendSlice(self.alloc, "const panels = @import(\"panels.zig\");\n");
         if (self.has_pty) {
             try out.appendSlice(self.alloc, "const pty_mod = @import(\"pty.zig\");\n");
             try out.appendSlice(self.alloc, "const vterm_mod = @import(\"vterm.zig\");\n");
