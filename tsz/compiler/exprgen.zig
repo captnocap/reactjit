@@ -966,10 +966,19 @@ const Parser = struct {
         var args = std.ArrayListUnmanaged([]const u8){};
         const saved = self.context;
         self.context = .argument;
+        var arg_idx: u32 = 0;
 
         while (self.curKind() != .rparen and self.curKind() != .eof) {
             const arg = try self.parseTernary();
-            try args.append(self.alloc, arg.text);
+            // Auto-add & for arguments passed to pointer params (struct → *Struct coercion)
+            const stmtgen = @import("stmtgen.zig");
+            const need_ref = stmtgen.isFnParamPtr(callee, arg_idx);
+            if (need_ref and !std.mem.startsWith(u8, arg.text, "&")) {
+                try args.append(self.alloc, try std.fmt.allocPrint(self.alloc, "&{s}", .{arg.text}));
+            } else {
+                try args.append(self.alloc, arg.text);
+            }
+            arg_idx += 1;
             if (self.curKind() == .comma) self.advance();
         }
         self.context = saved;

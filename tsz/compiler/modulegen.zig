@@ -394,12 +394,88 @@ fn emitModuleVars(
 // export function layout(root: Node, ...): void { ... }
 // → pub fn layout(root: *Node, ...) void { ... }
 
+/// Pre-scan all function signatures to register pointer param types.
+/// This allows forward references: a function can call another function
+/// defined later and still get correct & insertion.
+fn prescanFunctionSigs(
+    _: std.mem.Allocator,
+    lex: *const Lexer,
+    source: []const u8,
+) !void {
+    var pos: u32 = 0;
+    var brace_depth: u32 = 0;
+
+    while (pos < lex.count) {
+        const tok = lex.get(pos);
+        if (tok.kind == .lbrace) { brace_depth += 1; pos += 1; continue; }
+        if (tok.kind == .rbrace) { if (brace_depth > 0) brace_depth -= 1; pos += 1; continue; }
+        if (brace_depth > 0 or tok.kind != .identifier) { pos += 1; continue; }
+
+        const text = tok.text(source);
+        if (std.mem.eql(u8, text, "export")) { pos += 1; continue; }
+
+        if (std.mem.eql(u8, text, "function") or
+            (pos > 0 and lex.get(pos).kind == .identifier and std.mem.eql(u8, text, "function")))
+        {
+            pos += 1; // skip "function"
+            if (pos >= lex.count or lex.get(pos).kind != .identifier) continue;
+            const fn_name = lex.get(pos).text(source);
+            pos += 1; // skip name
+
+            // Parse params to register pointer types
+            if (pos < lex.count and lex.get(pos).kind == .lparen) {
+                pos += 1; // skip (
+                var param_idx: u32 = 0;
+                while (pos < lex.count and lex.get(pos).kind != .rparen) {
+                    if (lex.get(pos).kind != .identifier) { pos += 1; continue; }
+                    pos += 1; // skip param name
+                    if (pos < lex.count and lex.get(pos).kind == .colon) pos += 1; // skip :
+                    // Read type name
+                    const param_type = if (pos < lex.count and lex.get(pos).kind == .identifier)
+                        lex.get(pos).text(source)
+                    else
+                        "";
+                    if (param_type.len > 0) pos += 1; // skip type
+                    // Check for | null
+                    if (pos < lex.count and lex.get(pos).kind == .pipe) {
+                        pos += 1;
+                        if (pos < lex.count and lex.get(pos).kind == .identifier) pos += 1;
+                    }
+                    // Register if struct type (Node or PascalCase)
+                    if (param_type.len > 0 and isStructTypeName(param_type)) {
+                        stmtgen.registerFnPtrParam(fn_name, param_idx);
+                    }
+                    param_idx += 1;
+                    if (pos < lex.count and lex.get(pos).kind == .comma) pos += 1;
+                }
+                if (pos < lex.count and lex.get(pos).kind == .rparen) pos += 1;
+            }
+            // Skip rest of function (return type + body)
+            while (pos < lex.count and lex.get(pos).kind != .lbrace) pos += 1;
+            if (pos < lex.count and lex.get(pos).kind == .lbrace) {
+                var depth: u32 = 1;
+                pos += 1;
+                while (pos < lex.count and depth > 0) {
+                    if (lex.get(pos).kind == .lbrace) depth += 1;
+                    if (lex.get(pos).kind == .rbrace) depth -= 1;
+                    pos += 1;
+                }
+            }
+            continue;
+        }
+        pos += 1;
+    }
+}
+
 fn emitFunctions(
     alloc: std.mem.Allocator,
     lex: *const Lexer,
     source: []const u8,
     out: *std.ArrayListUnmanaged(u8),
 ) !void {
+    // Pre-scan to register all function param types for forward references
+    try prescanFunctionSigs(alloc, lex, source);
+
     var pos: u32 = 0;
     var brace_depth: u32 = 0;
     var has_functions = false;
@@ -463,7 +539,7 @@ fn emitFunctions(
 
             if (pos < lex.count and lex.get(pos).kind == .lparen) {
                 pos += 1; // skip (
-                try emitParams(alloc, lex, source, &pos, out);
+                try emitParams(alloc, lex, source, &pos, out, name);
                 // pos is now past the )
             }
 
@@ -552,8 +628,10 @@ fn emitParams(
     source: []const u8,
     pos: *u32,
     out: *std.ArrayListUnmanaged(u8),
+    fn_name: []const u8,
 ) !void {
     var first = true;
+    var param_idx: u32 = 0;
 
     while (pos.* < lex.count and lex.get(pos.*).kind != .rparen) {
         if (lex.get(pos.*).kind != .identifier) {
@@ -605,10 +683,12 @@ fn emitParams(
             // Node params → mutable pointer (layout engine mutates nodes)
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
             stmtgen.registerVar(param_name, .ptr_t);
+            stmtgen.registerFnPtrParam(fn_name, param_idx);
         } else if (isStructTypeName(param_type)) {
             // Other struct params → const pointer (read-only by default)
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*const {s}", .{zig_type}));
             stmtgen.registerVar(param_name, .ptr_t);
+            stmtgen.registerFnPtrParam(fn_name, param_idx);
         } else {
             try out.appendSlice(alloc, zig_type);
             // Register param type for expression type inference
@@ -624,6 +704,8 @@ fn emitParams(
                 .unknown;
             stmtgen.registerVar(param_name, expr_ty);
         }
+
+        param_idx += 1;
 
         // Skip comma
         if (pos.* < lex.count and lex.get(pos.*).kind == .comma) pos.* += 1;

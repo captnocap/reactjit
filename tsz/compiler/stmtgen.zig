@@ -30,6 +30,21 @@ var var_type_table: exprgen.VarTypes = .{};
 // so callees can resolve the return type without an allowlist.
 var fn_return_types: exprgen.VarTypes = .{};
 
+// Function param pointer table — tracks which params are struct pointers.
+// When a function is emitted with Node/struct params (→ *Node), register here
+// so call sites can auto-add & for value-to-pointer coercion.
+const MAX_FN_SIGS = 64;
+const MAX_PARAMS = 16;
+
+const FnSig = struct {
+    name: []const u8 = "",
+    param_is_ptr: [MAX_PARAMS]bool = [_]bool{false} ** MAX_PARAMS,
+    param_count: u8 = 0,
+};
+
+var fn_sigs: [MAX_FN_SIGS]FnSig = [_]FnSig{.{}} ** MAX_FN_SIGS;
+var fn_sig_count: u32 = 0;
+
 pub fn resetVarTypes() void {
     var_type_table = .{};
 }
@@ -44,6 +59,37 @@ pub fn registerFnReturnType(name: []const u8, ty: exprgen.ExprType) void {
 
 pub fn getFnReturnType(name: []const u8) ?exprgen.ExprType {
     return fn_return_types.get(name);
+}
+
+/// Register that a function's Nth param is a pointer type (struct → *Struct).
+pub fn registerFnPtrParam(fn_name: []const u8, param_idx: u32) void {
+    if (param_idx >= MAX_PARAMS) return;
+    // Find existing entry
+    for (0..fn_sig_count) |i| {
+        if (std.mem.eql(u8, fn_sigs[i].name, fn_name)) {
+            fn_sigs[i].param_is_ptr[param_idx] = true;
+            if (param_idx + 1 > fn_sigs[i].param_count) fn_sigs[i].param_count = @intCast(param_idx + 1);
+            return;
+        }
+    }
+    // Create new entry
+    if (fn_sig_count < MAX_FN_SIGS) {
+        fn_sigs[fn_sig_count] = .{ .name = fn_name };
+        fn_sigs[fn_sig_count].param_is_ptr[param_idx] = true;
+        fn_sigs[fn_sig_count].param_count = @intCast(param_idx + 1);
+        fn_sig_count += 1;
+    }
+}
+
+/// Check if a function's Nth param is a pointer type.
+pub fn isFnParamPtr(fn_name: []const u8, param_idx: u32) bool {
+    if (param_idx >= MAX_PARAMS) return false;
+    for (0..fn_sig_count) |i| {
+        if (std.mem.eql(u8, fn_sigs[i].name, fn_name)) {
+            return fn_sigs[i].param_is_ptr[param_idx];
+        }
+    }
+    return false;
 }
 
 /// Map a Zig type string to ExprType

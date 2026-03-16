@@ -49,12 +49,12 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = hitTest(node.children[i], mx, my);
+        const hit = hitTest(&node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
     }
-    if (hasHandlers(node.handlers) or node.input_id != null or node.canvas_type != null) {
+    if (hasHandlers(&node.handlers) or node.input_id != null or node.canvas_type != null) {
         const r = node.computed;
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
@@ -74,7 +74,7 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = hitTestText(node.children[i], mx, my);
+        const hit = hitTestText(&node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
@@ -99,7 +99,7 @@ pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?*Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = findScrollContainer(node.children[i], mx, my);
+        const hit = findScrollContainer(&node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
