@@ -197,18 +197,18 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         const pad_t = node.style.padTop();
         const color = node.text_color orelse Color.rgb(255, 255, 255);
         const text_max_w = node.computed.w - pad_l - pad_r;
-        _ = text_max_w;
 
         const cr = @as(f32, @floatFromInt(color.r)) / 255.0;
         const cg = @as(f32, @floatFromInt(color.g)) / 255.0;
         const cb = @as(f32, @floatFromInt(color.b)) / 255.0;
         const ca = @as(f32, @floatFromInt(color.a)) / 255.0 * effective_opacity;
 
-        gpu.drawTextLine(
+        _ = gpu.drawTextWrapped(
             txt,
             screen_x + pad_l,
             screen_y + pad_t,
             node.font_size,
+            text_max_w,
             cr, cg, cb, ca,
         );
     }

@@ -481,6 +481,100 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     }
 }
 
+/// Draw text with word-wrapping at max_width. Returns total height drawn.
+pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32) f32 {
+    if (g_ft_face == null) return 0;
+    if (max_width <= 0) {
+        drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
+        return @as(f32, @floatFromInt(size_px));
+    }
+
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+
+    const face = g_ft_face;
+    const line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+
+    var pen_x: f32 = 0;
+    var pen_y: f32 = y;
+    var line_start: usize = 0;
+    var last_break: usize = 0;
+    var last_break_pen_x: f32 = 0;
+    var i: usize = 0;
+
+    while (i < text.len) {
+        const ch = decodeUtf8(text[i..]);
+
+        // Explicit newline
+        if (ch.codepoint == '\n') {
+            drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
+            pen_y += line_h;
+            i += ch.len;
+            line_start = i;
+            last_break = i;
+            pen_x = 0;
+            last_break_pen_x = 0;
+            continue;
+        }
+
+        // Track word boundaries
+        if (ch.codepoint == ' ') {
+            last_break = i;
+            last_break_pen_x = pen_x;
+        }
+
+        // Measure this glyph
+        var advance: f32 = 0;
+        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+            advance = @floatFromInt(glyph.advance);
+        }
+
+        if (pen_x + advance > max_width and pen_x > 0) {
+            // Wrap at last word boundary if possible
+            if (last_break > line_start) {
+                drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
+                pen_y += line_h;
+                // Skip the space
+                line_start = last_break + 1;
+                pen_x = pen_x - last_break_pen_x - advance;
+                // Re-measure from line_start to current position
+                pen_x = 0;
+                var j: usize = line_start;
+                while (j < i) {
+                    const jch = decodeUtf8(text[j..]);
+                    if (cacheGlyph(jch.codepoint, size_px)) |g| {
+                        pen_x += @floatFromInt(g.advance);
+                    }
+                    j += jch.len;
+                }
+                last_break = line_start;
+                last_break_pen_x = 0;
+            } else {
+                // No break point — force break at current position
+                drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
+                pen_y += line_h;
+                line_start = i;
+                last_break = i;
+                pen_x = 0;
+                last_break_pen_x = 0;
+            }
+        }
+
+        pen_x += advance;
+        i += ch.len;
+    }
+
+    // Draw remaining text
+    if (line_start < text.len) {
+        drawTextLine(text[line_start..], x, pen_y, size_px, cr, cg, cb, ca);
+        pen_y += line_h;
+    }
+
+    return pen_y - y;
+}
+
 /// Render all queued primitives and present.
 pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const surface = g_surface orelse return;
