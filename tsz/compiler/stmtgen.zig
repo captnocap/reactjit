@@ -355,7 +355,9 @@ fn emitVarDecl(
                 std.mem.eql(u8, ta, "i16") or std.mem.eql(u8, ta, "i32") or
                 std.mem.eql(u8, ta, "i64") or std.mem.eql(u8, ta, "f64") or
                 std.mem.eql(u8, ta, "usize") or
-                (ta.len > 0 and ta[0] == '[');
+                (ta.len > 0 and ta[0] == '[') or
+                // PascalCase custom types (enums, structs) — Zig needs the type for var
+                (ta.len > 0 and ta[0] >= 'A' and ta[0] <= 'Z');
             if (keep) {
                 registerVar(snake_name, typeStrToExprType(ta));
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = {s};", .{ ind, effective_kw, snake_name, ta, final_expr });
