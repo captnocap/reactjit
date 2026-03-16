@@ -18,6 +18,7 @@ const builtin = @import("builtin");
 const native_os = builtin.os.tag;
 const lexer = @import("lexer.zig");
 const codegen = @import("codegen.zig");
+const modulegen = @import("modulegen.zig");
 const registry = @import("registry.zig");
 const process = @import("process.zig");
 pub const actions = @import("actions.zig");
@@ -163,6 +164,41 @@ fn buildMergedSource(alloc: std.mem.Allocator, input_file: []const u8, source: [
 var g_release_mode: bool = true;
 var g_framework_mode: bool = false; // --framework flag for compile-runtime
 
+/// Detect if a tokenized .tsz file is imperative mode (no App function, no JSX).
+fn isImperativeMode(lex: *const lexer.Lexer, source: []const u8) bool {
+    var i: u32 = 0;
+    while (i + 1 < lex.count) : (i += 1) {
+        const tok = lex.get(i);
+        if (tok.kind == .identifier) {
+            const text = tok.text(source);
+            // Check for function App(
+            if (std.mem.eql(u8, text, "function")) {
+                const next = lex.get(i + 1);
+                if (next.kind == .identifier and std.mem.eql(u8, next.text(source), "App")) {
+                    return false; // Has App function → JSX mode
+                }
+            }
+        }
+        // Check for JSX tags: < followed by PascalCase identifier (not ALL_CAPS)
+        if (tok.kind == .lt) {
+            const next = lex.get(i + 1);
+            if (next.kind == .identifier) {
+                const name = next.text(source);
+                if (name.len > 1 and name[0] >= 'A' and name[0] <= 'Z') {
+                    // PascalCase has at least one lowercase letter (Box, Text, ScrollView)
+                    // ALL_CAPS (MAX_CHILDREN) is not JSX
+                    var has_lower = false;
+                    for (name[1..]) |ch| {
+                        if (ch >= 'a' and ch <= 'z') { has_lower = true; break; }
+                    }
+                    if (has_lower) return false; // Has JSX → component mode
+                }
+            }
+        }
+    }
+    return true; // No App, no JSX → imperative mode
+}
+
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
 fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
@@ -178,10 +214,22 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     var lex = lexer.Lexer.init(merged_source);
     lex.tokenize();
 
-    var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
-    const zig_source = gen.generate() catch |err| {
-        std.debug.print("[tsz] Compile error: {}\n", .{err});
-        return false;
+    // Route to imperative mode or JSX component mode
+    const imperative = isImperativeMode(&lex, merged_source);
+    var gen: ?codegen.Generator = null;
+
+    const zig_source = if (imperative) blk: {
+        std.debug.print("[tsz] Imperative mode detected\n", .{});
+        break :blk modulegen.generate(alloc, &lex, merged_source, input_file) catch |err| {
+            std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
+            return false;
+        };
+    } else blk: {
+        gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
+        break :blk gen.?.generate() catch |err| {
+            std.debug.print("[tsz] Compile error: {}\n", .{err});
+            return false;
+        };
     };
     defer alloc.free(zig_source);
 
@@ -197,13 +245,15 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
         return false;
     };
 
-    // Write ffi_libs.txt
+    // Write ffi_libs.txt (JSX mode only — imperative mode has no FFI)
     const libs_path = "tsz/runtime/ffi_libs.txt";
     const libs_file = std.fs.cwd().createFile(libs_path, .{}) catch return false;
     defer libs_file.close();
-    for (gen.ffi_libs.items) |lib| {
-        libs_file.writeAll(lib) catch {};
-        libs_file.writeAll("\n") catch {};
+    if (gen) |g| {
+        for (g.ffi_libs.items) |lib| {
+            libs_file.writeAll(lib) catch {};
+            libs_file.writeAll("\n") catch {};
+        }
     }
 
     const basename = std.fs.path.basename(input_file);
@@ -522,12 +572,20 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
     var lex = lexer.Lexer.init(merged_source);
     lex.tokenize();
 
-    var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
-    gen.mode = .runtime_fragment;
-
-    const zig_source = gen.generate() catch |err| {
-        std.debug.print("[tsz] Compile error: {}\n", .{err});
-        std.process.exit(1);
+    // Route to imperative mode or JSX fragment mode
+    const zig_source = if (isImperativeMode(&lex, merged_source)) blk: {
+        std.debug.print("[tsz] Imperative mode detected\n", .{});
+        break :blk modulegen.generate(alloc, &lex, merged_source, input_file) catch |err| {
+            std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
+            std.process.exit(1);
+        };
+    } else blk: {
+        var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
+        gen.mode = .runtime_fragment;
+        break :blk gen.generate() catch |err| {
+            std.debug.print("[tsz] Compile error: {}\n", .{err});
+            std.process.exit(1);
+        };
     };
     defer alloc.free(zig_source);
 
