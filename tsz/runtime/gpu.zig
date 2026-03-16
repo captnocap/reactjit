@@ -432,16 +432,11 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         break :blk changed;
     };
 
-    // Static frame: present the previous surface texture without re-rendering.
-    // This skips CommandEncoder + RenderPass + writeBuffer entirely.
-    if (!data_changed) {
-        _ = surface.present();
-        g_last_rect_count = g_rect_count;
-        g_last_glyph_count = g_glyph_count;
-        g_rect_count = 0;
-        g_glyph_count = 0;
-        return;
-    }
+    // Note: we CANNOT skip the render pass on static frames because each
+    // getCurrentTexture() returns a new swapchain image that must be drawn
+    // into. Presenting without rendering shows garbage/flickering.
+    // The writeBuffer skip below is the safe optimization — it avoids
+    // staging buffer creation while still drawing into the new surface.
 
     if (data_changed) {
         g_prev_dims = .{ g_width, g_height };
