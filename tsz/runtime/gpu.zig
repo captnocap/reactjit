@@ -137,12 +137,13 @@ var g_last_glyph_count: usize = 0;
 var g_prev_frame_hash: u64 = 0;
 var g_prev_dims: [2]u32 = .{ 0, 0 };
 
-// Memory drain — periodically recreate GPU buffers to reclaim fragmented
-// staging allocator pools. Every DRAIN_INTERVAL frames, destroy and rebuild
-// the rect/glyph/globals buffers + their bind groups. This forces wgpu to
-// release the old allocator pools and start fresh. Cost: one frame of buffer
-// recreation every ~10 minutes. Prevents the ~0.6MB/min RSS growth.
-const DRAIN_INTERVAL: u64 = 36000; // ~10 minutes at 60fps
+// Memory drain — recreate GPU buffers to reclaim fragmented staging pools.
+// Only triggers after DRAIN_IDLE_THRESHOLD consecutive STATIC frames
+// (scene unchanged). This ensures we never drain during active rendering
+// (video editing, animations, user interaction) — only when the app is
+// genuinely idle. Resets the counter on any dirty frame.
+const DRAIN_IDLE_THRESHOLD: u64 = 36000; // ~10 min of consecutive idle at 60fps
+var g_idle_frames: u64 = 0;
 var g_frame_counter: u64 = 0;
 
 // Atlas packer state
@@ -487,9 +488,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const device = g_device orelse return;
     const queue = g_queue orelse return;
 
-    // Periodic memory drain — recreate buffers to reclaim fragmented pools
     g_frame_counter += 1;
-    if (g_frame_counter % DRAIN_INTERVAL == 0) drainMemory();
 
     // Get current surface texture
     var surface_texture: wgpu.SurfaceTexture = undefined;
@@ -520,11 +519,20 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         break :blk changed;
     };
 
-    // Note: we CANNOT skip the render pass on static frames because each
-    // getCurrentTexture() returns a new swapchain image that must be drawn
-    // into. Presenting without rendering shows garbage/flickering.
-    // The writeBuffer skip below is the safe optimization — it avoids
-    // staging buffer creation while still drawing into the new surface.
+    // Idle-triggered memory drain: after enough consecutive static frames,
+    // recycle buffers to reclaim fragmented allocator pools. Resets on any
+    // dirty frame, so active rendering (video editing, animations) is never
+    // interrupted.
+    if (data_changed) {
+        g_idle_frames = 0;
+    } else {
+        g_idle_frames += 1;
+        if (g_idle_frames == DRAIN_IDLE_THRESHOLD) {
+            drainMemory();
+            // drainMemory sets g_prev_frame_hash=0, so the next iteration
+            // of this block will see data_changed=true and re-upload.
+        }
+    }
 
     if (data_changed) {
         g_prev_dims = .{ g_width, g_height };
