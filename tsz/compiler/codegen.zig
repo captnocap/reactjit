@@ -12,27 +12,37 @@ const Lexer = lexer_mod.Lexer;
 const tailwind = @import("tailwind.zig");
 const bootstrap = @import("bootstrap.zig");
 
-const MAX_LOCALS = 32;
-const MAX_COMPONENTS = 32;
-const MAX_COMPONENT_PROPS = 16;
-const MAX_ARRAYS = 256;
-const MAX_HANDLERS = 64;
-const MAX_STATE_SLOTS = 32;
-const MAX_DYN_TEXTS = 32;
-const MAX_FFI_HEADERS = 16;
-const MAX_FFI_LIBS = 16;
-const MAX_FFI_FUNCS = 64;
-const MAX_WINDOWS = 8;
-const MAX_CONDS = 32;
-const MAX_EFFECTS = 32;
-const MAX_ANIM_HOOKS = 16;
-const MAX_ANIM_BINDINGS = 32;
-const MAX_DYN_STYLES = 64;
-const MAX_ROUTES = 16;
-const MAX_MAPS = 16;
-const MAX_ARRAY_INIT = 32;
-const MAX_OBJECT_FIELDS = 16;
-const MAX_OBJECTS = 16;
+const MAX_LOCALS = 64;
+const MAX_COMPONENTS = 64;
+const MAX_COMPONENT_PROPS = 64;
+const MAX_ARRAYS = 512;
+const MAX_HANDLERS = 256;
+const MAX_STATE_SLOTS = 128;
+const MAX_DYN_TEXTS = 128;
+const MAX_FFI_HEADERS = 32;
+const MAX_FFI_LIBS = 32;
+const MAX_FFI_FUNCS = 128;
+const MAX_WINDOWS = 16;
+const MAX_CONDS = 64;
+const MAX_EFFECTS = 64;
+const MAX_ANIM_HOOKS = 32;
+const MAX_ANIM_BINDINGS = 64;
+const MAX_DYN_STYLES = 128;
+const MAX_ROUTES = 32;
+const MAX_MAPS = 32;
+const MAX_ARRAY_INIT = 64;
+const MAX_OBJECT_FIELDS = 32;
+const MAX_OBJECTS = 32;
+const MAX_INPUTS = 32;
+const MAX_PANEL_IMPORTS = 32;
+const MAX_CLASSIFIERS = 256;
+const MAX_PENDING_DYN_STYLES = 32;
+const MAX_PENDING_ANIM = 16;
+const MAX_MAP_INNER = 16;
+const MAX_LET_VARS = 32;
+const MAX_UTIL_FUNCS = 32;
+const MAX_UTIL_PARAMS = 16;
+const MAX_OVERLAYS = 16;
 
 const ObjectStateInfo = struct {
     getter: []const u8, // "user"
@@ -129,7 +139,7 @@ const LocalVar = struct {
     state_type: StateType, // type hint for template literal formatting
 };
 
-const MAX_COMPUTED_ARRAYS = 8;
+const MAX_COMPUTED_ARRAYS = 16;
 
 const ComputedArrayKind = enum { filter, split };
 
@@ -142,8 +152,6 @@ const ComputedArray = struct {
     predicate_param: []const u8, // lambda param name ("item") — for documentation only
     separator: []const u8, // split separator (e.g., ",")
 };
-
-const MAX_LET_VARS = 16;
 
 const LetVar = struct {
     name: []const u8, // .tsz name (e.g., "label")
@@ -159,9 +167,6 @@ const ComponentInfo = struct {
     body_pos: u32, // token position of the return's JSX (at the '<')
     has_children: bool,
 };
-
-const MAX_UTIL_FUNCS = 16;
-const MAX_UTIL_PARAMS = 8;
 
 const UtilFunc = struct {
     name: []const u8,
@@ -217,7 +222,7 @@ const MapInfo = struct {
     outer_style: []const u8,
     outer_font_size: []const u8,
     outer_text_color: []const u8,
-    inner_nodes: [8]MapInnerNode,
+    inner_nodes: [MAX_MAP_INNER]MapInnerNode,
     inner_count: u32,
     is_self_closing: bool,
     is_text_element: bool,
@@ -231,7 +236,7 @@ const MapTemplateResult = struct {
     outer_style: []const u8,
     outer_font_size: []const u8,
     outer_text_color: []const u8,
-    inner_nodes: [8]MapInnerNode,
+    inner_nodes: [MAX_MAP_INNER]MapInnerNode,
     inner_count: u32,
     is_self_closing: bool,
     is_text_element: bool,
@@ -245,8 +250,6 @@ const WindowInfo = struct {
     arrays_end: u32,
     root_expr: []const u8,
 };
-
-const MAX_OVERLAYS = 8;
 
 const OverlayInfo = struct {
     kind: []const u8 = "context_menu", // context_menu, modal, tooltip, popover
@@ -292,7 +295,7 @@ pub const Generator = struct {
     // Dynamic styles (state-dependent style values)
     dyn_styles: [MAX_DYN_STYLES]DynStyle,
     dyn_style_count: u32,
-    pending_dyn_styles: [16]PendingDynStyle,
+    pending_dyn_styles: [MAX_PENDING_DYN_STYLES]PendingDynStyle,
     pending_dyn_style_count: u32,
     emit_colors_as_rgb: bool,
 
@@ -312,8 +315,8 @@ pub const Generator = struct {
 
     // TextInputs
     input_count: u32,
-    input_multiline: [16]bool,
-    input_change_handlers: [16]?[]const u8,
+    input_multiline: [MAX_INPUTS]bool,
+    input_change_handlers: [MAX_INPUTS]?[]const u8,
 
     // Conditionals
     conds: [MAX_CONDS]CondInfo,
@@ -328,7 +331,7 @@ pub const Generator = struct {
     anim_hook_count: u32,
     anim_bindings: [MAX_ANIM_BINDINGS]AnimStyleBinding,
     anim_binding_count: u32,
-    pending_anim: [8]PendingAnimBinding,
+    pending_anim: [MAX_PENDING_ANIM]PendingAnimBinding,
     pending_anim_count: u32,
     emit_float_as_f32: bool, // when true, decimal literals become @as(f32, N)
 
@@ -338,7 +341,7 @@ pub const Generator = struct {
     has_routes: bool,
     has_crypto: bool,
     has_panels: bool,
-    panel_imports: [16][]const u8, // panel names imported via `import { x } from '@panels'`
+    panel_imports: [MAX_PANEL_IMPORTS][]const u8, // panel names imported via `import { x } from '@panels'`
     panel_import_count: u32,
     has_pty: bool,
     has_inspector: bool,
@@ -357,10 +360,10 @@ pub const Generator = struct {
     map_item_type: ?StateType, // element type of current .map() source (null = i64 default)
 
     // Classifiers: name → { primitive_type, style_fields_string }
-    classifier_names: [128][]const u8,
-    classifier_primitives: [128][]const u8,
-    classifier_styles: [128][]const u8,
-    classifier_text_props: [128][]const u8, // fontSize, color for Text classifiers
+    classifier_names: [MAX_CLASSIFIERS][]const u8,
+    classifier_primitives: [MAX_CLASSIFIERS][]const u8,
+    classifier_styles: [MAX_CLASSIFIERS][]const u8,
+    classifier_text_props: [MAX_CLASSIFIERS][]const u8, // fontSize, color for Text classifiers
     classifier_count: u32,
 
     // Local variables (compile-time constant substitution)
@@ -390,6 +393,17 @@ pub const Generator = struct {
     prop_stack_count: u32,
     // Children JSX to splice for {children} placeholders
     component_children_exprs: ?*std.ArrayListUnmanaged([]const u8),
+
+    // Compile error diagnostics (set by overflow checks, checked before emission)
+    compile_error: ?[]const u8,
+
+    /// Set a compile error if none is set yet. First error wins.
+    fn setError(self: *Generator, msg: []const u8) void {
+        if (self.compile_error == null) {
+            self.compile_error = msg;
+            std.debug.print("[tsz] compile error: {s}\n", .{msg});
+        }
+    }
 
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
@@ -424,8 +438,8 @@ pub const Generator = struct {
             .overlay_count = 0,
             .has_overlays = false,
             .input_count = 0,
-            .input_multiline = [_]bool{false} ** 16,
-            .input_change_handlers = [_]?[]const u8{null} ** 16,
+            .input_multiline = [_]bool{false} ** MAX_INPUTS,
+            .input_change_handlers = [_]?[]const u8{null} ** MAX_INPUTS,
             .conds = undefined,
             .cond_count = 0,
             .effects = undefined,
@@ -474,6 +488,7 @@ pub const Generator = struct {
             .prop_stack = undefined,
             .prop_stack_count = 0,
             .component_children_exprs = null,
+            .compile_error = null,
         };
     }
 
@@ -522,9 +537,9 @@ pub const Generator = struct {
                 if (self.curKind() == .lbrace) {
                     self.advance_token(); // {
                     // Collect names
-                    var names: [16][]const u8 = undefined;
+                    var names: [MAX_PANEL_IMPORTS][]const u8 = undefined;
                     var nc: u32 = 0;
-                    while (self.curKind() == .identifier and nc < 16) {
+                    while (self.curKind() == .identifier and nc < MAX_PANEL_IMPORTS) {
                         names[nc] = self.curText();
                         nc += 1;
                         self.advance_token();
@@ -539,9 +554,11 @@ pub const Generator = struct {
                             if (std.mem.eql(u8, path, "@panels")) {
                                 // Register these names as panel imports
                                 for (names[0..nc]) |n| {
-                                    if (self.panel_import_count < 16) {
+                                    if (self.panel_import_count < MAX_PANEL_IMPORTS) {
                                         self.panel_imports[self.panel_import_count] = n;
                                         self.panel_import_count += 1;
+                                    } else {
+                                        self.setError("Too many panel imports (limit: 32)");
                                     }
                                 }
                             }
@@ -734,6 +751,11 @@ pub const Generator = struct {
     // ── Top-level parsing ────────────────────────────────────────────
 
     pub fn generate(self: *Generator) ![]const u8 {
+        // Check for lexer overflow
+        if (self.lex.overflow) {
+            return error.TokenLimitExceeded;
+        }
+
         // Phase 1: Collect FFI pragmas
         self.collectFFIPragmas();
 
@@ -797,11 +819,18 @@ pub const Generator = struct {
                     .has_ref = true,
                 };
                 self.dyn_style_count += 1;
+            } else {
+                self.setError("Too many dynamic styles (limit: 128)");
             }
         }
         self.pending_dyn_style_count = 0;
 
-        // Phase 5: Emit Zig source
+        // Check for overflow errors accumulated during collection/parsing
+        if (self.compile_error) |_| {
+            return error.LimitExceeded;
+        }
+
+        // Emit Zig source
         return switch (self.mode) {
             .full_app => self.emitZigSource(root_expr),
             .runtime_fragment => self.emitRuntimeFragment(root_expr),
@@ -1122,6 +1151,8 @@ pub const Generator = struct {
                                             };
                                             self.state_count += 1;
                                             self.has_state = true;
+                                        } else {
+                                            self.setError("Too many state slots (limit: 128)");
                                         }
                                     }
 
@@ -1136,6 +1167,8 @@ pub const Generator = struct {
                                             .field_count = obj_field_count,
                                         };
                                         self.object_count += 1;
+                                    } else {
+                                        self.setError("Too many object state declarations (limit: 32)");
                                     }
 
                                     // Skip rparen and continue past normal slot creation
@@ -1154,6 +1187,8 @@ pub const Generator = struct {
                                     };
                                     self.state_count += 1;
                                     self.has_state = true;
+                                } else {
+                                    self.setError("Too many state slots (limit: 128)");
                                 }
                             }
                         }
@@ -1263,6 +1298,8 @@ pub const Generator = struct {
                         .interval_ms = interval_ms,
                     };
                     self.effect_count += 1;
+                } else {
+                    self.setError("Too many useEffect hooks (limit: 64)");
                 }
                 continue; // don't advance_token at bottom
             }
@@ -1359,6 +1396,8 @@ pub const Generator = struct {
                                     .damping = damping,
                                 };
                                 self.anim_hook_count += 1;
+                            } else {
+                                self.setError("Too many animation hooks (limit: 32)");
                             }
                             continue;
                         }
@@ -1551,6 +1590,8 @@ pub const Generator = struct {
                                     .handler_end = h_end,
                                 };
                                 self.prop_stack_count += 1;
+                            } else {
+                                self.setError("Too many component props (limit: 64)");
                             }
                             break;
                         }
@@ -1701,6 +1742,8 @@ pub const Generator = struct {
                             .body_end = body_end,
                         };
                         self.util_func_count += 1;
+                    } else {
+                        self.setError("Too many utility functions (limit: 32)");
                     }
                 }
                 continue;
@@ -1782,32 +1825,36 @@ pub const Generator = struct {
                             self.advance_token(); // skip "return"
                             if (self.curKind() == .lparen) self.advance_token(); // skip (
                             // Now positioned at the '<' of the JSX
-                            if (self.curKind() == .lt and self.component_count < MAX_COMPONENTS) {
-                                // Check for {children} in body by scanning ahead
-                                const body_pos = self.pos;
-                                var has_children = false;
-                                const scan_save = self.pos;
-                                var scan_depth: u32 = 0;
-                                while (self.pos < self.lex.count) {
-                                    if (self.curKind() == .lt) scan_depth += 1;
-                                    if (self.isIdent("children")) {
-                                        has_children = true;
-                                        break;
+                            if (self.curKind() == .lt) {
+                                if (self.component_count < MAX_COMPONENTS) {
+                                    // Check for {children} in body by scanning ahead
+                                    const body_pos = self.pos;
+                                    var has_children = false;
+                                    const scan_save = self.pos;
+                                    var scan_depth: u32 = 0;
+                                    while (self.pos < self.lex.count) {
+                                        if (self.curKind() == .lt) scan_depth += 1;
+                                        if (self.isIdent("children")) {
+                                            has_children = true;
+                                            break;
+                                        }
+                                        // Stop at the function's closing brace
+                                        if (self.curKind() == .rbrace and scan_depth == 0) break;
+                                        self.advance_token();
                                     }
-                                    // Stop at the function's closing brace
-                                    if (self.curKind() == .rbrace and scan_depth == 0) break;
-                                    self.advance_token();
-                                }
-                                self.pos = scan_save;
+                                    self.pos = scan_save;
 
-                                self.components[self.component_count] = .{
-                                    .name = name,
-                                    .prop_names = prop_names,
-                                    .prop_count = prop_count,
-                                    .body_pos = body_pos,
-                                    .has_children = has_children,
-                                };
-                                self.component_count += 1;
+                                    self.components[self.component_count] = .{
+                                        .name = name,
+                                        .prop_names = prop_names,
+                                        .prop_count = prop_count,
+                                        .body_pos = body_pos,
+                                        .has_children = has_children,
+                                    };
+                                    self.component_count += 1;
+                                } else {
+                                    self.setError("Too many component definitions (limit: 64)");
+                                }
                             }
                             break;
                         }
@@ -1955,8 +2002,12 @@ pub const Generator = struct {
                                     .state_type = if (is_string) .string else st,
                                 };
                                 self.local_count += 1;
+                            } else {
+                                self.setError("Too many local variables (limit: 64)");
                             }
                             self.let_count += 1;
+                        } else {
+                            self.setError("Too many let variables (limit: 32)");
                         }
                         if (self.curKind() == .semicolon) self.advance_token();
                         continue;
@@ -2007,6 +2058,8 @@ pub const Generator = struct {
                                                 .state_type = ft,
                                             };
                                             self.local_count += 1;
+                                        } else {
+                                            self.setError("Too many local variables (limit: 64)");
                                         }
                                     }
                                 }
@@ -2078,6 +2131,8 @@ pub const Generator = struct {
                                                     .separator = "",
                                                 };
                                                 self.computed_count += 1;
+                                            } else {
+                                                self.setError("Too many computed arrays (limit: 16)");
                                             }
                                             if (self.curKind() == .semicolon) self.advance_token();
                                             continue;
@@ -2111,6 +2166,8 @@ pub const Generator = struct {
                                                         .separator = sep,
                                                     };
                                                     self.computed_count += 1;
+                                                } else {
+                                                    self.setError("Too many computed arrays (limit: 16)");
                                                 }
                                                 if (self.curKind() == .semicolon) self.advance_token();
                                                 continue;
@@ -2134,6 +2191,8 @@ pub const Generator = struct {
                                 .state_type = st,
                             };
                             self.local_count += 1;
+                        } else {
+                            self.setError("Too many local variables (limit: 64)");
                         }
                         if (self.curKind() == .semicolon) self.advance_token();
                         continue;
@@ -2501,6 +2560,8 @@ pub const Generator = struct {
                                 .style_field = self.pending_anim[pi].style_field,
                             };
                             self.anim_binding_count += 1;
+                        } else {
+                            self.setError("Too many animation bindings (limit: 64)");
                         }
                     }
                     self.pending_anim_count = own_pending_anim; // keep our own bindings
@@ -2515,6 +2576,8 @@ pub const Generator = struct {
                                 .has_ref = false,
                             };
                             self.dyn_style_count += 1;
+                        } else {
+                            self.setError("Too many dynamic styles (limit: 128)");
                         }
                     }
                     self.pending_dyn_style_count = own_pending_dyn_style;
@@ -2527,6 +2590,8 @@ pub const Generator = struct {
                                 .child_idx = @intCast(child_exprs.items.len - 1),
                             };
                             self.route_count += 1;
+                        } else {
+                            self.setError("Too many routes (limit: 32)");
                         }
                         self.last_route_path = null;
                     }
@@ -2580,6 +2645,8 @@ pub const Generator = struct {
                                     .has_ref = false,
                                 };
                                 self.dyn_style_count += 1;
+                            } else {
+                                self.setError("Too many dynamic styles (limit: 128)");
                             }
                         }
                         self.pending_dyn_style_count = own_pending_dyn_style;
@@ -2592,6 +2659,8 @@ pub const Generator = struct {
                                 .false_idx = @intCast(child_exprs.items.len - 1),
                             };
                             self.cond_count += 1;
+                        } else {
+                            self.setError("Too many conditionals (limit: 64)");
                         }
                     } else if (self.isTernaryAhead()) {
                         // Ternary: {condition ? <TrueJSX/> : <FalseJSX/>}
@@ -2607,6 +2676,8 @@ pub const Generator = struct {
                                 .false_idx = @intCast(child_exprs.items.len - 1),
                             };
                             self.cond_count += 1;
+                        } else {
+                            self.setError("Too many conditionals (limit: 64)");
                         }
                     } else if (self.isMapAhead()) {
                         // .map() expression: {items.map((item, index) => (...))}
@@ -2740,6 +2811,8 @@ pub const Generator = struct {
                 };
                 self.last_dyn_id = self.dyn_count;
                 self.dyn_count += 1;
+            } else {
+                self.setError("Too many dynamic text bindings (limit: 128)");
             }
         } else if (text_content) |tc| {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -2998,7 +3071,7 @@ pub const Generator = struct {
         // TextInput — assign input ID and placeholder
         if (is_text_input) {
             const iid = self.input_count;
-            if (iid < 16) self.input_multiline[iid] = is_multiline;
+            if (iid < MAX_INPUTS) self.input_multiline[iid] = is_multiline;
             self.input_count += 1;
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".input_id = {d}", .{iid}));
@@ -3008,7 +3081,7 @@ pub const Generator = struct {
                 try fields.appendSlice(self.alloc, "\"");
             }
             if (change_handler_name != null) {
-                if (iid < 16) self.input_change_handlers[iid] = change_handler_name;
+                if (iid < MAX_INPUTS) self.input_change_handlers[iid] = change_handler_name;
             }
         }
 
@@ -3177,7 +3250,7 @@ pub const Generator = struct {
                         self.emit_colors_as_rgb = true;
                         const expr = try self.emitStateExpr();
                         self.emit_colors_as_rgb = false;
-                        if (self.pending_dyn_style_count < 16) {
+                        if (self.pending_dyn_style_count < MAX_PENDING_DYN_STYLES) {
                             self.pending_dyn_styles[self.pending_dyn_style_count] = .{
                                 .field = color_field,
                                 .expression = expr,
@@ -3232,7 +3305,7 @@ pub const Generator = struct {
                         self.emit_float_as_f32 = true;
                         const expr = try self.emitStateExpr();
                         self.emit_float_as_f32 = false;
-                        if (self.pending_dyn_style_count < 16) {
+                        if (self.pending_dyn_style_count < MAX_PENDING_DYN_STYLES) {
                             self.pending_dyn_styles[self.pending_dyn_style_count] = .{
                                 .field = zig_key,
                                 .expression = expr,
@@ -3254,7 +3327,7 @@ pub const Generator = struct {
                         // Check if value is an animation variable — emit placeholder
                         if (self.isAnimVar(val)) |anim_idx| {
                             try fields.appendSlice(self.alloc, "0");
-                            if (self.pending_anim_count < 8) {
+                            if (self.pending_anim_count < MAX_PENDING_ANIM) {
                                 self.pending_anim[self.pending_anim_count] = .{
                                     .anim_idx = anim_idx,
                                     .style_field = zig_key,
@@ -5623,6 +5696,8 @@ pub const Generator = struct {
                 };
             }
             self.map_count += 1;
+        } else {
+            self.setError("Too many .map() lists (limit: 32)");
         }
 
         return ".{}";
@@ -5678,14 +5753,14 @@ pub const Generator = struct {
             if (self.curKind() == .gt) self.advance_token();
         }
 
-        var inner_nodes: [8]MapInnerNode = undefined;
+        var inner_nodes: [MAX_MAP_INNER]MapInnerNode = undefined;
         var inner_count: u32 = 0;
 
         if (!is_self_closing) {
             while (self.curKind() != .lt_slash and self.curKind() != .eof) {
                 if (self.curKind() == .lt) {
                     const child = try self.parseMapTemplateChild();
-                    if (inner_count < 8) {
+                    if (inner_count < MAX_MAP_INNER) {
                         inner_nodes[inner_count] = child;
                         inner_count += 1;
                     }
@@ -5695,7 +5770,7 @@ pub const Generator = struct {
                         const tl = try self.parseTemplateLiteral();
                         self.advance_token(); // template literal token
                         // Text on the outer element itself (Text element case)
-                        if (is_text and inner_count < 8) {
+                        if (is_text and inner_count < MAX_MAP_INNER) {
                             inner_nodes[inner_count] = .{
                                 .font_size = font_size,
                                 .text_color = text_color,
@@ -7122,7 +7197,7 @@ pub const Generator = struct {
         // Register text inputs
         if (self.input_count > 0) {
             for (0..self.input_count) |i| {
-                if (i < 16 and self.input_multiline[i]) {
+                if (i < MAX_INPUTS and self.input_multiline[i]) {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.registerMultiline({d});\n", .{i}));
                 } else {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
@@ -7130,7 +7205,7 @@ pub const Generator = struct {
             }
             // Register onChange callbacks
             for (0..self.input_count) |i| {
-                if (i < 16) {
+                if (i < MAX_INPUTS) {
                     if (self.input_change_handlers[i]) |handler_name| {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "    input_mod.setOnChange({d}, {s});\n", .{ i, handler_name }));
@@ -7148,7 +7223,7 @@ pub const Generator = struct {
         }
         // Mark inspector overlay nodes so hit test skips them
         if (self.has_inspector) {
-            var marked: [16]u32 = undefined;
+            var marked: [MAX_OVERLAYS]u32 = undefined;
             var marked_count: usize = 0;
             for (0..self.dyn_style_count) |si| {
                 const ds = self.dyn_styles[si];
@@ -7158,7 +7233,7 @@ pub const Generator = struct {
                     for (0..marked_count) |mi| {
                         if (marked[mi] == ds.arr_index) { already = true; break; }
                     }
-                    if (!already and marked_count < 16) {
+                    if (!already and marked_count < MAX_OVERLAYS) {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "    {s}[{d}].devtools_viz = .inspector_overlay;\n",
                             .{ ds.arr_name, ds.arr_index }));

@@ -78,13 +78,14 @@ pub const Token = struct {
     }
 };
 
-const MAX_TOKENS = 16384;
+const MAX_TOKENS = 32768;
 
 pub const Lexer = struct {
     source: []const u8,
     pos: u32,
     tokens: [MAX_TOKENS]Token,
     count: u32,
+    overflow: bool,
 
     pub fn init(source: []const u8) Lexer {
         return .{
@@ -92,6 +93,7 @@ pub const Lexer = struct {
             .pos = 0,
             .tokens = undefined,
             .count = 0,
+            .overflow = false,
         };
     }
 
@@ -114,7 +116,13 @@ pub const Lexer = struct {
     }
 
     fn emit(self: *Lexer, kind: TokenKind, start: u32, end: u32) void {
-        if (self.count >= MAX_TOKENS) return;
+        if (self.count >= MAX_TOKENS) {
+            if (!self.overflow) {
+                self.overflow = true;
+                std.debug.print("[tsz] Token limit exceeded ({d}). Source file is too large for single-pass compilation.\n", .{MAX_TOKENS});
+            }
+            return;
+        }
         self.tokens[self.count] = .{ .kind = kind, .start = start, .end = end };
         self.count += 1;
     }
