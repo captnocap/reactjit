@@ -43,6 +43,24 @@ const MAX_LET_VARS = 32;
 const MAX_UTIL_FUNCS = 32;
 const MAX_UTIL_PARAMS = 16;
 const MAX_OVERLAYS = 16;
+const MAX_COMP_FUNCS = 32;
+const MAX_COMP_INSTANCES = 128;
+const MAX_COMP_INNER = 8;
+
+const CompFunc = struct {
+    name: []const u8,
+    func_source: []const u8,
+    inner_count: u32,
+    inner_sizes: [MAX_COMP_INNER]u32,
+};
+
+const CompInstance = struct {
+    func_idx: u32, // index into comp_funcs
+    storage_names: [MAX_COMP_INNER][]const u8, // _comp_Chip_0, _comp_Chip_1, etc.
+    init_call: []const u8, // the full init call expression
+    parent_arr: []const u8, // parent array name
+    parent_idx: u32, // index in parent array
+};
 
 const ObjectStateInfo = struct {
     getter: []const u8, // "user"
@@ -170,6 +188,8 @@ const ComponentInfo = struct {
     prop_count: u32,
     body_pos: u32, // token position of the return's JSX (at the '<')
     has_children: bool,
+    usage_count: u32, // how many times this component is instantiated
+    func_generated: bool, // true if init function has been generated
 };
 
 const UtilFunc = struct {
@@ -398,6 +418,13 @@ pub const Generator = struct {
     // Children JSX to splice for {children} placeholders
     component_children_exprs: ?*std.ArrayListUnmanaged([]const u8),
 
+    // Component functions (for multi-use leaf components)
+    comp_funcs: [MAX_COMP_FUNCS]CompFunc,
+    comp_func_count: u32,
+    comp_instances: [MAX_COMP_INSTANCES]CompInstance,
+    comp_instance_count: u32,
+    comp_instance_counter: [MAX_COMP_FUNCS]u32, // per-function instance counter for naming
+
     // Compile error diagnostics (set by overflow checks, checked before emission)
     compile_error: ?[]const u8,
 
@@ -492,6 +519,11 @@ pub const Generator = struct {
             .prop_stack = undefined,
             .prop_stack_count = 0,
             .component_children_exprs = null,
+            .comp_funcs = undefined,
+            .comp_func_count = 0,
+            .comp_instances = undefined,
+            .comp_instance_count = 0,
+            .comp_instance_counter = [_]u32{0} ** MAX_COMP_FUNCS,
             .compile_error = null,
         };
     }
@@ -794,6 +826,9 @@ pub const Generator = struct {
         self.pos = 0;
         const app_start = self.findAppFunction() orelse return error.NoAppFunction;
         self.collectStateHooks(app_start);
+
+        // Phase 4b: Count component usage in App body
+        self.countComponentUsage(app_start);
 
         // Phase 5: Collect useEffect calls
         self.pos = app_start;
@@ -1448,7 +1483,7 @@ pub const Generator = struct {
 
     // ── Component helpers ──────────────────────────────────────────────
 
-    fn findComponent(self: *Generator, name: []const u8) ?*const ComponentInfo {
+    fn findComponent(self: *Generator, name: []const u8) ?*ComponentInfo {
         for (0..self.component_count) |i| {
             if (std.mem.eql(u8, self.components[i].name, name)) return &self.components[i];
         }
@@ -1527,7 +1562,9 @@ pub const Generator = struct {
     }
 
     /// Inline a component at its call site: collect props, jump to body, parse JSX.
-    fn inlineComponent(self: *Generator, comp: *const ComponentInfo) anyerror![]const u8 {
+    /// For multi-use leaf components (usage >= 2, no children), generates shared init
+    /// functions to reduce code bloat.
+    fn inlineComponent(self: *Generator, comp: *ComponentInfo) anyerror![]const u8 {
         const saved_component = self.current_inline_component;
         self.current_inline_component = comp.name;
         defer self.current_inline_component = saved_component;
@@ -1655,6 +1692,28 @@ pub const Generator = struct {
             }
         }
 
+        // ── Component function path: multi-use leaf components ──
+        // For components used 2+ times with no children slot, generate a shared
+        // init function instead of fully inlining every instance.
+        const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children;
+        if (eligible) {
+            // Check props don't contain state refs (simple leaf only)
+            var has_state_prop = false;
+            for (saved_prop_count..self.prop_stack_count) |pi| {
+                const v = self.prop_stack[pi].value;
+                if (std.mem.indexOf(u8, v, "state.") != null) has_state_prop = true;
+                if (self.prop_stack[pi].handler_start != null) has_state_prop = true;
+            }
+            if (!has_state_prop) {
+                const cf_result = try self.compFuncInline(comp, saved_prop_count);
+                if (cf_result) |placeholder| {
+                    self.prop_stack_count = saved_prop_count;
+                    return placeholder;
+                }
+                // If compFuncInline returned null, fall through to normal inline
+            }
+        }
+
         // 3. Save position, jump to component body
         const saved_pos = self.pos;
         const saved_children = self.component_children_exprs;
@@ -1674,6 +1733,290 @@ pub const Generator = struct {
         self.component_children_exprs = saved_children;
 
         return result;
+    }
+
+    /// Component function inline: generates shared init function on first use,
+    /// then emits per-instance storage + deferred init call for every use.
+    /// Returns the placeholder expression, or null if this component can't be optimized.
+    fn compFuncInline(self: *Generator, comp: *ComponentInfo, saved_prop_count: u32) !?[]const u8 {
+        var func_idx: u32 = 0;
+
+        if (!comp.func_generated) {
+            // ── First call: parse normally to capture the template ──
+            const arr_count_before = self.array_decls.items.len;
+            const arr_id_before = self.array_counter;
+
+            // Parse the component body
+            const saved_pos = self.pos;
+            self.pos = comp.body_pos;
+            self.component_children_exprs = null;
+            const root_expr = try self.parseJSXElement();
+            self.pos = saved_pos;
+
+            const arr_count_after = self.array_decls.items.len;
+            const inner_count_u = arr_count_after - arr_count_before;
+            if (inner_count_u > MAX_COMP_INNER or inner_count_u == 0) {
+                // Too many inner arrays or no arrays — skip optimization
+                // Remove the arrays we just generated (they came from a throwaway parse)
+                while (self.array_decls.items.len > arr_count_before) {
+                    _ = self.array_decls.pop();
+                }
+                self.array_counter = arr_id_before;
+                return null;
+            }
+            const inner_count: u32 = @intCast(inner_count_u);
+
+            // Capture inner array sizes by parsing the captured decl strings
+            var inner_sizes: [MAX_COMP_INNER]u32 = [_]u32{0} ** MAX_COMP_INNER;
+            for (0..inner_count) |ii| {
+                const decl = self.array_decls.items[arr_count_before + ii];
+                // Count Node elements: number of ".{" at top level
+                inner_sizes[ii] = countNodeElements(decl);
+            }
+
+            // Build the init function source
+            var func_src: std.ArrayListUnmanaged(u8) = .{};
+
+            // Function signature
+            try func_src.appendSlice(self.alloc, "fn _init");
+            try func_src.appendSlice(self.alloc, comp.name);
+            try func_src.appendSlice(self.alloc, "(");
+
+            // Inner array pointer params
+            for (0..inner_count) |ii| {
+                if (ii > 0) try func_src.appendSlice(self.alloc, ", ");
+                try func_src.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "_inner_{d}: *[{d}]Node", .{ ii, inner_sizes[ii] }));
+            }
+
+            // Prop params — infer types from how they were used in generated code
+            for (saved_prop_count..self.prop_stack_count) |pi| {
+                const prop = self.prop_stack[pi];
+                try func_src.appendSlice(self.alloc, ", ");
+                try func_src.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "_p_{s}: ", .{prop.name}));
+                // Infer type from usage in root_expr and array decls
+                const param_type = self.inferPropType(prop, root_expr, self.array_decls.items[arr_count_before..arr_count_after]);
+                try func_src.appendSlice(self.alloc, param_type);
+            }
+
+            try func_src.appendSlice(self.alloc, ") Node {\n");
+
+            // Body: assign inner arrays
+            for (0..inner_count) |ii| {
+                const decl = self.array_decls.items[arr_count_before + ii];
+                // Extract the array initializer content after "= [_]Node{ " and before " };"
+                const arr_init = extractArrayInit(decl);
+                // Replace prop value literals with parameter references
+                var replaced_init: []const u8 = try self.alloc.dupe(u8, arr_init);
+                for (saved_prop_count..self.prop_stack_count) |pi| {
+                    const prop = self.prop_stack[pi];
+                    const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
+                    replaced_init = try self.replaceAllOccurrences(replaced_init, prop.value, param_ref);
+                    // Also handle color-converted values: prop value "\"#4ec9b0\"" becomes Color.rgb(78, 201, 176)
+                    if (prop.value.len >= 2 and prop.value[0] == '"') {
+                        const inner_val = prop.value[1 .. prop.value.len - 1];
+                        if (inner_val.len > 0 and inner_val[0] == '#') {
+                            const color_zig = try self.parseColorValue(inner_val);
+                            replaced_init = try self.replaceAllOccurrences(replaced_init, color_zig, param_ref);
+                        }
+                    }
+                }
+                try func_src.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _inner_{d}.* = [_]Node{{ {s} }};\n", .{ ii, replaced_init }));
+            }
+
+            // Root expression — replace &_arr_N references with _inner_K
+            var replaced_root: []const u8 = try self.alloc.dupe(u8, root_expr);
+            for (0..inner_count) |ii| {
+                const arr_id = arr_id_before + @as(u32, @intCast(ii));
+                const old_ref = try std.fmt.allocPrint(self.alloc, "&_arr_{d}", .{arr_id});
+                const new_ref = try std.fmt.allocPrint(self.alloc, "_inner_{d}", .{ii});
+                replaced_root = try self.replaceAllOccurrences(replaced_root, old_ref, new_ref);
+            }
+            // Replace prop value literals in root expression too
+            for (saved_prop_count..self.prop_stack_count) |pi| {
+                const prop = self.prop_stack[pi];
+                const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
+                replaced_root = try self.replaceAllOccurrences(replaced_root, prop.value, param_ref);
+                if (prop.value.len >= 2 and prop.value[0] == '"') {
+                    const inner_val = prop.value[1 .. prop.value.len - 1];
+                    if (inner_val.len > 0 and inner_val[0] == '#') {
+                        const color_zig = try self.parseColorValue(inner_val);
+                        replaced_root = try self.replaceAllOccurrences(replaced_root, color_zig, param_ref);
+                    }
+                }
+            }
+
+            // Convert ".{ ... }" to "Node{ ... }" for the return
+            if (std.mem.startsWith(u8, replaced_root, ".{ ")) {
+                replaced_root = try std.fmt.allocPrint(self.alloc, "return Node{{ {s}", .{replaced_root[3..]});
+            } else {
+                replaced_root = try std.fmt.allocPrint(self.alloc, "return {s}", .{replaced_root});
+            }
+            try func_src.appendSlice(self.alloc, "    ");
+            try func_src.appendSlice(self.alloc, replaced_root);
+            try func_src.appendSlice(self.alloc, ";\n}\n");
+
+            // Remove the captured arrays from array_decls (they are now in the function)
+            while (self.array_decls.items.len > arr_count_before) {
+                _ = self.array_decls.pop();
+            }
+            self.array_counter = arr_id_before;
+
+            // Store the function
+            if (self.comp_func_count < MAX_COMP_FUNCS) {
+                func_idx = self.comp_func_count;
+                self.comp_funcs[func_idx] = .{
+                    .name = comp.name,
+                    .func_source = try self.alloc.dupe(u8, func_src.items),
+                    .inner_count = inner_count,
+                    .inner_sizes = inner_sizes,
+                };
+                self.comp_func_count += 1;
+            } else {
+                return null;
+            }
+
+            comp.func_generated = true;
+        } else {
+            // Find existing function index
+            for (0..self.comp_func_count) |fi| {
+                if (std.mem.eql(u8, self.comp_funcs[fi].name, comp.name)) {
+                    func_idx = @intCast(fi);
+                    break;
+                }
+            }
+        }
+
+        // ── Every call: emit per-instance storage + deferred init ──
+        const cf = &self.comp_funcs[func_idx];
+        if (self.comp_instance_count >= MAX_COMP_INSTANCES) return null;
+
+        const inst_id = self.comp_instance_counter[func_idx];
+        self.comp_instance_counter[func_idx] += 1;
+
+        var inst: CompInstance = .{
+            .func_idx = func_idx,
+            .storage_names = undefined,
+            .init_call = "",
+            .parent_arr = "",
+            .parent_idx = 0,
+        };
+
+        // Emit storage arrays as array_decls (they are "var _comp_Name_N: [S]Node = undefined;")
+        for (0..cf.inner_count) |ii| {
+            const storage_name = try std.fmt.allocPrint(self.alloc, "_comp_{s}_{d}_{d}", .{ comp.name, inst_id, ii });
+            inst.storage_names[ii] = storage_name;
+            const storage_decl = try std.fmt.allocPrint(self.alloc, "var {s}: [{d}]Node = undefined;", .{ storage_name, cf.inner_sizes[ii] });
+            try self.array_decls.append(self.alloc, storage_decl);
+        }
+
+        // Build the init call expression: _initChip(&_comp_Chip_0_0, "Zig", Color.rgb(247, 164, 29))
+        var call: std.ArrayListUnmanaged(u8) = .{};
+        try call.appendSlice(self.alloc, "_init");
+        try call.appendSlice(self.alloc, comp.name);
+        try call.appendSlice(self.alloc, "(");
+        for (0..cf.inner_count) |ii| {
+            if (ii > 0) try call.appendSlice(self.alloc, ", ");
+            try call.appendSlice(self.alloc, "&");
+            try call.appendSlice(self.alloc, inst.storage_names[ii]);
+        }
+        // Prop values as arguments
+        for (saved_prop_count..self.prop_stack_count) |pi| {
+            const prop = self.prop_stack[pi];
+            try call.appendSlice(self.alloc, ", ");
+            // Convert prop value to Zig expression for the call
+            if (prop.value.len >= 2 and prop.value[0] == '"') {
+                const inner_val = prop.value[1 .. prop.value.len - 1];
+                if (inner_val.len > 0 and inner_val[0] == '#') {
+                    // Color prop — convert to Color.rgb(...)
+                    const color_expr = try self.parseColorValue(inner_val);
+                    try call.appendSlice(self.alloc, color_expr);
+                } else {
+                    // String prop — pass as string literal
+                    try call.appendSlice(self.alloc, prop.value);
+                }
+            } else {
+                try call.appendSlice(self.alloc, prop.value);
+            }
+        }
+        try call.appendSlice(self.alloc, ")");
+        inst.init_call = try self.alloc.dupe(u8, call.items);
+
+        self.comp_instances[self.comp_instance_count] = inst;
+        self.comp_instance_count += 1;
+
+        // Return placeholder — will be filled by _initComponents() at runtime
+        return try self.alloc.dupe(u8, ".{}");
+    }
+
+    /// Infer the Zig type for a component prop based on how its value was used
+    /// in the generated template code.
+    fn inferPropType(self: *Generator, prop: PropBinding, root_expr: []const u8, array_decls: []const []const u8) []const u8 {
+        _ = self;
+        // Check if prop value appears near ".background_color = " or ".text_color = " in output
+        const val = prop.value;
+        // If the raw value is a quoted string with #, it's a color
+        if (val.len >= 2 and val[0] == '"') {
+            const inner = val[1 .. val.len - 1];
+            if (inner.len > 0 and inner[0] == '#') {
+                return "Color";
+            }
+        }
+        // Check generated code for context clues
+        for (array_decls) |decl| {
+            if (std.mem.indexOf(u8, decl, ".text_color = ") != null or
+                std.mem.indexOf(u8, decl, ".background_color = ") != null)
+            {
+                // Check if this decl references a color conversion of our prop value
+                if (val.len >= 2 and val[0] == '"') {
+                    // String prop used as text
+                    if (std.mem.indexOf(u8, decl, ".text = ") != null) {
+                        return "[]const u8";
+                    }
+                }
+            }
+        }
+        // Check root expression too
+        if (std.mem.indexOf(u8, root_expr, "background_color") != null and
+            val.len >= 2 and val[0] == '"')
+        {
+            const inner = val[1 .. val.len - 1];
+            if (inner.len > 0 and inner[0] == '#') {
+                return "Color";
+            }
+        }
+        // Default: if quoted string, it's []const u8; if number, u16
+        if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+            return "[]const u8";
+        }
+        if (val.len > 0 and val[0] >= '0' and val[0] <= '9') {
+            return "u16";
+        }
+        return "[]const u8";
+    }
+
+    /// Replace all occurrences of `needle` in `haystack` with `replacement`.
+    fn replaceAllOccurrences(self: *Generator, haystack: []const u8, needle: []const u8, replacement: []const u8) ![]const u8 {
+        if (needle.len == 0 or haystack.len < needle.len) return haystack;
+        var result: std.ArrayListUnmanaged(u8) = .{};
+        var i: usize = 0;
+        while (i <= haystack.len - needle.len) {
+            if (std.mem.eql(u8, haystack[i..][0..needle.len], needle)) {
+                try result.appendSlice(self.alloc, replacement);
+                i += needle.len;
+            } else {
+                try result.append(self.alloc, haystack[i]);
+                i += 1;
+            }
+        }
+        // Append remaining bytes
+        while (i < haystack.len) {
+            try result.append(self.alloc, haystack[i]);
+            i += 1;
+        }
+        return try self.alloc.dupe(u8, result.items);
     }
 
     /// Collect utility functions (lowercase, non-App, non-component).
@@ -1854,6 +2197,8 @@ pub const Generator = struct {
                                         .prop_count = prop_count,
                                         .body_pos = body_pos,
                                         .has_children = has_children,
+                                        .usage_count = 0,
+                                        .func_generated = false,
                                     };
                                     self.component_count += 1;
                                 } else {
@@ -1870,6 +2215,30 @@ pub const Generator = struct {
                 // Skip rest of function
                 _ = func_pos;
                 continue;
+            }
+            self.advance_token();
+        }
+    }
+
+    /// Count how many times each component is used as a JSX tag in the App body.
+    fn countComponentUsage(self: *Generator, app_start: u32) void {
+        const saved_pos = self.pos;
+        defer self.pos = saved_pos;
+        self.pos = app_start;
+        while (self.pos < self.lex.count and self.curKind() != .eof) {
+            if (self.curKind() == .lt) {
+                self.advance_token();
+                if (self.curKind() == .identifier) {
+                    const name = self.curText();
+                    if (name.len > 0 and name[0] >= 'A' and name[0] <= 'Z') {
+                        for (0..self.component_count) |i| {
+                            if (std.mem.eql(u8, self.components[i].name, name)) {
+                                self.components[i].usage_count += 1;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             self.advance_token();
         }
@@ -3147,6 +3516,21 @@ pub const Generator = struct {
                 if (self.maps[mi].parent_arr_name.len == 0) {
                     if (self.maps[mi].child_idx < child_exprs.items.len) {
                         self.maps[mi].parent_arr_name = arr_name;
+                    }
+                }
+            }
+
+            // Bind component instances to this array: match unbound instances
+            // to their placeholder positions in child_exprs
+            for (child_exprs.items, 0..) |expr, ci| {
+                if (std.mem.eql(u8, expr, ".{}")) {
+                    // Find the earliest unbound component instance
+                    for (0..self.comp_instance_count) |cii| {
+                        if (self.comp_instances[cii].parent_arr.len == 0) {
+                            self.comp_instances[cii].parent_arr = arr_name;
+                            self.comp_instances[cii].parent_idx = @intCast(ci);
+                            break;
+                        }
                     }
                 }
             }
@@ -6740,6 +7124,27 @@ pub const Generator = struct {
             }
         }
 
+        // Component init functions (for multi-use leaf components)
+        if (self.comp_func_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Component init functions ────────────────────────────────────\n");
+            for (0..self.comp_func_count) |fi| {
+                try out.appendSlice(self.alloc, self.comp_funcs[fi].func_source);
+                try out.appendSlice(self.alloc, "\n");
+            }
+        }
+
+        // _initComponents() — fills in deferred component instance slots
+        if (self.comp_instance_count > 0) {
+            try out.appendSlice(self.alloc, "fn _initComponents() void {\n");
+            for (0..self.comp_instance_count) |ci| {
+                const inst = self.comp_instances[ci];
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}] = {s};\n",
+                    .{ inst.parent_arr, inst.parent_idx, inst.init_call }));
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
+
         // Effect timer variables (module-level)
         if (self.effect_count > 0) {
             var has_any_timer = false;
@@ -7287,6 +7692,7 @@ pub const Generator = struct {
                 }
             }
         }
+        if (self.comp_instance_count > 0) try out.appendSlice(self.alloc, "    _initComponents();\n");
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
@@ -7725,4 +8131,54 @@ fn namedColor(name: []const u8) ?[3]u8 {
     if (std.mem.eql(u8, name, "orange")) return .{ 255, 165, 0 };
     if (std.mem.eql(u8, name, "transparent")) return .{ 0, 0, 0 }; // rgba(0,0,0,0) — alpha not supported yet
     return null;
+}
+
+// ── Component function helpers ──────────────────────────────────────────
+
+/// Count top-level Node elements in an array decl string.
+/// Looks for ".{" patterns at the top level (not inside nested braces).
+fn countNodeElements(decl: []const u8) u32 {
+    // Find the content between "[_]Node{ " and the final " };"
+    const marker = "[_]Node{ ";
+    const start = std.mem.indexOf(u8, decl, marker) orelse return 1;
+    const content = decl[start + marker.len ..];
+    var count: u32 = 0;
+    var depth: i32 = 0;
+    var i: usize = 0;
+    while (i < content.len) {
+        if (content[i] == '{') {
+            if (depth == 0) count += 1;
+            depth += 1;
+        } else if (content[i] == '}') {
+            depth -= 1;
+            if (depth < 0) break; // closing "};" of the array
+        }
+        i += 1;
+    }
+    return if (count > 0) count else 1;
+}
+
+/// Extract the array initializer content from a decl string.
+/// Input:  "var _arr_3 = [_]Node{ .{ .text = \"Top\" } }; // Chip"
+/// Output: ".{ .text = \"Top\" }"
+fn extractArrayInit(decl: []const u8) []const u8 {
+    const marker = "[_]Node{ ";
+    const start = std.mem.indexOf(u8, decl, marker) orelse return "";
+    const content_start = start + marker.len;
+    // Find matching end: scan for "};" at depth 0
+    var depth: i32 = 0;
+    var i: usize = content_start;
+    while (i < decl.len) {
+        if (decl[i] == '{') {
+            depth += 1;
+        } else if (decl[i] == '}') {
+            if (depth == 0) {
+                // This is the closing "}" of the array — content ends before it
+                return decl[content_start..i];
+            }
+            depth -= 1;
+        }
+        i += 1;
+    }
+    return decl[content_start..];
 }
