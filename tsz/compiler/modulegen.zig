@@ -682,7 +682,13 @@ fn parseTypeAtPos(
         try type_buf.appendSlice(alloc, lex.get(pos.*).text(source));
         pos.* += 1; // skip identifier
     }
-    const t = try alloc.dupe(u8, type_buf.items);
+    var t = try alloc.dupe(u8, type_buf.items);
+
+    // const T — type qualifier (e.g., const u8, const Node)
+    if (std.mem.eql(u8, t, "const") and pos.* < lex.count and lex.get(pos.*).kind == .identifier) {
+        const inner = try parseTypeAtPos(alloc, lex, source, pos);
+        t = try std.fmt.allocPrint(alloc, "const {s}", .{inner});
+    }
 
     // fn (params) RetType — function type
     if (std.mem.eql(u8, t, "fn") and pos.* < lex.count and lex.get(pos.*).kind == .lparen) {

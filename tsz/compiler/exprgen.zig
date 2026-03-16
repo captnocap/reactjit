@@ -724,8 +724,9 @@ const Parser = struct {
                     };
 
                     if (is_slice) {
-                        // Parse start expression using parsePrimary only (avoid postfix eating ..)
-                        const start_expr = try self.parsePrimary();
+                        // Parse start expression with postfix (handles prefix.len etc.)
+                        // parsePostfix stops at .. because . followed by . isn't an identifier
+                        const start_expr = try self.parsePostfix();
 
                         // Consume ..
                         if (self.curKind() == .dot) self.advance();
