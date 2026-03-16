@@ -47,6 +47,21 @@ var slots: [MAX_SLOTS]StateSlot = undefined;
 var slot_count: usize = 0;
 var _dirty: bool = false;
 
+/// Reserve a contiguous range of slots, all initialized to int(0).
+/// Returns the starting index. Used by runtime fragments:
+///   const base = state.reserveSlots(panel.SLOT_COUNT);
+///   panel.init(base);
+/// The fragment's init() then writes typed defaults via setSlot/setSlotFloat/etc.
+pub fn reserveSlots(count: usize) usize {
+    const base = slot_count;
+    std.debug.assert(base + count <= MAX_SLOTS);
+    for (0..count) |i| {
+        slots[base + i] = .{ .value = .{ .int = 0 }, .dirty = false };
+    }
+    slot_count += count;
+    return base;
+}
+
 /// Allocate a new state slot with an initial integer value.
 /// Called once per useState() at init time. Returns the slot ID.
 pub fn createSlot(initial: i64) usize {

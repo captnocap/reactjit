@@ -20,12 +20,6 @@ pub const SLOT_COUNT: usize = 6;
 
 pub fn init(base: usize) void {
     slot_base = base;
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
 }
 
 pub fn tick() void {

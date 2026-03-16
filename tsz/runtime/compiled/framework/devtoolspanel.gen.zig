@@ -9,12 +9,8 @@
 const std = @import("std");
 const layout = @import("../../layout.zig");
 const Node = layout.Node;
-const Style = layout.Style;
 const Color = layout.Color;
-const gpu = @import("../../gpu.zig");
 const state = @import("../../state.zig");
-const text_mod = @import("../../text.zig");
-const TextEngine = text_mod.TextEngine;
 
 // ── Panel identity ───────────────────────────────────────────
 pub const PANEL_ID = "devtoolspanel";
@@ -91,12 +87,6 @@ fn updateConditionals() void {
 
 pub fn init(base: usize) void {
     slot_base = base;
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
-    _ = state.createSlot(0);
     updateDynamicTexts();
     updateConditionals();
 }

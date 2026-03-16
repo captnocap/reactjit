@@ -5919,14 +5919,11 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
         if (!headless) {
             try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.zig\");\n");
-            try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
-            try out.appendSlice(self.alloc, "const gpu = @import(\"../../gpu.zig\");\n");
+            try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Color = layout.Color;\n");
         }
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../state.zig\");\n");
-        if (!headless and (self.dyn_count > 0 or self.has_state)) {
-            try out.appendSlice(self.alloc, "const text_mod = @import(\"../../text.zig\");\n");
-            try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
-        }
+        // text_mod/TextEngine only needed if fragment calls text functions directly
+        // (most fragments don't — the compositor handles text rendering)
         if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/inspector/panel.zig\");\n");
         if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"../../overlay.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../animate.zig\");\n");
@@ -6169,17 +6166,31 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "pub fn init(base: usize) void {\n");
         try out.appendSlice(self.alloc, "    slot_base = base;\n");
         if (self.has_state) {
+            // Write typed defaults into the pre-reserved slot range.
+            // Caller does: panel.init(state.reserveSlots(panel.SLOT_COUNT))
             for (0..self.state_count) |i| {
                 const slot = self.state_slots[i];
                 switch (slot.initial) {
-                    .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _ = state.createSlot({d});\n", .{v})),
+                    .int => |v| {
+                        if (v != 0) { // reserveSlots already zeros
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    state.setSlot(slot_base + {d}, {d});\n", .{ i, v }));
+                        }
+                    },
                     .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _ = state.createSlotFloat({d});\n", .{v})),
-                    .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _ = state.createSlotBool({});\n", .{v})),
-                    .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                        "    state.setSlotFloat(slot_base + {d}, {d});\n", .{ i, v })),
+                    .boolean => |v| {
+                        if (v) { // reserveSlots initializes to 0 (false)
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    state.setSlotBool(slot_base + {d}, true);\n", .{i}));
+                        }
+                    },
+                    .string => |v| {
+                        if (v.len > 0) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    state.setSlotString(slot_base + {d}, \"{s}\");\n", .{ i, v }));
+                        }
+                    },
                     .array => |v| {
                         try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
                         for (0..v.count) |j| {
