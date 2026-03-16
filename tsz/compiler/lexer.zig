@@ -220,7 +220,7 @@ pub const Lexer = struct {
                 continue;
             }
 
-            // Numbers (decimal, hex 0x, binary 0b, octal 0o)
+            // Numbers (decimal, hex 0x, binary 0b, octal 0o, scientific 1e-6)
             if (ch >= '0' and ch <= '9') {
                 if (ch == '0' and self.pos + 1 < self.source.len and
                     (self.source[self.pos + 1] == 'x' or self.source[self.pos + 1] == 'X' or
@@ -244,6 +244,24 @@ pub const Lexer = struct {
                         (self.source[self.pos] == '.' and (self.pos + 1 >= self.source.len or self.source[self.pos + 1] != '.'))))
                     {
                         self.pos += 1;
+                    }
+                    // Scientific notation: e/E followed by optional +/- and digits
+                    if (self.pos < self.source.len and
+                        (self.source[self.pos] == 'e' or self.source[self.pos] == 'E'))
+                    {
+                        self.pos += 1; // consume e/E
+                        // Optional sign
+                        if (self.pos < self.source.len and
+                            (self.source[self.pos] == '+' or self.source[self.pos] == '-'))
+                        {
+                            self.pos += 1;
+                        }
+                        // Exponent digits
+                        while (self.pos < self.source.len and
+                            (self.source[self.pos] >= '0' and self.source[self.pos] <= '9'))
+                        {
+                            self.pos += 1;
+                        }
                     }
                 }
                 self.emit(.number, start, self.pos);

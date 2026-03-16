@@ -320,7 +320,12 @@ fn emitModuleVars(
         if (std.mem.eql(u8, text, "type") or
             std.mem.eql(u8, text, "import"))
         {
+            // Skip the entire declaration through the semicolon
             pos += 1;
+            while (pos < lex.count and lex.get(pos).kind != .semicolon) {
+                pos += 1;
+            }
+            if (pos < lex.count and lex.get(pos).kind == .semicolon) pos += 1;
             continue;
         }
         // Skip function declarations (name + params + body)
