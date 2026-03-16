@@ -99,7 +99,7 @@ export function getSlot(id: usize): i64 {
   switch (slots[id].value) {
     case .int: |v| return v;
     case .float: |v| return @intFromFloat(v);
-    case .boolean: |v| return if (v) @as(i64, 1) else 0;
+    case .boolean: |v| return v ? @as(i64, 1) : 0;
     case .string: return 0;
   }
 }
@@ -108,7 +108,7 @@ export function getSlotFloat(id: usize): f64 {
   switch (slots[id].value) {
     case .int: |v| return @floatFromInt(v);
     case .float: |v| return v;
-    case .boolean: |v| return if (v) @as(f64, 1.0) else 0.0;
+    case .boolean: |v| return v ? @as(f64, 1.0) : 0.0;
     case .string: return 0.0;
   }
 }
@@ -287,25 +287,25 @@ export function saveState() {
 
   for (let i = 0; i < slot_count; i++) {
     switch (slots[i].value) {
-      case .int: |v| {
-        file.writeAll(&[_]u8{0}) catch return;
-        const val_bytes: u8[] = @bitCast(v);
-        file.writeAll(&val_bytes) catch return;
-      }
-      case .float: |v| {
-        file.writeAll(&[_]u8{1}) catch return;
-        const val_bytes: u8[] = @bitCast(v);
-        file.writeAll(&val_bytes) catch return;
-      }
-      case .boolean: |v| {
-        file.writeAll(&[_]u8{2}) catch return;
-        file.writeAll(&[_]u8{if (v) 1 else 0}) catch return;
-      }
-      case .string: |s| {
-        file.writeAll(&[_]u8{3}) catch return;
-        file.writeAll(&[_]u8{s.len}) catch return;
+      case .int: |v|
+        file.writeAll(&.{@as(u8, 0)}) catch return;
+        const val_bytes_i: [8]u8 = @bitCast(v);
+        file.writeAll(&val_bytes_i) catch return;
+        break;
+      case .float: |v|
+        file.writeAll(&.{@as(u8, 1)}) catch return;
+        const val_bytes_f: [8]u8 = @bitCast(v);
+        file.writeAll(&val_bytes_f) catch return;
+        break;
+      case .boolean: |v|
+        file.writeAll(&.{@as(u8, 2)}) catch return;
+        file.writeAll(&.{v ? @as(u8, 1) : @as(u8, 0)}) catch return;
+        break;
+      case .string: |s|
+        file.writeAll(&.{@as(u8, 3)}) catch return;
+        file.writeAll(&.{s.len}) catch return;
         file.writeAll(s.buf[0..s.len]) catch return;
-      }
+        break;
     }
   }
 }
@@ -325,31 +325,31 @@ export function loadState(): boolean {
     _ = file.readAll(&tag_byte) catch break;
 
     switch (tag_byte[0]) {
-      case 0: {
-        let val_bytes: u8[] = undefined;
-        _ = file.readAll(&val_bytes) catch break;
-        const val: i64 = @bitCast(val_bytes);
-        slots[i].value = { int: val };
-      }
-      case 1: {
-        let val_bytes: u8[] = undefined;
-        _ = file.readAll(&val_bytes) catch break;
-        const val: f64 = @bitCast(val_bytes);
-        slots[i].value = { float: val };
-      }
-      case 2: {
-        let bool_byte: u8[] = undefined;
+      case 0:
+        let val_bytes_i: [8]u8 = undefined;
+        _ = file.readAll(&val_bytes_i) catch break;
+        const val_i: i64 = @bitCast(val_bytes_i);
+        slots[i].value = { int: val_i };
+        break;
+      case 1:
+        let val_bytes_f: [8]u8 = undefined;
+        _ = file.readAll(&val_bytes_f) catch break;
+        const val_f: f64 = @bitCast(val_bytes_f);
+        slots[i].value = { float: val_f };
+        break;
+      case 2:
+        let bool_byte: [1]u8 = undefined;
         _ = file.readAll(&bool_byte) catch break;
         slots[i].value = { boolean: bool_byte[0] !== 0 };
-      }
-      case 3: {
-        let len_byte: u8[] = undefined;
+        break;
+      case 3:
+        let len_byte: [1]u8 = undefined;
         _ = file.readAll(&len_byte) catch break;
         const slen: u8 = len_byte[0];
         let str_val: Value = { string: { buf: @splat(0), len: slen } };
         _ = file.read(str_val.string.buf[0..slen]) catch break;
         slots[i].value = str_val;
-      }
+        break;
       default: break;
     }
   }

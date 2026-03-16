@@ -778,7 +778,11 @@ fn enumCaseToZig(alloc: std.mem.Allocator, case_str: []const u8) std.mem.Allocat
         const snake = try typegen.camelToSnake(alloc, variant);
         return try std.fmt.allocPrint(alloc, ".{s}", .{snake});
     }
-    // No dot — might be a plain value
+    // Integer literal — pass through as-is (not an enum variant)
+    if (case_str.len > 0 and (case_str[0] >= '0' and case_str[0] <= '9')) {
+        return try alloc.dupe(u8, case_str);
+    }
+    // No dot — might be a plain enum value
     const snake = try typegen.camelToSnake(alloc, case_str);
     return try std.fmt.allocPrint(alloc, ".{s}", .{snake});
 }

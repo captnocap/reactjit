@@ -815,18 +815,19 @@ const Parser = struct {
                                 .text = try std.fmt.allocPrint(self.alloc, "{s} catch |{s}| {s}", .{ left.text, capture_name, body.text }),
                                 .ty = left.ty,
                             };
-                        } else if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "return")) {
-                            // catch return / catch return <value>
-                            self.advance(); // skip "return"
+                        } else if (self.curKind() == .identifier and (std.mem.eql(u8, self.curText(), "return") or std.mem.eql(u8, self.curText(), "break") or std.mem.eql(u8, self.curText(), "continue"))) {
+                            // catch return / catch return <value> / catch break / catch continue
+                            const kw = try self.alloc.dupe(u8, self.curText());
+                            self.advance(); // skip keyword
                             if (self.curKind() == .semicolon or self.curKind() == .eof or self.curKind() == .rbrace) {
                                 left = .{
-                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch return", .{left.text}),
+                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch {s}", .{ left.text, kw }),
                                     .ty = .void_t,
                                 };
                             } else {
                                 const ret_val = try self.parseTernary();
                                 left = .{
-                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch return {s}", .{ left.text, ret_val.text }),
+                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch {s} {s}", .{ left.text, kw, ret_val.text }),
                                     .ty = left.ty,
                                 };
                             }
