@@ -1630,6 +1630,10 @@ fn resolveFieldType(field_name: []const u8) ExprType {
 
 /// Resolve the return type of a known function call.
 fn resolveCallReturnType(callee: []const u8) ExprType {
+    // Check dynamic function return type table first (populated by modulegen)
+    const stmtgen = @import("stmtgen.zig");
+    if (stmtgen.getFnReturnType(callee)) |ty| return ty;
+
     // Padding/margin helpers → f32 (function names stay camelCase)
     const f32_funcs = [_][]const u8{
         "padLeft",  "padRight",  "padTop",  "padBottom",

@@ -25,6 +25,11 @@ const typegen = @import("typegen.zig");
 
 var var_type_table: exprgen.VarTypes = .{};
 
+// Function return type table — persists across function resets.
+// When a function is emitted with a known return type, register it here
+// so callees can resolve the return type without an allowlist.
+var fn_return_types: exprgen.VarTypes = .{};
+
 pub fn resetVarTypes() void {
     var_type_table = .{};
 }
@@ -33,8 +38,16 @@ pub fn registerVar(name: []const u8, ty: exprgen.ExprType) void {
     var_type_table.put(name, ty);
 }
 
+pub fn registerFnReturnType(name: []const u8, ty: exprgen.ExprType) void {
+    fn_return_types.put(name, ty);
+}
+
+pub fn getFnReturnType(name: []const u8) ?exprgen.ExprType {
+    return fn_return_types.get(name);
+}
+
 /// Map a Zig type string to ExprType
-fn typeStrToExprType(ts: []const u8) exprgen.ExprType {
+pub fn typeStrToExprType(ts: []const u8) exprgen.ExprType {
     if (std.mem.eql(u8, ts, "f32")) return .f32_t;
     if (std.mem.eql(u8, ts, "usize")) return .usize_t;
     if (std.mem.eql(u8, ts, "u16")) return .u16_t;
@@ -570,7 +583,7 @@ fn emitForOf(
 
     // Iterator variable name
     const iter_name = peekText(lex, source, pos.*);
-    const snake_iter = iter_name;
+    const snake_iter = try typegen.camelToSnake(alloc, iter_name);
     pos.* += 1; // skip name
 
     pos.* += 1; // skip 'of'

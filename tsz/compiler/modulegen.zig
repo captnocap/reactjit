@@ -494,6 +494,9 @@ fn emitFunctions(
                     zig_ret;
             }
 
+            // Register function return type for call-site type resolution
+            stmtgen.registerFnReturnType(name, stmtgen.typeStrToExprType(ret_str));
+
             // Check for callconv(...) — emitted before return type in Zig
             if (pos < lex.count and lex.get(pos).kind == .identifier and
                 std.mem.eql(u8, lex.get(pos).text(source), "callconv"))
