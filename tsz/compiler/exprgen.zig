@@ -730,21 +730,11 @@ const Parser = struct {
                                 .ty = left.ty,
                             };
                         } else {
-                            // Range slice: a[x..y]
-                            const end_expr = try self.parsePrimary();
-                            // Allow postfix on end (e.g., a[0..s.len])
-                            var end_final = end_expr;
-                            while (self.curKind() == .dot) {
-                                self.advance();
-                                if (self.curKind() == .identifier) {
-                                    const prop = self.curText();
-                                    self.advance();
-                                    end_final = .{
-                                        .text = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ end_final.text, prop }),
-                                        .ty = .unknown,
-                                    };
-                                } else break;
-                            }
+                            // Range slice: a[x..y] — use full expression for end
+                            const saved2 = self.context;
+                            self.context = .value;
+                            const end_final = try self.parseTernary();
+                            self.context = saved2;
                             self.expect(.rbracket);
                             left = .{
                                 .text = try std.fmt.allocPrint(self.alloc, "{s}[{s}..{s}]", .{ left.text, start_expr.text, end_final.text }),
@@ -759,8 +749,15 @@ const Parser = struct {
                         self.expect(.rbracket);
                         // Resolve element type from container type
                         const elem_ty = left.ty.elementType();
+                        // Only @intCast when index is known f32 (TS number → needs cast to usize)
+                        // For usize, int_lit, and unknown types, pass through directly
+                        const needs_cast = idx.ty == .f32_t or idx.ty == .opt_f32_t;
+                        const idx_text = if (needs_cast)
+                            try std.fmt.allocPrint(self.alloc, "@intCast({s})", .{idx.text})
+                        else
+                            idx.text;
                         left = .{
-                            .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left.text, idx.text }),
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}[{s}]", .{ left.text, idx_text }),
                             .ty = elem_ty,
                         };
                     }
@@ -1243,21 +1240,38 @@ const Parser = struct {
                 }
             } else if (self.curKind() == .identifier) {
                 const key = self.curText();
-                self.advance();
 
-                if (self.curKind() == .colon) {
-                    // key: value (TS-style)
-                    self.advance();
+                if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .colon) {
+                    // key: value (TS-style) — identifier followed by :
+                    self.advance(); // skip key
+                    self.advance(); // skip :
                     const saved = self.context;
                     self.context = .argument;
                     const val = try self.parseTernary();
                     self.context = saved;
                     const snake = try camelToSnake(self.alloc, key);
                     try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, val.text }));
+                } else if (self.pos.* + 1 < self.lex.count and
+                    (self.lex.get(self.pos.* + 1).kind == .dot or
+                    self.lex.get(self.pos.* + 1).kind == .lbracket or
+                    self.lex.get(self.pos.* + 1).kind == .lparen))
+                {
+                    // Expression: identifier followed by . or [ or ( → positional value
+                    const saved3 = self.context;
+                    self.context = .argument;
+                    const val = try self.parseTernary();
+                    self.context = saved3;
+                    try fields.append(self.alloc, val.text);
                 } else {
-                    // Shorthand: { r } → .{ .r = r }
-                    const snake = try camelToSnake(self.alloc, key);
-                    try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, key }));
+                    self.advance();
+                    // Check for comma/rbrace → shorthand: { r } → .{ .r = r }
+                    if (self.curKind() == .comma or self.curKind() == .rbrace) {
+                        const snake = try camelToSnake(self.alloc, key);
+                        try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, key }));
+                    } else {
+                        // Unknown pattern — treat as positional with already-consumed token
+                        try fields.append(self.alloc, try self.alloc.dupe(u8, key));
+                    }
                 }
             } else {
                 // Positional value (tuple literal): .{ expr, expr }

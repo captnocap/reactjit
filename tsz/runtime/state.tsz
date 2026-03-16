@@ -77,7 +77,8 @@ export function createSlotBool(initial: boolean): usize {
 export function createSlotString(initial: string): usize {
   const id = slot_count;
   std.debug.assert(id < MAX_SLOTS);
-  let str_val: Value = { string: { buf: @splat(0), len: 0 } };
+  const zero_buf: [STRING_BUF_SIZE]u8 = @splat(0);
+  let str_val: Value = { string: { buf: zero_buf, len: 0 } };
   const copy_len: u8 = @intCast(@min(initial.len, STRING_BUF_SIZE));
   @memcpy(str_val.string.buf[0..copy_len], initial[0..copy_len]);
   str_val.string.len = copy_len;
@@ -127,7 +128,8 @@ export function getSlotBool(id: usize): boolean {
 export function setSlotString(id: usize, val: string) {
   const current = getSlotString(id);
   if (!std.mem.eql(u8, current, val)) {
-    let str_val: Value = { string: { buf: @splat(0), len: 0 } };
+    const zero_buf: [STRING_BUF_SIZE]u8 = @splat(0);
+  let str_val: Value = { string: { buf: zero_buf, len: 0 } };
     const copy_len: u8 = @intCast(@min(val.len, STRING_BUF_SIZE));
     @memcpy(str_val.string.buf[0..copy_len], val[0..copy_len]);
     str_val.string.len = copy_len;
@@ -220,7 +222,8 @@ export function fmtInt(buf: u8[], val: i64): string {
 export function createArraySlot(initial: i64[]): usize {
   const id = array_slot_count;
   std.debug.assert(id < MAX_ARRAY_SLOTS);
-  array_slots[id] = { values: @splat(0), count: initial.len, dirty: false };
+  const zero_vals: [MAX_ARRAY_LEN]i64 = @splat(0);
+  array_slots[id] = { values: zero_vals, count: initial.len, dirty: false };
   @memcpy(array_slots[id].values[0..initial.len], initial);
   array_slot_count += 1;
   return id;
@@ -347,7 +350,8 @@ export function loadState(): boolean {
         let len_byte: [1]u8 = undefined;
         _ = file.readAll(&len_byte) catch break;
         const slen: u8 = len_byte[0];
-        let str_val: Value = { string: { buf: @splat(0), len: slen } };
+        const zero_buf_s: [STRING_BUF_SIZE]u8 = @splat(0);
+        let str_val: Value = { string: { buf: zero_buf_s, len: slen } };
         _ = file.read(str_val.string.buf[0..slen]) catch break;
         slots[i].value = str_val;
         break;

@@ -14,6 +14,24 @@ const Token = lexer_mod.Token;
 const TokenKind = lexer_mod.TokenKind;
 
 const MAX_KNOWN_ENUMS = 64;
+const MAX_KNOWN_UNIONS = 32;
+
+/// Tracks union declarations so interface fields can skip default values.
+var known_unions: [MAX_KNOWN_UNIONS][]const u8 = undefined;
+var known_union_count: u32 = 0;
+
+fn registerUnion(name: []const u8) void {
+    if (known_union_count >= MAX_KNOWN_UNIONS) return;
+    known_unions[known_union_count] = name;
+    known_union_count += 1;
+}
+
+fn isKnownUnion(name: []const u8) bool {
+    for (0..known_union_count) |i| {
+        if (std.mem.eql(u8, known_unions[i], name)) return true;
+    }
+    return false;
+}
 
 /// Tracks enum declarations so interface fields can get default values.
 const EnumRegistry = struct {
@@ -263,6 +281,7 @@ fn emitUnion(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, po
     const name_tok = lex.get(pos.*);
     if (name_tok.kind != .identifier) return error.ExpectedIdentifier;
     const name = name_tok.text(source);
+    registerUnion(name);
     pos.* += 1;
 
     if (lex.get(pos.*).kind != .lbrace) return error.UnexpectedToken;
@@ -621,6 +640,9 @@ fn defaultForType(enums: *const EnumRegistry, mapped: []const u8, field_name: []
 
     // Known enum → .first_variant
     if (enums.getDefault(mapped)) |d| return d;
+
+    // Known union types → no default (unions can't be default-initialized)
+    if (isKnownUnion(mapped)) return null;
 
     // Known struct types → default struct init
     // (Any PascalCase type that's not a primitive or enum is likely a struct)

@@ -345,6 +345,13 @@ fn emitVarDecl(
                 registerVar(snake_name, expr_ty);
             }
         }
+        // Keep type annotation when initializer is a builtin that needs result type context
+        // (e.g., @bitCast, @splat need the LHS type to resolve)
+        if (type_ann) |ta| {
+            if (final_expr.len > 0 and final_expr[0] == '@') {
+                return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = {s};", .{ ind, effective_kw, snake_name, ta, final_expr });
+            }
+        }
         // Skip .tsz type annotations for most initializers (Zig infers correctly).
         // The raw .tsz types (e.g., "number[]") aren't valid Zig.
         // Otherwise let Zig infer from the initializer

@@ -231,10 +231,15 @@ fn emitModuleVars(
             std.mem.eql(u8, text, "union") or
             std.mem.eql(u8, text, "type") or
             std.mem.eql(u8, text, "import") or
-            std.mem.eql(u8, text, "export") or
             std.mem.eql(u8, text, "function"))
         {
             pos += 1;
+            continue;
+        }
+
+        // Track export prefix for pub visibility
+        if (std.mem.eql(u8, text, "export")) {
+            pos += 1; // skip export, next token should be let/const
             continue;
         }
 
@@ -242,6 +247,10 @@ fn emitModuleVars(
             pos += 1;
             continue;
         }
+
+        // Check if previous token was "export" → make pub
+        const is_pub = pos > 0 and lex.get(pos - 1).kind == .identifier and
+            std.mem.eql(u8, lex.get(pos - 1).text(source), "export");
 
         // Found a top-level let/const
         const is_const = std.mem.eql(u8, text, "const");
@@ -256,7 +265,7 @@ fn emitModuleVars(
             has_vars = true;
         }
 
-        const zig_keyword = if (is_const) "const" else "var";
+        const zig_keyword = if (is_pub and is_const) "pub const" else if (is_pub) "pub var" else if (is_const) "const" else "var";
         // Keep variable names in original casing to match references in function bodies
         const snake_name = name;
 
