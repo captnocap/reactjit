@@ -1,6 +1,14 @@
 // FormStory.tsz — Form with multiple inputs and validation
 
-import { Card, CardTitle, CardCaption, Row, Title, Subtitle, Badge } from '../styles.cls';
+import { Card, CardTitle, CardCaption, Row, Title, Subtitle } from '../styles.cls';
+
+function Badge({ children, color }: { children: any; color: string }) {
+  return (
+    <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, backgroundColor: color, borderRadius: 12 }}>
+      <Text fontSize={11} color="#ffffff">{children}</Text>
+    </Box>
+  );
+}
 
 function FormStory() {
   const [name, setName] = useState('');
@@ -79,7 +87,7 @@ function FormStory() {
           <Box style={{ gap: 4 }}>
             <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Text fontSize={11} color="#a6adc8">Username</Text>
-              <C.Badge color="#a6e3a1">Valid</C.Badge>
+              <Badge color="#a6e3a1">Valid</Badge>
             </Box>
             <Box style={{
               backgroundColor: '#11111b', borderRadius: 8,
@@ -93,7 +101,7 @@ function FormStory() {
           <Box style={{ gap: 4 }}>
             <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Text fontSize={11} color="#a6adc8">Password</Text>
-              <C.Badge color="#f38ba8">Too short</C.Badge>
+              <Badge color="#f38ba8">Too short</Badge>
             </Box>
             <Box style={{
               backgroundColor: '#11111b', borderRadius: 8,

@@ -29,17 +29,26 @@ const win32 = if (native_os == .windows) @import("win32.zig") else undefined;
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/// Derive the binary name from input file: "counter.tsz" → "tsz-counter"
+/// Strip any .tsz variant extension: .app.tsz, .mod.tsz, .cls.tsz, .tsz
+fn stripTszExt(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, ".app.tsz")) return name[0 .. name.len - 8];
+    if (std.mem.endsWith(u8, name, ".mod.tsz")) return name[0 .. name.len - 8];
+    if (std.mem.endsWith(u8, name, ".cls.tsz")) return name[0 .. name.len - 8];
+    if (std.mem.endsWith(u8, name, ".tsz")) return name[0 .. name.len - 4];
+    return name;
+}
+
+/// Derive the binary name from input file: "counter.app.tsz" → "tsz-counter"
 fn appName(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
     const base = std.fs.path.basename(input_file);
-    const stem = if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
+    const stem = stripTszExt(base);
     return std.fmt.allocPrint(alloc, "tsz-{s}", .{stem}) catch "tsz-app";
 }
 
-/// Derive project name from input file: "counter.tsz" → "counter"
+/// Derive project name from input file: "counter.app.tsz" → "counter"
 fn projectName(input_file: []const u8) []const u8 {
     const base = std.fs.path.basename(input_file);
-    return if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
+    return stripTszExt(base);
 }
 
 /// Full path to the app binary: "zig-out/bin/tsz-counter" (or .exe on Windows)
@@ -93,18 +102,34 @@ fn findImportPaths(source: []const u8, paths_out: *[MAX_IMPORTS][]const u8) u32 
 }
 
 /// Resolve an import path relative to the importing file's directory.
-/// './StatusBar' → '/abs/path/to/StatusBar.tsz'
+/// './StatusBar' → tries StatusBar.tsz, StatusBar.app.tsz, StatusBar.mod.tsz, StatusBar.cls.tsz
 fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path: []const u8) ?[]const u8 {
     const dir = std.fs.path.dirname(importer) orelse ".";
-    // Add .tsz extension if not present
-    const with_ext = if (std.mem.endsWith(u8, import_path, ".tsz"))
-        import_path
-    else if (std.mem.endsWith(u8, import_path, ".cls"))
-        std.fmt.allocPrint(alloc, "{s}.tsz", .{import_path}) catch return null
-    else
-        std.fmt.allocPrint(alloc, "{s}.tsz", .{import_path}) catch return null;
 
-    return std.fmt.allocPrint(alloc, "{s}/{s}", .{ dir, with_ext }) catch null;
+    // If it already has a full extension, use as-is
+    if (std.mem.endsWith(u8, import_path, ".tsz") or
+        std.mem.endsWith(u8, import_path, ".app.tsz") or
+        std.mem.endsWith(u8, import_path, ".mod.tsz") or
+        std.mem.endsWith(u8, import_path, ".cls.tsz"))
+    {
+        return std.fmt.allocPrint(alloc, "{s}/{s}", .{ dir, import_path }) catch null;
+    }
+
+    // .cls suffix → try .cls.tsz
+    if (std.mem.endsWith(u8, import_path, ".cls")) {
+        const candidate = std.fmt.allocPrint(alloc, "{s}/{s}.tsz", .{ dir, import_path }) catch return null;
+        if (std.fs.cwd().access(candidate, .{})) |_| return candidate else |_| {}
+    }
+
+    // Try extensions in priority order: .tsz, .app.tsz, .mod.tsz, .cls.tsz
+    const extensions = [_][]const u8{ ".tsz", ".app.tsz", ".mod.tsz", ".cls.tsz" };
+    for (extensions) |ext| {
+        const candidate = std.fmt.allocPrint(alloc, "{s}/{s}{s}", .{ dir, import_path, ext }) catch continue;
+        if (std.fs.cwd().access(candidate, .{})) |_| return candidate else |_| {}
+    }
+
+    // Fallback: just append .tsz (might not exist but preserves old behavior)
+    return std.fmt.allocPrint(alloc, "{s}/{s}.tsz", .{ dir, import_path }) catch null;
 }
 
 /// Recursively merge imported files into a single source string.
@@ -202,6 +227,15 @@ fn isImperativeMode(lex: *const lexer.Lexer, source: []const u8) bool {
     return true; // No App, no JSX → imperative mode
 }
 
+/// Determine mode from file extension, falling back to content scan.
+/// .mod.tsz → imperative, .app.tsz → JSX, .tsz/.cls.tsz → auto-detect
+fn detectMode(input_file: []const u8, lex: *const lexer.Lexer, source: []const u8) bool {
+    if (std.mem.endsWith(u8, input_file, ".mod.tsz")) return true; // imperative
+    if (std.mem.endsWith(u8, input_file, ".app.tsz")) return false; // JSX
+    // .tsz, .cls.tsz → content-based detection
+    return isImperativeMode(lex, source);
+}
+
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
 fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
@@ -211,11 +245,10 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     };
     defer alloc.free(source);
 
-    // Pre-scan to detect imperative mode BEFORE merging
-    // Imperative files use @import — don't merge source files
+    // Detect mode: extension-based first, content-scan fallback
     var pre_lex = lexer.Lexer.init(source);
     pre_lex.tokenize();
-    const imperative = isImperativeMode(&pre_lex, source);
+    const imperative = detectMode(input_file, &pre_lex, source);
 
     const final_source = if (imperative) source else buildMergedSource(alloc, input_file, source);
 
@@ -572,11 +605,10 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
     };
     defer alloc.free(source);
 
-    // Pre-scan to detect imperative mode BEFORE merging
-    // Imperative files use @import — don't merge source files
+    // Detect mode: extension-based first, content-scan fallback
     var pre_lex = lexer.Lexer.init(source);
     pre_lex.tokenize();
-    const imperative = isImperativeMode(&pre_lex, source);
+    const imperative = detectMode(input_file, &pre_lex, source);
 
     const final_source = if (imperative) source else buildMergedSource(alloc, input_file, source);
 
@@ -603,7 +635,7 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
     // Determine output path: kebab-to-snake, .gen.zig extension
     // Default → user/, --framework → framework/
     const basename = std.fs.path.basename(input_file);
-    const stem = if (std.mem.endsWith(u8, basename, ".tsz")) basename[0 .. basename.len - 4] else basename;
+    const stem = stripTszExt(basename);
 
     // Convert kebab-case and PascalCase to snake_case, lowercase
     var snake_buf: [256]u8 = undefined;
@@ -620,7 +652,9 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
     }
 
     // Determine output directory: --output overrides default user/framework split
-    const out_dir = g_output_path orelse if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
+    // Strip trailing slash to avoid double-slash in output path
+    const raw_dir = g_output_path orelse if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
+    const out_dir = if (raw_dir.len > 1 and raw_dir[raw_dir.len - 1] == '/') raw_dir[0 .. raw_dir.len - 1] else raw_dir;
     std.fs.cwd().makePath(out_dir) catch |err| {
         std.debug.print("[tsz] Failed to create output dir: {}\n", .{err});
         std.process.exit(1);
@@ -649,7 +683,7 @@ fn cmdAdd(alloc: std.mem.Allocator, arg: []const u8) void {
     registry.ensureConfigDir();
     var reg = registry.load(alloc);
 
-    // If arg ends with .tsz, register that file directly
+    // If arg ends with any .tsz variant, register that file directly
     if (std.mem.endsWith(u8, arg, ".tsz")) {
         const name = projectName(arg);
         // Resolve to absolute path
@@ -683,7 +717,7 @@ fn cmdAdd(alloc: std.mem.Allocator, arg: []const u8) void {
         const rel = std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir, entry.name }) catch continue;
         const abs = std.fs.cwd().realpath(rel, &full_buf) catch continue;
 
-        const stem = entry.name[0 .. entry.name.len - 4];
+        const stem = stripTszExt(entry.name);
         reg.add(stem, abs);
         std.debug.print("[tsz] Added '{s}' → {s}\n", .{ stem, abs });
         found += 1;
@@ -753,7 +787,7 @@ fn cmdInit(alloc: std.mem.Allocator, name: []const u8) void {
 
     // Write app.tsz
     var tsz_path_buf: [512]u8 = undefined;
-    const tsz_path = std.fmt.bufPrint(&tsz_path_buf, "{s}/app.tsz", .{name}) catch return;
+    const tsz_path = std.fmt.bufPrint(&tsz_path_buf, "{s}/app.app.tsz", .{name}) catch return;
 
     // Don't overwrite existing
     if (std.fs.cwd().access(tsz_path, .{})) |_| {

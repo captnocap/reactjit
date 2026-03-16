@@ -1,6 +1,14 @@
 // DataDashboardStory.tsz — Mini dashboard showing cards, stats, and data display
 
-import { Card, CardTitle, CardCaption, Row, Title, Subtitle, Badge } from '../styles.cls';
+import { Card, CardTitle, CardCaption, Row, Title, Subtitle } from '../styles.cls';
+
+function Badge({ children, color }: { children: any; color: string }) {
+  return (
+    <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, backgroundColor: color, borderRadius: 12 }}>
+      <Text fontSize={11} color="#ffffff">{children}</Text>
+    </Box>
+  );
+}
 
 function StatCard({ label, value, change, color }: { label: string; value: string; change: string; color: string }) {
   return (
@@ -69,11 +77,11 @@ function DataDashboardStory() {
       <C.Card>
         <C.CardTitle>Service Status</C.CardTitle>
         <C.Row>
-          <C.Badge color="#a6e3a1">API: Healthy</C.Badge>
-          <C.Badge color="#a6e3a1">DB: Connected</C.Badge>
-          <C.Badge color="#f9e2af">Cache: Warming</C.Badge>
-          <C.Badge color="#a6e3a1">CDN: Active</C.Badge>
-          <C.Badge color="#6c7086">Cron: Idle</C.Badge>
+          <Badge color="#a6e3a1">API: Healthy</Badge>
+          <Badge color="#a6e3a1">DB: Connected</Badge>
+          <Badge color="#f9e2af">Cache: Warming</Badge>
+          <Badge color="#a6e3a1">CDN: Active</Badge>
+          <Badge color="#6c7086">Cron: Idle</Badge>
         </C.Row>
       </C.Card>
 
