@@ -650,7 +650,8 @@ fn parseTypeAtPos(
     if (pos.* < lex.count and lex.get(pos.*).kind == .question) {
         pos.* += 1;
         const inner = try parseTypeAtPos(alloc, lex, source, pos);
-        return try std.fmt.allocPrint(alloc, "?{s}", .{inner});
+        const mapped = try typegen.mapType(alloc, inner);
+        return try std.fmt.allocPrint(alloc, "?{s}", .{mapped});
     }
 
     // *T or *const T — pointer type prefix
@@ -669,8 +670,42 @@ fn parseTypeAtPos(
 
     if (pos.* >= lex.count or lex.get(pos.*).kind != .identifier) return "unknown";
 
-    const t = lex.get(pos.*).text(source);
+    // Read identifier, then consume dotted chain (e.g., c.SDL_Renderer, layout.Node)
+    var type_buf: std.ArrayListUnmanaged(u8) = .{};
+    try type_buf.appendSlice(alloc, lex.get(pos.*).text(source));
     pos.* += 1;
+    while (pos.* + 1 < lex.count and lex.get(pos.*).kind == .dot and
+        lex.get(pos.* + 1).kind == .identifier)
+    {
+        try type_buf.append(alloc, '.');
+        pos.* += 1; // skip .
+        try type_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+        pos.* += 1; // skip identifier
+    }
+    const t = try alloc.dupe(u8, type_buf.items);
+
+    // fn (params) RetType — function type
+    if (std.mem.eql(u8, t, "fn") and pos.* < lex.count and lex.get(pos.*).kind == .lparen) {
+        var fn_buf: std.ArrayListUnmanaged(u8) = .{};
+        try fn_buf.appendSlice(alloc, "fn ");
+        // Collect ( ... )
+        var pdepth: u32 = 0;
+        while (pos.* < lex.count) {
+            const k = lex.get(pos.*).kind;
+            if (k == .lparen) pdepth += 1;
+            if (k == .rparen) pdepth -= 1;
+            try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+            if (pdepth == 0) break;
+        }
+        // Skip whitespace and collect return type token
+        if (pos.* < lex.count and lex.get(pos.*).kind == .identifier) {
+            try fn_buf.append(alloc, ' ');
+            try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+        }
+        return try alloc.dupe(u8, fn_buf.items);
+    }
 
     // Check for T[] (array/slice type)
     if (pos.* + 1 < lex.count and

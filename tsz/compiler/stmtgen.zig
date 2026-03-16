@@ -290,11 +290,7 @@ fn emitVarDecl(
         const effective_kw = if (std.mem.indexOf(u8, expr, "zeroes") != null or
             std.mem.indexOf(u8, expr, "[_]") != null) "var" else zig_kw;
 
-        // Slice element access needs & to get a pointer (for in-place mutation)
-        var final_expr = if (std.mem.indexOf(u8, expr, ".children[") != null)
-            try std.fmt.allocPrint(alloc, "&{s}", .{expr})
-        else
-            expr;
+        var final_expr = expr;
         if (std.mem.indexOf(u8, expr, "zeroes") != null and std.mem.indexOf(u8, expr, "f32") != null) {
             // Fix array element type based on type annotation or variable name
             const is_bool_arr = if (type_ann) |ta|
@@ -323,14 +319,17 @@ fn emitVarDecl(
         }
         // When var is initialized with a bare 0 literal, Zig needs an explicit type
         // (comptime_int can't be var). Use type annotation if available, else infer from name.
-        if (std.mem.eql(u8, effective_kw, "var") and std.mem.eql(u8, expr, "0")) {
+        // var with integer literal needs explicit type (comptime_int can't be var)
+        if (std.mem.eql(u8, effective_kw, "var") and expr.len > 0 and
+            (expr[0] >= '0' and expr[0] <= '9'))
+        {
             if (type_ann) |ta| {
                 registerVar(snake_name, typeStrToExprType(ta));
-                return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, ta });
+                return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = {s};", .{ ind, snake_name, ta, expr });
             }
             const inferred = inferNumericType(snake_name);
             registerVar(snake_name, typeStrToExprType(inferred));
-            return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, inferred });
+            return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = {s};", .{ ind, snake_name, inferred, expr });
         }
         // Register type using the FINAL expression (after array element type fixup).
         // Priority: final_expr text pattern → annotation → parser inference
@@ -419,7 +418,12 @@ fn emitIf(
         pos.* += 1; // skip name
         if (peekKind(lex, pos.*) == .pipe) pos.* += 1; // skip |
 
-        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) |{s}| ", .{ ind, cond, capture_name }));
+        // Strip " != null" if present — if (optional) |val| uses bare optional
+        const clean_cond = if (std.mem.endsWith(u8, cond, " != null"))
+            cond[0 .. cond.len - " != null".len]
+        else
+            cond;
+        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) |{s}| ", .{ ind, clean_cond, capture_name }));
 
         // Parse body (single statement or block)
         if (peekKind(lex, pos.*) == .lbrace) {
