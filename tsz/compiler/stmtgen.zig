@@ -547,6 +547,9 @@ fn emitForOf(
 
     pos.* += 1; // skip 'for'
     if (peekKind(lex, pos.*) == .lparen) pos.* += 1; // skip (
+
+    // Check for const (value capture) vs let (pointer capture)
+    const is_const = isIdent(lex, source, pos.*, "const");
     pos.* += 1; // skip const/let
 
     // Iterator variable name
@@ -566,7 +569,13 @@ fn emitForOf(
         body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
     }
 
-    return try std.fmt.allocPrint(alloc, "{s}for ({s}) |*{s}| {{\n{s}{s}}}", .{ ind, collection, snake_iter, body, ind });
+    // const → value capture |name|, let → pointer capture |*name|
+    const capture = if (is_const)
+        try std.fmt.allocPrint(alloc, "|{s}|", .{snake_iter})
+    else
+        try std.fmt.allocPrint(alloc, "|*{s}|", .{snake_iter});
+
+    return try std.fmt.allocPrint(alloc, "{s}for ({s}) {s} {{\n{s}{s}}}", .{ ind, collection, capture, body, ind });
 }
 
 // ── C-style for loop ────────────────────────────────────────────────
