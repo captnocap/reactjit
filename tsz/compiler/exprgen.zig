@@ -153,6 +153,32 @@ pub fn emitExpressionTyped(
     return result.text;
 }
 
+/// Full variant: returns both text and inferred type.
+pub fn emitExpressionFull(
+    alloc: std.mem.Allocator,
+    lex: *const Lexer,
+    source: []const u8,
+    pos: *u32,
+    context: ExprContext,
+    var_types: ?*const VarTypes,
+) !TypedExpr {
+    var p = Parser{
+        .alloc = alloc,
+        .lex = lex,
+        .source = source,
+        .pos = pos,
+        .context = context,
+        .var_types = var_types,
+    };
+    const result = try p.parseTernary();
+
+    if (context == .condition and isBareAccess(result.text) and std.mem.indexOf(u8, result.text, ".") != null) {
+        return .{ .text = try std.fmt.allocPrint(alloc, "{s} != null", .{result.text}), .ty = .bool_t };
+    }
+
+    return result;
+}
+
 /// Returns true if the string looks like a bare identifier or property chain
 /// (e.g. "node", "node.text", "node.style.width") — no operators, parens, etc.
 fn isBareAccess(s: []const u8) bool {
@@ -449,6 +475,9 @@ const Parser = struct {
     /// Emit a binary arithmetic expression with type-aware coercion.
     /// Returns a TypedExpr with the result type.
     fn emitArithCoerced(self: *Parser, left: TypedExpr, right: TypedExpr, op: []const u8) Error!TypedExpr {
+        // DEBUG: uncomment to trace type coercion
+        // std.debug.print("ARITH: {s}({s}) {s} {s}({s})\n", .{ left.text, @tagName(left.ty), op, right.text, @tagName(right.ty) });
+
         // Same type → no cast needed
         if (left.ty == right.ty and left.ty != .unknown) {
             return .{
@@ -1091,23 +1120,30 @@ fn resolveFieldType(field_name: []const u8) ExprType {
 
 /// Resolve the return type of a known function call.
 fn resolveCallReturnType(callee: []const u8) ExprType {
-    // Padding/margin helpers → f32
+    // Padding/margin helpers → f32 (function names stay camelCase)
     const f32_funcs = [_][]const u8{
+        "padLeft",  "padRight",  "padTop",  "padBottom",
+        "marLeft",  "marRight",  "marTop",  "marBottom",
+        "clampVal",
+        "estimateIntrinsicWidth", "estimateIntrinsicHeight",
+        // Also snake_case forms for method-style calls
         "pad_left", "pad_right", "pad_top", "pad_bottom",
         "mar_left", "mar_right", "mar_top", "mar_bottom",
         "clamp_val",
-        "estimate_intrinsic_width", "estimate_intrinsic_height",
     };
     for (f32_funcs) |f| {
         if (std.mem.eql(u8, callee, f)) return .f32_t;
     }
 
     // Nullable return
-    if (std.mem.eql(u8, callee, "resolve_maybe_pct")) return .opt_f32_t;
+    if (std.mem.eql(u8, callee, "resolveMaybePct") or
+        std.mem.eql(u8, callee, "resolve_maybe_pct")) return .opt_f32_t;
 
     // Struct returns
-    if (std.mem.eql(u8, callee, "measure_node_text") or
-        std.mem.eql(u8, callee, "measure_node_text_w") or
+    if (std.mem.eql(u8, callee, "measureNodeText") or
+        std.mem.eql(u8, callee, "measureNodeTextW") or
+        std.mem.eql(u8, callee, "measureNodeImage") or
+        std.mem.eql(u8, callee, "measure_node_text") or
         std.mem.eql(u8, callee, "measure_node_image") or
         std.mem.eql(u8, callee, "rgb") or
         std.mem.eql(u8, callee, "rgba"))

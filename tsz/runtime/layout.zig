@@ -447,11 +447,11 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
                 totalCross += lineCrossMax;
                 lineCount += 1;
                 lineMain = itemMain;
-                lineCrossMax = asF32(asF32(estimateIntrinsicHeight(child, innerW)) + asF32(marTop(child.style))) + asF32(marBottom(child.style));
+                lineCrossMax = estimateIntrinsicHeight(child, innerW) + marTop(child.style) + marBottom(child.style);
                 itemsOnLine = 1;
             } else {
                 lineMain += asF32(gapBefore) + asF32(itemMain);
-                const chCross = asF32(asF32(estimateIntrinsicHeight(child, innerW)) + asF32(marTop(child.style))) + asF32(marBottom(child.style));
+                const chCross = estimateIntrinsicHeight(child, innerW) + marTop(child.style) + marBottom(child.style);
                 if (chCross > lineCrossMax) {
                     lineCrossMax = chCross;
                 }
@@ -647,7 +647,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             while (i < visibleCount) : (i += 1) {
                 const itemMain = childBasis[@intCast(i)] + childMainMarginStart[@intCast(i)] + childMainMarginEnd[@intCast(i)];
                 const gapBefore = if (itemsOnLine > 0) gap else 0;
-                if (itemsOnLine > 0 and asF32((asF32(lineMain) + asF32(gapBefore) + itemMain)) > asF32(mainSize)) {
+                if (itemsOnLine > 0 and (asF32(lineMain) + asF32(gapBefore) + itemMain) > mainSize) {
                     if (numLines < MAX_LINES) {
                         lineStarts[@intCast(numLines)] = lineStartIdx;
                         lineCounts[@intCast(numLines)] = itemsOnLine;
@@ -685,7 +685,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var totalMainMargin: f32 = 0;
             {
                 var i = ls;
-                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                while (i < ls + lc) : (i += 1) {
                     totalBasis += childBasis[@intCast(i)];
                     totalMainMargin += childMainMarginStart[@intCast(i)] + childMainMarginEnd[@intCast(i)];
                     if (childGrow[@intCast(i)] > 0) {
@@ -693,14 +693,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
-            const lineGaps = if (lc > 1) gap * (asF32(lc) - asF32(1)) else 0;
-            const freeSpace = asF32(mainSize) - asF32(totalBasis) - lineGaps - totalMainMargin;
+            const lineGaps = if (lc > 1) gap * @as(f32, @floatFromInt((lc - 1))) else 0;
+            const freeSpace = mainSize - totalBasis - lineGaps - totalMainMargin;
             if (freeSpace > 0 and totalFlex > 0) {
                 var frozen = std.mem.zeroes([MAX_CHILDREN]bool);
                 var savedBasis = std.mem.zeroes([MAX_CHILDREN]f32);
                 {
                     var i = ls;
-                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    while (i < ls + lc) : (i += 1) {
                         frozen[@intCast(i)] = childGrow[@intCast(i)] <= 0;
                         savedBasis[@intCast(i)] = childBasis[@intCast(i)];
                     }
@@ -712,7 +712,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     var activeFlex: f32 = 0;
                     {
                         var i = ls;
-                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        while (i < ls + lc) : (i += 1) {
                             if (frozen[@intCast(i)]) {
                                 used += childBasis[@intCast(i)];
                             } else {
@@ -724,14 +724,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     if (activeFlex <= 0) {
                         break;
                     }
-                    const space = asF32(mainSize) - asF32(used) - lineGaps - totalMainMargin;
+                    const space = mainSize - used - lineGaps - totalMainMargin;
                     if (space <= 0) {
                         break;
                     }
                     var anyClamped = false;
                     {
                         var i = ls;
-                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        while (i < ls + lc) : (i += 1) {
                             if (frozen[@intCast(i)]) {
                                 continue;
                             }
@@ -756,7 +756,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 var totalShrinkScaled: f32 = 0;
                 {
                     var i = ls;
-                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    while (i < ls + lc) : (i += 1) {
                         totalShrinkScaled += childShrink[@intCast(i)] * childBasis[@intCast(i)];
                     }
                 }
@@ -764,8 +764,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     const shrinkOverflow = -freeSpace;
                     {
                         var i = ls;
-                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
-                            const amount = asF32((childShrink[@intCast(i)] * childBasis[@intCast(i)] / totalShrinkScaled)) * asF32(shrinkOverflow);
+                        while (i < ls + lc) : (i += 1) {
+                            const amount = (childShrink[@intCast(i)] * childBasis[@intCast(i)] / totalShrinkScaled) * shrinkOverflow;
                             childBasis[@intCast(i)] -= amount;
                         }
                     }
@@ -773,7 +773,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 if (isRow) {
                     {
                         var i = ls;
-                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        while (i < ls + lc) : (i += 1) {
                             const childIdx = visibleIndices[@intCast(i)];
                             const childNode = &node.children[@intCast(childIdx)];
                             if (childNode.style.min_width != null) {
@@ -789,7 +789,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             }
             {
                 var i = ls;
-                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
                     const child = &node.children[@intCast(childIdx)];
                     if (child.text == null) {
@@ -801,7 +801,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         }
                         const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         const prevW = childMainSize[@intCast(i)];
-                        if (@abs(asF32(finalW) - asF32(prevW)) > 0.5) {
+                        if (@abs(finalW - prevW) > 0.5) {
                             const cpl = padLeft(child.style);
                             const cpr = padRight(child.style);
                             const cpt = padTop(child.style);
@@ -831,7 +831,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var lineCross: f32 = 0;
             {
                 var i = ls;
-                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                while (i < ls + lc) : (i += 1) {
                     const childCross = childCrossSize[@intCast(i)] + childCrossMarginStart[@intCast(i)] + childCrossMarginEnd[@intCast(i)];
                     if (childCross > lineCross) {
                         lineCross = childCross;
@@ -856,11 +856,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var usedMain: f32 = 0;
             {
                 var i = ls;
-                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                while (i < ls + lc) : (i += 1) {
                     usedMain += childBasis[@intCast(i)] + childMainMarginStart[@intCast(i)] + childMainMarginEnd[@intCast(i)];
                 }
             }
-            const freeMain = asF32(mainSize) - asF32(usedMain) - lineGaps;
+            const freeMain = mainSize - usedMain - lineGaps;
             var mainOffset: f32 = 0;
             var extraGap: f32 = 0;
             switch (justify) {
@@ -872,18 +872,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 },
                 .space_between => {
                     if (lc > 1) {
-                        extraGap = freeMain / (asF32(lc) - asF32(1));
+                        extraGap = freeMain / @as(f32, @floatFromInt((lc - 1)));
                     }
                 },
                 .space_around => {
                     if (lc > 0) {
-                        extraGap = asF32(freeMain) / asF32(lc);
+                        extraGap = freeMain / @as(f32, @floatFromInt(lc));
                         mainOffset = extraGap / 2;
                     }
                 },
                 .space_evenly => {
                     if (lc > 0) {
-                        extraGap = freeMain / (asF32(lc) + asF32(1));
+                        extraGap = freeMain / @as(f32, @floatFromInt((lc + 1)));
                         mainOffset = extraGap;
                     }
                 },
@@ -893,7 +893,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var cursor = mainOffset;
             {
                 var i = ls;
-                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
                     const child = &node.children[@intCast(childIdx)];
                     var cx: f32 = undefined;
@@ -902,7 +902,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     var chFinal: f32 = undefined;
                     const effAlign = resolveAlign(child.style.align_self, @"align");
                     if (isRow) {
-                        cx = asF32(x + pl) + asF32(cursor);
+                        cx = x + pl + cursor;
                         cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         chFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
@@ -924,7 +924,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                             },
                         }
                     } else {
-                        cy = asF32(y + pt) + asF32(cursor);
+                        cy = y + pt + cursor;
                         chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         cwFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
@@ -1029,7 +1029,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 absW = estimateIntrinsicWidth(absChild);
             }
             absW = clampVal(absW, resolveMaybePct(acs.min_width, innerW), resolveMaybePct(acs.max_width, innerW));
-            const absInnerH = asF32(resolvedH) - asF32(pt) - pb;
+            const absInnerH = resolvedH - pt - pb;
             var absH: f32 = undefined;
             const resolvedAH = resolveMaybePct(acs.height, absInnerH);
             if (resolvedAH != null) {

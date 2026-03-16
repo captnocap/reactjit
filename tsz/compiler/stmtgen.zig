@@ -273,7 +273,9 @@ fn emitVarDecl(
     // = initializer
     if (peekKind(lex, pos.*) == .equals) {
         pos.* += 1; // skip =
-        const expr = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
+        const expr_result = try exprgen.emitExpressionFull(alloc, lex, source, pos, .assignment, &var_type_table);
+        const expr = expr_result.text;
+        const expr_ty = expr_result.ty;
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
 
         // Use var when: array allocation (TS const allows mutation of contents)
@@ -322,14 +324,18 @@ fn emitVarDecl(
             registerVar(snake_name, typeStrToExprType(inferred));
             return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, inferred });
         }
-        // Register type from annotation or initializer pattern
-        const ann_ty = if (type_ann) |ta| typeStrToExprType(ta) else exprgen.ExprType.unknown;
-        if (ann_ty != .unknown) {
-            registerVar(snake_name, ann_ty);
+        // Register type using the FINAL expression (after array element type fixup).
+        // Priority: final_expr text pattern → annotation → parser inference
+        const final_ty = inferExprType(final_expr);
+        if (final_ty != .unknown) {
+            registerVar(snake_name, final_ty);
         } else {
-            // Infer from initializer: function calls returning f32, struct access, etc.
-            const inferred_ty = inferExprType(expr);
-            if (inferred_ty != .unknown) registerVar(snake_name, inferred_ty);
+            const ann_ty = if (type_ann) |ta| typeStrToExprType(ta) else exprgen.ExprType.unknown;
+            if (ann_ty != .unknown) {
+                registerVar(snake_name, ann_ty);
+            } else if (expr_ty != .unknown) {
+                registerVar(snake_name, expr_ty);
+            }
         }
         // Skip .tsz type annotations for most initializers (Zig infers correctly).
         // The raw .tsz types (e.g., "number[]") aren't valid Zig.
