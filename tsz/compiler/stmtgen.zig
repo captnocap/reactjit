@@ -437,12 +437,37 @@ fn emitWhile(
     const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
-    var body: []const u8 = "";
     if (peekKind(lex, pos.*) == .lbrace) {
-        body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+        // Block body
+        const body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+        return try std.fmt.allocPrint(alloc, "{s}while ({s}) {{\n{s}{s}}}", .{ ind, cond, body, ind });
     }
 
-    return try std.fmt.allocPrint(alloc, "{s}while ({s}) {{\n{s}{s}}}", .{ ind, cond, body, ind });
+    // Brace-less body: while (cond) stmt;
+    // Special case: while (cond) i++ → while (cond) : (i += 1) {}
+    if (peekKind(lex, pos.*) == .identifier) {
+        const name = peekText(lex, source, pos.*);
+        if (pos.* + 2 < lex.count) {
+            const p1 = peekKind(lex, pos.* + 1);
+            const p2 = peekKind(lex, pos.* + 2);
+            if (p1 == .plus and p2 == .plus) {
+                const snake = try typegen.camelToSnake(alloc, name);
+                pos.* += 3; // skip name++
+                if (peekKind(lex, pos.*) == .semicolon) pos.* += 1;
+                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} += 1) {{}}", .{ ind, cond, snake });
+            }
+            if (p1 == .minus and p2 == .minus) {
+                const snake = try typegen.camelToSnake(alloc, name);
+                pos.* += 3;
+                if (peekKind(lex, pos.*) == .semicolon) pos.* += 1;
+                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} -= 1) {{}}", .{ ind, cond, snake });
+            }
+        }
+    }
+
+    // General brace-less body: parse single statement
+    const stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
+    return try std.fmt.allocPrint(alloc, "{s}while ({s}) {{\n{s}\n{s}}}", .{ ind, cond, stmt, ind });
 }
 
 // ── Switch/case ─────────────────────────────────────────────────────

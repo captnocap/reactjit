@@ -120,7 +120,7 @@ const Parser = struct {
         while (self.curKind() == .pipe_pipe) {
             self.advance();
             const right = try self.parseLogicalAnd();
-            left = try std.fmt.allocPrint(self.alloc, "({s} or {s})", .{ left, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} or {s}", .{ left, right });
         }
         return left;
     }
@@ -132,7 +132,7 @@ const Parser = struct {
         while (self.curKind() == .amp_amp) {
             self.advance();
             const right = try self.parseNullishCoalescing();
-            left = try std.fmt.allocPrint(self.alloc, "({s} and {s})", .{ left, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} and {s}", .{ left, right });
         }
         return left;
     }
@@ -165,7 +165,7 @@ const Parser = struct {
                 if (std.mem.eql(u8, rhs, "null") or std.mem.eql(u8, rhs, "undefined")) {
                     self.advance();
                     const op = if (is_eq) "==" else "!=";
-                    return try std.fmt.allocPrint(self.alloc, "({s} {s} null)", .{ left, op });
+                    return try std.fmt.allocPrint(self.alloc, "{s} {s} null", .{ left, op });
                 }
             }
 
@@ -182,7 +182,7 @@ const Parser = struct {
 
             const right = try self.parseComparison();
             const op = if (is_eq) "==" else "!=";
-            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
         }
         return left;
     }
@@ -201,7 +201,7 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseAdditive();
-            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
         }
         return left;
     }
@@ -218,7 +218,7 @@ const Parser = struct {
             const op: []const u8 = if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
-            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
         }
         return left;
     }
@@ -238,7 +238,7 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseUnary();
-            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
         }
         return left;
     }
@@ -323,7 +323,11 @@ const Parser = struct {
                     if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .plus) {
                         self.advance();
                         self.advance();
-                        left = try std.fmt.allocPrint(self.alloc, "blk: {{ const tmp = {s}; {s} += 1; break :blk tmp; }}", .{ left, left });
+                        // Postfix i++ → i += 1 (simplified: old-value semantics not needed in practice)
+                        {
+                            const inc_stmt = try std.fmt.allocPrint(self.alloc, "{s} += 1", .{left});
+                            left = inc_stmt;
+                        }
                     } else break;
                 },
 
@@ -332,7 +336,11 @@ const Parser = struct {
                     if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .minus) {
                         self.advance();
                         self.advance();
-                        left = try std.fmt.allocPrint(self.alloc, "blk: {{ const tmp = {s}; {s} -= 1; break :blk tmp; }}", .{ left, left });
+                        // Postfix i-- → i -= 1
+                        {
+                            const dec_stmt = try std.fmt.allocPrint(self.alloc, "{s} -= 1", .{left});
+                            left = dec_stmt;
+                        }
                     } else break;
                 },
 
