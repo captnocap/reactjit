@@ -376,9 +376,20 @@ fn emitForClassic(
         body = try emitBlock(alloc, lex, source, pos, indent_level + 2);
     }
 
-    return try std.fmt.allocPrint(alloc,
-        "{s}{{\n{s}\n{s}while ({s}) : ({s}) {{\n{s}{s}{s}}}\n{s}}}",
-        .{ ind, init_stmt, inner_ind, cond, update, body, inner_ind, "}", ind });
+    // Emit: { init; while (cond) : (update) { body } }
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    try out.appendSlice(alloc, ind);
+    try out.appendSlice(alloc, "{\n");
+    try out.appendSlice(alloc, init_stmt);
+    try out.append(alloc, '\n');
+    try out.appendSlice(alloc, inner_ind);
+    try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "while ({s}) : ({s}) {{\n", .{ cond, update }));
+    try out.appendSlice(alloc, body);
+    try out.appendSlice(alloc, inner_ind);
+    try out.appendSlice(alloc, "}\n");
+    try out.appendSlice(alloc, ind);
+    try out.appendSlice(alloc, "}");
+    return try alloc.dupe(u8, out.items);
 }
 
 /// Parse the update part of a C-style for loop (i++, i--, i += 1)

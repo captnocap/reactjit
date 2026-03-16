@@ -15,6 +15,7 @@ const lexer_mod = @import("lexer.zig");
 const Lexer = lexer_mod.Lexer;
 const Token = lexer_mod.Token;
 const TokenKind = lexer_mod.TokenKind;
+const typegen = @import("typegen.zig");
 
 pub const ExprContext = enum {
     value, // general expression
@@ -455,7 +456,8 @@ const Parser = struct {
                     if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Array")) {
                         self.advance();
                         self.expect(.lparen);
-                        const size = self.curText();
+                        const size_raw = self.curText();
+                        const size = try camelToSnake(self.alloc, size_raw);
                         self.advance();
                         self.expect(.rparen);
                         return try std.fmt.allocPrint(self.alloc, "std.mem.zeroes([{s}]f32)", .{size});
@@ -624,30 +626,8 @@ fn lowerFirst(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
 /// Convert camelCase to snake_case.
 /// "flexDirection" → "flex_direction", "paddingLeft" → "padding_left"
 pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
-    if (input.len == 0) return try alloc.dupe(u8, "");
-
-    // Count uppercase letters after first char to size the output
-    var extra: usize = 0;
-    for (input[1..]) |ch| {
-        if (ch >= 'A' and ch <= 'Z') extra += 1;
-    }
-    if (extra == 0) return try alloc.dupe(u8, input);
-
-    var buf = try alloc.alloc(u8, input.len + extra);
-    var j: usize = 0;
-    buf[0] = input[0];
-    j = 1;
-    for (input[1..]) |ch| {
-        if (ch >= 'A' and ch <= 'Z') {
-            buf[j] = '_';
-            buf[j + 1] = ch - 'A' + 'a';
-            j += 2;
-        } else {
-            buf[j] = ch;
-            j += 1;
-        }
-    }
-    return buf[0..j];
+    // Delegate to typegen's version which handles Zig reserved keyword escaping
+    return typegen.camelToSnake(alloc, input);
 }
 
 /// Convert `template ${expr}` to std.fmt.comptimePrint("template {s}", .{ expr })

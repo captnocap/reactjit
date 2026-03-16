@@ -146,7 +146,32 @@ pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
             try out.append(alloc, ch);
         }
     }
-    return try alloc.dupe(u8, out.items);
+    const result = try alloc.dupe(u8, out.items);
+    // Escape Zig reserved keywords
+    if (isZigKeyword(result)) {
+        return try std.fmt.allocPrint(alloc, "@\"{s}\"", .{result});
+    }
+    return result;
+}
+
+fn isZigKeyword(name: []const u8) bool {
+    const keywords = [_][]const u8{
+        "align", "allowzero", "and", "asm", "async", "await",
+        "break", "catch", "comptime", "const", "continue",
+        "defer", "else", "enum", "errdefer", "error", "export", "extern",
+        "false", "fn", "for", "if", "inline",
+        "noalias", "nosuspend", "null",
+        "opaque", "or", "orelse",
+        "packed", "pub", "resume", "return",
+        "struct", "suspend", "switch",
+        "test", "threadlocal", "true", "try", "type",
+        "undefined", "union", "unreachable", "usingnamespace",
+        "var", "volatile", "while",
+    };
+    for (keywords) |kw| {
+        if (std.mem.eql(u8, name, kw)) return true;
+    }
+    return false;
 }
 
 // ── Internal: enum emission ─────────────────────────────────────────
