@@ -8,7 +8,7 @@
 const builtin = @import("builtin");
 
 export const imports = @cImport({
-  if (comptime builtin.os.tag === .windows) {
+  if (builtin.os.tag == .windows) {
     @cInclude("SDL.h");
     @cInclude("SDL_syswm.h");
   } else {

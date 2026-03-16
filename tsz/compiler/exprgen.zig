@@ -549,13 +549,13 @@ const Parser = struct {
 
     fn parseAdditive(self: *Parser) Error!TypedExpr {
         var left = try self.parseMultiplicative();
-        while (self.curKind() == .plus or self.curKind() == .minus or self.curKind() == .wrap_add) {
+        while (self.curKind() == .plus or self.curKind() == .minus or self.curKind() == .wrap_add or self.curKind() == .wrap_sub) {
             // Don't consume + or - if followed by = (compound assignment handled by stmtgen)
             if ((self.curKind() == .plus or self.curKind() == .minus) and
                 self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
             // Don't consume if it's ++ or -- (postfix, handled elsewhere)
             if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == self.curKind()) break;
-            const op: []const u8 = if (self.curKind() == .wrap_add) "+%" else if (self.curKind() == .plus) "+" else "-";
+            const op: []const u8 = if (self.curKind() == .wrap_add) "+%" else if (self.curKind() == .wrap_sub) "-%" else if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
             const coerced = try self.emitArithCoerced(left, right, op);
@@ -974,14 +974,12 @@ const Parser = struct {
                     } else if (std.mem.eql(u8, self.curText(), "catch")) {
                         self.advance(); // skip "catch"
 
-                        // catch {} — empty catch block (discard error)
-                        if (self.curKind() == .lbrace and self.pos.* + 1 < self.lex.count and
-                            self.lex.get(self.pos.* + 1).kind == .rbrace)
-                        {
-                            self.advance(); // skip {
-                            self.advance(); // skip }
+                        // catch { ... } — block (empty or with statements)
+                        if (self.curKind() == .lbrace) {
+                            const stmtgen = @import("stmtgen.zig");
+                            const body = try stmtgen.emitBlock(self.alloc, self.lex, self.source, self.pos, 0);
                             left = .{
-                                .text = try std.fmt.allocPrint(self.alloc, "{s} catch {{}}", .{left.text}),
+                                .text = try std.fmt.allocPrint(self.alloc, "{s} catch {s}", .{ left.text, body }),
                                 .ty = left.ty,
                             };
                         }

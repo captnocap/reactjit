@@ -7,10 +7,10 @@
 //! To modify: edit DevtoolsPanel.tsz and recompile
 
 const std = @import("std");
-const layout = @import("../../layout.zig");
+const layout = @import("../layout.zig");
 const Node = layout.Node;
 const Color = layout.Color;
-const state = @import("../../state.zig");
+const state = @import("../state.zig");
 
 // ── Panel identity ───────────────────────────────────────────
 pub const PANEL_ID = "devtoolspanel";

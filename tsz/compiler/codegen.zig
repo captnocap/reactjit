@@ -6410,15 +6410,15 @@ pub const Generator = struct {
         // Imports — headless modules only need state, not layout/gpu/text
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
         if (!headless) {
-            try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.zig\");\n");
+            try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.gen.zig\");\n");
             try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Color = layout.Color;\n");
         }
-        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../state.zig\");\n");
+        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../state.gen.zig\");\n");
         // text_mod/TextEngine only needed if fragment calls text functions directly
         // (most fragments don't — the compositor handles text rendering)
-        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/inspector/panel.zig\");\n");
-        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"../../overlay.zig\");\n");
-        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../animate.zig\");\n");
+        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/inspector/panel.gen.zig\");\n");
+        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"../../overlay.gen.zig\");\n");
+        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../animate.gen.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -6877,36 +6877,36 @@ pub const Generator = struct {
 
         // Imports
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
-        try out.appendSlice(self.alloc, "const c = @import(\"c.zig\").imports;\n");
-        try out.appendSlice(self.alloc, "const layout = @import(\"layout.zig\");\n");
-        try out.appendSlice(self.alloc, "const text_mod = @import(\"text.zig\");\n");
+        try out.appendSlice(self.alloc, "const c = @import(\"c.gen.zig\").imports;\n");
+        try out.appendSlice(self.alloc, "const layout = @import(\"layout.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const text_mod = @import(\"text.gen.zig\");\n");
         try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\nconst LayoutRect = layout.LayoutRect;\n");
         try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
-        try out.appendSlice(self.alloc, "const image_mod = @import(\"image.zig\");\nconst ImageCache = image_mod.ImageCache;\n");
-        try out.appendSlice(self.alloc, "const events = @import(\"events.zig\");\n");
-        try out.appendSlice(self.alloc, "const mpv_mod = @import(\"mpv.zig\");\n");
-        try out.appendSlice(self.alloc, "const win_mgr = @import(\"windows.zig\");\n");
-        try out.appendSlice(self.alloc, "const watchdog = @import(\"watchdog.zig\");\n");
-        try out.appendSlice(self.alloc, "const bsod = @import(\"bsod.zig\");\n");
-        try out.appendSlice(self.alloc, "const leaktest = @import(\"leaktest.zig\");\n");
-        try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
-        try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
-        try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
-        try out.appendSlice(self.alloc, "const gpu = @import(\"gpu.zig\");\n");
-        try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
-        try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector/panel.zig\");\n");
-        try out.appendSlice(self.alloc, "const overlay_mod = @import(\"overlay.zig\");\n");
-        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
-        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
-        if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
-        if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"crypto.zig\");\n");
-        if (self.has_panels) try out.appendSlice(self.alloc, "const panels = @import(\"panels.zig\");\n");
+        try out.appendSlice(self.alloc, "const image_mod = @import(\"image.gen.zig\");\nconst ImageCache = image_mod.ImageCache;\n");
+        try out.appendSlice(self.alloc, "const events = @import(\"events.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const mpv_mod = @import(\"mpv.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const win_mgr = @import(\"windows.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const watchdog = @import(\"watchdog.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const bsod = @import(\"bsod.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const leaktest = @import(\"leaktest.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const input_mod = @import(\"input.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const gpu = @import(\"gpu.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector/panel.gen.zig\");\n");
+        try out.appendSlice(self.alloc, "const overlay_mod = @import(\"overlay.gen.zig\");\n");
+        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.gen.zig\");\n");
+        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.gen.zig\");\n");
+        if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.gen.zig\");\n");
+        if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"crypto.gen.zig\");\n");
+        if (self.has_panels) try out.appendSlice(self.alloc, "const panels = @import(\"panels.gen.zig\");\n");
         if (self.has_pty) {
-            try out.appendSlice(self.alloc, "const pty_mod = @import(\"pty.zig\");\n");
-            try out.appendSlice(self.alloc, "const vterm_mod = @import(\"vterm.zig\");\n");
-            try out.appendSlice(self.alloc, "const classifier_mod = @import(\"classifier.zig\");\n");
+            try out.appendSlice(self.alloc, "const pty_mod = @import(\"pty.gen.zig\");\n");
+            try out.appendSlice(self.alloc, "const vterm_mod = @import(\"vterm.gen.zig\");\n");
+            try out.appendSlice(self.alloc, "const classifier_mod = @import(\"classifier.gen.zig\");\n");
         }
-        try out.appendSlice(self.alloc, "const testharness = @import(\"testharness.zig\");\n");
+        try out.appendSlice(self.alloc, "const testharness = @import(\"testharness.gen.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {

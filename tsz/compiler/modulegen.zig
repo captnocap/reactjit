@@ -101,6 +101,23 @@ fn emitImports(
 
     while (pos < lex.count) {
         const tok = lex.get(pos);
+
+        // Skip 'declare' statements entirely — they contain 'import' tokens
+        // that would confuse the import parser below.
+        // Must respect brace depth since @cImport({ @cInclude("..."); }) has
+        // semicolons inside braces.
+        if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "declare")) {
+            var brace_depth: u32 = 0;
+            while (pos < lex.count) {
+                const k = lex.get(pos).kind;
+                if (k == .lbrace) brace_depth += 1;
+                if (k == .rbrace) { if (brace_depth > 0) brace_depth -= 1; }
+                if (k == .semicolon and brace_depth == 0) { pos += 1; break; }
+                pos += 1;
+            }
+            continue;
+        }
+
         if (tok.kind != .identifier or !std.mem.eql(u8, tok.text(source), "import")) {
             pos += 1;
             continue;
@@ -140,7 +157,7 @@ fn emitImports(
                     var mod_name: []const u8 = path;
                     if (std.mem.startsWith(u8, mod_name, "./")) mod_name = mod_name[2..];
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                        "const {s} = @import(\"{s}.zig\");\n", .{ import_name, mod_name }));
+                        "const {s} = @import(\"{s}.gen.zig\");\n", .{ import_name, mod_name }));
                 } else {
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
                         "const {s} = @import(\"{s}\");\n", .{ import_name, path }));
@@ -276,6 +293,19 @@ fn emitModuleVars(
         // Only process top-level tokens
         if (brace_depth > 0) {
             pos += 1;
+            continue;
+        }
+
+        // Skip 'declare' statements (FFI declarations handled elsewhere)
+        if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "declare")) {
+            var d_depth: u32 = 0;
+            while (pos < lex.count) {
+                const k = lex.get(pos).kind;
+                if (k == .lbrace) d_depth += 1;
+                if (k == .rbrace) { if (d_depth > 0) d_depth -= 1; }
+                if (k == .semicolon and d_depth == 0) { pos += 1; break; }
+                pos += 1;
+            }
             continue;
         }
 
@@ -937,12 +967,15 @@ fn collectExprUntil(
             const prev_last = result.items[result.items.len - 1];
             const cur_text = lex.get(pos.*).text(source);
             const cur_first = if (cur_text.len > 0) cur_text[0] else @as(u8, 0);
-            const is_dot = prev_last == '.' or cur_first == '.';
+            // Dot suppresses space for member access (a.b), but NOT for
+            // enum literals after operators (== .windows)
+            const is_member_dot = prev_last == '.' or
+                (cur_first == '.' and isIdentChar(prev_last));
             const is_call = cur_first == '(' and (isIdentChar(prev_last) or prev_last == ')');
             const is_close = cur_first == ')' or cur_first == ']';
             const after_open = prev_last == '(' or prev_last == '[';
             const is_comma = cur_first == ',';
-            if (!is_dot and !is_call and !is_close and !after_open and !is_comma) {
+            if (!is_member_dot and !is_call and !is_close and !after_open and !is_comma) {
                 try result.append(alloc, ' ');
             }
         }

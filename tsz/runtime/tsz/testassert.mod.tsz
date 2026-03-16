@@ -104,11 +104,7 @@ function writeViolation(out: []Violation, count: *usize, kind: ViolationKind, no
   let v = &out[count.*];
   v.kind = kind;
   v.node = node;
-  const result = std.fmt.bufPrint(&v.message, fmt, args) catch {
-    v.msg_len = 0;
-    count.* += 1;
-    return;
-  };
+  const result = std.fmt.bufPrint(&v.message, fmt, args) catch return;
   v.msg_len = @intCast(result.length);
   count.* += 1;
 }

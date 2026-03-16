@@ -171,6 +171,53 @@ if [ -n "$COLLISION" ]; then
   exit 0
 fi
 
+# ── Message delivery: check for pending messages ─────────────────────────────
+MESSAGES_DIR="$SESSIONS_DIR/messages"
+mkdir -p "$MESSAGES_DIR"
+PENDING_MSGS=""
+MSG_STALE=300  # messages older than 5 min are cleaned up
+
+for mf in "$MESSAGES_DIR"/*.json; do
+  [ -f "$mf" ] || continue
+
+  M_INFO=$(jq -r '{from:.from, to:.to, to_sid:(.to_sid // ""), msg:.msg, time:.time, from_sid:(.from_sid // "")}' "$mf" 2>/dev/null) || { rm -f "$mf"; continue; }
+
+  M_TO=$(echo "$M_INFO" | jq -r '.to')
+  M_TO_SID=$(echo "$M_INFO" | jq -r '.to_sid')
+  M_FROM=$(echo "$M_INFO" | jq -r '.from')
+  M_FROM_SID=$(echo "$M_INFO" | jq -r '.from_sid')
+  M_MSG=$(echo "$M_INFO" | jq -r '.msg')
+  M_TIME=$(echo "$M_INFO" | jq -r '.time')
+  M_AGE=$(( NOW - M_TIME ))
+
+  # Clean up stale messages
+  if [ "$M_AGE" -gt "$MSG_STALE" ]; then
+    rm -f "$mf"
+    continue
+  fi
+
+  # Skip messages from self (check both full SID and short ID)
+  [ -n "$M_FROM_SID" ] && [ "$M_FROM_SID" = "$SID" ] && continue
+  [ "$M_FROM" = "$SHORT" ] && continue
+
+  # Check if this message is for us
+  DELIVER=false
+  if [ "$M_TO" = "all" ]; then
+    DELIVER=true
+    # Don't delete global messages — other sessions need them too.
+    # They'll expire via MSG_STALE.
+  elif [ "$M_TO" = "$SHORT" ] || [ "$M_TO_SID" = "$SID" ]; then
+    DELIVER=true
+    # Targeted message — delete after delivery
+    rm -f "$mf"
+  fi
+
+  if [ "$DELIVER" = true ]; then
+    PENDING_MSGS="${PENDING_MSGS}
+  - [from session $M_FROM, ${M_AGE}s ago]: $M_MSG"
+  fi
+done
+
 # ── Query: scan for siblings ─────────────────────────────────────────────────
 SIBLINGS=""
 COUNT=1  # count self
@@ -242,11 +289,22 @@ ${RECENT_LINES}"
   fi
 done
 
-# ── No siblings? Exit silently ───────────────────────────────────────────────
-[ -z "$SIBLINGS" ] && exit 0
+# ── No siblings and no messages? Exit silently ───────────────────────────────
+[ -z "$SIBLINGS" ] && [ -z "$PENDING_MSGS" ] && exit 0
 
 # ── Inject context ───────────────────────────────────────────────────────────
-MSG="[SESSION AWARENESS] You are session $SHORT (1 of $COUNT active). Other sessions:${SIBLINGS}
+MSG="[SESSION AWARENESS] You are session $SHORT (1 of $COUNT active). Other sessions:${SIBLINGS}"
+
+# Append pending messages if any
+if [ -n "$PENDING_MSGS" ]; then
+  MSG="${MSG}
+
+[MESSAGES FOR YOU]:${PENDING_MSGS}
+
+To reply, run: bash \"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/send-message.sh <target_short_id|all> \"<message>\""
+fi
+
+MSG="${MSG}
 
 If a file you just read has been modified by another session, do not investigate — just re-read it. If git status is unexpectedly clean, another session committed your work — check git log and move on."
 

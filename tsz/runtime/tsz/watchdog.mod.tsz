@@ -40,7 +40,8 @@ export function init(limit_mb: u64) {
   warned = false;
   rss_history_count = 0;
   rss_history_idx = 0;
-  std.debug.print("[watchdog] Armed: {d}MB hard limit, {d}MB/s rate limit\n", .{ limit_mb, RATE_LIMIT_KB_PER_CHECK / 1024 });
+  const rate_mb = RATE_LIMIT_KB_PER_CHECK / 1024;
+  std.debug.print("[watchdog] Armed: {d}MB hard limit, {d}MB/s rate limit\n", .{ limit_mb, rate_mb });
 }
 
 /// Call once per frame. Returns true if the app should shut down.

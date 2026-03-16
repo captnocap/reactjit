@@ -51,6 +51,7 @@ pub const TokenKind = enum {
     // Wrapping arithmetic (Zig)
     wrap_mul, // *%
     wrap_add, // +%
+    wrap_sub, // -%
     caret_eq, // ^=
 
     // Logical
@@ -314,6 +315,11 @@ pub const Lexer = struct {
             if (ch == '+' and self.peekAt(1) == '%') {
                 self.pos += 2;
                 self.emit(.wrap_add, start, start + 2);
+                continue;
+            }
+            if (ch == '-' and self.peekAt(1) == '%') {
+                self.pos += 2;
+                self.emit(.wrap_sub, start, start + 2);
                 continue;
             }
             if (ch == '^' and self.peekAt(1) == '=') {
