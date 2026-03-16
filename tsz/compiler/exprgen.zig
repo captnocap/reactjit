@@ -637,6 +637,15 @@ const Parser = struct {
                         };
                         continue;
                     }
+                    // .* — Zig pointer dereference
+                    if (self.curKind() == .star) {
+                        self.advance();
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}.*", .{left.text}),
+                            .ty = .unknown,
+                        };
+                        continue;
+                    }
                     if (self.curKind() != .identifier) break;
                     const prop = self.curText();
                     self.advance();

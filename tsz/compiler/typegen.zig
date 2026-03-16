@@ -591,6 +591,28 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped_elem });
     }
 
+    // ?T — optional type prefix
+    if (tok.kind == .question) {
+        pos.* += 1;
+        const inner = try parseTypeAnnotation(alloc, lex, source, pos);
+        const mapped = try mapType(alloc, inner);
+        return try std.fmt.allocPrint(alloc, "?{s}", .{mapped});
+    }
+
+    // *T or *const T — pointer type prefix
+    if (tok.kind == .star) {
+        pos.* += 1;
+        if (pos.* < lex.count and lex.get(pos.*).kind == .identifier and
+            std.mem.eql(u8, lex.get(pos.*).text(source), "const"))
+        {
+            pos.* += 1;
+            const inner = try parseTypeAnnotation(alloc, lex, source, pos);
+            return try std.fmt.allocPrint(alloc, "*const {s}", .{inner});
+        }
+        const inner = try parseTypeAnnotation(alloc, lex, source, pos);
+        return try std.fmt.allocPrint(alloc, "*{s}", .{inner});
+    }
+
     // Complex Zig types (function pointers, optionals, etc.) — collect raw
     if (tok.kind != .identifier) {
         var raw: std.ArrayListUnmanaged(u8) = .{};
