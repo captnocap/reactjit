@@ -782,8 +782,19 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         }
         return try alloc.dupe(u8, raw.items);
     }
-    const base = tok.text(source);
+    // Read identifier, then consume dotted chain (e.g., c.SDL_Window, wgpu.TextureFormat)
+    var type_buf: std.ArrayListUnmanaged(u8) = .{};
+    try type_buf.appendSlice(alloc, tok.text(source));
     pos.* += 1;
+    while (pos.* + 1 < lex.count and lex.get(pos.*).kind == .dot and
+        lex.get(pos.* + 1).kind == .identifier)
+    {
+        try type_buf.append(alloc, '.');
+        pos.* += 1; // skip .
+        try type_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+        pos.* += 1; // skip identifier
+    }
+    const base = try alloc.dupe(u8, type_buf.items);
 
     // T[] — slice type
     if (pos.* + 1 < lex.count and lex.get(pos.*).kind == .lbracket and lex.get(pos.* + 1).kind == .rbracket) {
