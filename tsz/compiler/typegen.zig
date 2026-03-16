@@ -432,6 +432,10 @@ fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8
             try out.append(alloc, '?');
             try out.appendSlice(alloc, mapped);
             try out.appendSlice(alloc, " = null,\n");
+        } else if (mapped.len > 0 and mapped[0] == '?') {
+            // Type is already nullable (e.g., ?*const fn () void) — add = null
+            try out.appendSlice(alloc, mapped);
+            try out.appendSlice(alloc, " = null,\n");
         } else {
             try out.appendSlice(alloc, mapped);
             if (defaultForType(enums, mapped, snake)) |d| {
@@ -587,7 +591,32 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped_elem });
     }
 
-    if (tok.kind != .identifier) return error.ExpectedIdentifier;
+    // Complex Zig types (function pointers, optionals, etc.) — collect raw
+    if (tok.kind != .identifier) {
+        var raw: std.ArrayListUnmanaged(u8) = .{};
+        var paren_depth: u32 = 0;
+        while (pos.* < lex.count) {
+            const k = lex.get(pos.*).kind;
+            if (paren_depth == 0 and (k == .semicolon or k == .rbrace or k == .comma)) break;
+            if (k == .lparen) paren_depth += 1;
+            if (k == .rparen) {
+                if (paren_depth == 0) break;
+                paren_depth -= 1;
+            }
+            if (raw.items.len > 0) {
+                // Smart spacing: no space after ( or before )
+                const prev = raw.items[raw.items.len - 1];
+                const cur = lex.get(pos.*).text(source);
+                const cf = if (cur.len > 0) cur[0] else @as(u8, 0);
+                if (prev != '(' and prev != '*' and cf != ')' and cf != ',') {
+                    try raw.append(alloc, ' ');
+                }
+            }
+            try raw.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+        }
+        return try alloc.dupe(u8, raw.items);
+    }
     const base = tok.text(source);
     pos.* += 1;
 

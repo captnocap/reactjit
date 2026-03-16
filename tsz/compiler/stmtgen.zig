@@ -412,6 +412,40 @@ fn emitIf(
     const cond = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .condition, &var_type_table);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
+    // Check for |capture| — optional unwrap: if (expr) |name| { ... }
+    if (peekKind(lex, pos.*) == .pipe) {
+        pos.* += 1; // skip |
+        const capture_name = peekText(lex, source, pos.*);
+        pos.* += 1; // skip name
+        if (peekKind(lex, pos.*) == .pipe) pos.* += 1; // skip |
+
+        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) |{s}| ", .{ ind, cond, capture_name }));
+
+        // Parse body (single statement or block)
+        if (peekKind(lex, pos.*) == .lbrace) {
+            try out.appendSlice(alloc, "{\n");
+            const body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+            try out.appendSlice(alloc, body);
+            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}}}", .{ind}));
+        } else {
+            const stmt = try emitStatement(alloc, lex, source, pos, indent_level);
+            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}", .{stmt}));
+        }
+
+        // Check for else
+        if (peekKind(lex, pos.*) == .identifier and std.mem.eql(u8, peekText(lex, source, pos.*), "else")) {
+            pos.* += 1;
+            if (peekKind(lex, pos.*) == .lbrace) {
+                try out.appendSlice(alloc, " else {\n");
+                const else_body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+                try out.appendSlice(alloc, else_body);
+                try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}}}", .{ind}));
+            }
+        }
+
+        return try alloc.dupe(u8, out.items);
+    }
+
     // Extract ALL "X != null" parts from condition (handles compound: "a != null and b != null")
     var null_vars: [8][]const u8 = undefined;
     const null_var_count = extractAllNullCheckVars(alloc, cond, &null_vars);

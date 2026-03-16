@@ -225,15 +225,61 @@ fn emitModuleVars(
 
         const text = tok.text(source);
 
-        // Skip declarations handled by other phases
+        // Skip type declarations handled by other phases (skip name + body)
         if (std.mem.eql(u8, text, "enum") or
             std.mem.eql(u8, text, "interface") or
-            std.mem.eql(u8, text, "union") or
-            std.mem.eql(u8, text, "type") or
-            std.mem.eql(u8, text, "import") or
-            std.mem.eql(u8, text, "function"))
+            std.mem.eql(u8, text, "union"))
+        {
+            pos += 1; // skip keyword
+            if (pos < lex.count and lex.get(pos).kind == .identifier) pos += 1; // skip name
+            // Skip body braces
+            if (pos < lex.count and lex.get(pos).kind == .lbrace) {
+                var depth: u32 = 1;
+                pos += 1;
+                while (pos < lex.count and depth > 0) {
+                    if (lex.get(pos).kind == .lbrace) depth += 1;
+                    if (lex.get(pos).kind == .rbrace) depth -= 1;
+                    pos += 1;
+                }
+            }
+            continue;
+        }
+        if (std.mem.eql(u8, text, "type") or
+            std.mem.eql(u8, text, "import"))
         {
             pos += 1;
+            continue;
+        }
+        // Skip function declarations (name + params + body)
+        if (std.mem.eql(u8, text, "function")) {
+            pos += 1; // skip 'function'
+            if (pos < lex.count and lex.get(pos).kind == .identifier) pos += 1; // skip name
+            // Skip params (...)
+            if (pos < lex.count and lex.get(pos).kind == .lparen) {
+                var pdepth: u32 = 1;
+                pos += 1;
+                while (pos < lex.count and pdepth > 0) {
+                    if (lex.get(pos).kind == .lparen) pdepth += 1;
+                    if (lex.get(pos).kind == .rparen) pdepth -= 1;
+                    pos += 1;
+                }
+            }
+            // Skip return type + body
+            if (pos < lex.count and lex.get(pos).kind == .colon) {
+                pos += 1;
+                // Skip type tokens until {
+                while (pos < lex.count and lex.get(pos).kind != .lbrace) pos += 1;
+            }
+            // Skip body braces
+            if (pos < lex.count and lex.get(pos).kind == .lbrace) {
+                var depth: u32 = 1;
+                pos += 1;
+                while (pos < lex.count and depth > 0) {
+                    if (lex.get(pos).kind == .lbrace) depth += 1;
+                    if (lex.get(pos).kind == .rbrace) depth -= 1;
+                    pos += 1;
+                }
+            }
             continue;
         }
 
@@ -598,6 +644,27 @@ fn parseTypeAtPos(
         const elem = try parseTypeAtPos(alloc, lex, source, pos);
         const mapped = try typegen.mapType(alloc, elem);
         return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped });
+    }
+
+    // ?T — optional type prefix
+    if (pos.* < lex.count and lex.get(pos.*).kind == .question) {
+        pos.* += 1;
+        const inner = try parseTypeAtPos(alloc, lex, source, pos);
+        return try std.fmt.allocPrint(alloc, "?{s}", .{inner});
+    }
+
+    // *T or *const T — pointer type prefix
+    if (pos.* < lex.count and lex.get(pos.*).kind == .star) {
+        pos.* += 1;
+        if (pos.* < lex.count and lex.get(pos.*).kind == .identifier and
+            std.mem.eql(u8, lex.get(pos.*).text(source), "const"))
+        {
+            pos.* += 1;
+            const inner = try parseTypeAtPos(alloc, lex, source, pos);
+            return try std.fmt.allocPrint(alloc, "*const {s}", .{inner});
+        }
+        const inner = try parseTypeAtPos(alloc, lex, source, pos);
+        return try std.fmt.allocPrint(alloc, "*{s}", .{inner});
     }
 
     if (pos.* >= lex.count or lex.get(pos.*).kind != .identifier) return "unknown";
