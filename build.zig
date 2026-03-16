@@ -259,7 +259,7 @@ pub fn build(b: *std.Build) void {
         const engine_exe = b.addExecutable(.{
             .name = "rjit-engine",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("tsz/runtime/main.zig"),
+                .root_source_file = b.path("tsz/runtime/framework/main.zig"),
                 .target = target,
                 .optimize = optimize,
             }),

@@ -9,7 +9,7 @@
 
 const std = @import("std");
 const fs = @import("fs.zig");
-const sqlite = @import("sqlite.zig");
+const sqlite = @import("../modules/sqlite.zig");
 
 pub const MAX_KEY = 256;
 pub const MAX_VALUE = 8192;

@@ -13,8 +13,9 @@ const image_mod = @import("image.zig");
 const gpu = @import("gpu.zig");
 const canvas = @import("canvas.zig");
 const overlay_mod = @import("overlay.zig");
-const inspector = @import("framework/inspector/panel.zig");
-const devtools_panel = @import("compiled/framework/devtoolspanel.gen.zig");
+// TODO: inspector + devtools panel being rewritten in .tsz (see runtime/devtools/)
+// const inspector = @import("inspector.zig");
+// const devtools_panel = @import("devtools_panel.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
@@ -104,16 +105,7 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
     overlay_mod.setViewport(win_w, win_h);
     overlay_mod.render();
 
-    // Inspector overlay highlights
-    inspector.render();
-
-    // Devtools panel (pre-compiled from DevtoolsPanel.tsz)
-    if (inspector.isEnabled()) {
-        const panel_root = devtools_panel.getRoot();
-        panel_root.style.height = inspector.getPanelHeight();
-        layout.layout(panel_root, 0, inspector.getAppHeight(win_h), win_w, inspector.getPanelHeight());
-        paintNode(panel_root, 0, 0, 1.0);
-    }
+    // TODO: Inspector + devtools panel — being rewritten in .tsz
 
     // Present via wgpu
     gpu.frame(

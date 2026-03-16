@@ -5,7 +5,7 @@
 //! Linux/macOS only (Windows would need ConPTY).
 
 const std = @import("std");
-const vterm_mod = @import("vterm.zig");
+const vterm_mod = @import("../framework/vterm.zig");
 
 // POSIX headers for PTY operations
 // _GNU_SOURCE needed for posix_openpt, ptsname_r on glibc
