@@ -70,20 +70,20 @@ function App() {
           <Box style={{ marginTop: 16 }}>
             <Text fontSize={11} color="#8c8580">WATCHDOG SNAPSHOT</Text>
           </Box>
-          <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%', flexDirection: 'row', gap: 24 }}>
-            <Box style={{ flexDirection: 'column', gap: 4 }}>
+          <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+            <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Peak RSS</Text>
               <Text fontSize={14} color="#ebe6e0">519 MB</Text>
             </Box>
-            <Box style={{ flexDirection: 'column', gap: 4 }}>
+            <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Leak Rate</Text>
               <Text fontSize={14} color="#d93340">204 MB/s</Text>
             </Box>
-            <Box style={{ flexDirection: 'column', gap: 4 }}>
+            <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Hard Limit</Text>
               <Text fontSize={14} color="#ebe6e0">512 MB</Text>
             </Box>
-            <Box style={{ flexDirection: 'column', gap: 4 }}>
+            <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Frames Rendered</Text>
               <Text fontSize={14} color="#ebe6e0">847</Text>
             </Box>

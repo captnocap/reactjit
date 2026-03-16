@@ -110,6 +110,7 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
     g_app_w = win_w;
     g_app_h = win_h;
     g_sel_walk_state = 0; // Reset selection walk state each frame
+    clip_depth = 0; // Reset clip stack each frame
 
     // Walk tree and emit draw commands
     paintNode(root, 0, 0, 1.0);
@@ -134,6 +135,41 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// Clip rect stack — for overflow: scroll/hidden
+// ════════════════════════════════════════════════════════════════════════
+
+const ClipRect = struct { x: f32, y: f32, w: f32, h: f32 };
+const MAX_CLIP_STACK = 16;
+var clip_stack: [MAX_CLIP_STACK]ClipRect = undefined;
+var clip_depth: usize = 0;
+
+fn pushClip(x: f32, y: f32, w: f32, h: f32) void {
+    if (clip_depth < MAX_CLIP_STACK) {
+        if (clip_depth > 0) {
+            const parent = clip_stack[clip_depth - 1];
+            const nx = @max(x, parent.x);
+            const ny = @max(y, parent.y);
+            const nx2 = @min(x + w, parent.x + parent.w);
+            const ny2 = @min(y + h, parent.y + parent.h);
+            clip_stack[clip_depth] = .{ .x = nx, .y = ny, .w = @max(0, nx2 - nx), .h = @max(0, ny2 - ny) };
+        } else {
+            clip_stack[clip_depth] = .{ .x = x, .y = y, .w = w, .h = h };
+        }
+        clip_depth += 1;
+    }
+}
+
+fn popClip() void {
+    if (clip_depth > 0) clip_depth -= 1;
+}
+
+fn isClipped(sx: f32, sy: f32, sw: f32, sh: f32) bool {
+    if (clip_depth == 0) return false;
+    const cr = clip_stack[clip_depth - 1];
+    return (sx + sw <= cr.x or sx >= cr.x + cr.w or sy + sh <= cr.y or sy >= cr.y + cr.h);
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Tree painting — walks nodes and emits gpu draw commands
 // ════════════════════════════════════════════════════════════════════════
 
@@ -146,6 +182,9 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
     const screen_x = node.computed.x - scroll_x;
     const screen_y = node.computed.y - scroll_y;
     const w = node.computed.w;
+
+    // Skip nodes fully outside the current clip rect
+    if (node.style.position != .absolute and isClipped(screen_x, screen_y, w, node.computed.h)) return;
 
     // Capture overlay rect if this node matches the overlay test_id
     if (g_overlay_node_id) |overlay_id| {
@@ -289,6 +328,9 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
     const child_scroll_x = scroll_x + if (needs_clip) node.scroll_x else @as(f32, 0);
     const child_scroll_y = scroll_y + if (needs_clip) node.scroll_y else @as(f32, 0);
 
+    // Push clip rect for overflow: scroll/hidden containers
+    if (needs_clip) pushClip(screen_x, screen_y, w, h);
+
     // Z-index sorting
     var needs_zsort = false;
     for (node.children) |*child| {
@@ -319,6 +361,8 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
             paintNode(child, child_scroll_x, child_scroll_y, effective_opacity);
         }
     }
+
+    if (needs_clip) popClip();
 }
 
 // ════════════════════════════════════════════════════════════════════════
