@@ -24,36 +24,36 @@ var slot_base: usize = 0;
 pub const SLOT_COUNT: usize = 6;
 
 // ── Generated node tree ─────────────────────────────────────────
-var _arr_0 = [_]Node{ .{ .text = "Perf", .font_size = 12, .text_color = Color.rgb(170, 170, 170) } };
-var _arr_1 = [_]Node{ .{ .text = "Elements", .font_size = 12, .text_color = Color.rgb(170, 170, 170) } };
-var _arr_2 = [_]Node{ .{ .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6 }, .handlers = .{ .on_press = _handler_press_0 }, .children = &_arr_0 }, .{ .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6 }, .handlers = .{ .on_press = _handler_press_1 }, .children = &_arr_1 } };
-var _arr_3 = [_]Node{ .{ .text = "", .text_color = Color.rgb(78, 201, 176) }, .{ .text = "", .text_color = Color.rgb(204, 204, 204) }, .{ .text = "", .text_color = Color.rgb(204, 204, 204) } };
-var _arr_4 = [_]Node{ .{ .text = "", .text_color = Color.rgb(204, 204, 204) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) } };
-var _arr_5 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 20 }, .children = &_arr_3 }, .{ .style = .{ .flex_direction = .row, .gap = 20 }, .children = &_arr_4 } };
-var _arr_6 = [_]Node{ .{ .text = "Element inspector — select a node with the overlay", .text_color = Color.rgb(51, 51, 68) } };
+var _arr_0 = [_]Node{ .{ .text = "Perf", .font_size = 12, .text_color = Color.rgb(170, 170, 170) } }; // TabButton
+var _arr_1 = [_]Node{ .{ .text = "Elements", .font_size = 12, .text_color = Color.rgb(170, 170, 170) } }; // TabButton
+var _arr_2 = [_]Node{ .{ .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6 }, .handlers = .{ .on_press = _handler_press_0 }, .children = &_arr_0 }, .{ .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6 }, .handlers = .{ .on_press = _handler_press_1 }, .children = &_arr_1 } }; // TabBar
+var _arr_3 = [_]Node{ .{ .text = "", .text_color = Color.rgb(78, 201, 176) }, .{ .text = "", .text_color = Color.rgb(204, 204, 204) }, .{ .text = "", .text_color = Color.rgb(204, 204, 204) } }; // PerfTab
+var _arr_4 = [_]Node{ .{ .text = "", .text_color = Color.rgb(204, 204, 204) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) } }; // PerfTab
+var _arr_5 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 20 }, .children = &_arr_3 }, .{ .style = .{ .flex_direction = .row, .gap = 20 }, .children = &_arr_4 } }; // PerfTab
+var _arr_6 = [_]Node{ .{ .text = "Element inspector — select a node with the overlay", .text_color = Color.rgb(51, 51, 68) } }; // ElementsTab
 var _arr_7 = [_]Node{ .{ .style = .{ .flex_grow = 1, .padding = 8, .gap = 6 }, .children = &_arr_5 }, .{ .style = .{ .flex_grow = 1, .padding = 8, .gap = 6 }, .children = &_arr_6 } };
-var _arr_8 = [_]Node{ .{ .text = "", .text_color = Color.rgb(78, 201, 176) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "F12 close", .text_color = Color.rgb(85, 85, 102) } };
+var _arr_8 = [_]Node{ .{ .text = "", .text_color = Color.rgb(78, 201, 176) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "", .text_color = Color.rgb(85, 85, 102) }, .{ .text = "F12 close", .text_color = Color.rgb(85, 85, 102) } }; // StatusBar
 var _arr_9 = [_]Node{ .{ .style = .{ .height = 4, .background_color = Color.rgb(78, 201, 176) } }, .{ .style = .{ .height = 28, .background_color = Color.rgb(8, 8, 15), .flex_direction = .row, .gap = 0 }, .children = &_arr_2 }, .{ .style = .{ .flex_grow = 1 }, .children = &_arr_7 }, .{ .style = .{ .height = 24, .background_color = Color.rgb(8, 8, 15), .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .gap = 16 }, .children = &_arr_8 } };
 var root = Node{ .style = .{ .width = -1, .background_color = Color.rgb(12, 12, 20) }, .children = &_arr_9 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
-var _dyn_buf_0: [256]u8 = undefined;
+var _dyn_buf_0: [64]u8 = undefined;
 var _dyn_text_0: []const u8 = "";
-var _dyn_buf_1: [256]u8 = undefined;
+var _dyn_buf_1: [64]u8 = undefined;
 var _dyn_text_1: []const u8 = "";
-var _dyn_buf_2: [256]u8 = undefined;
+var _dyn_buf_2: [64]u8 = undefined;
 var _dyn_text_2: []const u8 = "";
-var _dyn_buf_3: [256]u8 = undefined;
+var _dyn_buf_3: [64]u8 = undefined;
 var _dyn_text_3: []const u8 = "";
-var _dyn_buf_4: [256]u8 = undefined;
+var _dyn_buf_4: [64]u8 = undefined;
 var _dyn_text_4: []const u8 = "";
-var _dyn_buf_5: [256]u8 = undefined;
+var _dyn_buf_5: [64]u8 = undefined;
 var _dyn_text_5: []const u8 = "";
-var _dyn_buf_6: [256]u8 = undefined;
+var _dyn_buf_6: [64]u8 = undefined;
 var _dyn_text_6: []const u8 = "";
-var _dyn_buf_7: [256]u8 = undefined;
+var _dyn_buf_7: [64]u8 = undefined;
 var _dyn_text_7: []const u8 = "";
-var _dyn_buf_8: [256]u8 = undefined;
+var _dyn_buf_8: [64]u8 = undefined;
 var _dyn_text_8: []const u8 = "";
 
 // ── Generated event handlers ────────────────────────────────────
@@ -76,14 +76,10 @@ fn updateDynamicTexts() void {
     _arr_4[0].text = _dyn_text_3;
     _dyn_text_4 = std.fmt.bufPrint(&_dyn_buf_4, "RSS: {d}MB", .{ state.getSlot(slot_base + 5) }) catch "";
     _arr_4[1].text = _dyn_text_4;
-    _dyn_text_5 = std.fmt.bufPrint(&_dyn_buf_5, "FPS: {d}", .{ state.getSlot(slot_base + 1) }) catch "";
-    _arr_8[0].text = _dyn_text_5;
-    _dyn_text_6 = std.fmt.bufPrint(&_dyn_buf_6, "Layout: {d}ms", .{ state.getSlot(slot_base + 2) }) catch "";
-    _arr_8[1].text = _dyn_text_6;
-    _dyn_text_7 = std.fmt.bufPrint(&_dyn_buf_7, "Paint: {d}ms", .{ state.getSlot(slot_base + 3) }) catch "";
-    _arr_8[2].text = _dyn_text_7;
-    _dyn_text_8 = std.fmt.bufPrint(&_dyn_buf_8, "Nodes: {d}", .{ state.getSlot(slot_base + 4) }) catch "";
-    _arr_8[3].text = _dyn_text_8;
+    _arr_8[0].text = _dyn_text_0;
+    _arr_8[1].text = _dyn_text_1;
+    _arr_8[2].text = _dyn_text_2;
+    _arr_8[3].text = _dyn_text_3;
 }
 
 fn updateConditionals() void {

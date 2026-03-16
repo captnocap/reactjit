@@ -382,6 +382,9 @@ pub const Generator = struct {
     util_funcs: [MAX_UTIL_FUNCS]UtilFunc,
     util_func_count: u32,
 
+    // Component context for debug comments on generated arrays
+    current_inline_component: ?[]const u8,
+
     // Prop substitution stack (active during component inlining)
     prop_stack: [MAX_COMPONENT_PROPS]PropBinding,
     prop_stack_count: u32,
@@ -467,6 +470,7 @@ pub const Generator = struct {
             .component_count = 0,
             .util_funcs = undefined,
             .util_func_count = 0,
+            .current_inline_component = null,
             .prop_stack = undefined,
             .prop_stack_count = 0,
             .component_children_exprs = null,
@@ -1457,8 +1461,34 @@ pub const Generator = struct {
         return false;
     }
 
+    /// Estimate buffer size needed for a bufPrint format string.
+    /// Counts literal chars + per-specifier overhead: {d}→20, {s}→128, {c}→1
+    fn estimateBufSize(fmt: []const u8) u32 {
+        var size: u32 = 0;
+        var i: usize = 0;
+        while (i < fmt.len) {
+            if (i + 2 < fmt.len and fmt[i] == '{' and fmt[i + 2] == '}') {
+                switch (fmt[i + 1]) {
+                    'd' => size += 20, // i64 max digits
+                    's' => size += 128, // string slot
+                    'c' => size += 1,
+                    else => size += 32,
+                }
+                i += 3;
+            } else {
+                size += 1;
+                i += 1;
+            }
+        }
+        return @max(size, 64); // floor at 64
+    }
+
     /// Inline a component at its call site: collect props, jump to body, parse JSX.
     fn inlineComponent(self: *Generator, comp: *const ComponentInfo) anyerror![]const u8 {
+        const saved_component = self.current_inline_component;
+        self.current_inline_component = comp.name;
+        defer self.current_inline_component = saved_component;
+
         // 1. Collect attribute values from the call site as prop bindings
         const saved_prop_count = self.prop_stack_count;
         while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) {
@@ -2996,6 +3026,10 @@ pub const Generator = struct {
                 try arr_content.appendSlice(self.alloc, expr);
             }
             try arr_content.appendSlice(self.alloc, " };");
+            if (self.current_inline_component) |comp_name| {
+                try arr_content.appendSlice(self.alloc, " // ");
+                try arr_content.appendSlice(self.alloc, comp_name);
+            }
             try self.array_decls.append(self.alloc, try arr_content.toOwnedSlice(self.alloc));
 
             // Bind conditions whose indices belong to this child array
@@ -5256,6 +5290,10 @@ pub const Generator = struct {
                 try arr_content.appendSlice(self.alloc, expr);
             }
             try arr_content.appendSlice(self.alloc, " };");
+            if (self.current_inline_component) |comp_name| {
+                try arr_content.appendSlice(self.alloc, " // ");
+                try arr_content.appendSlice(self.alloc, comp_name);
+            }
             try self.array_decls.append(self.alloc, try arr_content.toOwnedSlice(self.alloc));
 
             const root_expr = try std.fmt.allocPrint(self.alloc, ".{{ .children = &{s} }}", .{arr_name});
@@ -5301,6 +5339,10 @@ pub const Generator = struct {
                 try arr_content.appendSlice(self.alloc, expr);
             }
             try arr_content.appendSlice(self.alloc, " };");
+            if (self.current_inline_component) |comp_name| {
+                try arr_content.appendSlice(self.alloc, " // ");
+                try arr_content.appendSlice(self.alloc, comp_name);
+            }
             try self.array_decls.append(self.alloc, try arr_content.toOwnedSlice(self.alloc));
 
             const root_name = try std.fmt.allocPrint(self.alloc, "_ov{d}_root", .{ov_idx});
@@ -5982,11 +6024,12 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, ";\n");
         }
 
-        // Dynamic text buffers
+        // Dynamic text buffers (sized from format string)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "\n// ── Dynamic text buffers ─────────────────────────────────────────\n");
             for (0..self.dyn_count) |i| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [256]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, i }));
+                const buf_size = estimateBufSize(self.dyn_texts[i].fmt_string);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [{d}]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, buf_size, i }));
             }
         }
 
@@ -6017,12 +6060,29 @@ pub const Generator = struct {
             }
         }
 
-        // updateDynamicTexts
+        // updateDynamicTexts (dedup: same format + args share a buffer)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
             for (0..self.dyn_count) |i| {
                 const dt = self.dyn_texts[i];
-                if (dt.has_ref) {
+                if (!dt.has_ref) continue;
+                // Check if an earlier entry has the same format + args (dedup)
+                var dedup_source: ?u32 = null;
+                for (0..i) |j| {
+                    const prev = self.dyn_texts[j];
+                    if (prev.has_ref and
+                        std.mem.eql(u8, prev.fmt_string, dt.fmt_string) and
+                        std.mem.eql(u8, prev.fmt_args, dt.fmt_args))
+                    {
+                        dedup_source = @intCast(j);
+                        break;
+                    }
+                }
+                if (dedup_source) |src| {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].text = _dyn_text_{d};\n",
+                        .{ dt.arr_name, dt.arr_index, src }));
+                } else {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
                         .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
@@ -6474,11 +6534,12 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "\n// ── Secondary window {d}: \"{s}\" ─────────\nvar _win{d}_root = Node{{{s};\n", .{ i, w.title, i, w.root_expr[2..] }));
         }
 
-        // Dynamic text buffers
+        // Dynamic text buffers (sized from format string)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "\n// ── Dynamic text buffers ─────────────────────────────────────────\n");
             for (0..self.dyn_count) |i| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [256]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, i }));
+                const buf_size = estimateBufSize(self.dyn_texts[i].fmt_string);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [{d}]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, buf_size, i }));
             }
         }
 
@@ -6568,12 +6629,29 @@ pub const Generator = struct {
             }
         }
 
-        // updateDynamicTexts
+        // updateDynamicTexts (dedup: same format + args share a buffer)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
             for (0..self.dyn_count) |i| {
                 const dt = self.dyn_texts[i];
-                if (dt.has_ref) {
+                if (!dt.has_ref) continue;
+                // Check if an earlier entry has the same format + args (dedup)
+                var dedup_source: ?u32 = null;
+                for (0..i) |j| {
+                    const prev = self.dyn_texts[j];
+                    if (prev.has_ref and
+                        std.mem.eql(u8, prev.fmt_string, dt.fmt_string) and
+                        std.mem.eql(u8, prev.fmt_args, dt.fmt_args))
+                    {
+                        dedup_source = @intCast(j);
+                        break;
+                    }
+                }
+                if (dedup_source) |src| {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].text = _dyn_text_{d};\n",
+                        .{ dt.arr_name, dt.arr_index, src }));
+                } else {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
                         .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
