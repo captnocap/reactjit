@@ -581,9 +581,8 @@ fn emitForOf(
     const is_const = isIdent(lex, source, pos.*, "const");
     pos.* += 1; // skip const/let
 
-    // Iterator variable name
+    // Iterator variable name — preserve original casing
     const iter_name = peekText(lex, source, pos.*);
-    const snake_iter = try typegen.camelToSnake(alloc, iter_name);
     pos.* += 1; // skip name
 
     pos.* += 1; // skip 'of'
@@ -600,9 +599,9 @@ fn emitForOf(
 
     // const → value capture |name|, let → pointer capture |*name|
     const capture = if (is_const)
-        try std.fmt.allocPrint(alloc, "|{s}|", .{snake_iter})
+        try std.fmt.allocPrint(alloc, "|{s}|", .{iter_name})
     else
-        try std.fmt.allocPrint(alloc, "|*{s}|", .{snake_iter});
+        try std.fmt.allocPrint(alloc, "|*{s}|", .{iter_name});
 
     return try std.fmt.allocPrint(alloc, "{s}for ({s}) {s} {{\n{s}{s}}}", .{ ind, collection, capture, body, ind });
 }

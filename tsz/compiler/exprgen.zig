@@ -1979,7 +1979,7 @@ test "parenthesized" {
 
 test "function call" {
     try testExpr("foo(a, b)", "foo(a, b)");
-    try testExpr("resolveMaybePct(val, parent)", "resolve_maybe_pct(val, parent)");
+    try testExpr("resolveMaybePct(val, parent)", "resolveMaybePct(val, parent)");
 }
 
 test "index access" {

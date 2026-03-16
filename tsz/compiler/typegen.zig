@@ -646,6 +646,84 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         return try alloc.dupe(u8, fn_buf.items);
     }
 
+    // Arrow function type: (() => void) or ((x: number, y: number) => void)
+    // Converts to: *const fn () void or *const fn (x: f32, y: f32) void
+    if (tok.kind == .lparen) {
+        // Scan ahead for => to confirm this is an arrow function
+        var scan_pos = pos.*;
+        var scan_depth: u32 = 0;
+        var found_arrow = false;
+        while (scan_pos < lex.count) {
+            const sk = lex.get(scan_pos).kind;
+            if (sk == .lparen) scan_depth += 1;
+            if (sk == .rparen) {
+                scan_depth -= 1;
+                if (scan_depth == 0) break; // closed without arrow
+            }
+            if (sk == .arrow) { found_arrow = true; break; }
+            if (sk == .semicolon or sk == .rbrace) break;
+            scan_pos += 1;
+        }
+
+        if (found_arrow) {
+            pos.* += 1; // skip outer (
+
+            // If next is (, this is ((params) => ret) with outer grouping
+            // If next is ), this is (() => ret) — no params
+            var fn_buf: std.ArrayListUnmanaged(u8) = .{};
+            try fn_buf.appendSlice(alloc, "*const fn (");
+
+            if (lex.get(pos.*).kind == .lparen) {
+                pos.* += 1; // skip inner (
+                var param_count: u32 = 0;
+                while (pos.* < lex.count and lex.get(pos.*).kind != .rparen) {
+                    if (lex.get(pos.*).kind == .comma) { pos.* += 1; continue; }
+                    if (lex.get(pos.*).kind != .identifier) { pos.* += 1; continue; }
+                    const pname = lex.get(pos.*).text(source);
+                    pos.* += 1;
+                    if (pos.* < lex.count and lex.get(pos.*).kind == .colon) pos.* += 1;
+                    const ptype = try parseTypeAnnotation(alloc, lex, source, pos);
+                    const mapped_p = try mapType(alloc, ptype);
+                    if (param_count > 0) try fn_buf.appendSlice(alloc, ", ");
+                    try fn_buf.appendSlice(alloc, pname);
+                    try fn_buf.appendSlice(alloc, ": ");
+                    try fn_buf.appendSlice(alloc, mapped_p);
+                    param_count += 1;
+                }
+                if (pos.* < lex.count and lex.get(pos.*).kind == .rparen) pos.* += 1; // skip inner )
+            }
+            // else: empty params — () => ... — we're already past the outer (
+
+            // Skip =>
+            if (pos.* < lex.count and lex.get(pos.*).kind == .arrow) pos.* += 1;
+
+            // Parse return type
+            const ret_type = try parseTypeAnnotation(alloc, lex, source, pos);
+            const mapped_ret = try mapType(alloc, ret_type);
+
+            try fn_buf.appendSlice(alloc, ") ");
+            try fn_buf.appendSlice(alloc, mapped_ret);
+
+            // Skip outer )
+            if (pos.* < lex.count and lex.get(pos.*).kind == .rparen) pos.* += 1;
+
+            // Check for | null
+            if (pos.* < lex.count and lex.get(pos.*).kind == .pipe) {
+                const save = pos.*;
+                pos.* += 1;
+                if (pos.* < lex.count and lex.get(pos.*).kind == .identifier and
+                    std.mem.eql(u8, lex.get(pos.*).text(source), "null"))
+                {
+                    pos.* += 1;
+                    return try std.fmt.allocPrint(alloc, "?{s}", .{fn_buf.items});
+                }
+                pos.* = save;
+            }
+
+            return try alloc.dupe(u8, fn_buf.items);
+        }
+    }
+
     // Complex Zig types (function pointers, optionals, etc.) — collect raw
     if (tok.kind != .identifier) {
         var raw: std.ArrayListUnmanaged(u8) = .{};

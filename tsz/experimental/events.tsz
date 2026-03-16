@@ -1,10 +1,18 @@
 // events.tsz — hit testing and event dispatch
 // Walk the node tree back-to-front to find the deepest node
 // containing a point that has event handlers.
-//
-// Note: Node, EventHandler, Display, Overflow are defined in layout.tsz
-// This file is a standalone module — no imports needed at compile time.
-// The runtime wires the types via @import in the generated output.
+
+import { Node } from './layout';
+
+interface EventHandler {
+  onPress: (() => void) | null;
+  onHoverEnter: (() => void) | null;
+  onHoverExit: (() => void) | null;
+  onKey: ((key: c_int, mods: u16) => void) | null;
+  onChangeText: (() => void) | null;
+  onScroll: (() => void) | null;
+  onRightClick: ((x: f32, y: f32) => void) | null;
+}
 
 // Walk tree back-to-front. Returns deepest node under (mx, my) with handlers.
 export function hitTest(node: Node, mx: number, my: number): Node | null {

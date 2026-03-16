@@ -359,11 +359,13 @@ fn emitModuleVars(
             // Infer type from initializer
             if (init_val) |iv| {
                 if (isNumericLiteral(iv) and isAllCaps(name)) {
+                    // ALL_CAPS constants are typically counts/limits → usize
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
                         "{s} {s}: usize", .{ zig_keyword, snake_name }));
                 } else if (isNumericLiteral(iv)) {
+                    // TS number semantics → f32 (not usize)
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                        "{s} {s}: usize", .{ zig_keyword, snake_name }));
+                        "{s} {s}: f32", .{ zig_keyword, snake_name }));
                 } else {
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
                         "{s} {s}", .{ zig_keyword, snake_name }));
@@ -488,7 +490,9 @@ fn emitFunctions(
                 }
 
                 const zig_ret = try typegen.mapType(alloc, ret_type);
-                ret_str = if (ret_nullable)
+                ret_str = if (ret_nullable and isStructTypeName(ret_type))
+                    try std.fmt.allocPrint(alloc, "?*{s}", .{zig_ret})
+                else if (ret_nullable)
                     try std.fmt.allocPrint(alloc, "?{s}", .{zig_ret})
                 else
                     zig_ret;
@@ -600,6 +604,10 @@ fn emitParams(
         } else if (std.mem.eql(u8, param_type, "Node")) {
             // Node params → mutable pointer (layout engine mutates nodes)
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
+            stmtgen.registerVar(param_name, .ptr_t);
+        } else if (isStructTypeName(param_type)) {
+            // Other struct params → const pointer (read-only by default)
+            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*const {s}", .{zig_type}));
             stmtgen.registerVar(param_name, .ptr_t);
         } else {
             try out.appendSlice(alloc, zig_type);

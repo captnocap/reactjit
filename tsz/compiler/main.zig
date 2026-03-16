@@ -211,24 +211,27 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     };
     defer alloc.free(source);
 
-    // Merge imported files into a single source
-    const merged_source = buildMergedSource(alloc, input_file, source);
+    // Pre-scan to detect imperative mode BEFORE merging
+    // Imperative files use @import — don't merge source files
+    var pre_lex = lexer.Lexer.init(source);
+    pre_lex.tokenize();
+    const imperative = isImperativeMode(&pre_lex, source);
 
-    var lex = lexer.Lexer.init(merged_source);
+    const final_source = if (imperative) source else buildMergedSource(alloc, input_file, source);
+
+    var lex = lexer.Lexer.init(final_source);
     lex.tokenize();
 
-    // Route to imperative mode or JSX component mode
-    const imperative = isImperativeMode(&lex, merged_source);
     var gen: ?codegen.Generator = null;
 
     const zig_source = if (imperative) blk: {
         std.debug.print("[tsz] Imperative mode detected\n", .{});
-        break :blk modulegen.generate(alloc, &lex, merged_source, input_file) catch |err| {
+        break :blk modulegen.generate(alloc, &lex, final_source, input_file) catch |err| {
             std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
             return false;
         };
     } else blk: {
-        gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
+        gen = codegen.Generator.init(alloc, &lex, final_source, input_file);
         break :blk gen.?.generate() catch |err| {
             std.debug.print("[tsz] Compile error: {}\n", .{err});
             return false;
@@ -569,21 +572,26 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
     };
     defer alloc.free(source);
 
-    // Merge imported files into a single source
-    const merged_source = buildMergedSource(alloc, input_file, source);
+    // Pre-scan to detect imperative mode BEFORE merging
+    // Imperative files use @import — don't merge source files
+    var pre_lex = lexer.Lexer.init(source);
+    pre_lex.tokenize();
+    const imperative = isImperativeMode(&pre_lex, source);
 
-    var lex = lexer.Lexer.init(merged_source);
+    const final_source = if (imperative) source else buildMergedSource(alloc, input_file, source);
+
+    var lex = lexer.Lexer.init(final_source);
     lex.tokenize();
 
     // Route to imperative mode or JSX fragment mode
-    const zig_source = if (isImperativeMode(&lex, merged_source)) blk: {
+    const zig_source = if (imperative) blk: {
         std.debug.print("[tsz] Imperative mode detected\n", .{});
-        break :blk modulegen.generate(alloc, &lex, merged_source, input_file) catch |err| {
+        break :blk modulegen.generate(alloc, &lex, final_source, input_file) catch |err| {
             std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
             std.process.exit(1);
         };
     } else blk: {
-        var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
+        var gen = codegen.Generator.init(alloc, &lex, final_source, input_file);
         gen.mode = .runtime_fragment;
         break :blk gen.generate() catch |err| {
             std.debug.print("[tsz] Compile error: {}\n", .{err});
