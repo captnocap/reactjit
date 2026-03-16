@@ -13,11 +13,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ReactJIT is a rendering framework with **two stacks** that share the same layout engine and primitives:
 
 - **`love2d/`** — React reconciler → QuickJS → Lua → Love2D (OpenGL 2.1). Full-featured legacy stack. See `love2d/CLAUDE.md`.
-- **`tsz/`** — `.tsz` source → Zig compiler → SDL2 + FreeType + OpenGL. Zero-dependency native stack. See `tsz/CLAUDE.md`.
+- **`tsz/`** — `.tsz` source → Zig compiler → SDL2 + wgpu + FreeType. Zero-dependency native stack. See `tsz/CLAUDE.md`.
 
 **The native engine is where the energy is.** The Love2D stack is maintained but not where innovation happens.
 
 **Read the subdirectory CLAUDE.md for whichever stack you're working in.** The stacks have completely different languages, tools, and workflows.
+
+### The tsz Rule
+
+**If it's not generating code, it should be generated code.** The runtime is written in `.tsz`. The compiler turns `.tsz` into `.zig`. Hand-written `.zig` in the runtime is temporary — it means the compiler hasn't caught up. Fix the compiler, don't write more `.zig`.
 
 ## The Primitives (shared)
 
@@ -27,7 +31,7 @@ Everything is composed from these. A dashboard is Boxes and Text. There are no s
 
 ## Layout Rules (shared)
 
-The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and Zig (`tsz/runtime/layout.zig`).
+The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and tsz (`tsz/runtime/tsz/layout.tsz` → compiles to `tsz/runtime/compiled/layout.zig`).
 
 ### Sizing tiers (first match wins)
 1. **Explicit dimensions** — `width`, `height`, `flexGrow`, `flexBasis`
