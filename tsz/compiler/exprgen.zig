@@ -228,10 +228,18 @@ const Parser = struct {
                 }
             }
 
-            // String literal on RHS → std.mem.eql
+            // String literal on RHS → std.mem.eql (or == for single-char)
             if (self.curKind() == .string) {
                 const str_text = self.curText();
                 self.advance();
+                // Single-char literals (' ', '\n') → byte comparison with ==
+                // str_text includes quotes: ' ' (len 3) or '\n' (len 4 with escape)
+                const is_single_char = (str_text.len == 3) or
+                    (str_text.len == 4 and str_text[1] == '\\');
+                if (is_single_char) {
+                    const op = if (is_eq) "==" else "!=";
+                    return try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, str_text });
+                }
                 if (is_eq) {
                     return try std.fmt.allocPrint(self.alloc, "std.mem.eql(u8, {s}, {s})", .{ left, str_text });
                 } else {
@@ -260,7 +268,8 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseAdditive();
-            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
+            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
+            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
         }
         return left;
     }
@@ -277,7 +286,8 @@ const Parser = struct {
             const op: []const u8 = if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
-            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
+            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
+            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
         }
         return left;
     }
@@ -297,7 +307,8 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseUnary();
-            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
+            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
+            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
         }
         return left;
     }

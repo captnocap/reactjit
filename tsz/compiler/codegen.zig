@@ -8030,7 +8030,7 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, prefix, "jc")) {
         if (std.mem.eql(u8, value, "start")) return ".start";
         if (std.mem.eql(u8, value, "center")) return ".center";
-        if (std.mem.eql(u8, value, "end")) return ".end_";
+        if (std.mem.eql(u8, value, "end")) return ".end";
         if (std.mem.eql(u8, value, "space-between")) return ".space_between";
         if (std.mem.eql(u8, value, "space-around")) return ".space_around";
         if (std.mem.eql(u8, value, "space-evenly")) return ".space_evenly";
@@ -8038,7 +8038,7 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, prefix, "ai")) {
         if (std.mem.eql(u8, value, "start")) return ".start";
         if (std.mem.eql(u8, value, "center")) return ".center";
-        if (std.mem.eql(u8, value, "end")) return ".end_";
+        if (std.mem.eql(u8, value, "end")) return ".end";
         if (std.mem.eql(u8, value, "stretch")) return ".stretch";
     }
     if (std.mem.eql(u8, prefix, "d")) {
@@ -8054,7 +8054,7 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, value, "auto")) return ".auto";
         if (std.mem.eql(u8, value, "start")) return ".start";
         if (std.mem.eql(u8, value, "center")) return ".center";
-        if (std.mem.eql(u8, value, "end")) return ".end_";
+        if (std.mem.eql(u8, value, "end")) return ".end";
         if (std.mem.eql(u8, value, "stretch")) return ".stretch";
     }
     if (std.mem.eql(u8, prefix, "fw")) {

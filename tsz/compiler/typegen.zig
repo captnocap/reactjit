@@ -289,7 +289,7 @@ fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8
             try out.appendSlice(alloc, " = null,\n");
         } else {
             try out.appendSlice(alloc, mapped);
-            if (defaultForType(enums, mapped)) |d| {
+            if (defaultForType(enums, mapped, snake)) |d| {
                 try out.appendSlice(alloc, " = ");
                 try out.appendSlice(alloc, d);
             }
@@ -453,7 +453,14 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
 
 // ── Internal: default value for non-optional fields ─────────────────
 
-fn defaultForType(enums: *const EnumRegistry, mapped: []const u8) ?[]const u8 {
+fn defaultForType(enums: *const EnumRegistry, mapped: []const u8, field_name: []const u8) ?[]const u8 {
+    // Field-specific defaults (match hand-written runtime / CSS defaults)
+    if (std.mem.eql(u8, field_name, "font_size")) return "16";
+    if (std.mem.eql(u8, field_name, "flex_direction")) return ".column";
+    if (std.mem.eql(u8, field_name, "align_items")) return ".stretch";
+    if (std.mem.eql(u8, field_name, "opacity")) return "1.0";
+    if (std.mem.eql(u8, field_name, "scale_x")) return "1.0";
+    if (std.mem.eql(u8, field_name, "scale_y")) return "1.0";
     if (std.mem.eql(u8, mapped, "f32")) return "0";
     if (std.mem.eql(u8, mapped, "f64")) return "0";
     if (std.mem.eql(u8, mapped, "i64")) return "0";

@@ -42,6 +42,29 @@ pub fn generate(
         "//! To modify: edit {s} and recompile\n", .{basename}));
     try out.appendSlice(alloc, "\nconst std = @import(\"std\");\n");
 
+    // Helper: convert any numeric type to f32 (bridges TS's single `number` type to Zig's int/float split)
+    try out.appendSlice(alloc,
+        \\
+        \\inline fn asF32(val: anytype) f32 {
+        \\    return switch (@typeInfo(@TypeOf(val))) {
+        \\        .int, .comptime_int => @floatFromInt(val),
+        \\        .comptime_float => val,
+        \\        .float => if (@TypeOf(val) == f32) val else @floatCast(val),
+        \\        .optional => blk: {
+        \\            const v = val orelse 0;
+        \\            break :blk switch (@typeInfo(@TypeOf(v))) {
+        \\                .int, .comptime_int => @as(f32, @floatFromInt(v)),
+        \\                .comptime_float => @as(f32, v),
+        \\                .float => if (@TypeOf(v) == f32) v else @floatCast(v),
+        \\                else => @compileError("asF32: unsupported optional inner type"),
+        \\            };
+        \\        },
+        \\        else => @compileError("asF32: unsupported type"),
+        \\    };
+        \\}
+        \\
+    );
+
     // ── Phase 1: Imports ────────────────────────────────────────
     try emitImports(alloc, lex, source, &out);
 

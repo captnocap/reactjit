@@ -244,23 +244,30 @@ fn emitVarDecl(
         const expr = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
 
-        // Use var when: array allocation, or child element that gets mutated during layout
-        const is_child_access = std.mem.indexOf(u8, expr, ".children[") != null and
-            (std.mem.eql(u8, snake_name, "child") or std.mem.eql(u8, snake_name, "absChild"));
+        // Use var when: array allocation (TS const allows mutation of contents)
         const effective_kw = if (std.mem.indexOf(u8, expr, "zeroes") != null or
-            std.mem.indexOf(u8, expr, "[_]") != null or
-            is_child_access) "var" else zig_kw;
+            std.mem.indexOf(u8, expr, "[_]") != null) "var" else zig_kw;
 
-        // Fix array element type: index/count arrays should use usize, not f32
-        var final_expr = expr;
+        // Slice element access needs & to get a pointer (for in-place mutation)
+        var final_expr = if (std.mem.indexOf(u8, expr, ".children[") != null)
+            try std.fmt.allocPrint(alloc, "&{s}", .{expr})
+        else
+            expr;
         if (std.mem.indexOf(u8, expr, "zeroes") != null and std.mem.indexOf(u8, expr, "f32") != null) {
+            // Fix array element type based on type annotation or variable name
+            const is_bool_arr = if (type_ann) |ta|
+                (std.mem.indexOf(u8, ta, "bool") != null)
+            else
+                false;
             const is_index_arr = std.mem.indexOf(u8, snake_name, "Indices") != null or
                 std.mem.indexOf(u8, snake_name, "indices") != null or
                 std.mem.indexOf(u8, snake_name, "Starts") != null or
                 std.mem.indexOf(u8, snake_name, "starts") != null or
                 std.mem.indexOf(u8, snake_name, "Counts") != null or
                 std.mem.indexOf(u8, snake_name, "counts") != null;
-            if (is_index_arr) {
+            if (is_bool_arr) {
+                final_expr = try replaceAll(alloc, expr, "f32", "bool");
+            } else if (is_index_arr) {
                 final_expr = try replaceAll(alloc, expr, "f32", "usize");
             }
         }
@@ -351,6 +358,13 @@ fn emitIf(
             const nv = null_vars[vi];
             const unwrapped = try std.fmt.allocPrint(alloc, "{s}.?", .{nv});
             replaced = try replaceIdent(alloc, replaced, nv, unwrapped);
+            // Also handle property access: nv.prop → nv.?.prop
+            // (replaceIdent treats . as ident char, so nv.len misses)
+            const dot_nv = try std.fmt.allocPrint(alloc, "{s}.", .{nv});
+            const dot_unwrapped = try std.fmt.allocPrint(alloc, "{s}.?.", .{nv});
+            replaced = try replaceAll(alloc, replaced, dot_nv, dot_unwrapped);
+            // Fix double unwrap from overlapping replacements
+            replaced = try replaceAll(alloc, replaced, ".?.?", ".?");
             // Fix over-replacement: "X.? = null" → "X = null"
             const bad_pat = try std.fmt.allocPrint(alloc, "{s}.? = null", .{nv});
             const good_pat = try std.fmt.allocPrint(alloc, "{s} = null", .{nv});
@@ -835,14 +849,14 @@ fn isIdentChar(ch: u8) bool {
 /// Infer numeric type from variable name for "var x = 0" patterns.
 /// Names suggesting counts/indices → usize, otherwise → f32.
 fn inferNumericType(name: []const u8) []const u8 {
-    // Single-letter loop vars → usize
-    if (name.len == 1 and name[0] >= 'a' and name[0] <= 'z') return "usize";
+    // Short loop vars (i, j, ai, ci) → usize
+    if (name.len <= 2 and name[0] >= 'a' and name[0] <= 'z') return "usize";
     // Index/count names → usize
     const usize_hints = [_][]const u8{
         "count", "Count", "idx", "Idx", "index", "Index",
         "num", "Num", "lines", "Lines", "items", "Items",
         "passes", "Passes", "depth", "Depth", "len", "Len",
-        "Start", "start", "End", "end",
+        "Start", "start",
     };
     for (usize_hints) |hint| {
         if (std.mem.indexOf(u8, name, hint) != null) return "usize";
