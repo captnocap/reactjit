@@ -21,7 +21,16 @@ ReactJIT is a rendering framework with **two stacks** that share the same layout
 
 ### The tsz Rule
 
-**If it's not generating code, it should be generated code.** The runtime is written in `.tsz`. The compiler turns `.tsz` into `.zig`. Hand-written `.zig` in the runtime is temporary — it means the compiler hasn't caught up. Fix the compiler, don't write more `.zig`.
+**If it's not generating code, it should be generated code.** The runtime is written in `.mod.tsz`. The compiler turns `.mod.tsz` into `.zig`. Hand-written `.zig` in the runtime is temporary — it means the compiler hasn't caught up. Fix the compiler, don't write more `.zig`.
+
+### File Extensions
+
+| Extension | What | Example |
+|-----------|------|---------|
+| `.app.tsz` | App → binary | `counter.app.tsz` |
+| `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
+| `.tsz` | Component import | `Button.tsz` |
+| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
 
 ## The Primitives (shared)
 

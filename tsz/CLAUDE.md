@@ -38,20 +38,34 @@ runtime/
 examples/             — .tsz demo apps
 ```
 
+### File Extension Convention
+
+| Extension | Purpose | Compilation mode |
+|-----------|---------|-----------------|
+| `.app.tsz` | App entry points → standalone binaries | JSX mode (auto) |
+| `.mod.tsz` | Runtime modules → `.gen.zig` fragments | Imperative mode (auto) |
+| `.tsz` | Component imports (stories, shared components) | Auto-detect |
+| `.cls.tsz` | Classifier/style modules | Auto-detect |
+
+**The extension determines the compilation mode.** `.mod.tsz` is always imperative. `.app.tsz` is always JSX. Plain `.tsz` auto-detects from content.
+
 ### What goes where
 
 | Question | Answer |
 |----------|--------|
-| Writing new runtime code? | Write `.tsz` in `runtime/tsz/` |
-| Compiler can't handle a pattern? | Fix the compiler, then write `.tsz` |
+| Writing new runtime code? | Write `.mod.tsz` in `runtime/tsz/` |
+| Writing an app? | Write `.app.tsz` in `examples/` |
+| Writing a reusable component? | Write `.tsz` (imported by `.app.tsz`) |
+| Writing shared styles? | Write `.cls.tsz` |
+| Compiler can't handle a pattern? | Fix the compiler, then write `.mod.tsz` |
 | Need to read runtime source? | Read from `runtime/tsz/` |
 | Need to debug generated output? | Read from `runtime/compiled/` |
-| Editing a `.zig` in `compiled/`? | **No. Edit the `.tsz` and recompile.** |
-| Found a bug in generated code? | Fix the compiler or the `.tsz` source |
+| Editing a `.zig` in `compiled/`? | **No. Edit the `.mod.tsz` and recompile.** |
+| Found a bug in generated code? | Fix the compiler or the `.mod.tsz` source |
 
 ### The compiler is the only hand-written Zig
 
-The `compiler/` directory is pure Zig because the compiler can't compile itself (yet). Everything else — the entire runtime — is `.tsz` source that compiles to `.zig`.
+The `compiler/` directory is pure Zig because the compiler can't compile itself (yet). Everything else — the entire runtime — is `.mod.tsz` source that compiles to `.zig`.
 
 ## .tsz Syntax
 
@@ -89,16 +103,26 @@ export function getSlot(id: usize): i64 {
 }
 ```
 
+## Session Safety Net
+
+**When starting any non-trivial task, activate the loop safety net:**
+
+```
+/loop 2m
+```
+
+Zig build errors frequently cause the token stream to stall — the session just stops producing output and the user has to manually poke it. The `/loop 2m` acts as a heartbeat that auto-pokes you every 2 minutes if you go silent. Turn it off when you're done with the task.
+
 ## Build Commands
 
 All builds run from the **repo root** (where `build.zig` lives):
 
 ```bash
-zig build tsz-compiler                         # Build the compiler
-zig build engine-app                           # Build the runtime + app
-./zig-out/bin/tsz build app.tsz                # Compile .tsz → native binary
-./zig-out/bin/tsz run app.tsz                  # Compile and run
-./zig-out/bin/tsz compile-runtime src.tsz -o dir/  # Compile to .gen.zig fragment
+zig build tsz-compiler                              # Build the compiler
+zig build engine-app                                # Build the runtime + app
+./zig-out/bin/tsz build app.app.tsz                 # Compile .app.tsz → native binary
+./zig-out/bin/tsz run app.app.tsz                   # Compile and run
+./zig-out/bin/tsz compile-runtime src.mod.tsz -o dir/  # Compile .mod.tsz to .gen.zig fragment
 ```
 
 ## Compiler Capabilities
