@@ -43,8 +43,10 @@ pub fn emitExpression(
     };
     const result = try p.parseTernary();
 
-    // In condition context, a bare identifier/property access implies != null check
-    if (context == .condition and isBareAccess(result)) {
+    // In condition context, a property access on a nullable field implies != null check.
+    // Only do this for dotted paths (node.text, s.width) — bare locals like is_row
+    // are bools from comparisons, not optionals.
+    if (context == .condition and isBareAccess(result) and std.mem.indexOf(u8, result, ".") != null) {
         return try std.fmt.allocPrint(alloc, "{s} != null", .{result});
     }
 
@@ -154,6 +156,8 @@ const Parser = struct {
         while (self.curKind() == .eq_eq or self.curKind() == .not_eq) {
             const is_eq = self.curKind() == .eq_eq;
             self.advance();
+            // === and !== produce eq_eq/not_eq + equals — consume the extra =
+            if (self.curKind() == .equals) self.advance();
 
             // null/undefined on RHS
             if (self.curKind() == .identifier) {
@@ -207,6 +211,10 @@ const Parser = struct {
     fn parseAdditive(self: *Parser) Error![]const u8 {
         var left = try self.parseMultiplicative();
         while (self.curKind() == .plus or self.curKind() == .minus) {
+            // Don't consume + or - if followed by = (compound assignment handled by stmtgen)
+            if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
+            // Don't consume if it's ++ or -- (postfix, handled elsewhere)
+            if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == self.curKind()) break;
             const op: []const u8 = if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
@@ -220,6 +228,8 @@ const Parser = struct {
     fn parseMultiplicative(self: *Parser) Error![]const u8 {
         var left = try self.parseUnary();
         while (self.curKind() == .star or self.curKind() == .slash or self.curKind() == .percent) {
+            // Don't consume * / % if followed by = (compound assignment)
+            if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
             const op: []const u8 = switch (self.curKind()) {
                 .star => "*",
                 .slash => "/",
@@ -445,9 +455,39 @@ const Parser = struct {
                     return try self.alloc.dupe(u8, "new");
                 }
 
-                // Regular identifier — no camelToSnake (only after .)
+                // PascalCase.Variant → .variant (enum access)
+                // But NOT PascalCase.method() (namespace call like Math.abs)
+                if (text.len > 0 and text[0] >= 'A' and text[0] <= 'Z') {
+                    if (self.pos.* + 2 < self.lex.count and
+                        self.lex.get(self.pos.* + 1).kind == .dot and
+                        self.lex.get(self.pos.* + 2).kind == .identifier)
+                    {
+                        // Check if the member is followed by ( → method call, not enum
+                        const after_member = if (self.pos.* + 3 < self.lex.count)
+                            self.lex.get(self.pos.* + 3).kind
+                        else
+                            TokenKind.eof;
+
+                        if (after_member != .lparen) {
+                            // Enum access: FlexDirection.Row → .row
+                            self.advance(); // skip type name
+                            self.advance(); // skip .
+                            const variant = self.curText();
+                            self.advance(); // skip variant
+                            const snake = try camelToSnake(self.alloc, variant);
+                            // Lowercase the first char for Zig enum convention
+                            const lowered = try lowerFirst(self.alloc, snake);
+                            return try std.fmt.allocPrint(self.alloc, ".{s}", .{lowered});
+                        }
+                    }
+                    // PascalCase identifier without enum access — leave as-is (type or namespace)
+                    self.advance();
+                    return try self.alloc.dupe(u8, text);
+                }
+
+                // Regular identifier — apply camelToSnake for local variables
                 self.advance();
-                return try self.alloc.dupe(u8, text);
+                return try camelToSnake(self.alloc, text);
             },
 
             // Parenthesized expression
@@ -564,6 +604,15 @@ fn mapTsType(ts_type: []const u8) []const u8 {
     return ts_type;
 }
 
+/// Lowercase the first character of a string.
+fn lowerFirst(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+    if (input.len == 0) return try alloc.dupe(u8, "");
+    if (input[0] < 'A' or input[0] > 'Z') return try alloc.dupe(u8, input);
+    var buf = try alloc.dupe(u8, input);
+    buf[0] = input[0] - 'A' + 'a';
+    return buf;
+}
+
 /// Convert camelCase to snake_case.
 /// "flexDirection" → "flex_direction", "paddingLeft" → "padding_left"
 pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
@@ -641,20 +690,26 @@ fn emitTemplateLiteral(alloc: std.mem.Allocator, raw: []const u8) ![]const u8 {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 fn testExpr(input: []const u8, expected: []const u8) !void {
+    // Use arena — the parser creates many intermediate strings that only
+    // the final result references. In production an arena is used too.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
     var lex = Lexer.init(input);
     lex.tokenize();
     var pos: u32 = 0;
-    const result = try emitExpression(std.testing.allocator, &lex, input, &pos, .value);
-    defer std.testing.allocator.free(result);
+    const result = try emitExpression(alloc, &lex, input, &pos, .value);
     try std.testing.expectEqualStrings(expected, result);
 }
 
 fn testExprCtx(input: []const u8, expected: []const u8, ctx: ExprContext) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
     var lex = Lexer.init(input);
     lex.tokenize();
     var pos: u32 = 0;
-    const result = try emitExpression(std.testing.allocator, &lex, input, &pos, ctx);
-    defer std.testing.allocator.free(result);
+    const result = try emitExpression(alloc, &lex, input, &pos, ctx);
     try std.testing.expectEqualStrings(expected, result);
 }
 
@@ -781,7 +836,7 @@ test "parenthesized" {
 
 test "function call" {
     try testExpr("foo(a, b)", "foo(a, b)");
-    try testExpr("resolveMaybePct(val, parent)", "resolveMaybePct(val, parent)");
+    try testExpr("resolveMaybePct(val, parent)", "resolve_maybe_pct(val, parent)");
 }
 
 test "index access" {
@@ -798,4 +853,46 @@ test "comparison chain with logical" {
 
 test "slice method" {
     try testExpr("str.slice(a, b)", "str[@intCast(a)..@intCast(b)]");
+}
+
+test "compound assignment stops at +=" {
+    // exprgen should return just the LHS, leaving += for stmtgen
+    try testExpr("total", "total");
+    // When parsing "total + = x", the + before = should NOT be consumed
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const input = "total += 1";
+    var lex = Lexer.init(input);
+    lex.tokenize();
+    var pos: u32 = 0;
+    const result = try emitExpression(alloc, &lex, input, &pos, .value);
+    try std.testing.expectEqualStrings("total", result);
+    // pos should be at the + token, not past it
+    try std.testing.expectEqual(TokenKind.plus, lex.get(pos).kind);
+}
+
+test "enum reference" {
+    try testExpr("FlexDirection.Row", ".row");
+    try testExpr("Display.None", ".none");
+    try testExpr("Position.Absolute", ".absolute");
+    try testExpr("FlexWrap.Wrap", ".wrap");
+}
+
+test "enum does not apply to Math builtins" {
+    // Math.abs(x) should NOT be treated as enum (followed by parens)
+    try testExpr("Math.abs(x)", "@abs(x)");
+}
+
+test "local variable snake_case" {
+    try testExpr("visibleCount", "visible_count");
+    try testExpr("lineMain", "line_main");
+    try testExpr("itemsOnLine", "items_on_line");
+    try testExpr("totalCross", "total_cross");
+}
+
+test "simple identifiers unchanged" {
+    try testExpr("total", "total");
+    try testExpr("gap", "gap");
+    try testExpr("node", "node");
 }

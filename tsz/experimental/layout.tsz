@@ -21,17 +21,17 @@ enum DevtoolsViz { None, Sparkline, Wireframe, NodeTree, InspectorOverlay }
 // ─── Types ───────────────────────────────────────────────────────────
 
 interface Color {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
+  r: u8;
+  g: u8;
+  b: u8;
+  a: u8;
 }
 
-function rgb(r: number, g: number, b: number): Color {
+function rgb(r: u8, g: u8, b: u8): Color {
   return { r, g, b, a: 255 };
 }
 
-function rgba(r: number, g: number, b: number, a: number): Color {
+function rgba(r: u8, g: u8, b: u8, a: u8): Color {
   return { r, g, b, a };
 }
 
@@ -103,7 +103,7 @@ interface Style {
   scaleY: number;
   borderWidth: number;
   borderColor?: Color;
-  zIndex: number;
+  zIndex: i16;
   gradientColorEnd?: Color;
   gradientDirection: GradientDirection;
   shadowOffsetX: number;
@@ -118,16 +118,16 @@ interface Node {
   computed: LayoutRect;
 
   text?: string;
-  fontSize: number;
+  fontSize: u16;
   textColor?: Color;
   letterSpacing: number;
   lineHeight: number;
-  numberOfLines: number;
+  numberOfLines: u16;
   noWrap: boolean;
 
   codeLanguage: CodeLanguage;
   imageSrc?: string;
-  inputId?: number;
+  inputId?: u8;
   placeholder?: string;
   debugName?: string;
   testId?: string;

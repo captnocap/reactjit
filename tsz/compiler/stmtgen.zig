@@ -205,10 +205,14 @@ fn emitVarDecl(
         const expr = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
 
-        if (type_ann) |ta| {
-            return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = {s};", .{ ind, zig_kw, snake_name, ta, expr });
-        }
-        return try std.fmt.allocPrint(alloc, "{s}{s} {s} = {s};", .{ ind, zig_kw, snake_name, expr });
+        // If initializer is an array/zeroes allocation, use var (TS const allows mutation of contents)
+        const effective_kw = if (std.mem.indexOf(u8, expr, "zeroes") != null or
+            std.mem.indexOf(u8, expr, "[_]") != null) "var" else zig_kw;
+
+        // When there's an initializer, skip the type annotation — let Zig infer.
+        // The .tsz type annotation (e.g., "number[]") doesn't map cleanly and the
+        // initializer already carries the correct Zig type.
+        return try std.fmt.allocPrint(alloc, "{s}{s} {s} = {s};", .{ ind, effective_kw, snake_name, expr });
     }
 
     // No initializer
@@ -337,7 +341,7 @@ fn emitForOf(
         body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
     }
 
-    return try std.fmt.allocPrint(alloc, "{s}for ({s}) |{s}| {{\n{s}{s}}}", .{ ind, collection, snake_iter, body, ind });
+    return try std.fmt.allocPrint(alloc, "{s}for ({s}) |*{s}| {{\n{s}{s}}}", .{ ind, collection, snake_iter, body, ind });
 }
 
 // ── C-style for loop ────────────────────────────────────────────────
