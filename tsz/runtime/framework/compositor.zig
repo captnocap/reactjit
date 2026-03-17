@@ -350,7 +350,10 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
     const child_scroll_y = scroll_y + if (needs_clip) node.scroll_y else @as(f32, 0);
 
     // Push clip rect for overflow: scroll/hidden containers
-    if (needs_clip) pushClip(screen_x, screen_y, w, h);
+    if (needs_clip) {
+        pushClip(screen_x, screen_y, w, h);
+        gpu.pushScissor(screen_x, screen_y, w, h);
+    }
 
     // Z-index sorting
     var needs_zsort = false;
@@ -383,7 +386,10 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         }
     }
 
-    if (needs_clip) popClip();
+    if (needs_clip) {
+        popClip();
+        gpu.popScissor();
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════

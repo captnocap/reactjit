@@ -1545,7 +1545,13 @@ pub const Generator = struct {
         var i: u32 = self.prop_stack_count;
         while (i > 0) {
             i -= 1;
-            if (std.mem.eql(u8, self.prop_stack[i].name, name)) return self.prop_stack[i].value;
+            if (std.mem.eql(u8, self.prop_stack[i].name, name)) {
+                if (self.emit_prop_refs) {
+                    // Function mode: return parameter reference
+                    return std.fmt.allocPrint(self.alloc, "_p_{s}", .{name}) catch null;
+                }
+                return self.prop_stack[i].value;
+            }
         }
         return null;
     }
@@ -1796,11 +1802,14 @@ pub const Generator = struct {
             const arr_count_before = self.array_decls.items.len;
             const arr_id_before = self.array_counter;
 
-            // Parse the component body
+            // Parse the component body in prop-ref mode
+            // Props resolve to _p_name instead of concrete values
             const saved_pos = self.pos;
             self.pos = comp.body_pos;
             self.component_children_exprs = null;
+            self.emit_prop_refs = true;
             const root_expr = try self.parseJSXElement();
+            self.emit_prop_refs = false;
             self.pos = saved_pos;
 
             const arr_count_after = self.array_decls.items.len;
@@ -1865,23 +1874,7 @@ pub const Generator = struct {
                     const new_ref = try std.fmt.allocPrint(self.alloc, "_inner_{d}", .{jj});
                     replaced_init = try self.replaceAllOccurrences(replaced_init, old_ref, new_ref);
                 }
-                // Replace prop value literals with parameter references
-                // Skip empty values ("") to avoid catastrophic replacement
-                for (saved_prop_count..self.prop_stack_count) |pi| {
-                    const prop = self.prop_stack[pi];
-                    const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
-                    if (prop.value.len > 2 or (prop.value.len == 2 and prop.value[0] != '"')) {
-                        replaced_init = try self.replaceAllOccurrences(replaced_init, prop.value, param_ref);
-                    }
-                    // Also handle color-converted values: prop value "\"#4ec9b0\"" becomes Color.rgb(78, 201, 176)
-                    if (prop.value.len >= 2 and prop.value[0] == '"') {
-                        const inner_val = prop.value[1 .. prop.value.len - 1];
-                        if (inner_val.len > 0 and inner_val[0] == '#') {
-                            const color_zig = try self.parseColorValue(inner_val);
-                            replaced_init = try self.replaceAllOccurrences(replaced_init, color_zig, param_ref);
-                        }
-                    }
-                }
+                // Props resolved structurally via emit_prop_refs — no string replacement.
                 try func_src.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    _inner_{d}.* = [_]Node{{ {s} }};\n", .{ ii, replaced_init }));
             }
@@ -1894,21 +1887,7 @@ pub const Generator = struct {
                 const new_ref = try std.fmt.allocPrint(self.alloc, "_inner_{d}", .{ii});
                 replaced_root = try self.replaceAllOccurrences(replaced_root, old_ref, new_ref);
             }
-            // Replace prop value literals in root expression too
-            for (saved_prop_count..self.prop_stack_count) |pi| {
-                const prop = self.prop_stack[pi];
-                const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
-                if (prop.value.len > 2 or (prop.value.len == 2 and prop.value[0] != '"')) {
-                    replaced_root = try self.replaceAllOccurrences(replaced_root, prop.value, param_ref);
-                }
-                if (prop.value.len >= 2 and prop.value[0] == '"') {
-                    const inner_val = prop.value[1 .. prop.value.len - 1];
-                    if (inner_val.len > 0 and inner_val[0] == '#') {
-                        const color_zig = try self.parseColorValue(inner_val);
-                        replaced_root = try self.replaceAllOccurrences(replaced_root, color_zig, param_ref);
-                    }
-                }
-            }
+            // Props resolved structurally via emit_prop_refs — no string replacement.
 
             // Convert ".{ ... }" to "Node{ ... }" for the return
             if (std.mem.startsWith(u8, replaced_root, ".{ ")) {
@@ -2962,6 +2941,7 @@ pub const Generator = struct {
         var child_exprs: std.ArrayListUnmanaged([]const u8) = .{};
         defer child_exprs.deinit(self.alloc);
         var text_content: ?[]const u8 = null;
+        var is_prop_text_ref = false; // true = text_content is a bare identifier (_p_name), emit without quoting
         var is_dynamic_text = false;
         var dyn_fmt: []const u8 = "";
         var dyn_args: []const u8 = "";
@@ -3130,7 +3110,12 @@ pub const Generator = struct {
                         const ident = self.curText();
                         if (self.findProp(ident)) |val| {
                             self.advance_token();
-                            if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                            if (std.mem.startsWith(u8, val, "_p_")) {
+                                // Component function mode: prop param ref as text
+                                // Set as raw text expression (no quoting)
+                                text_content = val;
+                                is_prop_text_ref = true;
+                            } else if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
                                 text_content = val[1 .. val.len - 1];
                             } else if (std.mem.startsWith(u8, val, "state.getSlot(")) {
                                 // Dynamic state reference from prop — create dynamic text
@@ -3259,20 +3244,25 @@ pub const Generator = struct {
             }
         } else if (text_content) |tc| {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-            try fields.appendSlice(self.alloc, ".text = \"");
-            // Escape characters that break Zig string literals
-            for (tc) |ch| {
-                if (ch == '"') {
-                    try fields.appendSlice(self.alloc, "\\\"");
-                } else if (ch == '\\') {
-                    try fields.appendSlice(self.alloc, "\\\\");
-                } else if (ch == '\n') {
-                    try fields.appendSlice(self.alloc, "\\n");
-                } else {
-                    try fields.append(self.alloc, ch);
+            if (is_prop_text_ref) {
+                // Bare identifier (component function param) — no quoting
+                try fields.appendSlice(self.alloc, ".text = ");
+                try fields.appendSlice(self.alloc, tc);
+            } else {
+                try fields.appendSlice(self.alloc, ".text = \"");
+                for (tc) |ch| {
+                    if (ch == '"') {
+                        try fields.appendSlice(self.alloc, "\\\"");
+                    } else if (ch == '\\') {
+                        try fields.appendSlice(self.alloc, "\\\\");
+                    } else if (ch == '\n') {
+                        try fields.appendSlice(self.alloc, "\\n");
+                    } else {
+                        try fields.append(self.alloc, ch);
+                    }
                 }
+                try fields.appendSlice(self.alloc, "\"");
             }
-            try fields.appendSlice(self.alloc, "\"");
         }
 
         // Font size
@@ -3357,7 +3347,12 @@ pub const Generator = struct {
         if (color_str.len > 0) {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".text_color = ");
-            try fields.appendSlice(self.alloc, try self.parseColorValue(color_str));
+            if (std.mem.startsWith(u8, color_str, "_p_")) {
+                // Component function param ref — emit as bare identifier
+                try fields.appendSlice(self.alloc, color_str);
+            } else {
+                try fields.appendSlice(self.alloc, try self.parseColorValue(color_str));
+            }
         }
 
         // Classifier text_color (if not overridden by inline color prop)
@@ -3827,16 +3822,26 @@ pub const Generator = struct {
     }
 
     fn parseStringAttr(self: *Generator) ![]const u8 {
-        // Parse ="string" or ={"string"}
+        // Parse ="string" or ={"string"} or ={identifier}
         if (self.curKind() == .string) {
             const tok = self.cur();
             const raw = tok.text(self.source);
             self.advance_token();
-            // Strip quotes
             return raw[1 .. raw.len - 1];
         }
         if (self.curKind() == .lbrace) {
             self.advance_token();
+            // Check for identifier (prop/local/state reference)
+            if (self.curKind() == .identifier) {
+                const name = self.curText();
+                if (self.findProp(name)) |val| {
+                    self.advance_token();
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    if (std.mem.startsWith(u8, val, "_p_")) return val; // param ref
+                    if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) return val[1 .. val.len - 1];
+                    return val;
+                }
+            }
             const result = try self.parseStringAttr();
             if (self.curKind() == .rbrace) self.advance_token();
             return result;

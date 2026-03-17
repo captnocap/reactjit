@@ -145,6 +145,97 @@ var g_prev_dims: [2]u32 = .{ 0, 0 };
 const DRAIN_INTERVAL: u64 = 36000; // ~10 minutes at 60fps
 var g_frame_counter: u64 = 0;
 
+// ════════════════════════════════════════════════════════════════════════
+// Scissor rect segments — for overflow clipping
+// ════════════════════════════════════════════════════════════════════════
+
+const ScissorSegment = struct {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    rect_start: u32,
+    glyph_start: u32,
+};
+
+const MAX_SCISSOR_SEGMENTS = 64;
+var g_scissor_segments: [MAX_SCISSOR_SEGMENTS]ScissorSegment = undefined;
+var g_scissor_count: usize = 0;
+
+// Scissor stack for nested clips
+const MAX_SCISSOR_STACK = 16;
+var g_scissor_stack: [MAX_SCISSOR_STACK]ScissorSegment = undefined;
+var g_scissor_depth: usize = 0;
+
+pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
+    // Clamp to positive values and convert to u32
+    var sx: u32 = if (x > 0) @intFromFloat(x) else 0;
+    var sy: u32 = if (y > 0) @intFromFloat(y) else 0;
+    var sw: u32 = if (w > 0) @intFromFloat(@ceil(w)) else 0;
+    var sh: u32 = if (h > 0) @intFromFloat(@ceil(h)) else 0;
+
+    // Intersect with parent scissor
+    if (g_scissor_depth > 0) {
+        const parent = g_scissor_stack[g_scissor_depth - 1];
+        const px2 = parent.x + parent.w;
+        const py2 = parent.y + parent.h;
+        const nx = @max(sx, parent.x);
+        const ny = @max(sy, parent.y);
+        const nx2 = @min(sx + sw, px2);
+        const ny2 = @min(sy + sh, py2);
+        sx = nx;
+        sy = ny;
+        sw = if (nx2 > nx) nx2 - nx else 0;
+        sh = if (ny2 > ny) ny2 - ny else 0;
+    }
+
+    // Clamp to surface dimensions
+    if (sx + sw > g_width) sw = if (g_width > sx) g_width - sx else 0;
+    if (sy + sh > g_height) sh = if (g_height > sy) g_height - sy else 0;
+
+    // Record segment boundary
+    if (g_scissor_count < MAX_SCISSOR_SEGMENTS) {
+        g_scissor_segments[g_scissor_count] = .{
+            .x = sx, .y = sy, .w = sw, .h = sh,
+            .rect_start = @intCast(g_rect_count),
+            .glyph_start = @intCast(g_glyph_count),
+        };
+        g_scissor_count += 1;
+    }
+
+    // Push to stack
+    if (g_scissor_depth < MAX_SCISSOR_STACK) {
+        g_scissor_stack[g_scissor_depth] = .{
+            .x = sx, .y = sy, .w = sw, .h = sh,
+            .rect_start = 0, .glyph_start = 0,
+        };
+        g_scissor_depth += 1;
+    }
+}
+
+pub fn popScissor() void {
+    if (g_scissor_depth > 0) g_scissor_depth -= 1;
+
+    // Record segment boundary for parent scissor (or full viewport)
+    if (g_scissor_count < MAX_SCISSOR_SEGMENTS) {
+        if (g_scissor_depth > 0) {
+            const parent = g_scissor_stack[g_scissor_depth - 1];
+            g_scissor_segments[g_scissor_count] = .{
+                .x = parent.x, .y = parent.y, .w = parent.w, .h = parent.h,
+                .rect_start = @intCast(g_rect_count),
+                .glyph_start = @intCast(g_glyph_count),
+            };
+        } else {
+            g_scissor_segments[g_scissor_count] = .{
+                .x = 0, .y = 0, .w = g_width, .h = g_height,
+                .rect_start = @intCast(g_rect_count),
+                .glyph_start = @intCast(g_glyph_count),
+            };
+        }
+        g_scissor_count += 1;
+    }
+}
+
 // Atlas packer state
 var g_atlas_row_x: u32 = 0;
 var g_atlas_row_y: u32 = 0;
@@ -693,6 +784,34 @@ pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_wi
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Batch draw helpers for scissor-segmented rendering
+// ════════════════════════════════════════════════════════════════════════
+
+fn drawRectBatch(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    if (end <= start) return;
+    if (g_rect_pipeline) |pipeline| {
+        render_pass.setPipeline(pipeline);
+        if (g_bind_group) |bg| render_pass.setBindGroup(0, bg, 0, null);
+        if (g_rect_buffer) |buf| {
+            render_pass.setVertexBuffer(0, buf, 0, g_rect_count * @sizeOf(RectInstance));
+        }
+        render_pass.draw(6, end - start, 0, start);
+    }
+}
+
+fn drawGlyphBatch(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    if (end <= start) return;
+    if (g_text_pipeline) |pipeline| {
+        render_pass.setPipeline(pipeline);
+        if (g_text_bind_group) |bg| render_pass.setBindGroup(0, bg, 0, null);
+        if (g_text_buffer) |buf| {
+            render_pass.setVertexBuffer(0, buf, 0, g_glyph_count * @sizeOf(GlyphInstance));
+        }
+        render_pass.draw(6, end - start, 0, start);
+    }
+}
+
 /// Render all queued primitives and present.
 pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const surface = g_surface orelse return;
@@ -779,32 +898,56 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         .color_attachments = @ptrCast(&color_attachment),
     }) orelse return;
 
-    // Draw rects
-    if (g_rect_count > 0) {
-        if (g_rect_pipeline) |pipeline| {
-            render_pass.setPipeline(pipeline);
-            if (g_bind_group) |bg| {
-                render_pass.setBindGroup(0, bg, 0, null);
-            }
-            if (g_rect_buffer) |buf| {
-                render_pass.setVertexBuffer(0, buf, 0, g_rect_count * @sizeOf(RectInstance));
-            }
-            // 6 vertices per rect (2 triangles), instanced
-            render_pass.draw(6, @intCast(g_rect_count), 0, 0);
-        }
-    }
+    if (g_scissor_count == 0) {
+        // Fast path — no clip rects, single draw for all rects + glyphs
+        render_pass.setScissorRect(0, 0, g_width, g_height);
+        drawRectBatch(render_pass, 0, @intCast(g_rect_count));
+        drawGlyphBatch(render_pass, 0, @intCast(g_glyph_count));
+    } else {
+        // Add a final sentinel segment covering everything after the last segment
+        var segments: [MAX_SCISSOR_SEGMENTS + 1]ScissorSegment = undefined;
+        const seg_count = g_scissor_count;
+        @memcpy(segments[0..seg_count], g_scissor_segments[0..seg_count]);
 
-    // Draw text glyphs
-    if (g_glyph_count > 0) {
-        if (g_text_pipeline) |pipeline| {
-            render_pass.setPipeline(pipeline);
-            if (g_text_bind_group) |bg| {
-                render_pass.setBindGroup(0, bg, 0, null);
+        // Process segments: each segment says "from here, use this scissor"
+        // We need to draw [prev_segment_start .. this_segment_start) with prev scissor,
+        // then switch to this segment's scissor.
+
+        // Start with full viewport for anything before the first segment
+        var prev_rect: u32 = 0;
+        var prev_glyph: u32 = 0;
+        var prev_sx: u32 = 0;
+        var prev_sy: u32 = 0;
+        var prev_sw: u32 = g_width;
+        var prev_sh: u32 = g_height;
+
+        for (0..seg_count) |si| {
+            const seg = segments[si];
+            const rect_end = seg.rect_start;
+            const glyph_end = seg.glyph_start;
+
+            // Draw everything between prev and this segment boundary with prev scissor
+            if (rect_end > prev_rect or glyph_end > prev_glyph) {
+                render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
+                if (rect_end > prev_rect) drawRectBatch(render_pass, prev_rect, rect_end);
+                if (glyph_end > prev_glyph) drawGlyphBatch(render_pass, prev_glyph, glyph_end);
             }
-            if (g_text_buffer) |buf| {
-                render_pass.setVertexBuffer(0, buf, 0, g_glyph_count * @sizeOf(GlyphInstance));
-            }
-            render_pass.draw(6, @intCast(g_glyph_count), 0, 0);
+
+            prev_rect = rect_end;
+            prev_glyph = glyph_end;
+            prev_sx = seg.x;
+            prev_sy = seg.y;
+            prev_sw = seg.w;
+            prev_sh = seg.h;
+        }
+
+        // Draw remaining after last segment
+        const total_rects: u32 = @intCast(g_rect_count);
+        const total_glyphs: u32 = @intCast(g_glyph_count);
+        if (total_rects > prev_rect or total_glyphs > prev_glyph) {
+            render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
+            if (total_rects > prev_rect) drawRectBatch(render_pass, prev_rect, total_rects);
+            if (total_glyphs > prev_glyph) drawGlyphBatch(render_pass, prev_glyph, total_glyphs);
         }
     }
 
@@ -830,6 +973,8 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     g_last_glyph_count = g_glyph_count;
     g_rect_count = 0;
     g_glyph_count = 0;
+    g_scissor_count = 0;
+    g_scissor_depth = 0;
 }
 
 /// Diagnostic stats for crash reporting.
