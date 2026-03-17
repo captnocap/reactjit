@@ -197,4 +197,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |a| for (a) |arg| tsz_dash_run.addArg(arg);
     const tsz_dash_run_step = b.step("run-tsz-dashboard", "Build and run TSZ-compiled dashboard");
     tsz_dash_run_step.dependOn(&tsz_dash_run.step);
+
+    // ── Forked TSZ compiler (for compute{} block experiment) ─────
+    const compiler_exe = b.addExecutable(.{
+        .name = "zigos-compiler",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("compiler/cli.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    compiler_exe.linkLibC();
+    const compiler_install = b.addInstallArtifact(compiler_exe, .{});
+    const compiler_step = b.step("compiler", "Build forked TSZ compiler");
+    compiler_step.dependOn(&compiler_install.step);
 }
