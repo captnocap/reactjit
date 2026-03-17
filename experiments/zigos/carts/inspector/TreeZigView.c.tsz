@@ -4,23 +4,20 @@ import { TreeLine } from './TreeLine.c';
 function TreeZigView() {
   return (
     <C.TreeStack>
-      <TreeLine depth={0} caret={1} tag="RootNode" dim="native app root" />
-      <TreeLine depth={1} caret={1} tag="BoxNode" prop="panel shell" />
-      <TreeLine depth={2} caret={1} tag="BoxNode" prop="toolbar row" />
-      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
-      <TreeLine depth={4} caret={0} tag="TextNode" text="Hybrid" />
-      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
-      <TreeLine depth={4} caret={0} tag="TextNode" text="Zig" dim="native nodes" />
-      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
-      <TreeLine depth={4} caret={0} tag="TextNode" text="JSX" />
-      <TreeLine depth={2} caret={1} tag="ScrollViewNode" prop="tree viewport" />
-      <TreeLine depth={3} caret={1} tag="PressableNode" prop="row hit target" />
-      <TreeLine depth={4} caret={1} tag="BoxNode" prop="gutter rail" />
-      <TreeLine depth={5} caret={1} tag="BoxNode" prop="slot column" />
-      <TreeLine depth={6} caret={1} tag="TextNode" text="+v" />
-      <TreeLine depth={7} caret={1} tag="TextNode" text="|" />
-      <TreeLine depth={8} caret={1} tag="TextNode" text="|" />
-      <TreeLine depth={9} caret={0} tag="TextNode" text="+-" dim="long nest ready" />
+      <TreeLine indent={0} caret={1} tag="RootNode" dim="native app root" />
+      <TreeLine indent={8} caret={1} tag="BoxNode" prop="panel shell" />
+      <TreeLine indent={16} caret={1} tag="BoxNode" prop="toolbar row" />
+      <TreeLine indent={24} caret={1} tag="PressableNode" meta="@tab" />
+      <TreeLine indent={32} caret={0} tag="TextNode" text="Hybrid" />
+      <TreeLine indent={24} caret={1} tag="PressableNode" meta="@tab" />
+      <TreeLine indent={32} caret={0} tag="TextNode" text="Zig" dim="native nodes" />
+      <TreeLine indent={24} caret={1} tag="PressableNode" meta="@tab" />
+      <TreeLine indent={32} caret={0} tag="TextNode" text="JSX" />
+      <TreeLine indent={16} caret={1} tag="ScrollViewNode" prop="tree viewport" />
+      <TreeLine indent={24} caret={1} tag="PressableNode" prop="row hit target" />
+      <TreeLine indent={32} caret={1} tag="BoxNode" prop="branch pad" />
+      <TreeLine indent={40} caret={1} tag="TextNode" text="v" />
+      <TreeLine indent={48} caret={0} tag="TextNode" text="-" dim="leaf" />
     </C.TreeStack>
   );
 }

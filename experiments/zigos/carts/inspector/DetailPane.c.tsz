@@ -41,8 +41,8 @@ function DetailPane() {
             <Badge label="selected" tone={2} />
             <Badge label="flexGrow 1" tone={0} />
           </C.HeroRow>
-          <C.HeroCopy>Right-hand surface for flex diagnostics, style attributes, and node context.</C.HeroCopy>
-          <C.HeroCode>Panel / ElementsPage / DetailPane</C.HeroCode>
+          <C.HeroCopy>Selected node detail surface for box model, sizing, style, and structure.</C.HeroCopy>
+          <C.HeroCode>Inspector.tsz / ElementsPage.c.tsz / DetailPane.c.tsz</C.HeroCode>
           <C.ParentLink>
             <C.ParentArrow>{`\u2190`}</C.ParentArrow>
             <C.ParentName>{'<ElementsPage>'}</C.ParentName>
@@ -50,7 +50,7 @@ function DetailPane() {
           </C.ParentLink>
         </C.HeroCard>
 
-        <DetailSection title="Box Model" hint="margin / padding / content">
+        <DetailSection title="box model" hint="margin / padding / content">
           <C.BoxModelContainer>
             <C.BoxModelMargin>
               <C.BoxModelLayerLabel>margin</C.BoxModelLayerLabel>
@@ -84,7 +84,7 @@ function DetailPane() {
           </C.BoxModelContainer>
         </DetailSection>
 
-        <DetailSection title="Sizing Provenance" hint="how width and height were derived">
+        <DetailSection title="sizing" hint="width / height / position">
           <C.ProvenanceRow>
             <C.ProvenanceAxis>W</C.ProvenanceAxis>
             <C.ProvenanceChain>{`flex: parent 810 \u2192 basis 0 + grow 1 \u2192 free 480 \u2192`}</C.ProvenanceChain>
@@ -113,7 +113,7 @@ function DetailPane() {
           </C.ProvenanceRow>
         </DetailSection>
 
-        <DetailSection title="Flex Layout" hint="split-view composition">
+        <DetailSection title="layout" hint="split view">
           <C.MetricGrid>
             <MetricCard label="Direction" value="row" hint="tree and detail panes" />
             <MetricCard label="Tree Width" value="330px" hint="fixed pane" />
@@ -132,13 +132,13 @@ function DetailPane() {
           </C.FlexPreview>
         </DetailSection>
 
-        <DetailSection title="Style Attributes" hint="editable properties">
+        <DetailSection title="style" hint="editable">
           <C.PropertyList>
-            <PropertyRow name="overflow" value="scroll" note="detail surface owns its own vertical history" />
-            <PropertyRow name="padding" value="14" note="single content inset for section rhythm" />
-            <PropertyRow name="backgroundColor" value="#101523" note="section card tone" accent={1} />
-            <PropertyRow name="borderRadius" value="12" note="panel card rounding" />
-            <PropertyRow name="borderColor" value="#1c2437" note="quiet separators for nested cards" />
+            <PropertyRow name="overflow" value="scroll" note="detail surface owns vertical scroll" />
+            <PropertyRow name="padding" value="10" note="document inset for section rhythm" />
+            <PropertyRow name="backgroundColor" value="#0c1018" note="detail pane base tone" accent={1} />
+            <PropertyRow name="gap" value="0" note="sections stack directly; spacing lives inside groups" />
+            <PropertyRow name="borderColor" value="#1a2030" note="quiet dividers between groups" />
             <PropertyRow name="flexGrow" value="1" note="fills remaining horizontal space" />
             <PropertyRow name="flexBasis" value="0" note="starts from zero, grows into allocation" />
           </C.PropertyList>
@@ -147,30 +147,30 @@ function DetailPane() {
           </C.AddPropertyBtn>
         </DetailSection>
 
-        <DetailSection title="Children" hint="first 8 of 12 children">
+        <DetailSection title="children" hint="direct children">
           <C.ChildrenList>
             <C.ChildRow><C.ChildName>{'<HeroCard>'}</C.ChildName><C.ChildDims>452x86</C.ChildDims></C.ChildRow>
             <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x168</C.ChildDims></C.ChildRow>
             <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x142</C.ChildDims></C.ChildRow>
             <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x118</C.ChildDims></C.ChildRow>
-            <C.ChildRow><C.ChildName>{'<MetricGrid>'}</C.ChildName><C.ChildDims>452x62</C.ChildDims></C.ChildRow>
-            <C.ChildRow><C.ChildName>{'<FlexPreview>'}</C.ChildName><C.ChildDims>452x84</C.ChildDims></C.ChildRow>
-            <C.ChildRow><C.ChildName>{'<PropertyList>'}</C.ChildName><C.ChildDims>452x204</C.ChildDims></C.ChildRow>
-            <C.ChildRow><C.ChildName>{'<PropertyList>'}</C.ChildName><C.ChildDims>452x128</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x156</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x176</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x84</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x96</C.ChildDims></C.ChildRow>
           </C.ChildrenList>
         </DetailSection>
 
-        <DetailSection title="Handlers" hint="event callbacks">
+        <DetailSection title="handlers" hint="event callbacks">
           <C.HandlersList>
             <C.HandlerRow><C.HandlerName>onScroll</C.HandlerName><C.HandlerSnippet>{`(e) => updateScrollY(e.y)`}</C.HandlerSnippet></C.HandlerRow>
             <C.HandlerRow><C.HandlerName>onLayout</C.HandlerName><C.HandlerSnippet>{`(e) => measureContent(e)`}</C.HandlerSnippet></C.HandlerRow>
           </C.HandlersList>
         </DetailSection>
 
-        <DetailSection title="Structure" hint="what this node owns">
+        <DetailSection title="structure" hint="ownership">
           <C.PropertyList>
             <PropertyRow name="parent" value="<ElementsPage>" note="split shell that owns the left and right panes" />
-            <PropertyRow name="children" value="12 nodes" note="hero card, sections, metrics, lists" />
+            <PropertyRow name="children" value="8 nodes" note="hero card plus 7 detail sections" />
             <PropertyRow name="render count" value="8" note="reactive — re-rendered on selection change" accent={1} />
             <PropertyRow name="node id" value="#42" note="stable runtime identifier" />
           </C.PropertyList>

@@ -1,6 +1,7 @@
 //! Lexer for .tsz — tokenizes TypeScript-like syntax + JSX
 //!
-//! Produces a flat array of tokens. No heap allocation — fixed-size buffer.
+//! Produces a flat array of tokens. Tokens are heap-allocated via page_allocator
+//! so MAX_TOKENS can be large without blowing the stack.
 //! Handles: identifiers, numbers, strings, template literals, JSX tags,
 //! comments, FFI pragmas, and all punctuation.
 
@@ -85,20 +86,21 @@ pub const Token = struct {
     }
 };
 
-const MAX_TOKENS = 32768;
+const MAX_TOKENS = 262144;
 
 pub const Lexer = struct {
     source: []const u8,
     pos: u32,
-    tokens: [MAX_TOKENS]Token,
+    tokens: []Token,
     count: u32,
     overflow: bool,
 
     pub fn init(source: []const u8) Lexer {
+        const tokens = std.heap.page_allocator.alloc(Token, MAX_TOKENS) catch @panic("OOM allocating token buffer");
         return .{
             .source = source,
             .pos = 0,
-            .tokens = undefined,
+            .tokens = tokens,
             .count = 0,
             .overflow = false,
         };
@@ -123,10 +125,10 @@ pub const Lexer = struct {
     }
 
     fn emit(self: *Lexer, kind: TokenKind, start: u32, end: u32) void {
-        if (self.count >= MAX_TOKENS) {
+        if (self.count >= self.tokens.len) {
             if (!self.overflow) {
                 self.overflow = true;
-                std.debug.print("[tsz] Token limit exceeded ({d}). Source file is too large for single-pass compilation.\n", .{MAX_TOKENS});
+                std.debug.print("[tsz] Token limit exceeded ({d}). Source file is too large for single-pass compilation.\n", .{self.tokens.len});
             }
             return;
         }

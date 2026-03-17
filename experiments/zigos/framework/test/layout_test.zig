@@ -11,18 +11,25 @@ fn mockMeasure(
     max_lines: u16,
     no_wrap: bool,
 ) layout.TextMetrics {
-    _ = max_width;
     _ = letter_spacing;
-    _ = line_height;
     _ = max_lines;
-    _ = no_wrap;
 
-    const width = @as(f32, @floatFromInt(text.len)) * 6;
-    const height = @as(f32, @floatFromInt(font_size));
+    const char_w: f32 = 6;
+    const full_width = @as(f32, @floatFromInt(text.len)) * char_w;
+    const line_px = if (line_height > 0) line_height else @as(f32, @floatFromInt(font_size));
+
+    var width = full_width;
+    var lines: usize = 1;
+    if (!no_wrap and max_width > 0 and full_width > max_width) {
+        const chars_per_line = @max(1, @as(usize, @intFromFloat(@floor(max_width / char_w))));
+        lines = std.math.divCeil(usize, text.len, chars_per_line) catch unreachable;
+        width = @min(full_width, max_width);
+    }
+    const height = line_px * @as(f32, @floatFromInt(lines));
     return .{
         .width = width,
         .height = height,
-        .ascent = height * 0.8,
+        .ascent = @as(f32, @floatFromInt(font_size)) * 0.8,
     };
 }
 
@@ -185,4 +192,100 @@ test "empty centered fixed-width box stays shrink-wrapped" {
 
     try testing.expectApproxEqAbs(@as(f32, 11), root.children[0].computed.h, 0.01);
     try testing.expectApproxEqAbs(@as(f32, 12), root.children[1].computed.y, 0.01);
+}
+
+test "text in centered flex detail region wraps to the detail width" {
+    layout.setMeasureFn(mockMeasure);
+    defer layout.setMeasureFn(null);
+
+    var tree_text = [_]layout.Node{
+        .{ .text = "Tree", .font_size = 11 },
+    };
+    var detail_text = [_]layout.Node{
+        .{ .text = "detail flex region should wrap", .font_size = 11 },
+    };
+    var row_children = [_]layout.Node{
+        .{
+            .style = .{
+                .width = 120,
+                .justify_content = .center,
+                .align_items = .center,
+            },
+            .children = &tree_text,
+        },
+        .{
+            .style = .{
+                .flex_grow = 1,
+                .flex_basis = 0,
+                .justify_content = .center,
+                .align_items = .center,
+            },
+            .children = &detail_text,
+        },
+    };
+    var root = layout.Node{
+        .style = .{
+            .flex_direction = .row,
+            .gap = 6,
+            .align_items = .stretch,
+        },
+        .children = &row_children,
+    };
+
+    layout.layout(&root, 0, 0, 160, 52);
+
+    const detail = &root.children[1];
+    const label = &detail.children[0];
+
+    try testing.expectApproxEqAbs(@as(f32, 34), detail.computed.w, 0.01);
+    try testing.expect(label.computed.w <= detail.computed.w + 0.01);
+    try testing.expect(label.computed.h > 11);
+}
+
+test "text in stretch flex detail region wraps as a control" {
+    layout.setMeasureFn(mockMeasure);
+    defer layout.setMeasureFn(null);
+
+    var tree_text = [_]layout.Node{
+        .{ .text = "Tree", .font_size = 11 },
+    };
+    var detail_text = [_]layout.Node{
+        .{ .text = "detail flex region should wrap", .font_size = 11 },
+    };
+    var row_children = [_]layout.Node{
+        .{
+            .style = .{
+                .width = 120,
+                .justify_content = .center,
+                .align_items = .center,
+            },
+            .children = &tree_text,
+        },
+        .{
+            .style = .{
+                .flex_grow = 1,
+                .flex_basis = 0,
+                .justify_content = .center,
+                .align_items = .stretch,
+            },
+            .children = &detail_text,
+        },
+    };
+    var root = layout.Node{
+        .style = .{
+            .flex_direction = .row,
+            .gap = 6,
+            .align_items = .stretch,
+        },
+        .children = &row_children,
+    };
+
+    layout.layout(&root, 0, 0, 160, 52);
+
+    const detail = &root.children[1];
+    const label = &detail.children[0];
+
+    try testing.expectApproxEqAbs(@as(f32, 34), detail.computed.w, 0.01);
+    try testing.expectApproxEqAbs(detail.computed.w, label.computed.w, 0.01);
+    try testing.expect(label.computed.h > 11);
 }

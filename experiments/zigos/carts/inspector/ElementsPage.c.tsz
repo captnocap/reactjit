@@ -2,10 +2,10 @@ import { ElementsSurface, SplitDivider } from './style_cls';
 import { Tree } from './Tree.c';
 import { DetailPane } from './DetailPane.c';
 
-function ElementsPage({ activeTreeView, onChangeTreeView }) {
+function ElementsPage() {
   return (
     <C.ElementsSurface>
-      <Tree activeTreeView={activeTreeView} onChangeTreeView={onChangeTreeView} />
+      <Tree />
       <C.SplitDivider />
       <DetailPane />
     </C.ElementsSurface>

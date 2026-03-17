@@ -4,25 +4,25 @@ import { TreeLine } from './TreeLine.c';
 function TreeHybridView() {
   return (
     <C.TreeStack>
-      <TreeLine depth={0} caret={1} tag="<Panel>" dim="100% x 100%" />
-      <TreeLine depth={1} caret={1} tag="<TabBar>" prop="row gap=6" />
-      <TreeLine depth={2} caret={1} tag="<Pressable>" meta="view tab" />
-      <TreeLine depth={3} caret={0} tag="<Text>" text="Hybrid" dim="active" />
-      <TreeLine depth={2} caret={1} tag="<Pressable>" meta="view tab" />
-      <TreeLine depth={3} caret={0} tag="<Text>" text="Zig" />
-      <TreeLine depth={2} caret={1} tag="<Pressable>" meta="view tab" />
-      <TreeLine depth={3} caret={0} tag="<Text>" text="JSX" />
-      <TreeLine depth={1} caret={1} tag="<ElementsPage>" prop="row split" dim="selected shell" />
-      <TreeLine depth={2} caret={1} tag="<TreePane>" prop="deep gutter rail" />
-      <TreeLine depth={3} caret={1} tag="<ScrollView>" prop="flexGrow=1" />
-      <TreeLine depth={4} caret={0} tag="<TreeLine>" prop="Pressable row" meta="hover highlight" />
-      <TreeLine depth={2} caret={1} tag="<DetailPane>" prop="flexGrow=1" active={1} dim="selected" />
-      <TreeLine depth={3} caret={1} tag="<DetailStack>" prop="column gap=12" />
-      <TreeLine depth={4} caret={1} tag="<DetailSection>" text="Style Attributes" />
-      <TreeLine depth={5} caret={1} tag="<PropertyList>" prop="grouped rows" />
-      <TreeLine depth={6} caret={1} tag="<PropertyRow>" prop="backgroundColor" />
-      <TreeLine depth={7} caret={1} tag="<ValueBadge>" meta="accent" />
-      <TreeLine depth={8} caret={0} tag="<Text>" text="#172031" dim="deep gutter ready" />
+      <TreeLine indent={0} caret={1} tag="<Panel>" dim="100% x 100%" />
+      <TreeLine indent={8} caret={1} tag="<TabBar>" prop="row" />
+      <TreeLine indent={16} caret={1} tag="<Pressable>" meta="@tab" />
+      <TreeLine indent={24} caret={0} tag="<Text>" text="Hybrid" dim="selected" />
+      <TreeLine indent={16} caret={1} tag="<Pressable>" meta="@tab" />
+      <TreeLine indent={24} caret={0} tag="<Text>" text="Zig" />
+      <TreeLine indent={16} caret={1} tag="<Pressable>" meta="@tab" />
+      <TreeLine indent={24} caret={0} tag="<Text>" text="JSX" />
+      <TreeLine indent={8} caret={1} tag="<ElementsPage>" prop="row" dim="selected" />
+      <TreeLine indent={16} caret={1} tag="<TreePane>" prop="left" />
+      <TreeLine indent={24} caret={1} tag="<ScrollView>" prop="grow=1" />
+      <TreeLine indent={32} caret={0} tag="<TreeLine>" prop="row" meta="hover" />
+      <TreeLine indent={16} caret={1} tag="<DetailPane>" prop="grow=1" active={1} dim="selected" />
+      <TreeLine indent={24} caret={1} tag="<DetailStack>" prop="column" />
+      <TreeLine indent={32} caret={1} tag="<DetailSection>" text="style" />
+      <TreeLine indent={40} caret={1} tag="<PropertyList>" prop="rows" />
+      <TreeLine indent={48} caret={1} tag="<PropertyRow>" prop="background" />
+      <TreeLine indent={56} caret={1} tag="<ValueBadge>" meta="accent" />
+      <TreeLine indent={64} caret={0} tag="<Text>" text="#172031" dim="value" />
     </C.TreeStack>
   );
 }

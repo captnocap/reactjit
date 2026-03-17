@@ -9,7 +9,6 @@ import { ConsolePage } from './ConsolePage.c';
 import { LogsPage } from './LogsPage.c';
 
 const [activeTab, setActiveTab] = useState(0);
-const [activeTreeView, setActiveTreeView] = useState(1);
 
 function App() {
   return (
@@ -24,7 +23,7 @@ function App() {
         <InspectorTabButton label="Logs" active={activeTab == 6 ? 1 : 0} onPress={() => setActiveTab(6)} />
       </C.TabBar>
       <C.Divider />
-      {activeTab == 0 && <ElementsPage activeTreeView={activeTreeView} onChangeTreeView={setActiveTreeView} />}
+      {activeTab == 0 && <ElementsPage />}
       {activeTab == 1 && <SourcePage />}
       {activeTab == 2 && <WireframePage />}
       {activeTab == 3 && <PerfPage />}

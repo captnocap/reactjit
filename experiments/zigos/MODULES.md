@@ -56,6 +56,42 @@ if (breakpoint.atLeast(.lg)) { ... }   // true if desktop or wider
 const label = breakpoint.name();       // "sm", "md", "lg", "xl"
 ```
 
+## Multi-Window (framework/windows.zig)
+
+Three window types, one API:
+
+| Kind | Process | Renderer | Use case |
+|------|---------|----------|----------|
+| `.in_process` | Same | SDL2 renderer | Inspector, devtools, debug panels |
+| `.notification` | Same | SDL2 renderer | Toasts, alerts, transient overlays |
+| `.independent` | Separate | Own wgpu surface | Docked multi-panel UIs, complex apps |
+
+**Why not wgpu for in-process?** `gpu.zig` is a singleton bound to one surface. In-process windows use SDL2 renderers instead — simple, proven, no singleton conflicts. Independent windows get their own process with their own wgpu, connected via TCP/NDJSON (same pattern as the Love2D stack).
+
+```zig
+const windows = @import("windows.zig");
+
+// Open an inspector panel (in-process, SDL2 renderer)
+const win = windows.open(.{ .title = "Inspector", .width = 400, .height = 600 });
+windows.setRoot(win, &inspector_tree);
+
+// Fire a notification (auto-dismisses after 5s, no focus steal)
+_ = windows.open(.{
+    .title = "Build Complete",
+    .kind = .notification,
+    .width = 300,
+    .height = 80,
+    .auto_dismiss_ms = 5000,
+});
+
+// In the main loop — engine.zig handles this automatically:
+//   windows.routeEvent(&event);   // event dispatch
+//   windows.layoutAll();          // flex layout
+//   windows.paintAndPresent();    // SDL2 paint + present
+```
+
+Notification windows get X11 `_NET_WM_WINDOW_TYPE_NOTIFICATION` hints (no taskbar, no focus steal) and fade in/out automatically.
+
 ## What Goes Where
 
 | Location | What | Example |

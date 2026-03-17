@@ -1,31 +1,59 @@
-import { TreeRow, TreeRowSelected, TreeRowBody, TreeTag, TreeProp, TreeText, TreeDim, TreeMeta } from './style_cls';
-import { TreeGutter } from './TreeGutter.c';
+import {
+  TreeRow,
+  TreeRowSelected,
+  TreeRowBody,
+  TreePrimary,
+  TreeSecondary,
+  TreeSlotBox,
+  TreeBranchOpen,
+  TreeBranchClosed,
+  TreeBranchLeaf,
+  TreeTag,
+  TreeProp,
+  TreeText,
+  TreeDim,
+  TreeMeta,
+} from './style_cls';
 
-function TreeLine({ depth, caret, tag, prop, text, dim, meta, active }) {
+function TreeLine({ indent, caret, tag, prop, text, dim, meta, active }) {
+  let marker = <C.TreeBranchClosed>{'>'}</C.TreeBranchClosed>;
+  if (caret == 1) marker = <C.TreeBranchOpen>v</C.TreeBranchOpen>;
+  if (caret == 0) marker = <C.TreeBranchLeaf>-</C.TreeBranchLeaf>;
+
   if (active == 1) {
     return (
-      <C.TreeRowSelected onPress={() => {}}>
-        <TreeGutter depth={depth} caret={caret} />
+      <C.TreeRowSelected>
+        <Box style={{ width: indent }} />
+        <C.TreeSlotBox>{marker}</C.TreeSlotBox>
         <C.TreeRowBody>
-          <C.TreeTag>{tag}</C.TreeTag>
-          {prop && <C.TreeProp>{prop}</C.TreeProp>}
-          {text && <C.TreeText>{text}</C.TreeText>}
-          {dim && <C.TreeDim>{dim}</C.TreeDim>}
-          {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+          <C.TreePrimary>
+            <C.TreeTag>{tag}</C.TreeTag>
+            {text && <C.TreeText>{text}</C.TreeText>}
+          </C.TreePrimary>
+          <C.TreeSecondary>
+            {prop && <C.TreeProp>{prop}</C.TreeProp>}
+            {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+            {dim && <C.TreeDim>{dim}</C.TreeDim>}
+          </C.TreeSecondary>
         </C.TreeRowBody>
       </C.TreeRowSelected>
     );
   }
 
   return (
-    <C.TreeRow onPress={() => {}}>
-      <TreeGutter depth={depth} caret={caret} />
+    <C.TreeRow>
+      <Box style={{ width: indent }} />
+      <C.TreeSlotBox>{marker}</C.TreeSlotBox>
       <C.TreeRowBody>
-        <C.TreeTag>{tag}</C.TreeTag>
-        {prop && <C.TreeProp>{prop}</C.TreeProp>}
-        {text && <C.TreeText>{text}</C.TreeText>}
-        {dim && <C.TreeDim>{dim}</C.TreeDim>}
-        {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+        <C.TreePrimary>
+          <C.TreeTag>{tag}</C.TreeTag>
+          {text && <C.TreeText>{text}</C.TreeText>}
+        </C.TreePrimary>
+        <C.TreeSecondary>
+          {prop && <C.TreeProp>{prop}</C.TreeProp>}
+          {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+          {dim && <C.TreeDim>{dim}</C.TreeDim>}
+        </C.TreeSecondary>
       </C.TreeRowBody>
     </C.TreeRow>
   );

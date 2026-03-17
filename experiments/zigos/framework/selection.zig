@@ -23,6 +23,9 @@ var sel_dragging: bool = false;
 var sel_last_click: u32 = 0;
 var sel_click_count: u32 = 0;
 var sel_all: bool = false;
+// Walk-state machine for cross-node highlighting during paint traversal:
+// 0 = before selection, 1 = inside selection, 2 = past selection
+var sel_walk_state: u8 = 0;
 
 // Deferred resolution — record mouse pos during events, resolve to char index during paint.
 // This prevents FreeType state mutation during the event phase which corrupts layout measurements.
@@ -129,11 +132,40 @@ pub fn resolvePending() void {
     if (pending_drag) {
         pending_drag = false;
         if (!sel_dragging) return;
-        const node = sel_node orelse return;
-        if (node.text) |_| {
-            const idx = charIndexAtPos(node.text.?, node, pending_mx, pending_my);
-            sel_start = @min(sel_anchor, idx);
-            sel_end = @max(sel_anchor, idx);
+        const anchor_node = sel_node orelse return;
+        const root = pending_root orelse return;
+
+        // Hit-test for the text node under the current mouse position
+        const drag_hit = hitTestText(root, pending_mx, pending_my);
+
+        if (drag_hit) |drag_node| {
+            if (drag_node == anchor_node) {
+                // Same node — single-node selection
+                sel_end_node = anchor_node;
+                if (anchor_node.text) |_| {
+                    const idx = charIndexAtPos(anchor_node.text.?, anchor_node, pending_mx, pending_my);
+                    sel_start = @min(sel_anchor, idx);
+                    sel_end = @max(sel_anchor, idx);
+                }
+            } else {
+                // Different node — cross-node selection
+                sel_end_node = drag_node;
+                // Start node: from anchor to end of text
+                sel_start = sel_anchor;
+                if (anchor_node.text) |txt| {
+                    sel_end = txt.len;
+                }
+                // End node position stored implicitly — paintHighlight
+                // uses the walk-state machine to handle intermediate nodes
+            }
+        } else {
+            // Mouse is not over any text node — keep current selection
+            // but extend within the anchor node if possible
+            if (anchor_node.text) |_| {
+                const idx = charIndexAtPos(anchor_node.text.?, anchor_node, pending_mx, pending_my);
+                sel_start = @min(sel_anchor, idx);
+                sel_end = @max(sel_anchor, idx);
+            }
         }
     }
 }
@@ -177,8 +209,15 @@ pub fn clear() void {
     sel_click_count = 0;
 }
 
+/// Reset walk state each frame, before the paint walk begins.
+pub fn resetWalkState() void {
+    sel_walk_state = 0;
+}
+
 /// Paint selection highlights for a node during the paint walk.
 /// Call this for each text node before drawing text.
+/// Uses a walk-state machine for cross-node selection:
+///   0 = before selection start, 1 = inside selection, 2 = past selection end
 pub fn paintHighlight(node: *Node, screen_x: f32, screen_y: f32) void {
     const txt = node.text orelse return;
     if (txt.len == 0) return;
@@ -189,9 +228,63 @@ pub fn paintHighlight(node: *Node, screen_x: f32, screen_y: f32) void {
     const max_w = @max(1.0, node.computed.w - pad_l - pad_r);
 
     if (sel_all) {
+        // Select-all: highlight everything
         gpu.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, max_w, 0, txt.len);
-    } else if (sel_node == node and sel_start != sel_end) {
-        gpu.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, max_w, sel_start, sel_end);
+        return;
+    }
+
+    // No selection active
+    if (sel_node == null or sel_end_node == null) return;
+    if (sel_start == sel_end and sel_node == sel_end_node) return;
+
+    const is_start_node = (sel_node == node);
+    const is_end_node = (sel_end_node == node);
+    const is_same_node = (sel_node == sel_end_node);
+
+    var s0: usize = 0;
+    var s1: usize = 0;
+    var should_highlight = false;
+
+    if (is_same_node and is_start_node) {
+        // Single-node selection
+        s0 = @min(sel_start, sel_end);
+        s1 = @max(sel_start, sel_end);
+        should_highlight = (s1 > s0);
+    } else if (is_start_node or is_end_node) {
+        // First or last boundary node in cross-node selection
+        if (sel_walk_state == 0) {
+            // First boundary encountered in tree order
+            if (is_start_node) {
+                s0 = sel_start;
+                s1 = txt.len;
+            } else {
+                // End node came first in tree order (backward drag)
+                s0 = 0;
+                s1 = txt.len; // highlight from start — end node char pos handled below
+            }
+            sel_walk_state = 1;
+            should_highlight = true;
+        } else if (sel_walk_state == 1) {
+            // Second boundary — end of cross-node selection
+            if (is_end_node) {
+                s0 = 0;
+                s1 = txt.len; // full node for end boundary
+            } else {
+                s0 = 0;
+                s1 = sel_start;
+            }
+            sel_walk_state = 2;
+            should_highlight = (s1 > s0);
+        }
+    } else if (sel_walk_state == 1) {
+        // Middle node — fully selected
+        s0 = 0;
+        s1 = txt.len;
+        should_highlight = true;
+    }
+
+    if (should_highlight and s1 > s0) {
+        gpu.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, max_w, s0, s1);
     }
 }
 
@@ -334,20 +427,77 @@ fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
 }
 
 /// Collect selected text into a buffer. Returns bytes written.
+/// Handles single-node and cross-node selections using the same
+/// walk-state machine approach as paintHighlight.
 fn collectSelectedText(root: *Node, buf: []u8) usize {
     if (sel_all) {
         return collectAllText(root, buf, 0);
     }
-    const node = sel_node orelse return 0;
-    if (sel_start >= sel_end) return 0;
-    if (node.text) |txt| {
-        const s0 = @min(sel_start, txt.len);
-        const s1 = @min(sel_end, txt.len);
-        const n = @min(s1 - s0, buf.len);
-        if (n > 0) @memcpy(buf[0..n], txt[s0 .. s0 + n]);
-        return n;
+    const start_node = sel_node orelse return 0;
+    const end_node = sel_end_node orelse return 0;
+
+    if (start_node == end_node) {
+        // Single-node selection
+        if (sel_start >= sel_end) return 0;
+        if (start_node.text) |txt| {
+            const s0 = @min(sel_start, txt.len);
+            const s1 = @min(sel_end, txt.len);
+            const n = @min(s1 - s0, buf.len);
+            if (n > 0) @memcpy(buf[0..n], txt[s0 .. s0 + n]);
+            return n;
+        }
+        return 0;
     }
-    return 0;
+
+    // Cross-node selection — walk tree, collect text from start through end
+    var walk_state: u8 = 0; // 0=before, 1=inside, 2=past
+    return collectCrossNodeText(root, buf, 0, start_node, end_node, &walk_state);
+}
+
+/// Walk tree collecting text between start_node and end_node.
+fn collectCrossNodeText(node: *Node, buf: []u8, pos: usize, start_node: *Node, end_node: *Node, walk_state: *u8) usize {
+    if (walk_state.* == 2) return pos; // past selection
+    var p = pos;
+
+    const is_start = (node == start_node);
+    const is_end = (node == end_node);
+
+    if (node.text) |txt| {
+        if (is_start or is_end) {
+            if (walk_state.* == 0) {
+                // First boundary in tree order
+                const s0 = if (is_start) @min(sel_start, txt.len) else 0;
+                const s1 = txt.len;
+                if (s1 > s0) {
+                    if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+                    const n = @min(s1 - s0, buf.len - p);
+                    if (n > 0) { @memcpy(buf[p .. p + n], txt[s0 .. s0 + n]); p += n; }
+                }
+                walk_state.* = 1;
+            } else if (walk_state.* == 1) {
+                // Second boundary — end of selection
+                const s1 = if (is_end) @min(sel_end, txt.len) else @min(sel_start, txt.len);
+                if (s1 > 0) {
+                    if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+                    const n = @min(s1, buf.len - p);
+                    if (n > 0) { @memcpy(buf[p .. p + n], txt[0..n]); p += n; }
+                }
+                walk_state.* = 2;
+                return p;
+            }
+        } else if (walk_state.* == 1) {
+            // Middle node — fully selected
+            if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
+            const n = @min(txt.len, buf.len - p);
+            if (n > 0) { @memcpy(buf[p .. p + n], txt[0..n]); p += n; }
+        }
+    }
+
+    for (node.children) |*child| {
+        p = collectCrossNodeText(child, buf, p, start_node, end_node, walk_state);
+        if (walk_state.* == 2) break;
+    }
+    return p;
 }
 
 /// Recursively collect all text in the tree.

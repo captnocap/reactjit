@@ -4,7 +4,9 @@ import { TreeZigView } from './TreeZigView.c';
 import { TreeHybridView } from './TreeHybridView.c';
 import { TreeJsxView } from './TreeJsxView.c';
 
-function Tree({ activeTreeView, onChangeTreeView }) {
+const [activeTreeView, setActiveTreeView] = useState(1);
+
+function Tree() {
   return (
     <C.TreePane>
       <C.TreeToolbar>
@@ -13,9 +15,9 @@ function Tree({ activeTreeView, onChangeTreeView }) {
           <C.PaneMeta>tree</C.PaneMeta>
         </C.TreeToolbarLead>
         <C.TreeViewBar>
-          <TreeViewTabButton label="Zig" active={activeTreeView == 0 ? 1 : 0} onPress={() => onChangeTreeView(0)} />
-          <TreeViewTabButton label="Hybrid" active={activeTreeView == 1 ? 1 : 0} onPress={() => onChangeTreeView(1)} />
-          <TreeViewTabButton label="JSX" active={activeTreeView == 2 ? 1 : 0} onPress={() => onChangeTreeView(2)} />
+          <TreeViewTabButton label="Zig" active={activeTreeView == 0 ? 1 : 0} onPress={() => setActiveTreeView(0)} />
+          <TreeViewTabButton label="Hybrid" active={activeTreeView == 1 ? 1 : 0} onPress={() => setActiveTreeView(1)} />
+          <TreeViewTabButton label="JSX" active={activeTreeView == 2 ? 1 : 0} onPress={() => setActiveTreeView(2)} />
         </C.TreeViewBar>
       </C.TreeToolbar>
       <C.Divider />

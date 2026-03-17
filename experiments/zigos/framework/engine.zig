@@ -12,6 +12,7 @@ const qjs_runtime = @import("qjs_runtime.zig");
 const geometry = @import("geometry.zig");
 const selection = @import("selection.zig");
 const breakpoint = @import("breakpoint.zig");
+const windows = @import("windows.zig");
 const log = @import("log.zig");
 
 const Node = layout.Node;
@@ -162,6 +163,7 @@ pub fn run(config: AppConfig) !void {
         c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
+    defer windows.deinitAll(); // close all secondary windows before SDL_Quit
     c.SDL_SetWindowMinimumSize(window, 320, 240);
 
     if (geometry.load() != null) geometry.blockSaves();
@@ -210,6 +212,9 @@ pub fn run(config: AppConfig) !void {
     while (running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
+            // Route to secondary windows first — if consumed, skip main window handling
+            if (windows.routeEvent(&event)) continue;
+
             switch (event.type) {
                 c.SDL_QUIT => running = false,
                 c.SDL_WINDOWEVENT => {
@@ -274,16 +279,21 @@ pub fn run(config: AppConfig) !void {
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
 
-        // Layout
+        // Layout (main window)
         const t2 = std.time.microTimestamp();
         layout.layout(config.root, 0, 0, win_w, win_h);
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
 
+        // Layout + paint secondary windows (in-process, notifications)
+        windows.layoutAll();
+        windows.paintAndPresent();
+
         // Resolve deferred selection (safe — layout is done, FT mutations won't corrupt measurements)
         selection.resolvePending();
 
-        // Paint
+        // Paint (main window — wgpu)
+        selection.resetWalkState();
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
         const t5 = std.time.microTimestamp();

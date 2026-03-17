@@ -133,7 +133,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 if (std.mem.eql(u8, attr_name, "style")) {
                     const inline_style = try attrs.parseStyleAttr(self);
                     if (style_str.len > 0 and inline_style.len > 0) {
-                        style_str = try std.fmt.allocPrint(self.alloc, "{s}, {s}", .{ style_str, inline_style });
+                        style_str = try mergeStyles(self.alloc, style_str, inline_style);
                     } else if (inline_style.len > 0) {
                         style_str = inline_style;
                     }
@@ -828,4 +828,82 @@ pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
     self.has_routes = true;
 
     return element_expr;
+}
+
+/// Remove a named property from a Zig style string fragment.
+/// e.g. removePropFromStyle(alloc, ".flex_grow = 1, .height = 22", "flex_grow") → ".height = 22"
+/// Values may contain nested parens (Color.rgb(r, g, b)) — tracks depth.
+fn removePropFromStyle(alloc: std.mem.Allocator, style: []const u8, prop_name: []const u8) ![]const u8 {
+    var i: usize = 0;
+    while (i < style.len) {
+        if (style[i] == '.') {
+            // Only match at start or after ", "
+            const at_start = i == 0;
+            const after_sep = i >= 2 and style[i - 2] == ',' and style[i - 1] == ' ';
+            if (at_start or after_sep) {
+                const name_start = i + 1;
+                if (name_start + prop_name.len <= style.len and
+                    std.mem.eql(u8, style[name_start .. name_start + prop_name.len], prop_name))
+                {
+                    const after_name = name_start + prop_name.len;
+                    // Must be followed by space/= to confirm it's the prop (not a longer name)
+                    if (after_name >= style.len or style[after_name] == ' ' or style[after_name] == '=') {
+                        // Scan to end of value (next ", ." at paren depth 0)
+                        var val_end = after_name;
+                        var depth: u32 = 0;
+                        while (val_end < style.len) {
+                            const c = style[val_end];
+                            if (c == '(' or c == '[') depth += 1;
+                            if (c == ')' or c == ']') if (depth > 0) { depth -= 1; };
+                            if (depth == 0 and c == ',' and val_end + 2 < style.len and
+                                style[val_end + 1] == ' ' and style[val_end + 2] == '.')
+                            {
+                                break;
+                            }
+                            val_end += 1;
+                        }
+                        // Compute prop_start (include leading ", " if not at string start)
+                        const prop_start: usize = if (at_start) i else i - 2;
+                        var result: std.ArrayListUnmanaged(u8) = .{};
+                        try result.appendSlice(alloc, style[0..prop_start]);
+                        if (val_end < style.len) {
+                            // There's a following property — skip the separating ", " if we removed from start
+                            const rest = if (at_start) style[val_end + 2 ..] else style[val_end..];
+                            try result.appendSlice(alloc, rest);
+                        }
+                        return result.toOwnedSlice(alloc);
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    return style;
+}
+
+/// Merge classifier base style with inline override style.
+/// Inline properties win — any property in override is removed from base first.
+fn mergeStyles(alloc: std.mem.Allocator, base: []const u8, override: []const u8) ![]const u8 {
+    var result = base;
+    // Scan override for ".prop_name" at property positions and strip from base
+    var i: usize = 0;
+    while (i < override.len) {
+        if (override[i] == '.') {
+            const at_start = i == 0;
+            const after_sep = i >= 2 and override[i - 2] == ',' and override[i - 1] == ' ';
+            if (at_start or after_sep) {
+                var j = i + 1;
+                while (j < override.len and override[j] != ' ' and override[j] != '=' and override[j] != ',') j += 1;
+                const prop_name = override[i + 1 .. j];
+                if (prop_name.len > 0) {
+                    result = try removePropFromStyle(alloc, result, prop_name);
+                }
+            }
+        }
+        i += 1;
+    }
+    if (result.len > 0) {
+        return std.fmt.allocPrint(alloc, "{s}, {s}", .{ result, override });
+    }
+    return override;
 }
