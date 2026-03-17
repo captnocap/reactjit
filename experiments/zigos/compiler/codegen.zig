@@ -42,6 +42,9 @@ pub const MAX_CONDITIONALS = 32;
 pub const MAX_APP_CONDS = 32;
 pub const MAX_DYN_STYLES = 128;
 pub const MAX_FFI_HOOKS = 16;
+pub const MAX_UTIL_FUNCS = 32;
+pub const MAX_UTIL_PARAMS = 16;
+pub const MAX_LET_VARS = 32;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -113,6 +116,21 @@ pub const LocalVar = struct {
     name: []const u8,
     expr: []const u8,
     state_type: StateType,
+};
+
+pub const UtilFunc = struct {
+    name: []const u8,
+    params: [MAX_UTIL_PARAMS][]const u8,
+    param_count: u32,
+    body_start: u32, // token pos of opening {
+    body_end: u32, // token pos of closing }
+};
+
+pub const LetVar = struct {
+    name: []const u8,
+    initial: []const u8, // initial value expression
+    state_type: StateType, // inferred type
+    zig_name: []const u8, // runtime var name (_let_0, _let_1, etc.)
 };
 
 pub const DynText = struct {
@@ -209,6 +227,14 @@ pub const Generator = struct {
     // Local variables (compile-time const substitution)
     local_vars: [MAX_LOCALS]LocalVar,
     local_count: u32,
+
+    // Utility functions (non-component, non-App, lowercase)
+    util_funcs: [MAX_UTIL_FUNCS]UtilFunc,
+    util_func_count: u32,
+
+    // Mutable let vars (runtime variables, not compile-time substitution)
+    let_vars: [MAX_LET_VARS]LetVar,
+    let_count: u32,
 
     // Components (compile-time inlining)
     components: [MAX_COMPONENTS]ComponentInfo,
@@ -312,6 +338,10 @@ pub const Generator = struct {
             .ffi_hook_count = 0,
             .local_vars = undefined,
             .local_count = 0,
+            .util_funcs = undefined,
+            .util_func_count = 0,
+            .let_vars = undefined,
+            .let_count = 0,
             .components = undefined,
             .component_count = 0,
             .current_inline_component = null,
@@ -408,6 +438,20 @@ pub const Generator = struct {
     pub fn isLocalVar(self: *Generator, name: []const u8) ?*const LocalVar {
         for (0..self.local_count) |i| {
             if (std.mem.eql(u8, self.local_vars[i].name, name)) return &self.local_vars[i];
+        }
+        return null;
+    }
+
+    pub fn isUtilFunc(self: *Generator, name: []const u8) ?*const UtilFunc {
+        for (0..self.util_func_count) |i| {
+            if (std.mem.eql(u8, self.util_funcs[i].name, name)) return &self.util_funcs[i];
+        }
+        return null;
+    }
+
+    pub fn isLetVar(self: *Generator, name: []const u8) ?*const LetVar {
+        for (0..self.let_count) |i| {
+            if (std.mem.eql(u8, self.let_vars[i].name, name)) return &self.let_vars[i];
         }
         return null;
     }
@@ -535,6 +579,9 @@ pub const Generator = struct {
         self.pos = 0;
         collect.collectComponents(self);
 
+        // Phase 4.5: Utility functions (lowercase, non-App)
+        collect.collectUtilFunctions(self);
+
         // Phase 5: Extract <script> block
         self.pos = 0;
         collect.extractComputeBlock(self);
@@ -545,6 +592,9 @@ pub const Generator = struct {
         self.pos = 0;
         const app_start = collect.findAppFunction(self) orelse return error.NoAppFunction;
         collect.collectStateHooks(self, app_start);
+
+        // Phase 6.5: Collect let variables
+        collect.collectLetVars(self, app_start);
 
         // Phase 7: Count component usage in App body
         collect.countComponentUsage(self, app_start);

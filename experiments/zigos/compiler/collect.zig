@@ -613,3 +613,134 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
     }
     return try result.toOwnedSlice(self.alloc);
 }
+
+// ── Utility function collection ──
+
+/// Collect non-App, non-component (lowercase) function definitions.
+/// These become real Zig functions that handlers and expressions can call.
+pub fn collectUtilFunctions(self: *Generator) void {
+    self.pos = 0;
+    while (self.pos < self.lex.count and self.curKind() != .eof) {
+        if (self.isIdent("function")) {
+            self.advance_token();
+            if (self.curKind() != .identifier) continue;
+            const name = self.curText();
+            // Skip App and uppercase (components)
+            if (std.mem.eql(u8, name, "App")) { self.advance_token(); continue; }
+            if (name.len > 0 and name[0] >= 'A' and name[0] <= 'Z') { self.advance_token(); continue; }
+            self.advance_token();
+
+            // Parse params
+            var params: [codegen.MAX_UTIL_PARAMS][]const u8 = undefined;
+            var param_count: u32 = 0;
+            if (self.curKind() == .lparen) {
+                self.advance_token();
+                while (self.curKind() != .rparen and self.curKind() != .eof) {
+                    if (self.curKind() == .identifier) {
+                        if (param_count < codegen.MAX_UTIL_PARAMS) {
+                            params[param_count] = self.curText();
+                            param_count += 1;
+                        }
+                    }
+                    self.advance_token();
+                    if (self.curKind() == .comma) self.advance_token();
+                }
+                if (self.curKind() == .rparen) self.advance_token();
+            }
+
+            // Find body { ... }
+            if (self.curKind() == .lbrace) {
+                const body_start = self.pos;
+                var depth: u32 = 1;
+                self.advance_token();
+                while (depth > 0 and self.curKind() != .eof) {
+                    if (self.curKind() == .lbrace) depth += 1;
+                    if (self.curKind() == .rbrace) depth -= 1;
+                    if (depth > 0) self.advance_token();
+                }
+                const body_end = self.pos;
+                if (self.curKind() == .rbrace) self.advance_token();
+
+                if (self.util_func_count < codegen.MAX_UTIL_FUNCS) {
+                    self.util_funcs[self.util_func_count] = .{
+                        .name = name,
+                        .params = params,
+                        .param_count = param_count,
+                        .body_start = body_start,
+                        .body_end = body_end,
+                    };
+                    self.util_func_count += 1;
+                }
+            }
+            continue;
+        }
+        self.advance_token();
+    }
+}
+
+// ── Let variable collection ──
+
+/// Collect `let x = expr` declarations within the App function body.
+/// These become runtime mutable variables (distinct from compile-time const substitution).
+pub fn collectLetVars(self: *Generator, func_start: u32) void {
+    self.pos = func_start;
+    // Skip to opening brace
+    while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
+    if (self.curKind() == .lbrace) self.advance_token();
+
+    while (self.pos < self.lex.count) {
+        if (self.isIdent("return")) break;
+        if (self.isIdent("let")) {
+            self.advance_token();
+            if (self.curKind() == .identifier) {
+                const name = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token();
+                    // Collect the expression text up to semicolon
+                    const expr_start = self.pos;
+                    while (self.curKind() != .semicolon and self.curKind() != .eof) {
+                        self.advance_token();
+                    }
+                    if (self.pos > expr_start) {
+                        const first = self.lex.get(expr_start);
+                        const last = self.lex.get(self.pos - 1);
+                        const expr = self.source[first.start..last.end];
+
+                        // Infer type from the expression
+                        const st = inferExprType(self, expr);
+
+                        if (self.let_count < codegen.MAX_LET_VARS) {
+                            const zig_name = std.fmt.allocPrint(self.alloc, "_let_{d}", .{self.let_count}) catch "";
+                            self.let_vars[self.let_count] = .{
+                                .name = name,
+                                .initial = expr,
+                                .state_type = st,
+                                .zig_name = zig_name,
+                            };
+                            self.let_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        self.advance_token();
+    }
+}
+
+/// Infer StateType from an expression string.
+pub fn inferExprType(self: *Generator, expr: []const u8) codegen.StateType {
+    // String literals
+    if (expr.len >= 2 and (expr[0] == '"' or expr[0] == '\'')) return .string;
+    // Boolean
+    if (std.mem.eql(u8, expr, "true") or std.mem.eql(u8, expr, "false")) return .boolean;
+    // Float (has decimal point)
+    if (std.mem.indexOf(u8, expr, ".") != null) {
+        if (std.fmt.parseFloat(f64, expr) catch null) |_| return .float;
+    }
+    // Integer
+    if (expr.len > 0 and (expr[0] >= '0' and expr[0] <= '9')) return .int;
+    // State reference — inherit type
+    if (self.isState(expr)) |slot_id| return self.stateTypeById(slot_id);
+    return .int;
+}
