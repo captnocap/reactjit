@@ -177,7 +177,7 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
     // ── Phase 3: Try multi-use leaf optimization ──
     // If this component is used 2+ times and has no children or state-dependent props,
     // emit a shared _initComponentName() function instead of duplicating the tree inline.
-    const eligible = comp.usage_count >= 9999 and !comp.has_children and !has_caller_children;
+    const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children;
     if (eligible) {
         var has_state_prop = false;
         for (saved_prop_count..self.prop_stack_count) |pi| {
