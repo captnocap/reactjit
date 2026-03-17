@@ -949,7 +949,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             if (!mainAxisAuto) {
                 switch (justify) {
                     .center => {
-                        mainOffset = freeMain / 2;
+                        mainOffset = @floor(freeMain / 2);
                     },
                     .end => {
                         mainOffset = freeMain;
