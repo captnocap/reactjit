@@ -1,0 +1,32 @@
+import { TreeRow, TreeRowSelected, TreeRowBody, TreeTag, TreeProp, TreeText, TreeDim, TreeMeta } from './style_cls';
+import { TreeGutter } from './TreeGutter.c';
+
+function TreeLine({ depth, caret, tag, prop, text, dim, meta, active }) {
+  if (active == 1) {
+    return (
+      <C.TreeRowSelected onPress={() => {}}>
+        <TreeGutter depth={depth} caret={caret} />
+        <C.TreeRowBody>
+          <C.TreeTag>{tag}</C.TreeTag>
+          {prop && <C.TreeProp>{prop}</C.TreeProp>}
+          {text && <C.TreeText>{text}</C.TreeText>}
+          {dim && <C.TreeDim>{dim}</C.TreeDim>}
+          {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+        </C.TreeRowBody>
+      </C.TreeRowSelected>
+    );
+  }
+
+  return (
+    <C.TreeRow onPress={() => {}}>
+      <TreeGutter depth={depth} caret={caret} />
+      <C.TreeRowBody>
+        <C.TreeTag>{tag}</C.TreeTag>
+        {prop && <C.TreeProp>{prop}</C.TreeProp>}
+        {text && <C.TreeText>{text}</C.TreeText>}
+        {dim && <C.TreeDim>{dim}</C.TreeDim>}
+        {meta && <C.TreeMeta>{meta}</C.TreeMeta>}
+      </C.TreeRowBody>
+    </C.TreeRow>
+  );
+}

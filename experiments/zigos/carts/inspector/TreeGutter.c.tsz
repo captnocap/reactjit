@@ -1,0 +1,23 @@
+import { TreeGutterRail } from './style_cls';
+import { TreeSlot } from './TreeSlot.c';
+
+function TreeGutter({ depth, caret }) {
+  return (
+    <C.TreeGutterRail>
+      <TreeSlot guide={depth > 0 ? 1 : 0} branch={depth == 0 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 1 ? 1 : 0} branch={depth == 1 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 2 ? 1 : 0} branch={depth == 2 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 3 ? 1 : 0} branch={depth == 3 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 4 ? 1 : 0} branch={depth == 4 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 5 ? 1 : 0} branch={depth == 5 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 6 ? 1 : 0} branch={depth == 6 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 7 ? 1 : 0} branch={depth == 7 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 8 ? 1 : 0} branch={depth == 8 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 9 ? 1 : 0} branch={depth == 9 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 10 ? 1 : 0} branch={depth == 10 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 11 ? 1 : 0} branch={depth == 11 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 12 ? 1 : 0} branch={depth == 12 ? 1 : 0} caret={caret} />
+      <TreeSlot guide={depth > 13 ? 1 : 0} branch={depth == 13 ? 1 : 0} caret={caret} />
+    </C.TreeGutterRail>
+  );
+}

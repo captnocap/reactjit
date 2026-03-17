@@ -69,4 +69,16 @@ pub fn build(b: *std.Build) void {
     const compiler_install = b.addInstallArtifact(compiler_exe, .{});
     const compiler_step = b.step("compiler", "Build TSZ compiler");
     compiler_step.dependOn(&compiler_install.step);
+
+    // ── Compiler tests ───────────────────────────────────────────
+    const compiler_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("compiler/run_tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_compiler_tests = b.addRunArtifact(compiler_tests);
+    const test_step = b.step("test", "Run compiler tests");
+    test_step.dependOn(&run_compiler_tests.step);
 }

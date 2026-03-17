@@ -58,6 +58,30 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_right_click != null;
 }
 
+// ── Hover Hit Test (any node, not just ones with handlers) ──────────────
+
+/// Walk the tree back-to-front.
+/// Returns the deepest node containing (mx, my) that has handlers OR hoverable flag.
+/// Used for hover effects — opt-in via handlers or hoverable = true.
+pub fn hitTestHoverable(node: *Node, mx: f32, my: f32) ?*Node {
+    if (node.style.display == .none) return null;
+
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitTestHoverable(&node.children[i], mx, my)) |hit| return hit;
+    }
+
+    if (hasHandlers(&node.handlers) or node.hoverable or node.input_id != null or node.canvas_type != null) {
+        const r = node.computed;
+        if (r.w > 0 and r.h > 0 and mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
+            return node;
+        }
+    }
+
+    return null;
+}
+
 // ── Text Hit Test (finds any text node, not just ones with handlers) ────
 
 /// Find the deepest text node containing (mx, my).

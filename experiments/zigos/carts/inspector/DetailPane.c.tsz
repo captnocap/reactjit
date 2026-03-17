@@ -1,0 +1,77 @@
+import {
+  DetailPaneScroll,
+  DetailStack,
+  HeroCard,
+  HeroRow,
+  HeroTitle,
+  HeroCopy,
+  HeroCode,
+  MetricGrid,
+  FlexPreview,
+  FlexPreviewHeader,
+  FlexTrack,
+  FlexItemTree,
+  FlexItemDetail,
+  FlexItemLabel,
+  PropertyList,
+} from './style_cls';
+import { Badge } from './Badge.c';
+import { DetailSection } from './DetailSection.c';
+import { MetricCard } from './MetricCard.c';
+import { PropertyRow } from './PropertyRow.c';
+
+function DetailPane() {
+  return (
+    <C.DetailPaneScroll>
+      <C.DetailStack>
+        <C.HeroCard>
+          <C.HeroRow>
+            <C.HeroTitle>{'<DetailPane>'}</C.HeroTitle>
+            <Badge label="ScrollView" tone={1} />
+            <Badge label="selected" tone={2} />
+            <Badge label="flexGrow 1" tone={0} />
+          </C.HeroRow>
+          <C.HeroCopy>Right-hand surface for flex diagnostics, style attributes, and node context. Static for now, structured for live data later.</C.HeroCopy>
+          <C.HeroCode>Panel / ElementsPage / DetailPane</C.HeroCode>
+        </C.HeroCard>
+
+        <DetailSection title="Flex Layout" hint="split-view composition">
+          <C.MetricGrid>
+            <MetricCard label="Direction" value="row" hint="tree and detail panes" />
+            <MetricCard label="Tree Width" value="330px" hint="fixed pane" />
+            <MetricCard label="Detail Width" value="flexGrow 1" hint="fills remaining space" />
+          </C.MetricGrid>
+          <C.FlexPreview>
+            <C.FlexPreviewHeader>distribution preview</C.FlexPreviewHeader>
+            <C.FlexTrack>
+              <C.FlexItemTree>
+                <C.FlexItemLabel>Tree pane</C.FlexItemLabel>
+              </C.FlexItemTree>
+              <C.FlexItemDetail>
+                <C.FlexItemLabel>Detail flex region</C.FlexItemLabel>
+              </C.FlexItemDetail>
+            </C.FlexTrack>
+          </C.FlexPreview>
+        </DetailSection>
+
+        <DetailSection title="Style Attributes" hint="grouped rows, no god file">
+          <C.PropertyList>
+            <PropertyRow name="overflow" value="scroll" note="detail surface owns its own vertical history" />
+            <PropertyRow name="padding" value="14" note="single content inset for section rhythm" />
+            <PropertyRow name="backgroundColor" value="#101523" note="section card tone" accent={1} />
+            <PropertyRow name="borderRadius" value="12" note="panel card rounding" />
+            <PropertyRow name="borderColor" value="#1c2437" note="quiet separators for nested cards" />
+          </C.PropertyList>
+        </DetailSection>
+
+        <DetailSection title="Structure" hint="what this page is responsible for">
+          <C.PropertyList>
+            <PropertyRow name="parent" value="<ElementsPage>" note="split shell that owns the left and right panes" />
+            <PropertyRow name="children" value="HeroCard + Sections" note="composed from small static components" />
+            <PropertyRow name="future data" value="selection, flex, styles" note="runtime hooks can hydrate these rows later" accent={1} />
+          </C.PropertyList>
+        </DetailSection>
+      </C.DetailStack>
+    </C.DetailPaneScroll>
+  );
+}

@@ -17,6 +17,35 @@ const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 
+// ── Hover state ─────────────────────────────────────────────────────────
+
+var hovered_node: ?*Node = null;
+
+fn updateHover(root: *Node, mx: f32, my: f32) void {
+    const events = @import("events.zig");
+    const hit = events.hitTestHoverable(root, mx, my);
+    if (hit == hovered_node) return;
+
+    // Exit previous
+    if (hovered_node) |prev| {
+        if (prev.handlers.on_hover_exit) |handler| handler();
+    }
+    hovered_node = hit;
+    // Enter new
+    if (hit) |node| {
+        if (node.handlers.on_hover_enter) |handler| handler();
+    }
+}
+
+fn brighten(color: Color, amount: u8) Color {
+    return .{
+        .r = @min(255, @as(u16, color.r) + amount),
+        .g = @min(255, @as(u16, color.g) + amount),
+        .b = @min(255, @as(u16, color.b) + amount),
+        .a = color.a,
+    };
+}
+
 // ── App interface ────────────────────────────────────────────────────────
 
 pub const AppConfig = struct {
@@ -52,8 +81,21 @@ fn paintNode(node: *Node) void {
     if (node.style.display == .none) return;
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) return;
-    if (node.style.background_color) |bg| {
-        if (bg.a > 0) {
+    // Hover highlight — brighten background when this node is hovered
+    const is_hovered = (hovered_node == node);
+    if (is_hovered and node.style.background_color == null) {
+        // Node has no background but is hovered — draw a subtle highlight
+        gpu.drawRect(
+            r.x, r.y, r.w, r.h,
+            0.15, 0.15, 0.22, 0.6,
+            node.style.border_radius,
+            0, 0, 0, 0, 0,
+        );
+    }
+
+    if (node.style.background_color) |bg_raw| {
+        if (bg_raw.a > 0) {
+            const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
             gpu.drawRect(
                 r.x, r.y, r.w, r.h,
@@ -197,9 +239,10 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_MOUSEMOTION => {
+                    const mx: f32 = @floatFromInt(event.motion.x);
+                    const my: f32 = @floatFromInt(event.motion.y);
+                    updateHover(config.root, mx, my);
                     if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
-                        const mx: f32 = @floatFromInt(event.motion.x);
-                        const my: f32 = @floatFromInt(event.motion.y);
                         selection.onMouseDrag(config.root, mx, my);
                     }
                 },
@@ -232,6 +275,9 @@ pub fn run(config: AppConfig) !void {
         layout.layout(config.root, 0, 0, win_w, win_h);
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
+
+        // Resolve deferred selection (safe — layout is done, FT mutations won't corrupt measurements)
+        selection.resolvePending();
 
         // Paint
         const t4 = std.time.microTimestamp();

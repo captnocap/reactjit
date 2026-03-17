@@ -1,0 +1,32 @@
+import {
+  BadgeNeutral,
+  BadgeNeutralText,
+  BadgeAccent,
+  BadgeAccentText,
+  BadgeWarm,
+  BadgeWarmText,
+} from './style_cls';
+
+function Badge({ label, tone }) {
+  if (tone == 1) {
+    return (
+      <C.BadgeAccent>
+        <C.BadgeAccentText>{label}</C.BadgeAccentText>
+      </C.BadgeAccent>
+    );
+  }
+
+  if (tone == 2) {
+    return (
+      <C.BadgeWarm>
+        <C.BadgeWarmText>{label}</C.BadgeWarmText>
+      </C.BadgeWarm>
+    );
+  }
+
+  return (
+    <C.BadgeNeutral>
+      <C.BadgeNeutralText>{label}</C.BadgeNeutralText>
+    </C.BadgeNeutral>
+  );
+}

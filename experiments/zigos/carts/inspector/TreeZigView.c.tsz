@@ -1,0 +1,26 @@
+import { TreeStack } from './style_cls';
+import { TreeLine } from './TreeLine.c';
+
+function TreeZigView() {
+  return (
+    <C.TreeStack>
+      <TreeLine depth={0} caret={1} tag="RootNode" dim="native app root" />
+      <TreeLine depth={1} caret={1} tag="BoxNode" prop="panel shell" />
+      <TreeLine depth={2} caret={1} tag="BoxNode" prop="toolbar row" />
+      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
+      <TreeLine depth={4} caret={0} tag="TextNode" text="Hybrid" />
+      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
+      <TreeLine depth={4} caret={0} tag="TextNode" text="Zig" dim="native nodes" />
+      <TreeLine depth={3} caret={1} tag="PressableNode" meta="view tab" />
+      <TreeLine depth={4} caret={0} tag="TextNode" text="JSX" />
+      <TreeLine depth={2} caret={1} tag="ScrollViewNode" prop="tree viewport" />
+      <TreeLine depth={3} caret={1} tag="PressableNode" prop="row hit target" />
+      <TreeLine depth={4} caret={1} tag="BoxNode" prop="gutter rail" />
+      <TreeLine depth={5} caret={1} tag="BoxNode" prop="slot column" />
+      <TreeLine depth={6} caret={1} tag="TextNode" text="+v" />
+      <TreeLine depth={7} caret={1} tag="TextNode" text="|" />
+      <TreeLine depth={8} caret={1} tag="TextNode" text="|" />
+      <TreeLine depth={9} caret={0} tag="TextNode" text="+-" dim="long nest ready" />
+    </C.TreeStack>
+  );
+}

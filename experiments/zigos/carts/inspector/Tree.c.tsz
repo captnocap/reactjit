@@ -1,0 +1,29 @@
+import { TreePane, TreeToolbar, TreeToolbarLead, PaneTitle, PaneMeta, TreeViewBar, Divider, TreeScroll } from './style_cls';
+import { TreeViewTabButton } from './TreeViewTabButton.c';
+import { TreeZigView } from './TreeZigView.c';
+import { TreeHybridView } from './TreeHybridView.c';
+import { TreeJsxView } from './TreeJsxView.c';
+
+function Tree({ activeTreeView, onChangeTreeView }) {
+  return (
+    <C.TreePane>
+      <C.TreeToolbar>
+        <C.TreeToolbarLead>
+          <C.PaneTitle>ELEMENTS</C.PaneTitle>
+          <C.PaneMeta>tree</C.PaneMeta>
+        </C.TreeToolbarLead>
+        <C.TreeViewBar>
+          <TreeViewTabButton label="Zig" active={activeTreeView == 0 ? 1 : 0} onPress={() => onChangeTreeView(0)} />
+          <TreeViewTabButton label="Hybrid" active={activeTreeView == 1 ? 1 : 0} onPress={() => onChangeTreeView(1)} />
+          <TreeViewTabButton label="JSX" active={activeTreeView == 2 ? 1 : 0} onPress={() => onChangeTreeView(2)} />
+        </C.TreeViewBar>
+      </C.TreeToolbar>
+      <C.Divider />
+      <C.TreeScroll>
+        {activeTreeView == 0 && <TreeZigView />}
+        {activeTreeView == 1 && <TreeHybridView />}
+        {activeTreeView == 2 && <TreeJsxView />}
+      </C.TreeScroll>
+    </C.TreePane>
+  );
+}

@@ -32,6 +32,13 @@ eval "$(echo "$INPUT" | jq -r '
 SHORT="${SID:0:4}"
 NOW=$(date +%s)
 
+# ── Tool call lifecycle status ───────────────────────────────────────────────
+case "$HOOK" in
+  PreToolUse)    STATUS="active" ;;
+  PostToolUse)   STATUS="done" ;;
+  *)             STATUS="" ;;
+esac
+
 # ── SessionEnd: deregister and exit ──────────────────────────────────────────
 if [ "$HOOK" = "SessionEnd" ]; then
   rm -f "$SESSIONS_DIR/$SID.json"
@@ -118,12 +125,12 @@ fi
 TMP="$SESSIONS_DIR/.tmp.$SID"
 if [ -f "$SESSIONS_DIR/$SID.json" ]; then
   # Update ping/file/tool but keep recent array intact
-  jq --arg file "$DISPLAY_PATH" --arg tool "$TOOL" --argjson ping "$NOW" \
-    '.ping = $ping | .file = $file | .tool = $tool' \
+  jq --arg file "$DISPLAY_PATH" --arg tool "$TOOL" --argjson ping "$NOW" --arg status "$STATUS" \
+    '.ping = $ping | .file = $file | .tool = $tool | if $status != "" then .status = $status else . end' \
     "$SESSIONS_DIR/$SID.json" > "$TMP" 2>/dev/null && mv -f "$TMP" "$SESSIONS_DIR/$SID.json"
 else
   cat > "$TMP" <<EOF
-{"sid":"$SID","short":"$SHORT","ping":$NOW,"file":"$DISPLAY_PATH","tool":"$TOOL","recent":[]}
+{"sid":"$SID","short":"$SHORT","ping":$NOW,"file":"$DISPLAY_PATH","tool":"$TOOL","status":"$STATUS","recent":[]}
 EOF
   mv -f "$TMP" "$SESSIONS_DIR/$SID.json"
 fi
@@ -154,10 +161,17 @@ if [ "$HOOK" = "PreToolUse" ] && [ -n "$DISPLAY_PATH" ]; then
 
         S_PING=$(jq -r '.ping' "$f" 2>/dev/null) || continue
         S_AGO=$(( NOW - S_PING ))
+        S_STATUS=$(jq -r '.status // "done"' "$f" 2>/dev/null) || continue
 
-        if [ "$S_AGO" -le "$LOCK_WINDOW" ]; then
+        if [ "$S_STATUS" = "active" ] && [ "$S_AGO" -le 120 ]; then
+          # Sibling's Edit/Write tool call is still in progress — hard deny
           S_SHORT=$(jq -r '.short' "$f" 2>/dev/null) || continue
-          COLLISION="Session $S_SHORT is editing $DISPLAY_PATH (${S_AGO}s ago). Wait a few seconds and retry your edit to avoid clobbering their changes."
+          COLLISION="Session $S_SHORT is actively editing $DISPLAY_PATH (tool call started ${S_AGO}s ago, still in progress). Re-read the file and retry."
+          break
+        elif [ "$S_AGO" -le "$LOCK_WINDOW" ]; then
+          # Sibling recently finished editing — brief cooldown
+          S_SHORT=$(jq -r '.short' "$f" 2>/dev/null) || continue
+          COLLISION="Session $S_SHORT just finished editing $DISPLAY_PATH (${S_AGO}s ago). Re-read the file and retry."
           break
         fi
       done
@@ -248,7 +262,7 @@ for f in "$SESSIONS_DIR"/*.json; do
     .tool as $tool |
     .ping as $ping |
     (.recent // []) as $recent |
-    {short: $short, file: $file, tool: $tool, ping: $ping, recent: $recent}
+    {short: $short, file: $file, tool: $tool, ping: $ping, status: (.status // ""), recent: $recent}
   ' "$f" 2>/dev/null) || continue
 
   S_SHORT=$(echo "$SIBLING_INFO" | jq -r '.short')
@@ -264,9 +278,12 @@ for f in "$SESSIONS_DIR"/*.json; do
     AGO_STR="$(( S_AGO / 60 ))m ago"
   fi
 
+  S_STATUS=$(echo "$SIBLING_INFO" | jq -r '.status // ""')
+
   DETAIL=""
   [ -n "$S_FILE" ] && DETAIL=" → $S_FILE"
   [ -n "$S_TOOL" ] && DETAIL=" ($S_TOOL$DETAIL)"
+  [ "$S_STATUS" = "active" ] && DETAIL="${DETAIL} [IN PROGRESS]"
 
   # Format recent summaries: deduplicate per-file (latest wins), show last 3
   RECENT_LINES=$(echo "$SIBLING_INFO" | jq -r '

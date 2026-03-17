@@ -1,28 +1,25 @@
 import { Panel, TabBar, Divider } from './style_cls';
+import { InspectorTabButton } from './InspectorTabButton.c';
+import { ElementsPage } from './ElementsPage.c';
+import { TabPlaceholder } from './TabPlaceholder.c';
 
-const [activeTab, setActiveTab] = useState(1);
+const [activeTab, setActiveTab] = useState(0);
+const [activeTreeView, setActiveTreeView] = useState(1);
 
 function App() {
   return (
     <C.Panel>
       <C.TabBar>
-        <Pressable onPress={() => setActiveTab(1)}>
-          <Text fontSize={11} color={activeTab == 1 ? '#e0e2ea' : '#73768a'}>Elements</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab(2)}>
-          <Text fontSize={11} color={activeTab == 2 ? '#e0e2ea' : '#73768a'}>Console</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab(3)}>
-          <Text fontSize={11} color={activeTab == 3 ? '#e0e2ea' : '#73768a'}>Network</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab(4)}>
-          <Text fontSize={11} color={activeTab == 4 ? '#e0e2ea' : '#73768a'}>Performance</Text>
-        </Pressable>
+        <InspectorTabButton label="Elements" active={activeTab == 0 ? 1 : 0} onPress={() => setActiveTab(0)} />
+        <InspectorTabButton label="Console" active={activeTab == 1 ? 1 : 0} onPress={() => setActiveTab(1)} />
+        <InspectorTabButton label="Network" active={activeTab == 2 ? 1 : 0} onPress={() => setActiveTab(2)} />
+        <InspectorTabButton label="Performance" active={activeTab == 3 ? 1 : 0} onPress={() => setActiveTab(3)} />
       </C.TabBar>
       <C.Divider />
-      <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text fontSize={48} color="#e0e2ea">{activeTab}</Text>
-      </Box>
+      {activeTab == 0 && <ElementsPage activeTreeView={activeTreeView} onChangeTreeView={setActiveTreeView} />}
+      {activeTab == 1 && <TabPlaceholder title="Console" copy="Command history, logs, and watch expressions slot into the same panel shell later." />}
+      {activeTab == 2 && <TabPlaceholder title="Network" copy="Request timelines and transport traces can reuse these cards and split panes once data exists." />}
+      {activeTab == 3 && <TabPlaceholder title="Performance" copy="Frame budget, sparkline, and node hot spots belong here once telemetry is wired through." />}
     </C.Panel>
   );
 }

@@ -1,0 +1,14 @@
+import { PropertyRowBox, PropertyInfo, PropertyName, PropertyNote, PropertyValue, PropertyValueAccent } from './style_cls';
+
+function PropertyRow({ name, value, note, accent }) {
+  return (
+    <C.PropertyRowBox>
+      <C.PropertyInfo>
+        <C.PropertyName>{name}</C.PropertyName>
+        {note && <C.PropertyNote>{note}</C.PropertyNote>}
+      </C.PropertyInfo>
+      {accent == 1 && <C.PropertyValueAccent>{value}</C.PropertyValueAccent>}
+      {accent != 1 && <C.PropertyValue>{value}</C.PropertyValue>}
+    </C.PropertyRowBox>
+  );
+}

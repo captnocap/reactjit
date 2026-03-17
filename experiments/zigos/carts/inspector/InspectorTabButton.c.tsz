@@ -1,0 +1,17 @@
+import { TabButton, TabButtonActive, TabLabel, TabLabelActive } from './style_cls';
+
+function InspectorTabButton({ label, active, onPress }) {
+  if (active == 1) {
+    return (
+      <C.TabButtonActive onPress={onPress}>
+        <C.TabLabelActive>{label}</C.TabLabelActive>
+      </C.TabButtonActive>
+    );
+  }
+
+  return (
+    <C.TabButton onPress={onPress}>
+      <C.TabLabel>{label}</C.TabLabel>
+    </C.TabButton>
+  );
+}

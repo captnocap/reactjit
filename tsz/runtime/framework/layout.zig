@@ -148,6 +148,7 @@ pub const Node = struct {
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,
+    hoverable: bool = false,
     handlers: EventHandler = .{},
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,

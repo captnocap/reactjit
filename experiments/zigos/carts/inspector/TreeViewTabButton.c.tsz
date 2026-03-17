@@ -1,0 +1,17 @@
+import { TreeViewTab, TreeViewTabActive, TreeViewLabel, TreeViewLabelActive } from './style_cls';
+
+function TreeViewTabButton({ label, active, onPress }) {
+  if (active == 1) {
+    return (
+      <C.TreeViewTabActive onPress={onPress}>
+        <C.TreeViewLabelActive>{label}</C.TreeViewLabelActive>
+      </C.TreeViewTabActive>
+    );
+  }
+
+  return (
+    <C.TreeViewTab onPress={onPress}>
+      <C.TreeViewLabel>{label}</C.TreeViewLabel>
+    </C.TreeViewTab>
+  );
+}

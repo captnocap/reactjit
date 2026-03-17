@@ -1,0 +1,23 @@
+import { TreeStack } from './style_cls';
+import { TreeLine } from './TreeLine.c';
+
+function TreeJsxView() {
+  return (
+    <C.TreeStack>
+      <TreeLine depth={0} caret={1} tag="<Inspector />" dim="cart root" />
+      <TreeLine depth={1} caret={1} tag="<ElementsPage />" prop="default tab body" />
+      <TreeLine depth={2} caret={1} tag="<Tree />" prop="left inspector pane" />
+      <TreeLine depth={3} caret={1} tag="<TreeViewTabButton />" meta="label=Zig" />
+      <TreeLine depth={3} caret={1} tag="<TreeViewTabButton />" meta="label=Hybrid" />
+      <TreeLine depth={4} caret={0} tag="<Text>" text="selected view" dim="default" />
+      <TreeLine depth={3} caret={1} tag="<TreeViewTabButton />" meta="label=JSX" />
+      <TreeLine depth={2} caret={1} tag="<TreeHybridView />" prop="static composition" active={1} />
+      <TreeLine depth={3} caret={1} tag="<TreeLine />" prop="depth=6" />
+      <TreeLine depth={4} caret={1} tag="<TreeGutter />" prop="fixed slot rail" />
+      <TreeLine depth={5} caret={1} tag="<TreeSlot />" prop="guide=1" />
+      <TreeLine depth={6} caret={1} tag="<Text>" text="|" />
+      <TreeLine depth={7} caret={1} tag="<TreeSlot />" prop="branch=1 caret=0" />
+      <TreeLine depth={8} caret={0} tag="<Text>" text="+-" meta="deep nesting path" />
+    </C.TreeStack>
+  );
+}

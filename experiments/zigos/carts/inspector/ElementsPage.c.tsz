@@ -1,0 +1,13 @@
+import { ElementsSurface, SplitDivider } from './style_cls';
+import { Tree } from './Tree.c';
+import { DetailPane } from './DetailPane.c';
+
+function ElementsPage({ activeTreeView, onChangeTreeView }) {
+  return (
+    <C.ElementsSurface>
+      <Tree activeTreeView={activeTreeView} onChangeTreeView={onChangeTreeView} />
+      <C.SplitDivider />
+      <DetailPane />
+    </C.ElementsSurface>
+  );
+}
