@@ -6,9 +6,9 @@ const codegen = @import("codegen.zig");
 const lexer_mod = @import("lexer.zig");
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const alloc = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
 
     const args = try std.process.argsAlloc(alloc);
     defer std.process.argsFree(alloc, args);

@@ -1,0 +1,503 @@
+//! Attribute parsing — styles, strings, expressions, template literals, colors.
+//!
+//! Leaf functions called by jsx.zig during JSX element parsing.
+//! Also contains style key mappings and CSS normalization helpers.
+
+const std = @import("std");
+const codegen = @import("codegen.zig");
+const Generator = codegen.Generator;
+
+// ── Style parsing ──
+
+pub fn parseStyleAttr(self: *Generator) ![]const u8 {
+    if (self.curKind() == .lbrace) self.advance_token();
+    var double_brace = false;
+    if (self.curKind() == .lbrace) { self.advance_token(); double_brace = true; }
+
+    var fields: std.ArrayListUnmanaged(u8) = .{};
+
+    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+        if (self.curKind() == .identifier or self.curKind() == .string) {
+            var key = self.curText();
+            const is_string_key = self.curKind() == .string;
+            self.advance_token();
+            if (is_string_key and key.len >= 2) key = key[1 .. key.len - 1];
+            if (std.mem.indexOf(u8, key, "-") != null) {
+                key = kebabToCamel(self.alloc, key) catch key;
+            }
+            if (self.curKind() == .colon) self.advance_token();
+
+            if (mapColorKey(key)) |color_field| {
+                const val = try parseStringAttrInline(self);
+                const color = try parseColorValue(self, val);
+                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                try fields.appendSlice(self.alloc, ".");
+                try fields.appendSlice(self.alloc, color_field);
+                try fields.appendSlice(self.alloc, " = ");
+                try fields.appendSlice(self.alloc, color);
+            } else if (mapStyleKeyI16(key)) |zig_key| {
+                var val = self.curText();
+                if (self.curKind() == .identifier) {
+                    if (self.findProp(val)) |pval| val = pval;
+                }
+                self.advance_token();
+                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                try fields.appendSlice(self.alloc, ".");
+                try fields.appendSlice(self.alloc, zig_key);
+                try fields.appendSlice(self.alloc, " = ");
+                try fields.appendSlice(self.alloc, val);
+            } else if (mapStyleKey(key)) |zig_key| {
+                if (self.curKind() == .string) {
+                    const str_val = try parseStringAttrInline(self);
+                    if (std.mem.endsWith(u8, str_val, "%")) {
+                        if (std.fmt.parseFloat(f32, str_val[0 .. str_val.len - 1]) catch null) |pct| {
+                            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                            try fields.appendSlice(self.alloc, ".");
+                            try fields.appendSlice(self.alloc, zig_key);
+                            try fields.appendSlice(self.alloc, " = ");
+                            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{-(pct / 100.0)}));
+                        }
+                    } else if (parseCSSValue(str_val)) |px| {
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{px}));
+                    }
+                } else {
+                    var val = self.curText();
+                    if (self.curKind() == .identifier) {
+                        if (self.findProp(val)) |pval| val = pval;
+                    }
+                    self.advance_token();
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".");
+                    try fields.appendSlice(self.alloc, zig_key);
+                    try fields.appendSlice(self.alloc, " = ");
+                    try fields.appendSlice(self.alloc, val);
+                }
+            } else if (mapEnumKey(key)) |mapping| {
+                const val = try parseStringAttrInline(self);
+                if (mapEnumValue(mapping.prefix, val)) |zig_val| {
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".");
+                    try fields.appendSlice(self.alloc, mapping.field);
+                    try fields.appendSlice(self.alloc, " = ");
+                    try fields.appendSlice(self.alloc, zig_val);
+                }
+            } else {
+                skipStyleValue(self);
+            }
+        }
+        if (self.curKind() == .comma) self.advance_token();
+    }
+
+    if (self.curKind() == .rbrace) self.advance_token();
+    if (double_brace and self.curKind() == .rbrace) self.advance_token();
+    return try self.alloc.dupe(u8, fields.items);
+}
+
+pub fn skipStyleValue(self: *Generator) void {
+    if (self.curKind() == .string or self.curKind() == .number or self.curKind() == .identifier) {
+        self.advance_token();
+    }
+}
+
+// ── String/expr attribute parsing ──
+
+pub fn parseStringAttr(self: *Generator) ![]const u8 {
+    if (self.curKind() == .string) {
+        const tok = self.cur();
+        const raw = tok.text(self.source);
+        self.advance_token();
+        return raw[1 .. raw.len - 1];
+    }
+    if (self.curKind() == .lbrace) {
+        self.advance_token();
+        if (self.curKind() == .identifier) {
+            const name = self.curText();
+            if (self.findProp(name)) |val| {
+                self.advance_token();
+                if (self.curKind() == .rbrace) self.advance_token();
+                if (std.mem.startsWith(u8, val, "_p_")) return val;
+                if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) return val[1 .. val.len - 1];
+                return val;
+            }
+        }
+        const result = try parseStringAttr(self);
+        if (self.curKind() == .rbrace) self.advance_token();
+        return result;
+    }
+    self.advance_token();
+    return "";
+}
+
+pub fn parseStringAttrInline(self: *Generator) ![]const u8 {
+    if (self.curKind() == .string) {
+        const tok = self.cur();
+        const raw = tok.text(self.source);
+        self.advance_token();
+        return raw[1 .. raw.len - 1];
+    }
+    if (self.curKind() == .identifier) {
+        const name = self.curText();
+        if (self.findProp(name)) |val| {
+            self.advance_token();
+            if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) return val[1 .. val.len - 1];
+            return val;
+        }
+        if (self.isLocalVar(name)) |lv| {
+            self.advance_token();
+            if (lv.expr.len >= 2 and (lv.expr[0] == '"' or lv.expr[0] == '\'')) return lv.expr[1 .. lv.expr.len - 1];
+            return lv.expr;
+        }
+    }
+    self.advance_token();
+    return "";
+}
+
+pub fn parseExprAttr(self: *Generator) ![]const u8 {
+    if (self.curKind() == .lbrace) {
+        self.advance_token();
+        const val = self.curText();
+        self.advance_token();
+        if (self.curKind() == .rbrace) self.advance_token();
+        return val;
+    }
+    if (self.curKind() == .number or self.curKind() == .string) {
+        const val = self.curText();
+        self.advance_token();
+        return val;
+    }
+    return "0";
+}
+
+pub fn skipAttrValue(self: *Generator) !void {
+    if (self.curKind() == .string or self.curKind() == .number) {
+        self.advance_token();
+    } else if (self.curKind() == .lbrace) {
+        try skipBalanced(self);
+    }
+}
+
+pub fn skipBalanced(self: *Generator) !void {
+    if (self.curKind() != .lbrace) return;
+    self.advance_token();
+    var depth: u32 = 1;
+    while (depth > 0 and self.curKind() != .eof) {
+        if (self.curKind() == .lbrace) depth += 1;
+        if (self.curKind() == .rbrace) depth -= 1;
+        if (depth > 0) self.advance_token();
+    }
+    if (self.curKind() == .rbrace) self.advance_token();
+}
+
+// ── Text content ──
+
+pub fn collectTextContent(self: *Generator) []const u8 {
+    const start = self.pos;
+    while (self.curKind() != .lt and self.curKind() != .lt_slash and
+        self.curKind() != .lbrace and self.curKind() != .eof)
+    {
+        self.advance_token();
+    }
+    if (self.pos > start) {
+        const first = self.lex.get(start);
+        const last = self.lex.get(self.pos - 1);
+        return self.source[first.start..last.end];
+    }
+    return "";
+}
+
+// ── Template literals ──
+
+pub fn parseTemplateLiteral(self: *Generator) !codegen.TemplateResult {
+    const tok = self.cur();
+    const raw = tok.text(self.source);
+    const inner = raw[1 .. raw.len - 1];
+    return parseTemplateLiteralFromText(self, inner);
+}
+
+pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codegen.TemplateResult {
+    if (std.mem.indexOf(u8, inner, "${") == null) {
+        return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
+    }
+
+    var fmt: std.ArrayListUnmanaged(u8) = .{};
+    var args: std.ArrayListUnmanaged(u8) = .{};
+    var dep_slots: [codegen.MAX_DYN_DEPS]u32 = undefined;
+    var dep_count: u32 = 0;
+    var i: usize = 0;
+
+    while (i < inner.len) {
+        if (i + 1 < inner.len and inner[i] == '$' and inner[i + 1] == '{') {
+            i += 2;
+            const expr_start = i;
+            var depth: u32 = 1;
+            while (i < inner.len and depth > 0) {
+                if (inner[i] == '{') depth += 1;
+                if (inner[i] == '}') depth -= 1;
+                if (depth > 0) i += 1;
+            }
+            const expr = inner[expr_start..i];
+            if (i < inner.len) i += 1;
+
+            if (self.isState(expr)) |slot_id| {
+                const st = self.stateTypeById(slot_id);
+                const rid = self.regularSlotId(slot_id);
+                if (dep_count < codegen.MAX_DYN_DEPS) { dep_slots[dep_count] = rid; dep_count += 1; }
+                switch (st) {
+                    .string => {
+                        try fmt.appendSlice(self.alloc, "{s}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}));
+                    },
+                    .float => {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}));
+                    },
+                    .boolean => {
+                        try fmt.appendSlice(self.alloc, "{s}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{rid}));
+                    },
+                    else => {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}));
+                    },
+                }
+            } else if (self.findPropBinding(expr)) |binding| {
+                const pval = if (self.emit_prop_refs)
+                    (std.fmt.allocPrint(self.alloc, "_p_{s}", .{expr}) catch "")
+                else
+                    binding.value;
+                if (binding.prop_type == .dynamic_text and !self.emit_prop_refs) {
+                    if (binding.value.len >= 2 and binding.value[0] == '`') {
+                        const tmpl_inner = binding.value[1 .. binding.value.len - 1];
+                        const tmpl = try parseTemplateLiteralFromText(self, tmpl_inner);
+                        if (tmpl.is_dynamic) {
+                            try fmt.appendSlice(self.alloc, tmpl.fmt);
+                            if (tmpl.args.len > 0) {
+                                if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                try args.appendSlice(self.alloc, tmpl.args);
+                            }
+                            for (0..tmpl.dep_count) |di| {
+                                if (dep_count < codegen.MAX_DYN_DEPS) { dep_slots[dep_count] = tmpl.dep_slots[di]; dep_count += 1; }
+                            }
+                        } else {
+                            try fmt.appendSlice(self.alloc, tmpl.static_text);
+                        }
+                    } else {
+                        try fmt.appendSlice(self.alloc, binding.value);
+                    }
+                } else if (pval.len >= 2 and (pval[0] == '"' or pval[0] == '\'')) {
+                    try fmt.appendSlice(self.alloc, pval[1 .. pval.len - 1]);
+                } else if (std.mem.startsWith(u8, pval, "_p_")) {
+                    try fmt.appendSlice(self.alloc, "{s}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, pval);
+                } else if (std.mem.startsWith(u8, pval, "state.getSlotString")) {
+                    try fmt.appendSlice(self.alloc, "{s}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, pval);
+                } else {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, pval);
+                }
+            } else if (self.isLocalVar(expr)) |lv| {
+                switch (lv.state_type) {
+                    .string => {
+                        try fmt.appendSlice(self.alloc, "{s}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, lv.expr);
+                    },
+                    .float => {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, lv.expr);
+                    },
+                    .boolean => {
+                        try fmt.appendSlice(self.alloc, "{s}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "if ({s}) \"true\" else \"false\"", .{lv.expr}));
+                    },
+                    else => {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, lv.expr);
+                    },
+                }
+            } else if (std.mem.indexOf(u8, expr, "(")) |paren_pos| blk: {
+                const func_name = expr[0..paren_pos];
+                if (self.isFFIFunc(func_name)) {
+                    const ret_type = self.ffiReturnType(func_name);
+                    const fmt_spec: []const u8 = if (ret_type == .string) "{s}" else "{d}";
+                    try fmt.appendSlice(self.alloc, fmt_spec);
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    const ac = self.ffiArgCount(func_name);
+                    if (ac == 0) {
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "ffi.{s}()", .{func_name}));
+                    } else {
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "ffi.{s}(0)", .{func_name}));
+                    }
+                    break :blk;
+                }
+                try fmt.appendSlice(self.alloc, expr);
+            } else {
+                try fmt.appendSlice(self.alloc, expr);
+            }
+        } else {
+            try fmt.append(self.alloc, inner[i]);
+            i += 1;
+        }
+    }
+
+    if (args.items.len > 0) {
+        return .{
+            .is_dynamic = true,
+            .static_text = "",
+            .fmt = try self.alloc.dupe(u8, fmt.items),
+            .args = try self.alloc.dupe(u8, args.items),
+            .dep_slots = dep_slots,
+            .dep_count = dep_count,
+        };
+    }
+    return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
+}
+
+// ── Color parsing ──
+
+pub fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
+    if (hex.len == 0) return "Color.rgb(255, 255, 255)";
+    if (namedColor(hex)) |rgb| {
+        return try std.fmt.allocPrint(self.alloc, "Color.rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
+    }
+    const h = if (hex[0] == '#') hex[1..] else hex;
+    if (h.len == 8) {
+        const r = std.fmt.parseInt(u8, h[0..2], 16) catch 0;
+        const g = std.fmt.parseInt(u8, h[2..4], 16) catch 0;
+        const b = std.fmt.parseInt(u8, h[4..6], 16) catch 0;
+        const a = std.fmt.parseInt(u8, h[6..8], 16) catch 255;
+        return try std.fmt.allocPrint(self.alloc, "Color.rgba({d}, {d}, {d}, {d})", .{ r, g, b, a });
+    }
+    if (h.len == 6) {
+        const r = std.fmt.parseInt(u8, h[0..2], 16) catch 0;
+        const g = std.fmt.parseInt(u8, h[2..4], 16) catch 0;
+        const b = std.fmt.parseInt(u8, h[4..6], 16) catch 0;
+        return try std.fmt.allocPrint(self.alloc, "Color.rgb({d}, {d}, {d})", .{ r, g, b });
+    }
+    if (h.len == 3) {
+        const r = std.fmt.parseInt(u8, h[0..1], 16) catch 0;
+        const g = std.fmt.parseInt(u8, h[1..2], 16) catch 0;
+        const b = std.fmt.parseInt(u8, h[2..3], 16) catch 0;
+        return try std.fmt.allocPrint(self.alloc, "Color.rgb({d}, {d}, {d})", .{ r * 17, g * 17, b * 17 });
+    }
+    return "Color.rgb(255, 255, 255)";
+}
+
+// ── Style key mappings ──
+
+const EnumMapping = struct { field: []const u8, prefix: []const u8 };
+
+pub fn mapStyleKey(key: []const u8) ?[]const u8 {
+    const mappings = .{
+        .{ "width", "width" }, .{ "height", "height" },
+        .{ "minWidth", "min_width" }, .{ "maxWidth", "max_width" },
+        .{ "minHeight", "min_height" }, .{ "maxHeight", "max_height" },
+        .{ "flexGrow", "flex_grow" }, .{ "flexShrink", "flex_shrink" }, .{ "flexBasis", "flex_basis" },
+        .{ "gap", "gap" },
+        .{ "padding", "padding" }, .{ "paddingLeft", "padding_left" }, .{ "paddingRight", "padding_right" },
+        .{ "paddingTop", "padding_top" }, .{ "paddingBottom", "padding_bottom" },
+        .{ "margin", "margin" }, .{ "marginLeft", "margin_left" }, .{ "marginRight", "margin_right" },
+        .{ "marginTop", "margin_top" }, .{ "marginBottom", "margin_bottom" },
+        .{ "borderRadius", "border_radius" }, .{ "opacity", "opacity" }, .{ "borderWidth", "border_width" },
+        .{ "shadowOffsetX", "shadow_offset_x" }, .{ "shadowOffsetY", "shadow_offset_y" }, .{ "shadowBlur", "shadow_blur" },
+        .{ "top", "top" }, .{ "left", "left" }, .{ "right", "right" }, .{ "bottom", "bottom" },
+        .{ "aspectRatio", "aspect_ratio" }, .{ "rotation", "rotation" }, .{ "scaleX", "scale_x" }, .{ "scaleY", "scale_y" },
+    };
+    inline for (mappings) |m| {
+        if (std.mem.eql(u8, key, m[0])) return m[1];
+    }
+    return null;
+}
+
+pub fn mapStyleKeyI16(key: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, key, "zIndex")) return "z_index";
+    return null;
+}
+
+pub fn mapColorKey(key: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, key, "backgroundColor")) return "background_color";
+    if (std.mem.eql(u8, key, "borderColor")) return "border_color";
+    if (std.mem.eql(u8, key, "shadowColor")) return "shadow_color";
+    if (std.mem.eql(u8, key, "gradientColorEnd")) return "gradient_color_end";
+    return null;
+}
+
+pub fn mapEnumKey(key: []const u8) ?EnumMapping {
+    if (std.mem.eql(u8, key, "flexDirection")) return .{ .field = "flex_direction", .prefix = "fd" };
+    if (std.mem.eql(u8, key, "justifyContent")) return .{ .field = "justify_content", .prefix = "jc" };
+    if (std.mem.eql(u8, key, "alignItems")) return .{ .field = "align_items", .prefix = "ai" };
+    if (std.mem.eql(u8, key, "alignSelf")) return .{ .field = "align_self", .prefix = "as" };
+    if (std.mem.eql(u8, key, "flexWrap")) return .{ .field = "flex_wrap", .prefix = "fw" };
+    if (std.mem.eql(u8, key, "position")) return .{ .field = "position", .prefix = "pos" };
+    if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
+    if (std.mem.eql(u8, key, "textAlign")) return .{ .field = "text_align", .prefix = "ta" };
+    if (std.mem.eql(u8, key, "overflow")) return .{ .field = "overflow", .prefix = "ov" };
+    if (std.mem.eql(u8, key, "gradientDirection")) return .{ .field = "gradient_direction", .prefix = "gd" };
+    return null;
+}
+
+pub fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, prefix, "fd")) { if (std.mem.eql(u8, value, "row")) return ".row"; if (std.mem.eql(u8, value, "column")) return ".column"; }
+    if (std.mem.eql(u8, prefix, "jc")) { if (std.mem.eql(u8, value, "start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end")) return ".end"; if (std.mem.eql(u8, value, "space-between")) return ".space_between"; if (std.mem.eql(u8, value, "space-around")) return ".space_around"; if (std.mem.eql(u8, value, "space-evenly")) return ".space_evenly"; }
+    if (std.mem.eql(u8, prefix, "ai")) { if (std.mem.eql(u8, value, "start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
+    if (std.mem.eql(u8, prefix, "d")) { if (std.mem.eql(u8, value, "flex")) return ".flex"; if (std.mem.eql(u8, value, "none")) return ".none"; }
+    if (std.mem.eql(u8, prefix, "ta")) { if (std.mem.eql(u8, value, "left")) return ".left"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "right")) return ".right"; }
+    if (std.mem.eql(u8, prefix, "as")) { if (std.mem.eql(u8, value, "auto")) return ".auto"; if (std.mem.eql(u8, value, "start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
+    if (std.mem.eql(u8, prefix, "fw")) { if (std.mem.eql(u8, value, "nowrap")) return ".nowrap"; if (std.mem.eql(u8, value, "wrap")) return ".wrap"; }
+    if (std.mem.eql(u8, prefix, "pos")) { if (std.mem.eql(u8, value, "relative")) return ".relative"; if (std.mem.eql(u8, value, "absolute")) return ".absolute"; }
+    if (std.mem.eql(u8, prefix, "ov")) { if (std.mem.eql(u8, value, "visible")) return ".visible"; if (std.mem.eql(u8, value, "hidden")) return ".hidden"; if (std.mem.eql(u8, value, "scroll")) return ".scroll"; }
+    if (std.mem.eql(u8, prefix, "gd")) { if (std.mem.eql(u8, value, "vertical")) return ".vertical"; if (std.mem.eql(u8, value, "horizontal")) return ".horizontal"; if (std.mem.eql(u8, value, "none")) return ".none"; }
+    return null;
+}
+
+// ── CSS normalization helpers ──
+
+pub fn kebabToCamel(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var capitalize_next = false;
+    for (input) |ch| {
+        if (ch == '-') { capitalize_next = true; } else if (capitalize_next) { try result.append(alloc, if (ch >= 'a' and ch <= 'z') ch - 32 else ch); capitalize_next = false; } else { try result.append(alloc, ch); }
+    }
+    return try alloc.dupe(u8, result.items);
+}
+
+pub fn parseCSSValue(value: []const u8) ?f32 {
+    if (value.len == 0) return null;
+    if (std.mem.eql(u8, value, "auto")) return null;
+    if (std.mem.endsWith(u8, value, "px")) return std.fmt.parseFloat(f32, value[0 .. value.len - 2]) catch null;
+    if (std.mem.endsWith(u8, value, "rem")) { const num = std.fmt.parseFloat(f32, value[0 .. value.len - 3]) catch return null; return num * 16.0; }
+    if (std.mem.endsWith(u8, value, "%")) return std.fmt.parseFloat(f32, value[0 .. value.len - 1]) catch null;
+    return std.fmt.parseFloat(f32, value) catch null;
+}
+
+pub fn namedColor(name: []const u8) ?[3]u8 {
+    if (std.mem.eql(u8, name, "black")) return .{ 0, 0, 0 };
+    if (std.mem.eql(u8, name, "white")) return .{ 255, 255, 255 };
+    if (std.mem.eql(u8, name, "red")) return .{ 255, 0, 0 };
+    if (std.mem.eql(u8, name, "green")) return .{ 0, 128, 0 };
+    if (std.mem.eql(u8, name, "blue")) return .{ 0, 0, 255 };
+    if (std.mem.eql(u8, name, "yellow")) return .{ 255, 255, 0 };
+    if (std.mem.eql(u8, name, "cyan")) return .{ 0, 255, 255 };
+    if (std.mem.eql(u8, name, "magenta")) return .{ 255, 0, 255 };
+    if (std.mem.eql(u8, name, "gray")) return .{ 128, 128, 128 };
+    if (std.mem.eql(u8, name, "grey")) return .{ 128, 128, 128 };
+    if (std.mem.eql(u8, name, "silver")) return .{ 192, 192, 192 };
+    if (std.mem.eql(u8, name, "orange")) return .{ 255, 165, 0 };
+    if (std.mem.eql(u8, name, "transparent")) return .{ 0, 0, 0 };
+    return null;
+}
