@@ -385,9 +385,6 @@ pub const Generator = struct {
             self.errors.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
             if (self.compile_error == null) self.compile_error = msg;
         } else {
-            std.debug.print("[tsz] {s}:{d}:{d}: warning: {s}\n", .{
-                std.fs.path.basename(self.input_file), loc.line, loc.col, msg,
-            });
             self.warnings.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
         }
     }
