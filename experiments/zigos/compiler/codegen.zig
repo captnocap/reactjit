@@ -40,7 +40,7 @@ pub const MAX_FFI_FUNCS = 128;
 pub const MAX_ROUTES = 32;
 pub const MAX_CONDITIONALS = 32;
 pub const MAX_APP_CONDS = 32;
-pub const MAX_DYN_COLORS = 32;
+pub const MAX_DYN_STYLES = 128;
 pub const MAX_FFI_HOOKS = 16;
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -126,8 +126,9 @@ pub const DynText = struct {
     dep_count: u32,
 };
 
-pub const DynColor = struct {
-    expression: []const u8,
+pub const DynStyle = struct {
+    field: []const u8, // Zig style field: "text_color", "opacity", "width", etc.
+    expression: []const u8, // Zig expression: "Color.rgb(...)", "@as(f32, ...)"
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
@@ -194,9 +195,9 @@ pub const Generator = struct {
     dyn_count: u32,
     last_dyn_id: ?u32,
 
-    // Dynamic colors (state-dependent text_color)
-    dyn_colors: [MAX_DYN_COLORS]DynColor,
-    dyn_color_count: u32,
+    // Dynamic styles (state-dependent style values)
+    dyn_styles: [MAX_DYN_STYLES]DynStyle,
+    dyn_style_count: u32,
 
     // Classifiers (style.cls.tsz)
     classifier_names: [MAX_CLASSIFIERS][]const u8,
@@ -294,8 +295,8 @@ pub const Generator = struct {
             .has_state = false,
             .dyn_texts = undefined,
             .dyn_count = 0,
-            .dyn_colors = undefined,
-            .dyn_color_count = 0,
+            .dyn_styles = undefined,
+            .dyn_style_count = 0,
             .last_dyn_id = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,

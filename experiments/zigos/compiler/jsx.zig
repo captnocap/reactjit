@@ -13,7 +13,7 @@ const components = @import("components.zig");
 
 const MAX_DYN_TEXTS = codegen.MAX_DYN_TEXTS;
 const MAX_DYN_DEPS = codegen.MAX_DYN_DEPS;
-const MAX_DYN_COLORS = codegen.MAX_DYN_COLORS;
+const MAX_DYN_STYLES = codegen.MAX_DYN_STYLES;
 const MAX_CONDITIONALS = codegen.MAX_CONDITIONALS;
 const MAX_ROUTES = codegen.MAX_ROUTES;
 
@@ -89,6 +89,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var dyn_color_expr: ?[]const u8 = null;
     var src_str: []const u8 = "";
     var on_press_start: ?u32 = null;
+    var hoverable: bool = false;
 
     // Pre-populate from classifier
     if (classifier_idx) |idx| {
@@ -159,6 +160,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                         on_press_start = self.pos;
                         try attrs.skipBalanced(self);
                     }
+                } else if (std.mem.eql(u8, attr_name, "hoverable")) {
+                    hoverable = true;
+                    try attrs.skipAttrValue(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -399,14 +403,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     if (dyn_color_expr) |expr| {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".text_color = Color.rgb(0, 0, 0)");
-        if (self.dyn_color_count < MAX_DYN_COLORS) {
-            self.dyn_colors[self.dyn_color_count] = .{
+        if (self.dyn_style_count < MAX_DYN_STYLES) {
+            self.dyn_styles[self.dyn_style_count] = .{
+                .field = "text_color",
                 .expression = expr,
                 .arr_name = "",
                 .arr_index = 0,
                 .has_ref = false,
             };
-            self.dyn_color_count += 1;
+            self.dyn_style_count += 1;
         }
     } else if (color_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -449,6 +454,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".handlers = .{ .on_press = ");
         try fields.appendSlice(self.alloc, handler_name);
         try fields.appendSlice(self.alloc, " }");
+    }
+
+    // Hoverable
+    if (hoverable) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".hoverable = true");
     }
 
     // Children array
@@ -524,15 +535,22 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             }
         }
 
-        // Bind dynamic colors
-        for (0..self.dyn_color_count) |dci| {
-            if (!self.dyn_colors[dci].has_ref) {
-                for (child_exprs.items, 0..) |expr, ci| {
-                    if (std.mem.indexOf(u8, expr, ".text_color = Color.rgb(0, 0, 0)") != null) {
-                        self.dyn_colors[dci].arr_name = arr_name;
-                        self.dyn_colors[dci].arr_index = @intCast(ci);
-                        self.dyn_colors[dci].has_ref = true;
-                        break;
+        // Bind dynamic styles (color, opacity, etc.)
+        for (0..self.dyn_style_count) |dsi| {
+            if (!self.dyn_styles[dsi].has_ref) {
+                // Build the placeholder pattern for this field
+                const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
+                    ".text_color = Color.rgb(0, 0, 0)"
+                else
+                    "";
+                if (placeholder.len > 0) {
+                    for (child_exprs.items, 0..) |expr, ci| {
+                        if (std.mem.indexOf(u8, expr, placeholder) != null) {
+                            self.dyn_styles[dsi].arr_name = arr_name;
+                            self.dyn_styles[dsi].arr_index = @intCast(ci);
+                            self.dyn_styles[dsi].has_ref = true;
+                            break;
+                        }
                     }
                 }
             }

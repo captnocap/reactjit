@@ -167,12 +167,12 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "    {s}[{d}].text = _dyn_text_{d};\n",
             .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, dt.buf_id }));
     }
-    for (0..self.dyn_color_count) |dci| {
-        const dc = &self.dyn_colors[dci];
-        if (!dc.has_ref) continue;
+    for (0..self.dyn_style_count) |dsi| {
+        const ds = &self.dyn_styles[dsi];
+        if (!ds.has_ref) continue;
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    {s}[{d}].text_color = {s};\n",
-            .{ dc.arr_name, dc.arr_index, dc.expression }));
+            "    {s}[{d}].{s} = {s};\n",
+            .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
     }
     try out.appendSlice(self.alloc, "}\n\n");
 
@@ -241,7 +241,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "    qjs_runtime.registerHostFn(\"{s}\", @ptrCast(&_ffi_{s}), 8);\n", .{ func_name, func_name }));
     }
-    if (self.dyn_count > 0 or self.dyn_color_count > 0) {
+    if (self.dyn_count > 0 or self.dyn_style_count > 0) {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
     }
     if (self.has_routes) {
@@ -293,7 +293,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
         if (has_any_conds) try out.appendSlice(self.alloc, "    _updateConditionals();\n");
         if (self.has_state) try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
-    } else if (self.has_state and (self.dyn_count > 0 or self.dyn_color_count > 0 or has_any_conds)) {
+    } else if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds)) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateDynamicTexts();");
         if (has_any_conds) try out.appendSlice(self.alloc, " _updateConditionals();");
         try out.appendSlice(self.alloc, " state.clearDirty(); }\n");
