@@ -17,15 +17,31 @@ const MAX_DYN_STYLES = codegen.MAX_DYN_STYLES;
 const MAX_CONDITIONALS = codegen.MAX_CONDITIONALS;
 const MAX_ROUTES = codegen.MAX_ROUTES;
 
+/// Parse a single JSX element and return a Zig Node struct literal string.
+///
+/// This is the core of the compiler. It handles:
+///   - Fragments: <>...</>
+///   - Classifier references: <C.ClassName />
+///   - Route elements: <Route path="/" element={...} />
+///   - Component calls: <MyComp prop="val" /> → delegates to components.inlineComponent
+///   - Primitive elements: <Box style={{...}}>, <Text>hello</Text>, <Image src="..." />
+///
+/// For each element it:
+///   1. Parses attributes (style, color, fontSize, onPress, src, etc.)
+///   2. Parses children (child elements, text content, {expressions}, {conditionals})
+///   3. Builds a Zig struct literal: .{ .style = .{...}, .text = "hello", .children = &_arr_N }
+///   4. Emits child array declarations and binds dynamic text/style/conditional refs
+///
+/// Returns a string like ".{ .style = .{ .padding = 16 }, .children = &_arr_3 }"
 pub fn parseJSXElement(self: *Generator) ![]const u8 {
     if (self.curKind() != .lt) {
         components.setExpectedJSXError(self);
         return error.ExpectedJSX;
     }
     const jsx_source_offset = self.cur().start; // capture <Tag source position for breadcrumbs
-    self.advance_token(); // <
+    self.advance_token(); // consume <
 
-    // Fragment: <>...</>
+    // ── Fragment: <>...</> — anonymous wrapper, no style/attrs ──
     if (self.curKind() == .gt) {
         self.advance_token();
         var frag_children = std.ArrayListUnmanaged([]const u8){};
@@ -181,17 +197,19 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    // Self-closing vs children
-    var child_exprs = std.ArrayListUnmanaged([]const u8){};
-    var text_content: ?[]const u8 = null;
-    var is_dynamic_text = false;
-    var is_prop_text_ref = false;
-    var dyn_fmt: []const u8 = "";
-    var dyn_args: []const u8 = "";
-    var text_dep_slots: [MAX_DYN_DEPS]u32 = undefined;
+    // ── Phase 2: Parse children (between > and </Tag>) ──
+    // Collects: child elements, text content, dynamic text {expressions},
+    // template literals, conditional rendering {expr && <JSX>}
+    var child_exprs = std.ArrayListUnmanaged([]const u8){}; // child node expressions
+    var text_content: ?[]const u8 = null; // static text content for <Text>
+    var is_dynamic_text = false; // true if text comes from state/expression
+    var is_prop_text_ref = false; // true if text is a _p_name reference
+    var dyn_fmt: []const u8 = ""; // format string for dynamic text: "{d}" or "{s}"
+    var dyn_args: []const u8 = ""; // args for dynamic text: "state.getSlot(0)"
+    var text_dep_slots: [MAX_DYN_DEPS]u32 = undefined; // which state slots this text depends on
     var text_dep_count: u32 = 0;
 
-    const cond_base = self.conditional_count;
+    const cond_base = self.conditional_count; // track conditionals added by this element's children
 
     if (self.curKind() == .slash_gt) {
         self.advance_token();
@@ -339,7 +357,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    // Build node fields
+    // ── Phase 3: Build the Zig node struct literal ──
+    // Assembles all collected data into ".{ .style = ..., .text = ..., .children = &_arr_N }"
     var fields: std.ArrayListUnmanaged(u8) = .{};
 
     // Style
@@ -457,6 +476,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
         self.handler_counter += 1;
         const body = try handlers.emitHandlerBody(self, start);
+        if (body.len == 0) {
+            self.addWarning(self.lex.get(start).start, "onPress handler body produced no statements — onClick will do nothing at runtime");
+        }
         const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
         try self.handler_decls.append(self.alloc, handler_fn);
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -471,13 +493,17 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".hoverable = true");
     }
 
-    // Children array
+    // ── Phase 4: Emit children array and bind dynamic refs ──
+    // If this element has child nodes, emit a `var _arr_N = [_]Node{ child0, child1, ... };`
+    // declaration and set .children = &_arr_N on this node.
+    // Then bind any unbound dynamic texts, styles, and conditionals to their
+    // parent array + index so _updateDynamicTexts() knows where to write at runtime.
     if (child_exprs.items.len > 0) {
         const arr_name = try std.fmt.allocPrint(self.alloc, "_arr_{d}", .{self.array_counter});
         self.array_counter += 1;
 
         var arr_content: std.ArrayListUnmanaged(u8) = .{};
-        // Breadcrumb: tsz:file:line — <Tag>
+        // Source breadcrumb: tsz:file:line — <Tag>
         const tag_loc = self.lineCol(jsx_source_offset);
         try arr_content.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "// tsz:{s}:{d} — <{s}>\n", .{ std.fs.path.basename(self.input_file), tag_loc.line, tag_name }));
@@ -574,7 +600,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 }
 
 // ── Conditional child parsing ──
+// Handles {expr && <JSX>} patterns inside JSX children.
+// Two modes:
+//   - Compile-time: if expr is a prop (no state), evaluate truthiness at compile time
+//     and either include or exclude the child entirely.
+//   - Runtime: if expr references state, emit a ConditionalInfo that _updateConditionals()
+//     toggles display:.flex/.none on each state change.
 
+/// Look ahead from current position to see if there's a && before the next closing brace.
+/// Used to distinguish {expr && <JSX>} from {expr} or {children}.
 pub fn isLogicalAndAhead(self: *Generator) bool {
     var look = self.pos;
     var brace_depth: u32 = 0;
@@ -592,6 +626,14 @@ pub fn isLogicalAndAhead(self: *Generator) bool {
     return false;
 }
 
+/// Try to parse a {expr && <JSX>} conditional child.
+/// Returns true if it was a conditional (consumed tokens), false if not (no tokens consumed).
+///
+/// Compile-time path (props only): evaluates the condition at compile time and either
+/// includes or omits the child JSX entirely — zero runtime cost.
+///
+/// Runtime path (state refs): always includes the child, but records a ConditionalInfo
+/// that _updateConditionals() uses to toggle display:.flex/.none on state changes.
 pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnmanaged([]const u8)) anyerror!bool {
     if (!isLogicalAndAhead(self)) return false;
 
@@ -748,6 +790,10 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
 
 // ── Route element ──
 
+/// Parse <Route path="/about" element={<AboutPage />} />
+/// Records the route path and returns the element expression.
+/// The parent <Routes> container binds all routes to a shared array,
+/// and updateRoutes() toggles display based on router.currentPath().
 pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
     const saved_bind = self.routes_bind_from;
     self.routes_bind_from = null;

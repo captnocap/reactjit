@@ -1,12 +1,30 @@
 //! Codegen hub — Generator struct, types, constants, helpers, and pipeline orchestrator.
 //!
-//! This file defines the Generator and delegates work to:
-//!   collect.zig     — token scanning and declaration collection
-//!   jsx.zig         — JSX element parsing
-//!   components.zig  — component inlining
-//!   handlers.zig    — handler bodies and expression chain
-//!   attrs.zig       — attribute/style/template parsing
-//!   emit.zig        — final Zig source emission
+//! The Generator holds ALL compiler state (tokens, collected declarations, counters).
+//! generate() drives the full pipeline:
+//!
+//!   Phase 1:   collectFFIPragmas        — scan for // @ffi <header.h> -llib
+//!   Phase 2:   collectDeclaredFunctions — scan for `declare function foo(): type`
+//!   Phase 3:   collectClassifiers       — scan for classifier({...}) style abstractions
+//!   Phase 4:   collectComponents        — scan for function MyComp({props}) { return <...> }
+//!   Phase 4.5: collectUtilFunctions     — scan for lowercase function helpers
+//!   Phase 5:   extractComputeBlock      — extract <script>...</script> JS logic
+//!   Phase 6:   collectStateHooks        — scan for useState/useFFI declarations
+//!   Phase 6.5: collectLetVars           — scan for `let x = expr` mutable vars
+//!   Phase 7:   countComponentUsage      — count <MyComp> references for optimization
+//!   Phase 7.5: collectAppConditionals   — scan root-level {state && <JSX>} patterns
+//!   Phase 7.9: validate                 — catch unknown tags, bad props, unknown idents
+//!   Phase 8:   parseJSXElement          — recursive-descent JSX → Zig node tree
+//!   Phase 9:   emitZigSource            — assemble final .zig output file
+//!
+//! Delegates work to:
+//!   collect.zig     — phases 1-7.5 (token scanning and declaration collection)
+//!   validate.zig    — phase 7.9 (pre-emission error checking)
+//!   jsx.zig         — phase 8 (JSX element parsing)
+//!   components.zig  — component inlining (called from jsx.zig)
+//!   handlers.zig    — handler bodies and expression chain (called from jsx.zig)
+//!   attrs.zig       — attribute/style/template parsing (called from jsx.zig)
+//!   emit.zig        — phase 9 (final Zig source emission)
 
 const std = @import("std");
 const lexer_mod = @import("lexer.zig");
@@ -19,6 +37,7 @@ pub const tailwind = @import("tailwind.zig");
 const collect = @import("collect.zig");
 const jsx = @import("jsx.zig");
 const emit_mod = @import("emit.zig");
+const validate = @import("validate.zig");
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -301,12 +320,118 @@ pub const Generator = struct {
 
     compile_error: ?[]const u8,
 
+    // Multi-error collection — collect ALL errors, not just the first
+    errors: std.ArrayListUnmanaged(CompileMessage),
+    warnings: std.ArrayListUnmanaged(CompileMessage),
+    strict_mode: bool,
+
+    pub const CompileMessage = struct {
+        line: u32,
+        col: u32,
+        msg: []const u8,
+    };
+
     // ── Error reporting ──
 
+    pub const SourceLoc = struct {
+        line: u32,
+        col: u32,
+    };
+
+    /// Convert a byte offset into the source to a 1-based line:col pair.
+    pub fn lineCol(self: *const Generator, offset: u32) SourceLoc {
+        var line: u32 = 1;
+        var col: u32 = 1;
+        const limit = @min(offset, @as(u32, @intCast(self.source.len)));
+        for (self.source[0..limit]) |ch| {
+            if (ch == '\n') {
+                line += 1;
+                col = 1;
+            } else {
+                col += 1;
+            }
+        }
+        return .{ .line = line, .col = col };
+    }
+
+    /// Set a compile error with automatic file:line:col from the current token.
     pub fn setError(self: *Generator, msg: []const u8) void {
-        if (self.compile_error == null) {
-            self.compile_error = msg;
-            std.debug.print("[tsz] compile error: {s}\n", .{msg});
+        const tok = self.cur();
+        const loc = self.lineCol(tok.start);
+        std.debug.print("[tsz] {s}:{d}:{d}: error: {s}\n", .{
+            std.fs.path.basename(self.input_file), loc.line, loc.col, msg,
+        });
+        self.errors.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
+        if (self.compile_error == null) self.compile_error = msg;
+    }
+
+    /// Set a compile error at a specific source offset (for when pos has moved past the problem).
+    pub fn setErrorAt(self: *Generator, offset: u32, msg: []const u8) void {
+        const loc = self.lineCol(offset);
+        std.debug.print("[tsz] {s}:{d}:{d}: error: {s}\n", .{
+            std.fs.path.basename(self.input_file), loc.line, loc.col, msg,
+        });
+        self.errors.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
+        if (self.compile_error == null) self.compile_error = msg;
+    }
+
+    /// Add a warning. In strict mode, promotes to error.
+    pub fn addWarning(self: *Generator, offset: u32, msg: []const u8) void {
+        const loc = self.lineCol(offset);
+        if (self.strict_mode) {
+            std.debug.print("[tsz] {s}:{d}:{d}: error (--strict): {s}\n", .{
+                std.fs.path.basename(self.input_file), loc.line, loc.col, msg,
+            });
+            self.errors.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
+            if (self.compile_error == null) self.compile_error = msg;
+        } else {
+            std.debug.print("[tsz] {s}:{d}:{d}: warning: {s}\n", .{
+                std.fs.path.basename(self.input_file), loc.line, loc.col, msg,
+            });
+            self.warnings.append(self.alloc, .{ .line = loc.line, .col = loc.col, .msg = msg }) catch {};
+        }
+    }
+
+    /// Print the full error/warning summary after compilation.
+    /// Deduplicates repeated messages at the same location.
+    pub fn printDiagnosticSummary(self: *Generator) void {
+        const basename = std.fs.path.basename(self.input_file);
+        if (self.errors.items.len > 0 or self.warnings.items.len > 0) {
+            std.debug.print("\n[tsz] ── Diagnostic summary for {s} ──\n", .{basename});
+        }
+        if (self.errors.items.len > 0) {
+            std.debug.print("[tsz] {d} error(s):\n", .{self.errors.items.len});
+            printDeduped(self.errors.items, basename);
+        }
+        if (self.warnings.items.len > 0) {
+            std.debug.print("[tsz] {d} warning(s):\n", .{self.warnings.items.len});
+            printDeduped(self.warnings.items, basename);
+        }
+        if (self.errors.items.len > 0) {
+            std.debug.print("[tsz] Build FAILED — {d} error(s), {d} warning(s)\n\n", .{ self.errors.items.len, self.warnings.items.len });
+        } else if (self.warnings.items.len > 0) {
+            std.debug.print("[tsz] Build OK — {d} warning(s)\n\n", .{self.warnings.items.len});
+        }
+    }
+
+    fn printDeduped(items: []const CompileMessage, basename: []const u8) void {
+        var i: usize = 0;
+        while (i < items.len) {
+            const entry = items[i];
+            var count: usize = 1;
+            while (i + count < items.len) {
+                const next = items[i + count];
+                if (next.line == entry.line and next.col == entry.col and
+                    std.mem.eql(u8, next.msg, entry.msg)) {
+                    count += 1;
+                } else break;
+            }
+            if (count > 1) {
+                std.debug.print("[tsz]   {s}:{d}:{d}: {s} (x{d})\n", .{ basename, entry.line, entry.col, entry.msg, count });
+            } else {
+                std.debug.print("[tsz]   {s}:{d}:{d}: {s}\n", .{ basename, entry.line, entry.col, entry.msg });
+            }
+            i += count;
         }
     }
 
@@ -371,6 +496,9 @@ pub const Generator = struct {
             .app_conds = undefined,
             .app_cond_count = 0,
             .compile_error = null,
+            .errors = .{},
+            .warnings = .{},
+            .strict_mode = false,
         };
     }
 
@@ -610,6 +738,10 @@ pub const Generator = struct {
         self.pos = app_start;
         collect.findReturnStatement(self);
         collect.collectAppConditionals(self);
+
+        // Phase 7.9: Validate before emission — catch bad tags, unknown idents, prop mismatches
+        validate.validate(self, app_start);
+        if (self.compile_error) |_| return error.ValidationFailed;
 
         // Phase 8: Find return JSX and generate node tree
         self.pos = app_start;

@@ -1,7 +1,22 @@
 //! Final Zig source emission — takes collected data and writes the output file.
 //!
-//! emitZigSource: full app binary with main loop
-//! emitModuleSource: .mod.tsz → .gen.zig fragment with render() function
+//! emitZigSource (app mode) generates a complete Zig program with this structure:
+//!   1. Imports (std, layout, engine, state, router, qjs_runtime, FFI headers)
+//!   2. FFI host function wrappers (_ffi_funcName)
+//!   3. State manifest (human-readable slot→name mapping + comptime assertion)
+//!   4. @compileError breadcrumbs (unbound dynamic text/styles/conditionals)
+//!   5. Node tree (var _arr_N = [_]Node{...}; var root = Node{...};)
+//!   6. Dynamic text buffers (var _dyn_buf_N: [size]u8 = undefined;)
+//!   7. Event handlers (fn _handler_press_N() void { state.setSlot(...); })
+//!   8. Component init functions (fn _initMyComp(...) Node { ... })
+//!   9. JS_LOGIC (embedded JavaScript for QuickJS, setter calls rewritten)
+//!  10. _initState, _updateDynamicTexts, _updateConditionals, updateRoutes
+//!  11. _appInit (calls all init functions)
+//!  12. _appTick (per-frame: FFI polling, state dirty checks, text updates)
+//!  13. main() → engine.run(...)
+//!
+//! emitModuleSource (.mod.tsz mode) generates a lighter fragment:
+//!   imports + arrays + pub fn render() Node { ... }
 
 const std = @import("std");
 const codegen = @import("codegen.zig");

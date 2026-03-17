@@ -11,23 +11,32 @@ const attrs = @import("attrs.zig");
 
 // ── Handler body ──
 
+/// Parse an onPress handler body and emit equivalent Zig statements.
+///
+/// Input token stream: { () => { setCount(count + 1); setName('hello') } }
+/// Output Zig: "    state.setSlot(0, (state.getSlot(0) + 1));\n    state.setSlotString(1, \"hello\");\n"
+///
+/// Only setter calls are supported — the compiler maps setFoo(expr) to
+/// state.setSlot(N, expr). Everything else (local vars, if/for, unknown
+/// function calls) generates a warning and is skipped.
 pub fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
     const saved_pos = self.pos;
     self.pos = start;
     defer self.pos = saved_pos;
 
-    // Skip { () => or { (param) =>
+    // Skip the arrow function preamble: { () => or { (e) =>
     if (self.curKind() == .lbrace) self.advance_token();
     if (self.curKind() == .lparen) self.advance_token();
     while (self.curKind() == .identifier or self.curKind() == .comma) self.advance_token();
     if (self.curKind() == .rparen) self.advance_token();
     if (self.curKind() == .arrow) self.advance_token();
 
-    // Collect statements
+    // Collect Zig statements into stmts buffer
     var stmts: std.ArrayListUnmanaged(u8) = .{};
     const in_block = self.curKind() == .lbrace;
     if (in_block) self.advance_token();
 
+    // Parse each statement until closing brace
     const end_kind: codegen.TokenKind = if (in_block) .rbrace else .rbrace;
     while (self.curKind() != end_kind and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {
@@ -48,17 +57,19 @@ pub fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
                 try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}({d}, {s});\n", .{ set_fn, rid, val_expr }));
             } else if (std.mem.eql(u8, name, "const") or std.mem.eql(u8, name, "let") or std.mem.eql(u8, name, "var")) {
-                std.debug.print("[tsz] warning: local variable in handler body — not supported, skipping\n", .{});
+                self.addWarning(self.cur().start, "local variable in handler body — not supported, skipping");
                 self.advance_token();
             } else if (std.mem.eql(u8, name, "if")) {
-                std.debug.print("[tsz] warning: conditional in handler body — not supported, skipping\n", .{});
+                self.addWarning(self.cur().start, "conditional in handler body — not supported, skipping");
                 self.advance_token();
             } else if (std.mem.eql(u8, name, "for") or std.mem.eql(u8, name, "while")) {
-                std.debug.print("[tsz] warning: loop in handler body — not supported, skipping\n", .{});
+                self.addWarning(self.cur().start, "loop in handler body — not supported, skipping");
                 self.advance_token();
             } else {
                 // Unknown identifier — could be a function call we don't recognize
-                std.debug.print("[tsz] warning: unknown statement '{s}' in handler — only setter calls are supported\n", .{name});
+                const msg = std.fmt.allocPrint(self.alloc,
+                    "unknown statement '{s}' in handler — only setter calls are supported", .{name}) catch "unknown statement in handler";
+                self.addWarning(self.cur().start, msg);
                 self.advance_token();
             }
         } else {
@@ -71,11 +82,27 @@ pub fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
 }
 
 // ── Expression chain ──
+// Operator precedence parser for TS expressions → Zig expressions.
+// Each function handles one precedence level and calls the next one down:
+//
+//   emitStateExpr  (entry point)
+//     └─ emitTernary        ?:  and  ??
+//         └─ emitLogicalOr  ||
+//             └─ emitLogicalAnd  &&
+//                 └─ emitEquality  ==  !=
+//                     └─ emitComparison  <  >  <=  >=
+//                         └─ emitAdditive  +  -  (+ string concat)
+//                             └─ emitMultiplicative  *  /  %
+//                                 └─ emitUnary  !  -  ~
+//                                     └─ emitStateAtom  literals, state getters, FFI calls, props
 
+/// Entry point: parse a complete TS expression and return the equivalent Zig expression string.
 pub fn emitStateExpr(self: *Generator) ![]const u8 {
     return try emitTernary(self);
 }
 
+/// Ternary (a ? b : c) and nullish coalescing (a ?? b).
+/// Also handles the TS→Zig conversion: JS truthiness → Zig bool comparison.
 pub fn emitTernary(self: *Generator) ![]const u8 {
     const cond = try emitLogicalOr(self);
     if (self.curKind() == .question_question) {
@@ -235,8 +262,22 @@ fn emitUnary(self: *Generator) ![]const u8 {
     return try emitStateAtom(self);
 }
 
+/// Lowest-precedence: parse a single value (literal, state getter, prop, FFI call, etc).
+/// This is the "leaves" of the expression tree — everything bottoms out here.
+///
+/// Resolution order:
+///   1. (expr)        → recurse into emitStateExpr
+///   2. 42, 3.14      → number literal passthrough
+///   3. "hello", 'x'  → string literal (single quotes → double quotes, hex colors → Color.rgb)
+///   4. `template`    → template literal with ${} interpolation
+///   5. true/false    → boolean literal
+///   6. prop name     → substitute with concrete value from prop_stack
+///   7. state getter  → state.getSlot(N) / getSlotString(N) / etc
+///   8. local var     → substitute with collected expression
+///   9. FFI func      → ffi.funcName(args)
+///  10. bare ident    → passthrough (fallback, may produce Zig compile error)
 pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
-    // Parenthesized expression
+    // (expr) — parenthesized subexpression
     if (self.curKind() == .lparen) {
         self.advance_token();
         const inner = try emitStateExpr(self);

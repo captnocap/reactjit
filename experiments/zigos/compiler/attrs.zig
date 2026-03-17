@@ -9,6 +9,18 @@ const Generator = codegen.Generator;
 
 // ── Style parsing ──
 
+/// Parse a style attribute value and return Zig struct fields.
+///
+/// Handles both style={...} and style={{...}} (double-brace JSX convention).
+/// Input tokens: { { backgroundColor: '#ff0000', padding: 16, flexDirection: 'row' } }
+/// Output string: ".background_color = Color.rgb(255, 0, 0), .padding = 16, .flex_direction = .row"
+///
+/// Style keys are dispatched through 4 mapping functions:
+///   mapColorKey   → color fields (backgroundColor → .background_color = Color.rgb(...))
+///   mapStyleKeyI16 → i16 fields (zIndex → .z_index = N)
+///   mapStyleKey   → f32 fields (width, padding, margin, etc.)
+///   mapEnumKey    → enum fields (flexDirection → .flex_direction = .row)
+/// Unknown keys trigger a warning (possible typo).
 pub fn parseStyleAttr(self: *Generator) ![]const u8 {
     if (self.curKind() == .lbrace) self.advance_token();
     var double_brace = false;
@@ -86,6 +98,9 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                     try fields.appendSlice(self.alloc, zig_val);
                 }
             } else {
+                const warn_msg = std.fmt.allocPrint(self.alloc,
+                    "unknown style property '{s}' — not a recognized layout, color, or enum field (typo?)", .{key}) catch "unknown style property";
+                self.addWarning(self.cur().start, warn_msg);
                 skipStyleValue(self);
             }
         }
@@ -210,7 +225,17 @@ pub fn collectTextContent(self: *Generator) []const u8 {
 }
 
 // ── Template literals ──
+// Converts JS template literals like `Hello ${name}, you have ${count} items`
+// into Zig format strings + args: fmt="Hello {s}, you have {d} items", args="state.getSlotString(0), state.getSlot(1)"
+//
+// Each ${expr} is resolved in order:
+//   1. State variable  → state.getSlot*(N) with correct type specifier
+//   2. Prop binding    → substituted value or _p_name reference
+//   3. Local variable  → substituted expression
+//   4. FFI function    → ffi.funcName() call
+//   5. Unknown         → embedded as static text with a warning
 
+/// Parse a template literal from the current token (backtick-delimited).
 pub fn parseTemplateLiteral(self: *Generator) !codegen.TemplateResult {
     const tok = self.cur();
     const raw = tok.text(self.source);
@@ -346,11 +371,15 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                     break :blk;
                 }
                 // Not an FFI function — embed as static text
-                std.debug.print("[tsz] warning: expression '${{{s}}}' in template literal is not a state variable, prop, or FFI call — embedded as static text\n", .{expr});
+                const warn_msg = std.fmt.allocPrint(self.alloc,
+                    "expression '${{{s}}}' in template literal is not a state variable, prop, or FFI call — embedded as static text", .{expr}) catch "unresolved template expression";
+                self.addWarning(0, warn_msg);
                 try fmt.appendSlice(self.alloc, expr);
             } else {
                 // Unknown expression — embed as static text
-                std.debug.print("[tsz] warning: expression '${{{s}}}' in template literal could not be resolved — embedded as static text\n", .{expr});
+                const warn_msg = std.fmt.allocPrint(self.alloc,
+                    "expression '${{{s}}}' in template literal could not be resolved — embedded as static text", .{expr}) catch "unresolved template expression";
+                self.addWarning(0, warn_msg);
                 try fmt.appendSlice(self.alloc, expr);
             }
         } else {

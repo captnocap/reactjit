@@ -14,11 +14,25 @@ pub fn main() !void {
     defer std.process.argsFree(alloc, args);
 
     if (args.len < 3) {
-        std.debug.print("Usage: zigos-compiler build <file.tsz>\n", .{});
+        std.debug.print("Usage: zigos-compiler build [--strict] <file.tsz>\n", .{});
         return;
     }
 
-    const input_path = args[2];
+    // Parse flags
+    var strict_mode = false;
+    var input_idx: usize = 2;
+    for (args[2..]) |arg| {
+        if (std.mem.eql(u8, arg, "--strict")) {
+            strict_mode = true;
+            input_idx += 1;
+        } else break;
+    }
+    if (input_idx >= args.len) {
+        std.debug.print("Usage: zigos-compiler build [--strict] <file.tsz>\n", .{});
+        return;
+    }
+
+    const input_path = args[input_idx];
     const file_kind = classifyFile(input_path);
 
     const source = std.fs.cwd().readFileAlloc(alloc, input_path, 4 * 1024 * 1024) catch |err| {
@@ -34,10 +48,13 @@ pub fn main() !void {
         lex.tokenize();
         var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
         gen.is_module = true;
+        gen.strict_mode = strict_mode;
         const zig_source = gen.generate() catch |err| {
             std.debug.print("[tsz] Module compile error: {}\n", .{err});
+            gen.printDiagnosticSummary();
             return;
         };
+        gen.printDiagnosticSummary();
         // Output: basename.gen.zig
         const basename = std.fs.path.basename(input_path);
         const stem = basename[0 .. basename.len - ".mod.tsz".len];
@@ -66,6 +83,7 @@ pub fn main() !void {
     var lex = lexer_mod.Lexer.init(final_source);
     lex.tokenize();
     var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
+    gen.strict_mode = strict_mode;
 
     // If we found _script.tsz imports, set compute_js so codegen emits JS_LOGIC
     if (script_js) |js| {
@@ -73,8 +91,11 @@ pub fn main() !void {
     }
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[tsz] Compile error: {}\n", .{err});
+        gen.printDiagnosticSummary();
         return;
     };
+    gen.printDiagnosticSummary();
+    if (gen.errors.items.len > 0) return;
     defer alloc.free(zig_source);
 
     // Write generated_app.zig

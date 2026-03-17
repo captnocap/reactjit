@@ -18,10 +18,19 @@ const MAX_COMP_FUNCS = codegen.MAX_COMP_FUNCS;
 const MAX_COMP_INSTANCES = codegen.MAX_COMP_INSTANCES;
 const MAX_COMP_INNER = codegen.MAX_COMP_INNER;
 
+/// Inline a component at a call site: <MyComp prop="val" />
+///
+/// Components are compile-time inlined — there's no runtime component concept.
+/// The compiler saves/restores pos + prop_stack to jump into the component body,
+/// parse its JSX, then return the resulting node expression to the caller.
+///
+/// Multi-use leaf components (used 2+ times, no children, no state props) get
+/// optimized into init functions via compFuncInline() to avoid code duplication.
 pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror![]const u8 {
-    // Prevent recursive inlining
+    // Guard: prevent A calling itself → infinite recursion
     if (self.current_inline_component) |current| {
         if (std.mem.eql(u8, current, comp.name)) {
+            // Skip past the entire <Component>...</Component> or <Component /> in the token stream
             while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) self.advance_token();
             if (self.curKind() == .gt) {
                 self.advance_token();
@@ -32,9 +41,9 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                     self.advance_token();
                 }
             } else {
-                self.advance_token();
+                self.advance_token(); // skip />
             }
-            return ".{}";
+            return ".{}"; // emit empty node for recursive call
         }
     }
     self.inline_depth += 1;
@@ -44,10 +53,14 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         return ".{}";
     }
 
+    // Save context — we're about to push props and change the "current component"
     const saved_component = self.current_inline_component;
     self.current_inline_component = comp.name;
     defer self.current_inline_component = saved_component;
 
+    // ── Phase 1: Collect prop values from the call site ──
+    // Scan attributes like <Comp title="hello" count={42} />
+    // and push each matching prop onto the prop_stack for substitution
     const saved_prop_count = self.prop_stack_count;
     while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {
@@ -58,6 +71,7 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                 var val: []const u8 = "";
                 var prop_type: PropType = .string;
                 if (self.curKind() == .string) {
+                    // Static string prop: title="hello"
                     val = self.curText();
                     if (val.len >= 2 and val[0] == '\'') {
                         val = try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
@@ -66,10 +80,12 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                     self.advance_token();
                 } else if (self.curKind() == .lbrace) {
                     if (std.mem.startsWith(u8, attr_name, "on")) {
+                        // Event handler prop: onPress={...} — store token position for later emission
                         val = try std.fmt.allocPrint(self.alloc, "__handler_pos_{d}", .{self.pos});
                         prop_type = .expression;
                         try attrs.skipBalanced(self);
                     } else {
+                        // Dynamic prop: count={state + 1} or label={`text ${var}`}
                         self.advance_token();
                         if (self.curKind() == .template_literal) {
                             const tok = self.cur();
@@ -78,12 +94,14 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                             prop_type = .dynamic_text;
                             self.advance_token();
                         } else {
+                            // Evaluate the expression (may reference state)
                             val = try handlers.emitStateExpr(self);
                             prop_type = self.classifyExpr(val);
                         }
                         if (self.curKind() == .rbrace) self.advance_token();
                     }
                 }
+                // Push onto prop stack only if it matches a declared prop name
                 for (0..comp.prop_count) |pi| {
                     if (std.mem.eql(u8, comp.prop_names[pi], attr_name)) {
                         if (self.prop_stack_count < MAX_COMPONENT_PROPS) {
@@ -103,19 +121,23 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         }
     }
 
-    // Handle self-closing vs children
+    // ── Phase 2: Parse caller children (for components with {children} slots) ──
     var caller_children = std.ArrayListUnmanaged([]const u8){};
     var has_caller_children = false;
     if (self.curKind() == .slash_gt) {
+        // Self-closing: <Comp /> — no children
         self.advance_token();
     } else if (self.curKind() == .gt) {
+        // Open tag: <Comp>...</Comp>
         self.advance_token();
         if (comp.has_children) {
+            // Component declared {children} — parse caller's children JSX
             has_caller_children = true;
             while (self.curKind() != .eof) {
                 if (self.curKind() == .lt) {
                     const peek = self.pos + 1;
                     if (peek < self.lex.count and self.lex.get(peek).kind == .slash) {
+                        // Closing tag </Comp> — done collecting children
                         self.advance_token();
                         self.advance_token();
                         if (self.curKind() == .identifier) self.advance_token();
@@ -129,6 +151,7 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                 }
             }
         } else {
+            // Component doesn't use {children} — skip everything until </Comp>
             var depth: u32 = 1;
             while (self.pos < self.lex.count and depth > 0) {
                 if (self.curKind() == .lt) {
@@ -151,7 +174,9 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         }
     }
 
-    // Multi-use leaf component optimization
+    // ── Phase 3: Try multi-use leaf optimization ──
+    // If this component is used 2+ times and has no children or state-dependent props,
+    // emit a shared _initComponentName() function instead of duplicating the tree inline.
     const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children;
     if (eligible) {
         var has_state_prop = false;
@@ -166,12 +191,13 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
             const cf_result = try compFuncInline(self, comp, saved_prop_count);
             if (cf_result) |placeholder| {
                 self.prop_stack_count = saved_prop_count;
-                return placeholder;
+                return placeholder; // .{} placeholder — _initComponents fills it at startup
             }
         }
     }
 
-    // Direct inline: jump to component body
+    // ── Phase 4: Direct inline — jump to component body and parse its JSX ──
+    // Save current position, jump to component definition, parse JSX, jump back
     const saved_pos = self.pos;
     const saved_children = self.component_children_exprs;
     if (has_caller_children) {
@@ -179,25 +205,37 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
     } else {
         self.component_children_exprs = null;
     }
-    self.pos = comp.body_pos;
+    self.pos = comp.body_pos; // jump to the component's return <JSX> position
     const result = try jsx.parseJSXElement(self);
-    self.pos = saved_pos;
-    self.prop_stack_count = saved_prop_count;
+    self.pos = saved_pos; // jump back to caller
+    self.prop_stack_count = saved_prop_count; // pop props
     self.component_children_exprs = saved_children;
     return result;
 }
 
+/// Generate a shared init function for multi-use leaf components.
+///
+/// Instead of inlining the same JSX tree N times (once per call site), this
+/// generates a single `fn _initMyComp(_inner_0: *[N]Node, _p_title: []const u8) Node`
+/// function. Each call site gets a storage array + a call to this function in
+/// _initComponents(). This deduplicates the generated Zig significantly.
+///
+/// Returns `.{}` as a placeholder — the real node is filled in by _initComponents at startup.
+/// Returns null if the component isn't suitable (too many inner arrays, etc).
 pub fn compFuncInline(self: *Generator, comp: *codegen.ComponentInfo, saved_prop_count: u32) !?[]const u8 {
     var func_idx: u32 = 0;
 
     if (!comp.func_generated) {
+        // First time seeing this component — generate the init function.
+        // Parse the component body with emit_prop_refs=true so props become
+        // parameter references (_p_name) instead of concrete values.
         const arr_count_before = self.array_decls.items.len;
         const arr_id_before = self.array_counter;
 
         const saved_pos = self.pos;
         self.pos = comp.body_pos;
         self.component_children_exprs = null;
-        self.emit_prop_refs = true;
+        self.emit_prop_refs = true; // props emit as _p_name instead of concrete values
         const root_expr = try jsx.parseJSXElement(self);
         self.emit_prop_refs = false;
         self.pos = saved_pos;
@@ -318,6 +356,8 @@ pub fn compFuncInline(self: *Generator, comp: *codegen.ComponentInfo, saved_prop
     return try self.alloc.dupe(u8, ".{}");
 }
 
+/// String replace all: swap every occurrence of needle with replacement.
+/// Used to rewrite _arr_N references to _inner_N parameter refs in init functions.
 pub fn replaceAllOccurrences(self: *Generator, haystack: []const u8, needle: []const u8, replacement: []const u8) ![]const u8 {
     if (needle.len == 0 or haystack.len < needle.len) return haystack;
     var result: std.ArrayListUnmanaged(u8) = .{};
@@ -338,35 +378,25 @@ pub fn replaceAllOccurrences(self: *Generator, haystack: []const u8, needle: []c
     return try self.alloc.dupe(u8, result.items);
 }
 
+/// Report an error when JSX was expected but something else was found.
+/// Called from parseJSXElement when the current token isn't '<'.
 pub fn setExpectedJSXError(self: *Generator) void {
-    var offset: usize = self.source.len;
-    if (self.pos < self.lex.count) {
-        offset = self.lex.get(self.pos).start;
-    }
-
-    var line: usize = 1;
-    var column: usize = 1;
-    var i: usize = 0;
-    while (i < offset and i < self.source.len) : (i += 1) {
-        if (self.source[i] == '\n') {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-
+    const offset: u32 = if (self.pos < self.lex.count) self.lex.get(self.pos).start else @intCast(self.source.len);
     const tok_text = if (self.pos < self.lex.count) self.curText() else "EOF";
     const msg = std.fmt.allocPrint(
         self.alloc,
-        "Expected JSX at {s}:{d}:{d}, got {s} `{s}`",
-        .{ self.input_file, line, column, @tagName(self.curKind()), tok_text },
+        "Expected JSX, got {s} `{s}`",
+        .{ @tagName(self.curKind()), tok_text },
     ) catch "Expected JSX";
-    self.setError(msg);
+    self.setErrorAt(offset, msg);
 }
 
 // ── Component function helpers ──
 
+/// Count how many Node elements are in an array declaration like:
+///   var _arr_3 = [_]Node{ .{...}, .{...}, .{...} };
+/// Returns the count (3 in this example). Used to size the storage arrays
+/// that init functions write into.
 pub fn countNodeElements(decl: []const u8) u32 {
     const marker = "[_]Node{ ";
     const start = std.mem.indexOf(u8, decl, marker) orelse return 1;
@@ -381,6 +411,10 @@ pub fn countNodeElements(decl: []const u8) u32 {
     return if (count > 0) count else 1;
 }
 
+/// Extract the initializer content from an array declaration.
+/// Given: "var _arr_3 = [_]Node{ .{...}, .{...} };"
+/// Returns: ".{...}, .{...}"
+/// Used to transplant node init expressions into the init function body.
 pub fn extractArrayInit(decl: []const u8) []const u8 {
     const marker = "[_]Node{ ";
     const start = std.mem.indexOf(u8, decl, marker) orelse return "";

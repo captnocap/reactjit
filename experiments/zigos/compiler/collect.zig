@@ -2,6 +2,20 @@
 //!
 //! All functions here are pure readers: they scan the token stream and
 //! fill in Generator arrays/counts. No Zig code is emitted.
+//!
+//! Pipeline order (called from codegen.zig generate()):
+//!   Phase 1:   collectFFIPragmas        — // @ffi <header.h> -llib → ffi_headers, ffi_libs
+//!   Phase 2:   collectDeclaredFunctions — declare function foo(): type → ffi_funcs, return types, arg counts
+//!   Phase 3:   collectClassifiers       — classifier({...}) → classifier_names/primitives/styles/text_props
+//!   Phase 4:   collectComponents        — function MyComp({props}) → components[] with body_pos for later inlining
+//!   Phase 4.5: collectUtilFunctions     — function lowercase() → util_funcs[] (non-component, non-App helpers)
+//!   Phase 5:   extractComputeBlock      — <script>JS</script> → compute_js
+//!   Phase 6:   collectStateHooksTopLevel + collectStateHooks — useState/useFFI → state_slots[], ffi_hooks[]
+//!   Phase 6.5: collectLetVars           — let x = expr → let_vars[] (mutable runtime vars)
+//!   Phase 7:   countComponentUsage      — count <MyComp> refs → usage_count (for multi-use optimization)
+//!   Phase 7.5: collectAppConditionals   — {state == N && <JSX>} at root → app_conds[]
+//!
+//! Also: findAppFunction, findReturnStatement, rewriteSetterCalls (JS setter→__setState rewriting)
 
 const std = @import("std");
 const codegen = @import("codegen.zig");
@@ -10,6 +24,10 @@ const attrs = @import("attrs.zig");
 
 // ── FFI collection ──
 
+/// Phase 1: Scan all tokens for FFI pragma comments.
+/// Input:  // @ffi <time.h> -lrt
+/// Output: ffi_headers += "time.h", ffi_libs += "rt"
+/// These get emitted as @cImport/@cInclude in the generated Zig.
 pub fn collectFFIPragmas(self: *Generator) void {
     var i: u32 = 0;
     while (i < self.lex.count) : (i += 1) {
@@ -33,6 +51,12 @@ pub fn collectFFIPragmas(self: *Generator) void {
     }
 }
 
+/// Phase 2: Scan for TypeScript-style FFI function declarations.
+/// Input:  declare function getTime(a: number): number
+/// Output: ffi_funcs += "getTime", ffi_return_types += .int, ffi_arg_counts += 1
+/// These tell the compiler what C functions are available and how to wrap them.
+/// The return type is parsed from the `: type` annotation after the param list.
+/// Arg count is determined by counting commas inside the parentheses.
 pub fn collectDeclaredFunctions(self: *Generator) void {
     while (self.pos < self.lex.count and self.curKind() != .eof) {
         if (self.isIdent("declare")) {
@@ -78,6 +102,17 @@ pub fn collectDeclaredFunctions(self: *Generator) void {
 
 // ── Classifier collection ──
 
+/// Phase 3: Collect classifier() style abstractions from _cls.tsz files.
+///
+/// Classifiers are named style bundles that map to a primitive + style + text props.
+/// Input:
+///   classifier({
+///     Title: { type: 'Text', style: { fontSize: 24 }, color: '#fff', grow: true },
+///     Card:  { style: { padding: 16, borderRadius: 8 } }
+///   })
+///
+/// Output: classifier_names/primitives/styles/text_props arrays populated.
+/// Usage in JSX: <C.Title>Hello</C.Title> expands to <Text style={{fontSize:24}} color="#fff">
 pub fn collectClassifiers(self: *Generator) void {
     while (self.pos < self.lex.count and self.curKind() != .eof) {
         if (self.isIdent("classifier")) {
@@ -162,6 +197,14 @@ pub fn collectClassifiers(self: *Generator) void {
 
 // ── Component collection ──
 
+/// Phase 4: Scan for component function definitions (uppercase, non-App).
+///
+/// Input: function MyButton({ label, color }) { return (<Box>...</Box>) }
+/// Output: components[] entry with name="MyButton", prop_names=["label","color"],
+///         body_pos pointing to the <Box> token for later inlining by components.zig.
+///
+/// Also scans forward to check if the component body contains {children},
+/// which determines whether caller children get spliced in during inlining.
 pub fn collectComponents(self: *Generator) void {
     self.pos = 0;
     while (self.pos < self.lex.count and self.curKind() != .eof) {
@@ -251,6 +294,9 @@ pub fn collectComponents(self: *Generator) void {
     }
 }
 
+/// Phase 7: Count how many times each component is referenced as <MyComp> in the App body.
+/// Components with usage_count >= 2 are eligible for the init-function optimization
+/// (compFuncInline in components.zig) which deduplicates the generated node tree.
 pub fn countComponentUsage(self: *Generator, app_start: u32) void {
     const saved_pos = self.pos;
     defer self.pos = saved_pos;
@@ -276,6 +322,14 @@ pub fn countComponentUsage(self: *Generator, app_start: u32) void {
 
 // ── App + state collection ──
 
+/// Phase 7.5: Scan the root JSX element's direct children for top-level state conditionals.
+///
+/// Looks for patterns like: {activeTab == 0 && <TabContent/>}
+/// at the root level of the App's return JSX. These become AppConditional entries
+/// that _updateConditionals() toggles via display:.flex/.none.
+///
+/// This is a pre-pass before JSX parsing — it uses a lightweight scan that
+/// only handles simple `state == N &&` patterns (not arbitrary expressions).
 pub fn collectAppConditionals(self: *Generator) void {
     if (self.curKind() != .lt) return;
     self.advance_token();
@@ -369,6 +423,9 @@ pub fn collectAppConditionals(self: *Generator) void {
     }
 }
 
+/// Find the App function's token position. Scans all `function` keywords and
+/// returns the position of `function App`. Falls back to the last function
+/// if no explicit App is found (single-function files).
 pub fn findAppFunction(self: *Generator) ?u32 {
     var last_func: ?u32 = null;
     var app_func: ?u32 = null;
@@ -387,11 +444,15 @@ pub fn findAppFunction(self: *Generator) ?u32 {
     return app_func orelse last_func;
 }
 
+/// Phase 6a: Scan the entire source for useState/useFFI outside any function.
+/// Top-level state hooks are rare but supported for module-level state.
 pub fn collectStateHooksTopLevel(self: *Generator) void {
     self.pos = 0;
     scanForUseState(self, false);
 }
 
+/// Phase 6b: Scan the App function body for useState/useFFI hooks.
+/// Skips to the opening brace of the function, then delegates to scanForUseState.
 pub fn collectStateHooks(self: *Generator, func_start: u32) void {
     self.pos = func_start;
     while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
@@ -399,6 +460,19 @@ pub fn collectStateHooks(self: *Generator, func_start: u32) void {
     scanForUseState(self, true);
 }
 
+/// Core state hook scanner — handles two patterns:
+///
+///   useState: const [getter, setter] = useState(initialValue)
+///     → creates a StateSlot with getter name, setter name, and typed initial value
+///     → initial can be: number, float, string, boolean, or array literal
+///
+///   useFFI: const [getter] = useFFI(funcName, intervalMs)
+///     → creates a StateSlot (read-only, no setter) + an FFIHook for periodic polling
+///     → the FFI function's return type (from collectDeclaredFunctions) determines slot type
+///
+/// The stop_at_return flag controls scope:
+///   false = scan entire source (top-level hooks)
+///   true  = scan until `return` keyword (App function body only)
 pub fn scanForUseState(self: *Generator, stop_at_return: bool) void {
     while (self.pos < self.lex.count) {
         if (self.isIdent("const") or self.isIdent("let")) {
@@ -548,6 +622,8 @@ pub fn scanForUseState(self: *Generator, stop_at_return: bool) void {
 
 // ── Misc collection ──
 
+/// Advance pos to the first token after `return` (skipping optional parens).
+/// After this call, pos points at the start of the return expression (usually <JSX>).
 pub fn findReturnStatement(self: *Generator) void {
     while (self.pos < self.lex.count and !self.isIdent("return")) {
         self.advance_token();
@@ -556,6 +632,9 @@ pub fn findReturnStatement(self: *Generator) void {
     if (self.curKind() == .lparen) self.advance_token();
 }
 
+/// Phase 5: Extract JavaScript from <script>...</script> blocks.
+/// This JS gets embedded in the generated Zig as JS_LOGIC and runs in QuickJS.
+/// Scans raw source bytes (not tokens) since <script> content isn't tokenized.
 pub fn extractComputeBlock(self: *Generator) void {
     const src = self.source;
     const open_tag = "<script>";
@@ -575,6 +654,15 @@ pub fn extractComputeBlock(self: *Generator) void {
     }
 }
 
+/// Rewrite JS setter calls to __setState/__setStateString calls for QuickJS.
+///
+/// Input JS:  setCount(count + 1); setName("hello");
+/// Output JS: __setState(0, count + 1); __setStateString(1, "hello");
+///
+/// This bridges the JS world (setter function names) to the Zig state system
+/// (slot indices). The __setState functions are registered as QuickJS host functions
+/// that call state.setSlot()/state.setSlotString() on the Zig side.
+/// Also strips any useState() lines from the JS since state is managed by Zig.
 pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
     var result: std.ArrayListUnmanaged(u8) = .{};
     var line_iter = std.mem.splitScalar(u8, js, '\n');
