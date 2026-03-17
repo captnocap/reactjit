@@ -35,6 +35,8 @@ pub fn build(b: *std.Build) void {
     app_exe.root_module.addIncludePath(b.path("."));
     app_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
     app_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    app_exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    app_exe.root_module.addIncludePath(b.path("ffi"));
     app_exe.root_module.addImport("wgpu", wgpu_mod);
     app_exe.linkLibC();
     app_exe.linkSystemLibrary("SDL2");

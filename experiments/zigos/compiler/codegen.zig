@@ -179,6 +179,7 @@ pub const Generator = struct {
     ffi_libs: std.ArrayListUnmanaged([]const u8),
     ffi_funcs: std.ArrayListUnmanaged([]const u8),
     ffi_return_types: std.ArrayListUnmanaged(StateType), // parallel to ffi_funcs
+    ffi_arg_counts: std.ArrayListUnmanaged(u32), // parallel to ffi_funcs
 
     // useFFI hooks (Zig-side polling)
     ffi_hooks: [MAX_FFI_HOOKS]FFIHook,
@@ -223,6 +224,7 @@ pub const Generator = struct {
             .ffi_libs = .{},
             .ffi_funcs = .{},
             .ffi_return_types = .{},
+            .ffi_arg_counts = .{},
             .ffi_hooks = undefined,
             .ffi_hook_count = 0,
             .local_vars = undefined,
@@ -342,17 +344,21 @@ pub const Generator = struct {
                     self.advance_token();
                     if (self.curKind() == .identifier) {
                         self.ffi_funcs.append(self.alloc, self.curText()) catch {};
-                        // Scan forward to find return type: declare function name(...): TYPE
+                        // Scan forward to find arg count and return type
                         var ret_type: StateType = .int;
+                        var arg_count: u32 = 0;
                         const saved = self.pos;
                         self.advance_token(); // skip name
-                        // Skip (...)
+                        // Skip (...) and count params
                         if (self.curKind() == .lparen) {
                             var depth: u32 = 1;
                             self.advance_token();
+                            // Empty parens = 0 args
+                            if (self.curKind() != .rparen) arg_count = 1;
                             while (depth > 0 and self.curKind() != .eof) {
                                 if (self.curKind() == .lparen) depth += 1;
                                 if (self.curKind() == .rparen) depth -= 1;
+                                if (self.curKind() == .comma and depth == 1) arg_count += 1;
                                 if (depth > 0) self.advance_token();
                             }
                             if (self.curKind() == .rparen) self.advance_token();
@@ -369,6 +375,7 @@ pub const Generator = struct {
                         }
                         self.pos = saved;
                         self.ffi_return_types.append(self.alloc, ret_type) catch {};
+                        self.ffi_arg_counts.append(self.alloc, arg_count) catch {};
                     }
                 }
             }
@@ -384,6 +391,16 @@ pub const Generator = struct {
             }
         }
         return .int;
+    }
+
+    fn ffiArgCount(self: *Generator, name: []const u8) u32 {
+        for (self.ffi_funcs.items, 0..) |f, i| {
+            if (std.mem.eql(u8, f, name)) {
+                if (i < self.ffi_arg_counts.items.len) return self.ffi_arg_counts.items[i];
+                return 0;
+            }
+        }
+        return 0;
     }
 
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
@@ -1273,6 +1290,24 @@ pub const Generator = struct {
                             try args.appendSlice(self.alloc, lv.expr);
                         },
                     }
+                } else if (std.mem.indexOf(u8, expr, "(")) |paren_pos| blk: {
+                    // Function call in template — check if it's an FFI function
+                    const func_name = expr[0..paren_pos];
+                    if (self.isFFIFunc(func_name)) {
+                        const ret_type = self.ffiReturnType(func_name);
+                        const fmt_spec: []const u8 = if (ret_type == .string) "{s}" else "{d}";
+                        try fmt.appendSlice(self.alloc, fmt_spec);
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        const ac = self.ffiArgCount(func_name);
+                        if (ac == 0) {
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "ffi.{s}()", .{func_name}));
+                        } else {
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "ffi.{s}(0)", .{func_name}));
+                        }
+                        break :blk;
+                    }
+                    // Not FFI — embed as static text
+                    try fmt.appendSlice(self.alloc, expr);
                 } else {
                     // Unknown expression — embed as static text
                     try fmt.appendSlice(self.alloc, expr);
@@ -2318,20 +2353,34 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
             try out.appendSlice(self.alloc, "const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n\n");
             for (self.ffi_funcs.items) |func_name| {
-                // Generate: fn _ffi_NAME(ctx, this, argc, argv) -> JSValue
-                // Calls ffi.NAME with argv[0..] converted from JS numbers, returns result as JS number
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "fn _ffi_{s}(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {{\n" ++
-                    "    var args: [8]c_long = undefined;\n" ++
-                    "    var i: usize = 0;\n" ++
-                    "    while (i < @as(usize, @intCast(@max(0, argc))) and i < 8) : (i += 1) {{\n" ++
-                    "        var v: f64 = 0;\n" ++
-                    "        _ = qjs.JS_ToFloat64(ctx, &v, argv[i]);\n" ++
-                    "        args[i] = @intFromFloat(v);\n" ++
-                    "    }}\n" ++
-                    "    const result = ffi.{s}(args[0]);\n" ++
-                    "    return qjs.JS_NewFloat64(ctx, @floatFromInt(result));\n" ++
-                    "}}\n\n", .{ func_name, func_name }));
+                const argc = self.ffiArgCount(func_name);
+                // Build the C call args: ffi.name() or ffi.name(args[0]) or ffi.name(args[0], args[1])
+                var call_args: std.ArrayListUnmanaged(u8) = .{};
+                for (0..argc) |ai| {
+                    if (ai > 0) try call_args.appendSlice(self.alloc, ", ");
+                    try call_args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "args[{d}]", .{ai}));
+                }
+                if (argc == 0) {
+                    // No args — emit simpler wrapper without arg parsing
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _ffi_{s}(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {{\n" ++
+                        "    const result = ffi.{s}();\n" ++
+                        "    return qjs.JS_NewFloat64(null, @floatFromInt(result));\n" ++
+                        "}}\n\n", .{ func_name, func_name }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _ffi_{s}(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {{\n" ++
+                        "    var args: [8]c_long = undefined;\n" ++
+                        "    var i: usize = 0;\n" ++
+                        "    while (i < @as(usize, @intCast(@max(0, argc))) and i < 8) : (i += 1) {{\n" ++
+                        "        var v: f64 = 0;\n" ++
+                        "        _ = qjs.JS_ToFloat64(ctx, &v, argv[i]);\n" ++
+                        "        args[i] = @intFromFloat(v);\n" ++
+                        "    }}\n" ++
+                        "    const result = ffi.{s}({s});\n" ++
+                        "    return qjs.JS_NewFloat64(ctx, @floatFromInt(result));\n" ++
+                        "}}\n\n", .{ func_name, func_name, call_args.items }));
+                }
             }
         }
 
@@ -2626,19 +2675,43 @@ pub const Generator = struct {
                     .float => "",
                     else => "",
                 };
+                const ffi_call = if (self.ffiArgCount(hook.ffi_func) == 0)
+                    try std.fmt.allocPrint(self.alloc, "ffi.{s}()", .{hook.ffi_func})
+                else
+                    try std.fmt.allocPrint(self.alloc, "ffi.{s}(0)", .{hook.ffi_func});
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "            if (_now - _ffi_timer_{d} >= {d}) {{ {s}({d}, ffi.{s}(0){s}); _ffi_timer_{d} = _now; }}\n",
-                    .{ hi, hook.interval_ms, set_fn, rid, hook.ffi_func, cast, hi }));
+                    "            if (_now - _ffi_timer_{d} >= {d}) {{ {s}({d}, {s}{s}); _ffi_timer_{d} = _now; }}\n",
+                    .{ hi, hook.interval_ms, set_fn, rid, ffi_call, cast, hi }));
             }
             try out.appendSlice(self.alloc, "        }\n");
         }
+        // Check if any dynamic text is per-frame (no state deps — e.g. FFI calls)
+        var has_per_frame_text = false;
+        for (0..self.dyn_count) |di| {
+            if (self.dyn_texts[di].dep_count == 0 and self.dyn_texts[di].has_ref) {
+                has_per_frame_text = true;
+                break;
+            }
+        }
+        if (has_per_frame_text) {
+            // Per-frame expressions exist — always update texts
+            try out.appendSlice(self.alloc,
+                \\
+                \\        _updateDynamicTexts();
+                \\        if (state.isDirty()) state.clearDirty();
+                \\
+            );
+        } else {
+            try out.appendSlice(self.alloc,
+                \\
+                \\        if (state.isDirty()) {
+                \\            _updateDynamicTexts();
+                \\            state.clearDirty();
+                \\        }
+                \\
+            );
+        }
         try out.appendSlice(self.alloc,
-            \\
-            \\
-            \\        if (state.isDirty()) {
-            \\            _updateDynamicTexts();
-            \\            state.clearDirty();
-            \\        }
             \\
             \\        const t2 = @import("std").time.microTimestamp();
             \\        layout.layout(&root, 0, 0, win_w, win_h);

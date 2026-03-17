@@ -1,5 +1,7 @@
 // @ffi <time.h>
+// @ffi <clock_shim.h>
 declare function time(t: number): number;
+declare function clock_ms(): number;
 
 import { Page, Header, Row, Spacer, Title, Status, Alert, Dim, Circle, BigCircle, Pill } from './style.cls';
 import { StatCard } from './StatCard.c';
@@ -71,6 +73,7 @@ function App() {
         <Text fontSize={11} color="#6e7681" noWrap={true}>{`tick: ${tickUs}us`}</Text>
         <Text fontSize={11} color="#6e7681" noWrap={true}>{`layout: ${layoutUs}us`}</Text>
         <Text fontSize={11} color="#6e7681" noWrap={true}>{`paint: ${paintUs}us`}</Text>
+        <Text fontSize={11} color="#58a6ff" noWrap={true}>{`clock: ${clock_ms()}ms`}</Text>
       </Box>
     </C.Page>
   );
