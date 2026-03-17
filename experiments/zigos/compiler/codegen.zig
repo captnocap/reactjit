@@ -425,6 +425,9 @@ pub const Generator = struct {
     comp_instance_count: u32,
     comp_instance_counter: [MAX_COMP_FUNCS]u32, // per-function instance counter for naming
 
+    // compute{} block: raw JS source extracted for QuickJS embedding
+    compute_js: ?[]const u8 = null,
+
     // Compile error diagnostics (set by overflow checks, checked before emission)
     compile_error: ?[]const u8,
 
@@ -434,6 +437,33 @@ pub const Generator = struct {
             self.compile_error = msg;
             std.debug.print("[tsz] compile error: {s}\n", .{msg});
         }
+    }
+
+    /// Extract compute{} block — raw JS for QuickJS embedding.
+    /// Scans source text for <script>...</script> and extracts the JS body.
+    fn extractComputeBlock(self: *Generator) void {
+        const src = self.source;
+        const open_tag = "<script>";
+        const close_tag = "</script>";
+        // Find <script>
+        var i: usize = 0;
+        while (i + open_tag.len <= src.len) : (i += 1) {
+            if (std.mem.eql(u8, src[i .. i + open_tag.len], open_tag)) {
+                const body_start = i + open_tag.len;
+                // Find </script>
+                var j = body_start;
+                while (j + close_tag.len <= src.len) : (j += 1) {
+                    if (std.mem.eql(u8, src[j .. j + close_tag.len], close_tag)) {
+                        self.compute_js = src[body_start..j];
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn isIdentByte(ch: u8) bool {
+        return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
     }
 
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
@@ -821,6 +851,10 @@ pub const Generator = struct {
         // Phase 3.6: Collect utility functions (lowercase, non-App)
         self.pos = 0;
         self.collectUtilFunctions();
+
+        // Phase 3.7: Extract compute{} blocks (JS logic for QuickJS)
+        self.pos = 0;
+        self.extractComputeBlock();
 
         // Phase 4: Find App function and collect useState
         self.pos = 0;
@@ -6823,6 +6857,24 @@ pub const Generator = struct {
             }
         }
 
+        // ── Embedded JS logic from compute{} block ──
+        if (self.compute_js) |raw_js| {
+            try out.appendSlice(self.alloc, "\n// ── Embedded JS logic (from compute{} block) ───────────────\n");
+            try out.appendSlice(self.alloc, "pub const JS_LOGIC =\n");
+
+            // Rewrite setter calls: setFoo(val) → __setState(N, val) / __setStateString(N, val)
+            const rewritten = try self.rewriteSetterCalls(raw_js);
+
+            // Emit as Zig multi-line string
+            var line_iter = std.mem.splitScalar(u8, rewritten, '\n');
+            while (line_iter.next()) |line| {
+                try out.appendSlice(self.alloc, "    \\\\");
+                try out.appendSlice(self.alloc, line);
+                try out.appendSlice(self.alloc, "\n");
+            }
+            try out.appendSlice(self.alloc, ";\n");
+        }
+
         // Post-process: rewrite state slot references to use slot_base offset
         if (self.has_state) {
             const result = try out.toOwnedSlice(self.alloc);
@@ -6830,6 +6882,40 @@ pub const Generator = struct {
         }
 
         return try out.toOwnedSlice(self.alloc);
+    }
+
+    /// Rewrite setter calls in compute{} block JS.
+    /// setFoo(val) → __setState(N, val) for int/float/bool
+    /// setFoo(val) → __setStateString(N, val) for string
+    fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
+        var result: std.ArrayListUnmanaged(u8) = .{};
+        var i: usize = 0;
+        while (i < js.len) {
+            var matched = false;
+            for (0..self.state_count) |si| {
+                const setter = self.state_slots[si].setter;
+                if (i + setter.len + 1 <= js.len and
+                    std.mem.eql(u8, js[i .. i + setter.len], setter) and
+                    js[i + setter.len] == '(')
+                {
+                    // Check it's not part of a larger identifier
+                    if (i > 0 and isIdentByte(js[i - 1])) break;
+
+                    const is_string = std.meta.activeTag(self.state_slots[si].initial) == .string;
+                    const fn_name = if (is_string) "__setStateString" else "__setState";
+                    try result.appendSlice(self.alloc, fn_name);
+                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                    i += setter.len + 1; // skip past "setFoo("
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                try result.append(self.alloc, js[i]);
+                i += 1;
+            }
+        }
+        return try result.toOwnedSlice(self.alloc);
     }
 
     /// Rewrite bare state slot IDs to use slot_base offset in fragment mode.
