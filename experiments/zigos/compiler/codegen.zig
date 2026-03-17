@@ -54,10 +54,17 @@ pub const RouteInfo = struct {
     child_idx: u32,
 };
 
+pub const CondKind = enum {
+    show_hide, // {expr && <A/>} — toggle visibility
+    ternary, // {expr ? <A/> : <B/>} — swap two subtrees
+};
+
 pub const ConditionalInfo = struct {
+    kind: CondKind = .show_hide,
     cond_expr: []const u8,
     arr_name: []const u8,
-    child_idx: u32,
+    true_idx: u32, // child index shown when condition is true
+    false_idx: u32 = 0, // child index shown when condition is false (ternary only)
 };
 
 pub const AppConditional = struct {

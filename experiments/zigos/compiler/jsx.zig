@@ -717,9 +717,10 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
 
         if (self.conditional_count < MAX_CONDITIONALS) {
             self.conditionals[self.conditional_count] = .{
+                .kind = .show_hide,
                 .cond_expr = try self.alloc.dupe(u8, cond_parts.items),
                 .arr_name = "",
-                .child_idx = @intCast(child_exprs.items.len - 1),
+                .true_idx = @intCast(child_exprs.items.len - 1),
             };
             self.conditional_count += 1;
         }

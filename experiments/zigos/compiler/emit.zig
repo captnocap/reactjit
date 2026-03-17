@@ -216,9 +216,19 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         for (0..self.conditional_count) |ci| {
             const c = self.conditionals[ci];
             if (c.arr_name.len == 0) continue;
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "    {s}[{d}].style.display = if {s} .flex else .none;\n",
-                .{ c.arr_name, c.child_idx, c.cond_expr }));
+            switch (c.kind) {
+                .show_hide => {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].style.display = if {s} .flex else .none;\n",
+                        .{ c.arr_name, c.true_idx, c.cond_expr }));
+                },
+                .ternary => {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].style.display = if {s} .flex else .none;\n" ++
+                        "    {s}[{d}].style.display = if {s} .none else .flex;\n",
+                        .{ c.arr_name, c.true_idx, c.cond_expr, c.arr_name, c.false_idx, c.cond_expr }));
+                },
+            }
         }
         if (self.app_cond_count > 0) {
             const root_arr = try std.fmt.allocPrint(self.alloc, "_arr_{d}", .{self.array_counter - 1});
