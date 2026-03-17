@@ -33,7 +33,8 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 
 // ── Guest tree conversion ────────────────────────────────────────────
 
-const MAX_NODES = 4096;
+const MAX_NODES = 16384;
+const INVALID_POOL: usize = std.math.maxInt(usize);
 var node_pool: [MAX_NODES]Node = [_]Node{.{}} ** MAX_NODES;
 var node_count: usize = 0;
 
@@ -44,12 +45,17 @@ fn buildGuestTree(vm: *qjs.VM) ?*Node {
     if (vm.guest_nodes.items.len == 0) return null;
     node_count = 0;
 
+    // Init guest_to_pool mapping to invalid
+    const guest_count = vm.guest_nodes.items.len;
+    for (0..@min(guest_count, MAX_NODES)) |i| {
+        guest_to_pool[i] = INVALID_POOL;
+    }
+
     // BFS traversal ensures all direct children of a node are
-    // contiguous in node_pool (because we process level by level).
+    // contiguous in node_pool.
     var queue_head: usize = 0;
     var queue_tail: usize = 0;
 
-    // Enqueue root
     bfs_queue[queue_tail] = 0;
     queue_tail += 1;
 
@@ -57,8 +63,8 @@ fn buildGuestTree(vm: *qjs.VM) ?*Node {
         const guest_idx = bfs_queue[queue_head];
         queue_head += 1;
 
-        if (guest_idx >= vm.guest_nodes.items.len) continue;
-        if (node_count >= MAX_NODES) break;
+        if (guest_idx >= guest_count) continue;
+        if (node_count >= MAX_NODES - 1) break;
 
         const guest = &vm.guest_nodes.items[guest_idx];
         const pool_idx = node_count;
@@ -86,8 +92,6 @@ fn buildGuestTree(vm: *qjs.VM) ?*Node {
             } else null,
         };
 
-        // Enqueue children — they'll be allocated contiguously
-        // because they're processed in the next BFS batch
         for (guest.child_indices) |child_guest_idx| {
             if (queue_tail < MAX_NODES) {
                 bfs_queue[queue_tail] = child_guest_idx;
@@ -96,14 +100,20 @@ fn buildGuestTree(vm: *qjs.VM) ?*Node {
         }
     }
 
-    // Pass 2: now that all nodes are allocated, wire up children slices.
-    // Each node's children are contiguous in BFS order.
-    // We need to find where each node's children start in the pool.
+    // Pass 2: wire up children slices (bounds-checked).
     for (vm.guest_nodes.items, 0..) |*guest, gi| {
-        if (guest.child_indices.len > 0) {
+        if (guest.child_indices.len > 0 and gi < MAX_NODES) {
             const parent_pool = guest_to_pool[gi];
+            if (parent_pool == INVALID_POOL) continue;
+
             const first_child_pool = guest_to_pool[guest.child_indices[0]];
-            node_pool[parent_pool].children = node_pool[first_child_pool .. first_child_pool + guest.child_indices.len];
+            if (first_child_pool == INVALID_POOL) continue;
+
+            // Verify all children were allocated (contiguous in BFS)
+            const end = first_child_pool + guest.child_indices.len;
+            if (end > node_count) continue;
+
+            node_pool[parent_pool].children = node_pool[first_child_pool..end];
         }
     }
 
@@ -244,7 +254,22 @@ pub fn main() !void {
     var running = true;
     var frame: u32 = 0;
 
+    // Telemetry
+    var fps_frames: u32 = 0;
+    var fps_last_tick: u32 = c.SDL_GetTicks();
+    var fps_display: u32 = 0;
+    var tick_us: u64 = 0;
+    var layout_us: u64 = 0;
+    var tree_us: u64 = 0;
+    var paint_us: u64 = 0;
+    var guest_node_count: usize = 0;
+    var layout_node_count: usize = 0;
+    var title_buf: [256]u8 = undefined;
+
     while (running) {
+        const frame_start = std.time.microTimestamp();
+        _ = frame_start;
+
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
@@ -271,24 +296,87 @@ pub fn main() !void {
             }
         }
 
+        // Tick QuickJS
+        const t0 = std.time.microTimestamp();
         vm.tick();
+        const t1 = std.time.microTimestamp();
+        tick_us = @intCast(@max(0, t1 - t0));
 
         _ = c.SDL_SetRenderDrawColor(renderer, 18, 18, 28, 255);
         _ = c.SDL_RenderClear(renderer);
 
-        if (buildGuestTree(&vm)) |guest_root| {
+        // Build guest tree
+        const t2 = std.time.microTimestamp();
+        const maybe_root = buildGuestTree(&vm);
+        const t3 = std.time.microTimestamp();
+        tree_us = @intCast(@max(0, t3 - t2));
+
+        if (maybe_root) |guest_root| {
+            guest_node_count = vm.guest_nodes.items.len;
+            layout_node_count = node_count;
+
+            // Layout
+            const t4 = std.time.microTimestamp();
             layout.layout(guest_root, 0, 0, win_w, win_h);
-            if (frame == 0) {
-                std.log.info("Tree: {d} nodes, root computed: {d:.0}x{d:.0}, children: {d}", .{
-                    node_count, guest_root.computed.w, guest_root.computed.h, guest_root.children.len,
-                });
-            }
+            const t5 = std.time.microTimestamp();
+            layout_us = @intCast(@max(0, t5 - t4));
+
+            // Paint
+            const t6 = std.time.microTimestamp();
             paintNode(renderer, &text_engine, guest_root);
-        } else {
-            if (frame == 0) std.log.info("No guest tree (guest_nodes={d})", .{vm.guest_nodes.items.len});
+            const t7 = std.time.microTimestamp();
+            paint_us = @intCast(@max(0, t7 - t6));
+        }
+
+        // Telemetry overlay (bottom bar)
+        {
+            const bar_h: f32 = 24;
+            const bar_y = win_h - bar_h;
+            _ = c.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+            var bar_rect = c.SDL_Rect{ .x = 0, .y = @intFromFloat(bar_y), .w = @intFromFloat(win_w), .h = @intFromFloat(bar_h) };
+            _ = c.SDL_RenderFillRect(renderer, &bar_rect);
+
+            // Read RSS from /proc/self/statm
+            const rss_kb = readRssKb();
+
+            var telem_buf: [512]u8 = undefined;
+            const telem_str = std.fmt.bufPrint(&telem_buf, "FPS: {d}  |  tick: {d}us  tree: {d}us  layout: {d}us  paint: {d}us  |  nodes: {d}/{d}  |  RSS: {d}KB", .{
+                fps_display, tick_us, tree_us, layout_us, paint_us,
+                guest_node_count, layout_node_count, rss_kb,
+            }) catch "???";
+            text_engine.drawText(telem_str, 8, bar_y + 4, 13, Color.rgb(180, 220, 180));
         }
 
         c.SDL_RenderPresent(renderer);
+
+        // FPS counter
+        fps_frames += 1;
+        const now_tick = c.SDL_GetTicks();
+        if (now_tick - fps_last_tick >= 1000) {
+            fps_display = fps_frames;
+            fps_frames = 0;
+            fps_last_tick = now_tick;
+
+            // Update window title
+            const title = std.fmt.bufPrint(&title_buf, "ZigOS Shell — {d} FPS  {d} nodes  {d}KB RSS\x00", .{
+                fps_display, layout_node_count, readRssKb(),
+            }) catch "ZigOS Shell\x00";
+            c.SDL_SetWindowTitle(window, title.ptr);
+        }
+
         frame +%= 1;
     }
 }
+
+fn readRssKb() u64 {
+    var buf: [128]u8 = undefined;
+    const f = std.fs.openFileAbsolute("/proc/self/statm", .{}) catch return 0;
+    defer f.close();
+    const n = f.readAll(&buf) catch return 0;
+    var iter = std.mem.splitScalar(u8, buf[0..n], ' ');
+    _ = iter.next(); // skip size
+    const resident_str = iter.next() orelse return 0;
+    const pages = std.fmt.parseInt(u64, resident_str, 10) catch return 0;
+    return pages * 4;
+}
+
