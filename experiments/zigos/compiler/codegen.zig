@@ -87,6 +87,16 @@ const DynText = struct {
     dep_count: u32,
 };
 
+const MAX_FFI_HOOKS = 16;
+
+const FFIHook = struct {
+    getter: []const u8,      // state getter name (e.g., "unixTime")
+    ffi_func: []const u8,    // C function name (e.g., "time")
+    interval_ms: u32,        // poll interval
+    return_type: StateType,  // inferred from declare function return type
+    slot_id: u32,            // assigned state slot index
+};
+
 const CompFunc = struct {
     name: []const u8,
     func_source: []const u8,
@@ -168,6 +178,11 @@ pub const Generator = struct {
     ffi_headers: std.ArrayListUnmanaged([]const u8),
     ffi_libs: std.ArrayListUnmanaged([]const u8),
     ffi_funcs: std.ArrayListUnmanaged([]const u8),
+    ffi_return_types: std.ArrayListUnmanaged(StateType), // parallel to ffi_funcs
+
+    // useFFI hooks (Zig-side polling)
+    ffi_hooks: [MAX_FFI_HOOKS]FFIHook,
+    ffi_hook_count: u32,
 
     // Embedded JS logic (<script> or .script.tsz)
     compute_js: ?[]const u8 = null,
@@ -207,6 +222,9 @@ pub const Generator = struct {
             .ffi_headers = .{},
             .ffi_libs = .{},
             .ffi_funcs = .{},
+            .ffi_return_types = .{},
+            .ffi_hooks = undefined,
+            .ffi_hook_count = 0,
             .local_vars = undefined,
             .local_count = 0,
             .components = undefined,
@@ -324,11 +342,48 @@ pub const Generator = struct {
                     self.advance_token();
                     if (self.curKind() == .identifier) {
                         self.ffi_funcs.append(self.alloc, self.curText()) catch {};
+                        // Scan forward to find return type: declare function name(...): TYPE
+                        var ret_type: StateType = .int;
+                        const saved = self.pos;
+                        self.advance_token(); // skip name
+                        // Skip (...)
+                        if (self.curKind() == .lparen) {
+                            var depth: u32 = 1;
+                            self.advance_token();
+                            while (depth > 0 and self.curKind() != .eof) {
+                                if (self.curKind() == .lparen) depth += 1;
+                                if (self.curKind() == .rparen) depth -= 1;
+                                if (depth > 0) self.advance_token();
+                            }
+                            if (self.curKind() == .rparen) self.advance_token();
+                        }
+                        // Look for : TYPE
+                        if (self.curKind() == .colon) {
+                            self.advance_token();
+                            if (self.curKind() == .identifier) {
+                                const type_name = self.curText();
+                                if (std.mem.eql(u8, type_name, "string")) ret_type = .string
+                                else if (std.mem.eql(u8, type_name, "boolean")) ret_type = .boolean
+                                else if (std.mem.eql(u8, type_name, "number")) ret_type = .int;
+                            }
+                        }
+                        self.pos = saved;
+                        self.ffi_return_types.append(self.alloc, ret_type) catch {};
                     }
                 }
             }
             self.advance_token();
         }
+    }
+
+    fn ffiReturnType(self: *Generator, name: []const u8) StateType {
+        for (self.ffi_funcs.items, 0..) |f, i| {
+            if (std.mem.eql(u8, f, name)) {
+                if (i < self.ffi_return_types.items.len) return self.ffi_return_types.items[i];
+                return .int;
+            }
+        }
+        return .int;
     }
 
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
@@ -617,6 +672,64 @@ pub const Generator = struct {
                     if (self.curKind() == .identifier) {
                         const getter = self.curText();
                         self.advance_token();
+
+                        // useFFI: const [name] = useFFI(func, interval)
+                        if (self.curKind() == .rbracket) {
+                            self.advance_token(); // ]
+                            if (self.curKind() == .equals) self.advance_token(); // =
+                            if (self.isIdent("useFFI")) {
+                                self.advance_token(); // useFFI
+                                if (self.curKind() == .lparen) self.advance_token(); // (
+                                var ffi_func_name: []const u8 = "";
+                                if (self.curKind() == .identifier) {
+                                    ffi_func_name = self.curText();
+                                    self.advance_token();
+                                }
+                                if (self.curKind() == .comma) self.advance_token();
+                                var interval_ms: u32 = 1000;
+                                if (self.curKind() == .number) {
+                                    interval_ms = std.fmt.parseInt(u32, self.curText(), 10) catch 1000;
+                                    self.advance_token();
+                                }
+                                if (self.curKind() == .rparen) self.advance_token();
+
+                                // Create a state slot for this hook
+                                const ret_type = self.ffiReturnType(ffi_func_name);
+                                const initial: StateInitial = switch (ret_type) {
+                                    .string => .{ .string = "" },
+                                    .boolean => .{ .boolean = false },
+                                    .float => .{ .float = 0.0 },
+                                    else => .{ .int = 0 },
+                                };
+                                if (self.state_count < MAX_STATE_SLOTS) {
+                                    const slot_id = self.state_count;
+                                    self.state_slots[slot_id] = .{
+                                        .getter = getter,
+                                        .setter = "",
+                                        .initial = initial,
+                                    };
+                                    self.state_count += 1;
+                                    self.has_state = true;
+
+                                    if (self.ffi_hook_count < MAX_FFI_HOOKS) {
+                                        self.ffi_hooks[self.ffi_hook_count] = .{
+                                            .getter = getter,
+                                            .ffi_func = ffi_func_name,
+                                            .interval_ms = interval_ms,
+                                            .return_type = ret_type,
+                                            .slot_id = slot_id,
+                                        };
+                                        self.ffi_hook_count += 1;
+                                    }
+                                }
+                                if (self.curKind() == .semicolon) self.advance_token();
+                                continue;
+                            }
+                            // Not useFFI after ] = — skip
+                            continue;
+                        }
+
+                        // useState: const [getter, setter] = useState(initial)
                         if (self.curKind() == .comma) self.advance_token();
                         if (self.curKind() == .identifier) {
                             const setter = self.curText();
@@ -746,6 +859,7 @@ pub const Generator = struct {
                 var matched = false;
                 for (0..self.state_count) |si| {
                     const setter = self.state_slots[si].setter;
+                    if (setter.len == 0) continue; // useFFI slots have no setter
                     if (ii + setter.len + 1 <= line.len and
                         std.mem.eql(u8, line[ii .. ii + setter.len], setter) and
                         line[ii + setter.len] == '(')
@@ -2461,6 +2575,14 @@ pub const Generator = struct {
             \\    var fps_frames: u32 = 0;
             \\    var fps_last: u32 = c_imports.SDL_GetTicks();
             \\
+        );
+        // useFFI timer variables
+        for (0..self.ffi_hook_count) |hi| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    var _ffi_timer_{d}: u32 = 0;\n", .{hi}));
+        }
+        try out.appendSlice(self.alloc,
+            \\
             \\    while (running) {
             \\        var event: c_imports.SDL_Event = undefined;
             \\        while (c_imports.SDL_PollEvent(&event) != 0) {
@@ -2484,6 +2606,34 @@ pub const Generator = struct {
             \\        qjs_runtime.tick();
             \\        const t1 = @import("std").time.microTimestamp();
             \\        qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
+            \\
+        );
+        // useFFI polling — call C functions on interval, write to state slots
+        if (self.ffi_hook_count > 0) {
+            try out.appendSlice(self.alloc, "        {\n            const _now = c_imports.SDL_GetTicks();\n");
+            for (0..self.ffi_hook_count) |hi| {
+                const hook = self.ffi_hooks[hi];
+                const rid = self.regularSlotId(hook.slot_id);
+                const set_fn = switch (hook.return_type) {
+                    .string => "state.setSlotString",
+                    .boolean => "state.setSlotBool",
+                    .float => "state.setSlotFloat",
+                    else => "state.setSlot",
+                };
+                const cast = switch (hook.return_type) {
+                    .string => "",
+                    .boolean => " != 0",
+                    .float => "",
+                    else => "",
+                };
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "            if (_now - _ffi_timer_{d} >= {d}) {{ {s}({d}, ffi.{s}(0){s}); _ffi_timer_{d} = _now; }}\n",
+                    .{ hi, hook.interval_ms, set_fn, rid, hook.ffi_func, cast, hi }));
+            }
+            try out.appendSlice(self.alloc, "        }\n");
+        }
+        try out.appendSlice(self.alloc,
+            \\
             \\
             \\        if (state.isDirty()) {
             \\            _updateDynamicTexts();

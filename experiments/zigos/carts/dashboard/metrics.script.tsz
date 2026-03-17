@@ -41,7 +41,6 @@ function pushMetrics() {
 }
 
 setInterval(function() {
-  setUptime(time(0));
   pushMetrics();
 }, 1000);
 

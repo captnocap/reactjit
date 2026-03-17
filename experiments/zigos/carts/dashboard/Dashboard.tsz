@@ -5,7 +5,7 @@ import { Page, Header, Row, Spacer, Title, Status, Alert, Dim, Circle, BigCircle
 import { StatCard } from './StatCard.c';
 import { metrics } from './metrics.script';
 
-const [uptime, setUptime] = useState(0);
+const [uptime] = useFFI(time, 1000);
 const [cpu, setCpu] = useState(0);
 const [memUsed, setMemUsed] = useState(0);
 const [memTotal, setMemTotal] = useState(8192);
