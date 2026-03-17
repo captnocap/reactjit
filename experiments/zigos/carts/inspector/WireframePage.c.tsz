@@ -1,0 +1,170 @@
+import {
+  WireframeSurface, WireframeViewport, WireframeRoot,
+  WireframeNodeD0, WireframeNodeD1, WireframeNodeD2, WireframeNodeD3, WireframeNodeD4, WireframeNodeD5,
+  WireframeNodeSelected, WireframeNodeText, WireframeNodeHot, WireframeNodeLabel,
+  WireframeRow,
+  WireframeControlBar, WireframeFlexPillActive, WireframeFlexDotActive, WireframeFlexLabel,
+  WireframeScaleLabel, WireframeHint,
+  FlexAllocSection, FlexAllocHeader, FlexAllocSummary,
+  FlexAllocRow, FlexAllocLabel, FlexAllocBarBg, FlexAllocBasis, FlexAllocGrow, FlexAllocValue,
+} from './style_cls';
+
+function WireframePage() {
+  return (
+    <C.WireframeSurface>
+
+      <C.WireframeViewport>
+        <C.WireframeRoot>
+          <C.WireframeNodeLabel>RootNode</C.WireframeNodeLabel>
+
+          <C.WireframeNodeD0>
+            <C.WireframeNodeLabel>Panel</C.WireframeNodeLabel>
+
+            <C.WireframeNodeD1 style={{ height: 28 }}>
+              <C.WireframeNodeLabel>TabBar</C.WireframeNodeLabel>
+              <C.WireframeRow>
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+                <C.WireframeNodeD2 style={{ height: 16 }} />
+              </C.WireframeRow>
+            </C.WireframeNodeD1>
+
+            <C.WireframeRow>
+              <C.WireframeNodeD1>
+                <C.WireframeNodeLabel>Tree</C.WireframeNodeLabel>
+
+                <C.WireframeNodeD2 style={{ height: 24 }}>
+                  <C.WireframeNodeLabel>Toolbar</C.WireframeNodeLabel>
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeD2 style={{ height: 18 }}>
+                  <C.WireframeNodeLabel>ViewBar</C.WireframeNodeLabel>
+                  <C.WireframeRow>
+                    <C.WireframeNodeD3 style={{ height: 10 }} />
+                    <C.WireframeNodeD3 style={{ height: 10 }} />
+                    <C.WireframeNodeD3 style={{ height: 10 }} />
+                  </C.WireframeRow>
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeHot>
+                  <C.WireframeNodeLabel>ScrollView</C.WireframeNodeLabel>
+                  <C.WireframeNodeD3 style={{ height: 16 }}>
+                    <C.WireframeNodeText />
+                  </C.WireframeNodeD3>
+                  <C.WireframeNodeSelected style={{ height: 16 }}>
+                    <C.WireframeNodeLabel>TreeLine</C.WireframeNodeLabel>
+                  </C.WireframeNodeSelected>
+                  <C.WireframeNodeD3 style={{ height: 16 }}>
+                    <C.WireframeNodeText />
+                  </C.WireframeNodeD3>
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                </C.WireframeNodeHot>
+              </C.WireframeNodeD1>
+
+              <C.WireframeNodeD1>
+                <C.WireframeNodeLabel>DetailPane</C.WireframeNodeLabel>
+
+                <C.WireframeNodeD2>
+                  <C.WireframeNodeLabel>HeroCard</C.WireframeNodeLabel>
+                  <C.WireframeNodeText />
+                  <C.WireframeRow>
+                    <C.WireframeNodeD3 style={{ height: 14 }} />
+                    <C.WireframeNodeD3 style={{ height: 14 }} />
+                    <C.WireframeNodeD3 style={{ height: 14 }} />
+                  </C.WireframeRow>
+                  <C.WireframeNodeText />
+                  <C.WireframeNodeText />
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeD2>
+                  <C.WireframeNodeLabel>BoxModel</C.WireframeNodeLabel>
+                  <C.WireframeNodeD3>
+                    <C.WireframeNodeD4>
+                      <C.WireframeNodeD5 style={{ height: 20 }} />
+                    </C.WireframeNodeD4>
+                  </C.WireframeNodeD3>
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeD2>
+                  <C.WireframeNodeLabel>FlexLayout</C.WireframeNodeLabel>
+                  <C.WireframeRow>
+                    <C.WireframeNodeD3 style={{ height: 40 }} />
+                    <C.WireframeNodeD3 style={{ height: 40 }} />
+                    <C.WireframeNodeD3 style={{ height: 40 }} />
+                  </C.WireframeRow>
+                  <C.WireframeNodeD4>
+                    <C.WireframeRow>
+                      <C.WireframeNodeD5 style={{ height: 32 }} />
+                      <C.WireframeNodeD5 style={{ height: 32 }} />
+                    </C.WireframeRow>
+                  </C.WireframeNodeD4>
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeD2>
+                  <C.WireframeNodeLabel>Styles</C.WireframeNodeLabel>
+                  <C.WireframeNodeD3 style={{ height: 20 }} />
+                  <C.WireframeNodeD3 style={{ height: 20 }} />
+                  <C.WireframeNodeD3 style={{ height: 20 }} />
+                  <C.WireframeNodeD3 style={{ height: 20 }} />
+                  <C.WireframeNodeD3 style={{ height: 20 }} />
+                </C.WireframeNodeD2>
+
+                <C.WireframeNodeD2>
+                  <C.WireframeNodeLabel>Children</C.WireframeNodeLabel>
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                  <C.WireframeNodeD3 style={{ height: 16 }} />
+                </C.WireframeNodeD2>
+
+              </C.WireframeNodeD1>
+            </C.WireframeRow>
+
+          </C.WireframeNodeD0>
+        </C.WireframeRoot>
+      </C.WireframeViewport>
+
+      <C.FlexAllocSection>
+        <C.FlexAllocHeader>Flex Allocation: ElementsPage (row)</C.FlexAllocHeader>
+        <C.FlexAllocSummary>{`810px | basis:330+0 | free:480 | 2 items`}</C.FlexAllocSummary>
+
+        <C.FlexAllocRow>
+          <C.FlexAllocLabel>Tree</C.FlexAllocLabel>
+          <C.FlexAllocBarBg>
+            <C.FlexAllocBasis style={{ flexGrow: 330 }} />
+          </C.FlexAllocBarBg>
+          <C.FlexAllocValue>330px</C.FlexAllocValue>
+        </C.FlexAllocRow>
+
+        <C.FlexAllocRow>
+          <C.FlexAllocLabel>Detail</C.FlexAllocLabel>
+          <C.FlexAllocBarBg>
+            <C.FlexAllocBasis style={{ flexGrow: 0 }} />
+            <C.FlexAllocGrow style={{ flexGrow: 480 }} />
+          </C.FlexAllocBarBg>
+          <C.FlexAllocValue>{`0+480px`}</C.FlexAllocValue>
+        </C.FlexAllocRow>
+      </C.FlexAllocSection>
+
+      <C.WireframeControlBar>
+        <C.WireframeFlexPillActive>
+          <C.WireframeFlexDotActive>{`\u25CF`}</C.WireframeFlexDotActive>
+          <C.WireframeFlexLabel>Flex</C.WireframeFlexLabel>
+        </C.WireframeFlexPillActive>
+        <C.WireframeHint>click a flex container to see distribution</C.WireframeHint>
+        <C.WireframeScaleLabel>100%</C.WireframeScaleLabel>
+      </C.WireframeControlBar>
+
+    </C.WireframeSurface>
+  );
+}

@@ -14,6 +14,16 @@ import {
   FlexItemDetail,
   FlexItemLabel,
   PropertyList,
+  BoxModelContainer,
+  BoxModelMargin, BoxModelMarginLabel, BoxModelMarginRow,
+  BoxModelPadding, BoxModelPaddingLabel, BoxModelPaddingRow,
+  BoxModelContent, BoxModelContentLabel, BoxModelLayerLabel,
+  BoxModelValue, BoxModelValueDim,
+  ProvenanceRow, ProvenanceAxis, ProvenanceChain, ProvenanceResult, ProvenanceSource,
+  ChildrenList, ChildRow, ChildName, ChildDims,
+  HandlersList, HandlerRow, HandlerName, HandlerSnippet,
+  ParentLink, ParentArrow, ParentName, ParentDims,
+  AddPropertyBtn, AddPropertyLabel,
 } from './style_cls';
 import { Badge } from './Badge.c';
 import { DetailSection } from './DetailSection.c';
@@ -31,9 +41,77 @@ function DetailPane() {
             <Badge label="selected" tone={2} />
             <Badge label="flexGrow 1" tone={0} />
           </C.HeroRow>
-          <C.HeroCopy>Right-hand surface for flex diagnostics, style attributes, and node context. Static for now, structured for live data later.</C.HeroCopy>
+          <C.HeroCopy>Right-hand surface for flex diagnostics, style attributes, and node context.</C.HeroCopy>
           <C.HeroCode>Panel / ElementsPage / DetailPane</C.HeroCode>
+          <C.ParentLink>
+            <C.ParentArrow>{`\u2190`}</C.ParentArrow>
+            <C.ParentName>{'<ElementsPage>'}</C.ParentName>
+            <C.ParentDims>810x600</C.ParentDims>
+          </C.ParentLink>
         </C.HeroCard>
+
+        <DetailSection title="Box Model" hint="margin / padding / content">
+          <C.BoxModelContainer>
+            <C.BoxModelMargin>
+              <C.BoxModelLayerLabel>margin</C.BoxModelLayerLabel>
+              <C.BoxModelMarginRow>
+                <C.BoxModelValueDim>0</C.BoxModelValueDim>
+                <C.BoxModelMarginLabel>top: 0</C.BoxModelMarginLabel>
+                <C.BoxModelValueDim>0</C.BoxModelValueDim>
+              </C.BoxModelMarginRow>
+              <C.BoxModelPadding>
+                <C.BoxModelLayerLabel>padding</C.BoxModelLayerLabel>
+                <C.BoxModelPaddingRow>
+                  <C.BoxModelValueDim>14</C.BoxModelValueDim>
+                  <C.BoxModelPaddingLabel>top: 14</C.BoxModelPaddingLabel>
+                  <C.BoxModelValueDim>14</C.BoxModelValueDim>
+                </C.BoxModelPaddingRow>
+                <C.BoxModelContent>
+                  <C.BoxModelContentLabel>480 x 572</C.BoxModelContentLabel>
+                </C.BoxModelContent>
+                <C.BoxModelPaddingRow>
+                  <C.BoxModelValueDim>14</C.BoxModelValueDim>
+                  <C.BoxModelPaddingLabel>bottom: 14</C.BoxModelPaddingLabel>
+                  <C.BoxModelValueDim>14</C.BoxModelValueDim>
+                </C.BoxModelPaddingRow>
+              </C.BoxModelPadding>
+              <C.BoxModelMarginRow>
+                <C.BoxModelValueDim>0</C.BoxModelValueDim>
+                <C.BoxModelMarginLabel>bottom: 0</C.BoxModelMarginLabel>
+                <C.BoxModelValueDim>0</C.BoxModelValueDim>
+              </C.BoxModelMarginRow>
+            </C.BoxModelMargin>
+          </C.BoxModelContainer>
+        </DetailSection>
+
+        <DetailSection title="Sizing Provenance" hint="how width and height were derived">
+          <C.ProvenanceRow>
+            <C.ProvenanceAxis>W</C.ProvenanceAxis>
+            <C.ProvenanceChain>{`flex: parent 810 \u2192 basis 0 + grow 1 \u2192 free 480 \u2192`}</C.ProvenanceChain>
+            <C.ProvenanceResult>480px</C.ProvenanceResult>
+          </C.ProvenanceRow>
+          <C.ProvenanceRow>
+            <C.ProvenanceSource>{`  flexGrow: 1, flexBasis: 0, parent inner: 810 - tree 330 = 480`}</C.ProvenanceSource>
+          </C.ProvenanceRow>
+          <C.ProvenanceRow>
+            <C.ProvenanceAxis>H</C.ProvenanceAxis>
+            <C.ProvenanceChain>{`parent: outer 638 \u2192 padding 38 \u2192 inner 600 \u2192`}</C.ProvenanceChain>
+            <C.ProvenanceResult>600px</C.ProvenanceResult>
+          </C.ProvenanceRow>
+          <C.ProvenanceRow>
+            <C.ProvenanceSource>{`  stretch cross-axis: parent column height minus tab bar`}</C.ProvenanceSource>
+          </C.ProvenanceRow>
+          <C.ProvenanceRow>
+            <C.ProvenanceAxis>X</C.ProvenanceAxis>
+            <C.ProvenanceChain>{`tree 330 + divider 1 \u2192`}</C.ProvenanceChain>
+            <C.ProvenanceResult>331</C.ProvenanceResult>
+          </C.ProvenanceRow>
+          <C.ProvenanceRow>
+            <C.ProvenanceAxis>Y</C.ProvenanceAxis>
+            <C.ProvenanceChain>{`tab bar 38 \u2192`}</C.ProvenanceChain>
+            <C.ProvenanceResult>38</C.ProvenanceResult>
+          </C.ProvenanceRow>
+        </DetailSection>
 
         <DetailSection title="Flex Layout" hint="split-view composition">
           <C.MetricGrid>
@@ -54,23 +132,50 @@ function DetailPane() {
           </C.FlexPreview>
         </DetailSection>
 
-        <DetailSection title="Style Attributes" hint="grouped rows, no god file">
+        <DetailSection title="Style Attributes" hint="editable properties">
           <C.PropertyList>
             <PropertyRow name="overflow" value="scroll" note="detail surface owns its own vertical history" />
             <PropertyRow name="padding" value="14" note="single content inset for section rhythm" />
             <PropertyRow name="backgroundColor" value="#101523" note="section card tone" accent={1} />
             <PropertyRow name="borderRadius" value="12" note="panel card rounding" />
             <PropertyRow name="borderColor" value="#1c2437" note="quiet separators for nested cards" />
+            <PropertyRow name="flexGrow" value="1" note="fills remaining horizontal space" />
+            <PropertyRow name="flexBasis" value="0" note="starts from zero, grows into allocation" />
+          </C.PropertyList>
+          <C.AddPropertyBtn>
+            <C.AddPropertyLabel>[+ add property]</C.AddPropertyLabel>
+          </C.AddPropertyBtn>
+        </DetailSection>
+
+        <DetailSection title="Children" hint="first 8 of 12 children">
+          <C.ChildrenList>
+            <C.ChildRow><C.ChildName>{'<HeroCard>'}</C.ChildName><C.ChildDims>452x86</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x168</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x142</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<DetailSection>'}</C.ChildName><C.ChildDims>452x118</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<MetricGrid>'}</C.ChildName><C.ChildDims>452x62</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<FlexPreview>'}</C.ChildName><C.ChildDims>452x84</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<PropertyList>'}</C.ChildName><C.ChildDims>452x204</C.ChildDims></C.ChildRow>
+            <C.ChildRow><C.ChildName>{'<PropertyList>'}</C.ChildName><C.ChildDims>452x128</C.ChildDims></C.ChildRow>
+          </C.ChildrenList>
+        </DetailSection>
+
+        <DetailSection title="Handlers" hint="event callbacks">
+          <C.HandlersList>
+            <C.HandlerRow><C.HandlerName>onScroll</C.HandlerName><C.HandlerSnippet>{`(e) => updateScrollY(e.y)`}</C.HandlerSnippet></C.HandlerRow>
+            <C.HandlerRow><C.HandlerName>onLayout</C.HandlerName><C.HandlerSnippet>{`(e) => measureContent(e)`}</C.HandlerSnippet></C.HandlerRow>
+          </C.HandlersList>
+        </DetailSection>
+
+        <DetailSection title="Structure" hint="what this node owns">
+          <C.PropertyList>
+            <PropertyRow name="parent" value="<ElementsPage>" note="split shell that owns the left and right panes" />
+            <PropertyRow name="children" value="12 nodes" note="hero card, sections, metrics, lists" />
+            <PropertyRow name="render count" value="8" note="reactive — re-rendered on selection change" accent={1} />
+            <PropertyRow name="node id" value="#42" note="stable runtime identifier" />
           </C.PropertyList>
         </DetailSection>
 
-        <DetailSection title="Structure" hint="what this page is responsible for">
-          <C.PropertyList>
-            <PropertyRow name="parent" value="<ElementsPage>" note="split shell that owns the left and right panes" />
-            <PropertyRow name="children" value="HeroCard + Sections" note="composed from small static components" />
-            <PropertyRow name="future data" value="selection, flex, styles" note="runtime hooks can hydrate these rows later" accent={1} />
-          </C.PropertyList>
-        </DetailSection>
       </C.DetailStack>
     </C.DetailPaneScroll>
   );
