@@ -290,6 +290,13 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
         // Component prop resolution
         if (self.findProp(name)) |prop_val| {
             self.advance_token();
+            // If we're in color context and the prop value is a hex color string, convert it
+            if (self.emit_colors_as_rgb and prop_val.len >= 2 and (prop_val[0] == '"' or prop_val[0] == '\'')) {
+                const inner = prop_val[1 .. prop_val.len - 1];
+                if (inner.len > 0 and (inner[0] == '#' or attrs.namedColor(inner) != null)) {
+                    return try attrs.parseColorValue(self, inner);
+                }
+            }
             return prop_val;
         }
         // State getter
