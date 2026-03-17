@@ -31,7 +31,7 @@ function App() {
         <C.Status>{statusText}</C.Status>
         <C.Spacer />
         <C.Alert>{alertText}</C.Alert>
-        <C.Dim>{`Uptime: ${uptime}s`}</C.Dim>
+        <Text fontSize={12} color="#6e7681" noWrap={true}>{`Uptime: ${uptime}s`}</Text>
       </C.Header>
 
       <C.Row>

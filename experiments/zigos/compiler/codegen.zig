@@ -2787,6 +2787,7 @@ pub const Generator = struct {
         var letter_spacing: []const u8 = "";
         var line_height_val: []const u8 = "";
         var number_of_lines: []const u8 = "";
+        var no_wrap: bool = false;
         var color_str: []const u8 = "";
         var src_str: []const u8 = "";
         var on_press_start: ?u32 = null;
@@ -2857,6 +2858,9 @@ pub const Generator = struct {
                         line_height_val = try self.parseExprAttr();
                     } else if (std.mem.eql(u8, attr_name, "numberOfLines")) {
                         number_of_lines = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "noWrap")) {
+                        try self.skipAttrValue();
+                        no_wrap = true;
                     } else if (std.mem.eql(u8, attr_name, "color")) {
                         color_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "src")) {
@@ -3356,6 +3360,12 @@ pub const Generator = struct {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".font_size = ");
             try fields.appendSlice(self.alloc, font_size);
+        }
+
+        // No wrap
+        if (no_wrap) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".no_wrap = true");
         }
 
         // Debug name (for test queries)
