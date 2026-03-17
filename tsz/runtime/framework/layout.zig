@@ -158,6 +158,9 @@ pub const Node = struct {
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
     _parent_inner_h: ?f32 = null,
+    _cache_iw: f32 = -1,
+    _cache_ih: f32 = -1,
+    _cache_ih_avail: f32 = -1,
 };
 pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) TextMetrics;
 pub const MeasureImageFn = *const fn (path: []const u8) ImageDims;
@@ -318,14 +321,82 @@ fn measureNodeText(node: *Node) TextMetrics {
     return measureNodeTextW(node, 0);
 }
 
+// ── Text measurement cache ──────────────────────────────────────
+// Avoids redundant FreeType calls during estimation + layout.
+// Keyed on (text_ptr, text_len, font_size, maxWidth_bits).
+// Direct-mapped (hash & mask) for speed. Collisions just re-measure.
+
+const TEXT_CACHE_SIZE = 1024; // must be power of 2
+const TEXT_CACHE_MASK = TEXT_CACHE_SIZE - 1;
+
+const TextCacheEntry = struct {
+    text_ptr: usize = 0,
+    text_len: usize = 0,
+    font_size: u16 = 0,
+    max_width_bits: u32 = 0,
+    result: TextMetrics = .{},
+    valid: bool = false,
+};
+
+var textCache: [TEXT_CACHE_SIZE]TextCacheEntry = [_]TextCacheEntry{.{}} ** TEXT_CACHE_SIZE;
+
+fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bits: u32) usize {
+    // FNV-1a style hash
+    var h: usize = 0x811c9dc5;
+    h ^= text_ptr;
+    h *%= 0x01000193;
+    h ^= text_len;
+    h *%= 0x01000193;
+    h ^= font_size;
+    h *%= 0x01000193;
+    h ^= max_width_bits;
+    h *%= 0x01000193;
+    return h & TEXT_CACHE_MASK;
+}
+
 fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
-    if (node.text != null and measureFn != null) {
-        return measureFn.?(node.text.?, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap);
+    if (node.text == null or measureFn == null) {
+        return .{ .width = 0, .height = 0, .ascent = 0 };
     }
-    return .{ .width = 0, .height = 0, .ascent = 0 };
+    const txt = node.text.?;
+    const text_ptr = @intFromPtr(txt.ptr);
+    const text_len = txt.len;
+    const mw_bits: u32 = @bitCast(@as(f32, maxWidth));
+    const idx = textCacheHash(text_ptr, text_len, node.font_size, mw_bits);
+
+    const entry = &textCache[idx];
+    if (entry.valid and entry.text_ptr == text_ptr and entry.text_len == text_len and
+        entry.font_size == node.font_size and entry.max_width_bits == mw_bits)
+    {
+        return entry.result;
+    }
+
+    const result = measureFn.?(txt, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap);
+    entry.* = .{
+        .text_ptr = text_ptr,
+        .text_len = text_len,
+        .font_size = node.font_size,
+        .max_width_bits = mw_bits,
+        .result = result,
+        .valid = true,
+    };
+    return result;
+}
+
+fn invalidateTextCache() void {
+    for (&textCache) |*entry| {
+        entry.valid = false;
+    }
 }
 
 fn estimateIntrinsicWidth(node: *Node) f32 {
+    if (node._cache_iw >= 0) return node._cache_iw;
+    const result = estimateIntrinsicWidthUncached(node);
+    node._cache_iw = result;
+    return result;
+}
+
+fn estimateIntrinsicWidthUncached(node: *Node) f32 {
     const s = node.style;
     if (s.width != null) {
         return s.width.?;
@@ -373,6 +444,14 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
 }
 
 fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
+    if (node._cache_ih >= 0 and node._cache_ih_avail == availableWidth) return node._cache_ih;
+    const result = estimateIntrinsicHeightUncached(node, availableWidth);
+    node._cache_ih = result;
+    node._cache_ih_avail = availableWidth;
+    return result;
+}
+
+fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     const s = node.style;
     if (s.height != null) {
         return s.height.?;
@@ -578,18 +657,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const @"align" = s.align_items;
     const mainSize = if (isRow) innerW else innerH;
     const MAX_CHILDREN = 512;
-    var childBasis = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childGrow = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childShrink = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainSize = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossSize = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
-    var visibleIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var childBasis: [MAX_CHILDREN]f32 = undefined;
+    var childGrow: [MAX_CHILDREN]f32 = undefined;
+    var childShrink: [MAX_CHILDREN]f32 = undefined;
+    var childMainSize: [MAX_CHILDREN]f32 = undefined;
+    var childCrossSize: [MAX_CHILDREN]f32 = undefined;
+    var childMainMarginStart: [MAX_CHILDREN]f32 = undefined;
+    var childMainMarginEnd: [MAX_CHILDREN]f32 = undefined;
+    var childCrossMarginStart: [MAX_CHILDREN]f32 = undefined;
+    var childCrossMarginEnd: [MAX_CHILDREN]f32 = undefined;
+    var visibleIndices: [MAX_CHILDREN]usize = undefined;
     var visibleCount: usize = 0;
-    var absoluteIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var absoluteIndices: [MAX_CHILDREN]usize = undefined;
     var absoluteCount: usize = 0;
     {
         var i: usize = 0;
@@ -1082,7 +1161,18 @@ fn resolveAlign(self: AlignSelf, parent: AlignItems) AlignItems {
 
 pub fn layout(root: *Node, x: f32, y: f32, w: f32, h: f32) void {
     layoutCount = 0;
+    invalidateTextCache();
+    invalidateCaches(root);
     root._flex_w = w;
     root._stretch_h = h;
     layoutNode(root, x, y, w, h);
+}
+
+fn invalidateCaches(node: *Node) void {
+    node._cache_iw = -1;
+    node._cache_ih = -1;
+    node._cache_ih_avail = -1;
+    for (node.children) |*child| {
+        invalidateCaches(child);
+    }
 }
