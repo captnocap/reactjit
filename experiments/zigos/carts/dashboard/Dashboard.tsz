@@ -1,0 +1,115 @@
+// Dashboard.tsz — monitoring dashboard authored in TSZ
+// JS logic pushes data via __setState which maps to state.setSlot
+
+function App() {
+  // System metrics
+  const [uptime, setUptime] = useState(0);
+  const [cpu, setCpu] = useState(0);
+  const [memUsed, setMemUsed] = useState(0);
+  const [memTotal, setMemTotal] = useState(8192);
+  const [netIn, setNetIn] = useState(0);
+  const [netOut, setNetOut] = useState(0);
+  const [requests, setRequests] = useState(0);
+  const [errors, setErrors] = useState(0);
+  const [avgLatency, setAvgLatency] = useState(0);
+  const [p99, setP99] = useState(0);
+  const [connections, setConnections] = useState(0);
+  const [queueDepth, setQueueDepth] = useState(0);
+
+  // Infrastructure
+  const [dbQueries, setDbQueries] = useState(0);
+  const [dbAvg, setDbAvg] = useState(0);
+  const [cacheHit, setCacheHit] = useState(0);
+  const [cacheEntries, setCacheEntries] = useState(0);
+  const [diskPct, setDiskPct] = useState(0);
+  const [gcPause, setGcPause] = useState(0);
+
+  // Status
+  const [statusText, setStatusText] = useState('Status: HEALTHY');
+  const [alertText, setAlertText] = useState('All systems nominal');
+
+  return (
+    <Box style={{ flexDirection: 'column', gap: 8, padding: 12, backgroundColor: '#0d1117' }}>
+      <Box style={{ flexDirection: 'row', padding: 12, gap: 16, backgroundColor: '#161b22', alignItems: 'center' }}>
+        <Text fontSize={20} color="#e6edf3">ZigOS Dashboard</Text>
+        <Text fontSize={14} color={cpu > 80 ? '#f85149' : cpu > 60 ? '#d2992a' : '#3fb950'}>{statusText}</Text>
+        <Box style={{ flexGrow: 1 }} />
+        <Text fontSize={12} color="#6e7681">{alertText}</Text>
+        <Text fontSize={12} color="#6e7681">{`Uptime: ${uptime}s`}</Text>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">CPU</Text>
+          <Text fontSize={22} color={cpu > 80 ? '#f85149' : cpu > 60 ? '#d2992a' : '#3fb950'}>{`${cpu}%`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Memory</Text>
+          <Text fontSize={22} color="#58a6ff">{`${memUsed}/${memTotal} MB`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Requests</Text>
+          <Text fontSize={22} color="#e6edf3">{`${requests}`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Errors</Text>
+          <Text fontSize={22} color={errors > 100 ? '#f85149' : '#d2992a'}>{`${errors}`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Avg Latency</Text>
+          <Text fontSize={22} color="#79c0ff">{`${avgLatency}ms`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">P99</Text>
+          <Text fontSize={22} color={p99 > 200 ? '#f85149' : '#58a6ff'}>{`${p99}ms`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Connections</Text>
+          <Text fontSize={22} color="#e6edf3">{`${connections}`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Queue</Text>
+          <Text fontSize={22} color={queueDepth > 20 ? '#d2992a' : '#3fb950'}>{`${queueDepth}`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Net In</Text>
+          <Text fontSize={22} color="#79c0ff">{`${netIn} KB/s`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Net Out</Text>
+          <Text fontSize={22} color="#58a6ff">{`${netOut} KB/s`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">DB Queries</Text>
+          <Text fontSize={22} color="#e6edf3">{`${dbQueries}/s`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">DB Avg</Text>
+          <Text fontSize={22} color="#79c0ff">{`${dbAvg}ms`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Cache Hit</Text>
+          <Text fontSize={22} color="#3fb950">{`${cacheHit}%`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Cache Size</Text>
+          <Text fontSize={22} color="#6e7681">{`${cacheEntries}`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">Disk</Text>
+          <Text fontSize={22} color={diskPct > 85 ? '#f85149' : '#3fb950'}>{`${diskPct}%`}</Text>
+        </Box>
+        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
+          <Text fontSize={11} color="#6e7681">GC Pause</Text>
+          <Text fontSize={22} color={gcPause > 10 ? '#d2992a' : '#3fb950'}>{`${gcPause}ms`}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}

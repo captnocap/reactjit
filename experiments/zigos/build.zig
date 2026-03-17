@@ -115,4 +115,86 @@ pub fn build(b: *std.Build) void {
     if (b.args) |a| for (a) |arg| slots_run.addArg(arg);
     const slots_run_step = b.step("run-slots", "Build and run ZigOS slots (TSZ UI + JS logic)");
     slots_run_step.dependOn(&slots_run.step);
+
+    // ── Dashboard binary ─────────────────────────────────────────────
+    const dash_exe = b.addExecutable(.{
+        .name = "zigos-dashboard",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("main_dashboard.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    dash_exe.root_module.addIncludePath(b.path("../../love2d/quickjs"));
+    dash_exe.root_module.addCSourceFiles(.{
+        .root = b.path("../../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    dash_exe.root_module.addIncludePath(b.path("."));
+    dash_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+    dash_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    dash_exe.linkLibC();
+    dash_exe.linkSystemLibrary("SDL2");
+    dash_exe.linkSystemLibrary("freetype");
+    if (os == .linux) {
+        dash_exe.linkSystemLibrary("m");
+        dash_exe.linkSystemLibrary("pthread");
+        dash_exe.linkSystemLibrary("dl");
+        dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+    } else if (os == .macos) {
+        dash_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+    }
+    const dash_install = b.addInstallArtifact(dash_exe, .{});
+    b.getInstallStep().dependOn(&dash_install.step);
+
+    const dash_run = b.addRunArtifact(dash_exe);
+    dash_run.step.dependOn(b.getInstallStep());
+    if (b.args) |a| for (a) |arg| dash_run.addArg(arg);
+    const dash_run_step = b.step("run-dashboard", "Build and run ZigOS dashboard");
+    dash_run_step.dependOn(&dash_run.step);
+
+    // ── TSZ Dashboard (compiled .tsz fragment + QuickJS logic) ────
+    const tsz_dash_exe = b.addExecutable(.{
+        .name = "zigos-tsz-dashboard",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("main_tsz_dashboard.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    tsz_dash_exe.root_module.addIncludePath(b.path("../../love2d/quickjs"));
+    tsz_dash_exe.root_module.addCSourceFiles(.{
+        .root = b.path("../../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    tsz_dash_exe.root_module.addIncludePath(b.path("."));
+    tsz_dash_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+    tsz_dash_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    tsz_dash_exe.linkLibC();
+    tsz_dash_exe.linkSystemLibrary("SDL2");
+    tsz_dash_exe.linkSystemLibrary("freetype");
+    if (os == .linux) {
+        tsz_dash_exe.linkSystemLibrary("m");
+        tsz_dash_exe.linkSystemLibrary("pthread");
+        tsz_dash_exe.linkSystemLibrary("dl");
+        tsz_dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        tsz_dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+    } else if (os == .macos) {
+        tsz_dash_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        tsz_dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        tsz_dash_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+    }
+    const tsz_dash_install = b.addInstallArtifact(tsz_dash_exe, .{});
+    b.getInstallStep().dependOn(&tsz_dash_install.step);
+
+    const tsz_dash_run = b.addRunArtifact(tsz_dash_exe);
+    tsz_dash_run.step.dependOn(b.getInstallStep());
+    if (b.args) |a| for (a) |arg| tsz_dash_run.addArg(arg);
+    const tsz_dash_run_step = b.step("run-tsz-dashboard", "Build and run TSZ-compiled dashboard");
+    tsz_dash_run_step.dependOn(&tsz_dash_run.step);
 }
