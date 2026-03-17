@@ -374,6 +374,61 @@ pub fn build(b: *std.Build) void {
         app_step.dependOn(&app_install.step);
     }
 
+    // ── bsod (crash screen binary) ─────────────────────────────────────────
+    // Standalone binary that reads crash data from /tmp and renders the BSOD.
+    // Built from bsod_main.zig which imports bsod.gen.zig (compiled from bsod.tsz).
+    {
+        const bsod_exe = b.addExecutable(.{
+            .name = "tsz-bsod",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("tsz/runtime/framework/bsod_main.zig"),
+                .target = target,
+                .optimize = .ReleaseSmall,
+            }),
+        });
+
+        bsod_exe.linkLibC();
+        bsod_exe.linkSystemLibrary("SDL2");
+        bsod_exe.linkSystemLibrary("freetype");
+        if (tsz_os != .windows) bsod_exe.linkSystemLibrary("mpv");
+        bsod_exe.linkSystemLibrary("curl");
+        if (tsz_os != .windows) bsod_exe.linkSystemLibrary("vterm");
+        bsod_exe.root_module.addImport("wgpu", wgpu_mod);
+        if (tsz_os == .macos) {
+            bsod_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else if (tsz_os == .windows) {
+            bsod_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/lib/x64" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/include" });
+            bsod_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/release dll/win64" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include/freetype" });
+        } else {
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            bsod_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+        bsod_exe.root_module.addIncludePath(b.path("tsz/runtime"));
+        bsod_exe.root_module.addCSourceFile(.{
+            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
+        bsod_exe.root_module.addCSourceFile(.{
+            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
+            .flags = &.{"-O2"},
+        });
+
+        // GTK for tray — not needed for BSOD but linked by shared modules
+        if (tsz_os == .linux) {
+            bsod_exe.linkSystemLibrary("gtk-3");
+            bsod_exe.linkSystemLibrary("ayatana-appindicator3");
+        }
+
+        const bsod_install = b.addInstallArtifact(bsod_exe, .{});
+        const bsod_step = b.step("bsod", "Build the crash screen binary");
+        bsod_step.dependOn(&bsod_install.step);
+    }
+
     // ── tsz (compiler + project manager + GUI dashboard) ───────────────────
     // Compiler: reads .tsz files, parses, emits Zig, invokes zig build engine-app.
     // Manager: project registry, process lifecycle, status tracking.

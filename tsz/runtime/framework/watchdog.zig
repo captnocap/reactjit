@@ -122,12 +122,58 @@ pub fn showCrashScreen() void {
     // Write crash data to /tmp for the BSOD process to read
     writeCrashFile("/tmp/reactjit-crash-reason", getLastReason());
     writeCrashFile("/tmp/reactjit-crash-detail", getLastDetail());
+
     var rss_buf: [32]u8 = undefined;
     const rss_str = std.fmt.bufPrint(&rss_buf, "{d}", .{getRssMb()}) catch "?";
     writeCrashFile("/tmp/reactjit-crash-rss", rss_str);
 
-    // Spawn the BSOD binary as a separate process
-    const argv = [_][]const u8{"tsz/runtime/bin/tsz-bsod"};
+    // PID
+    var pid_buf: [16]u8 = undefined;
+    const pid_str = std.fmt.bufPrint(&pid_buf, "{d}", .{std.os.linux.getpid()}) catch "?";
+    writeCrashFile("/tmp/reactjit-crash-pid", pid_str);
+
+    // Uptime (frames / 60 ≈ seconds)
+    var uptime_buf: [32]u8 = undefined;
+    const uptime_secs = frame_count / 60;
+    const uptime_str = std.fmt.bufPrint(&uptime_buf, "{d}.{d}", .{ uptime_secs, (frame_count % 60) * 10 / 6 }) catch "?";
+    writeCrashFile("/tmp/reactjit-crash-uptime", uptime_str);
+
+    // Frames rendered
+    var frames_buf: [16]u8 = undefined;
+    const frames_str = std.fmt.bufPrint(&frames_buf, "{d}", .{frame_count}) catch "?";
+    writeCrashFile("/tmp/reactjit-crash-frames", frames_str);
+
+    // Peak RSS = current RSS at crash
+    writeCrashFile("/tmp/reactjit-crash-peak-rss", rss_str);
+
+    // Leak rate
+    var rate_buf: [32]u8 = undefined;
+    const delta = if (getRssKb() > last_check_rss_kb) (getRssKb() - last_check_rss_kb) / 1024 else 0;
+    const rate_str = std.fmt.bufPrint(&rate_buf, "{d} MB/s", .{delta}) catch "?";
+    writeCrashFile("/tmp/reactjit-crash-leak-rate", rate_str);
+
+    // Spawn the BSOD binary as a separate process.
+    // Resolve path relative to the running executable's directory.
+    var exe_dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const bsod_path = blk: {
+        const exe_path = std.fs.selfExePath(&exe_dir_buf) catch break :blk "tsz/runtime/bin/tsz-bsod";
+        // Walk back to find the dir, then append relative path
+        if (std.mem.lastIndexOfScalar(u8, exe_path, '/')) |last_slash| {
+            // exe is in zig-out/bin/ — go up two dirs to repo root
+            const exe_dir = exe_path[0..last_slash];
+            if (std.mem.lastIndexOfScalar(u8, exe_dir, '/')) |prev_slash| {
+                const parent = exe_dir[0..prev_slash];
+                if (std.mem.lastIndexOfScalar(u8, parent, '/')) |root_slash| {
+                    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+                    const p = std.fmt.bufPrint(&path_buf, "{s}/tsz/runtime/bin/tsz-bsod", .{parent[0..root_slash]}) catch break :blk "tsz/runtime/bin/tsz-bsod";
+                    break :blk p;
+                }
+            }
+        }
+        break :blk "tsz/runtime/bin/tsz-bsod";
+    };
+    std.debug.print("[watchdog] Spawning crash screen: {s}\n", .{bsod_path});
+    const argv = [_][]const u8{bsod_path};
     var child = std.process.Child.init(&argv, std.heap.page_allocator);
     child.spawn() catch |err| {
         std.debug.print("[watchdog] Failed to spawn crash window: {}\n", .{err});

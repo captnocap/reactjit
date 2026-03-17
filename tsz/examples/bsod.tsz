@@ -1,8 +1,20 @@
 // BSOD — Crash screen for the native engine
-// Standalone prototype — will become a framework module via compile-runtime
+// Standalone prototype — compiled as framework module via compile-runtime
+// Dynamic fields use useState so the wrapper can set them from /tmp crash data
 
 function App() {
   const [copied, setCopied] = useState(0);
+  const [reason, setReason] = useState("Watchdog: RSS exceeded limit");
+  const [detail, setDetail] = useState("No detail available.");
+  const [rss, setRss] = useState("?");
+  const [pid, setPid] = useState("?");
+  const [uptime, setUptime] = useState("?");
+  const [appName, setAppName] = useState("unknown.tsz");
+  const [timestamp, setTimestamp] = useState("");
+  const [stackTrace, setStackTrace] = useState("No stack trace available.");
+  const [peakRss, setPeakRss] = useState("?");
+  const [leakRate, setLeakRate] = useState("?");
+  const [frames, setFrames] = useState("?");
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f0a14', flexDirection: 'column' }}>
@@ -18,20 +30,20 @@ function App() {
           <Box style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
             <Text fontSize={22} color="#d93340">ReactJIT Crashed</Text>
             <Box style={{ flexGrow: 1 }} />
-            <Text fontSize={11} color="#5a5460">2026-03-16 15:42:07.391</Text>
+            <Text fontSize={11} color="#5a5460">{`${timestamp}`}</Text>
           </Box>
 
           {/* Process info row */}
           <Box style={{ flexDirection: 'row', marginTop: 8, gap: 16 }}>
-            <Text fontSize={12} color="#8c8580">PID: 48291</Text>
-            <Text fontSize={12} color="#8c8580">RSS: 519MB</Text>
-            <Text fontSize={12} color="#8c8580">Uptime: 14.2s</Text>
+            <Text fontSize={12} color="#8c8580">{`PID: ${pid}`}</Text>
+            <Text fontSize={12} color="#8c8580">{`RSS: ${rss}MB`}</Text>
+            <Text fontSize={12} color="#8c8580">{`Uptime: ${uptime}s`}</Text>
           </Box>
 
           {/* App identity */}
           <Box style={{ marginTop: 6, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Text fontSize={11} color="#5a5460">App:</Text>
-            <Text fontSize={12} color="#a89cc4">my-dashboard.tsz</Text>
+            <Text fontSize={12} color="#a89cc4">{`${appName}`}</Text>
             <Box style={{ width: 1, height: 12, backgroundColor: '#2a2534' }} />
             <Text fontSize={11} color="#5a5460">Engine:</Text>
             <Text fontSize={12} color="#a89cc4">tsz v0.1.0</Text>
@@ -43,7 +55,7 @@ function App() {
           {/* Reason section */}
           <Text fontSize={11} color="#8c8580">REASON</Text>
           <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%' }}>
-            <Text fontSize={16} color="#ebe6e0">Watchdog: RSS exceeded 512MB hard limit</Text>
+            <Text fontSize={16} color="#ebe6e0">{`${reason}`}</Text>
           </Box>
 
           {/* Detail section */}
@@ -51,7 +63,7 @@ function App() {
             <Text fontSize={11} color="#8c8580">DETAIL</Text>
           </Box>
           <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%' }}>
-            <Text fontSize={13} color="#c08c80">Memory grew from 48MB to 519MB in 2.3 seconds. Leak rate: 204MB/s detected in layout allocation pool. Last allocation: Node.children resize (32768 elements).</Text>
+            <Text fontSize={13} color="#c08c80">{`${detail}`}</Text>
           </Box>
 
           {/* Stack trace section */}
@@ -59,11 +71,7 @@ function App() {
             <Text fontSize={11} color="#8c8580">STACK TRACE</Text>
           </Box>
           <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%' }}>
-            <Text fontSize={11} color="#7a7080">0: layout.zig:482 — Node.addChildren (resize 16384→32768)</Text>
-            <Text fontSize={11} color="#7a7080">1: compositor.zig:197 — paintNode (recursive depth 847)</Text>
-            <Text fontSize={11} color="#7a7080">2: compositor.zig:91 — frame</Text>
-            <Text fontSize={11} color="#7a7080">3: main.zig:688 — mainLoop</Text>
-            <Text fontSize={11} color="#7a7080">4: generated_app.zig:264 — appTick</Text>
+            <Text fontSize={11} color="#7a7080">{`${stackTrace}`}</Text>
           </Box>
 
           {/* Watchdog snapshot */}
@@ -73,11 +81,11 @@ function App() {
           <Box style={{ marginTop: 6, padding: 12, backgroundColor: '#191420', width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
             <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Peak RSS</Text>
-              <Text fontSize={14} color="#ebe6e0">519 MB</Text>
+              <Text fontSize={14} color="#ebe6e0">{`${peakRss} MB`}</Text>
             </Box>
             <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Leak Rate</Text>
-              <Text fontSize={14} color="#d93340">204 MB/s</Text>
+              <Text fontSize={14} color="#d93340">{`${leakRate}`}</Text>
             </Box>
             <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Hard Limit</Text>
@@ -85,7 +93,7 @@ function App() {
             </Box>
             <Box style={{ flexDirection: 'column', gap: 4, flexGrow: 1, flexBasis: 60 }}>
               <Text fontSize={10} color="#5a5460">Frames Rendered</Text>
-              <Text fontSize={14} color="#ebe6e0">847</Text>
+              <Text fontSize={14} color="#ebe6e0">{`${frames}`}</Text>
             </Box>
           </Box>
 
