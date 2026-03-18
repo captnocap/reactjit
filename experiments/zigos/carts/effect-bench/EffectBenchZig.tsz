@@ -1,0 +1,95 @@
+// Effect Benchmark — Zig useEffect path
+// 8 state mutations per frame compiled to native Zig
+// No JS bridge — setState calls are direct Zig state.setSlot() calls
+
+const [a, setA] = useState(0);
+const [b, setB] = useState(0);
+const [c, setC] = useState(0);
+const [d, setD] = useState(0);
+const [e, setE] = useState(0);
+const [f, setF] = useState(0);
+const [g, setG] = useState(0);
+const [h, setH] = useState(0);
+const [frameCount, setFrameCount] = useState(0);
+const [fps, setFps] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+
+// Frame effect — 8 state mutations per tick, compiled to Zig
+useEffect(() => {
+  setA(a + 1);
+  setB(a + 1 * 2);
+  setC(a + 1 * 3);
+  setD(a + 1 * 4);
+  setE(a + 1 * 5);
+  setF(a + 1 * 6);
+  setG(a + 1 * 7);
+  setH(a + 1 * 8);
+  setFrameCount(frameCount + 1);
+});
+
+// Telemetry via JS (both paths need this for parity)
+<script>
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+</script>
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 20, gap: 16 }}>
+      <Text fontSize={20} color="#e6edf3">Effect Bench: Zig useEffect</Text>
+      <Text fontSize={14} color="#8b949e">8 setState calls/frame compiled to native Zig</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">A</Text>
+          <Text fontSize={20} color="#58a6ff">{`${a}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">B</Text>
+          <Text fontSize={20} color="#58a6ff">{`${b}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">C</Text>
+          <Text fontSize={20} color="#58a6ff">{`${c}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">D</Text>
+          <Text fontSize={20} color="#58a6ff">{`${d}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">E</Text>
+          <Text fontSize={20} color="#58a6ff">{`${e}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">F</Text>
+          <Text fontSize={20} color="#58a6ff">{`${f}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">G</Text>
+          <Text fontSize={20} color="#58a6ff">{`${g}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">H</Text>
+          <Text fontSize={20} color="#58a6ff">{`${h}`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8 }}>
+        <Text fontSize={14} color="#e6edf3">Engine Telemetry</Text>
+        <Box style={{ flexDirection: 'row', gap: 24, paddingTop: 8 }}>
+          <Text fontSize={12} color="#3fb950">{`FPS: ${fps}`}</Text>
+          <Text fontSize={12} color="#6e7681">{`tick: ${tickUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`layout: ${layoutUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`paint: ${paintUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`frames: ${frameCount}`}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}

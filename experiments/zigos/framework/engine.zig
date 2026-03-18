@@ -13,7 +13,9 @@ const geometry = @import("geometry.zig");
 const selection = @import("selection.zig");
 const breakpoint = @import("breakpoint.zig");
 const windows = @import("windows.zig");
+const canvas = @import("canvas.zig");
 const log = @import("log.zig");
+const tooltip = @import("tooltip.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -41,6 +43,15 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     // Enter new
     if (hit) |node| {
         if (node.handlers.on_hover_enter) |handler| handler();
+        // Tooltip: show if node carries tooltip text
+        if (node.tooltip) |tt| {
+            const r = node.computed;
+            tooltip.show(tt, r.x, r.y, r.w, r.h);
+        } else {
+            tooltip.hide();
+        }
+    } else {
+        tooltip.hide();
     }
 }
 
@@ -94,6 +105,11 @@ fn offsetDescendants(node: *Node, dy: f32) void {
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
+
+// Canvas drag state — tracks which canvas is being dragged for pan
+var canvas_drag_node: ?*Node = null;
+var canvas_drag_last_x: f32 = 0;
+var canvas_drag_last_y: f32 = 0;
 
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; return; }
@@ -197,6 +213,14 @@ fn paintNode(node: *Node) void {
         }
     }
 
+    // Canvas rendering — delegate to canvas system if this node has a canvas_type
+    if (node.canvas_type) |ct| {
+        gpu.pushScissor(r.x, r.y, r.w, r.h);
+        canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
+        gpu.popScissor();
+        return; // Canvas handles its own content — no children
+    }
+
     // Overflow clipping + scroll offset for scroll/auto/hidden containers
     const ov = node.style.overflow;
     const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
@@ -223,6 +247,9 @@ pub fn run(config: AppConfig) !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
     defer c.SDL_Quit();
     log.info(.engine, "SDL initialized", .{});
+
+    // Canvas system init
+    canvas.init();
 
     // Geometry: restore saved window position/size
     geometry.init(std.mem.span(config.title));
@@ -318,7 +345,16 @@ pub fn run(config: AppConfig) !void {
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
-                        if (layout.hitTest(config.root, mx, my)) |hit| {
+                        const events = @import("events.zig");
+                        // Canvas click — route to canvas first
+                        if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                            if (cn.canvas_type) |ct| {
+                                _ = canvas.dispatchClick(ct, mx - cn.computed.x, my - cn.computed.y);
+                                canvas_drag_node = cn;
+                                canvas_drag_last_x = mx;
+                                canvas_drag_last_y = my;
+                            }
+                        } else if (layout.hitTest(config.root, mx, my)) |hit| {
                             if (hit.input_id) |id| {
                                 input.focus(id);
                             } else if (hit.handlers.on_press) |handler| {
@@ -338,12 +374,24 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
                     updateHover(config.root, mx, my);
-                    if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
+                    const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
+                    if (dragging_left and canvas_drag_node != null) {
+                        // Canvas drag — send dx/dy for panning
+                        const cn = canvas_drag_node.?;
+                        if (cn.canvas_type) |ct| {
+                            const dx = mx - canvas_drag_last_x;
+                            const dy = my - canvas_drag_last_y;
+                            canvas.dispatchDrag(ct, mx - cn.computed.x, my - cn.computed.y, dx, dy);
+                            canvas_drag_last_x = mx;
+                            canvas_drag_last_y = my;
+                        }
+                    } else if (dragging_left) {
                         selection.onMouseDrag(config.root, mx, my);
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
+                        canvas_drag_node = null;
                         selection.onMouseUp();
                     }
                 },
@@ -370,17 +418,20 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(mx_i);
                     const my: f32 = @floatFromInt(my_i);
                     const events = @import("events.zig");
-                    if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
+                    // Canvas scroll — route to canvas for zoom
+                    if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                        if (cn.canvas_type) |ct| {
+                            const delta: f32 = @floatFromInt(event.wheel.y);
+                            canvas.dispatchScroll(ct, mx - cn.computed.x, my - cn.computed.y, delta);
+                        }
+                    } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
                         if (event.wheel.y != 0) {
-                            // Normal scroll wheel — 30px per tick
                             scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
                         }
                         if (event.wheel.x != 0) {
-                            // Side buttons / horizontal wheel — page jump (container height)
                             const page = @max(scroll_node.computed.h * 0.8, 60.0);
                             scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.x)) * page;
                         }
-                        // Clamp to [0, max_scroll]
                         const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
                     }
@@ -421,6 +472,10 @@ pub fn run(config: AppConfig) !void {
         selection.resetWalkState();
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
+
+        // Tooltip overlay (always on top of main tree)
+        tooltip.paintOverlay(measureCallback, win_w, win_h);
+
         const t5 = std.time.microTimestamp();
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
 
@@ -434,9 +489,11 @@ pub fn run(config: AppConfig) !void {
             const ppf = g_paint_count / @max(fps_frames, 1);
             const hpf = g_hidden_count / @max(fps_frames, 1);
             const zpf = g_zero_count / @max(fps_frames, 1);
-            std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d}\n", .{
-                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf,
+            std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
+                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
+            qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;
+            qjs_runtime.bridge_calls_this_second = 0;
             g_paint_count = 0;
             g_hidden_count = 0;
             g_zero_count = 0;

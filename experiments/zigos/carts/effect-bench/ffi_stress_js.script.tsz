@@ -1,0 +1,37 @@
+// FFI call stress — JS calls heavy_compute(100) in a tight loop N times
+// Each call crosses JS → C bridge via host function
+let N = 10;
+let _frames = 0;
+let _lastEscalation = Date.now();
+
+function tick() {
+  const t0 = Date.now();
+  let res = 0;
+  for (let i = 0; i < N; i++) {
+    res = heavy_compute(100);
+  }
+  const elapsed = Date.now() - t0;
+  setBatchUs(elapsed * 1000);
+  setResult(res);
+  setCallCount(N);
+  _frames++;
+  setFrameCount(_frames);
+
+  if (Date.now() - _lastEscalation > 3000) {
+    N = N * 2;
+    _lastEscalation = Date.now();
+    console.log('Escalating to N=' + N);
+  }
+}
+
+setInterval(tick, 16);
+
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+tick();
+console.log('FFI stress JS loaded. N=' + N);

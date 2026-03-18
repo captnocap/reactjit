@@ -30,6 +30,9 @@ pub var telemetry_fps: u32 = 0;
 pub var telemetry_layout_us: u64 = 0;
 pub var telemetry_paint_us: u64 = 0;
 pub var telemetry_tick_us: u64 = 0;
+pub var telemetry_bridge_calls: u64 = 0;
+pub var bridge_calls_this_second: u64 = 0;
+var bridge_last_reset: i64 = 0;
 
 // ── Host functions ──────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ fn hostSetState(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     var f: f64 = 0;
     _ = qjs.JS_ToFloat64(ctx, &f, argv[1]);
     state.setSlot(@intCast(slot_id), @intFromFloat(f));
+    bridge_calls_this_second += 1;
     return QJS_UNDEFINED;
 }
 
@@ -62,6 +66,33 @@ fn hostLog(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVa
     if (msg == null) return QJS_UNDEFINED;
     defer qjs.JS_FreeCString(ctx, msg);
     std.log.info("[JS] {s}", .{std.mem.span(msg)});
+    return QJS_UNDEFINED;
+}
+
+fn hostHeavyCompute(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewFloat64(null, 0);
+    var n: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &n, argv[0]);
+    const compute = @extern(*const fn (c_long) callconv(.c) c_long, .{ .name = "heavy_compute" });
+    const result = compute(@intCast(n));
+    return qjs.JS_NewFloat64(null, @floatFromInt(result));
+}
+
+fn hostHeavyComputeTimed(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewFloat64(null, 0);
+    var n: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &n, argv[0]);
+    const compute = @extern(*const fn (c_long) callconv(.c) c_long, .{ .name = "heavy_compute_timed" });
+    const result = compute(@intCast(n));
+    return qjs.JS_NewFloat64(null, @floatFromInt(result));
+}
+
+fn hostSetComputeN(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var n: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &n, argv[0]);
+    const setter = @extern(*const fn (c_long) callconv(.c) void, .{ .name = "set_compute_n" });
+    setter(@intCast(n));
     return QJS_UNDEFINED;
 }
 
@@ -133,6 +164,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getLayoutUs", qjs.JS_NewCFunction(ctx, hostGetLayoutUs, "getLayoutUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getPaintUs", qjs.JS_NewCFunction(ctx, hostGetPaintUs, "getPaintUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getTickUs", qjs.JS_NewCFunction(ctx, hostGetTickUs, "getTickUs", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));
 
     const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, val);

@@ -1,0 +1,34 @@
+// QuickJS state mutation benchmark
+// Every frame: 8 setState calls across the JS→Zig bridge
+// No compute — purely measures bridge overhead + dirty propagation
+
+let _frames = 0;
+let _counter = 0;
+
+function tick() {
+  _frames++;
+  _counter++;
+  setA(_counter);
+  setB(_counter * 2);
+  setC(_counter * 3);
+  setD(_counter * 4);
+  setE(_counter * 5);
+  setF(_counter * 6);
+  setG(_counter * 7);
+  setH(_counter * 8);
+  setFrameCount(_frames);
+}
+
+// Run every frame
+setInterval(tick, 16);
+
+// Telemetry at 4Hz
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+tick();
+console.log('JS bridge bench loaded.');

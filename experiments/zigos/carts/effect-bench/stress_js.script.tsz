@@ -1,0 +1,44 @@
+// Bridge stress test — escalating __setState calls per frame
+// Directly calls __setState in a tight loop to measure raw bridge throughput
+
+let N = 10;
+let _frames = 0;
+let _lastEscalation = Date.now();
+
+function stressTick() {
+  const t0 = Date.now();
+
+  // Hammer the bridge: N calls to __setState per frame
+  // We write to slot 0 repeatedly (it's just a throughput test)
+  for (let i = 0; i < N; i++) {
+    __setState(0, i);
+  }
+
+  const elapsed = Date.now() - t0;
+  setBridgeUs(elapsed * 1000);  // ms → approximate us
+
+  _frames++;
+  setFrameCount(_frames);
+  setN(N);
+
+  // Escalate every 3 seconds
+  if (Date.now() - _lastEscalation > 3000) {
+    N = N * 2;
+    _lastEscalation = Date.now();
+    console.log('Escalating to N=' + N);
+  }
+}
+
+// Run every frame
+setInterval(stressTick, 16);
+
+// Telemetry at 4Hz
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+stressTick();
+console.log('Bridge stress test loaded. Starting N=' + N);

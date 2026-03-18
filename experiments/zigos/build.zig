@@ -96,6 +96,7 @@ fn addAppExe(
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
     // FFI shims
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addIncludePath(b.path("ffi"));
     // wgpu
     exe.root_module.addImport("wgpu", wgpu_mod);

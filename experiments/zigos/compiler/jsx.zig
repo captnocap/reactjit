@@ -121,6 +121,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_multiline = std.mem.eql(u8, tag_name, "TextArea");
     // ScrollView → Box with overflow: auto (no special primitive needed)
     const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
+    // Canvas → Box with canvas_type field
+    const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
 
     // Component call
     if (self.compile_error != null) return ".{}";
@@ -141,6 +143,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var on_press_start: ?u32 = null;
     var on_change_text_start: ?u32 = null;
     var placeholder_str: []const u8 = "";
+    var canvas_type_str: []const u8 = "";
+    var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
 
     // Pre-populate from classifier
@@ -226,9 +230,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     } else {
                         try attrs.skipAttrValue(self);
                     }
+                } else if (std.mem.eql(u8, attr_name, "tooltip")) {
+                    tooltip_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "hoverable")) {
                     hoverable = true;
                     try attrs.skipAttrValue(self);
+                } else if (std.mem.eql(u8, attr_name, "type") and is_canvas) {
+                    canvas_type_str = try attrs.parseStringAttr(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -596,8 +604,26 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, " }");
     }
 
+    // Tooltip
+    if (tooltip_str.len > 0) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".tooltip = \"");
+        for (tooltip_str) |ch| {
+            if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
+        }
+        try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // Canvas type
+    if (is_canvas and canvas_type_str.len > 0) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".canvas_type = \"");
+        try fields.appendSlice(self.alloc, canvas_type_str);
+        try fields.appendSlice(self.alloc, "\"");
+    }
+
     // Hoverable
-    if (hoverable) {
+    if (hoverable or tooltip_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".hoverable = true");
     }
@@ -763,6 +789,37 @@ pub fn isLogicalAndAhead(self: *Generator) bool {
     return false;
 }
 
+/// Find the "render gate" && — the last && at brace/paren depth 0 before the
+/// closing brace. This is the && that separates the condition from the JSX element.
+/// For `{a && b && <Box>}`, returns the position of the second &&.
+/// For `{cond && <Box>}`, returns the position of the only &&.
+/// Handles compound conditions with &&, ||, and parenthesized subexpressions.
+pub fn findRenderGateAmpAmp(self: *Generator) u32 {
+    var scan = self.pos;
+    var brace_depth: u32 = 0;
+    var paren_depth: u32 = 0;
+    var last_amp_amp: u32 = self.pos; // fallback
+    while (scan < self.lex.count) {
+        const kind = self.lex.get(scan).kind;
+        if (kind == .lbrace) {
+            brace_depth += 1;
+        } else if (kind == .rbrace) {
+            if (brace_depth == 0) break;
+            brace_depth -= 1;
+        } else if (kind == .lparen) {
+            paren_depth += 1;
+        } else if (kind == .rparen) {
+            if (paren_depth > 0) paren_depth -= 1;
+        } else if (kind == .amp_amp and brace_depth == 0 and paren_depth == 0) {
+            last_amp_amp = scan;
+        } else if (kind == .eof) {
+            break;
+        }
+        scan += 1;
+    }
+    return last_amp_amp;
+}
+
 /// Try to parse a {expr && <JSX>} conditional child.
 /// Returns true if it was a conditional (consumed tokens), false if not (no tokens consumed).
 ///
@@ -771,19 +828,21 @@ pub fn isLogicalAndAhead(self: *Generator) bool {
 ///
 /// Runtime path (state refs): always includes the child, but records a ConditionalInfo
 /// that _updateConditionals() uses to toggle display:.flex/.none on state changes.
+///
+/// Supports compound conditions: {a && b && <JSX>}, {(a || b) && <JSX>}, {!a && <JSX>}
 pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnmanaged([]const u8)) anyerror!bool {
     if (!isLogicalAndAhead(self)) return false;
 
     const saved_pos = self.pos;
+    const amp_pos = findRenderGateAmpAmp(self);
     var has_state_ref = false;
     var has_comparison = false;
     var token_count: u32 = 0;
 
     {
         var scan = self.pos;
-        while (scan < self.lex.count) {
+        while (scan < amp_pos) {
             const kind = self.lex.get(scan).kind;
-            if (kind == .amp_amp) break;
             if (kind == .identifier) {
                 const txt = self.lex.get(scan).text(self.source);
                 if (scan + 2 < self.lex.count and
@@ -809,9 +868,6 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
     // Compile-time conditional: props only (no state)
     if (!has_state_ref) {
         self.pos = saved_pos;
-
-        var amp_pos = self.pos;
-        while (amp_pos < self.lex.count and self.lex.get(amp_pos).kind != .amp_amp) amp_pos += 1;
 
         var lhs: ?i64 = null;
         var rhs: ?i64 = null;
@@ -879,9 +935,7 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
     if (has_state_ref) {
         self.pos = saved_pos;
 
-        var amp_pos = self.pos;
-        while (amp_pos < self.lex.count and self.lex.get(amp_pos).kind != .amp_amp) amp_pos += 1;
-
+        // amp_pos already computed via findRenderGateAmpAmp — handles compound conditions
         var cond_parts: std.ArrayListUnmanaged(u8) = .{};
         try cond_parts.appendSlice(self.alloc, "(");
         while (self.pos < amp_pos) {
@@ -927,10 +981,30 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
                     continue;
                 }
             }
+            // Operators — emit Zig equivalents
             if (self.curKind() == .eq_eq) {
                 try cond_parts.appendSlice(self.alloc, " == ");
             } else if (self.curKind() == .not_eq) {
                 try cond_parts.appendSlice(self.alloc, " != ");
+            } else if (self.curKind() == .amp_amp) {
+                // Compound && within the condition (not the render gate)
+                try cond_parts.appendSlice(self.alloc, " and ");
+            } else if (self.curKind() == .pipe_pipe) {
+                try cond_parts.appendSlice(self.alloc, " or ");
+            } else if (self.curKind() == .bang) {
+                try cond_parts.appendSlice(self.alloc, "!");
+            } else if (self.curKind() == .lt) {
+                try cond_parts.appendSlice(self.alloc, " < ");
+            } else if (self.curKind() == .gt) {
+                try cond_parts.appendSlice(self.alloc, " > ");
+            } else if (self.curKind() == .lt_eq) {
+                try cond_parts.appendSlice(self.alloc, " <= ");
+            } else if (self.curKind() == .gt_eq) {
+                try cond_parts.appendSlice(self.alloc, " >= ");
+            } else if (self.curKind() == .lparen) {
+                try cond_parts.appendSlice(self.alloc, "(");
+            } else if (self.curKind() == .rparen) {
+                try cond_parts.appendSlice(self.alloc, ")");
             } else {
                 if (cond_parts.items.len > 1) try cond_parts.append(self.alloc, ' ');
                 try cond_parts.appendSlice(self.alloc, tok_text);

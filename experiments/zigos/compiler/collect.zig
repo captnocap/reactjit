@@ -1102,10 +1102,10 @@ pub fn collectLetVars(self: *Generator, func_start: u32) void {
 /// The body_start/body_end token positions are recorded so emit.zig can
 /// call emitHandlerBody to translate the arrow function body to Zig.
 pub fn collectEffectHooks(self: *Generator, func_start: u32) void {
-    self.pos = func_start;
-    // Skip past function header to body
-    while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
-    if (self.curKind() == .lbrace) self.advance_token();
+    // Scan from the top of the file — useEffect can appear at module top level
+    // (before function App) or inside the App function body, just like useState.
+    _ = func_start;
+    self.pos = 0;
 
     while (self.pos < self.lex.count) {
         if (self.isIdent("useEffect")) {
