@@ -215,9 +215,7 @@ fn paintNode(node: *Node) void {
 
     // Canvas rendering — delegate to canvas system if this node has a canvas_type
     if (node.canvas_type) |ct| {
-        gpu.pushScissor(r.x, r.y, r.w, r.h);
         canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
-        gpu.popScissor();
         return; // Canvas handles its own content — no children
     }
 
@@ -374,6 +372,15 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
                     updateHover(config.root, mx, my);
+                    // Canvas mouse move — for hover detection
+                    {
+                        const events = @import("events.zig");
+                        if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                            if (cn.canvas_type) |ct| {
+                                canvas.dispatchMouse(ct, mx - cn.computed.x, my - cn.computed.y);
+                            }
+                        }
+                    }
                     const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
                     if (dragging_left and canvas_drag_node != null) {
                         // Canvas drag — send dx/dy for panning
@@ -396,19 +403,57 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_TEXTINPUT => {
-                    input.handleTextInput(@ptrCast(&event.text.text));
+                    // Route text input to canvas if one is hovered
+                    var canvas_consumed = false;
+                    {
+                        var tmx_i: c_int = undefined;
+                        var tmy_i: c_int = undefined;
+                        _ = c.SDL_GetMouseState(&tmx_i, &tmy_i);
+                        const tmx: f32 = @floatFromInt(tmx_i);
+                        const tmy: f32 = @floatFromInt(tmy_i);
+                        const tevents = @import("events.zig");
+                        if (tevents.findCanvasNode(config.root, tmx, tmy)) |cn| {
+                            if (cn.canvas_type) |ct| {
+                                // Send each char as a key event (printable ASCII)
+                                const ch = event.text.text[0];
+                                if (ch >= 32 and ch < 127) {
+                                    canvas.dispatchKey(ct, @intCast(ch), 0);
+                                    canvas_consumed = true;
+                                }
+                            }
+                        }
+                    }
+                    if (!canvas_consumed) input.handleTextInput(@ptrCast(&event.text.text));
                 },
                 c.SDL_KEYDOWN => {
                     const sym = event.key.keysym.sym;
                     const mod = event.key.keysym.mod;
                     const ctrl = (mod & c.KMOD_CTRL) != 0;
-                    const input_consumed = if (input.getFocusedId() != null)
-                        (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
-                    else
-                        false;
-                    if (!input_consumed) {
-                        selection.onKeyDown(config.root, sym, mod);
-                        if (sym == c.SDLK_ESCAPE) running = false;
+                    // Route backspace/escape to canvas if hovered
+                    var canvas_key_consumed = false;
+                    if (sym == c.SDLK_BACKSPACE or sym == c.SDLK_ESCAPE) {
+                        var kmx_i: c_int = undefined;
+                        var kmy_i: c_int = undefined;
+                        _ = c.SDL_GetMouseState(&kmx_i, &kmy_i);
+                        const kmx: f32 = @floatFromInt(kmx_i);
+                        const kmy: f32 = @floatFromInt(kmy_i);
+                        const kevents = @import("events.zig");
+                        if (kevents.findCanvasNode(config.root, kmx, kmy)) |cn| {
+                            if (cn.canvas_type) |ct| {
+                                canvas.dispatchKey(ct, sym, @intCast(mod));
+                                canvas_key_consumed = true;
+                            }
+                        }
+                    }
+                    if (!canvas_key_consumed) {
+                        const input_consumed = if (input.getFocusedId() != null)
+                            (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
+                        else
+                            false;
+                        if (!input_consumed) {
+                            selection.onKeyDown(config.root, sym, mod);
+                            if (sym == c.SDLK_ESCAPE) running = false;
+                        }
                     }
                 },
                 c.SDL_MOUSEWHEEL => {
