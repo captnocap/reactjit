@@ -10,7 +10,7 @@
 //!   Phase 4:   collectComponents        — function MyComp({props}) → components[] with body_pos for later inlining
 //!   Phase 4.5: collectUtilFunctions     — function lowercase() → util_funcs[] (non-component, non-App helpers)
 //!   Phase 5:   extractComputeBlock      — <script>JS</script> → compute_js
-//!   Phase 6:   collectStateHooksTopLevel + collectStateHooks — useState/useFFI → state_slots[], ffi_hooks[]
+//!   Phase 6:   collectStateHooksTopLevel + collectStateHooks — useState/useFFI/useTransition/useSpring
 //!   Phase 6.5: collectLetVars           — let x = expr → let_vars[] (mutable runtime vars)
 //!   Phase 7:   countComponentUsage      — count <MyComp> refs → usage_count (for multi-use optimization)
 //!   Phase 7.5: collectAppConditionals   — {state == N && <JSX>} at root → app_conds[]
@@ -21,6 +21,7 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
+const handlers = @import("handlers.zig");
 
 // ── FFI collection ──
 
@@ -85,9 +86,7 @@ pub fn collectDeclaredFunctions(self: *Generator) void {
                         self.advance_token();
                         if (self.curKind() == .identifier) {
                             const type_name = self.curText();
-                            if (std.mem.eql(u8, type_name, "string")) ret_type = .string
-                            else if (std.mem.eql(u8, type_name, "boolean")) ret_type = .boolean
-                            else if (std.mem.eql(u8, type_name, "number")) ret_type = .int;
+                            if (std.mem.eql(u8, type_name, "string")) ret_type = .string else if (std.mem.eql(u8, type_name, "boolean")) ret_type = .boolean else if (std.mem.eql(u8, type_name, "number")) ret_type = .int;
                         }
                     }
                     self.pos = saved;
@@ -212,8 +211,14 @@ pub fn collectComponents(self: *Generator) void {
             self.advance_token();
             if (self.curKind() != .identifier) continue;
             const name = self.curText();
-            if (std.mem.eql(u8, name, "App")) { self.advance_token(); continue; }
-            if (name.len == 0 or name[0] < 'A' or name[0] > 'Z') { self.advance_token(); continue; }
+            if (std.mem.eql(u8, name, "App")) {
+                self.advance_token();
+                continue;
+            }
+            if (name.len == 0 or name[0] < 'A' or name[0] > 'Z') {
+                self.advance_token();
+                continue;
+            }
             self.advance_token();
 
             var prop_names: [codegen.MAX_COMPONENT_PROPS][]const u8 = undefined;
@@ -261,7 +266,10 @@ pub fn collectComponents(self: *Generator) void {
                                 var scan_depth: u32 = 0;
                                 while (self.pos < self.lex.count) {
                                     if (self.curKind() == .lt) scan_depth += 1;
-                                    if (self.isIdent("children")) { has_children = true; break; }
+                                    if (self.isIdent("children")) {
+                                        has_children = true;
+                                        break;
+                                    }
                                     if (self.curKind() == .rbrace and scan_depth == 0) break;
                                     self.advance_token();
                                 }
@@ -460,7 +468,162 @@ pub fn collectStateHooks(self: *Generator, func_start: u32) void {
     scanForUseState(self, true);
 }
 
-/// Core state hook scanner — handles two patterns:
+fn parseStateInitial(self: *Generator) codegen.StateInitial {
+    var initial: codegen.StateInitial = .{ .int = 0 };
+    if (self.curKind() == .number) {
+        const num_text = self.curText();
+        if (std.mem.indexOf(u8, num_text, ".") != null) {
+            initial = .{ .float = std.fmt.parseFloat(f64, num_text) catch 0.0 };
+        } else {
+            initial = .{ .int = std.fmt.parseInt(i64, num_text, 10) catch 0 };
+        }
+        self.advance_token();
+    } else if (self.curKind() == .string) {
+        const raw = self.curText();
+        initial = .{ .string = raw[1 .. raw.len - 1] };
+        self.advance_token();
+    } else if (self.curKind() == .identifier) {
+        const val = self.curText();
+        if (std.mem.eql(u8, val, "true")) {
+            initial = .{ .boolean = true };
+            self.advance_token();
+        } else if (std.mem.eql(u8, val, "false")) {
+            initial = .{ .boolean = false };
+            self.advance_token();
+        }
+    } else if (self.curKind() == .lbracket) {
+        self.advance_token();
+        var arr_vals: [codegen.MAX_ARRAY_INIT]i64 = undefined;
+        var arr_cnt: u32 = 0;
+        while (self.curKind() != .rbracket and self.curKind() != .eof) {
+            if (self.curKind() == .number) {
+                if (arr_cnt < codegen.MAX_ARRAY_INIT) {
+                    arr_vals[arr_cnt] = std.fmt.parseInt(i64, self.curText(), 10) catch 0;
+                    arr_cnt += 1;
+                }
+                self.advance_token();
+            } else if (self.curKind() == .minus) {
+                self.advance_token();
+                if (self.curKind() == .number) {
+                    if (arr_cnt < codegen.MAX_ARRAY_INIT) {
+                        arr_vals[arr_cnt] = -(std.fmt.parseInt(i64, self.curText(), 10) catch 0);
+                        arr_cnt += 1;
+                    }
+                    self.advance_token();
+                }
+            } else {
+                self.advance_token();
+            }
+            if (self.curKind() == .comma) self.advance_token();
+        }
+        if (self.curKind() == .rbracket) self.advance_token();
+        initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
+    }
+    return initial;
+}
+
+fn appendStateSlot(self: *Generator, getter: []const u8, setter: []const u8, initial: codegen.StateInitial) ?u32 {
+    if (self.state_count >= codegen.MAX_STATE_SLOTS) {
+        self.setError("Too many state slots (limit: 128)");
+        return null;
+    }
+
+    const slot_id = self.state_count;
+    self.state_slots[slot_id] = .{
+        .getter = getter,
+        .setter = setter,
+        .initial = initial,
+    };
+    self.state_count += 1;
+    self.has_state = true;
+    return slot_id;
+}
+
+fn skipHookCallRemainder(self: *Generator) void {
+    var depth: u32 = 1;
+    while (depth > 0 and self.curKind() != .eof) {
+        if (self.curKind() == .lparen) {
+            depth += 1;
+        } else if (self.curKind() == .rparen) {
+            depth -= 1;
+        }
+        self.advance_token();
+    }
+    if (self.curKind() == .semicolon) self.advance_token();
+}
+
+fn stripQuotes(text: []const u8) []const u8 {
+    if (text.len >= 2 and (text[0] == '"' or text[0] == '\'') and text[text.len - 1] == text[0]) {
+        return text[1 .. text.len - 1];
+    }
+    return text;
+}
+
+fn parseEasingKind(name: []const u8) ?codegen.EasingKind {
+    if (std.mem.eql(u8, name, "linear")) return .linear;
+    if (std.mem.eql(u8, name, "easeIn")) return .ease_in;
+    if (std.mem.eql(u8, name, "easeOut")) return .ease_out;
+    if (std.mem.eql(u8, name, "easeInOut")) return .ease_in_out;
+    return null;
+}
+
+fn hasAnimHookForSlot(self: *Generator, slot_id: u32) bool {
+    for (0..self.anim_hook_count) |i| {
+        if (self.anim_hooks[i].slot_id == slot_id) return true;
+    }
+    return false;
+}
+
+fn collectObjectStateHook(self: *Generator, getter: []const u8, setter: []const u8) void {
+    const obj_id = self.obj_state_count;
+    var fields: [codegen.MAX_OBJECT_STATE_FIELDS]codegen.ObjectField = undefined;
+    var field_count: u32 = 0;
+
+    self.advance_token(); // {
+    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const field_name = self.curText();
+            self.advance_token();
+            if (self.curKind() == .colon) self.advance_token();
+
+            const initial = parseStateInitial(self);
+            const slot_getter = std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ getter, field_name }) catch "";
+            const slot_setter = std.fmt.allocPrint(self.alloc, "__obj_{d}_{s}", .{ obj_id, field_name }) catch "";
+            const slot_id = appendStateSlot(self, slot_getter, slot_setter, initial);
+
+            if (slot_id) |sid| {
+                if (field_count < codegen.MAX_OBJECT_STATE_FIELDS) {
+                    fields[field_count] = .{
+                        .field_name = field_name,
+                        .slot_id = sid,
+                        .state_type = std.meta.activeTag(initial),
+                    };
+                    field_count += 1;
+                } else {
+                    self.setError("Too many object state fields (limit: 16)");
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+        if (self.curKind() == .comma) self.advance_token();
+    }
+    if (self.curKind() == .rbrace) self.advance_token();
+
+    if (self.obj_state_count < codegen.MAX_OBJECT_STATE_VARS) {
+        self.obj_state_vars[self.obj_state_count] = .{
+            .getter = getter,
+            .setter = setter,
+            .fields = fields,
+            .field_count = field_count,
+        };
+        self.obj_state_count += 1;
+    } else {
+        self.setError("Too many object state declarations (limit: 16)");
+    }
+}
+
+/// Core state hook scanner — handles four patterns:
 ///
 ///   useState: const [getter, setter] = useState(initialValue)
 ///     → creates a StateSlot with getter name, setter name, and typed initial value
@@ -469,6 +632,13 @@ pub fn collectStateHooks(self: *Generator, func_start: u32) void {
 ///   useFFI: const [getter] = useFFI(funcName, intervalMs)
 ///     → creates a StateSlot (read-only, no setter) + an FFIHook for periodic polling
 ///     → the FFI function's return type (from collectDeclaredFunctions) determines slot type
+///
+///   useTransition: useTransition(opacity, target, durationMs, "easeInOut")
+///     → registers a per-frame transition update for an existing float state slot
+///
+///   useSpring: useSpring(x, target, stiffness, damping)
+///     → registers a spring update for an existing float state slot and auto-allocates
+///       a hidden float velocity slot
 ///
 /// The stop_at_return flag controls scope:
 ///   false = scan entire source (top-level hooks)
@@ -547,73 +717,170 @@ pub fn scanForUseState(self: *Generator, stop_at_return: bool) void {
                         if (self.isIdent("useState")) {
                             self.advance_token();
                             if (self.curKind() == .lparen) self.advance_token();
-                            var initial: codegen.StateInitial = .{ .int = 0 };
-                            if (self.curKind() == .number) {
-                                const num_text = self.curText();
-                                if (std.mem.indexOf(u8, num_text, ".") != null) {
-                                    initial = .{ .float = std.fmt.parseFloat(f64, num_text) catch 0.0 };
-                                } else {
-                                    initial = .{ .int = std.fmt.parseInt(i64, num_text, 10) catch 0 };
-                                }
-                                self.advance_token();
-                            } else if (self.curKind() == .string) {
-                                const raw = self.curText();
-                                initial = .{ .string = raw[1 .. raw.len - 1] };
-                                self.advance_token();
-                            } else if (self.curKind() == .identifier) {
-                                const val = self.curText();
-                                if (std.mem.eql(u8, val, "true")) {
-                                    initial = .{ .boolean = true };
-                                    self.advance_token();
-                                } else if (std.mem.eql(u8, val, "false")) {
-                                    initial = .{ .boolean = false };
-                                    self.advance_token();
-                                }
-                            } else if (self.curKind() == .lbracket) {
-                                self.advance_token();
-                                var arr_vals: [codegen.MAX_ARRAY_INIT]i64 = undefined;
-                                var arr_cnt: u32 = 0;
-                                while (self.curKind() != .rbracket and self.curKind() != .eof) {
-                                    if (self.curKind() == .number) {
-                                        if (arr_cnt < codegen.MAX_ARRAY_INIT) {
-                                            arr_vals[arr_cnt] = std.fmt.parseInt(i64, self.curText(), 10) catch 0;
-                                            arr_cnt += 1;
-                                        }
-                                        self.advance_token();
-                                    } else if (self.curKind() == .minus) {
-                                        self.advance_token();
-                                        if (self.curKind() == .number) {
-                                            if (arr_cnt < codegen.MAX_ARRAY_INIT) {
-                                                arr_vals[arr_cnt] = -(std.fmt.parseInt(i64, self.curText(), 10) catch 0);
-                                                arr_cnt += 1;
-                                            }
-                                            self.advance_token();
-                                        }
-                                    } else {
-                                        self.advance_token();
-                                    }
-                                    if (self.curKind() == .comma) self.advance_token();
-                                }
-                                if (self.curKind() == .rbracket) self.advance_token();
-                                initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
+                            if (self.curKind() == .lbrace) {
+                                collectObjectStateHook(self, getter, setter);
+                                if (self.curKind() == .rparen) self.advance_token();
+                                if (self.curKind() == .semicolon) self.advance_token();
+                                continue;
                             }
+                            const initial = parseStateInitial(self);
                             if (self.curKind() == .rparen) self.advance_token();
-
-                            if (self.state_count < codegen.MAX_STATE_SLOTS) {
-                                self.state_slots[self.state_count] = .{
-                                    .getter = getter,
-                                    .setter = setter,
-                                    .initial = initial,
-                                };
-                                self.state_count += 1;
-                                self.has_state = true;
-                            } else {
-                                self.setError("Too many state slots (limit: 128)");
-                            }
+                            _ = appendStateSlot(self, getter, setter, initial);
                         }
                     }
                 }
             }
+        }
+        if (stop_at_return and (self.isIdent("useTransition") or self.isIdent("useSpring"))) {
+            const is_spring = self.isIdent("useSpring");
+            const hook_name = self.curText();
+            const hook_start = self.cur().start;
+            self.advance_token();
+
+            if (self.curKind() != .lparen) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} requires parentheses", .{hook_name}) catch "animation hook requires parentheses");
+                continue;
+            }
+            self.advance_token();
+
+            if (self.curKind() != .identifier) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} expects a state getter as its first argument", .{hook_name}) catch "animation hook expects a state getter");
+                skipHookCallRemainder(self);
+                continue;
+            }
+
+            const getter_name = self.curText();
+            const slot_id = self.isState(getter_name) orelse {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} expects an existing state getter, got '{s}'", .{ hook_name, getter_name }) catch "animation hook expects a state getter");
+                skipHookCallRemainder(self);
+                continue;
+            };
+
+            if (self.stateTypeById(slot_id) != .float) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} only supports float state slots ('{s}' is not float)", .{ hook_name, getter_name }) catch "animation hook requires float state");
+                skipHookCallRemainder(self);
+                continue;
+            }
+
+            if (hasAnimHookForSlot(self, slot_id)) {
+                self.setError(std.fmt.allocPrint(self.alloc, "state '{s}' already has an animation hook", .{getter_name}) catch "duplicate animation hook");
+                skipHookCallRemainder(self);
+                continue;
+            }
+
+            if (self.anim_hook_count >= codegen.MAX_ANIM_HOOKS) {
+                self.setError("Too many animation hooks (limit: 16)");
+                skipHookCallRemainder(self);
+                continue;
+            }
+
+            self.advance_token();
+            if (self.curKind() != .comma) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} is missing its target expression", .{hook_name}) catch "animation hook missing target expression");
+                skipHookCallRemainder(self);
+                continue;
+            }
+            self.advance_token();
+
+            const target_expr = handlers.emitStateExpr(self) catch {
+                self.setError(std.fmt.allocPrint(self.alloc, "failed to parse target expression for {s}({s}, ...)", .{ hook_name, getter_name }) catch "failed to parse animation target expression");
+                skipHookCallRemainder(self);
+                continue;
+            };
+
+            if (self.curKind() != .comma) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} is missing its numeric parameters", .{hook_name}) catch "animation hook missing parameters");
+                skipHookCallRemainder(self);
+                continue;
+            }
+            self.advance_token();
+
+            var duration_ms: u32 = 0;
+            var easing: codegen.EasingKind = .linear;
+            var stiffness: f32 = 0.0;
+            var damping: f32 = 0.0;
+
+            if (is_spring) {
+                if (self.curKind() != .number) {
+                    self.setError("useSpring stiffness must be a numeric literal");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+                stiffness = std.fmt.parseFloat(f32, self.curText()) catch 120.0;
+                self.advance_token();
+
+                if (self.curKind() != .comma) {
+                    self.setError("useSpring is missing its damping argument");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+                self.advance_token();
+
+                if (self.curKind() != .number) {
+                    self.setError("useSpring damping must be a numeric literal");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+                damping = std.fmt.parseFloat(f32, self.curText()) catch 14.0;
+                self.advance_token();
+            } else {
+                if (self.curKind() != .number) {
+                    self.setError("useTransition duration must be an integer literal in milliseconds");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+                duration_ms = std.fmt.parseInt(u32, self.curText(), 10) catch 300;
+                self.advance_token();
+
+                if (self.curKind() != .comma) {
+                    self.setError("useTransition is missing its easing argument");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+                self.advance_token();
+
+                if (self.curKind() != .string) {
+                    self.setError("useTransition easing must be a string literal");
+                    skipHookCallRemainder(self);
+                    continue;
+                }
+
+                const easing_name = stripQuotes(self.curText());
+                easing = parseEasingKind(easing_name) orelse {
+                    self.setErrorAt(hook_start, std.fmt.allocPrint(self.alloc, "unsupported easing '{s}' in useTransition", .{easing_name}) catch "unsupported easing");
+                    skipHookCallRemainder(self);
+                    continue;
+                };
+                self.advance_token();
+            }
+
+            if (self.curKind() != .rparen) {
+                self.setError(std.fmt.allocPrint(self.alloc, "{s} has too many arguments or is missing ')'", .{hook_name}) catch "animation hook syntax error");
+                skipHookCallRemainder(self);
+                continue;
+            }
+            self.advance_token();
+            if (self.curKind() == .semicolon) self.advance_token();
+
+            var vel_slot_id: u32 = 0;
+            if (is_spring) {
+                const vel_name = std.fmt.allocPrint(self.alloc, "_vel_{d}", .{self.state_count}) catch "_vel";
+                const vel_slot = appendStateSlot(self, vel_name, "", .{ .float = 0.0 }) orelse continue;
+                vel_slot_id = vel_slot;
+            }
+
+            self.anim_hooks[self.anim_hook_count] = .{
+                .kind = if (is_spring) .spring else .transition,
+                .slot_id = slot_id,
+                .vel_slot_id = vel_slot_id,
+                .target_expr = target_expr,
+                .duration_ms = duration_ms,
+                .easing = easing,
+                .stiffness = stiffness,
+                .damping = damping,
+            };
+            self.anim_hook_count += 1;
+            continue;
         }
         if (stop_at_return and self.isIdent("return")) break;
         self.advance_token();
@@ -714,8 +981,14 @@ pub fn collectUtilFunctions(self: *Generator) void {
             if (self.curKind() != .identifier) continue;
             const name = self.curText();
             // Skip App and uppercase (components)
-            if (std.mem.eql(u8, name, "App")) { self.advance_token(); continue; }
-            if (name.len > 0 and name[0] >= 'A' and name[0] <= 'Z') { self.advance_token(); continue; }
+            if (std.mem.eql(u8, name, "App")) {
+                self.advance_token();
+                continue;
+            }
+            if (name.len > 0 and name[0] >= 'A' and name[0] <= 'Z') {
+                self.advance_token();
+                continue;
+            }
             self.advance_token();
 
             // Parse params
@@ -812,6 +1085,130 @@ pub fn collectLetVars(self: *Generator, func_start: u32) void {
                 }
             }
         }
+        self.advance_token();
+    }
+}
+
+// ── Effect hook collection ──
+
+/// Phase 6.25: Collect useEffect() calls within the App function body.
+///
+/// Supports four variants:
+///   useEffect(() => { body }, [])       → mount (run once at init)
+///   useEffect(() => { body }, [dep])    → watch (run when deps change)
+///   useEffect(() => { body })           → frame (run every render)
+///   useEffect(() => { body }, 500)      → interval (run every N ms)
+///
+/// The body_start/body_end token positions are recorded so emit.zig can
+/// call emitHandlerBody to translate the arrow function body to Zig.
+pub fn collectEffectHooks(self: *Generator, func_start: u32) void {
+    self.pos = func_start;
+    // Skip past function header to body
+    while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
+    if (self.curKind() == .lbrace) self.advance_token();
+
+    while (self.pos < self.lex.count) {
+        if (self.isIdent("useEffect")) {
+            self.advance_token(); // skip "useEffect"
+            if (self.curKind() == .lparen) self.advance_token(); // skip (
+
+            // Record body_start — at the ( or first token of arrow function
+            const body_start = self.pos;
+
+            // Skip the arrow function: () => BODY or (e) => BODY
+            if (self.curKind() == .lparen) self.advance_token(); // (
+            while (self.curKind() == .identifier or self.curKind() == .comma) self.advance_token();
+            if (self.curKind() == .rparen) self.advance_token(); // )
+            if (self.curKind() == .arrow) self.advance_token(); // =>
+
+            // Skip body — either { ... } block or single expression
+            var body_end: u32 = self.pos;
+            if (self.curKind() == .lbrace) {
+                var depth: u32 = 1;
+                self.advance_token();
+                while (depth > 0 and self.curKind() != .eof) {
+                    if (self.curKind() == .lbrace) depth += 1;
+                    if (self.curKind() == .rbrace) depth -= 1;
+                    if (depth > 0) self.advance_token();
+                }
+                body_end = self.pos;
+                if (self.curKind() == .rbrace) self.advance_token();
+            } else {
+                // Single expression — skip until , or ) at depth 0
+                var paren_depth: u32 = 0;
+                while (self.curKind() != .eof) {
+                    if (self.curKind() == .lparen) paren_depth += 1;
+                    if (self.curKind() == .rparen) {
+                        if (paren_depth == 0) break;
+                        paren_depth -= 1;
+                    }
+                    if (self.curKind() == .comma and paren_depth == 0) break;
+                    self.advance_token();
+                }
+                body_end = self.pos;
+            }
+
+            // Determine kind based on what follows the body
+            var kind: codegen.EffectKind = .frame;
+            var dep_slots: [8]u32 = undefined;
+            var dep_count: u32 = 0;
+            var interval_ms: u32 = 0;
+
+            if (self.curKind() == .comma) {
+                self.advance_token(); // skip ,
+
+                if (self.curKind() == .lbracket) {
+                    self.advance_token(); // skip [
+                    if (self.curKind() == .rbracket) {
+                        // Empty deps → mount
+                        kind = .mount;
+                        self.advance_token(); // skip ]
+                    } else {
+                        // Dependencies → watch
+                        kind = .watch;
+                        while (self.curKind() != .rbracket and self.curKind() != .eof) {
+                            if (self.curKind() == .identifier) {
+                                const dep_name = self.curText();
+                                if (self.isState(dep_name)) |slot_id| {
+                                    if (dep_count < 8) {
+                                        dep_slots[dep_count] = slot_id;
+                                        dep_count += 1;
+                                    }
+                                }
+                            }
+                            self.advance_token();
+                            if (self.curKind() == .comma) self.advance_token();
+                        }
+                        if (self.curKind() == .rbracket) self.advance_token();
+                    }
+                } else if (self.curKind() == .number) {
+                    // Number → interval
+                    kind = .interval;
+                    interval_ms = std.fmt.parseInt(u32, self.curText(), 10) catch 1000;
+                    self.advance_token();
+                }
+            }
+
+            // Skip closing ) and optional ;
+            if (self.curKind() == .rparen) self.advance_token();
+            if (self.curKind() == .semicolon) self.advance_token();
+
+            if (self.effect_hook_count < codegen.MAX_EFFECT_HOOKS) {
+                self.effect_hooks[self.effect_hook_count] = .{
+                    .kind = kind,
+                    .body_start = body_start,
+                    .body_end = body_end,
+                    .dep_slots = dep_slots,
+                    .dep_count = dep_count,
+                    .interval_ms = interval_ms,
+                };
+                self.effect_hook_count += 1;
+            } else {
+                self.setError("Too many useEffect hooks (limit: 32)");
+            }
+            continue; // don't advance_token at bottom
+        }
+        if (self.isIdent("return")) break;
         self.advance_token();
     }
 }

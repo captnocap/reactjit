@@ -61,6 +61,23 @@ test "app with onPress" {
     try testing.expect(std.mem.indexOf(u8, out, "state.setSlot(") != null);
 }
 
+test "app with object state flattening" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "function App() { const [user, setUser] = useState({ name: \"alice\", age: 30, active: true }); " ++
+        "return <Pressable onPress={() => setUser({ ...user, name: \"bob\", age: user.age + 1 })}><Text>{user.name}</Text></Pressable> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "createSlotString(\"alice\")") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.getSlotString(0)") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.setSlotString(0, \"bob\")") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.setSlot(1, (state.getSlot(1) + 1))") != null);
+}
+
 test "app with component" {
     var a = arena();
     defer a.deinit();
@@ -343,6 +360,65 @@ test "REGRESSION: useFFI state in template literal must bind" {
     try testing.expect(std.mem.indexOf(u8, out, "state.getSlot") != null);
     // Direct use (not through component) — should bind
     try testing.expect(hasBoundDynText(out));
+}
+
+// ── useEffect tests ──
+
+test "app with useEffect mount" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { const [count, setCount] = useState(0); useEffect(() => { setCount(10) }, []); return <Box><Text>{`${count}`}</Text></Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // Mount effect body should appear in _appInit
+    try testing.expect(std.mem.indexOf(u8, out, "// useEffect mount") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.setSlot(0, 10)") != null);
+}
+
+test "app with useEffect frame" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { const [count, setCount] = useState(0); useEffect(() => { setCount(count + 1) }); return <Box><Text>{`${count}`}</Text></Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // Frame effect body should appear in _appTick
+    try testing.expect(std.mem.indexOf(u8, out, "// useEffect frame") != null);
+}
+
+test "app with useEffect interval" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { const [count, setCount] = useState(0); useEffect(() => { setCount(count + 1) }, 500); return <Box><Text>{`${count}`}</Text></Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // Interval effect should have timer variable and timer check in _appTick
+    try testing.expect(std.mem.indexOf(u8, out, "_effect_timer_") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ">= 500") != null);
+    // now parameter should NOT be suppressed
+    try testing.expect(std.mem.indexOf(u8, out, "_ = now;") == null);
+}
+
+test "app with useEffect watch" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { const [count, setCount] = useState(0); const [label, setLabel] = useState(\"hi\"); useEffect(() => { setLabel(\"changed\") }, [count]); return <Box><Text>{`${count} ${label}`}</Text></Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // Watch effect should emit setSlotString in the dirty check block
+    try testing.expect(std.mem.indexOf(u8, out, "state.setSlotString(") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.isDirty()") != null);
 }
 
 test "app with script block" {

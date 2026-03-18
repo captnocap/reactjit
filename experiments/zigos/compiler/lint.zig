@@ -103,6 +103,9 @@ pub const Linter = struct {
         self.checkFFIPragmaFormat();
         self.checkSingleBraceStyle();
         self.checkNoAppFunction();
+        self.checkChildOverflow();
+        self.checkPropConditionals();
+        self.checkMultiReturn();
 
         return .{
             .diagnostics = self.diags[0..self.count],
@@ -272,10 +275,8 @@ pub const Linter = struct {
             if (std.mem.eql(u8, name, "className") and i + 1 < self.lex.count and self.kind(i + 1) == .equals) {
                 self.emit(self.tok(i).start, .warn, "'className' is not supported — use 'style={{...}}' or a classifier instead");
             }
-            // useEffect
-            if (std.mem.eql(u8, name, "useEffect")) {
-                self.emit(self.tok(i).start, .warn, "'useEffect' is not supported in .tsz — use <script> blocks or useFFI hooks");
-            }
+            // useEffect — supported since Phase 6.25
+            // (mount, watch, frame, interval variants)
             // useRef
             if (std.mem.eql(u8, name, "useRef")) {
                 self.emit(self.tok(i).start, .warn, "'useRef' is not supported in .tsz");
@@ -485,6 +486,315 @@ pub const Linter = struct {
         } else if (!has_app) {
             self.emit(0, .hint, "No 'App' function found — the compiler will use the last function as the entry point");
         }
+    }
+
+    /// Child overflow detection — warns when a child has explicit pixel
+    /// dimensions larger than its parent's explicit pixel dimensions.
+    ///
+    /// Tracks JSX nesting with a dimension stack. Only fires on explicit
+    /// pixel values (not percentages, not flexGrow, not auto-sized).
+    /// Also accounts for parent padding reducing available space.
+    fn checkChildOverflow(self: *Linter) void {
+        const MAX_DEPTH = 64;
+        const DimEntry = struct {
+            width: ?f32 = null,
+            height: ?f32 = null,
+            pad_l: f32 = 0,
+            pad_r: f32 = 0,
+            pad_t: f32 = 0,
+            pad_b: f32 = 0,
+            pad_all: f32 = 0, // shorthand 'padding'
+            tag_offset: u32 = 0,
+
+            fn availWidth(e: *const @This()) ?f32 {
+                const w = e.width orelse return null;
+                const pl = if (e.pad_l > 0) e.pad_l else e.pad_all;
+                const pr = if (e.pad_r > 0) e.pad_r else e.pad_all;
+                return w - pl - pr;
+            }
+
+            fn availHeight(e: *const @This()) ?f32 {
+                const h = e.height orelse return null;
+                const pt = if (e.pad_t > 0) e.pad_t else e.pad_all;
+                const pb = if (e.pad_b > 0) e.pad_b else e.pad_all;
+                return h - pt - pb;
+            }
+        };
+
+        var stack: [MAX_DEPTH]DimEntry = undefined;
+        var depth: u32 = 0;
+        var i: u32 = 0;
+
+        while (i < self.lex.count) : (i += 1) {
+            const k = self.kind(i);
+            if (k == .eof) break;
+
+            // Opening tag: < Identifier ...
+            if (k == .lt and i + 1 < self.lex.count and self.kind(i + 1) == .identifier) {
+                const tag_name = self.text(i + 1);
+                // Skip lowercase (html) tags
+                if (tag_name.len == 0 or (tag_name[0] >= 'a' and tag_name[0] <= 'z')) {
+                    i += 1;
+                    continue;
+                }
+
+                // Parse the element's style dimensions
+                var entry = DimEntry{ .tag_offset = self.tok(i + 1).start };
+                var j = i + 2;
+
+                // Scan for style={{ ... }} within this tag
+                while (j < self.lex.count) {
+                    const jk = self.kind(j);
+                    if (jk == .gt or jk == .slash_gt or jk == .eof) break;
+
+                    if (self.isIdent(j, "style") and j + 3 < self.lex.count and
+                        self.kind(j + 1) == .equals and self.kind(j + 2) == .lbrace and
+                        self.kind(j + 3) == .lbrace)
+                    {
+                        // Parse style object
+                        var sj = j + 4;
+                        while (sj < self.lex.count and self.kind(sj) != .rbrace and self.kind(sj) != .eof) {
+                            if (self.kind(sj) == .identifier and sj + 2 < self.lex.count and
+                                self.kind(sj + 1) == .colon)
+                            {
+                                const prop = self.text(sj);
+                                const val = self.parseNumericValue(sj + 2);
+
+                                if (val) |v| {
+                                    if (std.mem.eql(u8, prop, "width")) { entry.width = v; }
+                                    else if (std.mem.eql(u8, prop, "height")) { entry.height = v; }
+                                    else if (std.mem.eql(u8, prop, "padding")) { entry.pad_all = v; }
+                                    else if (std.mem.eql(u8, prop, "paddingLeft")) { entry.pad_l = v; }
+                                    else if (std.mem.eql(u8, prop, "paddingRight")) { entry.pad_r = v; }
+                                    else if (std.mem.eql(u8, prop, "paddingTop")) { entry.pad_t = v; }
+                                    else if (std.mem.eql(u8, prop, "paddingBottom")) { entry.pad_b = v; }
+                                }
+                            }
+                            sj += 1;
+                        }
+                    }
+                    j += 1;
+                }
+
+                // Check if self-closing
+                var is_self_closing = false;
+                var scan = i + 2;
+                while (scan < self.lex.count) {
+                    const sk = self.kind(scan);
+                    if (sk == .slash_gt) { is_self_closing = true; break; }
+                    if (sk == .gt) break;
+                    if (sk == .eof) break;
+                    scan += 1;
+                }
+
+                // Compare child against parent
+                if (depth > 0 and !is_self_closing) {
+                    const parent = &stack[depth - 1];
+                    if (entry.width) |cw| {
+                        if (parent.availWidth()) |pw| {
+                            if (cw > pw) {
+                                const msg = std.fmt.allocPrint(self.alloc,
+                                    "Child width ({d:.0}px) exceeds parent's available width ({d:.0}px) — will overflow", .{ cw, pw }) catch "Child wider than parent";
+                                self.emit(entry.tag_offset, .warn, msg);
+                            }
+                        }
+                    }
+                    if (entry.height) |ch| {
+                        if (parent.availHeight()) |ph| {
+                            if (ch > ph) {
+                                const msg = std.fmt.allocPrint(self.alloc,
+                                    "Child height ({d:.0}px) exceeds parent's available height ({d:.0}px) — will overflow", .{ ch, ph }) catch "Child taller than parent";
+                                self.emit(entry.tag_offset, .warn, msg);
+                            }
+                        }
+                    }
+                } else if (is_self_closing and depth > 0) {
+                    // Self-closing — check but don't push
+                    const parent = &stack[depth - 1];
+                    if (entry.width) |cw| {
+                        if (parent.availWidth()) |pw| {
+                            if (cw > pw) {
+                                const msg = std.fmt.allocPrint(self.alloc,
+                                    "Child width ({d:.0}px) exceeds parent's available width ({d:.0}px) — will overflow", .{ cw, pw }) catch "Child wider than parent";
+                                self.emit(entry.tag_offset, .warn, msg);
+                            }
+                        }
+                    }
+                    if (entry.height) |ch| {
+                        if (parent.availHeight()) |ph| {
+                            if (ch > ph) {
+                                const msg = std.fmt.allocPrint(self.alloc,
+                                    "Child height ({d:.0}px) exceeds parent's available height ({d:.0}px) — will overflow", .{ ch, ph }) catch "Child taller than parent";
+                                self.emit(entry.tag_offset, .warn, msg);
+                            }
+                        }
+                    }
+                    i = scan;
+                    continue;
+                }
+
+                if (!is_self_closing and depth < MAX_DEPTH) {
+                    stack[depth] = entry;
+                    depth += 1;
+                }
+
+                i = scan;
+                continue;
+            }
+
+            // Closing tag: </ Identifier >
+            if (k == .lt_slash and i + 1 < self.lex.count and self.kind(i + 1) == .identifier) {
+                if (depth > 0) depth -= 1;
+                while (i < self.lex.count and self.kind(i) != .gt and self.kind(i) != .eof) i += 1;
+                continue;
+            }
+
+            // Fragment close: </>
+            if (k == .lt_slash and i + 1 < self.lex.count and self.kind(i + 1) == .gt) {
+                // Fragments don't have dimensions, but might have pushed a stack entry
+                i += 1;
+            }
+        }
+    }
+
+    /// Detect component functions that use {prop == N && <JSX>} conditionals.
+    /// These require ALL callers to pass the prop — unpassed props default to 0,
+    /// which may silently show/hide the wrong variant.
+    fn checkPropConditionals(self: *Linter) void {
+        var i: u32 = 0;
+        while (i < self.lex.count) : (i += 1) {
+            if (self.kind(i) == .eof) break;
+            // Find: function ComponentName({ prop1, prop2, ... })
+            if (!self.isIdent(i, "function")) continue;
+            if (i + 1 >= self.lex.count or self.kind(i + 1) != .identifier) continue;
+            const func_name = self.text(i + 1);
+            // Skip App — it's the entry point, not a component
+            if (std.mem.eql(u8, func_name, "App")) continue;
+            // Must start uppercase (component convention)
+            if (func_name.len == 0 or func_name[0] < 'A' or func_name[0] > 'Z') continue;
+
+            // Collect declared prop names from ({ prop1, prop2 })
+            var prop_names: [32][]const u8 = undefined;
+            var prop_count: u32 = 0;
+            var j = i + 2;
+            // Skip to opening ( then {
+            while (j < self.lex.count and self.kind(j) != .lbrace and self.kind(j) != .eof) j += 1;
+            j += 1; // skip {
+            while (j < self.lex.count and self.kind(j) != .rbrace and self.kind(j) != .eof) {
+                if (self.kind(j) == .identifier and prop_count < 32) {
+                    prop_names[prop_count] = self.text(j);
+                    prop_count += 1;
+                }
+                j += 1;
+            }
+            if (prop_count == 0) continue;
+
+            // Now scan the function body for {prop == N && or {prop != N &&
+            // Track brace depth to stay within this function
+            var body_depth: u32 = 0;
+            var found_body = false;
+            while (j < self.lex.count) : (j += 1) {
+                const k = self.kind(j);
+                if (k == .eof) break;
+                if (k == .lbrace) { body_depth += 1; found_body = true; }
+                if (k == .rbrace) {
+                    if (body_depth <= 1 and found_body) break; // end of function
+                    if (body_depth > 0) body_depth -= 1;
+                }
+                // Pattern: identifier (== | !=) number &&
+                if (k == .identifier and j + 3 < self.lex.count) {
+                    const ident = self.text(j);
+                    const next_k = self.kind(j + 1);
+                    if ((next_k == .eq_eq or next_k == .not_eq) and self.kind(j + 2) == .number) {
+                        if (self.kind(j + 3) == .amp_amp) {
+                            // Check if ident is a declared prop
+                            for (prop_names[0..prop_count]) |pn| {
+                                if (std.mem.eql(u8, pn, ident)) {
+                                    const msg = std.fmt.allocPrint(self.alloc,
+                                        "Component '{s}' uses conditional on prop '{s}' — callers that omit this prop will default to 0", .{ func_name, ident }) catch "Prop conditional warning";
+                                    self.emit(self.tok(j).start, .hint, msg);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            i = j;
+        }
+    }
+
+    /// Detect component functions with multiple return statements.
+    /// The compiler only handles a single return — extra returns are silently
+    /// skipped and their JSX content leaks through as bare text.
+    fn checkMultiReturn(self: *Linter) void {
+        var i: u32 = 0;
+        while (i < self.lex.count) : (i += 1) {
+            if (self.kind(i) == .eof) break;
+            // Find: function Name(
+            if (!self.isIdent(i, "function")) continue;
+            if (i + 1 >= self.lex.count or self.kind(i + 1) != .identifier) continue;
+            const func_name = self.text(i + 1);
+            // Skip App — entry point, single return is enforced elsewhere
+            if (std.mem.eql(u8, func_name, "App")) continue;
+
+            // Skip past parameter list (...) to find function body {
+            var j = i + 2;
+            while (j < self.lex.count and self.kind(j) != .rparen and self.kind(j) != .eof) j += 1;
+            j += 1; // skip )
+            while (j < self.lex.count and self.kind(j) != .lbrace and self.kind(j) != .eof) j += 1;
+            if (j >= self.lex.count) continue;
+
+            // Count return statements at depth 1 (top-level of function body)
+            var depth: u32 = 0;
+            var return_count: u32 = 0;
+            var first_return_offset: u32 = 0;
+            while (j < self.lex.count) : (j += 1) {
+                const k = self.kind(j);
+                if (k == .eof) break;
+                if (k == .lbrace) depth += 1;
+                if (k == .rbrace) {
+                    if (depth <= 1) break; // end of function
+                    depth -= 1;
+                }
+                // return at any depth inside the function body (skip text content like <Tag>return</Tag>)
+                if (depth >= 1 and self.isIdent(j, "return") and (j == 0 or self.kind(j - 1) != .gt)) {
+                    return_count += 1;
+                    if (return_count == 1) first_return_offset = self.tok(j).start;
+                }
+            }
+            if (return_count > 1) {
+                const msg = std.fmt.allocPrint(self.alloc,
+                    "Component '{s}' has {d} return statements — compiler only handles one. Use Fragment + {{prop && <JSX>}} conditionals instead of if/return", .{ func_name, return_count }) catch "Multi-return component";
+                self.emit(first_return_offset, .warn, msg);
+            }
+            i = j;
+        }
+    }
+
+    /// Try to parse a numeric pixel value from a token position.
+    /// Returns null for percentages, strings, expressions, variables.
+    fn parseNumericValue(self: *Linter, idx: u32) ?f32 {
+        if (idx >= self.lex.count) return null;
+        const k = self.kind(idx);
+
+        if (k == .number) {
+            const num_text = self.text(idx);
+            return std.fmt.parseFloat(f32, num_text) catch null;
+        }
+
+        // Skip percentage strings like '100%'
+        if (k == .string) {
+            const raw = self.text(idx);
+            if (raw.len >= 2) {
+                const inner = raw[1 .. raw.len - 1];
+                if (std.mem.indexOf(u8, inner, "%") != null) return null;
+                // Try parsing as a number string (e.g., '400')
+                return std.fmt.parseFloat(f32, inner) catch null;
+            }
+        }
+
+        return null;
     }
 };
 

@@ -13,3 +13,11 @@ function DetailSection({ title, hint, children }) {
     </C.Section>
   );
 }
+
+function App() {
+  return (
+    <DetailSection title="box model" hint="margin / padding / content">
+      <Text style={{ color: '#8090a0', fontSize: 11 }}>children go here</Text>
+    </DetailSection>
+  );
+}

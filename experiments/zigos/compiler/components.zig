@@ -177,7 +177,22 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
     // ── Phase 3: Try multi-use leaf optimization ──
     // If this component is used 2+ times and has no children or state-dependent props,
     // emit a shared _initComponentName() function instead of duplicating the tree inline.
-    const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children;
+    // Skip multi-use if body has && conditionals — they reference props that can't be
+    // evaluated inside a shared function (props are compile-time, not runtime params).
+    var has_body_conditionals = false;
+    {
+        var scan = comp.body_pos;
+        var depth: u32 = 0;
+        while (scan < self.lex.count) {
+            const kind = self.lex.get(scan).kind;
+            if (kind == .lbrace) depth += 1;
+            if (kind == .rbrace) { if (depth > 0) depth -= 1 else break; }
+            if (kind == .amp_amp and depth <= 1) { has_body_conditionals = true; break; }
+            if (kind == .eof) break;
+            scan += 1;
+        }
+    }
+    const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children and !has_body_conditionals;
     if (eligible) {
         var has_state_prop = false;
         for (saved_prop_count..self.prop_stack_count) |pi| {

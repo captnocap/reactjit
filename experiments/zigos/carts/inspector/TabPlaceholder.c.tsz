@@ -8,3 +8,9 @@ function TabPlaceholder({ title, copy }) {
     </C.TabPlaceholderSurface>
   );
 }
+
+function App() {
+  return (
+    <TabPlaceholder title="Network" copy="HTTP requests and WebSocket frames will appear here." />
+  );
+}

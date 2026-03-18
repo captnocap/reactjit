@@ -1,5 +1,4 @@
-import { Panel, TabBar, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood } from './style_cls';
-import { InspectorTabButton } from './InspectorTabButton.c';
+import { Panel, TabBar, TabButtonActive, TabLabelActive, TabButton, TabLabel, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood } from './style_cls';
 import { ElementsPage } from './ElementsPage.c';
 import { SourcePage } from './SourcePage.c';
 import { WireframePage } from './WireframePage.c';
@@ -14,22 +13,38 @@ function App() {
   return (
     <C.Panel>
       <C.TabBar>
-        <InspectorTabButton label="Elements" active={activeTab == 0 ? 1 : 0} onPress={() => setActiveTab(0)} />
-        <InspectorTabButton label="Source" active={activeTab == 1 ? 1 : 0} onPress={() => setActiveTab(1)} />
-        <InspectorTabButton label="Wireframe" active={activeTab == 2 ? 1 : 0} onPress={() => setActiveTab(2)} />
-        <InspectorTabButton label="Perf" active={activeTab == 3 ? 1 : 0} onPress={() => setActiveTab(3)} />
-        <InspectorTabButton label="Network" active={activeTab == 4 ? 1 : 0} onPress={() => setActiveTab(4)} />
-        <InspectorTabButton label="Console" active={activeTab == 5 ? 1 : 0} onPress={() => setActiveTab(5)} />
-        <InspectorTabButton label="Logs" active={activeTab == 6 ? 1 : 0} onPress={() => setActiveTab(6)} />
+        <Pressable onPress={() => { setActiveTab(0); navigate('/elements') }}>
+          <Text fontSize={11} color="#edf2ff">Elements</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(1); navigate('/source') }}>
+          <Text fontSize={11} color="#72788b">Source</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(2); navigate('/wireframe') }}>
+          <Text fontSize={11} color="#72788b">Wireframe</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(3); navigate('/perf') }}>
+          <Text fontSize={11} color="#72788b">Perf</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(4); navigate('/network') }}>
+          <Text fontSize={11} color="#72788b">Network</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(5); navigate('/console') }}>
+          <Text fontSize={11} color="#72788b">Console</Text>
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(6); navigate('/logs') }}>
+          <Text fontSize={11} color="#72788b">Logs</Text>
+        </Pressable>
       </C.TabBar>
       <C.Divider />
-      {activeTab == 0 && <ElementsPage />}
-      {activeTab == 1 && <SourcePage />}
-      {activeTab == 2 && <WireframePage />}
-      {activeTab == 3 && <PerfPage />}
-      {activeTab == 4 && <NetworkPage />}
-      {activeTab == 5 && <ConsolePage />}
-      {activeTab == 6 && <LogsPage />}
+      <Routes>
+        <Route path="/elements" element={<ElementsPage />} />
+        <Route path="/source" element={<SourcePage />} />
+        <Route path="/wireframe" element={<WireframePage />} />
+        <Route path="/perf" element={<PerfPage />} />
+        <Route path="/network" element={<NetworkPage />} />
+        <Route path="/console" element={<ConsolePage />} />
+        <Route path="/logs" element={<LogsPage />} />
+      </Routes>
       <C.StatusBar>
         <C.StatusLeft>
           <C.StatusTextGood>Ready</C.StatusTextGood>

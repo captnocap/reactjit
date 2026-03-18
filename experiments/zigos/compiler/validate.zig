@@ -12,7 +12,7 @@ const Generator = codegen.Generator;
 const TokenKind = codegen.TokenKind;
 
 const primitives = [_][]const u8{
-    "Box", "Text", "Image", "Pressable", "ScrollView", "TextInput",
+    "Box", "Text", "Image", "Pressable", "ScrollView", "TextInput", "TextArea",
 };
 
 const special_tags = [_][]const u8{
@@ -39,6 +39,7 @@ fn isKnownIdent(self: *Generator, name: []const u8) bool {
     // State getters and setters
     if (self.isState(name) != null) return true;
     if (self.isSetter(name) != null) return true;
+    if (self.isObjectStateVar(name) != null) return true;
 
     // Local const vars
     if (self.isLocalVar(name) != null) return true;
@@ -60,21 +61,21 @@ fn isKnownIdent(self: *Generator, name: []const u8) bool {
 
     // JS/TS keywords and built-ins that appear in expressions
     const keywords = [_][]const u8{
-        "true",       "false",       "null",      "undefined",
-        "console",    "Math",        "Date",      "JSON",
-        "parseInt",   "parseFloat",  "String",    "Number",
-        "Boolean",    "Array",       "Object",    "Map",
-        "Set",        "Promise",     "Error",     "typeof",
-        "instanceof", "new",         "this",      "window",
-        "document",   "navigator",   "children",  "props",
+        "true",       "false",      "null",     "undefined",
+        "console",    "Math",       "Date",     "JSON",
+        "parseInt",   "parseFloat", "String",   "Number",
+        "Boolean",    "Array",      "Object",   "Map",
+        "Set",        "Promise",    "Error",    "typeof",
+        "instanceof", "new",        "this",     "window",
+        "document",   "navigator",  "children", "props",
         // TSZ-specific
-        "from",       "import",      "export",    "default",
-        "function",   "const",       "let",       "var",
-        "if",         "else",        "return",    "switch",
-        "case",       "break",       "for",       "while",
-        "class",      "interface",   "type",      "enum",
-        "declare",    "void",        "useState",  "useFFI",
-        "App",        "script",
+        "from",       "import",     "export",   "default",
+        "function",   "const",      "let",      "var",
+        "if",         "else",       "return",   "switch",
+        "case",       "break",      "for",      "while",
+        "class",      "interface",  "type",     "enum",
+        "declare",    "void",       "useState", "useFFI",
+        "useEffect",  "App",        "script",
     };
     for (keywords) |kw| {
         if (std.mem.eql(u8, kw, name)) return true;
@@ -109,8 +110,7 @@ fn validateTags(self: *Generator, app_start: u32) void {
                 {
                     // Check if first char is uppercase (JSX convention for components)
                     if (tag.len > 0 and tag[0] >= 'A' and tag[0] <= 'Z') {
-                        const msg = std.fmt.allocPrint(self.alloc,
-                            "Unknown component <{s}> — not defined as a component, classifier, or primitive", .{tag}) catch "Unknown component";
+                        const msg = std.fmt.allocPrint(self.alloc, "Unknown component <{s}> — not defined as a component, classifier, or primitive", .{tag}) catch "Unknown component";
                         self.setErrorAt(next.start, msg);
                     }
                 }
@@ -156,9 +156,7 @@ fn validateComponentProps(self: *Generator, app_start: u32) void {
                                 if (!found and !std.mem.eql(u8, attr_name, "children") and
                                     !std.mem.eql(u8, attr_name, "key"))
                                 {
-                                    const msg = std.fmt.allocPrint(self.alloc,
-                                        "Unknown prop '{s}' on <{s}> — component declares: {s}",
-                                        .{ attr_name, tag, formatPropList(self, comp) }) catch "Unknown prop on component";
+                                    const msg = std.fmt.allocPrint(self.alloc, "Unknown prop '{s}' on <{s}> — component declares: {s}", .{ attr_name, tag, formatPropList(self, comp) }) catch "Unknown prop on component";
                                     self.setErrorAt(self.lex.get(attr_pos).start, msg);
                                 }
                             }
@@ -214,7 +212,10 @@ fn validateExpressionIdents(self: *Generator, app_start: u32) void {
                     const k = self.lex.get(pos).kind;
                     if (k == .lbrace) depth += 1;
                     if (k == .rbrace) {
-                        if (depth <= 1) { pos += 1; break; }
+                        if (depth <= 1) {
+                            pos += 1;
+                            break;
+                        }
                         depth -= 1;
                     }
                     if (k == .eof) break;
@@ -264,8 +265,7 @@ fn validateExpressionIdents(self: *Generator, app_start: u32) void {
                 }
 
                 if (!isKnownIdent(self, ident)) {
-                    const msg = std.fmt.allocPrint(self.alloc,
-                        "Unknown identifier '{s}' in expression — not a state variable, prop, local, or function", .{ident}) catch "Unknown identifier in expression";
+                    const msg = std.fmt.allocPrint(self.alloc, "Unknown identifier '{s}' in expression — not a state variable, prop, local, or function", .{ident}) catch "Unknown identifier in expression";
                     self.setErrorAt(next.start, msg);
                 }
             }

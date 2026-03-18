@@ -9,7 +9,8 @@
 //!   Phase 4:   collectComponents        — scan for function MyComp({props}) { return <...> }
 //!   Phase 4.5: collectUtilFunctions     — scan for lowercase function helpers
 //!   Phase 5:   extractComputeBlock      — extract <script>...</script> JS logic
-//!   Phase 6:   collectStateHooks        — scan for useState/useFFI declarations
+//!   Phase 6:   collectStateHooks        — scan for useState/useFFI/useTransition/useSpring declarations
+//!   Phase 6.25:collectEffectHooks      — scan for useEffect lifecycle hooks
 //!   Phase 6.5: collectLetVars           — scan for `let x = expr` mutable vars
 //!   Phase 7:   countComponentUsage      — count <MyComp> references for optimization
 //!   Phase 7.5: collectAppConditionals   — scan root-level {state && <JSX>} patterns
@@ -48,7 +49,7 @@ pub const MAX_ARRAYS = 512;
 pub const MAX_STATE_SLOTS = 128;
 pub const MAX_DYN_TEXTS = 128;
 pub const MAX_ARRAY_INIT = 64;
-pub const MAX_CLASSIFIERS = 256;
+pub const MAX_CLASSIFIERS = 512;
 pub const MAX_COMP_FUNCS = 32;
 pub const MAX_COMP_INSTANCES = 128;
 pub const MAX_COMP_INNER = 8;
@@ -61,9 +62,13 @@ pub const MAX_CONDITIONALS = 32;
 pub const MAX_APP_CONDS = 32;
 pub const MAX_DYN_STYLES = 128;
 pub const MAX_FFI_HOOKS = 16;
+pub const MAX_EFFECT_HOOKS = 32;
+pub const MAX_ANIM_HOOKS = 16;
 pub const MAX_UTIL_FUNCS = 32;
 pub const MAX_UTIL_PARAMS = 16;
 pub const MAX_LET_VARS = 32;
+pub const MAX_OBJECT_STATE_FIELDS = 16;
+pub const MAX_OBJECT_STATE_VARS = 16;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -128,6 +133,19 @@ pub const StateSlot = struct {
     initial: StateInitial,
 };
 
+pub const ObjectField = struct {
+    field_name: []const u8,
+    slot_id: u32,
+    state_type: StateType,
+};
+
+pub const ObjectStateVar = struct {
+    getter: []const u8,
+    setter: []const u8,
+    fields: [MAX_OBJECT_STATE_FIELDS]ObjectField,
+    field_count: u32,
+};
+
 pub const ComponentInfo = struct {
     name: []const u8,
     prop_names: [MAX_COMPONENT_PROPS][]const u8,
@@ -186,6 +204,31 @@ pub const FFIHook = struct {
     slot_id: u32,
 };
 
+pub const AnimKind = enum { transition, spring };
+pub const EasingKind = enum { linear, ease_in, ease_out, ease_in_out };
+
+pub const AnimHook = struct {
+    kind: AnimKind,
+    slot_id: u32,
+    vel_slot_id: u32,
+    target_expr: []const u8,
+    duration_ms: u32,
+    easing: EasingKind,
+    stiffness: f32,
+    damping: f32,
+};
+
+pub const EffectKind = enum { mount, watch, frame, interval };
+
+pub const EffectHook = struct {
+    kind: EffectKind,
+    body_start: u32, // token pos of arrow function body `{`
+    body_end: u32, // token pos of closing `}`
+    dep_slots: [8]u32, // slot IDs being watched (for .watch)
+    dep_count: u32,
+    interval_ms: u32, // for .interval
+};
+
 pub const CompFunc = struct {
     name: []const u8,
     func_source: []const u8,
@@ -232,6 +275,8 @@ pub const Generator = struct {
     // State (useState declarations)
     state_slots: [MAX_STATE_SLOTS]StateSlot,
     state_count: u32,
+    obj_state_vars: [MAX_OBJECT_STATE_VARS]ObjectStateVar,
+    obj_state_count: u32,
     has_state: bool,
 
     // Dynamic text (template literals that update from state)
@@ -290,6 +335,14 @@ pub const Generator = struct {
     ffi_hooks: [MAX_FFI_HOOKS]FFIHook,
     ffi_hook_count: u32,
 
+    // Animation hooks (per-frame transition/spring updates)
+    anim_hooks: [MAX_ANIM_HOOKS]AnimHook,
+    anim_hook_count: u32,
+
+    // useEffect hooks (lifecycle effects)
+    effect_hooks: [MAX_EFFECT_HOOKS]EffectHook,
+    effect_hook_count: u32,
+
     // Embedded JS logic (<script> or _script.tsz)
     compute_js: ?[]const u8 = null,
 
@@ -317,6 +370,10 @@ pub const Generator = struct {
     // Top-level App conditionals (pre-pass)
     app_conds: [MAX_APP_CONDS]AppConditional,
     app_cond_count: u32,
+
+    // TextInput compile-time ID assignment
+    input_counter: u32,
+    input_multiline: [16]bool,
 
     compile_error: ?[]const u8,
 
@@ -419,7 +476,8 @@ pub const Generator = struct {
             while (i + count < items.len) {
                 const next = items[i + count];
                 if (next.line == entry.line and next.col == entry.col and
-                    std.mem.eql(u8, next.msg, entry.msg)) {
+                    std.mem.eql(u8, next.msg, entry.msg))
+                {
                     count += 1;
                 } else break;
             }
@@ -447,6 +505,8 @@ pub const Generator = struct {
             .array_counter = 0,
             .state_slots = undefined,
             .state_count = 0,
+            .obj_state_vars = undefined,
+            .obj_state_count = 0,
             .has_state = false,
             .dyn_texts = undefined,
             .dyn_count = 0,
@@ -465,6 +525,10 @@ pub const Generator = struct {
             .ffi_arg_counts = .{},
             .ffi_hooks = undefined,
             .ffi_hook_count = 0,
+            .anim_hooks = undefined,
+            .anim_hook_count = 0,
+            .effect_hooks = undefined,
+            .effect_hook_count = 0,
             .local_vars = undefined,
             .local_count = 0,
             .util_funcs = undefined,
@@ -492,6 +556,8 @@ pub const Generator = struct {
             .conditional_count = 0,
             .app_conds = undefined,
             .app_cond_count = 0,
+            .input_counter = 0,
+            .input_multiline = [_]bool{false} ** 16,
             .compile_error = null,
             .errors = .{},
             .warnings = .{},
@@ -542,6 +608,28 @@ pub const Generator = struct {
     pub fn isSetter(self: *Generator, name: []const u8) ?u32 {
         for (0..self.state_count) |i| {
             if (std.mem.eql(u8, self.state_slots[i].setter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    pub fn isObjectStateVar(self: *Generator, name: []const u8) ?*const ObjectStateVar {
+        for (0..self.obj_state_count) |i| {
+            if (std.mem.eql(u8, self.obj_state_vars[i].getter, name)) return &self.obj_state_vars[i];
+        }
+        return null;
+    }
+
+    pub fn objectStateVarBySetter(self: *Generator, name: []const u8) ?*const ObjectStateVar {
+        for (0..self.obj_state_count) |i| {
+            if (std.mem.eql(u8, self.obj_state_vars[i].setter, name)) return &self.obj_state_vars[i];
+        }
+        return null;
+    }
+
+    pub fn resolveObjectStateField(self: *Generator, obj_name: []const u8, field_name: []const u8) ?*const ObjectField {
+        const obj = self.isObjectStateVar(obj_name) orelse return null;
+        for (0..obj.field_count) |i| {
+            if (std.mem.eql(u8, obj.fields[i].field_name, field_name)) return &obj.fields[i];
         }
         return null;
     }
@@ -723,7 +811,40 @@ pub const Generator = struct {
         collect.collectStateHooksTopLevel(self);
         self.pos = 0;
         const app_start = collect.findAppFunction(self) orelse return error.NoAppFunction;
+
+        // Seed prop_stack if the app function is itself a named component with props.
+        // This lets validation and compile-time conditional evaluation resolve prop
+        // references when a component file is compiled standalone (e.g. as a cart).
+        {
+            const saved_p = self.pos;
+            self.pos = app_start;
+            self.advance_token(); // skip "function" keyword
+            if (self.curKind() == .identifier) {
+                const app_name = self.curText();
+                for (0..self.component_count) |ci| {
+                    if (std.mem.eql(u8, self.components[ci].name, app_name)) {
+                        const comp = &self.components[ci];
+                        for (0..comp.prop_count) |pi| {
+                            if (self.prop_stack_count < MAX_COMPONENT_PROPS) {
+                                self.prop_stack[self.prop_stack_count] = .{
+                                    .name = comp.prop_names[pi],
+                                    .value = "",
+                                    .prop_type = .string,
+                                };
+                                self.prop_stack_count += 1;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            self.pos = saved_p;
+        }
+
         collect.collectStateHooks(self, app_start);
+
+        // Phase 6.25: Collect useEffect hooks (needs state slots to resolve deps)
+        collect.collectEffectHooks(self, app_start);
 
         // Phase 6.5: Collect let variables
         collect.collectLetVars(self, app_start);

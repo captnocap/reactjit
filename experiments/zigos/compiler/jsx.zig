@@ -45,14 +45,34 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     if (self.curKind() == .gt) {
         self.advance_token();
         var frag_children = std.ArrayListUnmanaged([]const u8){};
+        const frag_cond_base = self.conditional_count;
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
             if (self.curKind() == .lt) {
                 try frag_children.append(self.alloc, try parseJSXElement(self));
+            } else if (self.curKind() == .lbrace) {
+                self.advance_token(); // {
+                // {children} splice
+                if (self.isIdent("children") and self.component_children_exprs != null) {
+                    self.advance_token();
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    for (self.component_children_exprs.?.items) |child_expr| {
+                        try frag_children.append(self.alloc, child_expr);
+                    }
+                    continue;
+                }
+                // {expr && <JSX>} conditional rendering
+                if (try tryParseConditionalChild(self, &frag_children)) {
+                    continue;
+                }
+                if (self.curKind() == .rbrace) self.advance_token();
             } else {
                 self.advance_token();
             }
         }
-        if (self.curKind() == .lt_slash) { self.advance_token(); if (self.curKind() == .gt) self.advance_token(); }
+        if (self.curKind() == .lt_slash) {
+            self.advance_token();
+            if (self.curKind() == .gt) self.advance_token();
+        }
         if (frag_children.items.len == 0) return try self.alloc.dupe(u8, ".{}");
         const arr_name = try std.fmt.allocPrint(self.alloc, "_arr_{d}", .{self.array_counter});
         self.array_counter += 1;
@@ -62,9 +82,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             try arr_body.appendSlice(self.alloc, child_expr);
         }
         const frag_loc = self.lineCol(jsx_source_offset);
-        try self.array_decls.append(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "// tsz:{s}:{d} — <>\nvar {s} = [_]Node{{ {s} }};",
-            .{ std.fs.path.basename(self.input_file), frag_loc.line, arr_name, arr_body.items }));
+        try self.array_decls.append(self.alloc, try std.fmt.allocPrint(self.alloc, "// tsz:{s}:{d} — <>\nvar {s} = [_]Node{{ {s} }};", .{ std.fs.path.basename(self.input_file), frag_loc.line, arr_name, arr_body.items }));
+        // Bind conditionals from this fragment's children
+        for (frag_cond_base..self.conditional_count) |ci| {
+            if (self.conditionals[ci].arr_name.len == 0) {
+                self.conditionals[ci].arr_name = arr_name;
+            }
+        }
         return try std.fmt.allocPrint(self.alloc, ".{{ .children = &{s} }}", .{arr_name});
     }
 
@@ -92,6 +116,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_routes = std.mem.eql(u8, tag_name, "Routes");
     if (is_routes) self.routes_bind_from = self.route_count;
 
+    // TextInput/TextArea detection
+    const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
+    const is_multiline = std.mem.eql(u8, tag_name, "TextArea");
+    // ScrollView → Box with overflow: auto (no special primitive needed)
+    const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
+
     // Component call
     if (self.compile_error != null) return ".{}";
     if (self.findComponent(tag_name)) |comp| {
@@ -109,6 +139,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var dyn_color_expr: ?[]const u8 = null;
     var src_str: []const u8 = "";
     var on_press_start: ?u32 = null;
+    var on_change_text_start: ?u32 = null;
+    var placeholder_str: []const u8 = "";
     var hoverable: bool = false;
 
     // Pre-populate from classifier
@@ -184,6 +216,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     } else {
                         on_press_start = self.pos;
                         try attrs.skipBalanced(self);
+                    }
+                } else if (std.mem.eql(u8, attr_name, "placeholder")) {
+                    placeholder_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "onChangeText")) {
+                    if (self.curKind() == .lbrace) {
+                        on_change_text_start = self.pos;
+                        try attrs.skipBalanced(self);
+                    } else {
+                        try attrs.skipAttrValue(self);
                     }
                 } else if (std.mem.eql(u8, attr_name, "hoverable")) {
                     hoverable = true;
@@ -300,19 +341,62 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                             } else if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
                                 text_content = val[1 .. val.len - 1];
                             } else if (std.mem.startsWith(u8, val, "state.getSlot(")) {
-                                is_dynamic_text = true; dyn_fmt = "{d}"; dyn_args = val;
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
                             } else if (std.mem.startsWith(u8, val, "state.getSlotString(")) {
-                                is_dynamic_text = true; dyn_fmt = "{s}"; dyn_args = val;
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
+                                dyn_args = val;
                             } else if (std.mem.startsWith(u8, val, "state.getSlotFloat(")) {
-                                is_dynamic_text = true; dyn_fmt = "{d}"; dyn_args = val;
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
                             } else if (std.mem.startsWith(u8, val, "state.getSlotBool(")) {
-                                is_dynamic_text = true; dyn_fmt = "{s}";
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
                                 dyn_args = try std.fmt.allocPrint(self.alloc, "if ({s}) \"true\" else \"false\"", .{val});
                             } else if (std.mem.indexOf(u8, val, "state.getSlot") != null) {
-                                is_dynamic_text = true; dyn_fmt = "{d}"; dyn_args = val;
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
                             } else {
                                 text_content = val;
                             }
+                        }
+                    } else if (self.isObjectStateVar(ident) != null and
+                        self.pos + 2 < self.lex.count and
+                        self.lex.get(self.pos + 1).kind == .dot and
+                        self.lex.get(self.pos + 2).kind == .identifier)
+                    {
+                        const field_name = self.lex.get(self.pos + 2).text(self.source);
+                        if (self.resolveObjectStateField(ident, field_name)) |field| {
+                            self.advance_token();
+                            self.advance_token();
+                            self.advance_token();
+                            is_dynamic_text = true;
+                            const rid = self.regularSlotId(field.slot_id);
+                            text_dep_slots[0] = rid;
+                            text_dep_count = 1;
+                            dyn_fmt = switch (field.state_type) {
+                                .string => "{s}",
+                                .float => "{d}",
+                                .boolean => "{s}",
+                                else => "{d}",
+                            };
+                            dyn_args = switch (field.state_type) {
+                                .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                                .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                                .boolean => try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{rid}),
+                                else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                            };
+                        } else if (self.isObjectStateVar(ident) != null) {
+                            const field_start = self.lex.get(self.pos + 2).start;
+                            const msg = std.fmt.allocPrint(self.alloc, "unknown object state field '{s}.{s}'", .{ ident, field_name }) catch "unknown object state field";
+                            self.setErrorAt(field_start, msg);
+                            self.advance_token();
+                            self.advance_token();
+                            self.advance_token();
                         }
                     } else if (self.isState(ident)) |slot_id| {
                         self.advance_token();
@@ -321,7 +405,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                         const rid = self.regularSlotId(slot_id);
                         text_dep_slots[0] = rid;
                         text_dep_count = 1;
-                        dyn_fmt = switch (st) { .string => "{s}", .float => "{d}", .boolean => "{s}", else => "{d}" };
+                        dyn_fmt = switch (st) {
+                            .string => "{s}",
+                            .float => "{d}",
+                            .boolean => "{s}",
+                            else => "{d}",
+                        };
                         dyn_args = switch (st) {
                             .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
                             .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
@@ -331,7 +420,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     } else if (self.isLocalVar(ident)) |lv| {
                         self.advance_token();
                         is_dynamic_text = true;
-                        dyn_fmt = switch (lv.state_type) { .string => "{s}", .float => "{d}", .boolean => "{s}", else => "{d}" };
+                        dyn_fmt = switch (lv.state_type) {
+                            .string => "{s}",
+                            .float => "{d}",
+                            .boolean => "{s}",
+                            else => "{d}",
+                        };
                         dyn_args = lv.expr;
                     } else {
                         self.advance_token();
@@ -351,7 +445,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             self.advance_token();
             if (self.curKind() == .identifier) {
                 self.advance_token();
-                if (self.curKind() == .dot) { self.advance_token(); if (self.curKind() == .identifier) self.advance_token(); }
+                if (self.curKind() == .dot) {
+                    self.advance_token();
+                    if (self.curKind() == .identifier) self.advance_token();
+                }
             }
             if (self.curKind() == .gt) self.advance_token();
         }
@@ -361,10 +458,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     // Assembles all collected data into ".{ .style = ..., .text = ..., .children = &_arr_N }"
     var fields: std.ArrayListUnmanaged(u8) = .{};
 
-    // Style
-    if (style_str.len > 0) {
+    // Style — ScrollView injects overflow: auto automatically
+    if (style_str.len > 0 or is_scroll_view) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".style = .{ ");
+        if (is_scroll_view) {
+            try fields.appendSlice(self.alloc, ".overflow = .auto");
+            if (style_str.len > 0) try fields.appendSlice(self.alloc, ", ");
+        }
         try fields.appendSlice(self.alloc, style_str);
         try fields.appendSlice(self.alloc, " }");
     }
@@ -395,7 +496,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         } else {
             try fields.appendSlice(self.alloc, ".text = \"");
             for (tc) |ch| {
-                if (ch == '"') { try fields.appendSlice(self.alloc, "\\\""); } else if (ch == '\\') { try fields.appendSlice(self.alloc, "\\\\"); } else if (ch == '\n') { try fields.appendSlice(self.alloc, "\\n"); } else { try fields.append(self.alloc, ch); }
+                if (ch == '"') {
+                    try fields.appendSlice(self.alloc, "\\\"");
+                } else if (ch == '\\') {
+                    try fields.appendSlice(self.alloc, "\\\\");
+                } else if (ch == '\n') {
+                    try fields.appendSlice(self.alloc, "\\n");
+                } else {
+                    try fields.append(self.alloc, ch);
+                }
             }
             try fields.appendSlice(self.alloc, "\"");
         }
@@ -493,6 +602,35 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".hoverable = true");
     }
 
+    // onChangeText handler (TextInput)
+    if (on_change_text_start) |start| {
+        const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_change_{d}", .{self.handler_counter});
+        self.handler_counter += 1;
+        const body = try handlers.emitHandlerBody(self, start);
+        const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
+        try self.handler_decls.append(self.alloc, handler_fn);
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".handlers = .{ .on_change_text = ");
+        try fields.appendSlice(self.alloc, handler_name);
+        try fields.appendSlice(self.alloc, " }");
+    }
+
+    // TextInput/TextArea: assign compile-time input_id and emit placeholder
+    if (is_text_input) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        const iid = self.input_counter;
+        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".input_id = {d}", .{iid}));
+        if (iid < 16) self.input_multiline[iid] = is_multiline;
+        self.input_counter += 1;
+        if (placeholder_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .placeholder = \"");
+            for (placeholder_str) |ch| {
+                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
+            }
+            try fields.appendSlice(self.alloc, "\"");
+        }
+    }
+
     // ── Phase 4: Emit children array and bind dynamic refs ──
     // If this element has child nodes, emit a `var _arr_N = [_]Node{ child0, child1, ... };`
     // declaration and set .children = &_arr_N on this node.
@@ -505,8 +643,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         var arr_content: std.ArrayListUnmanaged(u8) = .{};
         // Source breadcrumb: tsz:file:line — <Tag>
         const tag_loc = self.lineCol(jsx_source_offset);
-        try arr_content.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "// tsz:{s}:{d} — <{s}>\n", .{ std.fs.path.basename(self.input_file), tag_loc.line, tag_name }));
+        try arr_content.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "// tsz:{s}:{d} — <{s}>\n", .{ std.fs.path.basename(self.input_file), tag_loc.line, tag_name }));
         try arr_content.appendSlice(self.alloc, "var ");
         try arr_content.appendSlice(self.alloc, arr_name);
         try arr_content.appendSlice(self.alloc, " = [_]Node{ ");
@@ -649,7 +786,18 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
             if (kind == .amp_amp) break;
             if (kind == .identifier) {
                 const txt = self.lex.get(scan).text(self.source);
-                if (self.isState(txt) != null) has_state_ref = true;
+                if (scan + 2 < self.lex.count and
+                    self.lex.get(scan + 1).kind == .dot and
+                    self.lex.get(scan + 2).kind == .identifier and
+                    self.resolveObjectStateField(txt, self.lex.get(scan + 2).text(self.source)) != null)
+                {
+                    has_state_ref = true;
+                } else if (self.isState(txt) != null) {
+                    has_state_ref = true;
+                } else if (self.findProp(txt)) |pval| {
+                    // Prop whose value depends on state — can't evaluate at compile time
+                    if (std.mem.indexOf(u8, pval, "state.") != null) has_state_ref = true;
+                }
             }
             if (kind == .eq_eq or kind == .not_eq or kind == .lt or kind == .gt or
                 kind == .lt_eq or kind == .gt_eq) has_comparison = true;
@@ -690,7 +838,13 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
 
         while (self.pos < amp_pos) {
             if (self.curKind() == .identifier) {
-                const val_str = self.findProp(self.curText()) orelse self.curText();
+                const ident_text = self.curText();
+                const val_str = self.findProp(ident_text) orelse blk: {
+                    // Unpassed component prop → default to 0 (falsy)
+                    if (self.isState(ident_text) == null and self.isLocalVar(ident_text) == null)
+                        break :blk "0";
+                    break :blk ident_text;
+                };
                 lhs = std.fmt.parseInt(i64, val_str, 10) catch null;
             } else if (self.curKind() == .number) {
                 const n = std.fmt.parseInt(i64, self.curText(), 10) catch null;
@@ -733,6 +887,26 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
         while (self.pos < amp_pos) {
             const tok_text = self.curText();
             if (self.curKind() == .identifier) {
+                if (self.pos + 2 < amp_pos and
+                    self.lex.get(self.pos + 1).kind == .dot and
+                    self.lex.get(self.pos + 2).kind == .identifier)
+                {
+                    const field_name = self.lex.get(self.pos + 2).text(self.source);
+                    if (self.resolveObjectStateField(tok_text, field_name)) |field| {
+                        const rid = self.regularSlotId(field.slot_id);
+                        const accessor = switch (field.state_type) {
+                            .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                            .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                            .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+                            else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                        };
+                        try cond_parts.appendSlice(self.alloc, accessor);
+                        self.advance_token();
+                        self.advance_token();
+                        self.advance_token();
+                        continue;
+                    }
+                }
                 if (self.isState(tok_text)) |slot_id| {
                     const rid = self.regularSlotId(slot_id);
                     const st = self.stateTypeById(slot_id);
@@ -854,7 +1028,9 @@ fn removePropFromStyle(alloc: std.mem.Allocator, style: []const u8, prop_name: [
                         while (val_end < style.len) {
                             const c = style[val_end];
                             if (c == '(' or c == '[') depth += 1;
-                            if (c == ')' or c == ']') if (depth > 0) { depth -= 1; };
+                            if (c == ')' or c == ']') if (depth > 0) {
+                                depth -= 1;
+                            };
                             if (depth == 0 and c == ',' and val_end + 2 < style.len and
                                 style[val_end + 1] == ' ' and style[val_end + 2] == '.')
                             {

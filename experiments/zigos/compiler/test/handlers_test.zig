@@ -144,6 +144,31 @@ test "state bool resolves to getSlotBool" {
     try testing.expect(std.mem.indexOf(u8, try exprWithState(a.allocator(), "active"), "state.getSlotBool(") != null);
 }
 
+test "object state field resolves to flat slot getter" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "user.name";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    gen.state_slots[0] = .{ .getter = "user.name", .setter = "__obj_0_name", .initial = .{ .string = "alice" } };
+    gen.state_slots[1] = .{ .getter = "user.age", .setter = "__obj_0_age", .initial = .{ .int = 30 } };
+    gen.state_count = 2;
+    gen.has_state = true;
+    gen.obj_state_vars[0] = .{
+        .getter = "user",
+        .setter = "setUser",
+        .fields = undefined,
+        .field_count = 2,
+    };
+    gen.obj_state_vars[0].fields[0] = .{ .field_name = "name", .slot_id = 0, .state_type = .string };
+    gen.obj_state_vars[0].fields[1] = .{ .field_name = "age", .slot_id = 1, .state_type = .int };
+    gen.obj_state_count = 1;
+
+    try testing.expectEqualStrings("state.getSlotString(0)", try handlers.emitStateExpr(&gen));
+}
+
 test "state + literal" {
     var a = arena();
     defer a.deinit();
@@ -182,6 +207,36 @@ test "handler body setter string" {
     try testing.expect(std.mem.indexOf(u8, body, "state.setSlotString(") != null);
 }
 
+test "handler body object setter writes only explicit fields" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "{() => setUser({ ...user, name: \"bob\", age: user.age + 1 })}";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    gen.state_slots[0] = .{ .getter = "user.name", .setter = "__obj_0_name", .initial = .{ .string = "alice" } };
+    gen.state_slots[1] = .{ .getter = "user.age", .setter = "__obj_0_age", .initial = .{ .int = 30 } };
+    gen.state_slots[2] = .{ .getter = "user.active", .setter = "__obj_0_active", .initial = .{ .boolean = true } };
+    gen.state_count = 3;
+    gen.has_state = true;
+    gen.obj_state_vars[0] = .{
+        .getter = "user",
+        .setter = "setUser",
+        .fields = undefined,
+        .field_count = 3,
+    };
+    gen.obj_state_vars[0].fields[0] = .{ .field_name = "name", .slot_id = 0, .state_type = .string };
+    gen.obj_state_vars[0].fields[1] = .{ .field_name = "age", .slot_id = 1, .state_type = .int };
+    gen.obj_state_vars[0].fields[2] = .{ .field_name = "active", .slot_id = 2, .state_type = .boolean };
+    gen.obj_state_count = 1;
+
+    const body = try handlers.emitHandlerBody(&gen, 0);
+    try testing.expect(std.mem.indexOf(u8, body, "state.setSlotString(0, \"bob\");") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "state.setSlot(1, (state.getSlot(1) + 1));") != null);
+    try testing.expect(std.mem.indexOf(u8, body, "state.setSlotBool(2,") == null);
+}
+
 test "precedence: multiply before add" {
     var a = arena();
     defer a.deinit();
@@ -205,5 +260,5 @@ test "precedence exact: logical AND binds tighter than OR" {
 test "precedence exact: ternary keeps comparison as condition" {
     var a = arena();
     defer a.deinit();
-    try testing.expectEqualStrings("(if ((1 == 1)) 10 else 20)", try exprResult(a.allocator(), "1 == 1 ? 10 : 20"));
+    try testing.expectEqualStrings("(if ((1 == 1)) @as(i32, 10) else @as(i32, 20))", try exprResult(a.allocator(), "1 == 1 ? 10 : 20"));
 }

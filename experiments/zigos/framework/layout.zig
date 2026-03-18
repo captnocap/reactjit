@@ -38,7 +38,7 @@ pub const AlignSelf = enum { auto, start, center, end, stretch };
 pub const FlexWrap = enum { no_wrap, wrap };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
-pub const Overflow = enum { visible, hidden, scroll };
+pub const Overflow = enum { visible, hidden, scroll, auto };
 pub const TextAlign = enum { left, center, right };
 pub const CodeLanguage = enum { none, zig, type_script, json, bash, markdown, plain };
 pub const GradientDirection = enum { none, vertical, horizontal };
@@ -1092,7 +1092,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             h.? = clampVal(h.?, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
         }
     }
-    if (s.overflow == .scroll or s.overflow == .hidden) {
+    if (s.overflow == .scroll or s.overflow == .hidden or s.overflow == .auto) {
         const fullContent = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
         node.content_height = fullContent;
     }

@@ -17,8 +17,9 @@ pub fn build(b: *std.Build) void {
     });
     const wgpu_mod = wgpu_dep.module("wgpu");
 
-    // ── zigos-app (codegen + layout + rendering, no networking deps) ──
-    const lite_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-app", false);
+    // ── App binary (name from -Dapp-name, defaults to "zigos-app") ──
+    const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "zigos-app";
+    const lite_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, false);
     const lite_install = b.addInstallArtifact(lite_exe, .{});
     const lite_step = b.step("app", "zigos-app — codegen + layout + rendering");
     lite_step.dependOn(&lite_install.step);

@@ -1,170 +1,259 @@
 import {
-  WireframeSurface, WireframeViewport, WireframeRoot,
+  WireframeSurface,
+  WireframeViewport,
+  WireframeStage,
+  WireframeFrame,
+  WireframeRoot,
+  WireframeMetaBar,
+  WireframeMetaText,
+  WireframeMetaPillSelected,
+  WireframeMetaPillHover,
+  WireframeMetaPillText,
+  WireframeAppTabs,
+  WireframeMiniTab,
+  WireframeMiniTabActive,
+  WireframeMiniTabLabel,
+  WireframeMiniTabLabelActive,
+  WireframeCanvas,
   WireframeNodeD0, WireframeNodeD1, WireframeNodeD2, WireframeNodeD3, WireframeNodeD4, WireframeNodeD5,
-  WireframeNodeSelected, WireframeNodeText, WireframeNodeHot, WireframeNodeLabel,
+  WireframeNodeSelected, WireframeNodeHover, WireframeNodeText, WireframeNodeHot,
+  WireframeNodeLabel, WireframeNodeLabelSelected,
   WireframeRow,
+  WireframeMiniStatus, WireframeStatusDim, WireframeStatusGood,
   WireframeControlBar, WireframeFlexPillActive, WireframeFlexDotActive, WireframeFlexLabel,
   WireframeScaleLabel, WireframeHint,
   FlexAllocSection, FlexAllocHeader, FlexAllocSummary,
   FlexAllocRow, FlexAllocLabel, FlexAllocBarBg, FlexAllocBasis, FlexAllocGrow, FlexAllocValue,
 } from './style_cls';
 
+function MiniTab({ label, active }) {
+  return (
+    <>
+      {active == 1 && <C.WireframeMiniTabActive>
+        <C.WireframeMiniTabLabelActive>{label}</C.WireframeMiniTabLabelActive>
+      </C.WireframeMiniTabActive>}
+      {active != 1 && <C.WireframeMiniTab>
+        <C.WireframeMiniTabLabel>{label}</C.WireframeMiniTabLabel>
+      </C.WireframeMiniTab>}
+    </>
+  );
+}
+
+function TreeGhostRow({ label, selected }) {
+  return (
+    <>
+      {selected == 1 && <C.WireframeNodeSelected style={{ height: 16, flexGrow: 0 }}>
+        <C.WireframeNodeLabelSelected>{label}</C.WireframeNodeLabelSelected>
+      </C.WireframeNodeSelected>}
+      {selected != 1 && <C.WireframeNodeD3 style={{ height: 14, flexGrow: 0 }}>
+        <C.WireframeNodeLabel>{label}</C.WireframeNodeLabel>
+      </C.WireframeNodeD3>}
+    </>
+  );
+}
+
+function StyleCell({ label }) {
+  return (
+    <C.WireframeNodeD4 style={{ height: 30, flexGrow: 1, flexBasis: 0 }}>
+      <C.WireframeNodeLabel>{label}</C.WireframeNodeLabel>
+      <C.WireframeNodeText style={{ width: '74%' }} />
+    </C.WireframeNodeD4>
+  );
+}
+
 function WireframePage() {
   return (
     <C.WireframeSurface>
-
       <C.WireframeViewport>
-        <C.WireframeRoot>
-          <C.WireframeNodeLabel>RootNode</C.WireframeNodeLabel>
+        <C.WireframeStage>
+          <C.WireframeFrame>
+            <C.WireframeRoot>
+              <C.WireframeMetaBar>
+                <C.WireframeMetaText>viewport 810 x 638</C.WireframeMetaText>
+                <C.WireframeMetaText>fit-scaled scene</C.WireframeMetaText>
+              </C.WireframeMetaBar>
 
-          <C.WireframeNodeD0>
-            <C.WireframeNodeLabel>Panel</C.WireframeNodeLabel>
+              <C.WireframeMetaPillSelected>
+                <C.WireframeMetaPillText>{'selected <DetailPane>'}</C.WireframeMetaPillText>
+              </C.WireframeMetaPillSelected>
 
-            <C.WireframeNodeD1 style={{ height: 28 }}>
-              <C.WireframeNodeLabel>TabBar</C.WireframeNodeLabel>
-              <C.WireframeRow>
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-                <C.WireframeNodeD2 style={{ height: 16 }} />
-              </C.WireframeRow>
-            </C.WireframeNodeD1>
+              <C.WireframeMetaPillHover>
+                <C.WireframeMetaPillText>{'hover <TreeScroll>'}</C.WireframeMetaPillText>
+              </C.WireframeMetaPillHover>
 
-            <C.WireframeRow>
-              <C.WireframeNodeD1>
-                <C.WireframeNodeLabel>Tree</C.WireframeNodeLabel>
+              <C.WireframeAppTabs>
+                <MiniTab label="Elements" active={1} />
+                <MiniTab label="Source" />
+                <MiniTab label="Wireframe" />
+                <MiniTab label="Perf" />
+                <MiniTab label="Network" />
+                <MiniTab label="Console" />
+                <MiniTab label="Logs" />
+              </C.WireframeAppTabs>
 
-                <C.WireframeNodeD2 style={{ height: 24 }}>
-                  <C.WireframeNodeLabel>Toolbar</C.WireframeNodeLabel>
-                </C.WireframeNodeD2>
+              <C.WireframeCanvas>
+                <C.WireframeNodeD0>
+                  <C.WireframeNodeLabel>InspectorRoot</C.WireframeNodeLabel>
 
-                <C.WireframeNodeD2 style={{ height: 18 }}>
-                  <C.WireframeNodeLabel>ViewBar</C.WireframeNodeLabel>
-                  <C.WireframeRow>
-                    <C.WireframeNodeD3 style={{ height: 10 }} />
-                    <C.WireframeNodeD3 style={{ height: 10 }} />
-                    <C.WireframeNodeD3 style={{ height: 10 }} />
-                  </C.WireframeRow>
-                </C.WireframeNodeD2>
-
-                <C.WireframeNodeHot>
-                  <C.WireframeNodeLabel>ScrollView</C.WireframeNodeLabel>
-                  <C.WireframeNodeD3 style={{ height: 16 }}>
-                    <C.WireframeNodeText />
-                  </C.WireframeNodeD3>
-                  <C.WireframeNodeSelected style={{ height: 16 }}>
-                    <C.WireframeNodeLabel>TreeLine</C.WireframeNodeLabel>
-                  </C.WireframeNodeSelected>
-                  <C.WireframeNodeD3 style={{ height: 16 }}>
-                    <C.WireframeNodeText />
-                  </C.WireframeNodeD3>
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                </C.WireframeNodeHot>
-              </C.WireframeNodeD1>
-
-              <C.WireframeNodeD1>
-                <C.WireframeNodeLabel>DetailPane</C.WireframeNodeLabel>
-
-                <C.WireframeNodeD2>
-                  <C.WireframeNodeLabel>HeroCard</C.WireframeNodeLabel>
-                  <C.WireframeNodeText />
-                  <C.WireframeRow>
-                    <C.WireframeNodeD3 style={{ height: 14 }} />
-                    <C.WireframeNodeD3 style={{ height: 14 }} />
-                    <C.WireframeNodeD3 style={{ height: 14 }} />
-                  </C.WireframeRow>
-                  <C.WireframeNodeText />
-                  <C.WireframeNodeText />
-                </C.WireframeNodeD2>
-
-                <C.WireframeNodeD2>
-                  <C.WireframeNodeLabel>BoxModel</C.WireframeNodeLabel>
-                  <C.WireframeNodeD3>
-                    <C.WireframeNodeD4>
-                      <C.WireframeNodeD5 style={{ height: 20 }} />
-                    </C.WireframeNodeD4>
-                  </C.WireframeNodeD3>
-                </C.WireframeNodeD2>
-
-                <C.WireframeNodeD2>
-                  <C.WireframeNodeLabel>FlexLayout</C.WireframeNodeLabel>
-                  <C.WireframeRow>
-                    <C.WireframeNodeD3 style={{ height: 40 }} />
-                    <C.WireframeNodeD3 style={{ height: 40 }} />
-                    <C.WireframeNodeD3 style={{ height: 40 }} />
-                  </C.WireframeRow>
-                  <C.WireframeNodeD4>
-                    <C.WireframeRow>
-                      <C.WireframeNodeD5 style={{ height: 32 }} />
-                      <C.WireframeNodeD5 style={{ height: 32 }} />
+                  <C.WireframeNodeD1 style={{ height: 20, flexGrow: 0 }}>
+                    <C.WireframeRow style={{ flexGrow: 0 }}>
+                      <C.WireframeNodeText style={{ width: 84 }} />
+                      <C.WireframeNodeText style={{ width: 46 }} />
+                      <C.WireframeNodeText style={{ width: 58 }} />
+                      <C.WireframeNodeText style={{ width: 42 }} />
                     </C.WireframeRow>
-                  </C.WireframeNodeD4>
-                </C.WireframeNodeD2>
+                  </C.WireframeNodeD1>
 
-                <C.WireframeNodeD2>
-                  <C.WireframeNodeLabel>Styles</C.WireframeNodeLabel>
-                  <C.WireframeNodeD3 style={{ height: 20 }} />
-                  <C.WireframeNodeD3 style={{ height: 20 }} />
-                  <C.WireframeNodeD3 style={{ height: 20 }} />
-                  <C.WireframeNodeD3 style={{ height: 20 }} />
-                  <C.WireframeNodeD3 style={{ height: 20 }} />
-                </C.WireframeNodeD2>
+                  <C.WireframeRow>
+                    <C.WireframeNodeD1 style={{ width: 220, flexGrow: 0 }}>
+                      <C.WireframeNodeLabel>TreePane</C.WireframeNodeLabel>
 
-                <C.WireframeNodeD2>
-                  <C.WireframeNodeLabel>Children</C.WireframeNodeLabel>
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                  <C.WireframeNodeD3 style={{ height: 16 }} />
-                </C.WireframeNodeD2>
+                      <C.WireframeNodeD2 style={{ height: 18, flexGrow: 0 }}>
+                        <C.WireframeRow style={{ flexGrow: 0 }}>
+                          <C.WireframeNodeText style={{ width: 54 }} />
+                          <C.WireframeNodeText style={{ width: 30 }} />
+                        </C.WireframeRow>
+                      </C.WireframeNodeD2>
 
-              </C.WireframeNodeD1>
-            </C.WireframeRow>
+                      <C.WireframeNodeD2 style={{ height: 18, flexGrow: 0 }}>
+                        <C.WireframeRow style={{ flexGrow: 0 }}>
+                          <MiniTab label="Zig" active={1} />
+                          <MiniTab label="Hybrid" />
+                          <MiniTab label="JSX" />
+                        </C.WireframeRow>
+                      </C.WireframeNodeD2>
 
-          </C.WireframeNodeD0>
-        </C.WireframeRoot>
+                      <C.WireframeNodeHover>
+                        <C.WireframeNodeLabel>TreeScroll</C.WireframeNodeLabel>
+                        <TreeGhostRow label="<Panel>" />
+                        <TreeGhostRow />
+                        <TreeGhostRow label="<ElementsPage>" />
+                        <TreeGhostRow />
+                        <TreeGhostRow label="<DetailPane>" selected={1} />
+                        <TreeGhostRow />
+                        <TreeGhostRow />
+                        <TreeGhostRow />
+                        <TreeGhostRow />
+                        <TreeGhostRow />
+                      </C.WireframeNodeHover>
+                    </C.WireframeNodeD1>
+
+                    <C.WireframeNodeSelected>
+                      <C.WireframeNodeLabelSelected>DetailPane</C.WireframeNodeLabelSelected>
+
+                      <C.WireframeNodeD2 style={{ height: 46, flexGrow: 0 }}>
+                        <C.WireframeNodeText style={{ width: '28%' }} />
+                        <C.WireframeRow style={{ flexGrow: 0 }}>
+                          <C.WireframeNodeD4 style={{ height: 10, width: 44, flexGrow: 0 }} />
+                          <C.WireframeNodeD4 style={{ height: 10, width: 44, flexGrow: 0 }} />
+                          <C.WireframeNodeD4 style={{ height: 10, width: 54, flexGrow: 0 }} />
+                        </C.WireframeRow>
+                        <C.WireframeNodeText style={{ width: '62%' }} />
+                        <C.WireframeNodeText style={{ width: '34%' }} />
+                      </C.WireframeNodeD2>
+
+                      <C.WireframeNodeD2 style={{ height: 118, flexGrow: 0 }}>
+                        <C.WireframeNodeLabel>BoxModel</C.WireframeNodeLabel>
+                        <C.WireframeNodeD3>
+                          <C.WireframeNodeD4>
+                            <C.WireframeNodeD5 style={{ height: 24, flexGrow: 0 }}>
+                              <C.WireframeNodeText style={{ width: '46%' }} />
+                            </C.WireframeNodeD5>
+                          </C.WireframeNodeD4>
+                        </C.WireframeNodeD3>
+                        <C.WireframeRow style={{ flexGrow: 0 }}>
+                          <C.WireframeNodeD4 style={{ height: 10 }} />
+                          <C.WireframeNodeD4 style={{ height: 10 }} />
+                          <C.WireframeNodeD4 style={{ height: 10 }} />
+                          <C.WireframeNodeD4 style={{ height: 10 }} />
+                        </C.WireframeRow>
+                      </C.WireframeNodeD2>
+
+                      <C.WireframeRow>
+                        <C.WireframeNodeD2>
+                          <C.WireframeNodeLabel>Style</C.WireframeNodeLabel>
+                          <C.WireframeRow style={{ flexGrow: 0 }}>
+                            <StyleCell label="width" />
+                            <StyleCell label="height" />
+                            <StyleCell label="grow" />
+                          </C.WireframeRow>
+                          <C.WireframeRow style={{ flexGrow: 0 }}>
+                            <StyleCell label="basis" />
+                            <StyleCell label="overflow" />
+                            <StyleCell label="bg" />
+                          </C.WireframeRow>
+                          <C.WireframeRow style={{ flexGrow: 0 }}>
+                            <StyleCell label="padT" />
+                            <StyleCell label="padR" />
+                            <StyleCell label="padB" />
+                          </C.WireframeRow>
+                        </C.WireframeNodeD2>
+
+                        <C.WireframeNodeD2>
+                          <C.WireframeNodeLabel>Diagnostics</C.WireframeNodeLabel>
+                          <C.WireframeNodeD4 style={{ height: 28, flexGrow: 0 }}>
+                            <C.WireframeNodeLabel>identity</C.WireframeNodeLabel>
+                            <C.WireframeNodeText style={{ width: '82%' }} />
+                          </C.WireframeNodeD4>
+                          <C.WireframeNodeD4 style={{ height: 28, flexGrow: 0 }}>
+                            <C.WireframeNodeLabel>geometry</C.WireframeNodeLabel>
+                            <C.WireframeNodeText style={{ width: '70%' }} />
+                          </C.WireframeNodeD4>
+                          <C.WireframeNodeD4 style={{ height: 28, flexGrow: 0 }}>
+                            <C.WireframeNodeLabel>sizing</C.WireframeNodeLabel>
+                            <C.WireframeNodeText style={{ width: '76%' }} />
+                          </C.WireframeNodeD4>
+                          <C.WireframeNodeD4 style={{ height: 28, flexGrow: 0 }}>
+                            <C.WireframeNodeLabel>runtime</C.WireframeNodeLabel>
+                            <C.WireframeNodeText style={{ width: '64%' }} />
+                          </C.WireframeNodeD4>
+                        </C.WireframeNodeD2>
+                      </C.WireframeRow>
+                    </C.WireframeNodeSelected>
+                  </C.WireframeRow>
+
+                  <C.FlexAllocSection style={{ position: 'absolute', right: 12, bottom: 12, width: 222 }}>
+                    <C.FlexAllocHeader>ElementsPage (row)</C.FlexAllocHeader>
+                    <C.FlexAllocSummary>{`810px | basis:330+0 | free:480 | 2 items`}</C.FlexAllocSummary>
+
+                    <C.FlexAllocRow>
+                      <C.FlexAllocLabel>Tree</C.FlexAllocLabel>
+                      <C.FlexAllocBarBg>
+                        <C.FlexAllocBasis style={{ flexGrow: 330 }} />
+                      </C.FlexAllocBarBg>
+                      <C.FlexAllocValue>330px</C.FlexAllocValue>
+                    </C.FlexAllocRow>
+
+                    <C.FlexAllocRow>
+                      <C.FlexAllocLabel>Detail</C.FlexAllocLabel>
+                      <C.FlexAllocBarBg>
+                        <C.FlexAllocBasis style={{ flexGrow: 0 }} />
+                        <C.FlexAllocGrow style={{ flexGrow: 480 }} />
+                      </C.FlexAllocBarBg>
+                      <C.FlexAllocValue>{`0 + 480px`}</C.FlexAllocValue>
+                    </C.FlexAllocRow>
+                  </C.FlexAllocSection>
+                </C.WireframeNodeD0>
+
+                <C.WireframeMiniStatus>
+                  <C.WireframeStatusGood>ready</C.WireframeStatusGood>
+                  <C.WireframeStatusDim>142 nodes</C.WireframeStatusDim>
+                  <C.WireframeStatusDim>60 fps</C.WireframeStatusDim>
+                </C.WireframeMiniStatus>
+              </C.WireframeCanvas>
+            </C.WireframeRoot>
+          </C.WireframeFrame>
+        </C.WireframeStage>
       </C.WireframeViewport>
-
-      <C.FlexAllocSection>
-        <C.FlexAllocHeader>Flex Allocation: ElementsPage (row)</C.FlexAllocHeader>
-        <C.FlexAllocSummary>{`810px | basis:330+0 | free:480 | 2 items`}</C.FlexAllocSummary>
-
-        <C.FlexAllocRow>
-          <C.FlexAllocLabel>Tree</C.FlexAllocLabel>
-          <C.FlexAllocBarBg>
-            <C.FlexAllocBasis style={{ flexGrow: 330 }} />
-          </C.FlexAllocBarBg>
-          <C.FlexAllocValue>330px</C.FlexAllocValue>
-        </C.FlexAllocRow>
-
-        <C.FlexAllocRow>
-          <C.FlexAllocLabel>Detail</C.FlexAllocLabel>
-          <C.FlexAllocBarBg>
-            <C.FlexAllocBasis style={{ flexGrow: 0 }} />
-            <C.FlexAllocGrow style={{ flexGrow: 480 }} />
-          </C.FlexAllocBarBg>
-          <C.FlexAllocValue>{`0+480px`}</C.FlexAllocValue>
-        </C.FlexAllocRow>
-      </C.FlexAllocSection>
 
       <C.WireframeControlBar>
         <C.WireframeFlexPillActive>
-          <C.WireframeFlexDotActive>{`\u25CF`}</C.WireframeFlexDotActive>
-          <C.WireframeFlexLabel>Flex</C.WireframeFlexLabel>
+          <C.WireframeFlexDotActive>on</C.WireframeFlexDotActive>
+          <C.WireframeFlexLabel>Flex overlay</C.WireframeFlexLabel>
         </C.WireframeFlexPillActive>
-        <C.WireframeHint>click a flex container to see distribution</C.WireframeHint>
-        <C.WireframeScaleLabel>100%</C.WireframeScaleLabel>
+        <C.WireframeHint>mini viewport of the in-view layout so you can read the whole shell at once</C.WireframeHint>
+        <C.WireframeScaleLabel>fit 79%</C.WireframeScaleLabel>
       </C.WireframeControlBar>
-
     </C.WireframeSurface>
   );
 }

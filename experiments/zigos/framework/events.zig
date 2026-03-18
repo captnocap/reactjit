@@ -109,8 +109,8 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
 
 // ── Scroll Container Hit Test ───────────────────────────────────────────
 
-/// Find the deepest scroll container (overflow == .scroll) under (mx, my).
-/// Used by mouse wheel dispatch to determine which ScrollView to scroll.
+/// Find the deepest scroll container under (mx, my).
+/// Any node with overflow scroll or auto (when content overflows) is scrollable.
 pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) return null;
 
@@ -125,10 +125,9 @@ pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?*Node {
         if (findScrollContainer(&node.children[i], mx, my)) |hit| return hit;
     }
 
-    // Check self
-    if (node.style.overflow == .scroll) {
-        return node;
-    }
+    // Check self — scroll always scrollable, auto only when content overflows
+    if (node.style.overflow == .scroll) return node;
+    if (node.style.overflow == .auto and node.content_height > r.h) return node;
 
     return null;
 }

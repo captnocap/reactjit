@@ -4,6 +4,7 @@
 const std = @import("std");
 const codegen = @import("codegen.zig");
 const lexer_mod = @import("lexer.zig");
+const lint = @import("lint.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -82,6 +83,23 @@ pub fn main() !void {
     // Compile .tsz → Zig
     var lex = lexer_mod.Lexer.init(final_source);
     lex.tokenize();
+
+    // Lint pass — catch structural issues before codegen
+    var linter = lint.Linter.init(alloc, &lex, final_source);
+    const lint_result = linter.run();
+    // Only print hints/warnings — don't abort on lint (codegen has its own error handling)
+    for (lint_result.diagnostics) |d| {
+        if (d.level == .err) continue; // codegen catches real errors with better context
+        const level_str: []const u8 = switch (d.level) {
+            .err => "error",
+            .warn => "warning",
+            .hint => "hint",
+        };
+        std.debug.print("[tsz] {s}:{d}:{d}: {s}: {s}\n", .{
+            std.fs.path.basename(input_path), d.line, d.col, level_str, d.message,
+        });
+    }
+
     var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
     gen.strict_mode = strict_mode;
 
@@ -110,10 +128,15 @@ pub fn main() !void {
     }
     std.debug.print("[tsz] Compiled {s} -> {s}\n", .{ std.fs.path.basename(input_path), out_path });
 
-    // Build binary
+    // Build binary — name it after the entry point
+    const basename = std.fs.path.basename(input_path);
+    const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
+    const app_name = basename[0..dot_pos];
+    const app_name_opt = try std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name});
+
     std.debug.print("[tsz] Building...\n", .{});
     var child = std.process.Child.init(
-        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "app" },
+        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
         alloc,
     );
     child.stderr_behavior = .Inherit;
@@ -126,7 +149,7 @@ pub fn main() !void {
         std.debug.print("[tsz] Build failed (exit {d})\n", .{term.Exited});
         return;
     }
-    std.debug.print("[tsz] Built -> zig-out/bin/zigos-app\n", .{});
+    std.debug.print("[tsz] Built -> zig-out/bin/{s}\n", .{app_name});
 }
 
 // ── File type classification ────────────────────────────────────

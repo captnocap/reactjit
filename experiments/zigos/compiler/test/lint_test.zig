@@ -123,7 +123,7 @@ test "warn: onClick" {
 }
 
 test "warn: className" { try testing.expect(hasDiag(runLint("function App() { return <Box className=\"foo\" /> }"), "className")); }
-test "warn: useEffect" { try testing.expect(hasDiag(runLint("function App() { useEffect(() => {}, []); return <Box /> }"), "useEffect")); }
+test "no warn: useEffect (now supported)" { try testing.expect(!hasDiag(runLint("function App() { useEffect(() => {}, []); return <Box /> }"), "useEffect")); }
 test "hint: useMemo" { try testing.expect(hasDiag(runLint("function App() { const x = useMemo(() => 42, []); return <Box /> }"), "useMemo")); }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -222,4 +222,58 @@ test "diagnostics have correct line numbers" {
         }
     }
     return error.TestUnexpectedResult;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CHILD OVERFLOW
+// ═══════════════════════════════════════════════════════════════════════
+
+test "warn: child width exceeds parent" {
+    const r = runLint("function App() { return <Box style={{ width: 400 }}><Box style={{ width: 500 }}>hi</Box></Box> }");
+    try testing.expect(hasDiagAt(r, .warn, "exceeds parent"));
+    try testing.expect(hasDiag(r, "width"));
+}
+
+test "warn: child height exceeds parent" {
+    const r = runLint("function App() { return <Box style={{ height: 200 }}><Box style={{ height: 300 }}>hi</Box></Box> }");
+    try testing.expect(hasDiagAt(r, .warn, "exceeds parent"));
+    try testing.expect(hasDiag(r, "height"));
+}
+
+test "valid: child fits in parent" {
+    const r = runLint("function App() { return <Box style={{ width: 400 }}><Box style={{ width: 200 }}>hi</Box></Box> }");
+    var overflow_count: u32 = 0;
+    for (r.diagnostics) |d| {
+        if (std.mem.indexOf(u8, d.message, "exceeds parent") != null) overflow_count += 1;
+    }
+    try testing.expectEqual(@as(u32, 0), overflow_count);
+}
+
+test "valid: child uses percentage width" {
+    const r = runLint("function App() { return <Box style={{ width: 400 }}><Box style={{ width: '100%' }}>hi</Box></Box> }");
+    var overflow_count: u32 = 0;
+    for (r.diagnostics) |d| {
+        if (std.mem.indexOf(u8, d.message, "exceeds parent") != null) overflow_count += 1;
+    }
+    try testing.expectEqual(@as(u32, 0), overflow_count);
+}
+
+test "valid: no parent dimensions — no overflow warning" {
+    const r = runLint("function App() { return <Box><Box style={{ width: 9999 }}>hi</Box></Box> }");
+    var overflow_count: u32 = 0;
+    for (r.diagnostics) |d| {
+        if (std.mem.indexOf(u8, d.message, "exceeds parent") != null) overflow_count += 1;
+    }
+    try testing.expectEqual(@as(u32, 0), overflow_count);
+}
+
+test "warn: padding reduces available space" {
+    const r = runLint("function App() { return <Box style={{ width: 400, padding: 50 }}><Box style={{ width: 350 }}>hi</Box></Box> }");
+    try testing.expect(hasDiagAt(r, .warn, "exceeds parent"));
+    try testing.expect(hasDiag(r, "width"));
+}
+
+test "warn: self-closing child overflow" {
+    const r = runLint("function App() { return <Box style={{ width: 200 }}><Box style={{ width: 300 }} /></Box> }");
+    try testing.expect(hasDiagAt(r, .warn, "exceeds parent"));
 }

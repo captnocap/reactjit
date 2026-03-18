@@ -189,9 +189,11 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
         sh = if (ny2 > ny) ny2 - ny else 0;
     }
 
-    // Clamp to surface dimensions
-    if (sx + sw > g_width) sw = if (g_width > sx) g_width - sx else 0;
-    if (sy + sh > g_height) sh = if (g_height > sy) g_height - sy else 0;
+    // Clamp to surface dimensions — wgpu requires x+w <= width AND y+h <= height
+    if (sx >= g_width) { sx = 0; sw = 0; }
+    if (sy >= g_height) { sy = 0; sh = 0; }
+    if (sx + sw > g_width) sw = g_width - sx;
+    if (sy + sh > g_height) sh = g_height - sy;
 
     // Record segment boundary
     if (g_scissor_count < MAX_SCISSOR_SEGMENTS) {

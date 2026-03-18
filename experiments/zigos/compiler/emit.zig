@@ -22,6 +22,125 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const collect = @import("collect.zig");
+const handlers = @import("handlers.zig");
+
+fn slotReadExpr(self: *Generator, slot_id: u32) ![]const u8 {
+    const rid = self.regularSlotId(slot_id);
+    return switch (self.stateTypeById(slot_id)) {
+        .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+        .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+        .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+        else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+    };
+}
+
+fn easingExpr(alloc: std.mem.Allocator, easing: codegen.EasingKind, t_expr: []const u8) ![]const u8 {
+    return switch (easing) {
+        .linear => try alloc.dupe(u8, t_expr),
+        .ease_in => try std.fmt.allocPrint(alloc, "(({s}) * ({s}))", .{ t_expr, t_expr }),
+        .ease_out => try std.fmt.allocPrint(alloc, "(1.0 - ((1.0 - ({s})) * (1.0 - ({s}))))", .{ t_expr, t_expr }),
+        .ease_in_out => try std.fmt.allocPrint(alloc,
+            "(if (({s}) < 0.5) (2.0 * ({s}) * ({s})) else (1.0 - (((-2.0 * ({s})) + 2.0) * ((-2.0 * ({s})) + 2.0)) / 2.0))",
+            .{ t_expr, t_expr, t_expr, t_expr, t_expr }),
+    };
+}
+
+fn emitTransitionTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: codegen.AnimHook) !void {
+    const slot_id = hook.slot_id;
+    const rid = self.regularSlotId(slot_id);
+    const t_name = try std.fmt.allocPrint(self.alloc, "_t_{d}", .{slot_id});
+    const eased_t = try easingExpr(self.alloc, hook.easing, t_name);
+
+    try out.appendSlice(self.alloc, "    {\n");
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        const _target_{d}: f64 = {s};\n", .{ slot_id, hook.target_expr }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        const _cur_{d}: f64 = state.getSlotFloat({d});\n", .{ slot_id, rid }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        if (_anim_ts_{d} == 0) {\n" ++
+        "            _anim_ts_{d} = now;\n" ++
+        "            _anim_from_{d} = _cur_{d};\n" ++
+        "            _anim_target_{d} = _target_{d};\n" ++
+        "        }\n",
+        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        if (_anim_target_{d} != _target_{d}) {\n" ++
+        "            _anim_ts_{d} = now;\n" ++
+        "            _anim_from_{d} = _cur_{d};\n" ++
+        "            _anim_target_{d} = _target_{d};\n" ++
+        "        }\n",
+        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+
+    if (hook.duration_ms == 0) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "        if (_cur_{d} != _target_{d}) {{\n" ++
+            "            state.setSlotFloat({d}, _target_{d});\n" ++
+            "            _anim_from_{d} = _target_{d};\n" ++
+            "            _anim_target_{d} = _target_{d};\n" ++
+            "            _anim_ts_{d} = now;\n" ++
+            "        }\n",
+            .{ slot_id, slot_id, rid, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+        try out.appendSlice(self.alloc, "    }\n");
+        return;
+    }
+
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        if (_cur_{d} != _target_{d}) {\n", .{ slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            const _elapsed_{d}: f64 = @as(f64, @floatFromInt(now - _anim_ts_{d}));\n", .{ slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            const _t_{d}: f64 = @min(@as(f64, 1.0), _elapsed_{d} / @as(f64, @floatFromInt({d})));\n",
+        .{ slot_id, slot_id, hook.duration_ms }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            const _eased_t_{d}: f64 = {s};\n", .{ slot_id, eased_t }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            const _new_{d}: f64 = _anim_from_{d} + ((_anim_target_{d} - _anim_from_{d}) * _eased_t_{d});\n",
+        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            state.setSlotFloat({d}, _new_{d});\n", .{ rid, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            if (_eased_t_{d} >= 1.0) {\n" ++
+        "                state.setSlotFloat({d}, _anim_target_{d});\n" ++
+        "                _anim_from_{d} = _anim_target_{d};\n" ++
+        "                _anim_ts_{d} = now;\n" ++
+        "            }\n" ++
+        "        }\n",
+        .{ slot_id, rid, slot_id, slot_id, slot_id, slot_id, slot_id }));
+    try out.appendSlice(self.alloc, "    }\n");
+}
+
+fn emitSpringTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: codegen.AnimHook) !void {
+    const slot_id = hook.slot_id;
+    const rid = self.regularSlotId(slot_id);
+    const vel_rid = self.regularSlotId(hook.vel_slot_id);
+
+    try out.appendSlice(self.alloc, "    {\n");
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        const _target_{d}: f64 = {s};\n", .{ slot_id, hook.target_expr }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        const _cur_{d}: f64 = state.getSlotFloat({d});\n", .{ slot_id, rid }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        var _vel_{d}: f64 = state.getSlotFloat({d});\n", .{ slot_id, vel_rid }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        const _delta_{d}: f64 = _target_{d} - _cur_{d};\n", .{ slot_id, slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        if (@abs(_delta_{d}) <= 0.0001 and @abs(_vel_{d}) <= 0.0001) {\n" ++
+        "            state.setSlotFloat({d}, 0.0);\n" ++
+        "            if (_cur_{d} != _target_{d}) state.setSlotFloat({d}, _target_{d});\n" ++
+        "        } else {\n",
+        .{ slot_id, slot_id, vel_rid, slot_id, slot_id, rid, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            const _force_{d}: f64 = {d} * _delta_{d} - {d} * _vel_{d};\n",
+        .{ slot_id, hook.stiffness, slot_id, hook.damping, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            _vel_{d} += _force_{d} * 0.016;\n", .{ slot_id, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            state.setSlotFloat({d}, _vel_{d});\n", .{ vel_rid, slot_id }));
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "            state.setSlotFloat({d}, _cur_{d} + _vel_{d} * 0.016);\n", .{ rid, slot_id, slot_id }));
+    try out.appendSlice(self.alloc, "        }\n");
+    try out.appendSlice(self.alloc, "    }\n");
+}
 
 pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     var out: std.ArrayListUnmanaged(u8) = .{};
@@ -90,6 +209,25 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     getter_used = true;
                 }
                 if (getter_used and setter_used) break;
+            }
+
+            if (!getter_used or !setter_used) {
+                const slot_read = try slotReadExpr(self, @intCast(si));
+                for (0..self.anim_hook_count) |ai| {
+                    const hook = self.anim_hooks[ai];
+                    if (hook.slot_id == @as(u32, @intCast(si))) {
+                        getter_used = true;
+                        setter_used = true;
+                    }
+                    if (hook.kind == .spring and hook.vel_slot_id == @as(u32, @intCast(si))) {
+                        getter_used = true;
+                        setter_used = true;
+                    }
+                    if (std.mem.indexOf(u8, hook.target_expr, slot_read) != null) {
+                        getter_used = true;
+                    }
+                    if (getter_used and setter_used) break;
+                }
             }
 
             if (!getter_used and !setter_used) {
@@ -177,6 +315,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
     if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"framework/state.zig\");\n");
     if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"framework/router.zig\");\n");
+    if (self.input_counter > 0) try out.appendSlice(self.alloc, "const input = @import(\"framework/input.zig\");\n");
     if (self.ffi_funcs.items.len > 0) try out.appendSlice(self.alloc, "const qjs_runtime = @import(\"framework/qjs_runtime.zig\");\n");
 
     // FFI imports
@@ -400,6 +539,26 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "var _ffi_timer_{d}: u32 = 0;\n", .{hi}));
     }
 
+    // Animation state variables
+    for (0..self.anim_hook_count) |ai| {
+        const hook = self.anim_hooks[ai];
+        if (hook.kind == .transition) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "var _anim_ts_{d}: u32 = 0;\n" ++
+                "var _anim_from_{d}: f64 = 0.0;\n" ++
+                "var _anim_target_{d}: f64 = 0.0;\n",
+                .{ hook.slot_id, hook.slot_id, hook.slot_id }));
+        }
+    }
+
+    // Effect timer variables (for interval effects)
+    for (0..self.effect_hook_count) |ei| {
+        if (self.effect_hooks[ei].kind == .interval) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "var _effect_timer_{d}: u32 = 0;\n", .{ei}));
+        }
+    }
+
     // updateRoutes
     if (self.route_count > 0) {
         try out.appendSlice(self.alloc, "fn updateRoutes() void {\n");
@@ -462,6 +621,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     // _appInit
     try out.appendSlice(self.alloc, "\nfn _appInit() void {\n    _initState();\n");
+    for (0..self.input_counter) |i| {
+        if (i < 16 and self.input_multiline[i]) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.registerMultiline({d});\n", .{i}));
+        } else {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.register({d});\n", .{i}));
+        }
+    }
     if (self.comp_instance_count > 0) {
         try out.appendSlice(self.alloc, "    _initComponents();\n");
     }
@@ -473,18 +639,41 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
     }
     if (self.has_routes) {
-        try out.appendSlice(self.alloc, "    router.init(\"/\");\n    updateRoutes();\n");
+        // Init router to the first route's path so the default page is visible
+        const init_path = if (self.route_count > 0) self.routes[0].path else "/";
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    router.init(\"{s}\");\n    updateRoutes();\n", .{init_path}));
     }
     if (has_any_conds) {
         try out.appendSlice(self.alloc, "    _updateConditionals();\n");
+    }
+    // Mount effects — run once at init
+    for (0..self.effect_hook_count) |ei| {
+        if (self.effect_hooks[ei].kind == .mount) {
+            const body = try handlers.emitHandlerBody(self, self.effect_hooks[ei].body_start);
+            if (body.len > 0) {
+                try out.appendSlice(self.alloc, "    // useEffect mount\n");
+                try out.appendSlice(self.alloc, body);
+            }
+        }
     }
     try out.appendSlice(self.alloc, "}\n\n");
 
     // _appTick
     try out.appendSlice(self.alloc, "fn _appTick(now: u32) void {\n");
-    if (self.ffi_hook_count == 0) {
+
+    // Check if `now` is used by FFI hooks, animation hooks, or interval effects
+    var needs_now = self.ffi_hook_count > 0 or self.anim_hook_count > 0;
+    if (!needs_now) {
+        for (0..self.effect_hook_count) |ei| {
+            if (self.effect_hooks[ei].kind == .interval) { needs_now = true; break; }
+        }
+    }
+    if (!needs_now) {
         try out.appendSlice(self.alloc, "    _ = now;\n");
     }
+
+    // FFI polling
     if (self.ffi_hook_count > 0) {
         for (0..self.ffi_hook_count) |hi| {
             const hook = self.ffi_hooks[hi];
@@ -510,9 +699,47 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 .{ hi, hook.interval_ms, set_fn, rid, ffi_call, cast, hi }));
         }
     }
+
+    if (self.anim_hook_count > 0) {
+        for (0..self.anim_hook_count) |ai| {
+            const hook = self.anim_hooks[ai];
+            switch (hook.kind) {
+                .transition => try emitTransitionTick(self, &out, hook),
+                .spring => try emitSpringTick(self, &out, hook),
+            }
+        }
+    }
+
     if (self.has_routes) {
         try out.appendSlice(self.alloc, "    if (router.isDirty()) { updateRoutes(); router.clearDirty(); }\n");
     }
+
+    // Frame effects — run every tick
+    for (0..self.effect_hook_count) |ei| {
+        if (self.effect_hooks[ei].kind == .frame) {
+            const body = try handlers.emitHandlerBody(self, self.effect_hooks[ei].body_start);
+            if (body.len > 0) {
+                try out.appendSlice(self.alloc, "    // useEffect frame\n");
+                try out.appendSlice(self.alloc, body);
+            }
+        }
+    }
+
+    // Interval effects — run every N ms
+    for (0..self.effect_hook_count) |ei| {
+        const eff = self.effect_hooks[ei];
+        if (eff.kind == .interval) {
+            const body = try handlers.emitHandlerBody(self, eff.body_start);
+            if (body.len > 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    if (now - _effect_timer_{d} >= {d}) {{\n", .{ ei, eff.interval_ms }));
+                try out.appendSlice(self.alloc, body);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _effect_timer_{d} = now;\n    }}\n", .{ei}));
+            }
+        }
+    }
+
     var has_per_frame_text = false;
     for (0..self.dyn_count) |di| {
         if (self.dyn_texts[di].dep_count == 0 and self.dyn_texts[di].has_ref) {
@@ -527,11 +754,43 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     } else if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds)) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateDynamicTexts();");
         if (has_any_conds) try out.appendSlice(self.alloc, " _updateConditionals();");
+        // Watch effects — run when watched state slots change
+        for (0..self.effect_hook_count) |ei| {
+            const eff = self.effect_hooks[ei];
+            if (eff.kind == .watch) {
+                const body = try handlers.emitHandlerBody(self, eff.body_start);
+                if (body.len > 0) {
+                    try out.appendSlice(self.alloc, "\n");
+                    try out.appendSlice(self.alloc, body);
+                }
+            }
+        }
         try out.appendSlice(self.alloc, " state.clearDirty(); }\n");
     } else if (self.has_state and has_any_conds) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateConditionals(); state.clearDirty(); }\n");
     } else if (self.has_state) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
+    }
+    // Watch effects when no dyn texts — need their own dirty check
+    {
+        var has_watch = false;
+        for (0..self.effect_hook_count) |ei| {
+            if (self.effect_hooks[ei].kind == .watch) { has_watch = true; break; }
+        }
+        if (has_watch and !has_per_frame_text and !(self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds))) {
+            try out.appendSlice(self.alloc, "    if (state.isDirty()) {\n");
+            for (0..self.effect_hook_count) |ei| {
+                const eff = self.effect_hooks[ei];
+                if (eff.kind == .watch) {
+                    const body = try handlers.emitHandlerBody(self, eff.body_start);
+                    if (body.len > 0) {
+                        try out.appendSlice(self.alloc, "        // useEffect watch\n");
+                        try out.appendSlice(self.alloc, body);
+                    }
+                }
+            }
+            try out.appendSlice(self.alloc, "        state.clearDirty();\n    }\n");
+        }
     }
     try out.appendSlice(self.alloc, "}\n\n");
 

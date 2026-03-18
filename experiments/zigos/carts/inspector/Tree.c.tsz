@@ -1,4 +1,4 @@
-import { TreePane, TreeToolbar, TreeToolbarLead, PaneTitle, PaneMeta, TreeViewBar, Divider, TreeScroll } from './style_cls';
+import { TreePane, TreeToolbar, TreeToolbarLead, PaneTitle, PaneMeta, TreeViewBar, Divider, TreeBodyChrome, TreeScroll } from './style_cls';
 import { TreeViewTabButton } from './TreeViewTabButton.c';
 import { TreeZigView } from './TreeZigView.c';
 import { TreeHybridView } from './TreeHybridView.c';
@@ -21,11 +21,13 @@ function Tree() {
         </C.TreeViewBar>
       </C.TreeToolbar>
       <C.Divider />
-      <C.TreeScroll>
-        {activeTreeView == 0 && <TreeZigView />}
-        {activeTreeView == 1 && <TreeHybridView />}
-        {activeTreeView == 2 && <TreeJsxView />}
-      </C.TreeScroll>
+      <C.TreeBodyChrome>
+        <C.TreeScroll>
+          {activeTreeView == 0 && <TreeZigView />}
+          {activeTreeView == 1 && <TreeHybridView />}
+          {activeTreeView == 2 && <TreeJsxView />}
+        </C.TreeScroll>
+      </C.TreeBodyChrome>
     </C.TreePane>
   );
 }
