@@ -22,19 +22,20 @@ const NodeType = enum {
     dyn,
 };
 
+const MAX_CHILDREN = 16; // max children per node
+
 const GraphNode = struct {
     name: []const u8,
     ntype: NodeType,
-    parent_idx: ?u16,       // index into nodes array, null for root
-    first_child: u16,       // index of first child (0 = none)
+    parent_idx: ?u16,
+    children: [MAX_CHILDREN]u16,  // actual child indices
     child_count: u16,
     depth: u8,
-    descendant_count: u16,  // total descendants (for collapsed label)
-    // Layout positions (in graph space, computed once)
-    gx: f32,               // graph-space x (center of node)
-    gy: f32,               // graph-space y (center of node)
-    gw: f32,               // width in graph space
-    gh: f32,               // height in graph space
+    descendant_count: u16,
+    gx: f32,
+    gy: f32,
+    gw: f32,
+    gh: f32,
 };
 
 // ── Camera state ────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ fn addNode(name: []const u8, ntype: NodeType, parent: ?u16, depth: u8) u16 {
         .name = name,
         .ntype = ntype,
         .parent_idx = parent,
-        .first_child = 0,
+        .children = undefined,
         .child_count = 0,
         .depth = depth,
         .descendant_count = 0,
@@ -80,12 +81,12 @@ fn addNode(name: []const u8, ntype: NodeType, parent: ?u16, depth: u8) u16 {
         .gw = @max(60, @as(f32, @floatFromInt(name.len)) * 8 + 24),
         .gh = 36,
     };
-    // Update parent's child tracking
     if (parent) |p| {
-        if (nodes[p].child_count == 0) {
-            nodes[p].first_child = idx;
+        const cc = nodes[p].child_count;
+        if (cc < MAX_CHILDREN) {
+            nodes[p].children[cc] = idx;
+            nodes[p].child_count = cc + 1;
         }
-        nodes[p].child_count += 1;
     }
     node_count += 1;
     return idx;
@@ -208,7 +209,7 @@ fn countDescendants(idx: u16) u16 {
     const n = &nodes[idx];
     var ci: u16 = 0;
     while (ci < n.child_count) : (ci += 1) {
-        const child_idx = n.first_child + ci;
+        const child_idx = n.children[ci];
         total += 1 + countDescendants(child_idx);
     }
     n.descendant_count = total;
@@ -227,7 +228,7 @@ fn leafCount(idx: u16) f32 {
     var total: f32 = 0;
     var ci: u16 = 0;
     while (ci < n.child_count) : (ci += 1) {
-        total += leafCount(n.first_child + ci);
+        total += leafCount(n.children[ci]);
     }
     return total;
 }
@@ -246,12 +247,12 @@ fn layoutNode(idx: u16) void {
     // Layout children first
     var ci: u16 = 0;
     while (ci < n.child_count) : (ci += 1) {
-        layoutNode(n.first_child + ci);
+        layoutNode(n.children[ci]);
     }
 
     // Center over children
-    const first = &nodes[n.first_child];
-    const last = &nodes[n.first_child + n.child_count - 1];
+    const first = &nodes[n.children[0]];
+    const last = &nodes[n.children[n.child_count - 1]];
     n.gx = (first.gx + last.gx) / 2;
 }
 
@@ -369,7 +370,7 @@ fn render(x: f32, y: f32, w: f32, h: f32) void {
         const tc = typeColor(n.ntype);
         const px = graphToScreenX(n.gx);
         const py = graphToScreenY(n.gy + n.gh / 2);
-        const first_child = &nodes[n.first_child];
+        const first_child = &nodes[n.children[0]];
         const cy_top = graphToScreenY(first_child.gy - first_child.gh / 2);
         const mid_y = py + (cy_top - py) / 2;
         const line_w: f32 = @max(1, 2 * scale);
@@ -381,7 +382,7 @@ fn render(x: f32, y: f32, w: f32, h: f32) void {
 
         // Horizontal bar
         if (n.child_count > 1) {
-            const last_child = &nodes[n.first_child + n.child_count - 1];
+            const last_child = &nodes[n.children[n.child_count - 1]];
             const fcx = graphToScreenX(first_child.gx);
             const lcx = graphToScreenX(last_child.gx);
             const bar_l = @min(fcx, lcx);
@@ -392,7 +393,7 @@ fn render(x: f32, y: f32, w: f32, h: f32) void {
         // Stems down to children
         var ci: u16 = 0;
         while (ci < n.child_count) : (ci += 1) {
-            const child = &nodes[n.first_child + ci];
+            const child = &nodes[n.children[ci]];
             const ccx = graphToScreenX(child.gx);
             const ccy = graphToScreenY(child.gy - child.gh / 2);
             if (ccy - mid_y > 1) {
