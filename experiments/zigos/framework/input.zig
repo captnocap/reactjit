@@ -450,3 +450,21 @@ pub fn setText(id: u8, text: []const u8) void {
         if (on_change_callbacks[id]) |cb| cb();
     }
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub const TelemetryInputStats = struct {
+    focused_id: i8,
+    active_count: u32,
+};
+
+pub fn telemetryStats() TelemetryInputStats {
+    var count: u32 = 0;
+    for (0..MAX_INPUTS) |i| {
+        if (inputs[i].active) count += 1;
+    }
+    return .{
+        .focused_id = if (focused_id) |id| @intCast(id) else -1,
+        .active_count = count,
+    };
+}

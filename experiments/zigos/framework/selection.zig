@@ -519,3 +519,13 @@ fn collectAllText(node: *Node, buf: []u8, pos: usize) usize {
     }
     return p;
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryHasSelection() bool {
+    return sel_node != null;
+}
+
+pub fn telemetryIsDragging() bool {
+    return sel_dragging;
+}

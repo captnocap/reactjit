@@ -449,3 +449,9 @@ pub fn installSignalHandler() void {
 fn sigusr1Handler(_: c_int) callconv(.c) void {
     saveState();
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryArraySlotCount() usize {
+    return array_slot_count;
+}

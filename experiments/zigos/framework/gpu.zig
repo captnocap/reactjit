@@ -485,10 +485,10 @@ pub fn drawRect(
 ) void {
     if (g_rect_count >= MAX_RECTS) return;
     // Apply canvas transform if active
-    const tx = if (g_transform_scale != 1.0) (x - g_transform_ox) * g_transform_scale + g_transform_ox + g_transform_tx else x;
-    const ty = if (g_transform_scale != 1.0) (y - g_transform_oy) * g_transform_scale + g_transform_oy + g_transform_ty else y;
-    const tw = if (g_transform_scale != 1.0) w * g_transform_scale else w;
-    const th = if (g_transform_scale != 1.0) h * g_transform_scale else h;
+    const tx = if (g_transform_active) (x - g_transform_ox) * g_transform_scale + g_transform_ox + g_transform_tx else x;
+    const ty = if (g_transform_active) (y - g_transform_oy) * g_transform_scale + g_transform_oy + g_transform_ty else y;
+    const tw = if (g_transform_active) w * g_transform_scale else w;
+    const th = if (g_transform_active) h * g_transform_scale else h;
     g_rects[g_rect_count] = .{
         .pos_x = tx,
         .pos_y = ty,
@@ -1553,4 +1553,48 @@ fn createSurfaceFromSDL(instance: *wgpu.Instance, wm_info: *const c.SDL_SysWMinf
 
     std.debug.print("Unsupported windowing subsystem: {d}\n", .{subsystem});
     return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Telemetry getters
+// ════════════════════════════════════════════════════════════════════════
+
+pub const TelemetryStats = struct {
+    rect_count: u32,
+    glyph_count: u32,
+    rect_capacity: u32,
+    glyph_capacity: u32,
+    atlas_glyph_count: u32,
+    atlas_capacity: u32,
+    atlas_row_x: u32,
+    atlas_row_y: u32,
+    scissor_depth: u32,
+    scissor_segment_count: u32,
+    surface_w: u32,
+    surface_h: u32,
+    frame_hash: u64,
+    frames_since_drain: u64,
+};
+
+pub fn telemetryStats() TelemetryStats {
+    return .{
+        .rect_count = @intCast(g_last_rect_count),
+        .glyph_count = @intCast(g_last_glyph_count),
+        .rect_capacity = MAX_RECTS,
+        .glyph_capacity = MAX_GLYPHS,
+        .atlas_glyph_count = @intCast(g_atlas_count),
+        .atlas_capacity = MAX_ATLAS_GLYPHS,
+        .atlas_row_x = g_atlas_row_x,
+        .atlas_row_y = g_atlas_row_y,
+        .scissor_depth = @intCast(g_scissor_depth),
+        .scissor_segment_count = @intCast(g_scissor_count),
+        .surface_w = g_width,
+        .surface_h = g_height,
+        .frame_hash = g_prev_frame_hash,
+        .frames_since_drain = g_frame_counter % DRAIN_INTERVAL,
+    };
+}
+
+pub fn telemetryFrameCounter() u64 {
+    return g_frame_counter;
 }

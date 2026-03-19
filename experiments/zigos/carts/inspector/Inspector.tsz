@@ -1,4 +1,4 @@
-import { Panel, AppContent, InspectorPane, TabBar, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood, DemoApp, DemoTitle, DemoSubtitle, DemoCard, DemoCardTitle, DemoCardBody, DemoRow, DemoBtn, DemoBtnLabel } from './style_cls';
+import { Panel, AppContent, InspectorPane, TabBar, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood, StatusTextWarn, DemoApp, DemoTitle, DemoSubtitle, DemoCard, DemoCardTitle, DemoCardBody, DemoRow, DemoBtn, DemoBtnLabel } from './style_cls';
 import { InspectorTabButton } from './InspectorTabButton.c';
 import { ElementsPage } from './ElementsPage.c';
 import { SourcePage } from './SourcePage.c';
@@ -9,6 +9,17 @@ import { ConsolePage } from './ConsolePage.c';
 import { LogsPage } from './LogsPage.c';
 
 const [activeTab, setActiveTab] = useState(0);
+
+// ── Status bar telemetry state ──
+const [statusFps, setStatusFps] = useState(0);
+const [statusNodes, setStatusNodes] = useState(0);
+const [statusWinW, setStatusWinW] = useState(0);
+const [statusWinH, setStatusWinH] = useState(0);
+const [statusDirty, setStatusDirty] = useState(0);
+const [statusLayoutUs, setStatusLayoutUs] = useState(0);
+const [statusPaintUs, setStatusPaintUs] = useState(0);
+const [statusRects, setStatusRects] = useState(0);
+const [statusGlyphs, setStatusGlyphs] = useState(0);
 
 function App() {
   return (
@@ -58,13 +69,18 @@ function App() {
         {activeTab == 6 && <LogsPage />}
         <C.StatusBar>
           <C.StatusLeft>
-            <C.StatusTextGood>Ready</C.StatusTextGood>
-            <C.StatusText>142 nodes</C.StatusText>
+            {statusDirty == 1 && <C.StatusTextWarn>Dirty</C.StatusTextWarn>}
+            {statusDirty == 0 && <C.StatusTextGood>Ready</C.StatusTextGood>}
+            <C.StatusText>{`${statusNodes} nodes`}</C.StatusText>
+            <C.StatusText>{`${statusRects}r ${statusGlyphs}g`}</C.StatusText>
           </C.StatusLeft>
           <C.StatusRight>
-            <C.StatusText>4.2 MB</C.StatusText>
-            <C.StatusTextGood>60 fps</C.StatusTextGood>
-            <C.StatusText>810x638</C.StatusText>
+            <C.StatusText>{`${statusLayoutUs}us lay`}</C.StatusText>
+            <C.StatusText>{`${statusPaintUs}us pnt`}</C.StatusText>
+            {statusFps >= 50 && <C.StatusTextGood>{`${statusFps} fps`}</C.StatusTextGood>}
+            {statusFps < 50 && statusFps >= 30 && <C.StatusTextWarn>{`${statusFps} fps`}</C.StatusTextWarn>}
+            {statusFps < 30 && <C.StatusText>{`${statusFps} fps`}</C.StatusText>}
+            <C.StatusText>{`${statusWinW}x${statusWinH}`}</C.StatusText>
           </C.StatusRight>
         </C.StatusBar>
       </C.InspectorPane>

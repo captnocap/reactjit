@@ -593,3 +593,13 @@ pub fn forEach(callback: *const fn (usize, *WindowSlot) void) void {
         if (slots[i].active) callback(i, &slots[i]);
     }
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryActiveCount() u32 {
+    var n: u32 = 0;
+    for (0..MAX_WINDOWS) |i| {
+        if (slots[i].active) n += 1;
+    }
+    return n;
+}

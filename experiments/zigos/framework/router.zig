@@ -245,3 +245,17 @@ pub fn findBestMatch(patterns: []const []const u8, pathname: []const u8) ?usize 
 
     return best_idx;
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub const TelemetryRouterStats = struct {
+    history_depth: u32,
+    current_index: u32,
+};
+
+pub fn telemetryStats() TelemetryRouterStats {
+    return .{
+        .history_depth = @intCast(history_count),
+        .current_index = @intCast(history_index),
+    };
+}

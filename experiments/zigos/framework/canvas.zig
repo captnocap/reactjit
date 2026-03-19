@@ -71,6 +71,13 @@ pub fn init() void {
     cam_zoom = 1.0;
 }
 
+/// Set camera position and zoom (called from initial viewport props).
+pub fn setCamera(cx: f32, cy: f32, zoom: f32) void {
+    cam_x = cx;
+    cam_y = cy;
+    cam_zoom = zoom;
+}
+
 // ── Rendering ───────────────────────────────────────────────────────────
 
 /// Render the canvas background + optional custom render pass.
@@ -111,4 +118,22 @@ pub fn handleDrag(dx: f32, dy: f32) void {
         cam_x -= dx / cam_zoom;
         cam_y -= dy / cam_zoom;
     }
+}
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub const TelemetryCameraState = struct {
+    x: f32,
+    y: f32,
+    zoom: f32,
+    type_count: u32,
+};
+
+pub fn telemetryCameraState() TelemetryCameraState {
+    return .{
+        .x = cam_x,
+        .y = cam_y,
+        .zoom = cam_zoom,
+        .type_count = @intCast(type_count),
+    };
 }

@@ -104,3 +104,9 @@ pub fn paintOverlay(measure_fn: layout.MeasureTextFn, win_w: f32, win_h: f32) vo
 
     gpu.popScissor();
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryVisible() bool {
+    return visible;
+}

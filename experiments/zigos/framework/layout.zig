@@ -157,12 +157,21 @@ pub const Node = struct {
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
     canvas_type: ?[]const u8 = null,
+    // Canvas viewport — initial camera (center point + zoom)
+    canvas_view_x: f32 = 0,
+    canvas_view_y: f32 = 0,
+    canvas_view_zoom: f32 = 1.0,
+    canvas_view_set: bool = false,  // true = apply on first frame
     // Canvas.Node fields — position + size in parent canvas's coordinate space
     canvas_node: bool = false,       // true = this is a Canvas.Node
     canvas_gx: f32 = 0,             // graph-space X (center)
     canvas_gy: f32 = 0,             // graph-space Y (center)
     canvas_gw: f32 = 0,             // graph-space width (0 = auto from content)
     canvas_gh: f32 = 0,             // graph-space height (0 = auto from content)
+    // Canvas.Path fields — SVG path drawing
+    canvas_path: bool = false,       // true = this is a Canvas.Path
+    canvas_path_d: ?[]const u8 = null, // SVG path data string
+    canvas_stroke_width: f32 = 2,
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -1200,4 +1209,14 @@ fn invalidateCaches(node: *Node) void {
     for (node.children) |*child| {
         invalidateCaches(child);
     }
+}
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryBudget() u32 {
+    return LAYOUT_BUDGET;
+}
+
+pub fn telemetryBudgetUsed() u32 {
+    return @intCast(layoutCount);
 }

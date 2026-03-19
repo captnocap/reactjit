@@ -109,6 +109,330 @@ fn hostGetTickUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_tick_us));
 }
 
+// ── Telemetry host functions (build JS objects from unified snapshot) ──
+
+const tel = @import("telemetry.zig");
+
+fn setF(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: f64) void {
+    _ = qjs.JS_SetPropertyStr(ctx, obj, name, qjs.JS_NewFloat64(ctx, val));
+}
+
+fn setB(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: bool) void {
+    setF(ctx, obj, name, if (val) 1.0 else 0.0);
+}
+
+fn hostTelFrame(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "fps", @floatFromInt(s.fps));
+    setF(c2, obj, "tick_us", @floatFromInt(s.tick_us));
+    setF(c2, obj, "layout_us", @floatFromInt(s.layout_us));
+    setF(c2, obj, "paint_us", @floatFromInt(s.paint_us));
+    setF(c2, obj, "frame_total_us", @floatFromInt(s.frame_total_us));
+    setF(c2, obj, "frame_number", @floatFromInt(s.frame_number));
+    setF(c2, obj, "bridge_calls_per_sec", @floatFromInt(s.bridge_calls_per_sec));
+    return obj;
+}
+
+fn hostTelGpu(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "rect_count", @floatFromInt(s.rect_count));
+    setF(c2, obj, "glyph_count", @floatFromInt(s.glyph_count));
+    setF(c2, obj, "rect_capacity", @floatFromInt(s.rect_capacity));
+    setF(c2, obj, "glyph_capacity", @floatFromInt(s.glyph_capacity));
+    setF(c2, obj, "atlas_glyph_count", @floatFromInt(s.atlas_glyph_count));
+    setF(c2, obj, "atlas_capacity", @floatFromInt(s.atlas_capacity));
+    setF(c2, obj, "atlas_row_x", @floatFromInt(s.atlas_row_x));
+    setF(c2, obj, "atlas_row_y", @floatFromInt(s.atlas_row_y));
+    setF(c2, obj, "scissor_depth", @floatFromInt(s.scissor_depth));
+    setF(c2, obj, "scissor_segment_count", @floatFromInt(s.scissor_segment_count));
+    setF(c2, obj, "gpu_surface_w", @floatFromInt(s.gpu_surface_w));
+    setF(c2, obj, "gpu_surface_h", @floatFromInt(s.gpu_surface_h));
+    setF(c2, obj, "frame_hash", @floatFromInt(s.frame_hash));
+    setF(c2, obj, "frames_since_drain", @floatFromInt(s.frames_since_drain));
+    return obj;
+}
+
+fn hostTelNodes(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "total", @floatFromInt(s.total_nodes));
+    setF(c2, obj, "visible", @floatFromInt(s.visible_nodes));
+    setF(c2, obj, "hidden", @floatFromInt(s.hidden_nodes));
+    setF(c2, obj, "zero_size", @floatFromInt(s.zero_size_nodes));
+    setF(c2, obj, "max_depth", @floatFromInt(s.max_depth));
+    setF(c2, obj, "scroll", @floatFromInt(s.scroll_nodes));
+    setF(c2, obj, "text", @floatFromInt(s.text_nodes));
+    setF(c2, obj, "image", @floatFromInt(s.image_nodes));
+    setF(c2, obj, "pressable", @floatFromInt(s.pressable_nodes));
+    setF(c2, obj, "canvas", @floatFromInt(s.canvas_nodes));
+    return obj;
+}
+
+fn hostTelState(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "slot_count", @floatFromInt(s.state_slot_count));
+    setF(c2, obj, "slot_capacity", @floatFromInt(s.state_slot_capacity));
+    setB(c2, obj, "dirty", s.state_dirty);
+    setF(c2, obj, "array_slot_count", @floatFromInt(s.array_slot_count));
+    setF(c2, obj, "array_slot_capacity", @floatFromInt(s.array_slot_capacity));
+    return obj;
+}
+
+fn hostTelSystem(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "window_x", @floatFromInt(s.window_x));
+    setF(c2, obj, "window_y", @floatFromInt(s.window_y));
+    setF(c2, obj, "window_w", @floatFromInt(s.window_w));
+    setF(c2, obj, "window_h", @floatFromInt(s.window_h));
+    setF(c2, obj, "display_count", @floatFromInt(s.display_count));
+    setF(c2, obj, "current_display", @floatFromInt(s.current_display));
+    setF(c2, obj, "display_w", @floatFromInt(s.display_w));
+    setF(c2, obj, "display_h", @floatFromInt(s.display_h));
+    setF(c2, obj, "breakpoint", @floatFromInt(s.breakpoint_tier));
+    setF(c2, obj, "secondary_windows", @floatFromInt(s.secondary_window_count));
+    return obj;
+}
+
+fn hostTelInput(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "focused_id", @floatFromInt(s.focused_input_id));
+    setF(c2, obj, "active_count", @floatFromInt(s.active_input_count));
+    setB(c2, obj, "has_selection", s.has_selection);
+    setB(c2, obj, "selection_dragging", s.selection_dragging);
+    setB(c2, obj, "tooltip_visible", s.tooltip_visible);
+    return obj;
+}
+
+fn hostTelCanvas(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "cam_x", s.canvas_cam_x);
+    setF(c2, obj, "cam_y", s.canvas_cam_y);
+    setF(c2, obj, "cam_zoom", s.canvas_cam_zoom);
+    setF(c2, obj, "type_count", @floatFromInt(s.canvas_type_count));
+    return obj;
+}
+
+fn hostTelNet(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "active_connections", @floatFromInt(s.net_active_connections));
+    setF(c2, obj, "open_connections", @floatFromInt(s.net_open_connections));
+    setF(c2, obj, "reconnecting", @floatFromInt(s.net_reconnecting));
+    setF(c2, obj, "event_queue_depth", @floatFromInt(s.net_event_queue_depth));
+    return obj;
+}
+
+fn hostTelLayout(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const s = tel.current;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "budget", @floatFromInt(s.layout_budget));
+    setF(c2, obj, "budget_used", @floatFromInt(s.layout_budget_used));
+    setF(c2, obj, "route_history_depth", @floatFromInt(s.route_history_depth));
+    setF(c2, obj, "route_current_index", @floatFromInt(s.route_current_index));
+    setF(c2, obj, "log_channels_enabled", @floatFromInt(s.log_channels_enabled));
+    return obj;
+}
+
+fn hostTelHistory(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    var count: i32 = 40;
+    if (argc >= 1) _ = qjs.JS_ToInt32(c2, &count, argv[0]);
+    const n: usize = @intCast(@max(1, @min(count, 120)));
+    const avail = tel.historyCount();
+    const actual = @min(n, avail);
+
+    const arr = qjs.JS_NewArray(c2);
+    for (0..actual) |i| {
+        if (tel.getHistory(i)) |snap| {
+            _ = qjs.JS_SetPropertyUint32(c2, arr, @intCast(i), qjs.JS_NewFloat64(c2, @floatFromInt(snap.frame_total_us)));
+        }
+    }
+    return arr;
+}
+
+fn hostTelNodeCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return qjs.JS_NewFloat64(null, @floatFromInt(tel.nodeCount()));
+}
+
+fn hostTelNode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return QJS_UNDEFINED;
+    var idx: i32 = 0;
+    _ = qjs.JS_ToInt32(c2, &idx, argv[0]);
+    if (idx < 0) return QJS_UNDEFINED;
+
+    const node = tel.getNode(@intCast(idx)) orelse return QJS_UNDEFINED;
+    const depth = tel.getNodeDepth(@intCast(idx));
+    const r = node.computed;
+
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "depth", @floatFromInt(depth));
+    setF(c2, obj, "child_count", @floatFromInt(node.children.len));
+    setF(c2, obj, "x", r.x);
+    setF(c2, obj, "y", r.y);
+    setF(c2, obj, "w", r.w);
+    setF(c2, obj, "h", r.h);
+    setB(c2, obj, "has_text", node.text != null);
+    setB(c2, obj, "has_image", node.image_src != null);
+    setB(c2, obj, "has_handler", node.handlers.on_press != null);
+    setB(c2, obj, "has_tooltip", node.tooltip != null);
+    setF(c2, obj, "font_size", @floatFromInt(node.font_size));
+    setF(c2, obj, "opacity", node.style.opacity);
+    setF(c2, obj, "scroll_y", node.scroll_y);
+    setF(c2, obj, "content_height", node.content_height);
+
+    // Tag name — debug_name or inferred type
+    const tag = node.debug_name orelse tel.nodeTypeName(node);
+    _ = qjs.JS_SetPropertyStr(c2, obj, "tag", qjs.JS_NewStringLen(c2, tag.ptr, @intCast(tag.len)));
+
+    // Display and flex direction as numbers
+    setF(c2, obj, "display", @floatFromInt(@intFromEnum(node.style.display)));
+    setF(c2, obj, "flex_direction", @floatFromInt(@intFromEnum(node.style.flex_direction)));
+
+    return obj;
+}
+
+fn hostTelNodeStyle(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return QJS_UNDEFINED;
+    var idx: i32 = 0;
+    _ = qjs.JS_ToInt32(c2, &idx, argv[0]);
+    if (idx < 0) return QJS_UNDEFINED;
+
+    const node = tel.getNode(@intCast(idx)) orelse return QJS_UNDEFINED;
+    const sty = node.style;
+    const obj = qjs.JS_NewObject(c2);
+
+    // Dimensions
+    if (sty.width) |v| setF(c2, obj, "width", v) else setF(c2, obj, "width", -1);
+    if (sty.height) |v| setF(c2, obj, "height", v) else setF(c2, obj, "height", -1);
+    if (sty.min_width) |v| setF(c2, obj, "min_width", v);
+    if (sty.max_width) |v| setF(c2, obj, "max_width", v);
+    if (sty.min_height) |v| setF(c2, obj, "min_height", v);
+    if (sty.max_height) |v| setF(c2, obj, "max_height", v);
+
+    // Flex
+    setF(c2, obj, "flex_grow", sty.flex_grow);
+    if (sty.flex_shrink) |v| setF(c2, obj, "flex_shrink", v);
+    if (sty.flex_basis) |v| setF(c2, obj, "flex_basis", v);
+    setF(c2, obj, "flex_direction", @floatFromInt(@intFromEnum(sty.flex_direction)));
+    setF(c2, obj, "justify_content", @floatFromInt(@intFromEnum(sty.justify_content)));
+    setF(c2, obj, "align_items", @floatFromInt(@intFromEnum(sty.align_items)));
+    setF(c2, obj, "align_self", @floatFromInt(@intFromEnum(sty.align_self)));
+    setF(c2, obj, "gap", sty.gap);
+
+    // Padding
+    setF(c2, obj, "padding", sty.padding);
+    if (sty.padding_left) |v| setF(c2, obj, "padding_left", v);
+    if (sty.padding_right) |v| setF(c2, obj, "padding_right", v);
+    if (sty.padding_top) |v| setF(c2, obj, "padding_top", v);
+    if (sty.padding_bottom) |v| setF(c2, obj, "padding_bottom", v);
+
+    // Margin
+    setF(c2, obj, "margin", sty.margin);
+    if (sty.margin_left) |v| setF(c2, obj, "margin_left", v);
+    if (sty.margin_right) |v| setF(c2, obj, "margin_right", v);
+    if (sty.margin_top) |v| setF(c2, obj, "margin_top", v);
+    if (sty.margin_bottom) |v| setF(c2, obj, "margin_bottom", v);
+
+    // Visual
+    setF(c2, obj, "border_radius", sty.border_radius);
+    setF(c2, obj, "border_width", sty.border_width);
+    setF(c2, obj, "opacity", sty.opacity);
+    setF(c2, obj, "z_index", @floatFromInt(sty.z_index));
+    setF(c2, obj, "rotation", sty.rotation);
+    setF(c2, obj, "scale_x", sty.scale_x);
+    setF(c2, obj, "scale_y", sty.scale_y);
+
+    // Background color
+    if (sty.background_color) |bg| {
+        setF(c2, obj, "bg_r", @floatFromInt(bg.r));
+        setF(c2, obj, "bg_g", @floatFromInt(bg.g));
+        setF(c2, obj, "bg_b", @floatFromInt(bg.b));
+        setF(c2, obj, "bg_a", @floatFromInt(bg.a));
+    }
+
+    // Border color
+    if (sty.border_color) |bc| {
+        setF(c2, obj, "border_r", @floatFromInt(bc.r));
+        setF(c2, obj, "border_g", @floatFromInt(bc.g));
+        setF(c2, obj, "border_b", @floatFromInt(bc.b));
+        setF(c2, obj, "border_a", @floatFromInt(bc.a));
+    }
+
+    // Position
+    setF(c2, obj, "position", @floatFromInt(@intFromEnum(sty.position)));
+    if (sty.top) |v| setF(c2, obj, "top", v);
+    if (sty.left) |v| setF(c2, obj, "left", v);
+    if (sty.right) |v| setF(c2, obj, "right", v);
+    if (sty.bottom) |v| setF(c2, obj, "bottom", v);
+
+    // Overflow, display, text align
+    setF(c2, obj, "overflow", @floatFromInt(@intFromEnum(sty.overflow)));
+    setF(c2, obj, "display", @floatFromInt(@intFromEnum(sty.display)));
+    setF(c2, obj, "text_align", @floatFromInt(@intFromEnum(sty.text_align)));
+
+    return obj;
+}
+
+fn hostTelNodeBoxModel(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return QJS_UNDEFINED;
+    var idx: i32 = 0;
+    _ = qjs.JS_ToInt32(c2, &idx, argv[0]);
+    if (idx < 0) return QJS_UNDEFINED;
+
+    const node = tel.getNode(@intCast(idx)) orelse return QJS_UNDEFINED;
+    const sty = node.style;
+    const r = node.computed;
+
+    const obj = qjs.JS_NewObject(c2);
+    // Computed rect
+    setF(c2, obj, "x", r.x);
+    setF(c2, obj, "y", r.y);
+    setF(c2, obj, "w", r.w);
+    setF(c2, obj, "h", r.h);
+
+    // Resolved padding
+    setF(c2, obj, "pad_top", sty.padTop());
+    setF(c2, obj, "pad_right", sty.padRight());
+    setF(c2, obj, "pad_bottom", sty.padBottom());
+    setF(c2, obj, "pad_left", sty.padLeft());
+
+    // Resolved margin (no helper methods — resolve optional fields manually)
+    setF(c2, obj, "margin_top", sty.margin_top orelse sty.margin);
+    setF(c2, obj, "margin_right", sty.margin_right orelse sty.margin);
+    setF(c2, obj, "margin_bottom", sty.margin_bottom orelse sty.margin);
+    setF(c2, obj, "margin_left", sty.margin_left orelse sty.margin);
+
+    setF(c2, obj, "border_width", sty.border_width);
+
+    // Content dimensions
+    const pl = sty.padLeft();
+    const pr = sty.padRight();
+    const pt = sty.padTop();
+    const pb = sty.padBottom();
+    setF(c2, obj, "content_w", @max(0, r.w - pl - pr));
+    setF(c2, obj, "content_h", @max(0, r.h - pt - pb));
+
+    return obj;
+}
+
 const polyfill =
     \\globalThis.console = {
     \\  log: function(...args) { __hostLog(0, args.map(String).join(' ')); },
@@ -167,6 +491,22 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));
+
+    // Telemetry host functions — unified snapshot access
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_frame", qjs.JS_NewCFunction(ctx, hostTelFrame, "__tel_frame", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_gpu", qjs.JS_NewCFunction(ctx, hostTelGpu, "__tel_gpu", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_nodes", qjs.JS_NewCFunction(ctx, hostTelNodes, "__tel_nodes", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_state", qjs.JS_NewCFunction(ctx, hostTelState, "__tel_state", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_system", qjs.JS_NewCFunction(ctx, hostTelSystem, "__tel_system", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_input", qjs.JS_NewCFunction(ctx, hostTelInput, "__tel_input", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_canvas", qjs.JS_NewCFunction(ctx, hostTelCanvas, "__tel_canvas", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_net", qjs.JS_NewCFunction(ctx, hostTelNet, "__tel_net", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_layout", qjs.JS_NewCFunction(ctx, hostTelLayout, "__tel_layout", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_history", qjs.JS_NewCFunction(ctx, hostTelHistory, "__tel_history", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_count", qjs.JS_NewCFunction(ctx, hostTelNodeCount, "__tel_node_count", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node", qjs.JS_NewCFunction(ctx, hostTelNode, "__tel_node", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_style", qjs.JS_NewCFunction(ctx, hostTelNodeStyle, "__tel_node_style", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_box_model", qjs.JS_NewCFunction(ctx, hostTelNodeBoxModel, "__tel_node_box_model", 1));
 
     const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, val);

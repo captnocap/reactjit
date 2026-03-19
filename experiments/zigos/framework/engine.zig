@@ -14,8 +14,10 @@ const selection = @import("selection.zig");
 const breakpoint = @import("breakpoint.zig");
 const windows = @import("windows.zig");
 const canvas = @import("canvas.zig");
+const svg_path = @import("svg_path.zig");
 const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
+const telemetry = @import("telemetry.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -109,21 +111,19 @@ fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
     for (node.children) |*child| offsetNodeXY(child, dx, dy);
 }
 
-/// Translate Canvas.Node children from flex positions to graph-space positions.
-/// Pure translation only — GPU transform handles zoom/pan.
-fn positionCanvasNodes(parent: *Node, vp: layout.LayoutRect) void {
-    const vp_cx = vp.x + vp.w / 2;
-    const vp_cy = vp.y + vp.h / 2;
+/// Translate Canvas.Node children from flex positions to raw graph-space.
+/// gx/gy is the center of the node in graph space.
+/// GPU transform maps graph space → screen space.
+fn positionCanvasNodes(parent: *Node) void {
     for (parent.children) |*child| {
         if (!child.canvas_node) continue;
-        // Target: center of viewport + graph offset
-        const target_x = vp_cx + child.canvas_gx - child.computed.w / 2;
-        const target_y = vp_cy + child.canvas_gy - child.computed.h / 2;
+        // Place at raw graph coordinates (gx/gy = center)
+        const target_x = child.canvas_gx - child.computed.w / 2;
+        const target_y = child.canvas_gy - child.computed.h / 2;
         const dx = target_x - child.computed.x;
         const dy = target_y - child.computed.y;
         child.computed.x = target_x;
         child.computed.y = target_y;
-        // Move all descendants by the same delta
         for (child.children) |*gc| offsetNodeXY(gc, dx, dy);
     }
 }
@@ -140,9 +140,27 @@ var canvas_drag_last_y: f32 = 0;
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; return; }
     g_paint_count += 1;
+
+    // Canvas.Path: draw before size check — paths have no computed dimensions
+    if (node.canvas_path) {
+        if (node.canvas_path_d) |d| {
+            const tc = node.text_color orelse Color.rgb(255, 255, 255);
+            const path = svg_path.parsePath(d);
+            svg_path.drawStroke(
+                &path,
+                @as(f32, @floatFromInt(tc.r)) / 255.0,
+                @as(f32, @floatFromInt(tc.g)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0,
+                @as(f32, @floatFromInt(tc.a)) / 255.0,
+                node.canvas_stroke_width,
+            );
+        }
+        return;
+    }
+
     const r = node.computed;
-    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; }
-    if (r.w <= 0 or r.h <= 0) return;
+    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
+
     // Hover highlight — brighten background when this node is hovered
     const is_hovered = (hovered_node == node);
     if (is_hovered and node.style.background_color == null) {
@@ -241,18 +259,24 @@ fn paintNode(node: *Node) void {
 
     // Canvas rendering — translate nodes to graph positions, GPU zoom/pan.
     if (node.canvas_type) |ct| {
+        // Apply initial viewport from props (first frame only)
+        if (node.canvas_view_set) {
+            canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
+            node.canvas_view_set = false;
+        }
         gpu.pushScissor(r.x, r.y, r.w, r.h);
         // Phase 1: background + optional custom render
         canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
-        // Phase 2: translate Canvas.Node children to graph-space positions
-        positionCanvasNodes(node, r);
-        // Phase 3: set GPU transform for zoom + pan
+        // Phase 2: place Canvas.Node children at raw graph coordinates
+        positionCanvasNodes(node);
+        // Phase 3: GPU transform maps graph space → screen space
+        // Formula: screen = pos * scale + (vp_center - cam * scale)
         const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
         const vp_cx = r.x + r.w / 2;
         const vp_cy = r.y + r.h / 2;
         gpu.setTransform(
-            vp_cx, vp_cy,
-            -cam.cx * cam.scale, -cam.cy * cam.scale,
+            0, 0,  // origin at graph origin
+            vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, // offset
             cam.scale,
         );
         // Phase 4: paint children — positions are graph-space, GPU does zoom/pan
@@ -514,7 +538,24 @@ pub fn run(config: AppConfig) !void {
 
         gpu.frame(0.051, 0.067, 0.090);
 
-        // Telemetry
+        // Unified telemetry snapshot
+        const t6 = std.time.microTimestamp();
+        telemetry.collect(.{
+            .tick_us = @intCast(@max(0, t1 - t0)),
+            .layout_us = @intCast(@max(0, t3 - t2)),
+            .paint_us = @intCast(@max(0, t5 - t4)),
+            .frame_total_us = @intCast(@max(0, t6 - t0)),
+            .fps = qjs_runtime.telemetry_fps,
+            .bridge_calls_per_sec = qjs_runtime.telemetry_bridge_calls,
+            .root = config.root,
+            .visible_nodes = g_paint_count,
+            .hidden_nodes = g_hidden_count,
+            .zero_size_nodes = g_zero_count,
+            .window = window,
+            .hovered_node = hovered_node,
+        });
+
+        // Telemetry (legacy stderr + qjs_runtime vars)
         fps_frames += 1;
         const now = c.SDL_GetTicks();
         if (now - fps_last >= 1000) {

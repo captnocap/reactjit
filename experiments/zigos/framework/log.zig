@@ -77,3 +77,14 @@ pub fn err(cat: Category, comptime fmt: []const u8, args: anytype) void {
     const name = @tagName(cat);
     std.debug.print("[{s}] ERROR: " ++ fmt ++ "\n", .{name} ++ args);
 }
+
+// ── Telemetry ────────────────────────────────────────────────────────────
+
+pub fn telemetryEnabledMask() u16 {
+    ensureInit();
+    var mask: u16 = 0;
+    for (0..NUM_CATEGORIES) |i| {
+        if (enabled[i]) mask |= @as(u16, 1) << @intCast(i);
+    }
+    return mask;
+}
