@@ -123,9 +123,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
-    // Canvas.Node → canvas_node=true, Canvas.Path → canvas_path=true
+    // Canvas.Node / Canvas.Path / Canvas.Clamp
     var is_canvas_node = false;
     var is_canvas_path = false;
+    var is_canvas_clamp = false;
     if (is_canvas and self.curKind() == .dot) {
         self.advance_token(); // skip '.'
         if (self.curKind() == .identifier) {
@@ -136,6 +137,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             } else if (std.mem.eql(u8, sub, "Path")) {
                 self.advance_token();
                 is_canvas_path = true;
+            } else if (std.mem.eql(u8, sub, "Clamp")) {
+                self.advance_token();
+                is_canvas_clamp = true;
             }
         }
     }
@@ -732,6 +736,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             try fields.appendSlice(self.alloc, ", .text_color = ");
             try fields.appendSlice(self.alloc, color);
         }
+    }
+
+    // Canvas.Clamp
+    if (is_canvas_clamp) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".canvas_clamp = true");
     }
 
     // Hoverable

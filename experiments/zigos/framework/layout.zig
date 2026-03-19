@@ -169,6 +169,7 @@ pub const Node = struct {
     canvas_gw: f32 = 0,             // graph-space width (0 = auto from content)
     canvas_gh: f32 = 0,             // graph-space height (0 = auto from content)
     // Canvas.Path fields — SVG path drawing
+    canvas_clamp: bool = false,      // true = this is a Canvas.Clamp (viewport-pinned)
     canvas_path: bool = false,       // true = this is a Canvas.Path
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
@@ -629,13 +630,25 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
         return;
     }
+    // Canvas.Path: no layout dimensions, skip.
+    if (node.canvas_path) {
+        node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
+        return;
+    }
+    // Canvas.Clamp: spans full parent bounds (viewport overlay).
+    if (node.canvas_clamp) {
+        node.computed = .{ .x = px, .y = py, .w = pw, .h = ph };
+        for (node.children) |*child| {
+            layoutNode(child, px, py, pw, ph);
+        }
+        return;
+    }
     // Canvas.Node: use gw/gh as fixed dimensions, lay out children within them.
     // Position will be overridden by canvas camera at paint time.
     if (node.canvas_node and (node.canvas_gw > 0 or node.canvas_gh > 0)) {
         const cw = if (node.canvas_gw > 0) node.canvas_gw else pw;
         const ch = if (node.canvas_gh > 0) node.canvas_gh else ph;
         node.computed = .{ .x = px, .y = py, .w = cw, .h = ch };
-        // Lay out children within this fixed size
         for (node.children) |*child| {
             layoutNode(child, px, py, cw, ch);
         }

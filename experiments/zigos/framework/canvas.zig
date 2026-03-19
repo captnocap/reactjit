@@ -97,6 +97,48 @@ pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform {
     return .{ .cx = cam_x, .cy = cam_y, .scale = cam_zoom };
 }
 
+/// Convert screen coordinates to graph space (inverse of GPU transform).
+/// screen = pos * scale + (vp_center - cam * scale)
+/// → pos = (screen - vp_center + cam * scale) / scale
+pub fn screenToGraph(screen_x: f32, screen_y: f32, vp_cx: f32, vp_cy: f32) [2]f32 {
+    if (cam_zoom == 0) return .{ 0, 0 };
+    return .{
+        (screen_x - vp_cx + cam_x * cam_zoom) / cam_zoom,
+        (screen_y - vp_cy + cam_y * cam_zoom) / cam_zoom,
+    };
+}
+
+/// Hovered node index (set by engine mouse handler)
+var hovered_node_idx: ?u16 = null;
+/// Selected (pinned) node index (set by click)
+var selected_node_idx: ?u16 = null;
+
+pub fn setHoveredNode(idx: ?u16) void {
+    hovered_node_idx = idx;
+}
+
+pub fn getHoveredNode() ?u16 {
+    return hovered_node_idx;
+}
+
+/// Click: toggle selection. Same node = deselect. Different node = select. Empty = deselect.
+pub fn clickNode() void {
+    if (hovered_node_idx) |hi| {
+        selected_node_idx = if (selected_node_idx != null and selected_node_idx.? == hi) null else hi;
+    } else {
+        selected_node_idx = null;
+    }
+}
+
+pub fn getSelectedNode() ?u16 {
+    return selected_node_idx;
+}
+
+/// Active node for detail panel: selected > hovered
+pub fn getActiveNode() ?u16 {
+    return selected_node_idx orelse hovered_node_idx;
+}
+
 // ── Input handlers (built-in zoom/pan for every canvas) ─────────────────
 
 pub fn handleScroll(mx: f32, my: f32, delta: f32, vp_w: f32, vp_h: f32) void {

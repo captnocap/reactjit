@@ -4,7 +4,7 @@ function App() {
       <Box style={{ flexDirection: 'row', padding: 10, gap: 12, backgroundColor: '#10141e', alignItems: 'center' }}>
         <Text fontSize={18} color="#e0e6f0">Constraint Graph</Text>
         <Box style={{ flexGrow: 1 }} />
-        <Text fontSize={13} color="#4a5568">Canvas.Path test</Text>
+        <Text fontSize={13} color="#4a5568">Canvas.Clamp test</Text>
       </Box>
       <Canvas type="constraint-graph" style={{ flexGrow: 1 }} viewX={0} viewY={100} viewZoom={1}>
         <Canvas.Path d="M 0,25 L 0,75" stroke="#a855f7" strokeWidth={3} />
@@ -35,6 +35,18 @@ function App() {
             <Text fontSize={10} color="#f97316">Child</Text>
           </Box>
         </Canvas.Node>
+
+        <Canvas.Clamp>
+          <Box style={{ flexDirection: 'column', width: '100%', height: '100%' }}>
+            <Box style={{ flexGrow: 1 }} />
+            <Box style={{ flexDirection: 'row', padding: 10 }}>
+              <Box style={{ flexGrow: 1 }} />
+              <Box style={{ padding: 6, backgroundColor: '#10141e', borderRadius: 4 }}>
+                <Text fontSize={11} color="#4a5568">scroll: zoom | drag: pan</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Clamp>
       </Canvas>
     </Box>
   );

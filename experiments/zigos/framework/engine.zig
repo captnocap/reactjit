@@ -279,9 +279,93 @@ fn paintNode(node: *Node) void {
             vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, // offset
             cam.scale,
         );
-        // Phase 4: paint children — positions are graph-space, GPU does zoom/pan
-        for (node.children) |*child| paintNode(child);
+        // Phase 4: paint graph children (Canvas.Node, Canvas.Path) WITH transform
+        {
+            const hovered = canvas.getHoveredNode();
+            const selected = canvas.getSelectedNode();
+            var child_idx: u16 = 0;
+            for (node.children) |*child| {
+                if (!child.canvas_clamp) {
+                    if (child.canvas_node) {
+                        const node_selected = selected != null and selected.? == child_idx;
+                        const node_hovered = hovered != null and hovered.? == child_idx;
+                        if (node_selected) {
+                            // Selected: bright ring
+                            const hw = child.canvas_gw / 2 + 5;
+                            const hh = child.canvas_gh / 2 + 5;
+                            gpu.drawRect(
+                                child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2,
+                                0.5, 0.4, 1.0, 0.4, 8, 2, 1.0, 1.0, 1.0, 0.5,
+                            );
+                        } else if (node_hovered) {
+                            // Hover: subtle glow
+                            const hw = child.canvas_gw / 2 + 4;
+                            const hh = child.canvas_gh / 2 + 4;
+                            gpu.drawRect(
+                                child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2,
+                                0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0,
+                            );
+                        }
+                    }
+                    paintNode(child);
+                }
+                child_idx += 1;
+            }
+        }
         gpu.resetTransform();
+        // Phase 5: paint clamped children WITHOUT transform (HUD layer)
+        for (node.children) |*child| {
+            if (child.canvas_clamp) {
+                layout.layoutNode(child, r.x, r.y, r.w, r.h);
+                paintNode(child);
+            }
+        }
+        // Phase 6: hover info — detail panel or hint, fixed at top-right
+        {
+            const panel_w: f32 = 190;
+            const panel_h: f32 = 90;
+            const panel_x = r.x + 12;
+            const panel_y = r.y + r.h - panel_h - 12;
+
+            if (canvas.getActiveNode()) |hi| {
+                // Find the active (selected or hovered) Canvas.Node child
+                var ci: u16 = 0;
+                for (node.children) |*child| {
+                    if (ci == hi and child.canvas_node) {
+                        var name: []const u8 = "Node";
+                        var sub_name: []const u8 = "";
+                        for (child.children) |*gc| {
+                            for (gc.children) |*ggc| {
+                                if (ggc.text) |t| {
+                                    if (name.len == 4 and std.mem.eql(u8, name, "Node")) {
+                                        name = t;
+                                    } else if (sub_name.len == 0) {
+                                        sub_name = t;
+                                    }
+                                }
+                            }
+                        }
+                        gpu.pushScissor(panel_x, panel_y, panel_w, panel_h);
+                        gpu.drawRect(panel_x, panel_y, panel_w, panel_h, 0.06, 0.08, 0.14, 0.95, 6, 1, 0.2, 0.2, 0.3, 0.6);
+                        gpu.drawTextLine(name, panel_x + 10, panel_y + 8, 14, 0.95, 0.95, 0.98, 1.0);
+                        if (sub_name.len > 0)
+                            gpu.drawTextLine(sub_name, panel_x + 10, panel_y + 26, 11, 0.6, 0.4, 0.9, 1.0);
+                        gpu.drawTextLine("gx:", panel_x + 10, panel_y + 44, 10, 0.4, 0.4, 0.5, 0.8);
+                        gpu.drawTextLine("gy:", panel_x + 10, panel_y + 58, 10, 0.4, 0.4, 0.5, 0.8);
+                        gpu.drawTextLine("size:", panel_x + 10, panel_y + 72, 10, 0.4, 0.4, 0.5, 0.8);
+                        gpu.popScissor();
+                        break;
+                    }
+                    ci += 1;
+                }
+            } else {
+                // No hover — show hint at same bottom-left spot
+                const hint_h: f32 = 30;
+                const hint_y = r.y + r.h - hint_h - 12;
+                gpu.drawRect(panel_x, hint_y, panel_w, hint_h, 0.06, 0.08, 0.12, 0.8, 4, 0, 0, 0, 0, 0);
+                gpu.drawTextLine("Hover a node for details", panel_x + 10, hint_y + 8, 11, 0.45, 0.45, 0.55, 0.7);
+            }
+        }
         gpu.popScissor();
         return;
     }
@@ -411,8 +495,9 @@ pub fn run(config: AppConfig) !void {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
                         const events = @import("events.zig");
-                        // Canvas drag start
+                        // Canvas click + drag start
                         if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                            canvas.clickNode();
                             canvas_drag_node = cn;
                             canvas_drag_last_x = mx;
                             canvas_drag_last_y = my;
@@ -436,6 +521,33 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
                     updateHover(config.root, mx, my);
+                    // Canvas hit testing — find which Canvas.Node the mouse is over
+                    {
+                        const mevents = @import("events.zig");
+                        if (mevents.findCanvasNode(config.root, mx, my)) |cn| {
+                            const vp_cx = cn.computed.x + cn.computed.w / 2;
+                            const vp_cy = cn.computed.y + cn.computed.h / 2;
+                            const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                            // Check Canvas.Node children
+                            var found_idx: ?u16 = null;
+                            var ci: u16 = 0;
+                            for (cn.children) |*child| {
+                                if (child.canvas_node) {
+                                    const hw = child.canvas_gw / 2;
+                                    const hh = child.canvas_gh / 2;
+                                    if (gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
+                                        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh)
+                                    {
+                                        found_idx = ci;
+                                    }
+                                }
+                                ci += 1;
+                            }
+                            canvas.setHoveredNode(found_idx);
+                        } else {
+                            canvas.setHoveredNode(null);
+                        }
+                    }
                     const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
                     if (dragging_left and canvas_drag_node != null) {
                         // Canvas pan — built-in
