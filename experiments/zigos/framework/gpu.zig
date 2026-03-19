@@ -7,7 +7,7 @@
 const std = @import("std");
 const wgpu = @import("wgpu");
 const c = @import("c.zig").imports;
-const shaders = @import("gpu_shaders.zig");
+const shaders = @import("gpu/shaders.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Types

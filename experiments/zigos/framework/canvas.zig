@@ -8,7 +8,7 @@
 //! content (connector lines, grids, particles) alongside the framework nodes.
 
 const std = @import("std");
-const gpu = @import("gpu.zig");
+const gpu = @import("gpu/gpu.zig");
 
 // ── Camera Transform ────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@
 //! Usage from .tsz:  <Box tooltip="Helpful text">...</Box>
 //! Usage from .zig:  node.tooltip = "Helpful text"
 
-const gpu = @import("gpu.zig");
+const gpu = @import("gpu/gpu.zig");
 const layout = @import("layout.zig");
 
 // ── Config ─────────────────────────────────────────────────────────────

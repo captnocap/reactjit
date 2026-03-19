@@ -7,7 +7,7 @@ const std = @import("std");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
-const gpu = @import("gpu.zig");
+const gpu = @import("gpu/gpu.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const geometry = @import("geometry.zig");
 const selection = @import("selection.zig");
@@ -146,7 +146,7 @@ fn paintNode(node: *Node) void {
         if (node.canvas_path_d) |d| {
             const tc = node.text_color orelse Color.rgb(255, 255, 255);
             const path = svg_path.parsePath(d);
-            svg_path.drawStroke(
+            svg_path.drawStrokeCurves(
                 &path,
                 @as(f32, @floatFromInt(tc.r)) / 255.0,
                 @as(f32, @floatFromInt(tc.g)) / 255.0,

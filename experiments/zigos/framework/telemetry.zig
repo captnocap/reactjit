@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const layout = @import("layout.zig");
-const gpu = @import("gpu.zig");
+const gpu = @import("gpu/gpu.zig");
 const state = @import("state.zig");
 const canvas = @import("canvas.zig");
 const selection = @import("selection.zig");

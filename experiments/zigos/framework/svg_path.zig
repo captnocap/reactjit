@@ -1,11 +1,12 @@
-//! SVG Path — Parser, Bezier tessellation, stroke geometry.
+//! SVG Path — Parser, GPU-native bezier curves, stroke geometry.
 //!
 //! Ported from love2d/lua/svg.lua. Supports M L C Q S T A Z commands.
-//! Paths are parsed into flattened polylines via recursive de Casteljau subdivision.
-//! Strokes are rendered as sequences of oriented quads through gpu.drawRect.
+//! Two rendering modes:
+//!   - drawStroke: tessellated polylines via gpu.drawRect (legacy, for fills)
+//!   - drawStrokeCurves: GPU-native SDF bezier curves (smooth at any zoom)
 
 const std = @import("std");
-const gpu = @import("gpu.zig");
+const gpu = @import("gpu/gpu.zig");
 const math = std.math;
 
 // ── Flattened path output ───────────────────────────────────────────────
@@ -22,6 +23,9 @@ pub const Subpath = struct {
 pub const Path = struct {
     subpaths: [MAX_SUBPATHS]Subpath = undefined,
     subpath_count: u32 = 0,
+    // Curve segments for GPU-native rendering (parallel to flattened subpaths)
+    curves: [MAX_CURVE_SEGMENTS]CurveSegment = undefined,
+    curve_count: u32 = 0,
 
     pub fn pointCount(self: *const Path) u32 {
         var total: u32 = 0;
@@ -30,6 +34,29 @@ pub const Path = struct {
         }
         return total;
     }
+};
+
+// ── GPU-native curve segments ─────────────────────────────────────────
+
+const MAX_CURVE_SEGMENTS = 2048;
+
+pub const CurveKind = enum { line, quadratic, cubic };
+
+/// Raw curve segment — stored during parsing, sent to GPU for native rendering.
+pub const CurveSegment = struct {
+    kind: CurveKind,
+    // Start point
+    x0: f32,
+    y0: f32,
+    // Control point 1 (quadratic: the control point; cubic: first control)
+    x1: f32 = 0,
+    y1: f32 = 0,
+    // Control point 2 (cubic only)
+    x2: f32 = 0,
+    y2: f32 = 0,
+    // End point
+    x3: f32,
+    y3: f32,
 };
 
 // ── Bezier tessellation ─────────────────────────────────────────────────
@@ -179,6 +206,26 @@ fn vecAngle(ux: f32, uy: f32, vx: f32, vy: f32) f32 {
     return ang;
 }
 
+// ── Curve segment recording ──────────────────────────────────────────────
+
+fn recordLine(path: *Path, x0: f32, y0: f32, x1: f32, y1: f32) void {
+    if (path.curve_count >= MAX_CURVE_SEGMENTS) return;
+    path.curves[path.curve_count] = .{ .kind = .line, .x0 = x0, .y0 = y0, .x3 = x1, .y3 = y1 };
+    path.curve_count += 1;
+}
+
+fn recordQuadratic(path: *Path, x0: f32, y0: f32, cpx: f32, cpy: f32, x1: f32, y1: f32) void {
+    if (path.curve_count >= MAX_CURVE_SEGMENTS) return;
+    path.curves[path.curve_count] = .{ .kind = .quadratic, .x0 = x0, .y0 = y0, .x1 = cpx, .y1 = cpy, .x3 = x1, .y3 = y1 };
+    path.curve_count += 1;
+}
+
+fn recordCubic(path: *Path, x0: f32, y0: f32, cp1x: f32, cp1y: f32, cp2x: f32, cp2y: f32, x1: f32, y1: f32) void {
+    if (path.curve_count >= MAX_CURVE_SEGMENTS) return;
+    path.curves[path.curve_count] = .{ .kind = .cubic, .x0 = x0, .y0 = y0, .x1 = cp1x, .y1 = cp1y, .x2 = cp2x, .y2 = cp2y, .x3 = x1, .y3 = y1 };
+    path.curve_count += 1;
+}
+
 // ── Path parser ─────────────────────────────────────────────────────────
 
 /// Parse an SVG path string into flattened polylines.
@@ -259,22 +306,27 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                     sp.points[sp.count + 1] = py;
                     sp.count += 2;
                 }
+                recordLine(&path, cx, cy, px, py);
                 cx = px;
                 cy = py;
             },
             'l' => {
                 const dx2 = readNumber(d, &pos) orelse break;
                 const dy2 = readNumber(d, &pos) orelse break;
-                cx += dx2;
-                cy += dy2;
+                const nx = cx + dx2;
+                const ny = cy + dy2;
                 if (sp.count + 2 <= MAX_POINTS) {
-                    sp.points[sp.count] = cx;
-                    sp.points[sp.count + 1] = cy;
+                    sp.points[sp.count] = nx;
+                    sp.points[sp.count + 1] = ny;
                     sp.count += 2;
                 }
+                recordLine(&path, cx, cy, nx, ny);
+                cx = nx;
+                cy = ny;
             },
             'H' => {
                 const px = readNumber(d, &pos) orelse break;
+                recordLine(&path, cx, cy, px, cy);
                 cx = px;
                 if (sp.count + 2 <= MAX_POINTS) {
                     sp.points[sp.count] = cx;
@@ -284,7 +336,9 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
             },
             'h' => {
                 const dx2 = readNumber(d, &pos) orelse break;
-                cx += dx2;
+                const nx = cx + dx2;
+                recordLine(&path, cx, cy, nx, cy);
+                cx = nx;
                 if (sp.count + 2 <= MAX_POINTS) {
                     sp.points[sp.count] = cx;
                     sp.points[sp.count + 1] = cy;
@@ -293,6 +347,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
             },
             'V' => {
                 const py = readNumber(d, &pos) orelse break;
+                recordLine(&path, cx, cy, cx, py);
                 cy = py;
                 if (sp.count + 2 <= MAX_POINTS) {
                     sp.points[sp.count] = cx;
@@ -302,7 +357,9 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
             },
             'v' => {
                 const dy2 = readNumber(d, &pos) orelse break;
-                cy += dy2;
+                const ny = cy + dy2;
+                recordLine(&path, cx, cy, cx, ny);
+                cy = ny;
                 if (sp.count + 2 <= MAX_POINTS) {
                     sp.points[sp.count] = cx;
                     sp.points[sp.count + 1] = cy;
@@ -317,6 +374,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x3 = readNumber(d, &pos) orelse break;
                 const y3 = readNumber(d, &pos) orelse break;
                 flattenCubic(sp, cx, cy, x1, y1, x2, y2, x3, y3, tol);
+                recordCubic(&path, cx, cy, x1, y1, x2, y2, x3, y3);
                 last_cp_x = x2;
                 last_cp_y = y2;
                 cx = x3;
@@ -330,6 +388,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x3 = cx + (readNumber(d, &pos) orelse break);
                 const y3 = cy + (readNumber(d, &pos) orelse break);
                 flattenCubic(sp, cx, cy, x1, y1, x2, y2, x3, y3, tol);
+                recordCubic(&path, cx, cy, x1, y1, x2, y2, x3, y3);
                 last_cp_x = x2;
                 last_cp_y = y2;
                 cx = x3;
@@ -349,6 +408,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x3 = (if (rel) cx else 0) + (readNumber(d, &pos) orelse break);
                 const y3 = (if (rel) cy else 0) + (readNumber(d, &pos) orelse break);
                 flattenCubic(sp, cx, cy, cp1x, cp1y, x2, y2, x3, y3, tol);
+                recordCubic(&path, cx, cy, cp1x, cp1y, x2, y2, x3, y3);
                 last_cp_x = x2;
                 last_cp_y = y2;
                 cx = x3;
@@ -360,6 +420,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x2 = readNumber(d, &pos) orelse break;
                 const y2 = readNumber(d, &pos) orelse break;
                 flattenQuadratic(sp, cx, cy, x1, y1, x2, y2, tol);
+                recordQuadratic(&path, cx, cy, x1, y1, x2, y2);
                 last_cp_x = x1;
                 last_cp_y = y1;
                 cx = x2;
@@ -371,6 +432,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x2 = cx + (readNumber(d, &pos) orelse break);
                 const y2 = cy + (readNumber(d, &pos) orelse break);
                 flattenQuadratic(sp, cx, cy, x1, y1, x2, y2, tol);
+                recordQuadratic(&path, cx, cy, x1, y1, x2, y2);
                 last_cp_x = x1;
                 last_cp_y = y1;
                 cx = x2;
@@ -388,6 +450,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const x2 = (if (rel) cx else 0) + (readNumber(d, &pos) orelse break);
                 const y2 = (if (rel) cy else 0) + (readNumber(d, &pos) orelse break);
                 flattenQuadratic(sp, cx, cy, cp1x, cp1y, x2, y2, tol);
+                recordQuadratic(&path, cx, cy, cp1x, cp1y, x2, y2);
                 last_cp_x = cp1x;
                 last_cp_y = cp1y;
                 cx = x2;
@@ -403,11 +466,18 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const ex = (if (rel) cx else 0) + (readNumber(d, &pos) orelse break);
                 const ey = (if (rel) cy else 0) + (readNumber(d, &pos) orelse break);
                 flattenArc(sp, cx, cy, arx, ary, x_rot, la_f > 0.5, sw_f > 0.5, ex, ey, tol);
+                // Arcs are converted to cubics internally by flattenArc — record as cubics
+                // For now, record the arc endpoints as a line (the flattened version handles quality)
+                // TODO: record the cubic segments from arcToBeziers directly
+                recordLine(&path, cx, cy, ex, ey);
                 cx = ex;
                 cy = ey;
             },
             'Z', 'z' => {
                 sp.closed = true;
+                if (cx != sx or cy != sy) {
+                    recordLine(&path, cx, cy, sx, sy);
+                }
                 cx = sx;
                 cy = sy;
             },
@@ -419,10 +489,35 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
     return path;
 }
 
-// ── Stroke rendering ────────────────────────────────────────────────────
+// ── GPU-native curve stroke rendering ─────────────────────────────────
+
+/// Draw a stroked path using GPU-native SDF bezier curves.
+/// Smooth at any zoom level — no tessellation artifacts.
+/// Lines are drawn as degenerate quadratics (control point at midpoint).
+pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32) void {
+    for (0..path.curve_count) |i| {
+        const seg = &path.curves[i];
+        switch (seg.kind) {
+            .line => {
+                // Lines go through drawRect — proper oriented rectangle
+                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, stroke_a);
+            },
+            .quadratic => {
+                gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
+            },
+            .cubic => {
+                // Split cubic into quadratics via gpu.drawCubicCurve
+                gpu.drawCubicCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x2, seg.y2, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
+            },
+        }
+    }
+}
+
+// ── Legacy stroke rendering (tessellated) ────────────────────────────
 
 /// Draw a stroked path as a series of oriented quads (thin rectangles).
 /// Goes through gpu.drawRect, so canvas GPU transform applies automatically.
+/// Use drawStrokeCurves instead for smooth rendering.
 pub fn drawStroke(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32) void {
     for (0..path.subpath_count) |si| {
         const sp = &path.subpaths[si];

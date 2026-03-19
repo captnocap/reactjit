@@ -339,4 +339,3 @@ pub const curve_wgsl =
     \\    return vec4f(in.color.rgb * final_alpha, final_alpha);
     \\}
 ;
-
