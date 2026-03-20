@@ -23,6 +23,7 @@ pub const Category = enum {
     text,
     ffi,
     tick,
+    render,
 };
 
 const NUM_CATEGORIES = @typeInfo(Category).@"enum".fields.len;

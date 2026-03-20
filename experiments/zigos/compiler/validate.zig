@@ -12,7 +12,7 @@ const Generator = codegen.Generator;
 const TokenKind = codegen.TokenKind;
 
 const primitives = [_][]const u8{
-    "Box", "Text", "Image", "Video", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas",
+    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas",
 };
 
 const special_tags = [_][]const u8{

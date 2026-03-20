@@ -123,6 +123,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
     // Video → Box with video_src field
     const is_video = std.mem.eql(u8, tag_name, "Video");
+    // Render → Box with render_src field
+    const is_render = std.mem.eql(u8, tag_name, "Render");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
     // Canvas.Node / Canvas.Path / Canvas.Clamp
@@ -657,14 +659,20 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    // Image / Video src
+    // Image / Video / Render src
     if (src_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-        try fields.appendSlice(self.alloc, if (is_video) ".video_src = \"" else ".image_src = \"");
-        if (std.fs.path.dirname(self.input_file)) |dir| {
-            try fields.appendSlice(self.alloc, try std.fs.path.resolve(self.alloc, &.{ dir, src_str }));
-        } else {
+        if (is_render) {
+            // Render sources are URIs (screen:0, vm:path, vnc:host:port) — pass raw, no path resolution
+            try fields.appendSlice(self.alloc, ".render_src = \"");
             try fields.appendSlice(self.alloc, src_str);
+        } else {
+            try fields.appendSlice(self.alloc, if (is_video) ".video_src = \"" else ".image_src = \"");
+            if (std.fs.path.dirname(self.input_file)) |dir| {
+                try fields.appendSlice(self.alloc, try std.fs.path.resolve(self.alloc, &.{ dir, src_str }));
+            } else {
+                try fields.appendSlice(self.alloc, src_str);
+            }
         }
         try fields.appendSlice(self.alloc, "\"");
     }
