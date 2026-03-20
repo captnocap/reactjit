@@ -77,6 +77,33 @@ test "parseColorValue empty" {
     try testing.expectEqualStrings("Color.rgb(255, 255, 255)", try attrs.parseColorValue(&gen, ""));
 }
 
+test "parseColorValue theme-bg" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Theme.get(.bg)", try attrs.parseColorValue(&gen, "theme-bg"));
+    try testing.expect(gen.has_theme);
+}
+test "parseColorValue theme-bgAlt" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Theme.get(.bg_alt)", try attrs.parseColorValue(&gen, "theme-bgAlt"));
+}
+test "parseColorValue theme-text" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Theme.get(.text)", try attrs.parseColorValue(&gen, "theme-text"));
+}
+test "parseColorValue theme-primary" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Theme.get(.primary)", try attrs.parseColorValue(&gen, "theme-primary"));
+}
+test "parseColorValue theme-error" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Theme.get(.@\"error\")", try attrs.parseColorValue(&gen, "theme-error"));
+}
+test "parseColorValue theme-unknown returns magenta" {
+    var a = arena(); defer a.deinit(); var lex = h.tokenize(""); var gen = h.makeGen(a.allocator(), &lex, "");
+    try testing.expectEqualStrings("Color.rgb(255, 0, 255)", try attrs.parseColorValue(&gen, "theme-banana"));
+    try testing.expect(!gen.has_theme);
+}
+
 test "parseStringAttr" {
     var a = arena(); defer a.deinit();
     var lex = Lexer.init("\"hello\""); lex.tokenize();

@@ -405,6 +405,17 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
 
 pub fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
     if (hex.len == 0) return "Color.rgb(255, 255, 255)";
+    // theme-* tokens → runtime lookup via Theme.get()
+    if (std.mem.startsWith(u8, hex, "theme-")) {
+        const token_name = hex[6..]; // strip "theme-" prefix
+        // Map camelCase token names to snake_case enum field names
+        const field = themeTokenField(token_name) orelse {
+            self.addWarning(0, try std.fmt.allocPrint(self.alloc, "Unknown theme token: '{s}'", .{token_name}));
+            return "Color.rgb(255, 0, 255)"; // magenta = unknown token
+        };
+        self.has_theme = true;
+        return try std.fmt.allocPrint(self.alloc, "Theme.get(.{s})", .{field});
+    }
     if (namedColor(hex)) |rgb| {
         return try std.fmt.allocPrint(self.alloc, "Color.rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
     }
@@ -532,5 +543,29 @@ pub fn namedColor(name: []const u8) ?[3]u8 {
     if (std.mem.eql(u8, name, "silver")) return .{ 192, 192, 192 };
     if (std.mem.eql(u8, name, "orange")) return .{ 255, 165, 0 };
     if (std.mem.eql(u8, name, "transparent")) return .{ 0, 0, 0 };
+    return null;
+}
+
+/// Map camelCase theme token name to Zig enum field name.
+/// e.g. "bgAlt" → "bg_alt", "textSecondary" → "text_secondary", "error" → "@\"error\""
+fn themeTokenField(name: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, name, "bg")) return "bg";
+    if (std.mem.eql(u8, name, "bgAlt")) return "bg_alt";
+    if (std.mem.eql(u8, name, "bgElevated")) return "bg_elevated";
+    if (std.mem.eql(u8, name, "surface")) return "surface";
+    if (std.mem.eql(u8, name, "surfaceHover")) return "surface_hover";
+    if (std.mem.eql(u8, name, "border")) return "border";
+    if (std.mem.eql(u8, name, "borderFocus")) return "border_focus";
+    if (std.mem.eql(u8, name, "text")) return "text";
+    if (std.mem.eql(u8, name, "textSecondary")) return "text_secondary";
+    if (std.mem.eql(u8, name, "textDim")) return "text_dim";
+    if (std.mem.eql(u8, name, "primary")) return "primary";
+    if (std.mem.eql(u8, name, "primaryHover")) return "primary_hover";
+    if (std.mem.eql(u8, name, "primaryPressed")) return "primary_pressed";
+    if (std.mem.eql(u8, name, "accent")) return "accent";
+    if (std.mem.eql(u8, name, "error")) return "@\"error\"";
+    if (std.mem.eql(u8, name, "warning")) return "warning";
+    if (std.mem.eql(u8, name, "success")) return "success";
+    if (std.mem.eql(u8, name, "info")) return "info";
     return null;
 }

@@ -308,12 +308,25 @@ fn emitStatement(
         return;
     }
 
-    // ── 7. Unknown call — skip args, emit a comment ──
+    // ── 7. Unknown call — capture first string arg if present, call via QJS bridge ──
     const call_name = try self.alloc.dupe(u8, name);
     self.advance_token();
+    var first_str_arg: ?[]const u8 = null;
     if (self.curKind() == .lparen) {
-        var bd: u32 = 1;
         self.advance_token();
+        // Capture first argument if it's a string literal (strip quotes)
+        if (self.curKind() == .string) {
+            const raw = self.curText();
+            // Strip surrounding quotes: 'Root' → Root, "Root" → Root
+            if (raw.len >= 2 and (raw[0] == '\'' or raw[0] == '"')) {
+                first_str_arg = try self.alloc.dupe(u8, raw[1 .. raw.len - 1]);
+            } else {
+                first_str_arg = try self.alloc.dupe(u8, raw);
+            }
+            self.advance_token();
+        }
+        // Skip remaining args
+        var bd: u32 = 1;
         while (bd > 0 and self.curKind() != .eof) {
             if (self.curKind() == .lparen) bd += 1;
             if (self.curKind() == .rparen) {
@@ -324,7 +337,16 @@ fn emitStatement(
         }
         if (self.curKind() == .rparen) self.advance_token();
     }
-    try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: {s}(...)\n", .{ pad, call_name }));
+    // If there's a <script> block, assume it's a JS function — call it via QJS bridge
+    if (self.compute_js != null) {
+        if (first_str_arg) |arg| {
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.callGlobalStr(\"{s}\", \"{s}\");\n", .{ pad, call_name, arg }));
+        } else {
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.callGlobal(\"{s}\");\n", .{ pad, call_name }));
+        }
+    } else {
+        try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: {s}(...)\n", .{ pad, call_name }));
+    }
 }
 
 /// Parse a for-loop increment expression and return the Zig continue expression.

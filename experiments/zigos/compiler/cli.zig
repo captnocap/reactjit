@@ -21,10 +21,14 @@ pub fn main() !void {
 
     // Parse flags
     var strict_mode = false;
+    var embed_mode = false;
     var input_idx: usize = 2;
     for (args[2..]) |arg| {
         if (std.mem.eql(u8, arg, "--strict")) {
             strict_mode = true;
+            input_idx += 1;
+        } else if (std.mem.eql(u8, arg, "--embed")) {
+            embed_mode = true;
             input_idx += 1;
         } else break;
     }
@@ -102,6 +106,7 @@ pub fn main() !void {
 
     var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
     gen.strict_mode = strict_mode;
+    gen.is_embedded = embed_mode;
 
     // If we found _script.tsz imports, set compute_js so codegen emits JS_LOGIC
     if (script_js) |js| {
@@ -116,8 +121,8 @@ pub fn main() !void {
     if (gen.errors.items.len > 0) return;
     defer alloc.free(zig_source);
 
-    // Write generated_app.zig
-    const out_path = "generated_app.zig";
+    // Write output — embedded goes to framework/devtools.zig, normal to generated_app.zig
+    const out_path = if (embed_mode) "framework/devtools.zig" else "generated_app.zig";
     {
         const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("Error creating {s}: {any}\n", .{ out_path, err });
@@ -127,6 +132,9 @@ pub fn main() !void {
         f.writeAll(zig_source) catch return;
     }
     std.debug.print("[tsz] Compiled {s} -> {s}\n", .{ std.fs.path.basename(input_path), out_path });
+
+    // Embedded mode: no binary build — the engine imports devtools.zig directly
+    if (embed_mode) return;
 
     // Build binary — name it after the entry point
     const basename = std.fs.path.basename(input_path);

@@ -171,6 +171,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_path_d: []const u8 = "";
     var canvas_stroke_str: []const u8 = "";
     var canvas_stroke_w_str: []const u8 = "";
+    var canvas_flow_speed_str: []const u8 = "";
     var canvas_view_x_str: []const u8 = "";
     var canvas_view_y_str: []const u8 = "";
     var canvas_view_zoom_str: []const u8 = "";
@@ -190,7 +191,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+    while (self.curKind() != .gt and self.curKind() != .gt_eq and self.curKind() != .slash_gt and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {
             const attr_name = self.curText();
             self.advance_token();
@@ -287,6 +288,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_stroke_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "strokeWidth") and is_canvas_path) {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
+                    canvas_flow_speed_str = try parseSignedNum(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -312,7 +315,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
     if (self.curKind() == .slash_gt) {
         self.advance_token();
-    } else if (self.curKind() == .gt) {
+    } else if (self.curKind() == .gt or self.curKind() == .gt_eq) {
+        // gt_eq (>=) can appear when > closes a tag and = is text content
+        // (e.g. <C.SourceLineCode>=</C.SourceLineCode> lexes as >='s single token)
+        if (self.curKind() == .gt_eq) text_content = "=";
         self.advance_token();
 
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
@@ -508,7 +514,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     if (self.curKind() == .identifier) self.advance_token();
                 }
             }
-            if (self.curKind() == .gt) self.advance_token();
+            if (self.curKind() == .gt or self.curKind() == .gt_eq) self.advance_token();
         }
     }
 
@@ -665,12 +671,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     }
 
     // Canvas type + view
-    if (is_canvas and !is_canvas_node and !is_canvas_path) {
+    if (is_canvas and !is_canvas_node and !is_canvas_path and !is_canvas_clamp) {
+        // Always emit canvas_type — defaults to "canvas" if no type prop
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         if (canvas_type_str.len > 0) {
-            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".canvas_type = \"");
             try fields.appendSlice(self.alloc, canvas_type_str);
             try fields.appendSlice(self.alloc, "\"");
+        } else {
+            try fields.appendSlice(self.alloc, ".canvas_type = \"canvas\"");
         }
         const has_view = canvas_view_x_str.len > 0 or canvas_view_y_str.len > 0 or canvas_view_zoom_str.len > 0;
         if (has_view) {
@@ -736,6 +745,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             try fields.appendSlice(self.alloc, ", .text_color = ");
             try fields.appendSlice(self.alloc, color);
         }
+        if (canvas_flow_speed_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".canvas_flow_speed = ");
+            try fields.appendSlice(self.alloc, canvas_flow_speed_str);
+        }
     }
 
     // Canvas.Clamp
@@ -751,8 +765,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     }
 
     // onChangeText handler (TextInput)
+    var change_handler_name: []const u8 = "";
     if (on_change_text_start) |start| {
         const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_change_{d}", .{self.handler_counter});
+        change_handler_name = handler_name;
         self.handler_counter += 1;
         const body = try handlers.emitHandlerBody(self, start);
         const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
@@ -768,7 +784,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         const iid = self.input_counter;
         try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".input_id = {d}", .{iid}));
-        if (iid < 16) self.input_multiline[iid] = is_multiline;
+        if (iid < 16) {
+            self.input_multiline[iid] = is_multiline;
+            self.input_change_handler[iid] = change_handler_name;
+        }
         self.input_counter += 1;
         if (placeholder_str.len > 0) {
             try fields.appendSlice(self.alloc, ", .placeholder = \"");
@@ -865,6 +884,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 // Build the placeholder pattern for this field
                 const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
                     ".text_color = Color.rgb(0, 0, 0)"
+                else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_flow_speed"))
+                    ".canvas_flow_speed = 0"
                 else
                     "";
                 if (placeholder.len > 0) {
@@ -1172,7 +1193,7 @@ pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
     var path: []const u8 = "/";
     var element_expr: []const u8 = ".{}";
 
-    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+    while (self.curKind() != .gt and self.curKind() != .gt_eq and self.curKind() != .slash_gt and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {
             const attr_name = self.curText();
             self.advance_token();

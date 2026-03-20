@@ -349,6 +349,9 @@ pub const Generator = struct {
     // Module mode: emit a .gen.zig fragment, not a full app
     is_module: bool = false,
 
+    // Embedded mode: full app WITHOUT main(), pub exports, framework-relative imports, isolated state
+    is_embedded: bool = false,
+
     // When true, string literals in emitStateAtom convert '#hex' to Color.rgb(...)
     emit_colors_as_rgb: bool = false,
 
@@ -359,6 +362,7 @@ pub const Generator = struct {
     routes: [MAX_ROUTES]RouteInfo,
     route_count: u32,
     has_routes: bool,
+    has_theme: bool,
     last_route_path: ?[]const u8,
     routes_bind_from: ?u32,
     inline_depth: u32,
@@ -374,6 +378,7 @@ pub const Generator = struct {
     // TextInput compile-time ID assignment
     input_counter: u32,
     input_multiline: [16]bool,
+    input_change_handler: [16][]const u8, // handler function name per input ID
 
     compile_error: ?[]const u8,
 
@@ -549,6 +554,7 @@ pub const Generator = struct {
             .routes = undefined,
             .route_count = 0,
             .has_routes = false,
+            .has_theme = false,
             .last_route_path = null,
             .routes_bind_from = null,
             .inline_depth = 0,
@@ -558,6 +564,7 @@ pub const Generator = struct {
             .app_cond_count = 0,
             .input_counter = 0,
             .input_multiline = [_]bool{false} ** 16,
+            .input_change_handler = [_][]const u8{""} ** 16,
             .compile_error = null,
             .errors = .{},
             .warnings = .{},

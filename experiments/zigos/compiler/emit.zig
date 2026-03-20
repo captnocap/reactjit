@@ -267,6 +267,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 // Check if root_expr contains the placeholder for this style
                 const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
                     ".text_color = Color.rgb(0, 0, 0)"
+                else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_flow_speed"))
+                    ".canvas_flow_speed = 0"
                 else
                     "";
                 if (placeholder.len > 0 and std.mem.indexOf(u8, root_expr, placeholder) != null) {
@@ -308,15 +310,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     // ── App mode: full binary with main loop ──
 
-    // Imports
+    // Imports — embedded mode uses framework-relative paths and isolated state
+    const prefix = if (self.is_embedded) "" else "framework/";
     try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
-    try out.appendSlice(self.alloc, "const layout = @import(\"framework/layout.zig\");\n");
-    try out.appendSlice(self.alloc, "const engine = @import(\"framework/engine.zig\");\n");
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const layout = @import(\"{s}layout.zig\");\n", .{prefix}));
+    if (!self.is_embedded) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const engine = @import(\"{s}engine.zig\");\n", .{prefix}));
     try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
-    if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"framework/state.zig\");\n");
-    if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"framework/router.zig\");\n");
-    if (self.input_counter > 0) try out.appendSlice(self.alloc, "const input = @import(\"framework/input.zig\");\n");
-    if (self.ffi_funcs.items.len > 0) try out.appendSlice(self.alloc, "const qjs_runtime = @import(\"framework/qjs_runtime.zig\");\n");
+    if (self.has_state) {
+        const state_mod = if (self.is_embedded) "devtools_state.zig" else "framework/state.zig";
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const state = @import(\"{s}\");\n", .{state_mod}));
+    }
+    if (self.has_routes) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const router = @import(\"{s}router.zig\");\n", .{prefix}));
+    if (self.input_counter > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const input = @import(\"{s}input.zig\");\n", .{prefix}));
+    if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
+    if (self.ffi_funcs.items.len > 0 or self.compute_js != null) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
 
     // FFI imports
     if (self.ffi_headers.items.len > 0) {
@@ -421,7 +428,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, decl);
         try out.appendSlice(self.alloc, "\n");
     }
-    try out.appendSlice(self.alloc, "var root = Node{");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub var root = Node{" else "var root = Node{");
     try out.appendSlice(self.alloc, root_expr[2..]);
     try out.appendSlice(self.alloc, ";\n");
 
@@ -464,7 +471,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     // JS_LOGIC
     try out.appendSlice(self.alloc, "\n// ── Embedded JS logic ────────────────────────────────────────\n");
-    try out.appendSlice(self.alloc, "const JS_LOGIC =\n");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub const JS_LOGIC =\n" else "const JS_LOGIC =\n");
     const js_source = self.compute_js orelse "";
     const rewritten = try collect.rewriteSetterCalls(self, js_source);
     var line_iter = std.mem.splitScalar(u8, rewritten, '\n');
@@ -476,7 +483,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, ";\n\n");
 
     // _initState
-    try out.appendSlice(self.alloc, "fn _initState() void {\n");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub fn _initState() void {\n" else "fn _initState() void {\n");
     if (self.has_state) {
         for (0..self.state_count) |i| {
             const slot = self.state_slots[i];
@@ -520,15 +527,31 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (0..self.dyn_style_count) |dsi| {
         const ds = &self.dyn_styles[dsi];
         if (!ds.has_ref) continue;
+        // f32 fields assigned from state slots need casting:
+        // state.getSlot() returns i64 → @floatFromInt
+        // state.getSlotFloat() returns f64 → @floatCast
+        const needs_int_cast = std.mem.eql(u8, ds.field, "canvas_flow_speed");
         // arr_name="" means style is on root itself
         if (ds.arr_name.len == 0) {
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "    root.{s} = {s};\n",
-                .{ ds.field, ds.expression }));
+            if (needs_int_cast) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    root.{s} = @floatFromInt({s});\n",
+                    .{ ds.field, ds.expression }));
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    root.{s} = {s};\n",
+                    .{ ds.field, ds.expression }));
+            }
         } else {
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "    {s}[{d}].{s} = {s};\n",
-                .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+            if (needs_int_cast) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].{s} = @floatFromInt({s});\n",
+                    .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].{s} = {s};\n",
+                    .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+            }
         }
     }
     try out.appendSlice(self.alloc, "}\n\n");
@@ -593,17 +616,30 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         for (0..self.conditional_count) |ci| {
             const c = self.conditionals[ci];
             if (c.arr_name.len == 0) continue;
+            // Wrap condition in parens + != 0 for integer state slots
+            const is_already_bool = std.mem.indexOf(u8, c.cond_expr, "!=") != null or
+                std.mem.indexOf(u8, c.cond_expr, "==") != null or
+                std.mem.indexOf(u8, c.cond_expr, ">=") != null or
+                std.mem.indexOf(u8, c.cond_expr, "<=") != null or
+                std.mem.indexOf(u8, c.cond_expr, " > ") != null or
+                std.mem.indexOf(u8, c.cond_expr, " < ") != null or
+                std.mem.indexOf(u8, c.cond_expr, " and ") != null or
+                std.mem.indexOf(u8, c.cond_expr, "getBool") != null;
+            const cond = if (is_already_bool)
+                try std.fmt.allocPrint(self.alloc, "({s})", .{c.cond_expr})
+            else
+                try std.fmt.allocPrint(self.alloc, "(({s}) != 0)", .{c.cond_expr});
             switch (c.kind) {
                 .show_hide => {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "    {s}[{d}].style.display = if {s} .flex else .none;\n",
-                        .{ c.arr_name, c.true_idx, c.cond_expr }));
+                        .{ c.arr_name, c.true_idx, cond }));
                 },
                 .ternary => {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "    {s}[{d}].style.display = if {s} .flex else .none;\n" ++
                         "    {s}[{d}].style.display = if {s} .none else .flex;\n",
-                        .{ c.arr_name, c.true_idx, c.cond_expr, c.arr_name, c.false_idx, c.cond_expr }));
+                        .{ c.arr_name, c.true_idx, cond, c.arr_name, c.false_idx, cond }));
                 },
             }
         }
@@ -611,21 +647,36 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             const root_arr = try std.fmt.allocPrint(self.alloc, "_arr_{d}", .{self.array_counter - 1});
             for (0..self.app_cond_count) |ci| {
                 const ac = self.app_conds[ci];
+                const ac_is_bool = std.mem.indexOf(u8, ac.cond_expr, "!=") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, "==") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, ">=") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, "<=") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, " > ") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, " < ") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, " and ") != null or
+                    std.mem.indexOf(u8, ac.cond_expr, "getBool") != null;
+                const ac_cond = if (ac_is_bool)
+                    try std.fmt.allocPrint(self.alloc, "({s})", .{ac.cond_expr})
+                else
+                    try std.fmt.allocPrint(self.alloc, "(({s}) != 0)", .{ac.cond_expr});
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}[{d}].style.display = if {s} .flex else .none;\n",
-                    .{ root_arr, ac.child_idx, ac.cond_expr }));
+                    .{ root_arr, ac.child_idx, ac_cond }));
             }
         }
         try out.appendSlice(self.alloc, "}\n\n");
     }
 
     // _appInit
-    try out.appendSlice(self.alloc, "\nfn _appInit() void {\n    _initState();\n");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "\npub fn _appInit() void {\n    _initState();\n" else "\nfn _appInit() void {\n    _initState();\n");
     for (0..self.input_counter) |i| {
         if (i < 16 and self.input_multiline[i]) {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.registerMultiline({d});\n", .{i}));
         } else {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.register({d});\n", .{i}));
+        }
+        if (i < 16 and self.input_change_handler[i].len > 0) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.setOnChange({d}, {s});\n", .{ i, self.input_change_handler[i] }));
         }
     }
     if (self.comp_instance_count > 0) {
@@ -660,7 +711,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, "}\n\n");
 
     // _appTick
-    try out.appendSlice(self.alloc, "fn _appTick(now: u32) void {\n");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub fn _appTick(now: u32) void {\n" else "fn _appTick(now: u32) void {\n");
 
     // Check if `now` is used by FFI hooks, animation hooks, or interval effects
     var needs_now = self.ffi_hook_count > 0 or self.anim_hook_count > 0;
@@ -794,8 +845,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
     try out.appendSlice(self.alloc, "}\n\n");
 
-    // main
-    {
+    // main (skip in embedded mode — the engine manages the lifecycle)
+    if (!self.is_embedded) {
         const basename = std.fs.path.basename(self.input_file);
         const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
         const app_name = basename[0..dot_pos];
@@ -821,7 +872,9 @@ pub fn emitModuleSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "//! Source: {s}\n\n", .{std.fs.path.basename(self.input_file)}));
 
     try out.appendSlice(self.alloc, "const layout = @import(\"framework/layout.zig\");\n");
-    try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n\n");
+    try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
+    if (self.has_theme) try out.appendSlice(self.alloc, "const Theme = @import(\"framework/theme.zig\");\n");
+    try out.appendSlice(self.alloc, "\n");
 
     for (self.array_decls.items) |decl| {
         try out.appendSlice(self.alloc, decl);
