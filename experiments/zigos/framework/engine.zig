@@ -78,6 +78,8 @@ pub const AppConfig = struct {
     title: [*:0]const u8 = "zigos app",
     width: u32 = 1280,
     height: u32 = 800,
+    min_width: u32 = 320,
+    min_height: u32 = 240,
     root: *Node,
     js_logic: []const u8 = "",
     /// Called once after QuickJS VM is ready. Register FFI host functions, set initial state.
@@ -391,7 +393,7 @@ pub fn run(config: AppConfig) !void {
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
     defer windows.deinitAll(); // close all secondary windows before SDL_Quit
-    c.SDL_SetWindowMinimumSize(window, 320, 240);
+    c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
 
     if (geometry.load() != null) geometry.blockSaves();
 
