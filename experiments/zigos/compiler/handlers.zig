@@ -153,6 +153,17 @@ fn emitStatement(
         return;
     }
 
+    // ── 3b. setVariant(N) → Theme.setVariant(N) ──
+    if (std.mem.eql(u8, name, "setVariant")) {
+        self.advance_token();
+        if (self.curKind() == .lparen) self.advance_token();
+        const val_expr = try emitStateExpr(self);
+        if (self.curKind() == .rparen) self.advance_token();
+        self.has_theme = true;
+        try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}Theme.setVariant(@intCast({s}));\n", .{ pad, val_expr }));
+        return;
+    }
+
     // ── 4. Local variable: const/let/var name = expr ──
     // Pushed to Generator.local_vars for compile-time substitution in emitStateAtom.
     // NOT emitted as Zig code — referenced by name in subsequent expressions.

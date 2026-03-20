@@ -495,7 +495,7 @@ pub fn run(config: AppConfig) !void {
                                 input.unfocus();
                                 handler();
                             }
-                        } else if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                        } else if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
                             // Canvas click + drag start (only if no HUD element was clicked)
                             input.unfocus();
                             if (canvas.getHoveredNode() != null) canvas.clickNode();
@@ -602,8 +602,8 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(mx_i);
                     const my: f32 = @floatFromInt(my_i);
                     const events = @import("events.zig");
-                    // Canvas zoom — built-in
-                    if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                    // Canvas zoom — built-in (check devtools first, then app)
+                    if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
                         const delta: f32 = @floatFromInt(event.wheel.y);
                         canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {

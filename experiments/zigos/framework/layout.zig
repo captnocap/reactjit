@@ -173,6 +173,7 @@ pub const Node = struct {
     canvas_path: bool = false,       // true = this is a Canvas.Path
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
+    canvas_flow_speed: f32 = 0,     // 0 = solid, >0 = flow forward, <0 = flow reverse
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -196,15 +197,29 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) {
         return null;
     }
+    // Scroll container: clip hit test to container bounds and adjust coordinates
+    const ov = node.style.overflow;
+    const r = node.computed;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    var child_mx = mx;
+    var child_my = my;
+    if (is_scroll) {
+        // Reject clicks outside the scroll container's visible bounds
+        if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) {
+            return null;
+        }
+        // Convert screen coordinates to content coordinates
+        child_my = my + node.scroll_y;
+        child_mx = mx + node.scroll_x;
+    }
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        if (hitTest(&node.children[i], mx, my)) |hit| {
+        if (hitTest(&node.children[i], child_mx, child_my)) |hit| {
             return hit;
         }
     }
     if (hasHandlers(node.handlers) or node.input_id != null or node.canvas_type != null) {
-        const r = node.computed;
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
         }
