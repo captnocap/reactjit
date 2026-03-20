@@ -73,14 +73,16 @@ fn addAppExe(
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
 
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("generated_app.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const exe = b.addExecutable(.{
         .name = name,
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("generated_app.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = root_mod,
     });
+    exe.stack_size = 16 * 1024 * 1024; // 16MB — devtools tree has ~2000 nodes
 
     // ── Core deps (both builds) ──────────────────────────────────
     // QuickJS

@@ -18,11 +18,17 @@ const svg_path = @import("svg_path.zig");
 const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
 const telemetry = @import("telemetry.zig");
+const devtools = @import("devtools.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
+
+// ── Devtools state ──────────────────────────────────────────────────────
+var devtools_visible: bool = false;
+var devtools_initialized: bool = false;
+const DEVTOOLS_HEIGHT: f32 = 360;
 
 // ── Cursor blink state ───────────────────────────────────────────────────
 var g_cursor_visible: bool = true;
@@ -91,6 +97,13 @@ fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing
     return .{};
 }
 
+fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
+    if (g_text_engine) |te| {
+        return te.measureTextWrappedEx(t, font_size, 0, 0, 0, 1, true).width;
+    }
+    return 0;
+}
+
 fn measureImageCallback(_: []const u8) layout.ImageDims {
     return .{};
 }
@@ -131,246 +144,39 @@ fn positionCanvasNodes(parent: *Node) void {
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
+var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
+var g_flow_enabled: bool = true; // per-child flow override for hover mode
+var g_hover_changed: bool = false; // debug flag
 
 // Canvas drag state — tracks which canvas is being dragged for pan
 var canvas_drag_node: ?*Node = null;
 var canvas_drag_last_x: f32 = 0;
 var canvas_drag_last_y: f32 = 0;
 
+// TextInput drag-select state
+var input_drag_active: bool = false;
+var input_drag_id: u8 = 0;
+var input_drag_node_x: f32 = 0; // node rect x (for computing local_x)
+var input_drag_node_pl: f32 = 0; // node padding-left
+var input_drag_font_size: u16 = 0;
+
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; return; }
     g_paint_count += 1;
 
-    // Canvas.Path: draw before size check — paths have no computed dimensions
-    if (node.canvas_path) {
-        if (node.canvas_path_d) |d| {
-            const tc = node.text_color orelse Color.rgb(255, 255, 255);
-            const path = svg_path.parsePath(d);
-            svg_path.drawStrokeCurves(
-                &path,
-                @as(f32, @floatFromInt(tc.r)) / 255.0,
-                @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0,
-                @as(f32, @floatFromInt(tc.a)) / 255.0,
-                node.canvas_stroke_width,
-            );
-        }
-        return;
-    }
+    // Canvas.Path: draw before size check
+    if (node.canvas_path) { paintCanvasPath(node); return; }
 
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
 
-    // Hover highlight — brighten background when this node is hovered
-    const is_hovered = (hovered_node == node);
-    if (is_hovered and node.style.background_color == null) {
-        // Node has no background but is hovered — draw a subtle highlight
-        gpu.drawRect(
-            r.x, r.y, r.w, r.h,
-            0.15, 0.15, 0.22, 0.6,
-            node.style.border_radius,
-            0, 0, 0, 0, 0,
-        );
-    }
+    // Paint this node's visuals (background, text, input, selection)
+    paintNodeVisuals(node);
 
-    if (node.style.background_color) |bg_raw| {
-        if (bg_raw.a > 0) {
-            const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
-            const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
-            gpu.drawRect(
-                r.x, r.y, r.w, r.h,
-                @as(f32, @floatFromInt(bg.r)) / 255.0,
-                @as(f32, @floatFromInt(bg.g)) / 255.0,
-                @as(f32, @floatFromInt(bg.b)) / 255.0,
-                @as(f32, @floatFromInt(bg.a)) / 255.0,
-                node.style.border_radius,
-                0,
-                @as(f32, @floatFromInt(bc.r)) / 255.0,
-                @as(f32, @floatFromInt(bc.g)) / 255.0,
-                @as(f32, @floatFromInt(bc.b)) / 255.0,
-                @as(f32, @floatFromInt(bc.a)) / 255.0,
-            );
-        }
-    }
-    // Selection highlights (drawn behind text)
-    selection.paintHighlight(node, r.x, r.y);
+    // Canvas rendering — separate heavy path
+    if (node.canvas_type != null) { paintCanvasContainer(node); return; }
 
-    if (node.text) |t| {
-        if (t.len > 0) {
-            const tc = node.text_color orelse Color.rgb(255, 255, 255);
-            const pl = node.style.padLeft();
-            const pt = node.style.padTop();
-            const pr = node.style.padRight();
-            _ = gpu.drawTextWrapped(
-                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-                @as(f32, @floatFromInt(tc.r)) / 255.0,
-                @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0,
-                @as(f32, @floatFromInt(tc.a)) / 255.0,
-            );
-        }
-    }
-
-    // TextInput: render typed text (or placeholder) and blinking cursor
-    if (node.input_id) |id| {
-        const typed = input.getText(id);
-        const is_placeholder = typed.len == 0;
-        // Selection highlight (drawn behind text, same as normal text nodes)
-        if (!is_placeholder) {
-            const sel = input.getSelection(id);
-            if (sel.hi > sel.lo) {
-                const pl = node.style.padLeft();
-                const pt = node.style.padTop();
-                const pr = node.style.padRight();
-                gpu.drawSelectionRects(typed, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr), sel.lo, sel.hi);
-            }
-        }
-        const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
-        if (display_text) |t| {
-            if (t.len > 0) {
-                const tc = if (is_placeholder)
-                    Color.rgb(100, 100, 110)
-                else
-                    (node.text_color orelse Color.rgb(220, 220, 220));
-                const pl = node.style.padLeft();
-                const pt = node.style.padTop();
-                const pr = node.style.padRight();
-                _ = gpu.drawTextWrapped(
-                    t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-                    @as(f32, @floatFromInt(tc.r)) / 255.0,
-                    @as(f32, @floatFromInt(tc.g)) / 255.0,
-                    @as(f32, @floatFromInt(tc.b)) / 255.0,
-                    @as(f32, @floatFromInt(tc.a)) / 255.0,
-                );
-            }
-        }
-        // Blinking cursor when focused
-        if (input.isFocused(id) and g_cursor_visible) {
-            const cursor_pos = input.getCursorPos(id);
-            const pl = node.style.padLeft();
-            const pt = node.style.padTop();
-            const pb = node.style.padBottom();
-            const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
-            const cx = r.x + pl + metrics.width;
-            const ch = r.h - pt - pb;
-            gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
-        }
-    }
-
-    // Canvas rendering — translate nodes to graph positions, GPU zoom/pan.
-    if (node.canvas_type) |ct| {
-        // Apply initial viewport from props (first frame only)
-        if (node.canvas_view_set) {
-            canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
-            node.canvas_view_set = false;
-        }
-        gpu.pushScissor(r.x, r.y, r.w, r.h);
-        // Phase 1: background + optional custom render
-        canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
-        // Phase 2: place Canvas.Node children at raw graph coordinates
-        positionCanvasNodes(node);
-        // Phase 3: GPU transform maps graph space → screen space
-        // Formula: screen = pos * scale + (vp_center - cam * scale)
-        const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
-        const vp_cx = r.x + r.w / 2;
-        const vp_cy = r.y + r.h / 2;
-        gpu.setTransform(
-            0, 0,  // origin at graph origin
-            vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, // offset
-            cam.scale,
-        );
-        // Phase 4: paint graph children (Canvas.Node, Canvas.Path) WITH transform
-        {
-            const hovered = canvas.getHoveredNode();
-            const selected = canvas.getSelectedNode();
-            var child_idx: u16 = 0;
-            for (node.children) |*child| {
-                if (!child.canvas_clamp) {
-                    if (child.canvas_node) {
-                        const node_selected = selected != null and selected.? == child_idx;
-                        const node_hovered = hovered != null and hovered.? == child_idx;
-                        if (node_selected) {
-                            // Selected: bright ring
-                            const hw = child.canvas_gw / 2 + 5;
-                            const hh = child.canvas_gh / 2 + 5;
-                            gpu.drawRect(
-                                child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2,
-                                0.5, 0.4, 1.0, 0.4, 8, 2, 1.0, 1.0, 1.0, 0.5,
-                            );
-                        } else if (node_hovered) {
-                            // Hover: subtle glow
-                            const hw = child.canvas_gw / 2 + 4;
-                            const hh = child.canvas_gh / 2 + 4;
-                            gpu.drawRect(
-                                child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2,
-                                0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0,
-                            );
-                        }
-                    }
-                    paintNode(child);
-                }
-                child_idx += 1;
-            }
-        }
-        gpu.resetTransform();
-        // Phase 5: paint clamped children WITHOUT transform (HUD layer)
-        for (node.children) |*child| {
-            if (child.canvas_clamp) {
-                layout.layoutNode(child, r.x, r.y, r.w, r.h);
-                paintNode(child);
-            }
-        }
-        // Phase 6: hover info — detail panel or hint, fixed at top-right
-        {
-            const panel_w: f32 = 190;
-            const panel_h: f32 = 90;
-            const panel_x = r.x + 12;
-            const panel_y = r.y + r.h - panel_h - 12;
-
-            if (canvas.getActiveNode()) |hi| {
-                // Find the active (selected or hovered) Canvas.Node child
-                var ci: u16 = 0;
-                for (node.children) |*child| {
-                    if (ci == hi and child.canvas_node) {
-                        var name: []const u8 = "Node";
-                        var sub_name: []const u8 = "";
-                        for (child.children) |*gc| {
-                            for (gc.children) |*ggc| {
-                                if (ggc.text) |t| {
-                                    if (name.len == 4 and std.mem.eql(u8, name, "Node")) {
-                                        name = t;
-                                    } else if (sub_name.len == 0) {
-                                        sub_name = t;
-                                    }
-                                }
-                            }
-                        }
-                        gpu.pushScissor(panel_x, panel_y, panel_w, panel_h);
-                        gpu.drawRect(panel_x, panel_y, panel_w, panel_h, 0.06, 0.08, 0.14, 0.95, 6, 1, 0.2, 0.2, 0.3, 0.6);
-                        gpu.drawTextLine(name, panel_x + 10, panel_y + 8, 14, 0.95, 0.95, 0.98, 1.0);
-                        if (sub_name.len > 0)
-                            gpu.drawTextLine(sub_name, panel_x + 10, panel_y + 26, 11, 0.6, 0.4, 0.9, 1.0);
-                        gpu.drawTextLine("gx:", panel_x + 10, panel_y + 44, 10, 0.4, 0.4, 0.5, 0.8);
-                        gpu.drawTextLine("gy:", panel_x + 10, panel_y + 58, 10, 0.4, 0.4, 0.5, 0.8);
-                        gpu.drawTextLine("size:", panel_x + 10, panel_y + 72, 10, 0.4, 0.4, 0.5, 0.8);
-                        gpu.popScissor();
-                        break;
-                    }
-                    ci += 1;
-                }
-            } else {
-                // No hover — show hint at same bottom-left spot
-                const hint_h: f32 = 30;
-                const hint_y = r.y + r.h - hint_h - 12;
-                gpu.drawRect(panel_x, hint_y, panel_w, hint_h, 0.06, 0.08, 0.12, 0.8, 4, 0, 0, 0, 0, 0);
-                gpu.drawTextLine("Hover a node for details", panel_x + 10, hint_y + 8, 11, 0.45, 0.45, 0.55, 0.7);
-            }
-        }
-        gpu.popScissor();
-        return;
-    }
-
-    // Overflow clipping + scroll offset for scroll/auto/hidden containers
+    // Overflow clipping + scroll offset + recurse children
     const ov = node.style.overflow;
     const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
     const is_clipped = is_scroll or ov == .hidden;
@@ -378,7 +184,6 @@ fn paintNode(node: *Node) void {
     if (is_clipped) gpu.pushScissor(r.x, r.y, r.w, r.h);
 
     if (is_scroll and node.scroll_y != 0) {
-        // Offset all descendants by scroll amount (layout positions are absolute)
         const sy = node.scroll_y;
         offsetDescendants(node, -sy);
         for (node.children) |*child| paintNode(child);
@@ -388,6 +193,170 @@ fn paintNode(node: *Node) void {
     }
 
     if (is_clipped) gpu.popScissor();
+}
+
+/// Paint a Canvas.Path node (SVG stroke curves). Separated to keep paintNode frame small.
+fn paintCanvasPath(node: *Node) callconv(.auto) void {
+    @setRuntimeSafety(false);
+    if (node.canvas_path_d) |d| {
+        const tc = node.text_color orelse Color.rgb(255, 255, 255);
+        const path = svg_path.parsePath(d);
+        svg_path.drawStrokeCurves(
+            &path,
+            @as(f32, @floatFromInt(tc.r)) / 255.0,
+            @as(f32, @floatFromInt(tc.g)) / 255.0,
+            @as(f32, @floatFromInt(tc.b)) / 255.0,
+            @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity,
+            node.canvas_stroke_width,
+            if (g_flow_enabled) node.canvas_flow_speed else 0,
+            c.SDL_GetTicks(),
+        );
+    }
+}
+
+/// Paint node visuals: background, hover, text, selection, text input.
+/// Separated from paintNode to reduce the recursive frame size.
+noinline fn paintNodeVisuals(node: *Node) void {
+    const r = node.computed;
+    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+
+    if (is_hovered and node.style.background_color == null) {
+        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
+    }
+
+    if (node.style.background_color) |bg_raw| {
+        if (bg_raw.a > 0) {
+            const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
+            const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
+            gpu.drawRect(
+                r.x, r.y, r.w, r.h,
+                @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                node.style.border_radius, 0,
+                @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+            );
+        }
+    }
+
+    selection.paintHighlight(node, r.x, r.y);
+
+    if (node.text) |t| {
+        if (t.len > 0) {
+            const tc = node.text_color orelse Color.rgb(255, 255, 255);
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            const final_a = @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity;
+            _ = gpu.drawTextWrapped(
+                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
+                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, final_a,
+            );
+        }
+    }
+
+    if (node.input_id) |id| paintTextInput(node, id);
+}
+
+/// Paint TextInput: typed text, placeholder, selection highlight, blinking cursor.
+noinline fn paintTextInput(node: *Node, id: u8) void {
+    const r = node.computed;
+    if (input.isFocused(id)) {
+        const pad: f32 = 4;
+        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 0.30, 0.56, 0.92, 0.7);
+    }
+    const typed = input.getText(id);
+    const is_placeholder = typed.len == 0;
+    if (!is_placeholder) {
+        const sel = input.getSelection(id);
+        if (sel.hi > sel.lo) {
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            gpu.drawSelectionRects(typed, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr), sel.lo, sel.hi);
+        }
+    }
+    const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
+    if (display_text) |t| {
+        if (t.len > 0) {
+            const tc = if (is_placeholder)
+                Color.rgb(100, 100, 110)
+            else
+                (node.text_color orelse Color.rgb(220, 220, 220));
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            _ = gpu.drawTextWrapped(
+                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
+                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0,
+            );
+        }
+    }
+    if (input.isFocused(id) and g_cursor_visible) {
+        const cursor_pos = input.getCursorPos(id);
+        const pl = node.style.padLeft();
+        const pt = node.style.padTop();
+        const pb = node.style.padBottom();
+        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
+        const cx = r.x + pl + metrics.width;
+        const ch = r.h - pt - pb;
+        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
+    }
+}
+
+/// Paint a Canvas container: transform setup, graph children, HUD layer.
+noinline fn paintCanvasContainer(node: *Node) void {
+    const r = node.computed;
+    const ct = node.canvas_type.?;
+    if (node.canvas_view_set) {
+        canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
+        node.canvas_view_set = false;
+    }
+    gpu.pushScissor(r.x, r.y, r.w, r.h);
+    canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
+    positionCanvasNodes(node);
+    const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
+    const vp_cx = r.x + r.w / 2;
+    const vp_cy = r.y + r.h / 2;
+    gpu.setTransform(0, 0, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, cam.scale);
+    {
+        const hovered = canvas.getHoveredNode();
+        const selected = canvas.getSelectedNode();
+        var child_idx: u16 = 0;
+        for (node.children) |*child| {
+            if (!child.canvas_clamp) {
+                if (child.canvas_node) {
+                    const node_selected = selected != null and selected.? == child_idx;
+                    const node_hovered = hovered != null and hovered.? == child_idx;
+                    if (node_selected) {
+                        const hw = child.canvas_gw / 2 + 5;
+                        const hh = child.canvas_gh / 2 + 5;
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 1.0, 1.0, 1.0, 0.5);
+                    } else if (node_hovered) {
+                        const hw = child.canvas_gw / 2 + 4;
+                        const hh = child.canvas_gh / 2 + 4;
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
+                    }
+                }
+                g_paint_opacity = canvas.getNodeDim(child_idx);
+                g_flow_enabled = canvas.getFlowOverride(child_idx);
+                paintNode(child);
+                g_paint_opacity = 1.0;
+                g_flow_enabled = true;
+            }
+            child_idx += 1;
+        }
+    }
+    gpu.resetTransform();
+    for (node.children) |*child| {
+        if (child.canvas_clamp) {
+            layout.layoutNode(child, r.x, r.y, r.w, r.h);
+            paintNode(child);
+        }
+    }
+    gpu.popScissor();
 }
 
 // ── Engine entry point ──────────────────────────────────────────────────
@@ -444,6 +413,7 @@ pub fn run(config: AppConfig) !void {
     g_text_engine = &te;
     layout.setMeasureFn(measureCallback);
     layout.setMeasureImageFn(measureImageCallback);
+    input.setMeasureWidthFn(measureWidthOnly);
 
     var win_w: f32 = @floatFromInt(init_w);
     var win_h: f32 = @floatFromInt(init_h);
@@ -495,22 +465,43 @@ pub fn run(config: AppConfig) !void {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
                         const events = @import("events.zig");
-                        // Canvas click + drag start
-                        if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                            canvas.clickNode();
+                        // Hit test devtools first (if visible), then app tree
+                        const devtools_hit = if (devtools_visible) layout.hitTest(&devtools.root, mx, my) else null;
+                        const hit = devtools_hit orelse layout.hitTest(config.root, mx, my);
+                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null) else false;
+                        if (hit_is_interactive) {
+                            const h = hit.?;
+                            if (h.input_id) |id| {
+                                const now_ms = c.SDL_GetTicks();
+                                const clicks = input.trackClick(now_ms);
+                                input.focus(id);
+                                const pl = h.style.padLeft();
+                                const local_x = mx - h.computed.x - pl;
+                                if (clicks == 3) {
+                                    input.selectAll(id);
+                                } else if (clicks == 2) {
+                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    input.selectWord(id);
+                                } else {
+                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    input.startDrag(id);
+                                    input_drag_active = true;
+                                    input_drag_id = id;
+                                    input_drag_node_x = h.computed.x;
+                                    input_drag_node_pl = pl;
+                                    input_drag_font_size = h.font_size;
+                                }
+                            } else if (h.handlers.on_press) |handler| {
+                                input.unfocus();
+                                handler();
+                            }
+                        } else if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                            // Canvas click + drag start (only if no HUD element was clicked)
+                            input.unfocus();
+                            if (canvas.getHoveredNode() != null) canvas.clickNode();
                             canvas_drag_node = cn;
                             canvas_drag_last_x = mx;
                             canvas_drag_last_y = my;
-                        } else if (layout.hitTest(config.root, mx, my)) |hit| {
-                            if (hit.input_id) |id| {
-                                input.focus(id);
-                            } else if (hit.handlers.on_press) |handler| {
-                                input.unfocus();
-                                handler();
-                            } else {
-                                input.unfocus();
-                                selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
-                            }
                         } else {
                             input.unfocus();
                             selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
@@ -520,6 +511,12 @@ pub fn run(config: AppConfig) !void {
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
+                    // TextInput drag selection
+                    if (input_drag_active) {
+                        const local_x = mx - input_drag_node_x - input_drag_node_pl;
+                        input.updateDrag(input_drag_id, local_x, input_drag_font_size);
+                    }
+                    if (devtools_visible) updateHover(&devtools.root, mx, my);
                     updateHover(config.root, mx, my);
                     // Canvas hit testing — find which Canvas.Node the mouse is over
                     {
@@ -544,7 +541,9 @@ pub fn run(config: AppConfig) !void {
                                 ci += 1;
                             }
                             canvas.setHoveredNode(found_idx);
+                            g_hover_changed = true;
                         } else {
+                            if (canvas.getHoveredNode() != null) g_hover_changed = true;
                             canvas.setHoveredNode(null);
                         }
                     }
@@ -563,6 +562,7 @@ pub fn run(config: AppConfig) !void {
                 c.SDL_MOUSEBUTTONUP => {
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         canvas_drag_node = null;
+                        input_drag_active = false;
                         selection.onMouseUp();
                     }
                 },
@@ -572,14 +572,27 @@ pub fn run(config: AppConfig) !void {
                 c.SDL_KEYDOWN => {
                     const sym = event.key.keysym.sym;
                     const mod = event.key.keysym.mod;
-                    const ctrl = (mod & c.KMOD_CTRL) != 0;
-                    const input_consumed = if (input.getFocusedId() != null)
-                        (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
-                    else
-                        false;
-                    if (!input_consumed) {
-                        selection.onKeyDown(config.root, sym, mod);
-                        if (sym == c.SDLK_ESCAPE) running = false;
+                    // F12: toggle devtools
+                    if (sym == c.SDLK_F12) {
+                        devtools_visible = !devtools_visible;
+                        std.debug.print("[devtools] F12 pressed — visible={}\n", .{devtools_visible});
+                        if (devtools_visible and !devtools_initialized) {
+                            std.debug.print("[devtools] calling _appInit...\n", .{});
+                            devtools._appInit();
+                            std.debug.print("[devtools] _appInit done, evaluating JS ({d} bytes)...\n", .{devtools.JS_LOGIC.len});
+                            if (devtools.JS_LOGIC.len > 0) qjs_runtime.evalScript(devtools.JS_LOGIC);
+                            std.debug.print("[devtools] JS done, initialized\n", .{});
+                            devtools_initialized = true;
+                        }
+                    } else {
+                        const ctrl = (mod & c.KMOD_CTRL) != 0;
+                        const input_consumed = if (input.getFocusedId() != null)
+                            (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
+                        else
+                            false;
+                        if (!input_consumed) {
+                            selection.onKeyDown(config.root, sym, mod);
+                        }
                     }
                 },
                 c.SDL_MOUSEWHEEL => {
@@ -618,9 +631,18 @@ pub fn run(config: AppConfig) !void {
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
 
+        // Devtools tick
+        if (devtools_visible and devtools_initialized) {
+            devtools._appTick(c.SDL_GetTicks());
+        }
+
         // Layout (main window)
         const t2 = std.time.microTimestamp();
-        layout.layout(config.root, 0, 0, win_w, win_h);
+        const app_h = if (devtools_visible) @max(100, win_h - DEVTOOLS_HEIGHT) else win_h;
+        layout.layout(config.root, 0, 0, win_w, app_h);
+        if (devtools_visible) {
+            layout.layout(&devtools.root, 0, app_h, win_w, DEVTOOLS_HEIGHT);
+        }
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
 
@@ -641,6 +663,12 @@ pub fn run(config: AppConfig) !void {
         selection.resetWalkState();
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
+
+        // Paint devtools panel (below app)
+        if (devtools_visible) {
+            gpu.drawRect(0, app_h, win_w, 2, 0.4, 0.2, 0.9, 1.0, 0, 0, 0, 0, 0, 0);
+            paintNode(&devtools.root);
+        }
 
         // Tooltip overlay (always on top of main tree)
         tooltip.paintOverlay(measureCallback, win_w, win_h);
@@ -681,6 +709,7 @@ pub fn run(config: AppConfig) !void {
             qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;
             qjs_runtime.bridge_calls_this_second = 0;
             g_paint_count = 0;
+            g_hover_changed = false;
             g_hidden_count = 0;
             g_zero_count = 0;
             fps_frames = 0;
