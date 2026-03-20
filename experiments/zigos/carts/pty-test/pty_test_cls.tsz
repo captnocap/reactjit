@@ -22,12 +22,6 @@ classifier Subtitle(Text) {
   color: '#8b949e';
 }
 
-classifier TermRow(Box) {
-  flexDirection: 'row';
-  flexGrow: 1;
-  gap: 12;
-}
-
 classifier TermContainer(Box) {
   flexGrow: 1;
   backgroundColor: '#000000';
@@ -35,12 +29,6 @@ classifier TermContainer(Box) {
   borderWidth: 1;
   borderColor: '#30363d';
   overflow: 'hidden';
-}
-
-classifier TermLabel(Text) {
-  fontSize: 11;
-  color: '#8b949e';
-  paddingBottom: 4;
 }
 
 classifier StatusBar(Box) {

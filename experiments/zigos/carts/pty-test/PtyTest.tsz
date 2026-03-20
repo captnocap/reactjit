@@ -1,36 +1,22 @@
-import { Page, Header, Title, Subtitle, TermRow, TermContainer, TermLabel, StatusBar, StatusLabel, StatusValue } from './pty_test_cls';
+import { Page, Header, Title, Subtitle, TermContainer, StatusBar, StatusLabel, StatusValue } from './pty_test_cls';
 
 function App() {
   return (
     <C.Page>
       <C.Header>
         <C.Title>PTY Test</C.Title>
-        <C.Subtitle>Terminal emulators composed from Render surfaces — click to focus, type to interact</C.Subtitle>
+        <C.Subtitle>Terminal emulator via Render surface — click to focus, type to interact</C.Subtitle>
       </C.Header>
 
-      <C.TermRow>
-        <Box style={{ flexGrow: 1, gap: 4 }}>
-          <C.TermLabel>bash (default shell)</C.TermLabel>
-          <C.TermContainer>
-            <Render src="app:xterm -fa Monospace -fs 11" style={{ flexGrow: 1 }} />
-          </C.TermContainer>
-        </Box>
-
-        <Box style={{ flexGrow: 1, gap: 4 }}>
-          <C.TermLabel>htop (system monitor)</C.TermLabel>
-          <C.TermContainer>
-            <Render src="app:xterm -fa Monospace -fs 11 -e htop" style={{ flexGrow: 1 }} />
-          </C.TermContainer>
-        </Box>
-      </C.TermRow>
+      <C.TermContainer>
+        <Render src="app:xterm -fa Monospace -fs 11 -geometry 160x40" style={{ flexGrow: 1 }} />
+      </C.TermContainer>
 
       <C.StatusBar>
         <C.StatusLabel>Backend:</C.StatusLabel>
-        <C.StatusValue>Xvfb + XShm + XTest per surface</C.StatusValue>
+        <C.StatusValue>Xvfb + XShm + XTest</C.StatusValue>
         <C.StatusLabel>PTY:</C.StatusLabel>
-        <C.StatusValue>xterm manages its own PTY (forkpty + /bin/bash)</C.StatusValue>
-        <C.StatusLabel>Input:</C.StatusLabel>
-        <C.StatusValue>XTest synthetic keyboard/mouse forwarding</C.StatusValue>
+        <C.StatusValue>xterm forkpty → /bin/bash</C.StatusValue>
       </C.StatusBar>
     </C.Page>
   );
