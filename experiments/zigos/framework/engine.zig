@@ -475,6 +475,10 @@ pub fn run(config: AppConfig) !void {
                 },
                 c.SDL_WINDOWEVENT => {
                     switch (event.window.event) {
+                        c.SDL_WINDOWEVENT_CLOSE => {
+                            std.debug.print("[engine] SDL_WINDOWEVENT_CLOSE for window {d}\n", .{event.window.windowID});
+                            running = false;
+                        },
                         c.SDL_WINDOWEVENT_SIZE_CHANGED => {
                             win_w = @floatFromInt(event.window.data1);
                             win_h = @floatFromInt(event.window.data2);
@@ -489,6 +493,12 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
+                    // Render surface input forwarding (VNC mouse) — check first
+                    {
+                        const rmx: f32 = @floatFromInt(event.button.x);
+                        const rmy: f32 = @floatFromInt(event.button.y);
+                        if (render_surfaces.handleMouseDown(rmx, rmy, event.button.button)) continue;
+                    }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
@@ -539,6 +549,8 @@ pub fn run(config: AppConfig) !void {
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
+                    // Render surface mouse motion forwarding
+                    if (render_surfaces.handleMouseMotion(mx, my)) continue;
                     // TextInput drag selection
                     if (input_drag_active) {
                         const local_x = mx - input_drag_node_x - input_drag_node_pl;
@@ -588,6 +600,12 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
+                    // Render surface mouse up forwarding
+                    {
+                        const rmx: f32 = @floatFromInt(event.button.x);
+                        const rmy: f32 = @floatFromInt(event.button.y);
+                        if (render_surfaces.handleMouseUp(rmx, rmy, event.button.button)) continue;
+                    }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         canvas_drag_node = null;
                         input_drag_active = false;
@@ -595,11 +613,15 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_TEXTINPUT => {
+                    // Render surface text input forwarding
+                    if (render_surfaces.handleTextInput(@ptrCast(&event.text.text))) continue;
                     input.handleTextInput(@ptrCast(&event.text.text));
                 },
                 c.SDL_KEYDOWN => {
                     const sym = event.key.keysym.sym;
                     const mod = event.key.keysym.mod;
+                    // Render surface key forwarding (before F12 check so F12 still works)
+                    if (sym != c.SDLK_F12 and render_surfaces.handleKeyDown(sym)) continue;
                     // F12: toggle devtools
                     if (sym == c.SDLK_F12) {
                         devtools_visible = !devtools_visible;
@@ -622,6 +644,9 @@ pub fn run(config: AppConfig) !void {
                             selection.onKeyDown(config.root, sym, mod);
                         }
                     }
+                },
+                c.SDL_KEYUP => {
+                    _ = render_surfaces.handleKeyUp(event.key.keysym.sym);
                 },
                 c.SDL_MOUSEWHEEL => {
                     var mx_i: c_int = undefined;

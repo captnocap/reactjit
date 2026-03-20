@@ -774,8 +774,25 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
-    // No CPU flip needed — FLIP_Y=0 means mpv outputs bottom-up (GL convention).
-    // The shared image shader flips UV.y (1.0 - corner.y) → correct orientation.
+    // Flip rows vertically before upload.
+    // glReadPixels from an FBO returns top-down data (FBO texture origin is top-left).
+    // The shared image shader has UV Y-flip (1.0 - corner.y), so this CPU flip
+    // cancels it → correct orientation. Same pattern as render_surfaces.zig.
+    const row_bytes: usize = @as(usize, w) * 4;
+    var top: usize = 0;
+    var bot: usize = h - 1;
+    while (top < bot) {
+        const top_off = top * row_bytes;
+        const bot_off = bot * row_bytes;
+        var col: usize = 0;
+        while (col < row_bytes) : (col += 1) {
+            buf[top_off + col] ^= buf[bot_off + col];
+            buf[bot_off + col] ^= buf[top_off + col];
+            buf[top_off + col] ^= buf[bot_off + col];
+        }
+        top += 1;
+        bot -= 1;
+    }
 
     // Upload to wgpu texture
     uploadToWgpu(tex, buf, w, h, queue);
