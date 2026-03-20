@@ -9,7 +9,7 @@ function App() {
       </C.Header>
 
       <C.VideoContainer>
-        <Video src="test.mp4" style={{ width: '100%', height: '100%' }} />
+        <Video src="test.mp4" style={{ flexGrow: 1 }} />
       </C.VideoContainer>
 
       <C.Controls>

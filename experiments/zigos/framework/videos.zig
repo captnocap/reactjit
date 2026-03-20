@@ -132,6 +132,7 @@ const GlFunctions = struct {
     texImage2D: *const fn (c_uint, c_int, c_int, c_int, c_int, c_int, c_uint, c_uint, ?*const anyopaque) callconv(.c) void = undefined,
     texParameteri: *const fn (c_uint, c_uint, c_int) callconv(.c) void = undefined,
     readPixels: *const fn (c_int, c_int, c_int, c_int, c_uint, c_uint, ?*anyopaque) callconv(.c) void = undefined,
+    pixelStorei: *const fn (c_uint, c_int) callconv(.c) void = undefined,
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -218,7 +219,6 @@ const VideoEntry = struct {
 
 var entries: [MAX_VIDEOS]VideoEntry = [_]VideoEntry{.{}} ** MAX_VIDEOS;
 var entry_count: usize = 0;
-var _dbg_frame: u32 = 0; // debug frame counter (prints every 60 frames)
 
 // ════════════════════════════════════════════════════════════════════════
 // GL context setup (dedicated hidden window for mpv rendering)
@@ -269,6 +269,7 @@ fn initGLContext() bool {
     gl.texImage2D = loadGlFn(@TypeOf(gl.texImage2D), "glTexImage2D") orelse return glInitFail("glTexImage2D");
     gl.texParameteri = loadGlFn(@TypeOf(gl.texParameteri), "glTexParameteri") orelse return glInitFail("glTexParameteri");
     gl.readPixels = loadGlFn(@TypeOf(gl.readPixels), "glReadPixels") orelse return glInitFail("glReadPixels");
+    gl.pixelStorei = loadGlFn(@TypeOf(gl.pixelStorei), "glPixelStorei") orelse return glInitFail("glPixelStorei");
 
     gl_available = true;
     std.debug.print("[videos] GL context ready (dedicated for mpv)\n", .{});
@@ -596,7 +597,6 @@ fn createRenderContext(handle: ?*anyopaque, out_ctx: *?*anyopaque) RenderMode {
 
 /// Call once per frame before paint.
 pub fn update() void {
-    _dbg_frame +%= 1;
     if (!lib_available) return;
 
     const device = gpu_core.getDevice() orelse return;
@@ -639,9 +639,7 @@ pub fn update() void {
         if (e.status == .ready) {
             if (e.render_ctx) |ctx| {
                 const flags = mpv_fns.render_ctx_update(ctx);
-                if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] update: flags=0x{x} entry_count={d} mode={s}\n", .{ flags, entry_count, @tagName(e.mode) });
                 if (flags & MPV_RENDER_UPDATE_FRAME != 0) {
-                    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] NEW FRAME — rendering\n", .{});
                     if (e.mode == .opengl) {
                         renderGL(e, queue);
                     } else {
@@ -751,7 +749,7 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
         .h = @intCast(h),
         .internal_format = 0,
     };
-    var flip_y: c_int = 1; // top-down output for wgpu
+    var flip_y: c_int = 0; // GL convention (bottom-up) — shader flips UV.y
     var block_time: c_int = 0; // don't block waiting for display refresh
     var render_params = [_]MpvRenderParam{
         .{ .type = MPV_RENDER_PARAM_OPENGL_FBO, .data = @ptrCast(&mpv_fbo) },
@@ -760,22 +758,17 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
         .{ .type = 0, .data = null },
     };
 
-    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: fbo={d} {d}x{d} calling mpv_render\n", .{ e.fbo, w, h });
     const err = mpv_fns.render_ctx_render(ctx, &render_params);
-    if (err < 0) {
-        std.debug.print("[videos:dbg] renderGL: mpv_render FAILED err={d}\n", .{err});
-        return;
-    }
+    if (err < 0) return;
     mpv_fns.render_ctx_report_swap(ctx);
 
     // Read back from private FBO to CPU buffer
-    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: glReadPixels {d}x{d}\n", .{ w, h });
+    gl.pixelStorei(0x0D05, 1); // GL_PACK_ALIGNMENT = 1 (no row padding)
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, e.fbo);
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
     // Upload to wgpu texture
-    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: writeTexture {d}x{d}\n", .{ w, h });
     uploadToWgpu(tex, buf, w, h, queue);
 }
 
@@ -842,29 +835,37 @@ fn uploadToWgpu(tex: *wgpu.Texture, buf: []u8, w: u32, h: u32, queue: *wgpu.Queu
 /// Ensures the video is loaded and queues the textured quad for rendering.
 /// Returns true if a video quad was queued (caller should skip background paint).
 pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
-    if (_dbg_frame % 120 == 1) std.debug.print("[videos:dbg] paintVideo CALLED src_len={d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ src.len, x, y, w, h });
     var entry = findEntry(src);
     if (entry == null) {
         loadVideo(src);
         entry = findEntry(src);
     }
-    const e = entry orelse {
-        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: no entry for src\n", .{});
-        return false;
-    };
+    const e = entry orelse return false;
     e.active = true;
 
-    if (e.status != .ready) {
-        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: status={s} (not ready)\n", .{@tagName(e.status)});
-        return false;
-    }
-    const bg = e.bind_group orelse {
-        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: no bind_group!\n", .{});
-        return false;
-    };
+    if (e.status != .ready) return false;
+    const bg = e.bind_group orelse return false;
     if (e.width == 0 or e.height == 0) return false;
 
-    images.queueQuad(x, y, w, h, opacity, bg);
+    // Aspect-ratio "contain" fit — but only when container has sane dimensions.
+    // Layout can produce h=9999 (proportional fallback for unconstrained containers);
+    // in that case just use video's native aspect to compute height from width.
+    const vid_w: f32 = @floatFromInt(e.width);
+    const vid_h: f32 = @floatFromInt(e.height);
+    const vid_aspect = vid_w / vid_h;
+    const clamped_h = if (h > w * 4) w / vid_aspect else h; // clamp absurd heights
+    const box_aspect = w / clamped_h;
+    var draw_w = w;
+    var draw_h = clamped_h;
+    if (vid_aspect > box_aspect) {
+        draw_h = w / vid_aspect;
+    } else if (vid_aspect < box_aspect) {
+        draw_w = clamped_h * vid_aspect;
+    }
+    const draw_x = x + (w - draw_w) / 2;
+    const draw_y = y + (clamped_h - draw_h) / 2;
+
+    images.queueQuad(draw_x, draw_y, draw_w, draw_h, opacity, bg);
     return true;
 }
 
@@ -960,9 +961,9 @@ fn destroyEntry(e: *VideoEntry) void {
     if (e.sampler) |s| s.release();
     if (e.texture_view) |v| v.release();
     if (e.texture) |t| t.destroy();
-    // GL resources (need GL context current)
+    // GL context must be current for render_ctx_free and FBO cleanup
+    if (e.mode == .opengl and gl_available) makeGLCurrent();
     if (e.fbo != 0 and gl_available) {
-        makeGLCurrent();
         var fbo = e.fbo;
         var tex = e.fbo_tex;
         gl.deleteFramebuffers(1, &fbo);

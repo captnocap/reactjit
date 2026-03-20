@@ -469,10 +469,7 @@ pub fn run(config: AppConfig) !void {
             if (windows.routeEvent(&event)) continue;
 
             switch (event.type) {
-                c.SDL_QUIT => {
-                    std.debug.print("[engine:dbg] SDL_QUIT received — setting running=false\n", .{});
-                    running = false;
-                },
+                c.SDL_QUIT => running = false,
                 c.SDL_WINDOWEVENT => {
                     switch (event.window.event) {
                         c.SDL_WINDOWEVENT_SIZE_CHANGED => {

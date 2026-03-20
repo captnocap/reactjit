@@ -409,7 +409,7 @@ pub const image_wgsl =
     \\
     \\    var out: VertexOutput;
     \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
-    \\    out.uv = corner;
+    \\    out.uv = vec2f(corner.x, 1.0 - corner.y); // flip Y — GL readback is bottom-up
     \\    out.opacity = inst.opacity;
     \\    return out;
     \\}
