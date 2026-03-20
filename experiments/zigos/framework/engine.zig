@@ -606,7 +606,7 @@ pub fn run(config: AppConfig) !void {
                             (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
                         else
                             false;
-                        if (!input_consumed) {
+                        if (!input_consumed and !videos.handleKey(sym)) {
                             selection.onKeyDown(config.root, sym, mod);
                         }
                     }
