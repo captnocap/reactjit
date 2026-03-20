@@ -192,9 +192,9 @@ pub const curve_wgsl =
     \\    @location(2) p2: vec2f,           // end point
     \\    @location(3) color: vec4f,        // stroke RGBA [0..1]
     \\    @location(4) stroke_width: f32,   // stroke thickness in pixels
-    \\    @location(5) _pad0: f32,
-    \\    @location(6) _pad1: f32,
-    \\    @location(7) _pad2: f32,
+    \\    @location(5) dash_len: f32,       // t-space dash period (0 = solid)
+    \\    @location(6) gap_ratio: f32,      // fraction that is gap (0.5 = equal)
+    \\    @location(7) time_offset: f32,    // animated offset for flow
     \\};
     \\
     \\struct VertexOutput {
@@ -205,6 +205,9 @@ pub const curve_wgsl =
     \\    @location(3) p2: vec2f,
     \\    @location(4) color: vec4f,
     \\    @location(5) stroke_width: f32,
+    \\    @location(6) dash_len: f32,
+    \\    @location(7) gap_ratio: f32,
+    \\    @location(8) time_offset: f32,
     \\};
     \\
     \\// ── Vertex shader ────────────────────────────────────────────
@@ -242,36 +245,37 @@ pub const curve_wgsl =
     \\    out.p2 = inst.p2;
     \\    out.color = inst.color;
     \\    out.stroke_width = inst.stroke_width;
+    \\    out.dash_len = inst.dash_len;
+    \\    out.gap_ratio = inst.gap_ratio;
+    \\    out.time_offset = inst.time_offset;
     \\    return out;
     \\}
     \\
-    \\// ── SDF distance to quadratic bezier ─────────────────────────
-    \\// Exact minimum distance from point p to quadratic bezier (a, b, c).
-    \\// Based on Inigo Quilez's approach: solve the cubic for closest t,
-    \\// then evaluate distance at candidate t values.
-    \\fn sdf_bezier(pos: vec2f, a: vec2f, b: vec2f, c: vec2f) -> f32 {
+    \\// ── SDF distance + closest t for quadratic bezier ──────────
+    \\// Returns vec2f(distance, closest_t).
+    \\// Based on Inigo Quilez's approach: solve the cubic for closest t.
+    \\fn sdf_bezier_t(pos: vec2f, a: vec2f, b: vec2f, c: vec2f) -> vec2f {
     \\    let A = b - a;
     \\    let B = c - 2.0 * b + a;
     \\    let C = a - pos;
     \\
-    \\    // Coefficients of the derivative dot product polynomial:
-    \\    // d/dt |B*t^2 + 2*A*t + C|^2 = 0
-    \\    // => cubic: k3*t^3 + k2*t^2 + k1*t + k0 = 0
     \\    let k3 = dot(B, B);
     \\    let k2 = 3.0 * dot(A, B);
     \\    let k1 = 2.0 * dot(A, A) + dot(C, B);
     \\    let k0 = dot(C, A);
     \\
     \\    var min_dist = 1e10;
+    \\    var best_t = 0.0;
     \\
-    \\    // Check endpoints (t=0, t=1) — always valid candidates
-    \\    min_dist = min(min_dist, dot(C, C));
-    \\    let end = a + 2.0 * A + B - pos;
-    \\    min_dist = min(min_dist, dot(end, end));
+    \\    // Check endpoints
+    \\    let d0 = dot(C, C);
+    \\    let end_v = a + 2.0 * A + B - pos;
+    \\    let d1 = dot(end_v, end_v);
+    \\    if d0 < d1 { min_dist = d0; best_t = 0.0; }
+    \\    else { min_dist = d1; best_t = 1.0; }
     \\
     \\    // Solve cubic for interior critical points
     \\    if abs(k3) > 1e-6 {
-    \\        // Depressed cubic: t^3 + pt + q = 0
     \\        let ik3 = 1.0 / k3;
     \\        let p_coeff = (3.0 * k1 * k3 - k2 * k2) / (3.0 * k3 * k3);
     \\        let q_coeff = (2.0 * k2 * k2 * k2 - 9.0 * k1 * k2 * k3 + 27.0 * k0 * k3 * k3) / (27.0 * k3 * k3 * k3);
@@ -279,15 +283,14 @@ pub const curve_wgsl =
     \\        let shift = -k2 * ik3 / 3.0;
     \\
     \\        if disc >= 0.0 {
-    \\            // One real root
     \\            let sq = sqrt(disc);
     \\            let u = sign(-q_coeff * 0.5 + sq) * pow(abs(-q_coeff * 0.5 + sq), 1.0 / 3.0);
     \\            let v = sign(-q_coeff * 0.5 - sq) * pow(abs(-q_coeff * 0.5 - sq), 1.0 / 3.0);
     \\            let t0 = clamp(u + v + shift, 0.0, 1.0);
     \\            let pt0 = a + 2.0 * A * t0 + B * t0 * t0 - pos;
-    \\            min_dist = min(min_dist, dot(pt0, pt0));
+    \\            let dd = dot(pt0, pt0);
+    \\            if dd < min_dist { min_dist = dd; best_t = t0; }
     \\        } else {
-    \\            // Three real roots (casus irreducibilis)
     \\            let mp3 = -p_coeff / 3.0;
     \\            let r = sqrt(mp3 * mp3 * mp3);
     \\            let cos_phi = clamp(-q_coeff / (2.0 * r), -1.0, 1.0);
@@ -299,10 +302,14 @@ pub const curve_wgsl =
     \\            let pt0 = a + 2.0 * A * t0 + B * t0 * t0 - pos;
     \\            let pt1 = a + 2.0 * A * t1 + B * t1 * t1 - pos;
     \\            let pt2 = a + 2.0 * A * t2 + B * t2 * t2 - pos;
-    \\            min_dist = min(min_dist, min(dot(pt0, pt0), min(dot(pt1, pt1), dot(pt2, pt2))));
+    \\            let dd0 = dot(pt0, pt0);
+    \\            let dd1 = dot(pt1, pt1);
+    \\            let dd2 = dot(pt2, pt2);
+    \\            if dd0 < min_dist { min_dist = dd0; best_t = t0; }
+    \\            if dd1 < min_dist { min_dist = dd1; best_t = t1; }
+    \\            if dd2 < min_dist { min_dist = dd2; best_t = t2; }
     \\        }
     \\    } else if abs(k2) > 1e-6 {
-    \\        // Degenerate to quadratic: k2*t^2 + k1*t + k0 = 0
     \\        let det = k1 * k1 - 4.0 * k0 * k2;
     \\        if det >= 0.0 {
     \\            let sq = sqrt(det);
@@ -310,22 +317,27 @@ pub const curve_wgsl =
     \\            let tb = clamp((-k1 - sq) / (2.0 * k2), 0.0, 1.0);
     \\            let pa = a + 2.0 * A * ta + B * ta * ta - pos;
     \\            let pb = a + 2.0 * A * tb + B * tb * tb - pos;
-    \\            min_dist = min(min_dist, min(dot(pa, pa), dot(pb, pb)));
+    \\            let da = dot(pa, pa);
+    \\            let db = dot(pb, pb);
+    \\            if da < min_dist { min_dist = da; best_t = ta; }
+    \\            if db < min_dist { min_dist = db; best_t = tb; }
     \\        }
     \\    } else if abs(k1) > 1e-6 {
-    \\        // Linear: k1*t + k0 = 0
     \\        let t0 = clamp(-k0 / k1, 0.0, 1.0);
     \\        let pt0 = a + 2.0 * A * t0 + B * t0 * t0 - pos;
-    \\        min_dist = min(min_dist, dot(pt0, pt0));
+    \\        let dd = dot(pt0, pt0);
+    \\        if dd < min_dist { min_dist = dd; best_t = t0; }
     \\    }
     \\
-    \\    return sqrt(min_dist);
+    \\    return vec2f(sqrt(min_dist), best_t);
     \\}
     \\
     \\// ── Fragment shader ───────────────────────────────────────────
     \\@fragment
     \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    \\    let dist = sdf_bezier(in.pixel_pos, in.p0, in.p1, in.p2);
+    \\    let result = sdf_bezier_t(in.pixel_pos, in.p0, in.p1, in.p2);
+    \\    let dist = result.x;
+    \\    let t = result.y;
     \\    let half_w = in.stroke_width * 0.5;
     \\
     \\    // Anti-aliased stroke: smooth falloff over 1px at the edge
@@ -335,7 +347,82 @@ pub const curve_wgsl =
     \\        discard;
     \\    }
     \\
-    \\    let final_alpha = in.color.a * alpha;
+    \\    var final_alpha = in.color.a * alpha;
+    \\
+    \\    // Animated dash pattern
+    \\    if in.dash_len > 0.0 {
+    \\        let pattern = fract((t + in.time_offset) / in.dash_len);
+    \\        let edge = 0.04;
+    \\        let threshold = 1.0 - in.gap_ratio;
+    \\        let dash_alpha = smoothstep(threshold - edge, threshold + edge, pattern);
+    \\        final_alpha *= (1.0 - dash_alpha);
+    \\    }
+    \\
+    \\    if final_alpha <= 0.001 {
+    \\        discard;
+    \\    }
+    \\
     \\    return vec4f(in.color.rgb * final_alpha, final_alpha);
+    \\}
+;
+
+/// Image pipeline: textured quads for video frames and images.
+/// Each instance is one quad with screen position, size, and opacity.
+/// The texture is bound per-draw-call (each image has its own bind group).
+pub const image_wgsl =
+    \\// ── Uniforms ───────────────────────────────────────────────────
+    \\struct Globals {
+    \\    screen_size: vec2f,
+    \\};
+    \\@group(0) @binding(0) var<uniform> globals: Globals;
+    \\@group(0) @binding(1) var image_tex: texture_2d<f32>;
+    \\@group(0) @binding(2) var image_sampler: sampler;
+    \\
+    \\// ── Per-instance data ─────────────────────────────────────────
+    \\struct ImageInstance {
+    \\    @location(0) pos: vec2f,
+    \\    @location(1) size: vec2f,
+    \\    @location(2) opacity: f32,
+    \\    @location(3) _pad0: f32,
+    \\};
+    \\
+    \\struct VertexOutput {
+    \\    @builtin(position) clip_pos: vec4f,
+    \\    @location(0) uv: vec2f,
+    \\    @location(1) opacity: f32,
+    \\};
+    \\
+    \\@vertex
+    \\fn vs_main(
+    \\    @builtin(vertex_index) vertex_index: u32,
+    \\    inst: ImageInstance,
+    \\) -> VertexOutput {
+    \\    var quad_x = array<f32, 6>(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
+    \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+    \\    let corner = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
+    \\
+    \\    let pixel_pos = inst.pos + corner * inst.size;
+    \\    let ndc = vec2f(
+    \\        pixel_pos.x / globals.screen_size.x * 2.0 - 1.0,
+    \\        1.0 - pixel_pos.y / globals.screen_size.y * 2.0,
+    \\    );
+    \\
+    \\    var out: VertexOutput;
+    \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
+    \\    out.uv = corner;
+    \\    out.opacity = inst.opacity;
+    \\    return out;
+    \\}
+    \\
+    \\@fragment
+    \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    \\    let color = textureSample(image_tex, image_sampler, in.uv);
+    \\    // Video frames use rgb0 format (alpha=0) — force full opacity.
+    \\    // Instance opacity controls fade effects.
+    \\    let alpha = in.opacity;
+    \\    if alpha <= 0.0 {
+    \\        discard;
+    \\    }
+    \\    return vec4f(color.rgb * alpha, alpha);
     \\}
 ;

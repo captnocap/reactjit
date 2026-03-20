@@ -151,6 +151,7 @@ pub fn emitExpressionTyped(
         if (result.ty == .opt_f32_t or
             std.mem.endsWith(u8, result.text, ".text") or
             std.mem.endsWith(u8, result.text, ".image_src") or
+            std.mem.endsWith(u8, result.text, ".video_src") or
             std.mem.endsWith(u8, result.text, ".input_id") or
             std.mem.endsWith(u8, result.text, ".placeholder") or
             std.mem.endsWith(u8, result.text, ".debug_name") or
@@ -1698,6 +1699,7 @@ fn resolveFieldType(field_name: []const u8) ExprType {
     // String fields
     if (std.mem.eql(u8, field_name, "text") or
         std.mem.eql(u8, field_name, "image_src") or
+        std.mem.eql(u8, field_name, "video_src") or
         std.mem.eql(u8, field_name, "placeholder") or
         std.mem.eql(u8, field_name, "debug_name") or
         std.mem.eql(u8, field_name, "test_id") or

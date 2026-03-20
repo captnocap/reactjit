@@ -1,0 +1,32 @@
+import { Page, Header, Title, Subtitle, VideoContainer, Controls, Btn, BtnText, InfoRow, InfoLabel, InfoValue } from './video_test_cls';
+
+const [playing, setPlaying] = useState(0);
+
+function App() {
+  return (
+    <C.Page>
+      <C.Header>
+        <C.Title>Video Test</C.Title>
+        <C.Subtitle>libmpv OpenGL render API → wgpu</C.Subtitle>
+      </C.Header>
+
+      <C.VideoContainer>
+        <Video src="test.mp4" style={{ width: '100%', height: '100%' }} />
+      </C.VideoContainer>
+
+      <C.Controls>
+        <C.Btn onPress={() => { setPlaying(1) }}>
+          <C.BtnText>Play</C.BtnText>
+        </C.Btn>
+        <C.Btn onPress={() => { setPlaying(0) }}>
+          <C.BtnText>Pause</C.BtnText>
+        </C.Btn>
+
+        <C.InfoRow>
+          <C.InfoLabel>Status:</C.InfoLabel>
+          <C.InfoValue>{playing == 1 ? 'Playing' : 'Paused'}</C.InfoValue>
+        </C.InfoRow>
+      </C.Controls>
+    </C.Page>
+  );
+}

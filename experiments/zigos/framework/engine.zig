@@ -20,6 +20,7 @@ const tooltip = @import("tooltip.zig");
 const telemetry = @import("telemetry.zig");
 const devtools = @import("devtools.zig");
 const testharness = @import("testharness.zig");
+const videos = @import("videos.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -242,6 +243,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
     }
 
+    // Video frame — draw after background, before text
+    if (node.video_src) |src| {
+        _ = videos.paintVideo(src, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
     selection.paintHighlight(node, r.x, r.y);
 
     if (node.text) |t| {
@@ -397,6 +403,8 @@ pub fn run(config: AppConfig) !void {
     c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
 
     if (geometry.load() != null) geometry.blockSaves();
+
+    defer videos.deinit();
 
     // GPU init
     gpu.init(window) catch |err| {
@@ -658,6 +666,9 @@ pub fn run(config: AppConfig) !void {
 
         // Resolve deferred selection (safe — layout is done, FT mutations won't corrupt measurements)
         selection.resolvePending();
+
+        // Video update — poll mpv for new frames before paint
+        videos.update();
 
         // Cursor blink — update before paint so cursor state is fresh
         const now_tick = c.SDL_GetTicks();

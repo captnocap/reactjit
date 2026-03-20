@@ -144,6 +144,7 @@ pub const Node = struct {
     no_wrap: bool = false,
     code_language: CodeLanguage = .none,
     image_src: ?[]const u8 = null,
+    video_src: ?[]const u8 = null,
     input_id: ?u8 = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,

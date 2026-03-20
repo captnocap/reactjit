@@ -11,6 +11,7 @@ const c = @import("../c.zig").imports;
 const rects = @import("rects.zig");
 const text = @import("text.zig");
 const curves = @import("curves.zig");
+pub const images = @import("images.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Re-exports — callers use gpu.drawRect(), gpu.RectInstance, etc.
@@ -258,6 +259,7 @@ fn drainMemory() void {
     rects.drain(device, globals_buffer);
     text.drain(device, globals_buffer);
     curves.drain(device, globals_buffer);
+    images.drain(device, globals_buffer);
 
     // Force full redraw on next frame
     g_prev_frame_hash = 0;
@@ -345,11 +347,13 @@ pub fn init(window: *c.SDL_Window) !void {
     // Initialize pipelines
     rects.initPipeline(device, globals_buffer);
     curves.initPipeline(device, globals_buffer);
+    images.initPipeline(device, globals_buffer);
 
     std.debug.print("wgpu initialized: {d}x{d}\n", .{ g_width, g_height });
 }
 
 pub fn deinit() void {
+    images.deinit();
     curves.deinit();
     text.deinit();
     rects.deinit();
@@ -393,6 +397,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         rects.reset();
         text.reset();
         curves.reset();
+        images.reset();
         g_scissor_count = 0;
         g_scissor_depth = 0;
         return;
@@ -425,6 +430,9 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         text.upload(queue);
         curves.upload(queue);
     }
+
+    // Image quads always upload (video frames change independently of UI dirty state)
+    if (images.count() > 0) images.upload(queue);
 
     const encoder = device.createCommandEncoder(&.{}) orelse return;
 
@@ -496,6 +504,13 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
     }
 
+    // Image/video quads — drawn after rect/text/curve with full viewport scissor.
+    // Not scissor-segmented (v1 limitation — videos ignore overflow:hidden).
+    if (images.count() > 0) {
+        render_pass.setScissorRect(0, 0, g_width, g_height);
+        images.drawAll(render_pass);
+    }
+
     render_pass.end();
     render_pass.release();
 
@@ -514,6 +529,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     rects.reset();
     text.reset();
     curves.reset();
+    images.reset();
     g_scissor_count = 0;
     g_scissor_depth = 0;
 }
