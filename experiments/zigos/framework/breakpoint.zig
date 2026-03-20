@@ -18,19 +18,26 @@ pub const Breakpoint = enum(u8) {
 
 var current_bp: Breakpoint = .lg;
 var current_width: f32 = 1280;
+var dirty: bool = true; // start dirty so first frame applies bp styles
 
 /// Update breakpoint from window width. Call on resize.
 pub fn update(w: f32) void {
     current_width = w;
-    if (w >= 1440) {
-        current_bp = .xl;
-    } else if (w >= 1024) {
-        current_bp = .lg;
-    } else if (w >= 640) {
-        current_bp = .md;
-    } else {
-        current_bp = .sm;
+    const new_bp: Breakpoint = if (w >= 1440) .xl else if (w >= 1024) .lg else if (w >= 640) .md else .sm;
+    if (new_bp != current_bp) {
+        dirty = true;
     }
+    current_bp = new_bp;
+}
+
+/// Check if breakpoint changed since last clearDirty.
+pub fn isDirty() bool {
+    return dirty;
+}
+
+/// Clear dirty flag after applying bp styles.
+pub fn clearDirty() void {
+    dirty = false;
 }
 
 /// Get current breakpoint.

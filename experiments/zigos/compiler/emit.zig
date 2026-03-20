@@ -361,6 +361,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.has_routes) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const router = @import(\"{s}router.zig\");\n", .{prefix}));
     if (self.input_counter > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const input = @import(\"{s}input.zig\");\n", .{prefix}));
     if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
+    if (self.has_breakpoints) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const breakpoint = @import(\"{s}breakpoint.zig\");\n", .{prefix}));
     if (self.ffi_funcs.items.len > 0 or self.compute_js != null) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
 
     // FFI imports
@@ -373,13 +374,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
     try out.appendSlice(self.alloc, "\n");
 
-    // Variant style arrays — one array per classifier that has variants
+    // Variant style arrays — one array per classifier that has variants (no bp)
     if (self.variant_update_count > 0) {
         try out.appendSlice(self.alloc, "// ── Layout variant styles ───────────────────────────────────────\n");
         for (0..self.classifier_count) |ci| {
-            if (!self.classifier_has_variants[ci]) continue;
+            if (!self.classifier_has_variants[ci] or self.classifier_bp_idx[ci] != null) continue;
             const cls_name = self.classifier_names[ci];
-            const total_variants = @as(u32, self.variant_count) + 1; // +1 for base (slot 0)
+            const total_variants = @as(u32, self.variant_count) + 1;
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "const _cls_{s}_v = [_]Style{{ ", .{cls_name}));
             for (0..total_variants) |vi| {
@@ -389,7 +390,6 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         ".{{ {s} }}", .{vs}));
                 } else {
-                    // Fallback to base style if this variant is not defined for this classifier
                     const base = self.classifier_variant_styles[ci][0];
                     if (base.len > 0) {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -400,6 +400,71 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
             try out.appendSlice(self.alloc, " };\n");
+        }
+        try out.appendSlice(self.alloc, "\n");
+    }
+
+    // Breakpoint style arrays — [4]Style or [4][N]Style per classifier with bp:
+    // Breakpoint style arrays — [4]Style or [4][N]Style per classifier with bp:
+    if (self.has_breakpoints) {
+        try out.appendSlice(self.alloc, "// ── Breakpoint styles ───────────────────────────────────────────\n");
+        var bp_emitted_names: [codegen.MAX_BP_CLASSIFIERS][]const u8 = .{""} ** codegen.MAX_BP_CLASSIFIERS;
+        var bp_emitted_count: u32 = 0;
+        for (0..self.classifier_count) |ci| {
+            const bs_idx = self.classifier_bp_idx[ci] orelse continue;
+            const cls_name = self.classifier_names[ci];
+            // Dedup by name — same classifier imported from multiple files
+            var already = false;
+            for (0..bp_emitted_count) |ei| {
+                if (std.mem.eql(u8, bp_emitted_names[ei], cls_name)) { already = true; break; }
+            }
+            if (already) continue;
+            if (bp_emitted_count < codegen.MAX_BP_CLASSIFIERS) {
+                bp_emitted_names[bp_emitted_count] = cls_name;
+                bp_emitted_count += 1;
+            }
+            const has_any_variants = self.classifier_has_variants[ci] or
+                self.bp_has_variants[bs_idx][0] or self.bp_has_variants[bs_idx][1] or
+                self.bp_has_variants[bs_idx][2] or self.bp_has_variants[bs_idx][3];
+
+            if (has_any_variants) {
+                const total_variants = @as(u32, self.variant_count) + 1;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "const _cls_{s}_bp = [4][{d}]Style{{ ", .{ cls_name, total_variants }));
+                for (0..4) |ti| {
+                    if (ti > 0) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, ".{ ");
+                    for (0..total_variants) |vi| {
+                        if (vi > 0) try out.appendSlice(self.alloc, ", ");
+                        const vs = self.bp_variant_styles[bs_idx][ti][vi];
+                        if (vs.len > 0) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{vs}));
+                        } else {
+                            const base = self.bp_styles[bs_idx][ti];
+                            if (base.len > 0) {
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{base}));
+                            } else {
+                                try out.appendSlice(self.alloc, ".{}");
+                            }
+                        }
+                    }
+                    try out.appendSlice(self.alloc, " }");
+                }
+                try out.appendSlice(self.alloc, " };\n");
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "const _cls_{s}_bp = [4]Style{{ ", .{cls_name}));
+                for (0..4) |ti| {
+                    if (ti > 0) try out.appendSlice(self.alloc, ", ");
+                    const bps = self.bp_styles[bs_idx][ti];
+                    if (bps.len > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{bps}));
+                    } else {
+                        try out.appendSlice(self.alloc, ".{}");
+                    }
+                }
+                try out.appendSlice(self.alloc, " };\n");
+            }
         }
         try out.appendSlice(self.alloc, "\n");
     }
@@ -864,14 +929,30 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             }
         }
     }
-    // Variant style assignments — swap entire style block based on active variant
+    // Variant/breakpoint style assignments — swap entire style block each frame
     for (0..self.variant_update_count) |vi| {
         const vu = &self.variant_updates[vi];
         if (vu.arr_name.len == 0) continue;
         const cls_name = self.classifier_names[vu.classifier_idx];
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    {s}[{d}].style = _cls_{s}_v[Theme.activeVariant()];\n",
-            .{ vu.arr_name, vu.arr_index, cls_name }));
+        const has_bp = self.classifier_bp_idx[vu.classifier_idx] != null;
+        const has_variants = self.classifier_has_variants[vu.classifier_idx];
+
+        if (has_bp and has_variants) {
+            // 2D: breakpoint × variant
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].style = _cls_{s}_bp[@intFromEnum(breakpoint.current())][Theme.activeVariant()];\n",
+                .{ vu.arr_name, vu.arr_index, cls_name }));
+        } else if (has_bp) {
+            // 1D: breakpoint only
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].style = _cls_{s}_bp[@intFromEnum(breakpoint.current())];\n",
+                .{ vu.arr_name, vu.arr_index, cls_name }));
+        } else {
+            // 1D: variant only
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].style = _cls_{s}_v[Theme.activeVariant()];\n",
+                .{ vu.arr_name, vu.arr_index, cls_name }));
+        }
     }
     try out.appendSlice(self.alloc, "}\n\n");
 
@@ -1094,6 +1175,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     if (self.has_routes) {
         try out.appendSlice(self.alloc, "    if (router.isDirty()) { updateRoutes(); router.clearDirty(); }\n");
+    }
+    if (self.has_breakpoints) {
+        try out.appendSlice(self.alloc, "    if (breakpoint.isDirty()) { _updateDynamicTexts(); breakpoint.clearDirty(); }\n");
     }
 
     // Frame effects — run every tick

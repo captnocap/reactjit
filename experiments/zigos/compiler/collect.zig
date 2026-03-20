@@ -219,6 +219,99 @@ pub fn collectClassifiers(self: *Generator) void {
                                         if (self.curKind() == .comma) self.advance_token();
                                     }
                                     if (self.curKind() == .rbrace) self.advance_token();
+                                } else if (std.mem.eql(u8, field, "bp")) {
+                                    // bp: { sm: { style: {}, variants: {} }, md: {}, ... }
+                                    // Allocate a bp slot for this classifier
+                                    const cls_idx = self.classifier_count;
+                                    var bp_slot: ?u8 = self.classifier_bp_idx[cls_idx];
+                                    if (bp_slot == null and self.bp_count < codegen.MAX_BP_CLASSIFIERS) {
+                                        bp_slot = self.bp_count;
+                                        self.classifier_bp_idx[cls_idx] = bp_slot;
+                                        self.bp_count += 1;
+                                    }
+                                    if (self.curKind() == .lbrace) self.advance_token();
+                                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                        if (self.curKind() == .identifier) {
+                                            const tier_name = self.curText();
+                                            const tier_idx: ?u8 = if (std.mem.eql(u8, tier_name, "sm")) 0
+                                                else if (std.mem.eql(u8, tier_name, "md")) 1
+                                                else if (std.mem.eql(u8, tier_name, "lg")) 2
+                                                else if (std.mem.eql(u8, tier_name, "xl")) 3
+                                                else null;
+                                            self.advance_token();
+                                            if (self.curKind() == .colon) self.advance_token();
+                                            if (tier_idx) |ti| {
+                                                if (self.curKind() == .lbrace) {
+                                                    self.advance_token();
+                                                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                                        if (self.curKind() == .identifier) {
+                                                            const bf = self.curText();
+                                                            self.advance_token();
+                                                            if (self.curKind() == .colon) self.advance_token();
+                                                            if (std.mem.eql(u8, bf, "style")) {
+                                                                const bp_style = attrs.parseStyleAttr(self) catch "";
+                                                                if (bp_slot) |bs| {
+                                                                    self.bp_styles[bs][ti] = bp_style;
+                                                                    self.has_breakpoints = true;
+                                                                }
+                                                            } else if (std.mem.eql(u8, bf, "variants")) {
+                                                                if (self.curKind() == .lbrace) self.advance_token();
+                                                                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                                                    if (self.curKind() == .identifier) {
+                                                                        const bvname = self.curText();
+                                                                        const bvidx = self.findOrAddVariant(bvname);
+                                                                        self.advance_token();
+                                                                        if (self.curKind() == .colon) self.advance_token();
+                                                                        if (self.curKind() == .lbrace) {
+                                                                            self.advance_token();
+                                                                            while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                                                                if (self.curKind() == .identifier) {
+                                                                                    const bvf = self.curText();
+                                                                                    self.advance_token();
+                                                                                    if (self.curKind() == .colon) self.advance_token();
+                                                                                    if (std.mem.eql(u8, bvf, "style")) {
+                                                                                        const bv_style = attrs.parseStyleAttr(self) catch "";
+                                                                                        if (bp_slot) |bs| {
+                                                                                            if (bvidx > 0 and bvidx < codegen.MAX_VARIANTS) {
+                                                                                                self.bp_variant_styles[bs][ti][bvidx] = bv_style;
+                                                                                                self.bp_has_variants[bs][ti] = true;
+                                                                                            }
+                                                                                        }
+                                                                                    } else {
+                                                                                        self.advance_token();
+                                                                                    }
+                                                                                } else {
+                                                                                    self.advance_token();
+                                                                                }
+                                                                                if (self.curKind() == .comma) self.advance_token();
+                                                                            }
+                                                                            if (self.curKind() == .rbrace) self.advance_token();
+                                                                        }
+                                                                    } else {
+                                                                        self.advance_token();
+                                                                    }
+                                                                    if (self.curKind() == .comma) self.advance_token();
+                                                                }
+                                                                if (self.curKind() == .rbrace) self.advance_token();
+                                                            } else {
+                                                                self.advance_token();
+                                                            }
+                                                        } else {
+                                                            self.advance_token();
+                                                        }
+                                                        if (self.curKind() == .comma) self.advance_token();
+                                                    }
+                                                    if (self.curKind() == .rbrace) self.advance_token();
+                                                }
+                                            } else {
+                                                self.advance_token();
+                                            }
+                                        } else {
+                                            self.advance_token();
+                                        }
+                                        if (self.curKind() == .comma) self.advance_token();
+                                    }
+                                    if (self.curKind() == .rbrace) self.advance_token();
                                 } else {
                                     self.advance_token();
                                 }
@@ -240,6 +333,28 @@ pub fn collectClassifiers(self: *Generator) void {
                                 self.classifier_variant_styles[idx][0] = style_str;
                                 self.classifier_variant_text_props[idx][0] = text_props;
                                 self.has_theme = true; // variants need Theme import for activeVariant()
+                            }
+                            // Fill breakpoint tier fallbacks: unspecified tiers use base style
+                            if (self.classifier_bp_idx[idx]) |bs| {
+                                for (0..4) |ti| {
+                                    if (self.bp_styles[bs][ti].len == 0) {
+                                        self.bp_styles[bs][ti] = style_str;
+                                    }
+                                    // Copy base variant styles into tiers that don't define their own
+                                    if (!self.bp_has_variants[bs][ti] and self.classifier_has_variants[idx]) {
+                                        for (0..codegen.MAX_VARIANTS) |vi| {
+                                            if (self.classifier_variant_styles[idx][vi].len > 0) {
+                                                self.bp_variant_styles[bs][ti][vi] = self.classifier_variant_styles[idx][vi];
+                                            }
+                                        }
+                                        self.bp_has_variants[bs][ti] = true;
+                                    }
+                                    // Slot 0 of each tier's variants is the tier's base style
+                                    if (self.bp_has_variants[bs][ti]) {
+                                        self.bp_variant_styles[bs][ti][0] = self.bp_styles[bs][ti];
+                                    }
+                                }
+                                self.has_theme = true;
                             }
                             self.classifier_count += 1;
                         }

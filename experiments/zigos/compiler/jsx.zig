@@ -947,9 +947,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    // Register variant update for variant classifiers
+    // Register variant update for variant/breakpoint classifiers
     if (classifier_idx) |idx| {
-        if (self.classifier_has_variants[idx]) {
+        if (self.classifier_has_variants[idx] or self.classifier_bp_idx[idx] != null) {
             const vu_idx = self.variant_update_count;
             if (vu_idx < MAX_DYN_STYLES) {
                 self.variant_updates[vu_idx] = .{

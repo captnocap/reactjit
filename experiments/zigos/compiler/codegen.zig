@@ -68,6 +68,7 @@ pub const MAX_UTIL_FUNCS = 32;
 pub const MAX_UTIL_PARAMS = 16;
 pub const MAX_LET_VARS = 32;
 pub const MAX_VARIANTS = 8;
+pub const MAX_BP_CLASSIFIERS = 64; // max classifiers with bp: overrides
 pub const MAX_MAPS = 32;
 pub const MAX_MAP_INNER = 16;
 pub const MAX_COMPUTED_ARRAYS = 16;
@@ -363,6 +364,15 @@ pub const Generator = struct {
     variant_names: [MAX_VARIANTS][]const u8,
     variant_count: u8,
 
+    // Breakpoints (classifier bp: {} blocks) — 4 tiers: sm=0, md=1, lg=2, xl=3
+    // Indirection: classifier_bp_idx maps classifier index → bp slot (null = no bp)
+    classifier_bp_idx: [MAX_CLASSIFIERS]?u8,
+    bp_styles: [MAX_BP_CLASSIFIERS][4][]const u8,
+    bp_variant_styles: [MAX_BP_CLASSIFIERS][4][MAX_VARIANTS][]const u8,
+    bp_has_variants: [MAX_BP_CLASSIFIERS][4]bool,
+    bp_count: u8,
+    has_breakpoints: bool,
+
     // Variant update entries (emitted in _updateDynamicTexts)
     variant_updates: [MAX_DYN_STYLES]VariantUpdate,
     variant_update_count: u32,
@@ -611,6 +621,12 @@ pub const Generator = struct {
             .classifier_variant_text_props = .{.{""} ** MAX_VARIANTS} ** MAX_CLASSIFIERS,
             .variant_names = .{""} ** MAX_VARIANTS,
             .variant_count = 0,
+            .classifier_bp_idx = .{null} ** MAX_CLASSIFIERS,
+            .bp_styles = .{.{""} ** 4} ** MAX_BP_CLASSIFIERS,
+            .bp_variant_styles = .{.{.{""} ** MAX_VARIANTS} ** 4} ** MAX_BP_CLASSIFIERS,
+            .bp_has_variants = .{.{false} ** 4} ** MAX_BP_CLASSIFIERS,
+            .bp_count = 0,
+            .has_breakpoints = false,
             .variant_updates = undefined,
             .variant_update_count = 0,
             .ffi_headers = .{},
