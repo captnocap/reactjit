@@ -21,6 +21,7 @@ const telemetry = @import("telemetry.zig");
 const devtools = @import("devtools.zig");
 const testharness = @import("testharness.zig");
 const videos = @import("videos.zig");
+const filedrop = @import("filedrop.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -404,6 +405,7 @@ pub fn run(config: AppConfig) !void {
 
     if (geometry.load() != null) geometry.blockSaves();
 
+    videos.init();
     defer videos.deinit();
 
     // GPU init
@@ -634,9 +636,7 @@ pub fn run(config: AppConfig) !void {
                 },
                 c.SDL_DROPFILE => {
                     if (event.drop.file) |file_ptr| {
-                        std.debug.print("[engine] file dropped: {s}\n", .{std.mem.span(file_ptr)});
-                        videos.handleFileDrop(file_ptr);
-                        videos.patchTreeForDrop(config.root);
+                        filedrop.dispatch(std.mem.span(file_ptr), config.root);
                         c.SDL_free(file_ptr);
                     }
                 },

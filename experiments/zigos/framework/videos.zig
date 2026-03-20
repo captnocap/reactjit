@@ -949,48 +949,46 @@ pub fn deinit() void {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// File drop — replace all active video sources with the dropped file
+// File drop subscriber — registered via the generic filedrop system
 // ════════════════════════════════════════════════════════════════════════
 
-/// Static buffer for the dropped file path (persists across frames).
-var drop_path_buf: [4096]u8 = undefined;
-var drop_path: ?[]const u8 = null;
+const filedrop = @import("filedrop.zig");
+const Node = @import("layout.zig").Node;
 
-/// Handle a file drop event. Destroys all current videos and loads the
-/// dropped file. Also rewrites video_src on all Video nodes in the tree
-/// so the paint phase picks up the new source.
-pub fn handleFileDrop(path: [*:0]const u8) void {
-    const path_slice = std.mem.span(path);
-    if (path_slice.len == 0 or path_slice.len >= drop_path_buf.len) return;
+/// Subscribe to file drop events. Called once at engine startup.
+pub fn init() void {
+    filedrop.subscribe(&onFileDrop);
+}
 
-    // Copy path to persistent buffer
-    @memcpy(drop_path_buf[0..path_slice.len], path_slice);
-    drop_path = drop_path_buf[0..path_slice.len];
+/// File drop handler — loads dropped file as video, auto-plays.
+/// If libmpv isn't loaded yet, loadLibrary() is called on demand.
+fn onFileDrop(path: []const u8, root: *Node) void {
+    if (!loadLibrary()) return;
 
-    std.debug.print("[videos] file drop: {s}\n", .{path_slice});
+    std.debug.print("[videos] file drop: {s}\n", .{path});
 
     // Destroy all existing videos and load the new one
     clearCache();
-    loadVideo(drop_path.?);
+    loadVideo(path);
 
-    // Auto-play the dropped file
-    if (findEntry(drop_path.?)) |e| {
+    // Auto-play
+    if (findEntry(path)) |e| {
         if (e.handle) |h| {
             _ = mpv_fns.set_property_string(h, "pause", "no");
             e.paused = false;
         }
     }
+
+    // Rewrite video_src on all Video nodes so paint picks up the new source
+    patchVideoNodes(root, path);
 }
 
-/// Rewrite video_src on all Video nodes in the tree to the dropped path.
-/// Called from the engine before paint so the node tree reflects the drop.
-pub fn patchTreeForDrop(node: *@import("layout.zig").Node) void {
-    const dp = drop_path orelse return;
+fn patchVideoNodes(node: *Node, path: []const u8) void {
     if (node.video_src != null) {
-        node.video_src = dp;
+        node.video_src = path;
     }
     for (node.children) |*child| {
-        patchTreeForDrop(child);
+        patchVideoNodes(child, path);
     }
 }
 
