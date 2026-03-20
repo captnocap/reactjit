@@ -22,9 +22,13 @@ pub fn main() !void {
         runCheck(alloc, args);
         return;
     }
+    if (args.len >= 2 and std.mem.eql(u8, args[1], "test")) {
+        runTest(alloc, args);
+        return;
+    }
 
     if (args.len < 3) {
-        std.debug.print("Usage: zigos-compiler build|check [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: zigos-compiler build|check|test [--strict] <file.tsz>\n", .{});
         return;
     }
 
@@ -485,5 +489,108 @@ fn runCheck(alloc: std.mem.Allocator, args: []const []const u8) void {
         std.debug.print("PREFLIGHT:STATUS:ERROR\n", .{});
     } else {
         std.debug.print("PREFLIGHT:STATUS:OK\n", .{});
+    }
+}
+
+// ── Test subcommand ─────────────────────────────────────────────────────
+//
+// zigos-compiler test <app.tsz>
+//
+// Compiles the app, builds the binary, then runs it with ZIGOS_TEST=1.
+// The engine enables the test harness, which runs registered tests after
+// the first rendered frame and exits with 0 (all pass) or 1 (any fail).
+
+fn runTest(alloc: std.mem.Allocator, args: []const []const u8) void {
+    if (args.len < 3) {
+        std.debug.print("Usage: zigos-compiler test <file.tsz>\n", .{});
+        return;
+    }
+
+    const input_path = args[2];
+
+    // Step 1: Read and compile the .tsz source
+    const source = std.fs.cwd().readFileAlloc(alloc, input_path, 4 * 1024 * 1024) catch |err| {
+        std.debug.print("[test] Error reading {s}: {any}\n", .{ input_path, err });
+        return;
+    };
+    defer alloc.free(source);
+
+    const final_source = buildMergedSource(alloc, input_path, source);
+    const script_js = loadScriptImports(alloc, input_path, source);
+
+    var lex = lexer_mod.Lexer.init(final_source);
+    lex.tokenize();
+
+    var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
+    if (script_js) |js| gen.compute_js = js;
+    const zig_source = gen.generate() catch |err| {
+        std.debug.print("[test] Compile error: {}\n", .{err});
+        gen.printDiagnosticSummary();
+        return;
+    };
+    gen.printDiagnosticSummary();
+    if (gen.compile_error != null) return;
+
+    // Write generated_app.zig
+    const out_path = "generated_app.zig";
+    {
+        const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+            std.debug.print("[test] Error creating {s}: {any}\n", .{ out_path, err });
+            return;
+        };
+        defer f.close();
+        f.writeAll(zig_source) catch return;
+    }
+
+    // Step 2: Build the binary
+    const basename = std.fs.path.basename(input_path);
+    const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
+    const app_name = basename[0..dot_pos];
+    const app_name_opt = std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name}) catch return;
+
+    std.debug.print("[test] Building {s}...\n", .{app_name});
+    var build_child = std.process.Child.init(
+        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+        alloc,
+    );
+    build_child.stderr_behavior = .Inherit;
+    build_child.stdout_behavior = .Inherit;
+    const build_term = build_child.spawnAndWait() catch |err| {
+        std.debug.print("[test] Build failed to spawn: {}\n", .{err});
+        return;
+    };
+    if (build_term.Exited != 0) {
+        std.debug.print("[test] Build failed (exit {d})\n", .{build_term.Exited});
+        return;
+    }
+
+    // Step 3: Run with ZIGOS_TEST=1
+    const bin_path = std.fmt.allocPrint(alloc, "zig-out/bin/{s}", .{app_name}) catch return;
+    std.debug.print("[test] Running {s} with ZIGOS_TEST=1...\n", .{bin_path});
+
+    var run_child = std.process.Child.init(&.{bin_path}, alloc);
+    run_child.stderr_behavior = .Inherit;
+    run_child.stdout_behavior = .Inherit;
+    // Set ZIGOS_TEST=1 in the environment
+    var env_map = std.process.EnvMap.init(alloc);
+    // Copy current env
+    if (std.process.getEnvMap(alloc)) |*current| {
+        var it = current.iterator();
+        while (it.next()) |entry| {
+            env_map.put(entry.key_ptr.*, entry.value_ptr.*) catch {};
+        }
+    } else |_| {}
+    env_map.put("ZIGOS_TEST", "1") catch {};
+    run_child.env_map = &env_map;
+
+    const run_term = run_child.spawnAndWait() catch |err| {
+        std.debug.print("[test] Failed to run: {}\n", .{err});
+        return;
+    };
+
+    if (run_term.Exited == 0) {
+        std.debug.print("[test] ALL TESTS PASSED\n", .{});
+    } else {
+        std.debug.print("[test] TESTS FAILED (exit {d})\n", .{run_term.Exited});
     }
 }

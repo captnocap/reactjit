@@ -19,6 +19,7 @@ const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
 const telemetry = @import("telemetry.zig");
 const devtools = @import("devtools.zig");
+const testharness = @import("testharness.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -428,6 +429,9 @@ pub fn run(config: AppConfig) !void {
     // App init (FFI registration, initial state)
     if (config.init) |initFn| initFn();
 
+    // Test harness — enable if ZIGOS_TEST=1
+    if (testharness.envEnabled()) testharness.enable();
+
     // Run embedded JS
     if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
 
@@ -679,6 +683,12 @@ pub fn run(config: AppConfig) !void {
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
 
         gpu.frame(0.051, 0.067, 0.090);
+
+        // Test harness — run tests after layout+paint, then exit
+        if (testharness.tick()) {
+            const exit_code = testharness.runAll(config.root);
+            std.process.exit(exit_code);
+        }
 
         // Unified telemetry snapshot
         const t6 = std.time.microTimestamp();
