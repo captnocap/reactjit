@@ -1,0 +1,65 @@
+import { Term, TermInner, Row, Cell } from './pty_cls';
+import { pty } from './pty.script';
+
+// ── Terminal grid state — 24 rows ───────────────────────────────
+const [row0, setRow0] = useState('');
+const [row1, setRow1] = useState('');
+const [row2, setRow2] = useState('');
+const [row3, setRow3] = useState('');
+const [row4, setRow4] = useState('');
+const [row5, setRow5] = useState('');
+const [row6, setRow6] = useState('');
+const [row7, setRow7] = useState('');
+const [row8, setRow8] = useState('');
+const [row9, setRow9] = useState('');
+const [row10, setRow10] = useState('');
+const [row11, setRow11] = useState('');
+const [row12, setRow12] = useState('');
+const [row13, setRow13] = useState('');
+const [row14, setRow14] = useState('');
+const [row15, setRow15] = useState('');
+const [row16, setRow16] = useState('');
+const [row17, setRow17] = useState('');
+const [row18, setRow18] = useState('');
+const [row19, setRow19] = useState('');
+const [row20, setRow20] = useState('');
+const [row21, setRow21] = useState('');
+const [row22, setRow22] = useState('');
+const [row23, setRow23] = useState('');
+
+// ── Cursor position (tracked by script, used to show cursor box) ─
+const [ptyCol, setPtyCol] = useState(0);
+const [ptyRow, setPtyRow] = useState(0);
+
+function App() {
+  return (
+    <C.Term>
+      <C.TermInner>
+        <C.Row><C.Cell>{row0}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row1}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row2}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row3}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row4}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row5}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row6}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row7}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row8}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row9}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row10}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row11}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row12}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row13}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row14}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row15}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row16}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row17}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row18}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row19}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row20}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row21}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row22}</C.Cell></C.Row>
+        <C.Row><C.Cell>{row23}</C.Cell></C.Row>
+      </C.TermInner>
+    </C.Term>
+  );
+}

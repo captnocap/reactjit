@@ -24,6 +24,7 @@ const videos = @import("videos.zig");
 const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 const capture = @import("capture.zig");
+const effects = @import("effects.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -256,6 +257,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
         _ = render_surfaces.paintSurface(src, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
+    // Effect — generative visual (spirograph, rings, etc.)
+    if (node.effect_type) |etype| {
+        _ = effects.paintEffect(etype, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
     selection.paintHighlight(node, r.x, r.y);
 
     if (node.text) |t| {
@@ -420,6 +426,9 @@ pub fn run(config: AppConfig) !void {
 
     capture.init();
     defer capture.deinit();
+
+    effects.init();
+    defer effects.deinit();
 
     // GPU init
     gpu.init(window) catch |err| {
@@ -617,6 +626,11 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_TEXTINPUT => {
+                    // PTY gets text first when active
+                    if (qjs_runtime.ptyActive()) {
+                        qjs_runtime.ptyHandleTextInput(@ptrCast(&event.text.text));
+                        continue;
+                    }
                     // Render surface text input forwarding
                     if (render_surfaces.handleTextInput(@ptrCast(&event.text.text))) continue;
                     input.handleTextInput(@ptrCast(&event.text.text));
@@ -626,6 +640,11 @@ pub fn run(config: AppConfig) !void {
                     const mod = event.key.keysym.mod;
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
+                    // PTY special key routing (arrows, enter, backspace, ctrl combos)
+                    if (qjs_runtime.ptyActive() and sym != c.SDLK_F12) {
+                        qjs_runtime.ptyHandleKeyDown(sym, mod);
+                        continue;
+                    }
                     // Render surface key forwarding (before F12 check so F12 still works)
                     if (sym != c.SDLK_F12 and render_surfaces.handleKeyDown(sym)) continue;
                     // F12: toggle devtools
@@ -728,7 +747,11 @@ pub fn run(config: AppConfig) !void {
         const now_tick = c.SDL_GetTicks();
         const dt_ms = now_tick -% g_prev_tick;
         g_prev_tick = now_tick;
-        g_cursor_visible = input.tickBlink(@as(f32, @floatFromInt(dt_ms)) / 1000.0);
+        const dt_sec = @as(f32, @floatFromInt(dt_ms)) / 1000.0;
+        g_cursor_visible = input.tickBlink(dt_sec);
+
+        // Effects update — animate and render all effect instances
+        effects.update(dt_sec);
 
         // Paint (main window — wgpu)
         selection.resetWalkState();

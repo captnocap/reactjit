@@ -8,6 +8,7 @@ const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const state = @import("state.zig");
+const pty_mod = @import("pty.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;
@@ -24,6 +25,9 @@ const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };
 var g_qjs_rt: ?*qjs.JSRuntime = null;
 var g_qjs_ctx: ?*qjs.JSContext = null;
 var g_text_engine: ?*TextEngine = null;
+
+// ── PTY singleton ────────────────────────────────────────────────
+var g_pty: ?pty_mod.Pty = null;
 
 // ── Telemetry (written by the main loop, read by JS host functions) ──
 pub var telemetry_fps: u32 = 0;
@@ -93,6 +97,76 @@ fn hostSetComputeN(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]
     _ = qjs.JS_ToInt32(ctx, &n, argv[0]);
     const setter = @extern(*const fn (c_long) callconv(.c) void, .{ .name = "set_compute_n" });
     setter(@intCast(n));
+    return QJS_UNDEFINED;
+}
+
+fn hostGetActiveNode(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    if (canvas_mod.getActiveNode()) |idx| {
+        return qjs.JS_NewFloat64(null, @floatFromInt(idx));
+    }
+    return qjs.JS_NewFloat64(null, -1);
+}
+
+fn hostGetSelectedNode(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    if (canvas_mod.getSelectedNode()) |idx| {
+        return qjs.JS_NewFloat64(null, @floatFromInt(idx));
+    }
+    return qjs.JS_NewFloat64(null, -1);
+}
+
+fn hostGetInputText(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const input_mod = @import("input.zig");
+    if (argc < 1) return qjs.JS_NewString(ctx, "");
+    var id: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &id, argv[0]);
+    const text = input_mod.getText(@intCast(@max(0, id)));
+    if (text.len == 0) return qjs.JS_NewString(ctx, "");
+    // Need null-terminated string for JS
+    return qjs.JS_NewStringLen(ctx, text.ptr, @intCast(text.len));
+}
+
+fn hostSetNodeDim(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    if (argc < 2) return QJS_UNDEFINED;
+    var idx: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &idx, argv[0]);
+    var opacity_f64: f64 = 1.0;
+    _ = qjs.JS_ToFloat64(ctx, &opacity_f64, argv[1]);
+    canvas_mod.setNodeDim(@intCast(@max(0, idx)), @floatCast(opacity_f64));
+    return QJS_UNDEFINED;
+}
+
+fn hostResetNodeDim(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    canvas_mod.resetNodeDim();
+    return QJS_UNDEFINED;
+}
+
+fn hostSetPathFlow(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    if (argc < 2) return QJS_UNDEFINED;
+    var idx: i32 = 0;
+    var enabled: i32 = 1;
+    _ = qjs.JS_ToInt32(ctx, &idx, argv[0]);
+    _ = qjs.JS_ToInt32(ctx, &enabled, argv[1]);
+    canvas_mod.setFlowOverride(@intCast(@max(0, idx)), enabled != 0);
+    return QJS_UNDEFINED;
+}
+
+fn hostResetPathFlow(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const canvas_mod = @import("canvas.zig");
+    canvas_mod.resetFlowOverride();
+    return QJS_UNDEFINED;
+}
+
+fn hostSetFlowEnabled(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const svg_path = @import("svg_path.zig");
+    if (argc < 1) return QJS_UNDEFINED;
+    var val: i32 = 2;
+    _ = qjs.JS_ToInt32(ctx, &val, argv[0]);
+    svg_path.setFlowMode(@intCast(@max(0, @min(2, val))));
     return QJS_UNDEFINED;
 }
 
@@ -466,6 +540,116 @@ const polyfill =
     \\};
 ;
 
+// ── PTY host functions ───────────────────────────────────────────
+
+fn hostPtyOpen(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_pty != null) return qjs.JS_NewFloat64(null, 0);
+    var cols: u16 = 80;
+    var rows: u16 = 24;
+    if (argc >= 1) {
+        var v: i32 = 0;
+        _ = qjs.JS_ToInt32(ctx, &v, argv[0]);
+        if (v > 0) cols = @intCast(v);
+    }
+    if (argc >= 2) {
+        var v: i32 = 0;
+        _ = qjs.JS_ToInt32(ctx, &v, argv[1]);
+        if (v > 0) rows = @intCast(v);
+    }
+    g_pty = pty_mod.openPty(.{ .cols = cols, .rows = rows }) catch {
+        return qjs.JS_NewFloat64(null, -1);
+    };
+    return qjs.JS_NewFloat64(null, 0);
+}
+
+fn hostPtyRead(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_pty) |*p| {
+        if (p.readData()) |data| {
+            return qjs.JS_NewStringLen(ctx, data.ptr, @intCast(data.len));
+        }
+    }
+    return QJS_UNDEFINED;
+}
+
+fn hostPtyWrite(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    if (g_pty) |*p| {
+        const str = qjs.JS_ToCString(ctx, argv[0]);
+        if (str == null) return QJS_UNDEFINED;
+        defer qjs.JS_FreeCString(ctx, str);
+        _ = p.writeData(std.mem.span(str));
+    }
+    return QJS_UNDEFINED;
+}
+
+fn hostPtyAlive(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_pty) |*p| {
+        return qjs.JS_NewFloat64(null, if (p.alive()) @as(f64, 1) else 0);
+    }
+    return qjs.JS_NewFloat64(null, 0);
+}
+
+// ── PTY key routing — called from engine event loop ─────────────
+
+/// Returns true if a PTY is active and should consume keyboard input.
+pub fn ptyActive() bool {
+    if (g_pty) |*p| return p.alive();
+    return false;
+}
+
+/// Forward SDL_TEXTINPUT text to the PTY (printable chars, already UTF-8).
+pub fn ptyHandleTextInput(text: [*:0]const u8) void {
+    if (g_pty) |*p| {
+        _ = p.writeData(std.mem.span(text));
+    }
+}
+
+/// Translate an SDL keysym to a terminal escape sequence and write to PTY.
+/// SDL constants are included via the c.zig import in engine.zig, so we
+/// accept the raw i32 sym and u16 mod values directly.
+pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
+    const SDLK_RETURN    = 13;
+    const SDLK_BACKSPACE = 8;
+    const SDLK_DELETE    = 127;
+    const SDLK_TAB       = 9;
+    const SDLK_UP        = 0x40000052;
+    const SDLK_DOWN      = 0x40000051;
+    const SDLK_RIGHT     = 0x4000004f;
+    const SDLK_LEFT      = 0x40000050;
+    const SDLK_HOME      = 0x4000004a;
+    const SDLK_END       = 0x4000004d;
+    const SDLK_PAGEUP    = 0x4000004b;
+    const SDLK_PAGEDOWN  = 0x4000004e;
+    const KMOD_CTRL: u16 = 0x00c0;
+
+    const ctrl = (mod & KMOD_CTRL) != 0;
+
+    if (g_pty) |*p| {
+        if (ctrl and sym >= 'a' and sym <= 'z') {
+            // Ctrl+letter → \x01..\x1a
+            const seq = [1]u8{ @intCast(sym - 'a' + 1) };
+            _ = p.writeData(&seq);
+            return;
+        }
+        const seq: []const u8 = switch (sym) {
+            SDLK_RETURN    => "\r",
+            SDLK_BACKSPACE => "\x7f",
+            SDLK_DELETE    => "\x1b[3~",
+            SDLK_TAB       => "\t",
+            SDLK_UP        => "\x1b[A",
+            SDLK_DOWN      => "\x1b[B",
+            SDLK_RIGHT     => "\x1b[C",
+            SDLK_LEFT      => "\x1b[D",
+            SDLK_HOME      => "\x1b[H",
+            SDLK_END       => "\x1b[F",
+            SDLK_PAGEUP    => "\x1b[5~",
+            SDLK_PAGEDOWN  => "\x1b[6~",
+            else           => return,
+        };
+        _ = p.writeData(seq);
+    }
+}
+
 // ── QuickJS lifecycle ───────────────────────────────────────────
 
 pub fn initVM() void {
@@ -492,6 +676,20 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));
 
+    // Canvas active/selected node
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getActiveNode", qjs.JS_NewCFunction(ctx, hostGetActiveNode, "getActiveNode", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getSelectedNode", qjs.JS_NewCFunction(ctx, hostGetSelectedNode, "getSelectedNode", 0));
+    // Flow animation control
+    _ = qjs.JS_SetPropertyStr(ctx, global, "setFlowEnabled", qjs.JS_NewCFunction(ctx, hostSetFlowEnabled, "setFlowEnabled", 1));
+    // Input text access
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getInputText", qjs.JS_NewCFunction(ctx, hostGetInputText, "getInputText", 1));
+    // Node dim/highlight (filter system)
+    _ = qjs.JS_SetPropertyStr(ctx, global, "setNodeDim", qjs.JS_NewCFunction(ctx, hostSetNodeDim, "setNodeDim", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "resetNodeDim", qjs.JS_NewCFunction(ctx, hostResetNodeDim, "resetNodeDim", 0));
+    // Per-path flow override (hover mode)
+    _ = qjs.JS_SetPropertyStr(ctx, global, "setPathFlow", qjs.JS_NewCFunction(ctx, hostSetPathFlow, "setPathFlow", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "resetPathFlow", qjs.JS_NewCFunction(ctx, hostResetPathFlow, "resetPathFlow", 0));
+
     // Telemetry host functions — unified snapshot access
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_frame", qjs.JS_NewCFunction(ctx, hostTelFrame, "__tel_frame", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_gpu", qjs.JS_NewCFunction(ctx, hostTelGpu, "__tel_gpu", 0));
@@ -507,6 +705,12 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node", qjs.JS_NewCFunction(ctx, hostTelNode, "__tel_node", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_style", qjs.JS_NewCFunction(ctx, hostTelNodeStyle, "__tel_node_style", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_box_model", qjs.JS_NewCFunction(ctx, hostTelNodeBoxModel, "__tel_node_box_model", 1));
+
+    // PTY host functions
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_open", qjs.JS_NewCFunction(ctx, hostPtyOpen, "__pty_open", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_read", qjs.JS_NewCFunction(ctx, hostPtyRead, "__pty_read", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_write", qjs.JS_NewCFunction(ctx, hostPtyWrite, "__pty_write", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 0));
 
     const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, val);
@@ -539,6 +743,37 @@ pub fn evalScript(js_logic: []const u8) void {
             qjs.JS_FreeValue(ctx, exc);
         }
         qjs.JS_FreeValue(ctx, val);
+    }
+}
+
+/// Call a global JS function by name (no arguments). Used by Zig event handlers
+/// to invoke functions defined in <script> blocks.
+pub fn callGlobal(name: [*:0]const u8) void {
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            const r = qjs.JS_Call(ctx, func, global, 0, null);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with one string argument.
+pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [1]qjs.JSValue{qjs.JS_NewString(ctx, arg)};
+            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, r);
+        }
     }
 }
 
