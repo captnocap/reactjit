@@ -1,13 +1,11 @@
-import { Page, Header, Title, Subtitle, VideoContainer, Controls, Btn, BtnText, InfoRow, InfoLabel, InfoValue } from './video_test_cls';
-
-const [playing, setPlaying] = useState(0);
+import { Page, Header, Title, Subtitle, VideoContainer, Controls, InfoRow, InfoLabel, InfoValue } from './video_test_cls';
 
 function App() {
   return (
     <C.Page>
       <C.Header>
         <C.Title>Video Test</C.Title>
-        <C.Subtitle>libmpv OpenGL render API → wgpu</C.Subtitle>
+        <C.Subtitle>libmpv OpenGL render API → wgpu — drop a video file to play</C.Subtitle>
       </C.Header>
 
       <C.VideoContainer>
@@ -15,16 +13,8 @@ function App() {
       </C.VideoContainer>
 
       <C.Controls>
-        <C.Btn onPress={() => { setPlaying(1) }}>
-          <C.BtnText>Play</C.BtnText>
-        </C.Btn>
-        <C.Btn onPress={() => { setPlaying(0) }}>
-          <C.BtnText>Pause</C.BtnText>
-        </C.Btn>
-
         <C.InfoRow>
-          <C.InfoLabel>Status:</C.InfoLabel>
-          <C.InfoValue>{playing == 1 ? 'Playing' : 'Paused'}</C.InfoValue>
+          <C.InfoLabel>Drop any video file onto this window to play it.</C.InfoLabel>
         </C.InfoRow>
       </C.Controls>
     </C.Page>

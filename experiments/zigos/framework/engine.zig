@@ -632,6 +632,14 @@ pub fn run(config: AppConfig) !void {
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
                     }
                 },
+                c.SDL_DROPFILE => {
+                    if (event.drop.file) |file_ptr| {
+                        std.debug.print("[engine] file dropped: {s}\n", .{std.mem.span(file_ptr)});
+                        videos.handleFileDrop(file_ptr);
+                        videos.patchTreeForDrop(config.root);
+                        c.SDL_free(file_ptr);
+                    }
+                },
                 else => {},
             }
         }
