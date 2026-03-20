@@ -617,8 +617,13 @@ pub fn update() void {
         if (e.status == .loading and e.texture == null) {
             const w_opt = getMpvInt(e.handle, "video-params/w");
             const h_opt = getMpvInt(e.handle, "video-params/h");
+            const dw_opt = getMpvInt(e.handle, "video-params/dw");
+            const dh_opt = getMpvInt(e.handle, "video-params/dh");
+            const raw_w = getMpvInt(e.handle, "width");
+            const raw_h = getMpvInt(e.handle, "height");
             if (w_opt) |w_i| {
                 if (h_opt) |h_i| {
+                    std.debug.print("[videos] mpv dims: video-params/w={d} h={d} dw={?} dh={?} raw_w={?} raw_h={?}\n", .{ w_i, h_i, dw_opt, dh_opt, raw_w, raw_h });
                     const w: u32 = @intCast(@max(1, w_i));
                     const h: u32 = @intCast(@max(1, h_i));
                     if (initVideoResources(e, device, w, h)) {
@@ -750,7 +755,7 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
         .h = @intCast(h),
         .internal_format = 0,
     };
-    var flip_y: c_int = 1; // mpv outputs top-down; CPU flip cancels shader UV.y flip
+    var flip_y: c_int = 0; // GL convention bottom-up; shader UV.y flip handles it
     var block_time: c_int = 0; // don't block waiting for display refresh
     var render_params = [_]MpvRenderParam{
         .{ .type = MPV_RENDER_PARAM_OPENGL_FBO, .data = @ptrCast(&mpv_fbo) },
@@ -769,24 +774,8 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
-    // Flip rows vertically — glReadPixels returns bottom-up from the FBO.
-    // The shared image shader has UV Y-flip (1.0 - corner.y), so this CPU flip
-    // cancels it out → correct orientation. Same approach as render_surfaces.zig.
-    const row_bytes: usize = @as(usize, w) * 4;
-    var top: usize = 0;
-    var bot: usize = h - 1;
-    while (top < bot) {
-        const top_off = top * row_bytes;
-        const bot_off = bot * row_bytes;
-        var col: usize = 0;
-        while (col < row_bytes) : (col += 1) {
-            buf[top_off + col] ^= buf[bot_off + col];
-            buf[bot_off + col] ^= buf[top_off + col];
-            buf[top_off + col] ^= buf[bot_off + col];
-        }
-        top += 1;
-        bot -= 1;
-    }
+    // No CPU flip needed — FLIP_Y=0 means mpv outputs bottom-up (GL convention).
+    // The shared image shader flips UV.y (1.0 - corner.y) → correct orientation.
 
     // Upload to wgpu texture
     uploadToWgpu(tex, buf, w, h, queue);
@@ -999,8 +988,10 @@ fn destroyEntry(e: *VideoEntry) void {
     if (e.render_ctx) |ctx| mpv_fns.render_ctx_free(ctx);
     std.debug.print("[videos] destroyEntry: render ctx freed, calling terminate_destroy...\n", .{});
     if (e.handle) |h| mpv_fns.terminate_destroy(h);
+    std.debug.print("[videos] destroyEntry: terminate_destroy done\n", .{});
     if (e.pixel_buf) |buf| page_alloc.free(buf);
     e.* = .{};
+    std.debug.print("[videos] destroyEntry: complete\n", .{});
 }
 
 fn clearCache() void {
