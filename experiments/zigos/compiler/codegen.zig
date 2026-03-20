@@ -428,6 +428,9 @@ pub const Generator = struct {
     // Embedded JS logic (<script> or _script.tsz)
     compute_js: ?[]const u8 = null,
 
+    // Embedded Zig logic (<zscript> block)
+    compute_zig: ?[]const u8 = null,
+
     // Module mode: emit a .gen.zig fragment, not a full app
     is_module: bool = false,
 
@@ -978,6 +981,9 @@ pub const Generator = struct {
         // Phase 5: Extract <script> block
         self.pos = 0;
         collect.extractComputeBlock(self);
+
+        // Phase 5b: Extract <zscript> block
+        collect.extractZscriptBlock(self);
 
         // Phase 6: Collect useState
         self.pos = 0;

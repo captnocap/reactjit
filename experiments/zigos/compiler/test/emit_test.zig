@@ -18,7 +18,7 @@ test "minimal app" {
     try testing.expect(std.mem.indexOf(u8, out, "const std = @import(\"std\")") != null);
     try testing.expect(std.mem.indexOf(u8, out, "const Node = layout.Node") != null);
     try testing.expect(std.mem.indexOf(u8, out, "pub fn main()") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "var root = Node{") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "var _root = Node{") != null);
 }
 
 test "app with state" {
@@ -88,7 +88,7 @@ test "app with component" {
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "hi") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "var root") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "var _root") != null);
 }
 
 test "app with FFI" {

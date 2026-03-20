@@ -1212,6 +1212,28 @@ pub fn extractComputeBlock(self: *Generator) void {
     }
 }
 
+/// Phase 5b: Extract inline Zig from <zscript>...</zscript> blocks.
+/// This Zig gets emitted directly into the generated file — use for test functions,
+/// utility code, or anything that needs direct access to the Zig runtime.
+pub fn extractZscriptBlock(self: *Generator) void {
+    const src = self.source;
+    const open_tag = "<zscript>";
+    const close_tag = "</zscript>";
+    var i: usize = 0;
+    while (i + open_tag.len <= src.len) : (i += 1) {
+        if (std.mem.eql(u8, src[i .. i + open_tag.len], open_tag)) {
+            const body_start = i + open_tag.len;
+            var j = body_start;
+            while (j + close_tag.len <= src.len) : (j += 1) {
+                if (std.mem.eql(u8, src[j .. j + close_tag.len], close_tag)) {
+                    self.compute_zig = src[body_start..j];
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /// Rewrite JS setter calls to __setState/__setStateString calls for QuickJS.
 ///
 /// Input JS:  setCount(count + 1); setName("hello");

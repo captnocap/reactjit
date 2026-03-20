@@ -363,6 +363,11 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
     if (self.has_breakpoints) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const breakpoint = @import(\"{s}breakpoint.zig\");\n", .{prefix}));
     if (self.ffi_funcs.items.len > 0 or self.compute_js != null) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
+    if (self.compute_zig != null) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testharness = @import(\"{s}testharness.zig\");\n", .{prefix}));
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const query = @import(\"{s}query.zig\");\n", .{prefix}));
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testassert = @import(\"{s}testassert.zig\");\n", .{prefix}));
+    }
 
     // FFI imports
     if (self.ffi_headers.items.len > 0) {
@@ -562,7 +567,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, decl);
         try out.appendSlice(self.alloc, "\n");
     }
-    try out.appendSlice(self.alloc, if (self.is_embedded) "pub var root = Node{" else "var root = Node{");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub var _root = Node{" else "var _root = Node{");
     try out.appendSlice(self.alloc, root_expr[2..]);
     try out.appendSlice(self.alloc, ";\n");
 
@@ -832,6 +837,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
     }
 
+    // Embedded Zig logic (<zscript> block)
+    if (self.compute_zig) |zig_code| {
+        try out.appendSlice(self.alloc, "\n// ── Embedded Zig logic (<zscript>) ──────────────────────────\n");
+        try out.appendSlice(self.alloc, zig_code);
+        try out.appendSlice(self.alloc, "\n\n");
+    }
+
     // JS_LOGIC
     try out.appendSlice(self.alloc, "\n// ── Embedded JS logic ────────────────────────────────────────\n");
     try out.appendSlice(self.alloc, if (self.is_embedded) "pub const JS_LOGIC =\n" else "const JS_LOGIC =\n");
@@ -880,7 +892,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         // inlines to a single Text — no child array exists, the node IS root)
         if (dt.arr_name.len == 0) {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "    root.text = _dyn_text_{d};\n", .{dt.buf_id}));
+                "    _root.text = _dyn_text_{d};\n", .{dt.buf_id}));
         } else {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "    {s}[{d}].text = _dyn_text_{d};\n",
@@ -900,7 +912,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
                 !std.mem.eql(u8, ds.field, "font_size") and
                 !std.mem.eql(u8, ds.field, "opacity");
-            const root_acc = if (is_root_style) "root.style." else "root.";
+            const root_acc = if (is_root_style) "_root.style." else "_root.";
             if (needs_int_cast) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}{s} = @floatFromInt({s});\n",
@@ -1110,6 +1122,11 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 "    _rebuildMap{d}();\n", .{mi}));
         }
     }
+    // Auto-register test functions from <zscript> (any fn named test_*)
+    if (self.compute_zig) |zig_code| {
+        try emitTestRegistrations(self, &out, zig_code);
+    }
+
     // Mount effects — run once at init
     for (0..self.effect_hook_count) |ei| {
         if (self.effect_hooks[ei].kind == .mount) {
@@ -1274,7 +1291,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "pub fn main() !void {{\n" ++
             "    try engine.run(.{{\n" ++
             "        .title = \"{s}\",\n" ++
-            "        .root = &root,\n" ++
+            "        .root = &_root,\n" ++
             "        .js_logic = JS_LOGIC,\n" ++
             "        .init = _appInit,\n" ++
             "        .tick = _appTick,\n" ++
@@ -1392,4 +1409,47 @@ fn replaceIdent(alloc: std.mem.Allocator, text: []const u8, needle: []const u8, 
 
 fn isIdentByte(ch: u8) bool {
     return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
+}
+
+/// Scan <zscript> contents for `fn test_*` function definitions and emit
+/// testharness.register() calls for each one in _appInit.
+fn emitTestRegistrations(self: *Generator, out: *std.ArrayListUnmanaged(u8), zig_code: []const u8) !void {
+    // Scan for "fn test_" patterns
+    const needle = "fn test_";
+    var i: usize = 0;
+    var found_any = false;
+    while (i + needle.len < zig_code.len) : (i += 1) {
+        if (std.mem.eql(u8, zig_code[i .. i + needle.len], needle)) {
+            // Check word boundary before "fn"
+            if (i > 0 and isIdentByte(zig_code[i - 1])) continue;
+
+            // Extract function name: fn test_foo(
+            const name_start = i + 3; // skip "fn "
+            var name_end = name_start;
+            while (name_end < zig_code.len and isIdentByte(zig_code[name_end])) name_end += 1;
+            const func_name = zig_code[name_start..name_end];
+
+            if (func_name.len > 0) {
+                if (!found_any) {
+                    try out.appendSlice(self.alloc, "    // Auto-registered tests from <zscript>\n");
+                    found_any = true;
+                }
+                // Convert test_foo_bar to "foo bar" for display
+                const display_name = try testDisplayName(self.alloc, func_name);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    testharness.register(\"{s}\", {s});\n", .{ display_name, func_name }));
+            }
+        }
+    }
+}
+
+/// Convert "test_map_renders_items" → "map renders items" for test display.
+fn testDisplayName(alloc: std.mem.Allocator, name: []const u8) ![]const u8 {
+    // Strip "test_" prefix
+    const stripped = if (std.mem.startsWith(u8, name, "test_")) name[5..] else name;
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    for (stripped) |ch| {
+        try result.append(alloc, if (ch == '_') ' ' else ch);
+    }
+    return result.items;
 }
