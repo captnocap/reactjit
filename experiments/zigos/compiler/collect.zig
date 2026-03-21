@@ -672,9 +672,19 @@ fn parseStateInitial(self: *Generator) codegen.StateInitial {
     } else if (self.curKind() == .lbracket) {
         self.advance_token();
         var arr_vals: [codegen.MAX_ARRAY_INIT]i64 = undefined;
+        var str_vals: [codegen.MAX_ARRAY_INIT][]const u8 = undefined;
         var arr_cnt: u32 = 0;
+        var has_strings = false;
         while (self.curKind() != .rbracket and self.curKind() != .eof) {
-            if (self.curKind() == .number) {
+            if (self.curKind() == .string) {
+                has_strings = true;
+                const raw = self.curText();
+                if (arr_cnt < codegen.MAX_ARRAY_INIT) {
+                    str_vals[arr_cnt] = raw[1 .. raw.len - 1]; // strip quotes
+                    arr_cnt += 1;
+                }
+                self.advance_token();
+            } else if (self.curKind() == .number) {
                 if (arr_cnt < codegen.MAX_ARRAY_INIT) {
                     arr_vals[arr_cnt] = std.fmt.parseInt(i64, self.curText(), 10) catch 0;
                     arr_cnt += 1;
@@ -695,7 +705,11 @@ fn parseStateInitial(self: *Generator) codegen.StateInitial {
             if (self.curKind() == .comma) self.advance_token();
         }
         if (self.curKind() == .rbracket) self.advance_token();
-        initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
+        if (has_strings) {
+            initial = .{ .string_array = .{ .values = str_vals, .count = arr_cnt } };
+        } else {
+            initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
+        }
     }
     return initial;
 }
@@ -803,6 +817,105 @@ fn collectObjectStateHook(self: *Generator, getter: []const u8, setter: []const 
         self.obj_state_count += 1;
     } else {
         self.setError("Too many object state declarations (limit: 16)");
+    }
+}
+
+/// Parse an object array hook: useState([{ field: value, ... }])
+/// Extracts field names and types from the first object literal in the array.
+/// Does NOT create normal state slots — registers an ObjectArrayInfo instead.
+fn collectObjectArrayHook(self: *Generator, getter: []const u8, setter: []const u8) void {
+    // Deduplicate
+    if (self.isObjectArray(getter) != null) {
+        // Skip past the array literal
+        var depth: u32 = 1;
+        while (depth > 0 and self.curKind() != .eof) {
+            if (self.curKind() == .lbracket) depth += 1;
+            if (self.curKind() == .rbracket) depth -= 1;
+            if (depth > 0) self.advance_token();
+        }
+        if (self.curKind() == .rbracket) self.advance_token();
+        return;
+    }
+
+    self.advance_token(); // [
+    if (self.curKind() != .lbrace) return;
+    self.advance_token(); // {
+
+    var fields: [codegen.MAX_OBJECT_ARRAY_FIELDS]codegen.ObjectArrayField = undefined;
+    var field_count: u32 = 0;
+
+    // Parse fields from the first object literal
+    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const field_name = self.curText();
+            self.advance_token();
+            if (self.curKind() == .colon) self.advance_token();
+
+            // Infer type from initial value
+            var field_type: codegen.StateType = .int;
+            if (self.curKind() == .number) {
+                const num_text = self.curText();
+                if (std.mem.indexOf(u8, num_text, ".") != null) {
+                    field_type = .float;
+                } else {
+                    field_type = .int;
+                }
+                self.advance_token();
+            } else if (self.curKind() == .string) {
+                field_type = .string;
+                self.advance_token();
+            } else if (self.curKind() == .identifier) {
+                const val = self.curText();
+                if (std.mem.eql(u8, val, "true") or std.mem.eql(u8, val, "false")) {
+                    field_type = .boolean;
+                }
+                self.advance_token();
+            } else if (self.curKind() == .minus) {
+                // Negative number
+                self.advance_token();
+                if (self.curKind() == .number) {
+                    const num_text = self.curText();
+                    if (std.mem.indexOf(u8, num_text, ".") != null) {
+                        field_type = .float;
+                    } else {
+                        field_type = .int;
+                    }
+                    self.advance_token();
+                }
+            } else {
+                self.advance_token();
+            }
+
+            if (field_count < codegen.MAX_OBJECT_ARRAY_FIELDS) {
+                fields[field_count] = .{
+                    .name = field_name,
+                    .field_type = field_type,
+                };
+                field_count += 1;
+            }
+        } else {
+            self.advance_token();
+        }
+        if (self.curKind() == .comma) self.advance_token();
+    }
+    if (self.curKind() == .rbrace) self.advance_token(); // }
+
+    // Skip past any remaining objects in the array (we only need the schema from the first)
+    while (self.curKind() != .rbracket and self.curKind() != .eof) {
+        self.advance_token();
+    }
+    if (self.curKind() == .rbracket) self.advance_token(); // ]
+
+    if (self.object_array_count < codegen.MAX_OBJECT_ARRAYS) {
+        self.object_arrays[self.object_array_count] = .{
+            .getter = getter,
+            .setter = setter,
+            .fields = fields,
+            .field_count = field_count,
+        };
+        self.object_array_count += 1;
+    } else {
+        self.setError("Too many object array declarations (limit: 16)");
     }
 }
 
@@ -1008,6 +1121,17 @@ pub fn scanForUseState(self: *Generator, stop_at_return: bool) void {
                         if (self.isIdent("useState")) {
                             self.advance_token();
                             if (self.curKind() == .lparen) self.advance_token();
+                            // Object array: useState([{...}])
+                            if (self.curKind() == .lbracket and
+                                self.pos + 1 < self.lex.count and
+                                self.lex.get(self.pos + 1).kind == .lbrace)
+                            {
+                                collectObjectArrayHook(self, getter, setter);
+                                if (self.curKind() == .rparen) self.advance_token();
+                                if (self.curKind() == .semicolon) self.advance_token();
+                                continue;
+                            }
+                            // Single object: useState({...})
                             if (self.curKind() == .lbrace) {
                                 collectObjectStateHook(self, getter, setter);
                                 if (self.curKind() == .rparen) self.advance_token();
@@ -1252,9 +1376,31 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
         if (std.mem.indexOf(u8, trimmed, "useState(") != null) continue;
         if (trimmed.len == 0 and first_line) continue;
         first_line = false;
+        // Skip comment lines — don't rewrite setter names inside comments
+        if (std.mem.startsWith(u8, trimmed, "//")) {
+            try result.appendSlice(self.alloc, line);
+            try result.append(self.alloc, '\n');
+            continue;
+        }
         var ii: usize = 0;
         while (ii < line.len) {
             var matched = false;
+            // Check object array setters first (not in state_slots)
+            for (0..self.object_array_count) |oi| {
+                const oa_setter = self.object_arrays[oi].setter;
+                if (oa_setter.len == 0) continue;
+                if (ii + oa_setter.len + 1 <= line.len and
+                    std.mem.eql(u8, line[ii .. ii + oa_setter.len], oa_setter) and
+                    line[ii + oa_setter.len] == '(')
+                {
+                    if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "__setObjArr{d}(", .{oi}));
+                    ii += oa_setter.len + 1;
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) continue;
             for (0..self.state_count) |si| {
                 const setter = self.state_slots[si].setter;
                 if (setter.len == 0) continue;
@@ -1263,10 +1409,16 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
                     line[ii + setter.len] == '(')
                 {
                     if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
-                    const is_string = std.meta.activeTag(self.state_slots[si].initial) == .string;
-                    const fn_name = if (is_string) "__setStateString" else "__setState";
+                    const tag = std.meta.activeTag(self.state_slots[si].initial);
+                    const fn_name = if (tag == .string) "__setStateString" else if (tag == .string_array) "__setStateStringArray" else "__setState";
                     try result.appendSlice(self.alloc, fn_name);
-                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                    if (tag == .string_array) {
+                        // String array setter uses the string_array slot ID, not the state slot index
+                        const sa_id = self.stringArraySlotId(@intCast(si));
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{sa_id}));
+                    } else {
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                    }
                     ii += setter.len + 1;
                     matched = true;
                     break;

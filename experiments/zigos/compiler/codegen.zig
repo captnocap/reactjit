@@ -80,6 +80,8 @@ pub const VariantUpdate = struct {
 };
 pub const MAX_OBJECT_STATE_FIELDS = 16;
 pub const MAX_OBJECT_STATE_VARS = 16;
+pub const MAX_OBJECT_ARRAYS = 16;
+pub const MAX_OBJECT_ARRAY_FIELDS = 16;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -125,7 +127,7 @@ pub const PropBinding = struct {
     prop_type: PropType = .string,
 };
 
-pub const StateType = enum { int, float, boolean, string, array };
+pub const StateType = enum { int, float, boolean, string, array, string_array };
 
 pub const StateInitial = union(StateType) {
     int: i64,
@@ -134,6 +136,10 @@ pub const StateInitial = union(StateType) {
     string: []const u8,
     array: struct {
         values: [MAX_ARRAY_INIT]i64,
+        count: u32,
+    },
+    string_array: struct {
+        values: [MAX_ARRAY_INIT][]const u8,
         count: u32,
     },
 };
@@ -154,6 +160,18 @@ pub const ObjectStateVar = struct {
     getter: []const u8,
     setter: []const u8,
     fields: [MAX_OBJECT_STATE_FIELDS]ObjectField,
+    field_count: u32,
+};
+
+pub const ObjectArrayField = struct {
+    name: []const u8,
+    field_type: StateType, // .int, .float, .string, .boolean
+};
+
+pub const ObjectArrayInfo = struct {
+    getter: []const u8,
+    setter: []const u8,
+    fields: [MAX_OBJECT_ARRAY_FIELDS]ObjectArrayField,
     field_count: u32,
 };
 
@@ -282,6 +300,12 @@ pub const MapInfo = struct {
     is_computed: bool = false,
     computed_idx: u32 = 0,
     computed_element_type: StateType = .int,
+    // String array source (for rows.map() where rows is useState(['']))
+    is_string_array: bool = false,
+    string_array_slot_id: u32 = 0,
+    // Object array source (for nodes.map() where nodes is useState([{...}]))
+    is_object_array: bool = false,
+    object_array_idx: u32 = 0,
 };
 
 pub const MapTemplateResult = struct {
@@ -456,12 +480,17 @@ pub const Generator = struct {
     computed_arrays: [MAX_COMPUTED_ARRAYS]ComputedArray,
     computed_count: u32,
 
+    // Object arrays (useState([{...}]))
+    object_arrays: [MAX_OBJECT_ARRAYS]ObjectArrayInfo,
+    object_array_count: u32,
+
     // Maps (.map() dynamic lists)
     maps: [MAX_MAPS]MapInfo,
     map_count: u32,
     map_item_param: ?[]const u8,
     map_index_param: ?[]const u8,
     map_item_type: ?StateType,
+
 
     // Conditionals ({expr && <JSX>})
     conditionals: [MAX_CONDITIONALS]ConditionalInfo,
@@ -670,6 +699,8 @@ pub const Generator = struct {
             .maps = undefined,
             .computed_arrays = undefined,
             .computed_count = 0,
+            .object_arrays = undefined,
+            .object_array_count = 0,
             .map_count = 0,
             .map_item_param = null,
             .map_index_param = null,
@@ -839,21 +870,57 @@ pub const Generator = struct {
         return null;
     }
 
-    /// Check if a state variable is an array-typed useState.
+    /// Check if a name is an object array (useState([{...}])).
+    pub fn isObjectArray(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.object_array_count) |i| {
+            if (std.mem.eql(u8, self.object_arrays[i].getter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Check if a name is an object array setter.
+    pub fn isObjectArraySetter(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.object_array_count) |i| {
+            if (std.mem.eql(u8, self.object_arrays[i].setter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Check if a state variable is an array-typed useState (i64 or string).
     pub fn isArrayState(self: *Generator, name: []const u8) ?u32 {
         for (0..self.state_count) |i| {
+            const tag = std.meta.activeTag(self.state_slots[i].initial);
             if (std.mem.eql(u8, self.state_slots[i].getter, name) and
-                std.meta.activeTag(self.state_slots[i].initial) == .array)
+                (tag == .array or tag == .string_array))
                 return @intCast(i);
         }
         return null;
     }
 
-    /// Convert sequential state index to array slot index (separate from regular slots).
+    /// Check if a state variable is specifically a string_array useState.
+    pub fn isStringArrayState(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.state_count) |i| {
+            if (std.mem.eql(u8, self.state_slots[i].getter, name) and
+                std.meta.activeTag(self.state_slots[i].initial) == .string_array)
+                return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Convert sequential state index to i64 array slot index.
     pub fn arraySlotId(self: *Generator, state_idx: u32) u32 {
         var count: u32 = 0;
         for (0..state_idx) |j| {
             if (std.meta.activeTag(self.state_slots[j].initial) == .array) count += 1;
+        }
+        return count;
+    }
+
+    /// Convert sequential state index to string array slot index.
+    pub fn stringArraySlotId(self: *Generator, state_idx: u32) u32 {
+        var count: u32 = 0;
+        for (0..state_idx) |j| {
+            if (std.meta.activeTag(self.state_slots[j].initial) == .string_array) count += 1;
         }
         return count;
     }

@@ -362,7 +362,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.input_counter > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const input = @import(\"{s}input.zig\");\n", .{prefix}));
     if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
     if (self.has_breakpoints) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const breakpoint = @import(\"{s}breakpoint.zig\");\n", .{prefix}));
-    if (self.ffi_funcs.items.len > 0 or self.compute_js != null) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
+    if (self.ffi_funcs.items.len > 0 or self.compute_js != null or self.object_array_count > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
     if (self.compute_zig != null) {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testharness = @import(\"{s}testharness.zig\");\n", .{prefix}));
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const query = @import(\"{s}query.zig\");\n", .{prefix}));
@@ -519,6 +519,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 .boolean => "bool",
                 .string => "string",
                 .array => "array",
+                .string_array => "string_array",
             };
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "// slot {d}: {s} ({s})\n", .{ i, slot.getter, type_name }));
@@ -610,6 +611,158 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         .{ ci, ci, ci, ci }));
                 },
             }
+        }
+    }
+
+    // Object arrays (useState([{...}]) — parallel heap-allocated arrays per field)
+    if (self.object_array_count > 0) {
+        // Ensure qjs import exists for the unpack host functions
+        if (self.ffi_funcs.items.len == 0) {
+            try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+            try out.appendSlice(self.alloc, "const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n");
+        }
+        try out.appendSlice(self.alloc, "\n// ── Object arrays ───────────────────────────────────────────────\n");
+        try out.appendSlice(self.alloc, "const _oa_alloc = std.heap.page_allocator;\n\n");
+
+        for (0..self.object_array_count) |oi| {
+            const oa = self.object_arrays[oi];
+
+            // Per-field parallel arrays
+            for (0..oa.field_count) |fi| {
+                const f = oa.fields[fi];
+                switch (f.field_type) {
+                    .string => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "var _oa{d}_{s}: [][256]u8 = &[_][256]u8{{}};\n" ++
+                            "var _oa{d}_{s}_lens: []u16 = &[_]u16{{}};\n" ++
+                            "var _oa{d}_{s}_cap: usize = 0;\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name }));
+                    },
+                    .float => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "var _oa{d}_{s}: []f64 = &[_]f64{{}};\n" ++
+                            "var _oa{d}_{s}_cap: usize = 0;\n",
+                            .{ oi, f.name, oi, f.name }));
+                    },
+                    else => { // int, boolean
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "var _oa{d}_{s}: []i64 = &[_]i64{{}};\n" ++
+                            "var _oa{d}_{s}_cap: usize = 0;\n",
+                            .{ oi, f.name, oi, f.name }));
+                    },
+                }
+            }
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "var _oa{d}_count: usize = 0;\n" ++
+                "var _oa{d}_dirty: bool = false;\n\n",
+                .{ oi, oi }));
+
+            // ensureCapacity function
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "fn _oa{d}_ensureCapacity(needed: usize) void {{\n" ++
+                "    if (needed <= _oa{d}_{s}_cap) return;\n" ++
+                "    const new_cap = @max(needed, if (_oa{d}_{s}_cap == 0) @as(usize, 64) else _oa{d}_{s}_cap * 2);\n",
+                .{ oi, oi, oa.fields[0].name, oi, oa.fields[0].name, oi, oa.fields[0].name }));
+
+            for (0..oa.field_count) |fi| {
+                const f = oa.fields[fi];
+                switch (f.field_type) {
+                    .string => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    if (_oa{d}_{s}_cap == 0) {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.alloc([256]u8, new_cap) catch return;\n" ++
+                            "        _oa{d}_{s}_lens = _oa_alloc.alloc(u16, new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}_lens, 0);\n" ++
+                            "    }} else {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.realloc(_oa{d}_{s}.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
+                            "        _oa{d}_{s}_lens = _oa_alloc.realloc(_oa{d}_{s}_lens.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}_lens[_oa{d}_{s}_cap..new_cap], 0);\n" ++
+                            "    }}\n" ++
+                            "    _oa{d}_{s}_cap = new_cap;\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name }));
+                    },
+                    .float => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    if (_oa{d}_{s}_cap == 0) {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.alloc(f64, new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}, 0.0);\n" ++
+                            "    }} else {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.realloc(_oa{d}_{s}.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}[_oa{d}_{s}_cap..new_cap], 0.0);\n" ++
+                            "    }}\n" ++
+                            "    _oa{d}_{s}_cap = new_cap;\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name }));
+                    },
+                    else => { // int, boolean
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    if (_oa{d}_{s}_cap == 0) {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.alloc(i64, new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}, 0);\n" ++
+                            "    }} else {{\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.realloc(_oa{d}_{s}.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
+                            "        @memset(_oa{d}_{s}[_oa{d}_{s}_cap..new_cap], 0);\n" ++
+                            "    }}\n" ++
+                            "    _oa{d}_{s}_cap = new_cap;\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name }));
+                    },
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+
+            // Unpack host function: reads JS array of objects, writes to parallel arrays
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "fn _oa{d}_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {{\n" ++
+                "    const c2 = ctx orelse return QJS_UNDEFINED;\n" ++
+                "    const arr = argv[0];\n" ++
+                "    const len_val = qjs.JS_GetPropertyStr(c2, arr, \"length\");\n" ++
+                "    var arr_len: i32 = 0;\n" ++
+                "    _ = qjs.JS_ToInt32(c2, &arr_len, len_val);\n" ++
+                "    qjs.JS_FreeValue(c2, len_val);\n" ++
+                "    const count: usize = @intCast(@max(0, arr_len));\n" ++
+                "    _oa{d}_ensureCapacity(count);\n" ++
+                "    for (0..count) |_i| {{\n" ++
+                "        const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));\n",
+                .{ oi, oi }));
+
+            // Per-field extraction
+            for (0..oa.field_count) |fi| {
+                const f = oa.fields[fi];
+                switch (f.field_type) {
+                    .string => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
+                            "        const _s = qjs.JS_ToCString(c2, _v);\n" ++
+                            "        qjs.JS_FreeValue(c2, _v);\n" ++
+                            "        if (_s) |ss| {{ const sl = std.mem.span(ss); const n = @min(sl.len, 255); @memcpy(_oa{d}_{s}[_i][0..n], sl[0..n]); _oa{d}_{s}_lens[_i] = @intCast(n); qjs.JS_FreeCString(c2, _s); }}\n" ++
+                            "        else {{ _oa{d}_{s}_lens[_i] = 0; }} }}\n",
+                            .{ f.name, oi, f.name, oi, f.name, oi, f.name }));
+                    },
+                    .float => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
+                            "        var _f: f64 = 0; _ = qjs.JS_ToFloat64(c2, &_f, _v);\n" ++
+                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _f; }}\n",
+                            .{ f.name, oi, f.name }));
+                    },
+                    else => { // int, boolean
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
+                            "        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);\n" ++
+                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _n; }}\n",
+                            .{ f.name, oi, f.name }));
+                    },
+                }
+            }
+
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "        qjs.JS_FreeValue(c2, elem);\n" ++
+                "    }}\n" ++
+                "    _oa{d}_count = count;\n" ++
+                "    _oa{d}_dirty = true;\n" ++
+                "    state.markDirty();\n" ++
+                "    return QJS_UNDEFINED;\n" ++
+                "}}\n\n",
+                .{ oi, oi }));
         }
     }
 
@@ -714,6 +867,14 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     "    for (0.._map_count_{d}) |_i| {{\n" ++
                     "        const _item = items[_i];\n",
                     .{ mi, m.computed_idx, m.computed_idx, mi, mi, mi }));
+            } else if (m.is_string_array) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _rebuildMap{d}() void {{\n" ++
+                    "    const _sa_len = state.getStringArrayLen({d});\n" ++
+                    "    _map_count_{d} = @min(_sa_len, MAX_MAP_{d});\n" ++
+                    "    for (0.._map_count_{d}) |_i| {{\n" ++
+                    "        const _item = state.getStringArrayElement({d}, _i);\n",
+                    .{ mi, m.string_array_slot_id, mi, mi, mi, m.string_array_slot_id }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "fn _rebuildMap{d}() void {{\n" ++
@@ -736,12 +897,18 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             }
 
             if (has_dyn_text) {
-                const inner = m.inner_nodes[dyn_ni];
-                // Rewrite template args: replace item param with _item, index param with _i
-                const rewritten_args = try rewriteMapArgs(self, inner.text_args, m.item_param, m.index_param);
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "        _map_texts_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
-                    .{ mi, mi, inner.text_fmt, rewritten_args }));
+                if (m.is_string_array) {
+                    // String array: _item is already []const u8, assign directly
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "        _map_texts_{d}[_i] = _item;\n", .{mi}));
+                } else {
+                    const inner = m.inner_nodes[dyn_ni];
+                    // Rewrite template args: replace item param with _item, index param with _i
+                    const rewritten_args = try rewriteMapArgs(self, inner.text_args, m.item_param, m.index_param);
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "        _map_texts_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                        .{ mi, mi, inner.text_fmt, rewritten_args }));
+                }
             }
 
             // Emit inner children array assignment
@@ -874,6 +1041,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
                     }
                     try out.appendSlice(self.alloc, " });\n");
+                },
+                .string_array => {
+                    try out.appendSlice(self.alloc, "    _ = state.createStringArraySlot();\n");
                 },
             }
         }
@@ -1097,6 +1267,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (self.ffi_funcs.items) |func_name| {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "    qjs_runtime.registerHostFn(\"{s}\", @ptrCast(&_ffi_{s}), 8);\n", .{ func_name, func_name }));
+    }
+    for (0..self.object_array_count) |oi| {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    qjs_runtime.registerHostFn(\"__setObjArr{d}\", @ptrCast(&_oa{d}_unpack), 1);\n", .{ oi, oi }));
     }
     if (self.dyn_count > 0 or self.dyn_style_count > 0) {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
