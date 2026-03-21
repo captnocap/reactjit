@@ -16,7 +16,7 @@ import { elements } from './elements.script';
 const [activeTab, setActiveTab] = useState(0);
 
 // ── Tree node data (set by elements.script) ──
-const [treeNodes, setTreeNodes] = useState([{ indent: 0, caret: 0, tag: '', tagColor: '#8fabef', dim: '' }]);
+const [treeNodes, setTreeNodes] = useState([{ indent: 0, caret: 0, tag: '', tagColor: 0x8fabef, dim: '' }]);
 
 // ── Detail pane state (set by elements.script) ──
 const [detTag, setDetTag] = useState('--');

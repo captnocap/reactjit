@@ -1717,9 +1717,18 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                                 const oa = self.object_arrays[oa_idx];
                                 for (0..oa.field_count) |fi| {
                                     if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
-                                        dyn_text_color = try std.fmt.allocPrint(self.alloc,
-                                            "Color.fromHex(_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]])",
-                                            .{ oa_idx, field_name, oa_idx, field_name });
+                                        if (oa.fields[fi].field_type == .string) {
+                                            dyn_text_color = try std.fmt.allocPrint(self.alloc,
+                                                "Color.fromHex(_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]])",
+                                                .{ oa_idx, field_name, oa_idx, field_name });
+                                        } else {
+                                            // Int field: packed 0xRRGGBB — bit-shift to Color
+                                            const arr_expr = try std.fmt.allocPrint(self.alloc,
+                                                "_oa{d}_{s}[_i]", .{ oa_idx, field_name });
+                                            dyn_text_color = try std.fmt.allocPrint(self.alloc,
+                                                "Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                                                .{ arr_expr, arr_expr, arr_expr });
+                                        }
                                         break;
                                     }
                                 }

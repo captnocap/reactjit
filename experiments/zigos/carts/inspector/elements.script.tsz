@@ -5,15 +5,15 @@ var _scrollOffset = 0;
 var _selectedIdx = 0;
 
 function tagToColor(tag) {
-  if (tag == 'Text') return '#d99571';
-  if (tag == 'Pressable') return '#e6bd6d';
-  if (tag == 'Box') return '#77c1b3';
-  if (tag == 'ScrollView') return '#77c1b3';
-  if (tag == 'Image') return '#9ccc65';
-  if (tag == 'TextInput') return '#e6bd6d';
-  if (tag == 'Graph') return '#9c88ff';
-  if (tag == 'Canvas') return '#9c88ff';
-  return '#8fabef';
+  if (tag == 'Text') return 0xd99571;
+  if (tag == 'Pressable') return 0xe6bd6d;
+  if (tag == 'Box') return 0x77c1b3;
+  if (tag == 'ScrollView') return 0x77c1b3;
+  if (tag == 'Image') return 0x9ccc65;
+  if (tag == 'TextInput') return 0xe6bd6d;
+  if (tag == 'Graph') return 0x9c88ff;
+  if (tag == 'Canvas') return 0x9c88ff;
+  return 0x8fabef;
 }
 
 function pollTree() {
