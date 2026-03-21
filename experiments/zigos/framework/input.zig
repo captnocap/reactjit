@@ -26,6 +26,27 @@ var on_change_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{
 var focused_id: ?u8 = null;
 var cursor_blink: f32 = 0;
 var cursor_visible: bool = true;
+var measure_width_fn: ?*const fn ([]const u8, u16) f32 = null;
+
+/// Set the text width measurement callback (provided by engine.zig).
+pub fn setMeasureWidthFn(f: *const fn ([]const u8, u16) f32) void {
+    measure_width_fn = f;
+}
+
+var last_click_ms: u32 = 0;
+var click_count: u8 = 0;
+
+/// Track click timing for double/triple click detection. Returns click count.
+pub fn trackClick(now_ms: u32) u8 {
+    const dt = now_ms -| last_click_ms;
+    if (dt < 400) {
+        click_count = if (click_count >= 3) 1 else click_count + 1;
+    } else {
+        click_count = 1;
+    }
+    last_click_ms = now_ms;
+    return click_count;
+}
 
 /// Register an input slot. Called at init time.
 pub fn register(id: u8) void {
@@ -457,6 +478,87 @@ pub const TelemetryInputStats = struct {
     focused_id: i8,
     active_count: u32,
 };
+
+var drag_id: ?u8 = null;
+var drag_font_size: u16 = 0;
+
+/// Select all text in the given input.
+pub fn selectAll(id: u8) void {
+    if (id >= MAX_INPUTS) return;
+    const s = &inputs[id];
+    s.sel_start = 0;
+    s.sel_end = s.len;
+    s.has_selection = true;
+    s.cursor = s.len;
+}
+
+/// Select the word at the cursor position.
+pub fn selectWord(id: u8) void {
+    if (id >= MAX_INPUTS) return;
+    const s = &inputs[id];
+    const buf = s.buf[0..s.len];
+    var start: u16 = s.cursor;
+    var end: u16 = s.cursor;
+    while (start > 0 and isWordChar(buf[start - 1])) start -= 1;
+    while (end < s.len and isWordChar(buf[end])) end += 1;
+    s.sel_start = start;
+    s.sel_end = end;
+    s.has_selection = start != end;
+    s.cursor = end;
+}
+
+fn isWordChar(ch: u8) bool {
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
+}
+
+/// Set cursor position from a pixel X offset using the measure callback.
+pub fn setCursorFromX(id: u8, local_x: f32, font_size: u16) void {
+    if (id >= MAX_INPUTS or measure_width_fn == null) return;
+    const s = &inputs[id];
+    const mfn = measure_width_fn.?;
+    var best: u16 = 0;
+    var best_dist: f32 = @abs(local_x);
+    for (1..@as(usize, s.len) + 1) |i| {
+        const w = mfn(s.buf[0..i], font_size);
+        const dist = @abs(local_x - w);
+        if (dist < best_dist) {
+            best_dist = dist;
+            best = @intCast(i);
+        }
+    }
+    s.cursor = best;
+    s.has_selection = false;
+}
+
+/// Begin a drag selection from current cursor position.
+pub fn startDrag(id: u8) void {
+    if (id >= MAX_INPUTS) return;
+    drag_id = id;
+    const s = &inputs[id];
+    s.sel_start = s.cursor;
+    s.sel_end = s.cursor;
+    s.has_selection = false;
+}
+
+/// Update drag selection to new X position.
+pub fn updateDrag(id: u8, local_x: f32, font_size: u16) void {
+    if (id >= MAX_INPUTS or measure_width_fn == null) return;
+    const s = &inputs[id];
+    const mfn = measure_width_fn.?;
+    var best: u16 = 0;
+    var best_dist: f32 = @abs(local_x);
+    for (1..@as(usize, s.len) + 1) |i| {
+        const w = mfn(s.buf[0..i], font_size);
+        const dist = @abs(local_x - w);
+        if (dist < best_dist) {
+            best_dist = dist;
+            best = @intCast(i);
+        }
+    }
+    s.sel_end = best;
+    s.cursor = best;
+    s.has_selection = s.sel_start != s.sel_end;
+}
 
 pub fn telemetryStats() TelemetryInputStats {
     var count: u32 = 0;

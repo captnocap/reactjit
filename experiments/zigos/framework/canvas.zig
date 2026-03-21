@@ -179,3 +179,42 @@ pub fn telemetryCameraState() TelemetryCameraState {
         .type_count = @intCast(type_count),
     };
 }
+
+var node_dim_idx: ?u16 = null;
+var node_dim_opacity: f32 = 1.0;
+var flow_override_idx: ?u16 = null;
+var flow_override_enabled: bool = false;
+
+pub fn setNodeDim(idx: u16, opacity: f32) void {
+    node_dim_idx = idx;
+    node_dim_opacity = opacity;
+}
+
+pub fn resetNodeDim() void {
+    node_dim_idx = null;
+    node_dim_opacity = 1.0;
+}
+
+pub fn setFlowOverride(idx: u16, enabled: bool) void {
+    flow_override_idx = idx;
+    flow_override_enabled = enabled;
+}
+
+pub fn resetFlowOverride() void {
+    flow_override_idx = null;
+    flow_override_enabled = false;
+}
+
+pub fn getNodeDim(idx: u16) f32 {
+    if (node_dim_idx) |di| {
+        if (di == idx) return node_dim_opacity;
+    }
+    return 1.0;
+}
+
+pub fn getFlowOverride(idx: u16) bool {
+    if (flow_override_idx) |fi| {
+        if (fi == idx) return flow_override_enabled;
+    }
+    return true;
+}

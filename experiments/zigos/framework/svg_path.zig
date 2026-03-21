@@ -494,7 +494,9 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
 /// Draw a stroked path using GPU-native SDF bezier curves.
 /// Smooth at any zoom level — no tessellation artifacts.
 /// Lines are drawn as degenerate quadratics (control point at midpoint).
-pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32) void {
+pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32, _flow_speed: f32, _ticks: u32) void {
+    _ = _flow_speed;
+    _ = _ticks;
     for (0..path.curve_count) |i| {
         const seg = &path.curves[i];
         switch (seg.kind) {
@@ -673,6 +675,12 @@ pub fn drawStrokePartial(path: *const Path, t: f32, stroke_r: f32, stroke_g: f32
             }
         }
     }
+}
+
+var flow_mode: u2 = 2; // 0=off, 1=partial, 2=full
+
+pub fn setFlowMode(mode: u2) void {
+    flow_mode = mode;
 }
 
 // ── Tokenizer helpers ───────────────────────────────────────────────────
