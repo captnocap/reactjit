@@ -1,120 +1,71 @@
-// Elements tab — polls app node tree and populates tree view state
+// Elements tab — polls real node tree from engine telemetry
+// Sets treeNodes object array and detail pane state
 
-var _treeData = [];
-var _selectedIdx = -1;
 var _scrollOffset = 0;
+var _selectedIdx = 0;
+
+function tagToColor(tag) {
+  if (tag == 'Text') return '#d99571';
+  if (tag == 'Pressable') return '#e6bd6d';
+  if (tag == 'Box') return '#77c1b3';
+  if (tag == 'ScrollView') return '#77c1b3';
+  if (tag == 'Image') return '#9ccc65';
+  if (tag == 'TextInput') return '#e6bd6d';
+  if (tag == 'Graph') return '#9c88ff';
+  if (tag == 'Canvas') return '#9c88ff';
+  return '#8fabef';
+}
 
 function pollTree() {
   var count = __tel_node_count();
-  _treeData = [];
-  for (var i = 0; i < count; i++) {
+  var rows = [];
+  var windowSize = 50;
+  var end = Math.min(_scrollOffset + windowSize, count);
+
+  for (var i = _scrollOffset; i < end; i++) {
     var n = __tel_node(i);
     if (n) {
-      _treeData.push({
+      rows.push({
+        indent: n.depth * 8,
+        caret: n.child_count > 0 ? 1 : 0,
         tag: '<' + n.tag + '>',
-        depth: n.depth,
-        childCount: n.child_count,
-        x: Math.round(n.x),
-        y: Math.round(n.y),
-        w: Math.round(n.w),
-        h: Math.round(n.h),
-        hasText: n.has_text,
-        hasHandler: n.has_handler,
-        hasImage: n.has_image,
-        fontSize: n.font_size,
-        idx: i,
+        tagColor: tagToColor(n.tag),
+        dim: Math.round(n.w) + 'x' + Math.round(n.h),
       });
     }
   }
-  updateTreeView();
+  setTreeNodes(rows);
+  updateDetail();
 }
 
-function updateTreeView() {
-  var visible = 30;
-  var start = _scrollOffset;
-  var end = Math.min(start + visible, _treeData.length);
+function updateDetail() {
+  var n = __tel_node(_selectedIdx);
+  if (!n) return;
 
-  for (var i = 0; i < visible; i++) {
-    var dataIdx = start + i;
-    if (dataIdx < _treeData.length) {
-      var n = _treeData[dataIdx];
-      var indent = n.depth * 8;
-      var caret = n.childCount > 0 ? 1 : 0;
-      var tag = n.tag;
-      var tagColor = '#8fabef';
-      var dim = n.w + 'x' + n.h;
-      var meta = '';
-      var active = (_selectedIdx === dataIdx) ? 1 : 0;
+  setDetTag('<' + n.tag + '>');
+  setDetDim(Math.round(n.w) + ' x ' + Math.round(n.h));
+  setDetPos(Math.round(n.x) + ', ' + Math.round(n.y));
+  setDetKids(n.child_count);
 
-      // Color by type
-      if (n.hasText) tagColor = '#d99571';
-      else if (n.hasHandler) tagColor = '#e6bd6d';
-      else if (n.hasImage) tagColor = '#77c1b3';
-
-      if (n.hasHandler) meta = '@press';
-
-      // Set state for each row
-      setTreeRowTag(i, tag);
-      setTreeRowIndent(i, indent);
-      setTreeRowCaret(i, caret);
-      setTreeRowColor(i, tagColor);
-      setTreeRowDim(i, dim);
-      setTreeRowMeta(i, meta);
-      setTreeRowActive(i, active);
-      setTreeRowVisible(i, 1);
-    } else {
-      setTreeRowVisible(i, 0);
-    }
+  var style = __tel_node_style(_selectedIdx);
+  if (style) {
+    setDetGrow(Math.round(style.flex_grow));
+    setDetDir(style.flex_direction == 0 ? 'column' : 'row');
+    setDetOver(style.overflow == 0 ? 'visible' : style.overflow == 1 ? 'hidden' : 'scroll');
   }
 
-  setTreeNodeCount(_treeData.length);
-}
-
-function selectNode(idx) {
-  _selectedIdx = idx;
-  if (idx >= 0 && idx < _treeData.length) {
-    var n = _treeData[idx];
-    // Update detail pane with selected node info
-    var style = __tel_node_style(n.idx);
-    var box = __tel_node_box_model(n.idx);
-
-    setDetailTag(n.tag);
-    setDetailDims(n.w + ' x ' + n.h);
-    setDetailPos(n.x + ', ' + n.y);
-    setDetailChildren(n.childCount);
-
-    if (style) {
-      setDetailFlexGrow(style.flex_grow);
-      setDetailFlexDir(style.flex_direction === 0 ? 'column' : 'row');
-      setDetailOverflow(style.overflow === 0 ? 'visible' : style.overflow === 1 ? 'hidden' : 'scroll');
-    }
-    if (box) {
-      setDetailPadTop(box.padding_top);
-      setDetailPadRight(box.padding_right);
-      setDetailPadBottom(box.padding_bottom);
-      setDetailPadLeft(box.padding_left);
-      setDetailMarginTop(box.margin_top);
-      setDetailMarginRight(box.margin_right);
-      setDetailMarginBottom(box.margin_bottom);
-      setDetailMarginLeft(box.margin_left);
-      setDetailContentW(box.content_w);
-      setDetailContentH(box.content_h);
-    }
-  }
-  updateTreeView();
-}
-
-function treeScrollUp() {
-  if (_scrollOffset > 0) {
-    _scrollOffset -= 5;
-    updateTreeView();
-  }
-}
-
-function treeScrollDown() {
-  if (_scrollOffset + 30 < _treeData.length) {
-    _scrollOffset += 5;
-    updateTreeView();
+  var box = __tel_node_box_model(_selectedIdx);
+  if (box) {
+    setDetPT(Math.round(box.pad_top));
+    setDetPR(Math.round(box.pad_right));
+    setDetPB(Math.round(box.pad_bottom));
+    setDetPL(Math.round(box.pad_left));
+    setDetMT(Math.round(box.margin_top));
+    setDetMR(Math.round(box.margin_right));
+    setDetMB(Math.round(box.margin_bottom));
+    setDetML(Math.round(box.margin_left));
+    setDetCW(Math.round(box.content_w));
+    setDetCH(Math.round(box.content_h));
   }
 }
 

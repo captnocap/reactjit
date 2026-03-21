@@ -7,8 +7,32 @@ import { PerfPage } from './PerfPage.c';
 import { NetworkPage } from './NetworkPage.c';
 import { ConsolePage } from './ConsolePage.c';
 import { LogsPage } from './LogsPage.c';
+import { telemetry } from './telemetry.script';
+import { elements } from './elements.script';
 
 const [activeTab, setActiveTab] = useState(0);
+
+// ── Tree node data (set by elements.script) ──
+const [treeNodes, setTreeNodes] = useState([{ indent: 0, caret: 0, tag: '', tagColor: '#8fabef', dim: '' }]);
+
+// ── Detail pane state (set by elements.script) ──
+const [detTag, setDetTag] = useState('--');
+const [detDim, setDetDim] = useState('0 x 0');
+const [detPos, setDetPos] = useState('0, 0');
+const [detKids, setDetKids] = useState(0);
+const [detGrow, setDetGrow] = useState(0);
+const [detDir, setDetDir] = useState('column');
+const [detOver, setDetOver] = useState('visible');
+const [detPT, setDetPT] = useState(0);
+const [detPR, setDetPR] = useState(0);
+const [detPB, setDetPB] = useState(0);
+const [detPL, setDetPL] = useState(0);
+const [detMT, setDetMT] = useState(0);
+const [detMR, setDetMR] = useState(0);
+const [detMB, setDetMB] = useState(0);
+const [detML, setDetML] = useState(0);
+const [detCW, setDetCW] = useState(0);
+const [detCH, setDetCH] = useState(0);
 
 // ── Status bar telemetry state ──
 const [statusFps, setStatusFps] = useState(0);
