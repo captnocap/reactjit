@@ -357,7 +357,10 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
 
     if (!is_self_closing) {
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
-            if (self.curKind() == .lbrace) {
+            if (self.curKind() == .lt) {
+                // Nested child element — skip it entirely (including its content and closing tag)
+                skipBalancedElement(self);
+            } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
                 if (self.curKind() == .template_literal) {
                     const tl = try attrs.parseTemplateLiteral(self);
@@ -445,6 +448,46 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .style = style_str,
         .dyn_text_color = dyn_text_color,
     };
+}
+
+/// Skip over a complete JSX element including its content and closing tag.
+/// Handles self-closing (<Foo />) and open/close (<Foo>...</Foo>) elements,
+/// including nested children of arbitrary depth.
+fn skipBalancedElement(self: *Generator) void {
+    if (self.curKind() != .lt) return;
+    self.advance_token(); // <
+    // Skip tag name (and C.Name patterns)
+    if (self.curKind() == .identifier) self.advance_token();
+    if (self.curKind() == .dot) { self.advance_token(); if (self.curKind() == .identifier) self.advance_token(); }
+    // Skip attributes until > or />
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .lbrace) {
+            attrs.skipBalanced(self) catch {};
+        } else {
+            self.advance_token();
+        }
+    }
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        return; // Self-closing
+    }
+    if (self.curKind() == .gt) self.advance_token();
+    // Skip content until matching closing tag
+    while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+        if (self.curKind() == .lt) {
+            skipBalancedElement(self); // Recurse for nested children
+        } else if (self.curKind() == .lbrace) {
+            attrs.skipBalanced(self) catch {};
+        } else {
+            self.advance_token();
+        }
+    }
+    // Skip closing tag </Tag> or </C.Tag>
+    if (self.curKind() == .lt_slash) self.advance_token();
+    if (self.curKind() == .identifier) self.advance_token();
+    if (self.curKind() == .dot) self.advance_token();
+    if (self.curKind() == .identifier) self.advance_token();
+    if (self.curKind() == .gt) self.advance_token();
 }
 
 pub fn mergeStyles(alloc: std.mem.Allocator, base: []const u8, override: []const u8) ![]const u8 {

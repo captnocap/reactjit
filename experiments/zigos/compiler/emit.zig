@@ -772,10 +772,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
         for (0..self.map_count) |mi| {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "const MAX_MAP_{d}: usize = 4096;\n" ++
-                "var _map_pool_{d}: [MAX_MAP_{d}]Node = [_]Node{{.{{}}}} ** MAX_MAP_{d};\n" ++
+                "const MAX_MAP_{d}: usize = 256;\n" ++
+                "var _map_pool_{d}: [MAX_MAP_{d}]Node = undefined;\n" ++
                 "var _map_count_{d}: usize = 0;\n",
-                .{ mi, mi, mi, mi, mi }));
+                .{ mi, mi, mi, mi }));
             const m = self.maps[mi];
             if (m.inner_count > 0 and !m.is_self_closing) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -787,8 +787,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 if (m.inner_nodes[ni].is_dynamic_text) {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "var _map_text_bufs_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
-                        "var _map_texts_{d}_{d}: [MAX_MAP_{d}][]const u8 = [_][]const u8{{\"\"}} ** MAX_MAP_{d};\n",
-                        .{ mi, ni, mi, mi, ni, mi, mi }));
+                        "var _map_texts_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
+                        .{ mi, ni, mi, mi, ni, mi }));
                 }
             }
         }

@@ -40,19 +40,26 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
             if (self.curKind() == .colon) self.advance_token();
 
             if (mapColorKey(key)) |color_field| {
-                const val = try parseStringAttrInline(self);
-                const color = try parseColorValue(self, val);
-                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                try fields.appendSlice(self.alloc, ".");
-                try fields.appendSlice(self.alloc, color_field);
-                try fields.appendSlice(self.alloc, " = ");
-                try fields.appendSlice(self.alloc, color);
-            } else if (mapStyleKeyI16(key)) |zig_key| {
-                var val = self.curText();
-                if (self.curKind() == .identifier) {
-                    if (self.findProp(val)) |pval| val = pval;
+                if (self.curKind() == .string) {
+                    const val = try parseStringAttrInline(self);
+                    const color = try parseColorValue(self, val);
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".");
+                    try fields.appendSlice(self.alloc, color_field);
+                    try fields.appendSlice(self.alloc, " = ");
+                    try fields.appendSlice(self.alloc, color);
+                } else {
+                    // Non-string color (e.g., item.color where color is packed 0xRRGGBB i64)
+                    const val = consumeStyleValueExpr(self);
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".");
+                    try fields.appendSlice(self.alloc, color_field);
+                    try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        " = Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                        .{ val, val, val }));
                 }
-                self.advance_token();
+            } else if (mapStyleKeyI16(key)) |zig_key| {
+                const val = consumeStyleValueExpr(self);
                 if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                 try fields.appendSlice(self.alloc, ".");
                 try fields.appendSlice(self.alloc, zig_key);
@@ -85,11 +92,7 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                         try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{px}));
                     }
                 } else {
-                    var val = self.curText();
-                    if (self.curKind() == .identifier) {
-                        if (self.findProp(val)) |pval| val = pval;
-                    }
-                    self.advance_token();
+                    const val = consumeStyleValueExpr(self);
                     // State getter in a style field → dynamic style binding
                     if (std.mem.indexOf(u8, val, "state.getSlot") != null or
                         std.mem.indexOf(u8, val, "state.getSlotFloat") != null)
@@ -114,17 +117,28 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                         try fields.appendSlice(self.alloc, ".");
                         try fields.appendSlice(self.alloc, zig_key);
                         try fields.appendSlice(self.alloc, " = ");
-                        try fields.appendSlice(self.alloc, val);
+                        // Object array fields are i64 — cast to f32 for style values
+                        if (std.mem.indexOf(u8, val, "_oa") != null) {
+                            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "@as(f32, @floatFromInt({s}))", .{val}));
+                        } else {
+                            try fields.appendSlice(self.alloc, val);
+                        }
                     }
                 }
             } else if (mapEnumKey(key)) |mapping| {
-                const val = try parseStringAttrInline(self);
-                if (mapEnumValue(mapping.prefix, val)) |zig_val| {
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".");
-                    try fields.appendSlice(self.alloc, mapping.field);
-                    try fields.appendSlice(self.alloc, " = ");
-                    try fields.appendSlice(self.alloc, zig_val);
+                if (self.curKind() == .string) {
+                    const val = try parseStringAttrInline(self);
+                    if (mapEnumValue(mapping.prefix, val)) |zig_val| {
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, mapping.field);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, zig_val);
+                    }
+                } else {
+                    // Expression value for enum key — consume and skip
+                    _ = consumeStyleValueExpr(self);
                 }
             } else {
                 const warn_msg = std.fmt.allocPrint(self.alloc,
@@ -132,6 +146,9 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                 self.addWarning(self.cur().start, warn_msg);
                 skipStyleValue(self);
             }
+        } else {
+            // Safety: skip unknown tokens to prevent infinite loop
+            self.advance_token();
         }
         if (self.curKind() == .comma) self.advance_token();
     }
@@ -145,6 +162,71 @@ pub fn skipStyleValue(self: *Generator) void {
     if (self.curKind() == .string or self.curKind() == .number or self.curKind() == .identifier) {
         self.advance_token();
     }
+}
+
+/// Consume a multi-token style value expression until comma or rbrace.
+/// Handles expressions like `bar.pct * 3`, `item.color`, `foo + bar`.
+/// Resolves map item field references (bar.field → _oa{N}_{field}[_i]),
+/// map index params (i → _i), and prop bindings.
+pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
+    var expr: std.ArrayListUnmanaged(u8) = .{};
+    var depth: u32 = 0;
+    while (self.curKind() != .eof) {
+        const k = self.curKind();
+        // Stop at comma or closing brace (unless inside nested parens/braces)
+        if (depth == 0 and (k == .comma or k == .rbrace)) break;
+        if (k == .lparen or k == .lbrace) depth += 1;
+        if ((k == .rparen or k == .rbrace) and depth > 0) depth -= 1;
+        const txt = self.curText();
+        if (k == .identifier) {
+            // Check map item param: bar.field → _oa{N}_{field}[_i]
+            if (self.map_item_param != null and std.mem.eql(u8, txt, self.map_item_param.?)) {
+                self.advance_token();
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // skip dot
+                    const field_name = self.curText();
+                    self.advance_token(); // skip field
+                    if (self.map_obj_array_idx) |oa_idx| {
+                        expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                            "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "") catch {};
+                    } else {
+                        expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                            "_item.{s}", .{field_name}) catch "") catch {};
+                    }
+                } else {
+                    // Bare item param without field access
+                    expr.appendSlice(self.alloc, "_item") catch {};
+                }
+                continue;
+            }
+            // Check map index param: i → _i
+            if (self.map_index_param) |idx_p| {
+                if (std.mem.eql(u8, txt, idx_p)) {
+                    expr.appendSlice(self.alloc, "@as(f32, @floatFromInt(_i))") catch {};
+                    self.advance_token();
+                    continue;
+                }
+            }
+            if (self.findProp(txt)) |resolved| {
+                expr.appendSlice(self.alloc, resolved) catch {};
+            } else {
+                expr.appendSlice(self.alloc, txt) catch {};
+            }
+        } else {
+            // Operators need spaces around them for valid Zig
+            if (k == .plus or k == .minus or k == .star or k == .slash) {
+                if (expr.items.len > 0 and expr.items[expr.items.len - 1] != ' ')
+                    expr.append(self.alloc, ' ') catch {};
+                expr.appendSlice(self.alloc, txt) catch {};
+                expr.append(self.alloc, ' ') catch {};
+            } else {
+                expr.appendSlice(self.alloc, txt) catch {};
+            }
+        }
+        self.advance_token();
+    }
+    if (expr.items.len == 0) return "0";
+    return expr.items;
 }
 
 // ── String/expr attribute parsing ──
