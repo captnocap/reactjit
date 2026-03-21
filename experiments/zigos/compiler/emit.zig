@@ -875,6 +875,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     "    for (0.._map_count_{d}) |_i| {{\n" ++
                     "        const _item = state.getStringArrayElement({d}, _i);\n",
                     .{ mi, m.string_array_slot_id, mi, mi, mi, m.string_array_slot_id }));
+            } else if (m.is_object_array) {
+                // Object array — no _item, fields are accessed via _oa{N}_{field}[_i]
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _rebuildMap{d}() void {{\n" ++
+                    "    _map_count_{d} = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
+                    "    for (0.._map_count_{d}) |_i| {{\n",
+                    .{ mi, mi, m.object_array_idx, mi, mi }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "fn _rebuildMap{d}() void {{\n" ++

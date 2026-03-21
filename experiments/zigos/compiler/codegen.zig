@@ -490,6 +490,7 @@ pub const Generator = struct {
     map_item_param: ?[]const u8,
     map_index_param: ?[]const u8,
     map_item_type: ?StateType,
+    map_obj_array_idx: ?u32,
 
 
     // Conditionals ({expr && <JSX>})
@@ -705,6 +706,7 @@ pub const Generator = struct {
             .map_item_param = null,
             .map_index_param = null,
             .map_item_type = null,
+            .map_obj_array_idx = null,
             .conditionals = undefined,
             .conditional_count = 0,
             .app_conds = undefined,

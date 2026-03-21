@@ -125,13 +125,20 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_video = std.mem.eql(u8, tag_name, "Video");
     // Render → Box with render_src field
     const is_render = std.mem.eql(u8, tag_name, "Render");
+    // Effect → Box with effect_type field (generative visuals)
+    const is_effect = std.mem.eql(u8, tag_name, "Spirograph") or std.mem.eql(u8, tag_name, "Rings") or
+        std.mem.eql(u8, tag_name, "Constellation") or std.mem.eql(u8, tag_name, "FlowParticles") or
+        std.mem.eql(u8, tag_name, "Voronoi") or std.mem.eql(u8, tag_name, "Terrain") or
+        std.mem.eql(u8, tag_name, "Sunburst") or std.mem.eql(u8, tag_name, "Cymatics");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
-    // Canvas.Node / Canvas.Path / Canvas.Clamp
+    // Graph → Box with graph_container (SVG paths, no pan/zoom)
+    const is_graph = std.mem.eql(u8, tag_name, "Graph");
+    // Canvas.Node / Canvas.Path / Canvas.Clamp / Graph.Path / Graph.Node
     var is_canvas_node = false;
     var is_canvas_path = false;
     var is_canvas_clamp = false;
-    if (is_canvas and self.curKind() == .dot) {
+    if ((is_canvas or is_graph) and self.curKind() == .dot) {
         self.advance_token(); // skip '.'
         if (self.curKind() == .identifier) {
             const sub = self.curText();
@@ -141,7 +148,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             } else if (std.mem.eql(u8, sub, "Path")) {
                 self.advance_token();
                 is_canvas_path = true;
-            } else if (std.mem.eql(u8, sub, "Clamp")) {
+            } else if (std.mem.eql(u8, sub, "Clamp") and is_canvas) {
                 self.advance_token();
                 is_canvas_clamp = true;
             }
@@ -179,6 +186,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_view_x_str: []const u8 = "";
     var canvas_view_y_str: []const u8 = "";
     var canvas_view_zoom_str: []const u8 = "";
+    var canvas_drift_x_str: []const u8 = "";
+    var canvas_drift_y_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
 
@@ -272,12 +281,16 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     try attrs.skipAttrValue(self);
                 } else if (std.mem.eql(u8, attr_name, "type") and is_canvas and !is_canvas_node and !is_canvas_path) {
                     canvas_type_str = try attrs.parseStringAttr(self);
-                } else if (std.mem.eql(u8, attr_name, "viewX") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                } else if (std.mem.eql(u8, attr_name, "viewX") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
                     canvas_view_x_str = try parseSignedNum(self);
-                } else if (std.mem.eql(u8, attr_name, "viewY") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                } else if (std.mem.eql(u8, attr_name, "viewY") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
                     canvas_view_y_str = try parseSignedNum(self);
-                } else if (std.mem.eql(u8, attr_name, "viewZoom") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                } else if (std.mem.eql(u8, attr_name, "viewZoom") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
                     canvas_view_zoom_str = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "driftX") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                    canvas_drift_x_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "driftY") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                    canvas_drift_y_str = try parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gx") and is_canvas_node) {
                     canvas_gx_str = try parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gy") and is_canvas_node) {
@@ -677,6 +690,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, "\"");
     }
 
+    // Effect type
+    if (is_effect) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".effect_type = \"");
+        try fields.appendSlice(self.alloc, tag_name);
+        try fields.appendSlice(self.alloc, "\"");
+    }
+
     // onPress handler
     if (on_press_start) |start| {
         const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
@@ -701,6 +722,29 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
         }
         try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // Graph container (SVG paths, no pan/zoom)
+    if (is_graph and !is_canvas_node and !is_canvas_path) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".graph_container = true");
+        const has_view = canvas_view_x_str.len > 0 or canvas_view_y_str.len > 0 or canvas_view_zoom_str.len > 0;
+        if (has_view) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".canvas_view_set = true");
+        }
+        if (canvas_view_x_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_x = ");
+            try fields.appendSlice(self.alloc, canvas_view_x_str);
+        }
+        if (canvas_view_y_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_y = ");
+            try fields.appendSlice(self.alloc, canvas_view_y_str);
+        }
+        if (canvas_view_zoom_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_zoom = ");
+            try fields.appendSlice(self.alloc, canvas_view_zoom_str);
+        }
     }
 
     // Canvas type + view
@@ -730,6 +774,19 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (canvas_view_zoom_str.len > 0) {
             try fields.appendSlice(self.alloc, ", .canvas_view_zoom = ");
             try fields.appendSlice(self.alloc, canvas_view_zoom_str);
+        }
+        // Drift — continuous viewport animation
+        const has_drift = canvas_drift_x_str.len > 0 or canvas_drift_y_str.len > 0;
+        if (has_drift) {
+            try fields.appendSlice(self.alloc, ", .canvas_drift_active = true");
+            if (canvas_drift_x_str.len > 0) {
+                try fields.appendSlice(self.alloc, ", .canvas_drift_x = ");
+                try fields.appendSlice(self.alloc, canvas_drift_x_str);
+            }
+            if (canvas_drift_y_str.len > 0) {
+                try fields.appendSlice(self.alloc, ", .canvas_drift_y = ");
+                try fields.appendSlice(self.alloc, canvas_drift_y_str);
+            }
         }
     }
 
@@ -1369,8 +1426,9 @@ fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     const array_name = self.curText();
     const computed_idx = self.isComputedArray(array_name);
     const state_idx = if (computed_idx == null) self.isArrayState(array_name) else null;
+    const obj_arr_idx = if (computed_idx == null and state_idx == null) self.isObjectArray(array_name) else null;
 
-    if (computed_idx == null and state_idx == null) {
+    if (computed_idx == null and state_idx == null and obj_arr_idx == null) {
         // Not a known array source — skip past the .map() and return empty
         self.advance_token(); // identifier
         return ".{}";
@@ -1407,6 +1465,7 @@ fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     if (computed_idx) |ci| {
         self.map_item_type = self.computed_arrays[ci].element_type;
     }
+    self.map_obj_array_idx = obj_arr_idx;
 
     // Parse the JSX template
     const template = try parseMapTemplate(self);
@@ -1415,6 +1474,7 @@ fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     self.map_item_param = null;
     self.map_index_param = null;
     self.map_item_type = null;
+    self.map_obj_array_idx = null;
 
     // Skip optional ) after JSX
     if (had_paren and self.curKind() == .rparen) self.advance_token();
@@ -1442,9 +1502,9 @@ fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .computed_idx = ci,
                 .computed_element_type = self.computed_arrays[ci].element_type,
             };
-        } else {
+        } else if (obj_arr_idx) |oi| {
             self.maps[self.map_count] = .{
-                .array_slot_id = self.arraySlotId(state_idx.?),
+                .array_slot_id = 0,
                 .item_param = item_param,
                 .index_param = index_param,
                 .parent_arr_name = "",
@@ -1456,6 +1516,27 @@ fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .inner_count = template.inner_count,
                 .is_self_closing = template.is_self_closing,
                 .is_text_element = template.is_text_element,
+                .is_object_array = true,
+                .object_array_idx = oi,
+            };
+        } else {
+            const si = state_idx.?;
+            const is_str_arr = std.meta.activeTag(self.state_slots[si].initial) == .string_array;
+            self.maps[self.map_count] = .{
+                .array_slot_id = if (is_str_arr) 0 else self.arraySlotId(si),
+                .item_param = item_param,
+                .index_param = index_param,
+                .parent_arr_name = "",
+                .child_idx = 0,
+                .outer_style = template.outer_style,
+                .outer_font_size = template.outer_font_size,
+                .outer_text_color = template.outer_text_color,
+                .inner_nodes = template.inner_nodes,
+                .inner_count = template.inner_count,
+                .is_self_closing = template.is_self_closing,
+                .is_text_element = template.is_text_element,
+                .is_string_array = is_str_arr,
+                .string_array_slot_id = if (is_str_arr) self.stringArraySlotId(si) else 0,
             };
         }
         self.map_count += 1;
@@ -1479,9 +1560,18 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
     };
     self.advance_token(); // <
 
-    const tag = self.curText();
+    var tag = self.curText();
+    self.advance_token(); // tag name (or "C")
+    // Handle C.Name classifier references
+    if (std.mem.eql(u8, tag, "C") and self.curKind() == .dot) {
+        self.advance_token(); // .
+        const cls_name = self.curText();
+        self.advance_token(); // actual name
+        if (self.findClassifier(cls_name)) |idx| {
+            tag = self.classifier_primitives[idx];
+        }
+    }
     const is_text = std.mem.eql(u8, tag, "Text");
-    self.advance_token(); // tag name
 
     var style_str: []const u8 = "";
     var font_size: []const u8 = "";
@@ -1566,8 +1656,10 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                 }
             }
         }
-        // Skip closing tag
+        // Skip closing tag (handles </Tag> and </C.Tag>)
         if (self.curKind() == .lt_slash) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token();
+        if (self.curKind() == .dot) self.advance_token();
         if (self.curKind() == .identifier) self.advance_token();
         if (self.curKind() == .gt) self.advance_token();
     }
@@ -1586,7 +1678,12 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
 /// Parse a single child element inside a .map() template.
 fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     self.advance_token(); // <
-    self.advance_token(); // tag name
+    self.advance_token(); // tag name (or "C")
+    // Handle C.Name classifier references
+    if (self.curKind() == .dot) {
+        self.advance_token(); // .
+        self.advance_token(); // actual name
+    }
 
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
@@ -1640,6 +1737,60 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                         text_args = tl.args;
                     } else {
                         static_text = tl.static_text;
+                    }
+                } else if (self.curKind() == .identifier) {
+                    // {item} or {node.field} — identifier reference in .map() callbacks
+                    const ident = self.curText();
+                    self.advance_token();
+                    if (self.map_item_param) |param| {
+                        if (std.mem.eql(u8, ident, param)) {
+                            if (self.curKind() == .dot and self.map_obj_array_idx != null) {
+                                // Object array field access: {node.tag}
+                                self.advance_token(); // .
+                                const field_name = self.curText();
+                                self.advance_token(); // field
+                                const oa_idx = self.map_obj_array_idx.?;
+                                const oa = self.object_arrays[oa_idx];
+                                for (0..oa.field_count) |fi| {
+                                    if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                                        is_dynamic_text = true;
+                                        switch (oa.fields[fi].field_type) {
+                                            .string => {
+                                                text_fmt = "{s}";
+                                                text_args = std.fmt.allocPrint(self.alloc,
+                                                    "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]",
+                                                    .{ oa_idx, field_name, oa_idx, field_name }) catch "";
+                                            },
+                                            .float => {
+                                                text_fmt = "{d}";
+                                                text_args = std.fmt.allocPrint(self.alloc,
+                                                    "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "";
+                                            },
+                                            else => {
+                                                text_fmt = "{d}";
+                                                text_args = std.fmt.allocPrint(self.alloc,
+                                                    "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "";
+                                            },
+                                        }
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // Bare map item param — mark as dynamic text
+                                is_dynamic_text = true;
+                                text_fmt = "{s}";
+                                text_args = ident;
+                            }
+                        }
+                    }
+                    if (!is_dynamic_text) {
+                        if (self.map_index_param) |param| {
+                            if (std.mem.eql(u8, ident, param)) {
+                                is_dynamic_text = true;
+                                text_fmt = "{d}";
+                                text_args = ident;
+                            }
+                        }
                     }
                 }
                 if (self.curKind() == .rbrace) self.advance_token();
