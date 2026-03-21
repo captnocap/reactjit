@@ -7,7 +7,7 @@ function TreeHybridView() {
     <C.TreeStack>
       {treeNodes.map((node) => (
         <C.TreeRow>
-          <Text fontSize={11} color="#93a8d0">{node.tag}</Text>
+          <Text fontSize={11} color={node.tagColor}>{node.tag}</Text>
           <C.TreeDim>{node.dim}</C.TreeDim>
         </C.TreeRow>
       ))}

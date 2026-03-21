@@ -1687,6 +1687,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
 
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
+    var dyn_text_color: []const u8 = "";
     var style_str: []const u8 = "";
     var is_self_closing = false;
 
@@ -1701,8 +1702,41 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                 } else if (std.mem.eql(u8, attr, "fontSize")) {
                     font_size = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr, "color")) {
-                    const hex = try attrs.parseStringAttr(self);
-                    text_color = try attrs.parseColorValue(self, hex);
+                    // Check for dynamic color: color={node.field}
+                    if (self.curKind() == .lbrace and self.map_obj_array_idx != null and self.map_item_param != null) {
+                        const saved = self.pos;
+                        self.advance_token(); // {
+                        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), self.map_item_param.?)) {
+                            self.advance_token(); // node
+                            if (self.curKind() == .dot) {
+                                self.advance_token(); // .
+                                const field_name = self.curText();
+                                self.advance_token(); // field
+                                if (self.curKind() == .rbrace) self.advance_token(); // }
+                                const oa_idx = self.map_obj_array_idx.?;
+                                const oa = self.object_arrays[oa_idx];
+                                for (0..oa.field_count) |fi| {
+                                    if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                                        dyn_text_color = try std.fmt.allocPrint(self.alloc,
+                                            "Color.fromHex(_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]])",
+                                            .{ oa_idx, field_name, oa_idx, field_name });
+                                        break;
+                                    }
+                                }
+                            } else {
+                                self.pos = saved;
+                                const hex = try attrs.parseStringAttr(self);
+                                text_color = try attrs.parseColorValue(self, hex);
+                            }
+                        } else {
+                            self.pos = saved;
+                            const hex = try attrs.parseStringAttr(self);
+                            text_color = try attrs.parseColorValue(self, hex);
+                        }
+                    } else {
+                        const hex = try attrs.parseStringAttr(self);
+                        text_color = try attrs.parseColorValue(self, hex);
+                    }
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -1812,6 +1846,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .is_dynamic_text = is_dynamic_text,
         .static_text = static_text,
         .style = style_str,
+        .dyn_text_color = dyn_text_color,
     };
 }
 

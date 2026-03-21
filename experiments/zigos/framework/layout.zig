@@ -55,6 +55,28 @@ pub const Color = struct {
     pub fn rgba(r: u8, g: u8, b: u8, a: u8) Color {
         return .{ .r = r, .g = g, .b = b, .a = a };
     }
+
+    /// Parse a "#RRGGBB" hex string at runtime. Returns transparent black on bad input.
+    pub fn fromHex(hex: []const u8) Color {
+        if (hex.len < 7 or hex[0] != '#') return .{};
+        return .{
+            .r = parseHexByte(hex[1], hex[2]),
+            .g = parseHexByte(hex[3], hex[4]),
+            .b = parseHexByte(hex[5], hex[6]),
+            .a = 255,
+        };
+    }
+
+    fn parseHexByte(hi: u8, lo: u8) u8 {
+        return (@as(u8, hexNibble(hi)) << 4) | @as(u8, hexNibble(lo));
+    }
+
+    fn hexNibble(c: u8) u4 {
+        if (c >= '0' and c <= '9') return @intCast(c - '0');
+        if (c >= 'a' and c <= 'f') return @intCast(c - 'a' + 10);
+        if (c >= 'A' and c <= 'F') return @intCast(c - 'A' + 10);
+        return 0;
+    }
 };
 pub const TextMetrics = struct {
     width: f32 = 0,
@@ -146,6 +168,7 @@ pub const Node = struct {
     image_src: ?[]const u8 = null,
     video_src: ?[]const u8 = null,
     render_src: ?[]const u8 = null,
+    effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
@@ -158,12 +181,19 @@ pub const Node = struct {
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
+    graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)
     canvas_view_x: f32 = 0,
     canvas_view_y: f32 = 0,
     canvas_view_zoom: f32 = 1.0,
     canvas_view_set: bool = false,  // true = apply on first frame
+    // Canvas viewport drift — continuous camera animation (pixels/second)
+    canvas_drift_x: f32 = 0,        // horizontal drift speed (px/s, negative = left)
+    canvas_drift_y: f32 = 0,        // vertical drift speed (px/s, negative = up)
+    canvas_drift_active: bool = false, // true = drift animation is running
+    // Per-node theme override (0 = inherit global, 1+ = palette ID from registry)
+    theme_id: u8 = 0,
     // Canvas.Node fields — position + size in parent canvas's coordinate space
     canvas_node: bool = false,       // true = this is a Canvas.Node
     canvas_gx: f32 = 0,             // graph-space X (center)
@@ -666,14 +696,39 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         node.computed = .{ .x = px, .y = py, .w = @min(pw, 8192), .h = @min(ph, 8192) };
         return;
     }
-    // Canvas.Node: use gw/gh as fixed dimensions, lay out children within them.
-    // Position will be overridden by canvas camera at paint time.
-    if (node.canvas_node and (node.canvas_gw > 0 or node.canvas_gh > 0)) {
+    // Canvas.Node layout:
+    // - gw sets width (or parent width if 0)
+    // - gh>0: fixed height
+    // - gh=0: auto-height — allocate generous box, layout children, measure
+    //   content extent, shrink node to fit, re-layout with real height
+    if (node.canvas_node) {
         const cw = if (node.canvas_gw > 0) node.canvas_gw else pw;
-        const ch = if (node.canvas_gh > 0) node.canvas_gh else ph;
-        node.computed = .{ .x = px, .y = py, .w = cw, .h = ch };
-        for (node.children) |*child| {
-            layoutNode(child, px, py, cw, ch);
+        if (node.canvas_gh > 0) {
+            // Fixed dimensions
+            node.computed = .{ .x = px, .y = py, .w = cw, .h = node.canvas_gh };
+            for (node.children) |*child| {
+                layoutNode(child, px, py, cw, node.canvas_gh);
+            }
+        } else {
+            // Auto-height: allocate big, measure content, shrink to fit
+            const alloc_h: f32 = 500; // generous initial box
+            node.computed = .{ .x = px, .y = py, .w = cw, .h = alloc_h };
+            for (node.children) |*child| {
+                layoutNode(child, px, py, cw, alloc_h);
+            }
+            // Measure actual content extent (subtract dead space)
+            var max_bottom: f32 = 0;
+            for (node.children) |*child| {
+                const bottom = (child.computed.y - py) + child.computed.h;
+                if (bottom > max_bottom) max_bottom = bottom;
+            }
+            const content_h = if (max_bottom > 0) max_bottom else 0;
+            // Shrink node to content and re-layout so % children get real height
+            node.computed.h = content_h;
+            node.canvas_gh = content_h;
+            for (node.children) |*child| {
+                layoutNode(child, px, py, cw, content_h);
+            }
         }
         return;
     }

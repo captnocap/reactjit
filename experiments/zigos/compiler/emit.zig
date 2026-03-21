@@ -942,7 +942,12 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                             ".font_size = {s}", .{inner.font_size}));
                         has_field = true;
                     }
-                    if (inner.text_color.len > 0) {
+                    if (inner.dyn_text_color.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text_color = {s}", .{inner.dyn_text_color}));
+                        has_field = true;
+                    } else if (inner.text_color.len > 0) {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             ".text_color = {s}", .{inner.text_color}));

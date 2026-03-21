@@ -281,6 +281,7 @@ pub const MapInnerNode = struct {
     is_dynamic_text: bool,
     static_text: []const u8,
     style: []const u8,
+    dyn_text_color: []const u8 = "", // Zig expr for runtime color (e.g., Color.fromHex(...))
 };
 
 pub const MapInfo = struct {
