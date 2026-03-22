@@ -130,3 +130,6 @@ function todo_init() {
   _todos.push({ id: 'demo3', title: 'Build TodoMVC in tsz', completed: true });
   _syncState();
 }
+
+// Self-execute on JS load — seed the demo data
+todo_init();

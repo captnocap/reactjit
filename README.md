@@ -114,9 +114,9 @@ Both let you drop out of JSX into imperative code. The difference is where it ru
 | **Runs in** | QuickJS (JS runtime) | Native Zig (compiled into binary) |
 | **When** | Runtime — after app starts | Compile time — baked into the binary |
 | **Good for** | Timers, async fetches, dynamic data, mock data | Performance-critical math, tests, FFI, framework access |
-| **Speed** | Fast enough for UI logic | 57M ops/sec on the bridge (`8b7451b1`) |
+| **Speed** | 52M ops/sec — hits the wall there | No ceiling — native Zig, keeps scaling |
 
-We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec before any FPS drop (`8b7451b1`). But for tight loops, FFI, and anything that needs direct access to Zig's type system, `<zscript>` compiles to zero-overhead native code — no bridge, no QuickJS, no serialization.
+We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. Both `<script>` and `<zscript>` perform identically up to ~50M ops. The difference only shows up past that mark: JS plateaus while Zig keeps scaling. For anything under 50M ops/sec (which is virtually every UI app), use whichever is more convenient. Use `<zscript>` when you need direct Zig type system access, FFI, or you're genuinely past the 50M threshold.
 
 Key commits:
 - `f662eb0d` — FFI option 1: JS host functions, proved the bridge works but showed overhead for tight FFI
