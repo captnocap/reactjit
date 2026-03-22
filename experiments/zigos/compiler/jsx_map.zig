@@ -51,6 +51,10 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     }
 
     // Set map context for template literal parsing
+    // Save outer index param for nested maps (ci in inner map resolves to outer _i)
+    if (self.map_index_param != null) {
+        self.parent_map_index_param = self.map_index_param;
+    }
     self.map_item_param = item_param;
     self.map_index_param = index_param;
     if (computed_idx) |ci| {
@@ -251,7 +255,16 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                         }
                     }
                 } else {
+                    const mc_before = self.map_count;
+                    const parent_mi: i32 = if (self.map_count > 0) @as(i32, @intCast(self.map_count - 1)) else -1;
                     const child = try parseMapTemplateChild(self);
+                    // Check if child parsing created nested maps
+                    if (self.map_count > mc_before and parent_mi >= 0) {
+                        for (mc_before..self.map_count) |nmi| {
+                            self.maps[nmi].parent_map_idx = parent_mi;
+                            self.maps[nmi].parent_inner_idx = inner_count;
+                        }
+                    }
                     if (inner_count < codegen.MAX_MAP_INNER) {
                         inner_nodes[inner_count] = child;
                         inner_count += 1;
@@ -536,8 +549,17 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                         static_text = tl.static_text;
                     }
                 } else if (self.curKind() == .identifier) {
-                    // {item} or {node.field} — identifier reference in .map() callbacks
                     const ident = self.curText();
+                    // Detect nested map: {items.map(...)}
+                    if (self.pos + 2 < self.lex.count and
+                        self.lex.get(self.pos + 1).kind == .dot and
+                        self.lex.get(self.pos + 2).kind == .identifier and
+                        std.mem.eql(u8, self.lex.get(self.pos + 2).text(self.source), "map"))
+                    {
+                        _ = try parseMapExpression(self);
+                        if (self.curKind() == .rbrace) self.advance_token();
+                        continue;
+                    }
                     self.advance_token();
                     if (self.map_item_param) |param| {
                         if (std.mem.eql(u8, ident, param)) {
@@ -705,6 +727,14 @@ fn tryParseMapConditional(
                 try cond.appendSlice(self.alloc, prop_val);
                 self.advance_token();
                 continue;
+            }
+            // Parent map index param (outer _i for nested maps)
+            if (self.parent_map_index_param) |pidx| {
+                if (std.mem.eql(u8, txt, pidx)) {
+                    try cond.appendSlice(self.alloc, "@as(i64, @intCast(_ci))");
+                    self.advance_token();
+                    continue;
+                }
             }
         }
         if (k == .eq_eq) {

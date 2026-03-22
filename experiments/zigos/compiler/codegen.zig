@@ -752,6 +752,7 @@ pub const Generator = struct {
             .map_count = 0,
             .map_item_param = null,
             .map_index_param = null,
+            .parent_map_index_param = null,
             .map_item_type = null,
             .map_obj_array_idx = null,
             .conditionals = undefined,

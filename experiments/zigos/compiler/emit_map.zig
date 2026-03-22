@@ -11,8 +11,25 @@ pub fn emitMapRebuildCalls(self: *Generator, out: *std.ArrayListUnmanaged(u8), p
             "{s}_rebuildComputed{d}();\n", .{ pad, ci }));
     }
     for (0..self.map_count) |mi| {
+        // Skip nested maps — they're chained below
+        if (self.maps[mi].parent_map_idx >= 0) continue;
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "{s}_rebuildMap{d}();\n", .{ pad, mi }));
+    }
+    // Chain nested map pools to parent inner nodes
+    for (0..self.map_count) |mi| {
+        const m = self.maps[mi];
+        if (m.parent_map_idx < 0) continue;
+        const pmi: u32 = @intCast(m.parent_map_idx);
+        // First rebuild the inner map independently
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "{s}_rebuildMap{d}();\n", .{ pad, mi }));
+        // Then assign inner pool to each outer item's child
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "{s}for (0.._map_count_{d}) |_ci| {{\n" ++
+            "{s}    _map_inner_{d}[_ci][{d}].children = _map_pool_{d}[0.._map_count_{d}];\n" ++
+            "{s}}}\n",
+            .{ pad, pmi, pad, pmi, m.parent_inner_idx, mi, mi, pad }));
     }
 }
 
