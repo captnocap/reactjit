@@ -29,12 +29,15 @@ extern fn unlink(path: [*:0]const u8) c_int;
 var server: ?ipc.Server = null;
 var enabled: bool = false;
 var authenticated: bool = false;
+var awaiting_code: bool = false;
 var streaming_telemetry: bool = false;
 var selected_node_id: i32 = -1;
 
 var our_keypair: X25519.KeyPair = undefined;
 var shared_key: [32]u8 = undefined;
 var tx_nonce_counter: u64 = 0;
+var pending_client_pubkey: [32]u8 = undefined;
+var pairing_code: [6]u8 = undefined;
 
 var session_path_buf: [256]u8 = undefined;
 var session_path_len: usize = 0;
@@ -55,11 +58,14 @@ pub fn poll() void {
     _ = srv.acceptClient();
     if (!srv.connected()) {
         authenticated = false;
+        awaiting_code = false;
         return;
     }
     const msgs = srv.poll();
     for (msgs) |msg| {
-        if (!authenticated) {
+        if (awaiting_code) {
+            handleCodeVerify(srv, msg.data);
+        } else if (!authenticated) {
             handleHandshake(srv, msg.data);
         } else {
             handleEncrypted(srv, msg.data);
@@ -72,6 +78,13 @@ pub fn poll() void {
 
 pub fn getSelectedNode() i32 {
     return selected_node_id;
+}
+
+/// Returns the 6-digit pairing code if a client is awaiting confirmation.
+/// Engine uses this to render a modal overlay. Returns null when not pairing.
+pub fn getPairingCode() ?[]const u8 {
+    if (!awaiting_code) return null;
+    return &pairing_code;
 }
 
 pub fn deinit() void {
@@ -141,6 +154,8 @@ fn removeSessionFile() void {
 
 // ── Handshake ──────────────────────────────────────────────────────
 
+/// Phase 1: client sends pubkey → app generates pairing code, shows modal overlay.
+/// Code is NOT sent over the wire — user reads it from the app window.
 fn handleHandshake(srv: *ipc.Server, raw: []const u8) void {
     const hex = jsonStr(raw, "pubkey") orelse {
         dropClient(srv);
@@ -148,19 +163,52 @@ fn handleHandshake(srv: *ipc.Server, raw: []const u8) void {
     };
     if (hex.len != 64) { dropClient(srv); return; }
 
-    var client_pubkey: [32]u8 = undefined;
-    _ = app_crypto.hexToBytes(hex, &client_pubkey) catch { dropClient(srv); return; };
+    _ = app_crypto.hexToBytes(hex, &pending_client_pubkey) catch { dropClient(srv); return; };
 
-    const dh_shared = X25519.scalarmult(our_keypair.secret_key, client_pubkey) catch {
+    // Generate 6-digit pairing code from CSPRNG
+    var rng_bytes: [4]u8 = undefined;
+    std.crypto.random.bytes(&rng_bytes);
+    const rng_val = std.mem.readInt(u32, &rng_bytes, .little) % 1_000_000;
+    _ = std.fmt.bufPrint(&pairing_code, "{d:0>6}", .{rng_val}) catch {};
+
+    awaiting_code = true;
+
+    // Tell client to prompt user for the code (code itself is NOT sent)
+    _ = srv.sendLine("{\"challenge\":\"enter_code\"}");
+}
+
+/// Phase 2: client sends code → app verifies → completes DH + encrypted channel.
+fn handleCodeVerify(srv: *ipc.Server, raw: []const u8) void {
+    const code = jsonStr(raw, "code") orelse {
         dropClient(srv);
+        awaiting_code = false;
+        return;
+    };
+
+    // Constant-time compare to prevent timing attacks
+    if (code.len != 6 or !std.crypto.timing_safe.eql([6]u8, code[0..6].*, pairing_code)) {
+        dropClient(srv);
+        awaiting_code = false;
+        return;
+    }
+
+    // Code verified — complete DH key exchange
+    const dh_shared = X25519.scalarmult(our_keypair.secret_key, pending_client_pubkey) catch {
+        dropClient(srv);
+        awaiting_code = false;
         return;
     };
 
     const prk = app_crypto.hkdfExtract("tsz-debug-v1", &dh_shared);
-    app_crypto.hkdfExpand(&prk, "debug-channel", &shared_key) catch { dropClient(srv); return; };
+    app_crypto.hkdfExpand(&prk, "debug-channel", &shared_key) catch {
+        dropClient(srv);
+        awaiting_code = false;
+        return;
+    };
 
     tx_nonce_counter = 0;
     authenticated = true;
+    awaiting_code = false;
     sendEncrypted(srv, "{\"method\":\"debug.handshake\",\"ok\":true}");
 }
 
@@ -433,7 +481,7 @@ test "jsonInt extracts values" {
     try std.testing.expectEqual(@as(?i32, null), jsonInt("{\"a\":1}", "missing"));
 }
 
-test "e2e: X25519 handshake + encrypted debug.select" {
+test "e2e: X25519 handshake + visual pairing + encrypted debug.select" {
     // Start server
     startServer();
     defer deinit();
@@ -445,7 +493,7 @@ test "e2e: X25519 handshake + encrypted debug.select" {
     defer client.close();
     try std.testing.expect(server.?.acceptClient());
 
-    // Client generates keypair, sends pubkey
+    // Phase 1: Client sends pubkey
     const client_kp = X25519.KeyPair.generate();
     var pubkey_hex: [64]u8 = undefined;
     app_crypto.bytesToHex(&client_kp.public_key, &pubkey_hex);
@@ -455,7 +503,33 @@ test "e2e: X25519 handshake + encrypted debug.select" {
 
     std.Thread.sleep(20 * std.time.ns_per_ms);
     poll();
+
+    // Server should be awaiting code, NOT authenticated yet
+    try std.testing.expect(awaiting_code);
+    try std.testing.expect(!authenticated);
+
+    // Pairing code should be visible
+    const code = getPairingCode() orelse return error.NoPairingCode;
+    try std.testing.expectEqual(@as(usize, 6), code.len);
+
+    // Client reads challenge response
+    std.Thread.sleep(20 * std.time.ns_per_ms);
+    const challenge_msgs = client.poll();
+    try std.testing.expect(challenge_msgs.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, challenge_msgs[0].data, "enter_code") != null);
+
+    // Phase 2: Client sends the code (read from app screen by user)
+    var code_buf: [64]u8 = undefined;
+    const code_msg = std.fmt.bufPrint(&code_buf, "{{\"code\":\"{s}\"}}", .{code}) catch unreachable;
+    try std.testing.expect(client.sendLine(code_msg));
+
+    std.Thread.sleep(20 * std.time.ns_per_ms);
+    poll();
+
+    // Now authenticated, pairing dismissed
     try std.testing.expect(authenticated);
+    try std.testing.expect(!awaiting_code);
+    try std.testing.expectEqual(@as(?[]const u8, null), getPairingCode());
 
     // Client derives same shared key
     const client_dh = X25519.scalarmult(client_kp.secret_key, our_keypair.public_key) catch unreachable;
@@ -479,6 +553,34 @@ test "e2e: X25519 handshake + encrypted debug.select" {
     std.Thread.sleep(20 * std.time.ns_per_ms);
     poll();
     try std.testing.expectEqual(@as(i32, 42), getSelectedNode());
+}
+
+test "wrong pairing code is rejected" {
+    startServer();
+    defer deinit();
+    var client = try ipc.Client.connect(server.?.getPort());
+    defer client.close();
+    _ = server.?.acceptClient();
+
+    // Send pubkey
+    const client_kp = X25519.KeyPair.generate();
+    var pubkey_hex: [64]u8 = undefined;
+    app_crypto.bytesToHex(&client_kp.public_key, &pubkey_hex);
+    var msg_buf: [128]u8 = undefined;
+    const hs_msg = std.fmt.bufPrint(&msg_buf, "{{\"pubkey\":\"{s}\"}}", .{pubkey_hex[0..64]}) catch unreachable;
+    _ = client.sendLine(hs_msg);
+    std.Thread.sleep(20 * std.time.ns_per_ms);
+    poll();
+    try std.testing.expect(awaiting_code);
+
+    // Send wrong code
+    _ = client.sendLine("{\"code\":\"000000\"}");
+    std.Thread.sleep(20 * std.time.ns_per_ms);
+    poll();
+
+    // Should be rejected
+    try std.testing.expect(!authenticated);
+    try std.testing.expect(!awaiting_code);
 }
 
 test "unauthenticated client is dropped" {

@@ -40,6 +40,7 @@ const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else stru
     pub fn poll() void {}
     pub fn deinit() void {}
     pub fn getSelectedNode() i32 { return -1; }
+    pub fn getPairingCode() ?[]const u8 { return null; }
 };
 
 // Force-reference crypto.zig so its export fn symbols (e.g. crypto_run_all_tests) are available to the linker.
@@ -1449,6 +1450,26 @@ pub fn run(config: AppConfig) !void {
 
         // Tooltip overlay (always on top of main tree)
         tooltip.paintOverlay(measureCallback, win_w, win_h);
+
+        // Debug pairing overlay — modal with 6-digit code
+        if (debug_server.getPairingCode()) |code| {
+            // Semi-transparent backdrop
+            gpu.drawRect(0, 0, win_w, win_h, 0, 0, 0, 0.6, 0, 0, 0, 0, 0, 0);
+            // Card background
+            const cw: f32 = 320;
+            const ch: f32 = 140;
+            const cx = (win_w - cw) / 2;
+            const cy = (win_h - ch) / 2;
+            gpu.drawRect(cx, cy, cw, ch, 0.12, 0.14, 0.20, 0.95, 12, 0, 0, 0, 0, 0);
+            // Border
+            gpu.drawRect(cx, cy, cw, ch, 0, 0, 0, 0, 12, 1.5, 0.38, 0.65, 0.98, 0.8);
+            // Title
+            _ = gpu.drawTextWrapped("Debug Pairing", cx + 20, cy + 16, 15, cw - 40, 0.89, 0.91, 0.94, 1.0, 0);
+            // Code (large)
+            _ = gpu.drawTextWrapped(code, cx + 60, cy + 55, 36, cw - 120, 0.38, 0.65, 0.98, 1.0, 0);
+            // Hint
+            _ = gpu.drawTextWrapped("Enter this code in tsz-tools", cx + 20, cy + 108, 11, cw - 40, 0.58, 0.63, 0.73, 0.8, 0);
+        }
 
         const t5 = std.time.microTimestamp();
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
