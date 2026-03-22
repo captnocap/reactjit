@@ -43,6 +43,13 @@ pub const EffectContext = struct {
     // ── Frame counter ──
     frame: u32,
 
+    // ── Source buffer (mask mode only) ──
+    // When non-null, this is the captured parent content for post-processing.
+    // Masks read from source (parent's rendered pixels) and write to buf (output).
+    source: ?[*]const u8 = null,
+    source_width: u32 = 0,
+    source_height: u32 = 0,
+
     // ════════════════════════════════════════════════════════════════
     // Pixel operations
     // ════════════════════════════════════════════════════════════════
@@ -83,6 +90,25 @@ pub const EffectContext = struct {
             @as(f32, @floatFromInt(self.buf[idx + 1])) / 255.0,
             @as(f32, @floatFromInt(self.buf[idx + 2])) / 255.0,
             @as(f32, @floatFromInt(self.buf[idx + 3])) / 255.0,
+        };
+    }
+
+    /// Read a pixel from the source buffer (mask mode only).
+    /// Returns the parent's rendered content at (x, y) as [r, g, b, a] floats 0..1.
+    /// Returns zero if no source is set (standalone/background mode).
+    pub fn getSource(self: *const EffectContext, x: f32, y: f32) [4]f32 {
+        const src = self.source orelse return .{ 0, 0, 0, 0 };
+        if (x < 0 or y < 0) return .{ 0, 0, 0, 0 };
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.source_width or uy >= self.source_height) return .{ 0, 0, 0, 0 };
+        const src_stride = self.source_width * 4;
+        const idx = @as(usize, uy) * @as(usize, src_stride) + @as(usize, ux) * 4;
+        return .{
+            @as(f32, @floatFromInt(src[idx])) / 255.0,
+            @as(f32, @floatFromInt(src[idx + 1])) / 255.0,
+            @as(f32, @floatFromInt(src[idx + 2])) / 255.0,
+            @as(f32, @floatFromInt(src[idx + 3])) / 255.0,
         };
     }
 

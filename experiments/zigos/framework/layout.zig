@@ -216,6 +216,8 @@ pub const Node = struct {
     canvas_flow_speed: f32 = 0,     // 0 = solid, >0 = flow forward, <0 = flow reverse
     // Effect — user-compiled pixel render callback
     effect_render: ?effect_ctx.RenderFn = null,
+    effect_background: bool = false, // true = render behind parent's children
+    effect_mask: bool = false,       // true = post-process parent's rendered content
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,

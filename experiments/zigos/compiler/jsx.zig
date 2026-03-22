@@ -200,6 +200,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
     var on_render_start: ?u32 = null; // <Effect onRender={...}>
+    var effect_is_background: bool = false; // <Effect background ...>
+    var effect_is_mask: bool = false; // <Effect mask ...>
 
     // Pre-populate from classifier
     if (classifier_idx) |idx| {
@@ -326,6 +328,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_flow_speed_str = try parseSignedNum(self);
                 } else {
                     try attrs.skipAttrValue(self);
+                }
+            } else {
+                // Bare boolean attributes (no =): <Effect background />, <Effect mask />
+                if (is_custom_effect and std.mem.eql(u8, attr_name, "background")) {
+                    effect_is_background = true;
+                } else if (is_custom_effect and std.mem.eql(u8, attr_name, "mask")) {
+                    effect_is_mask = true;
                 }
             }
         } else {
@@ -756,6 +765,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".effect_render = ");
         try fields.appendSlice(self.alloc, render_name);
         self.has_effect_render = true;
+        if (effect_is_background) {
+            try fields.appendSlice(self.alloc, ", .effect_background = true");
+        }
+        if (effect_is_mask) {
+            try fields.appendSlice(self.alloc, ", .effect_mask = true");
+        }
     }
 
     // onPress handler
