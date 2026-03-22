@@ -1,0 +1,26 @@
+function App() {
+  return (
+    <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
+      <h1 style={{ fontSize: 18 }}>WPT: order property</h1>
+
+      <p style={{ fontSize: 11 }}>Note: CSS order property is not supported by the layout engine</p>
+      <p style={{ fontSize: 11 }}>The Style struct has no order field. Items render in DOM order.</p>
+
+      <p style={{ fontSize: 11 }}>DOM order (reference) — 1, 2, 3 left to right</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 50, backgroundColor: '#333', gap: 4, padding: 4 }}>
+        <div style={{ width: 60, height: 40, backgroundColor: '#4CAF50' }}>
+          <span style={{ color: '#FFF', fontSize: 14 }}>1</span>
+        </div>
+        <div style={{ width: 60, height: 40, backgroundColor: '#2196F3' }}>
+          <span style={{ color: '#FFF', fontSize: 14 }}>2</span>
+        </div>
+        <div style={{ width: 60, height: 40, backgroundColor: '#FF9800' }}>
+          <span style={{ color: '#FFF', fontSize: 14 }}>3</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11 }}>With order, visual order would be 3, 1, 2</p>
+      <p style={{ fontSize: 11 }}>UNSUPPORTED — requires order field in Style struct + sort in layout</p>
+    </div>
+  );
+}
