@@ -46,6 +46,14 @@ fn easingExpr(alloc: std.mem.Allocator, easing: codegen.EasingKind, t_expr: []co
     };
 }
 
+/// Check if any DynStyle has a CSS transition config (controls whether transition import is emitted).
+fn hasAnyTransitions(self: *Generator) bool {
+    for (0..self.dyn_style_count) |i| {
+        if (self.dyn_styles[i].transition_config.len > 0) return true;
+    }
+    return false;
+}
+
 fn emitTransitionTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: codegen.AnimHook) !void {
     const slot_id = hook.slot_id;
     const rid = self.regularSlotId(slot_id);
@@ -363,6 +371,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.input_counter > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const input = @import(\"{s}input.zig\");\n", .{prefix}));
     if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
     if (self.has_breakpoints) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const breakpoint = @import(\"{s}breakpoint.zig\");\n", .{prefix}));
+    if (hasAnyTransitions(self)) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const transition = @import(\"{s}transition.zig\");\n", .{prefix}));
+    if (self.has_effect_render) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const effect_ctx = @import(\"{s}effect_ctx.zig\");\n", .{prefix}));
     if (self.ffi_funcs.items.len > 0 or self.compute_js != null or self.object_array_count > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
     if (self.compute_zig != null) {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testharness = @import(\"{s}testharness.zig\");\n", .{prefix}));
@@ -1189,6 +1199,22 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (0..self.dyn_style_count) |dsi| {
         const ds = &self.dyn_styles[dsi];
         if (!ds.has_ref) continue;
+
+        // CSS transition path: emit transition.set() instead of direct assignment
+        if (ds.transition_config.len > 0) {
+            const value_wrapper = if (ds.is_color) "color" else "float";
+            if (ds.arr_name.len == 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    transition.set(&_root, .{s}, .{{ .{s} = {s} }}, {s});\n",
+                    .{ ds.field, value_wrapper, ds.expression, ds.transition_config }));
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    transition.set(&{s}[{d}], .{s}, .{{ .{s} = {s} }}, {s});\n",
+                    .{ ds.arr_name, ds.arr_index, ds.field, value_wrapper, ds.expression, ds.transition_config }));
+            }
+            continue;
+        }
+
         // f32 fields assigned from state slots need casting:
         // state.getSlot() returns i64 → @floatFromInt
         // state.getSlotFloat() returns f64 → @floatCast

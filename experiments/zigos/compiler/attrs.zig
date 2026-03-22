@@ -28,6 +28,14 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
 
     var fields: std.ArrayListUnmanaged(u8) = .{};
 
+    // Track which DynStyles are created in this style block (for transition tagging)
+    const dyn_style_start = self.dyn_style_count;
+    // Transition configs parsed from the 'transition' key (applied after loop)
+    var trans_fields: [16][]const u8 = undefined; // Zig field names
+    var trans_configs: [16][]const u8 = undefined; // Zig TransitionConfig literals
+    var trans_is_color: [16]bool = undefined;
+    var trans_count: u32 = 0;
+
     while (self.curKind() != .rbrace and self.curKind() != .eof) {
         if (self.curKind() == .identifier or self.curKind() == .string) {
             var key = self.curText();
@@ -154,6 +162,83 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                     // Expression value for enum key — consume and skip
                     _ = consumeStyleValueExpr(self);
                 }
+            } else if (std.mem.eql(u8, key, "transition")) {
+                // Parse transition config: { property: { duration: N, easing: "..." }, ... }
+                if (self.curKind() == .lbrace) {
+                    self.advance_token();
+                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                        if (self.curKind() == .identifier or self.curKind() == .string) {
+                            var prop_key = self.curText();
+                            const is_str = self.curKind() == .string;
+                            self.advance_token();
+                            if (is_str and prop_key.len >= 2) prop_key = prop_key[1 .. prop_key.len - 1];
+                            if (self.curKind() == .colon) self.advance_token();
+
+                            // Map camelCase prop name to Zig field name
+                            const zig_field = mapColorKey(prop_key) orelse
+                                (if (mapStyleKey(prop_key)) |sk| sk else
+                                (if (std.mem.eql(u8, prop_key, "all")) "all" else prop_key));
+                            const is_color = mapColorKey(prop_key) != null;
+
+                            // Parse the config object { duration: N, easing: "...", delay: N }
+                            if (self.curKind() == .lbrace) {
+                                self.advance_token();
+                                var dur: u16 = 300;
+                                var del: u16 = 0;
+                                var easing_str: []const u8 = "ease_in_out";
+                                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                    if (self.curKind() == .identifier) {
+                                        const cfg_key = self.curText();
+                                        self.advance_token();
+                                        if (self.curKind() == .colon) self.advance_token();
+                                        if (std.mem.eql(u8, cfg_key, "duration")) {
+                                            if (self.curKind() == .number) {
+                                                dur = std.fmt.parseInt(u16, self.curText(), 10) catch 300;
+                                                self.advance_token();
+                                            }
+                                        } else if (std.mem.eql(u8, cfg_key, "delay")) {
+                                            if (self.curKind() == .number) {
+                                                del = std.fmt.parseInt(u16, self.curText(), 10) catch 0;
+                                                self.advance_token();
+                                            }
+                                        } else if (std.mem.eql(u8, cfg_key, "easing")) {
+                                            if (self.curKind() == .string) {
+                                                const raw = self.curText();
+                                                easing_str = mapEasingName(if (raw.len >= 2) raw[1 .. raw.len - 1] else raw);
+                                                self.advance_token();
+                                            }
+                                        } else {
+                                            // Unknown config key — skip value
+                                            if (self.curKind() != .rbrace) self.advance_token();
+                                        }
+                                    } else {
+                                        self.advance_token();
+                                    }
+                                    if (self.curKind() == .comma) self.advance_token();
+                                }
+                                if (self.curKind() == .rbrace) self.advance_token();
+
+                                // Build Zig TransitionConfig literal
+                                if (trans_count < 16) {
+                                    trans_fields[trans_count] = zig_field;
+                                    trans_configs[trans_count] = try std.fmt.allocPrint(self.alloc,
+                                        ".{{ .duration_ms = {d}, .delay_ms = {d}, .easing = .{{ .named = .{s} }} }}",
+                                        .{ dur, del, easing_str });
+                                    trans_is_color[trans_count] = is_color;
+                                    trans_count += 1;
+                                }
+                            } else {
+                                skipStyleValue(self);
+                            }
+                        } else {
+                            self.advance_token();
+                        }
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                } else {
+                    skipStyleValue(self);
+                }
             } else {
                 const warn_msg = std.fmt.allocPrint(self.alloc,
                     "unknown style property '{s}' — not a recognized layout, color, or enum field (typo?)", .{key}) catch "unknown style property";
@@ -165,6 +250,25 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
             self.advance_token();
         }
         if (self.curKind() == .comma) self.advance_token();
+    }
+
+    // Apply transition configs to DynStyles created in this style block
+    if (trans_count > 0) {
+        var dsi = dyn_style_start;
+        while (dsi < self.dyn_style_count) : (dsi += 1) {
+            const ds_field = self.dyn_styles[dsi].field;
+            var ti: u32 = 0;
+            while (ti < trans_count) : (ti += 1) {
+                // Match by field name, or "all" matches everything
+                if (std.mem.eql(u8, trans_fields[ti], ds_field) or
+                    std.mem.eql(u8, trans_fields[ti], "all"))
+                {
+                    self.dyn_styles[dsi].transition_config = trans_configs[ti];
+                    self.dyn_styles[dsi].is_color = trans_is_color[ti] or mapColorKey(ds_field) != null;
+                    break;
+                }
+            }
+        }
     }
 
     if (self.curKind() == .rbrace) self.advance_token();
@@ -696,11 +800,28 @@ pub fn mapColorKey(key: []const u8) ?[]const u8 {
     return null;
 }
 
+/// Map CSS easing name to transition.EasingType enum field name.
+pub fn mapEasingName(name: []const u8) []const u8 {
+    if (std.mem.eql(u8, name, "linear")) return "linear";
+    if (std.mem.eql(u8, name, "easeIn")) return "ease_in";
+    if (std.mem.eql(u8, name, "easeOut")) return "ease_out";
+    if (std.mem.eql(u8, name, "easeInOut")) return "ease_in_out";
+    if (std.mem.eql(u8, name, "spring")) return "spring";
+    if (std.mem.eql(u8, name, "bounce")) return "bounce";
+    if (std.mem.eql(u8, name, "elastic")) return "elastic";
+    // CSS standard names
+    if (std.mem.eql(u8, name, "ease-in")) return "ease_in";
+    if (std.mem.eql(u8, name, "ease-out")) return "ease_out";
+    if (std.mem.eql(u8, name, "ease-in-out")) return "ease_in_out";
+    return "ease_in_out"; // default
+}
+
 pub fn mapEnumKey(key: []const u8) ?EnumMapping {
     if (std.mem.eql(u8, key, "flexDirection")) return .{ .field = "flex_direction", .prefix = "fd" };
     if (std.mem.eql(u8, key, "justifyContent")) return .{ .field = "justify_content", .prefix = "jc" };
     if (std.mem.eql(u8, key, "alignItems")) return .{ .field = "align_items", .prefix = "ai" };
     if (std.mem.eql(u8, key, "alignSelf")) return .{ .field = "align_self", .prefix = "as" };
+    if (std.mem.eql(u8, key, "alignContent")) return .{ .field = "align_content", .prefix = "ac" };
     if (std.mem.eql(u8, key, "flexWrap")) return .{ .field = "flex_wrap", .prefix = "fw" };
     if (std.mem.eql(u8, key, "position")) return .{ .field = "position", .prefix = "pos" };
     if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
@@ -714,6 +835,7 @@ pub fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, prefix, "fd")) { if (std.mem.eql(u8, value, "row")) return ".row"; if (std.mem.eql(u8, value, "column")) return ".column"; }
     if (std.mem.eql(u8, prefix, "jc")) { if (std.mem.eql(u8, value, "start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end")) return ".end"; if (std.mem.eql(u8, value, "space-between") or std.mem.eql(u8, value, "spaceBetween")) return ".space_between"; if (std.mem.eql(u8, value, "space-around") or std.mem.eql(u8, value, "spaceAround")) return ".space_around"; if (std.mem.eql(u8, value, "space-evenly") or std.mem.eql(u8, value, "spaceEvenly")) return ".space_evenly"; if (std.mem.eql(u8, value, "flex-start") or std.mem.eql(u8, value, "flexStart")) return ".start"; if (std.mem.eql(u8, value, "flex-end") or std.mem.eql(u8, value, "flexEnd")) return ".end"; }
     if (std.mem.eql(u8, prefix, "ai")) { if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flexStart") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flexEnd") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
+    if (std.mem.eql(u8, prefix, "ac")) { if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; if (std.mem.eql(u8, value, "space-between") or std.mem.eql(u8, value, "spaceBetween")) return ".space_between"; if (std.mem.eql(u8, value, "space-around") or std.mem.eql(u8, value, "spaceAround")) return ".space_around"; if (std.mem.eql(u8, value, "space-evenly") or std.mem.eql(u8, value, "spaceEvenly")) return ".space_evenly"; }
     if (std.mem.eql(u8, prefix, "d")) { if (std.mem.eql(u8, value, "flex")) return ".flex"; if (std.mem.eql(u8, value, "none")) return ".none"; }
     if (std.mem.eql(u8, prefix, "ta")) { if (std.mem.eql(u8, value, "left")) return ".left"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "right")) return ".right"; }
     if (std.mem.eql(u8, prefix, "as")) { if (std.mem.eql(u8, value, "auto")) return ".auto"; if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flexStart") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flexEnd") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }

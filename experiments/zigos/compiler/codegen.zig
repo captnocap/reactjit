@@ -223,6 +223,12 @@ pub const DynStyle = struct {
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
+    /// If non-empty, this DynStyle uses transition.set() instead of direct assignment.
+    /// Contains the Zig literal for transition.TransitionConfig, e.g.:
+    ///   ".{ .duration_ms = 300, .easing = .{ .named = .ease_in_out } }"
+    transition_config: []const u8 = "",
+    /// true if this is a color property (needs .color AnimValue wrapper)
+    is_color: bool = false,
 };
 
 pub const FFIHook = struct {
@@ -331,6 +337,10 @@ pub const MapInfo = struct {
     object_array_idx: u32 = 0,
     // onPress handler body (Zig statements with _i for index)
     handler_body: []const u8 = "",
+    // Nested map: parent map index (for chained rebuilds)
+    parent_map_idx: i32 = -1, // -1 = independent, >=0 = nested inside parent map N
+    // Which inner node of the parent map this pool should be assigned to
+    parent_inner_idx: u32 = 0,
 };
 
 pub const MapTemplateResult = struct {
@@ -383,6 +393,10 @@ pub const Generator = struct {
     // Event handler functions
     handler_decls: std.ArrayListUnmanaged([]const u8),
     handler_counter: u32,
+
+    // Effect render callbacks (<Effect onRender={...}>)
+    effect_param: ?[]const u8 = null, // parameter name inside onRender arrow fn
+    has_effect_render: bool = false, // true if any <Effect onRender> was compiled
 
     // State (useState declarations)
     state_slots: [MAX_STATE_SLOTS]StateSlot,
@@ -519,6 +533,7 @@ pub const Generator = struct {
     map_count: u32,
     map_item_param: ?[]const u8,
     map_index_param: ?[]const u8,
+    parent_map_index_param: ?[]const u8, // outer map index param for nested maps
     map_item_type: ?StateType,
     map_obj_array_idx: ?u32,
 
