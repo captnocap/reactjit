@@ -90,10 +90,10 @@ pub fn focus(id: u8) void {
     c.SDL_StartTextInput();
 }
 
-/// Unfocus all inputs. Stops SDL text input.
+/// Unfocus all inputs. Text input events continue flowing so terminals
+/// and other consumers (PTY, render surfaces) still receive SDL_TEXTINPUT.
 pub fn unfocus() void {
     focused_id = null;
-    c.SDL_StopTextInput();
 }
 
 /// Check if a specific input is focused.

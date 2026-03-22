@@ -438,7 +438,7 @@ pub fn build(b: *std.Build) void {
         const tsz_exe = b.addExecutable(.{
             .name = "tsz",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("tsz/compiler/main.zig"),
+                .root_source_file = b.path("tsz/compiler/cli.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
