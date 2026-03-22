@@ -200,7 +200,13 @@ pub fn set(node: *Node, property: Property, new_value: AnimValue, config: Transi
 
     // Check for existing transition on this node+property
     if (findSlot(node, property)) |idx| {
-        retarget(idx, new_value, config);
+        // Only retarget if the target changed — otherwise the transition is
+        // already heading to the right place. This is critical because _appTick
+        // calls set() every frame with the same target.
+        if (!slots[idx].to.eql(new_value)) {
+            retarget(idx, new_value, config);
+        }
+        return;
     } else {
         // Allocate new slot
         if (allocSlot()) |idx| {
