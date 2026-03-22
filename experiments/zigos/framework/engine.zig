@@ -25,7 +25,7 @@ const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 const capture = @import("capture.zig");
 const effects = @import("effects.zig");
-const scene3d = @import("gpu/scene3d.zig");
+const render3d = @import("gpu/render3d.zig");
 const transition = @import("transition.zig");
 const physics2d = @import("physics2d.zig");
 
@@ -372,7 +372,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
     // Scene3D — 3D viewport rendered offscreen, composited here
     if (node.scene3d) {
-        _ = scene3d.render(r.x, r.y, r.w, r.h, g_paint_opacity);
+        _ = render3d.render(r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
     selection.paintHighlight(node, r.x, r.y);
@@ -895,7 +895,7 @@ pub fn run(config: AppConfig) !void {
 
         // Effects update — animate and render all effect instances
         effects.update(dt_sec);
-        scene3d.update(dt_sec);
+        render3d.update(dt_sec);
 
         // Paint (main window — wgpu)
         selection.resetWalkState();
