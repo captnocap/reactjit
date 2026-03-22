@@ -798,9 +798,16 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     .{ mi, mi, mi, mi }));
             }
             if (m.inner_count > 0 and !m.is_self_closing) {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
-                    .{ mi, mi, m.inner_count }));
+                if (m.parent_map_idx >= 0) {
+                    const npmi: u32 = @intCast(m.parent_map_idx);
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_inner_{d}: [MAX_MAP_{d}][MAX_MAP_{d}][{d}]Node = undefined;\n",
+                        .{ mi, npmi, mi, m.inner_count }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
+                        .{ mi, mi, m.inner_count }));
+                }
             }
             // Per-inner-node text buffers (one pair per dynamic text node)
             for (0..m.inner_count) |ni| {
@@ -1034,7 +1041,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             // Emit inner children array assignment
             if (m.inner_count > 0 and !m.is_self_closing) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "        _map_inner_{d}[_i] = [{d}]Node{{ ", .{ mi, m.inner_count }));
+                    "        _map_inner_{d}{s}[_i] = [{d}]Node{{ ", .{ mi, pool_prefix, m.inner_count }));
                 for (0..m.inner_count) |ni| {
                     const inner = m.inner_nodes[ni];
                     if (ni > 0) try out.appendSlice(self.alloc, ", ");
@@ -1125,7 +1132,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             } else if (m.inner_count > 0 and !m.is_self_closing) {
                 if (has_outer_field) try out.appendSlice(self.alloc, ", ");
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    ".children = &_map_inner_{d}[_i]", .{mi}));
+                    ".children = &_map_inner_{d}{s}[_i]", .{ mi, pool_prefix }));
             }
             if (m.handler_body.len > 0) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
