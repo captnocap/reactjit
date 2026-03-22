@@ -343,6 +343,8 @@ pub const MapInfo = struct {
     parent_map_idx: i32 = -1, // -1 = independent, >=0 = nested inside parent map N
     // Which inner node of the parent map this pool should be assigned to
     parent_inner_idx: u32 = 0,
+    // Display condition for the pool (wrapper) node — filters invisible items from gap spacing
+    pool_display_cond: []const u8 = "",
 };
 
 pub const MapTemplateResult = struct {
@@ -354,6 +356,7 @@ pub const MapTemplateResult = struct {
     is_self_closing: bool,
     is_text_element: bool,
     handler_body: []const u8 = "",
+    pool_display_cond: []const u8 = "",
 };
 
 pub const ComputedArrayKind = enum { filter, split };

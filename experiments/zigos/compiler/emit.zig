@@ -180,9 +180,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             }
 
             // Check dynamic style expressions for getter references
+            // Expressions are already compiled: `mode` → `state.getSlot(0)`, so check both forms
             if (!getter_used) {
+                const slot_expr = try slotReadExpr(self, @intCast(si));
                 for (0..self.dyn_style_count) |dsi| {
-                    if (std.mem.indexOf(u8, self.dyn_styles[dsi].expression, slot.getter) != null) {
+                    if (std.mem.indexOf(u8, self.dyn_styles[dsi].expression, slot.getter) != null or
+                        std.mem.indexOf(u8, self.dyn_styles[dsi].expression, slot_expr) != null)
+                    {
                         getter_used = true;
                         break;
                     }
@@ -209,15 +213,25 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
 
-            // Check handler bodies for setter references
-            for (self.handler_decls.items) |h| {
-                if (std.mem.indexOf(u8, h, slot.setter) != null) {
-                    setter_used = true;
+            // Check handler bodies for setter/getter references
+            // Handlers are already compiled: setMode(v) → state.setSlot(N, v), so check both forms
+            {
+                const rid = self.regularSlotId(@intCast(si));
+                const slot_set_prefix = try std.fmt.allocPrint(self.alloc, "state.setSlot({d},", .{rid});
+                const slot_read = try slotReadExpr(self, @intCast(si));
+                for (self.handler_decls.items) |h| {
+                    if (std.mem.indexOf(u8, h, slot.setter) != null or
+                        std.mem.indexOf(u8, h, slot_set_prefix) != null)
+                    {
+                        setter_used = true;
+                    }
+                    if (std.mem.indexOf(u8, h, slot.getter) != null or
+                        std.mem.indexOf(u8, h, slot_read) != null)
+                    {
+                        getter_used = true;
+                    }
+                    if (getter_used and setter_used) break;
                 }
-                if (std.mem.indexOf(u8, h, slot.getter) != null) {
-                    getter_used = true;
-                }
-                if (getter_used and setter_used) break;
             }
 
             if (!getter_used or !setter_used) {
@@ -1127,9 +1141,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "        _map_pool_{d}{s}[{s}] = .{{ ", .{ mi, pool_prefix, out_idx2 }));
             var has_outer_field = false;
-            if (m.outer_style.len > 0) {
+            if (m.outer_style.len > 0 or m.pool_display_cond.len > 0) {
+                // Combine outer_style with pool display condition (filters wrapper from gap spacing)
+                const display_part: []const u8 = if (m.pool_display_cond.len > 0)
+                    try std.fmt.allocPrint(self.alloc, ".display = if ({s}) .flex else .none", .{m.pool_display_cond})
+                else
+                    "";
+                const sep: []const u8 = if (m.outer_style.len > 0 and display_part.len > 0) ", " else "";
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    ".style = .{{ {s} }}", .{m.outer_style}));
+                    ".style = .{{ {s}{s}{s} }}", .{ m.outer_style, sep, display_part }));
                 has_outer_field = true;
             }
             if (m.is_text_element and m.inner_count > 0) {

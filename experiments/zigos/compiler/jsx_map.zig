@@ -101,6 +101,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .computed_idx = ci,
                 .computed_element_type = self.computed_arrays[ci].element_type,
                 .handler_body = template.handler_body,
+                .pool_display_cond = template.pool_display_cond,
             };
         } else if (obj_arr_idx) |oi| {
             self.maps[my_map_idx] = .{
@@ -119,6 +120,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .is_object_array = true,
                 .object_array_idx = oi,
                 .handler_body = template.handler_body,
+                .pool_display_cond = template.pool_display_cond,
             };
         } else {
             const si = state_idx.?;
@@ -139,6 +141,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .is_string_array = is_str_arr,
                 .string_array_slot_id = if (is_str_arr) self.stringArraySlotId(si) else 0,
                 .handler_body = template.handler_body,
+                .pool_display_cond = template.pool_display_cond,
             };
         }
         // map_count already incremented via pre-reservation
@@ -183,6 +186,7 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
     var handler_body: []const u8 = "";
+    var pool_display_cond: []const u8 = "";
     var is_self_closing = false;
 
     // Parse attributes
@@ -292,6 +296,11 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                         for (0..cond_count) |dsi| {
                             if (inner_count < codegen.MAX_MAP_INNER) {
                                 const sub = cond_subs[dsi];
+                                // Capture first conditional's display_cond as pool-level condition
+                                // so the wrapper node also hides (prevents gap accumulation)
+                                if (pool_display_cond.len == 0 and sub.display_cond.len > 0) {
+                                    pool_display_cond = sub.display_cond;
+                                }
                                 inner_nodes[inner_count] = .{
                                     .font_size = sub.font_size,
                                     .text_color = sub.text_color,
@@ -440,6 +449,7 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
         .is_self_closing = is_self_closing,
         .is_text_element = is_text,
         .handler_body = handler_body,
+        .pool_display_cond = pool_display_cond,
     };
 }
 
