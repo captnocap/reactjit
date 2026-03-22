@@ -3,7 +3,10 @@
 
 import { tools_init } from "./tools.script";
 import { Dashboard } from "./Dashboard_c";
-import { Shell, TitleBar, TitleText, TitleDim, TabRow, Tab, TabActive, TabText, TabTextActive, StatusBar, StatusText, StatusAccent, Placeholder, PlaceholderText } from './tools_cls';
+import { BsodViewer } from "./BsodViewer_c";
+import { Inspector } from "./Inspector_c";
+import { TestRunner } from "./TestRunner_c";
+import { Shell, TitleBar, TitleText, TitleDim, TabRow, Tab, TabActive, TabText, TabTextActive, StatusBar, StatusText, StatusAccent } from './tools_cls';
 
 const [activeTab, setActiveTab] = useState(0);
 const [projectCount, setProjectCount] = useState(4);
@@ -32,17 +35,11 @@ function App() {
 
       {activeTab == 0 && <Dashboard />}
 
-      {activeTab == 1 && <C.Placeholder>
-        <C.PlaceholderText>Inspector — attach to a running .tsz app</C.PlaceholderText>
-      </C.Placeholder>}
+      {activeTab == 1 && <Inspector />}
 
-      {activeTab == 2 && <C.Placeholder>
-        <C.PlaceholderText>Crashes — view crash reports from ~/.tsz/crashes/</C.PlaceholderText>
-      </C.Placeholder>}
+      {activeTab == 2 && <BsodViewer />}
 
-      {activeTab == 3 && <C.Placeholder>
-        <C.PlaceholderText>Tests — record and replay interaction scripts</C.PlaceholderText>
-      </C.Placeholder>}
+      {activeTab == 3 && <TestRunner />}
 
       <C.StatusBar>
         <C.StatusAccent>tsz</C.StatusAccent>

@@ -1,0 +1,137 @@
+import { Content, SectionTitle, SectionRow, LogPanel, LogHeader, LogHeaderText, LogBody, LogLine, LogLineSuccess, LogLineError, LogLineWarn, LogLineAccent, LogLineDim, DotCrashed, DotStopped } from './tools_cls';
+import { CrashCard, CrashHeader, CrashName, CrashTime, CrashReason, CrashDetail, CrashStack, CrashStackLine, CrashMetricRow, CrashMetric, CrashMetricValue, CrashMetricLabel, CrashSeverity, CrashActions, CrashButton, CrashButtonLabel, CrashButtonDanger, CrashButtonDangerLabel } from './tools_cls';
+
+const [selectedCrash, setSelectedCrash] = useState(0);
+const [copied, setCopied] = useState(0);
+
+function BsodViewer() {
+  return (
+    <C.Content>
+      <C.SectionRow>
+        <C.SectionTitle>Crash Reports</C.SectionTitle>
+        <C.LogLineDim>~/.tsz/crashes/</C.LogLineDim>
+      </C.SectionRow>
+
+      <C.CrashCard onPress={() => { setSelectedCrash(1); setCopied(0) }}>
+        <C.CrashHeader>
+          <C.SectionRow>
+            <C.DotCrashed />
+            <C.CrashName>Dashboard</C.CrashName>
+          </C.SectionRow>
+          <C.CrashTime>2026-03-22 14:32:07</C.CrashTime>
+        </C.CrashHeader>
+        <C.CrashReason>Watchdog: RSS exceeded 512MB hard limit</C.CrashReason>
+      </C.CrashCard>
+
+      <C.CrashCard onPress={() => { setSelectedCrash(2); setCopied(0) }}>
+        <C.CrashHeader>
+          <C.SectionRow>
+            <C.DotCrashed />
+            <C.CrashName>Inspector</C.CrashName>
+          </C.SectionRow>
+          <C.CrashTime>2026-03-22 11:05:43</C.CrashTime>
+        </C.CrashHeader>
+        <C.CrashReason>Panic: index out of bounds in layout.zig:482</C.CrashReason>
+      </C.CrashCard>
+
+      <C.CrashCard onPress={() => { setSelectedCrash(3); setCopied(0) }}>
+        <C.CrashHeader>
+          <C.SectionRow>
+            <C.DotStopped />
+            <C.CrashName>Storybook</C.CrashName>
+          </C.SectionRow>
+          <C.CrashTime>2026-03-21 09:18:22</C.CrashTime>
+        </C.CrashHeader>
+        <C.CrashReason>GPU: wgpu device lost (VK_ERROR_DEVICE_LOST)</C.CrashReason>
+      </C.CrashCard>
+
+      {selectedCrash == 1 && <C.LogPanel>
+        <C.LogHeader>
+          <C.LogHeaderText>Dashboard — crash detail</C.LogHeaderText>
+          <C.CrashSeverity>CRITICAL</C.CrashSeverity>
+        </C.LogHeader>
+        <C.LogBody style={{ height: 280 }}>
+          <Box style={{ flexDirection: 'column', gap: 8, padding: 8 }}>
+            <C.LogLineAccent>REASON</C.LogLineAccent>
+            <C.CrashDetail>Watchdog: RSS exceeded 512MB hard limit</C.CrashDetail>
+            <C.LogLineDim>Memory grew from 48MB to 519MB in 2.3s. Leak rate: 204MB/s in layout allocation pool.</C.LogLineDim>
+
+            <C.CrashMetricRow>
+              <C.CrashMetric>
+                <C.CrashMetricLabel>Peak RSS</C.CrashMetricLabel>
+                <C.CrashMetricValue>519 MB</C.CrashMetricValue>
+              </C.CrashMetric>
+              <C.CrashMetric>
+                <C.CrashMetricLabel>Leak Rate</C.CrashMetricLabel>
+                <C.CrashMetricValue>204 MB/s</C.CrashMetricValue>
+              </C.CrashMetric>
+              <C.CrashMetric>
+                <C.CrashMetricLabel>Hard Limit</C.CrashMetricLabel>
+                <C.CrashMetricValue>512 MB</C.CrashMetricValue>
+              </C.CrashMetric>
+              <C.CrashMetric>
+                <C.CrashMetricLabel>Uptime</C.CrashMetricLabel>
+                <C.CrashMetricValue>14.2s</C.CrashMetricValue>
+              </C.CrashMetric>
+            </C.CrashMetricRow>
+
+            <C.LogLineAccent>STACK TRACE</C.LogLineAccent>
+            <C.CrashStack>
+              <C.CrashStackLine>0: layout.zig:482 — Node.addChildren (resize 16384→32768)</C.CrashStackLine>
+              <C.CrashStackLine>1: compositor.zig:197 — paintNode (recursive depth 847)</C.CrashStackLine>
+              <C.CrashStackLine>2: compositor.zig:91 — frame</C.CrashStackLine>
+              <C.CrashStackLine>3: main.zig:688 — mainLoop</C.CrashStackLine>
+              <C.CrashStackLine>4: generated_app.zig:264 — appTick</C.CrashStackLine>
+            </C.CrashStack>
+
+            <C.CrashActions>
+              {copied == 0 && <C.CrashButton onPress={() => { setCopied(1) }}><C.CrashButtonLabel>Copy to Clipboard</C.CrashButtonLabel></C.CrashButton>}
+              {copied == 1 && <C.CrashButton><C.CrashButtonLabel>Copied!</C.CrashButtonLabel></C.CrashButton>}
+              <C.CrashButtonDanger><C.CrashButtonDangerLabel>Reboot App</C.CrashButtonDangerLabel></C.CrashButtonDanger>
+            </C.CrashActions>
+          </Box>
+        </C.LogBody>
+      </C.LogPanel>}
+
+      {selectedCrash == 2 && <C.LogPanel>
+        <C.LogHeader>
+          <C.LogHeaderText>Inspector — crash detail</C.LogHeaderText>
+          <C.CrashSeverity>PANIC</C.CrashSeverity>
+        </C.LogHeader>
+        <C.LogBody style={{ height: 200 }}>
+          <Box style={{ flexDirection: 'column', gap: 8, padding: 8 }}>
+            <C.LogLineAccent>REASON</C.LogLineAccent>
+            <C.CrashDetail>Panic: index out of bounds in layout.zig:482</C.CrashDetail>
+            <C.LogLineDim>Attempted to access child[15] of node with 12 children during flex layout pass.</C.LogLineDim>
+            <C.LogLineAccent>STACK TRACE</C.LogLineAccent>
+            <C.CrashStack>
+              <C.CrashStackLine>0: layout.zig:482 — flexChildren (index 15, len 12)</C.CrashStackLine>
+              <C.CrashStackLine>1: layout.zig:201 — layoutNode</C.CrashStackLine>
+              <C.CrashStackLine>2: engine.zig:340 — frame</C.CrashStackLine>
+            </C.CrashStack>
+          </Box>
+        </C.LogBody>
+      </C.LogPanel>}
+
+      {selectedCrash == 3 && <C.LogPanel>
+        <C.LogHeader>
+          <C.LogHeaderText>Storybook — crash detail</C.LogHeaderText>
+          <C.CrashSeverity>GPU</C.CrashSeverity>
+        </C.LogHeader>
+        <C.LogBody style={{ height: 200 }}>
+          <Box style={{ flexDirection: 'column', gap: 8, padding: 8 }}>
+            <C.LogLineAccent>REASON</C.LogLineAccent>
+            <C.CrashDetail>GPU: wgpu device lost (VK_ERROR_DEVICE_LOST)</C.CrashDetail>
+            <C.LogLineDim>Vulkan device was lost during render pass. Driver timeout or GPU hang. Possible cause: oversized draw call batch.</C.LogLineDim>
+            <C.LogLineAccent>STACK TRACE</C.LogLineAccent>
+            <C.CrashStack>
+              <C.CrashStackLine>0: gpu/rect_pipeline.zig:89 — submitBatch (2048 rects)</C.CrashStackLine>
+              <C.CrashStackLine>1: gpu/renderer.zig:142 — flush</C.CrashStackLine>
+              <C.CrashStackLine>2: engine.zig:380 — paint</C.CrashStackLine>
+            </C.CrashStack>
+          </Box>
+        </C.LogBody>
+      </C.LogPanel>}
+    </C.Content>
+  );
+}

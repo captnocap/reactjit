@@ -1,0 +1,116 @@
+import { Content, SectionTitle, SectionRow, LogPanel, LogHeader, LogHeaderText, LogBody, LogLine, LogLineSuccess, LogLineError, LogLineAccent, LogLineDim, DotRunning, DotStopped, DotCrashed } from './tools_cls';
+import { InspectCard, InspectHeader, InspectName, InspectPid, InspectConnected, InspectDisconnected, InspectButton, InspectButtonLabel, MetricGrid, MetricBox, MetricBoxValue, MetricBoxLabel, MetricBoxAccent, TreePanel, TreeLine, TreeIndent } from './tools_cls';
+
+const [connectedApp, setConnectedApp] = useState(0);
+const [inspFps, setInspFps] = useState(0);
+const [inspLayout, setInspLayout] = useState(0);
+const [inspPaint, setInspPaint] = useState(0);
+const [inspNodes, setInspNodes] = useState(0);
+const [inspRss, setInspRss] = useState(0);
+const [inspBridge, setInspBridge] = useState(0);
+const [streamActive, setStreamActive] = useState(0);
+const [treeText, setTreeText] = useState('');
+
+<script>
+// Simulated telemetry stream
+setInterval(function() {
+  if (connectedApp === 0) return;
+  if (streamActive === 0) return;
+  setInspFps(58 + Math.floor(Math.random() * 5));
+  setInspLayout(Math.floor(Math.random() * 800 + 200));
+  setInspPaint(Math.floor(Math.random() * 400 + 100));
+  setInspNodes(142 + Math.floor(Math.random() * 20));
+  setInspRss(32 + Math.floor(Math.random() * 8));
+  setInspBridge(Math.floor(Math.random() * 5000 + 45000));
+}, 500);
+
+function connectApp(id) {
+  setConnectedApp(id);
+  setStreamActive(1);
+  // Mock tree response
+  setTreeText('Box (Shell) 1280x800\n  Box (TitleBar) 1280x40\n    Text "tsz tools"\n  Box (TabRow) 1280x36\n    Pressable (Tab) 80x36\n    Pressable (Tab) 80x36\n  Box (Content) 1280x700\n    Box (ProjectCard) 600x120\n      Text "Dashboard"\n      Box (ActionRow)\n    ScrollView (LogBody)\n      Text (LogLine)');
+}
+
+function disconnectApp() {
+  setConnectedApp(0);
+  setStreamActive(0);
+  setInspFps(0);
+  setInspLayout(0);
+  setInspPaint(0);
+  setInspNodes(0);
+  setInspRss(0);
+  setInspBridge(0);
+  setTreeText('');
+}
+</script>
+
+function Inspector() {
+  return (
+    <C.Content>
+      <C.SectionRow>
+        <C.SectionTitle>Running Apps</C.SectionTitle>
+        {connectedApp > 0 && <C.InspectConnected>attached</C.InspectConnected>}
+        {connectedApp == 0 && <C.InspectDisconnected>detached</C.InspectDisconnected>}
+      </C.SectionRow>
+
+      <C.InspectCard>
+        <C.InspectHeader>
+          <C.SectionRow>
+            <C.DotRunning />
+            <C.InspectName>Dashboard</C.InspectName>
+          </C.SectionRow>
+          <C.InspectPid>PID 48291</C.InspectPid>
+        </C.InspectHeader>
+        {connectedApp != 1 && <C.InspectButton onPress={() => { connectApp(1) }}><C.InspectButtonLabel>Attach</C.InspectButtonLabel></C.InspectButton>}
+        {connectedApp == 1 && <C.InspectButton onPress={() => { disconnectApp() }}><C.InspectButtonLabel>Detach</C.InspectButtonLabel></C.InspectButton>}
+      </C.InspectCard>
+
+      <C.InspectCard>
+        <C.InspectHeader>
+          <C.SectionRow>
+            <C.DotRunning />
+            <C.InspectName>Storybook</C.InspectName>
+          </C.SectionRow>
+          <C.InspectPid>PID 48305</C.InspectPid>
+        </C.InspectHeader>
+        {connectedApp != 2 && <C.InspectButton onPress={() => { connectApp(2) }}><C.InspectButtonLabel>Attach</C.InspectButtonLabel></C.InspectButton>}
+        {connectedApp == 2 && <C.InspectButton onPress={() => { disconnectApp() }}><C.InspectButtonLabel>Detach</C.InspectButtonLabel></C.InspectButton>}
+      </C.InspectCard>
+
+      {connectedApp > 0 && <C.SectionTitle>Telemetry</C.SectionTitle>}
+
+      {connectedApp > 0 && <C.MetricGrid>
+        <C.MetricBox>
+          <C.MetricBoxAccent>{`${inspFps}`}</C.MetricBoxAccent>
+          <C.MetricBoxLabel>FPS</C.MetricBoxLabel>
+        </C.MetricBox>
+        <C.MetricBox>
+          <C.MetricBoxValue>{`${inspLayout}µs`}</C.MetricBoxValue>
+          <C.MetricBoxLabel>Layout</C.MetricBoxLabel>
+        </C.MetricBox>
+        <C.MetricBox>
+          <C.MetricBoxValue>{`${inspPaint}µs`}</C.MetricBoxValue>
+          <C.MetricBoxLabel>Paint</C.MetricBoxLabel>
+        </C.MetricBox>
+        <C.MetricBox>
+          <C.MetricBoxValue>{`${inspNodes}`}</C.MetricBoxValue>
+          <C.MetricBoxLabel>Nodes</C.MetricBoxLabel>
+        </C.MetricBox>
+        <C.MetricBox>
+          <C.MetricBoxValue>{`${inspRss}MB`}</C.MetricBoxValue>
+          <C.MetricBoxLabel>RSS</C.MetricBoxLabel>
+        </C.MetricBox>
+        <C.MetricBox>
+          <C.MetricBoxValue>{`${inspBridge}`}</C.MetricBoxValue>
+          <C.MetricBoxLabel>Bridge/s</C.MetricBoxLabel>
+        </C.MetricBox>
+      </C.MetricGrid>}
+
+      {connectedApp > 0 && <C.SectionTitle>Element Tree</C.SectionTitle>}
+
+      {connectedApp > 0 && <C.TreePanel>
+        <C.TreeLine>{treeText}</C.TreeLine>
+      </C.TreePanel>}
+    </C.Content>
+  );
+}

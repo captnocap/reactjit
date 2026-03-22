@@ -1,0 +1,110 @@
+import { Content, SectionTitle, SectionRow, LogPanel, LogHeader, LogHeaderText, LogBody, LogLine, LogLineSuccess, LogLineError, LogLineWarn, LogLineAccent, LogLineDim, DotRunning, DotStopped } from './tools_cls';
+import { TestCard, TestHeader, TestName, TestStatus, TestPassCount, TestFailCount, TestActions, TestButton, TestButtonLabel, TestButtonRecord, TestButtonRecordLabel, TestButtonPlay, TestButtonPlayLabel, ScriptEditor, ScriptArea, TestResultRow, TestResultPass, TestResultFail, TestResultName } from './tools_cls';
+
+const [testState, setTestState] = useState(0);
+const [testScript, setTestScript] = useState('');
+const [testLog, setTestLog] = useState('');
+const [passCount, setPassCount] = useState(0);
+const [failCount, setFailCount] = useState(0);
+const [recording, setRecording] = useState(0);
+
+<script>
+var _defaultScript = '// Test script for Dashboard\ndebug.simulate.press("build-btn");\nassert.tree(".LogLine", "Build OK");\ndebug.simulate.press("run-btn");\nassert.perf("fps", ">", 30);\nassert.snapshot("dashboard-after-run.png");';
+
+setTestScript(_defaultScript);
+
+function runTests() {
+  setTestState(1);
+  setTestLog('Running test script...');
+  setPassCount(0);
+  setFailCount(0);
+
+  setTimeout(function() {
+    setTestLog('Running test script...\n[1/5] simulate.press("build-btn")... OK');
+    setPassCount(1);
+  }, 400);
+
+  setTimeout(function() {
+    setTestLog('Running test script...\n[1/5] simulate.press("build-btn")... OK\n[2/5] assert.tree(".LogLine", "Build OK")... OK');
+    setPassCount(2);
+  }, 800);
+
+  setTimeout(function() {
+    setTestLog('Running test script...\n[1/5] simulate.press("build-btn")... OK\n[2/5] assert.tree(".LogLine", "Build OK")... OK\n[3/5] simulate.press("run-btn")... OK');
+    setPassCount(3);
+  }, 1200);
+
+  setTimeout(function() {
+    setTestLog('Running test script...\n[1/5] simulate.press("build-btn")... OK\n[2/5] assert.tree(".LogLine", "Build OK")... OK\n[3/5] simulate.press("run-btn")... OK\n[4/5] assert.perf("fps", ">", 30)... FAIL (fps=28)');
+    setPassCount(3);
+    setFailCount(1);
+  }, 1600);
+
+  setTimeout(function() {
+    setTestLog('Running test script...\n[1/5] simulate.press("build-btn")... OK\n[2/5] assert.tree(".LogLine", "Build OK")... OK\n[3/5] simulate.press("run-btn")... OK\n[4/5] assert.perf("fps", ">", 30)... FAIL (fps=28)\n[5/5] assert.snapshot("dashboard-after-run.png")... OK\n\n4 passed, 1 failed');
+    setPassCount(4);
+    setFailCount(1);
+    setTestState(2);
+  }, 2000);
+}
+
+function startRecording() {
+  setRecording(1);
+  setTestLog('Recording interactions...\nClick on elements in the attached app.\nPress Stop to save the script.');
+}
+
+function stopRecording() {
+  setRecording(0);
+  setTestScript('// Recorded interactions\ndebug.simulate.press("tab-0");\ndebug.simulate.type("url-input", "https://wpt.live/");\ndebug.simulate.press("go-btn");\nassert.tree(".pageContent", "wpt.live");');
+  setTestLog('Recording stopped. 4 interactions captured.');
+}
+</script>
+
+function TestRunner() {
+  return (
+    <C.Content>
+      <C.SectionRow>
+        <C.SectionTitle>Test Runner</C.SectionTitle>
+        {testState == 0 && <C.LogLineDim>idle</C.LogLineDim>}
+        {testState == 1 && <C.LogLineAccent>running...</C.LogLineAccent>}
+        {testState == 2 && <C.SectionRow>
+          <C.TestPassCount>{`${passCount} passed`}</C.TestPassCount>
+          {failCount > 0 && <C.TestFailCount>{`${failCount} failed`}</C.TestFailCount>}
+        </C.SectionRow>}
+      </C.SectionRow>
+
+      <C.TestActions>
+        {recording == 0 && <C.TestButtonPlay onPress={() => { runTests() }}>
+          <C.TestButtonPlayLabel>Run Tests</C.TestButtonPlayLabel>
+        </C.TestButtonPlay>}
+        {recording == 0 && <C.TestButtonRecord onPress={() => { startRecording() }}>
+          <C.TestButtonRecordLabel>Record</C.TestButtonRecordLabel>
+        </C.TestButtonRecord>}
+        {recording == 1 && <C.TestButton onPress={() => { stopRecording() }}>
+          <C.TestButtonLabel>Stop Recording</C.TestButtonLabel>
+        </C.TestButton>}
+      </C.TestActions>
+
+      <C.SectionTitle>Script</C.SectionTitle>
+      <C.ScriptEditor>
+        <TextArea value={testScript} onChangeText={(t) => { setTestScript(t) }} fontSize={10} style={{ height: 120, backgroundColor: 'theme-surface', borderWidth: 1, borderColor: 'theme-border', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }} />
+      </C.ScriptEditor>
+
+      <C.SectionTitle>Results</C.SectionTitle>
+      <C.LogPanel>
+        <C.LogHeader>
+          <C.LogHeaderText>Test Output</C.LogHeaderText>
+          {testState == 2 && <C.SectionRow>
+            <C.TestPassCount>{`${passCount}✓`}</C.TestPassCount>
+            {failCount > 0 && <C.TestFailCount>{`${failCount}✗`}</C.TestFailCount>}
+          </C.SectionRow>}
+        </C.LogHeader>
+        <C.LogBody style={{ height: 160 }}>
+          <Box style={{ flexDirection: 'column', gap: 1, padding: 4 }}>
+            <C.LogLine>{testLog}</C.LogLine>
+          </Box>
+        </C.LogBody>
+      </C.LogPanel>
+    </C.Content>
+  );
+}
