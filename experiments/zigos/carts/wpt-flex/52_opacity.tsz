@@ -2,6 +2,9 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: opacity</Text>
+      <div style={{ backgroundColor: '#B71C1C', padding: 4, borderRadius: 4 }}>
+        <Text color="#FFF" fontSize={12}>FAIL — opacity style values set correctly but not visually rendered by GPU pipeline</Text>
+      </div>
 
       <Text fontSize={11}>opacity 0, 0.25, 0.5, 0.75, 1.0</Text>
       <div style={{ flexDirection: 'row', gap: 8 }}>
