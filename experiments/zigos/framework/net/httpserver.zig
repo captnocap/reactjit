@@ -128,16 +128,17 @@ pub const HttpServer = struct {
         for (&self.clients) |*client| {
             if (client.active and client.id == client_id) {
                 if (client.stream) |stream| {
-                    const writer = stream.writer();
                     const status_text = statusText(status);
-                    writer.print(
+                    var hdr_buf: [512]u8 = undefined;
+                    const hdr = std.fmt.bufPrint(&hdr_buf,
                         "HTTP/1.1 {d} {s}\r\n" ++
                             "Content-Type: {s}\r\n" ++
                             "Content-Length: {d}\r\n" ++
                             "Connection: close\r\n\r\n",
                         .{ status, status_text, content_type, body.len },
-                    ) catch {};
-                    writer.writeAll(body) catch {};
+                    ) catch "";
+                    stream.writeAll(hdr) catch {};
+                    stream.writeAll(body) catch {};
                     stream.close();
                 }
                 client.active = false;
@@ -270,15 +271,16 @@ pub const HttpServer = struct {
 
         const content_type = mimeType(suffix_to_use);
         const stream = client.stream orelse return;
-        const writer = stream.writer();
-        writer.print(
+        var hdr_buf: [512]u8 = undefined;
+        const hdr = std.fmt.bufPrint(&hdr_buf,
             "HTTP/1.1 200 OK\r\n" ++
                 "Content-Type: {s}\r\n" ++
                 "Content-Length: {d}\r\n" ++
                 "Connection: close\r\n\r\n",
             .{ content_type, file_len },
-        ) catch {};
-        writer.writeAll(body[0..file_len]) catch {};
+        ) catch "";
+        stream.writeAll(hdr) catch {};
+        stream.writeAll(body[0..file_len]) catch {};
         stream.close();
         client.active = false;
     }
@@ -286,15 +288,16 @@ pub const HttpServer = struct {
     fn respondDirect(self: *HttpServer, client: *HttpClient, status: u16, body: []const u8) void {
         _ = self;
         if (client.stream) |stream| {
-            const writer = stream.writer();
-            writer.print(
+            var hdr_buf: [512]u8 = undefined;
+            const hdr = std.fmt.bufPrint(&hdr_buf,
                 "HTTP/1.1 {d} {s}\r\n" ++
                     "Content-Type: text/plain\r\n" ++
                     "Content-Length: {d}\r\n" ++
                     "Connection: close\r\n\r\n",
                 .{ status, statusText(status), body.len },
-            ) catch {};
-            writer.writeAll(body) catch {};
+            ) catch "";
+            stream.writeAll(hdr) catch {};
+            stream.writeAll(body) catch {};
             stream.close();
         }
         client.active = false;

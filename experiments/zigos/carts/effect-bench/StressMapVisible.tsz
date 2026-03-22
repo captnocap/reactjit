@@ -1,0 +1,34 @@
+// Map stress: all nodes visible, tiled grid, no zeros
+// Each item is a fixed-size box with text — tiles to fill screen
+
+import { stress_map_visible } from "./stress_map_visible.script";
+
+const [fps, setFps] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [frameCount, setFrameCount] = useState(0);
+const [nodeCount, setNodeCount] = useState(0);
+
+const [items, setItems] = useState([{ label: '', value: 0, color: 0x58a6ff }]);
+
+function App() {
+  return (
+    <Box style={{ width: "100%", height: "100%", backgroundColor: "#0d1117", padding: 4, gap: 2 }}>
+      <Box style={{ flexDirection: "row", gap: 8 }}>
+        <Text fontSize={14} color="#e6edf3">{`Visible — ${nodeCount} items`}</Text>
+        <Text fontSize={14} color="#3fb950">{`${fps} fps`}</Text>
+        <Text fontSize={14} color="#d2992a">{`L:${layoutUs}us`}</Text>
+        <Text fontSize={14} color="#58a6ff">{`P:${paintUs}us`}</Text>
+        <Text fontSize={14} color="#f78166">{`T:${tickUs}us`}</Text>
+      </Box>
+      <Box style={{ flexGrow: 1, flexWrap: "wrap", flexDirection: "row", gap: 2 }}>
+        {items.map((item) => (
+          <Box style={{ width: 48, height: 16, backgroundColor: "#161b22", borderRadius: 2, padding: 2 }}>
+            <Text fontSize={7} color={item.color}>{item.label}</Text>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}

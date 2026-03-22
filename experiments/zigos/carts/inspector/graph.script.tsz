@@ -1,0 +1,123 @@
+// Constraint graph logic — flow animation, filtering, inspector polling
+
+// Flow mode: 0=off, 1=hover, 2=on
+var _flowMode = 2;
+var _flowLabels = ['Off', 'Hover', 'On'];
+var _lastActiveNode = -1;
+
+function toggleFlow() {
+  _flowMode = (_flowMode + 1) % 3;
+  setFlowEnabled(_flowMode);
+  if (_flowMode === 1) {
+    for (var i = 0; i < _paths.length; i++) {
+      setPathFlow(_paths[i].idx, 0);
+    }
+    _lastActiveNode = -2;
+  } else {
+    resetPathFlow();
+  }
+}
+
+// Poll active node for hover mode — enable flow only on connected paths
+setInterval(function() {
+  if (_flowMode !== 1) return;
+  var active = getActiveNode();
+  if (active === _lastActiveNode) return;
+  _lastActiveNode = active;
+  if (active < 0) {
+    for (var i = 0; i < _paths.length; i++) {
+      setPathFlow(_paths[i].idx, 0);
+    }
+    return;
+  }
+  for (var i = 0; i < _paths.length; i++) {
+    var p = _paths[i];
+    var nodeIdx = active + 4;
+    var connected = (p.connects[0] === nodeIdx || p.connects[1] === nodeIdx);
+    setPathFlow(p.idx, connected ? 1 : 0);
+  }
+}, 32);
+
+// Filter system — dims non-matching nodes/paths
+// Canvas child indices: 0-3 = paths, 4-8 = nodes
+var _nodes = [
+  { idx: 4, name: 'App', type: 'Root' },
+  { idx: 5, name: 'Router', type: 'Parent' },
+  { idx: 6, name: 'Shell', type: 'Flex' },
+  { idx: 7, name: 'ModalStack', type: 'Child' },
+  { idx: 8, name: 'ConditionalPanel', type: 'Dynamic' },
+];
+var _paths = [
+  { idx: 0, connects: [4, 5] },
+  { idx: 1, connects: [5, 6] },
+  { idx: 2, connects: [5, 7] },
+  { idx: 3, connects: [7, 8] },
+];
+var _activeFilters = {};
+var _searchQuery = '';
+
+function fuzzyMatch(query, target) {
+  var q = query.toLowerCase();
+  var t = target.toLowerCase();
+  var qi = 0;
+  for (var ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) qi++;
+  }
+  return qi === q.length;
+}
+
+function applyDimming() {
+  var hasFilter = false;
+  for (var k in _activeFilters) { if (_activeFilters[k]) hasFilter = true; }
+  var hasSearch = _searchQuery.length > 0;
+
+  if (!hasFilter && !hasSearch) {
+    resetNodeDim();
+    return;
+  }
+
+  var nodeMatch = {};
+  for (var i = 0; i < _nodes.length; i++) {
+    var n = _nodes[i];
+    var match = true;
+    if (hasFilter && !_activeFilters[n.type]) match = false;
+    if (hasSearch) {
+      if (!fuzzyMatch(_searchQuery, n.name) && !fuzzyMatch(_searchQuery, n.type)) match = false;
+    }
+    nodeMatch[n.idx] = match;
+    setNodeDim(n.idx, match ? 1.0 : 0.25);
+  }
+
+  for (var j = 0; j < _paths.length; j++) {
+    var p = _paths[j];
+    var anyConnected = nodeMatch[p.connects[0]] || nodeMatch[p.connects[1]];
+    setNodeDim(p.idx, anyConnected ? 1.0 : 0.25);
+  }
+}
+
+function toggleFilter(type) {
+  _activeFilters[type] = !_activeFilters[type];
+  applyDimming();
+}
+
+function onSearchChange() {
+  _searchQuery = getInputText(0) || '';
+  applyDimming();
+}
+
+function navTo(dir) {
+  // Placeholder — will navigate tree when live introspection is wired
+  console.log('navTo: ' + dir);
+}
+
+// Inspector panel visibility — poll active/selected node state
+setInterval(function() {
+  var active = getActiveNode();
+  var selected = getSelectedNode();
+  var shouldShow = active >= 0 ? 1 : 0;
+  var shouldShowNav = selected >= 0 ? 1 : 0;
+  setShowInfo(shouldShow);
+  setShowNav(shouldShowNav);
+}, 32);
+
+console.log('Constraint graph logic loaded.');

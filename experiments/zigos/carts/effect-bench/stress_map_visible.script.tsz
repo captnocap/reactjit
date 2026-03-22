@@ -1,0 +1,40 @@
+// Visible map stress — escalate items that all fit on screen
+// At 60x40px each, ~360 fit in 1280x800. Each has 8 child nodes = ~2880 nodes.
+
+const colors = [0x58a6ff, 0x3fb950, 0xf78166, 0xd2992a, 0x79c0ff, 0xbc8cff, 0xff7b72, 0x7ee787];
+let _frames = 0;
+let _itemCount = 20;
+let _lastEscalation = Date.now();
+
+function buildItems(count) {
+  var arr = [];
+  for (var i = 0; i < count; i++) {
+    arr.push({ label: 'n' + i, value: i, color: colors[i % 8] });
+  }
+  setItems(arr);
+  setNodeCount(count);
+}
+
+buildItems(_itemCount);
+
+// Escalate every 3 seconds, cap at 400
+setInterval(function() {
+  if (Date.now() - _lastEscalation > 3000) {
+    _itemCount = Math.min(_itemCount * 2, 400);
+    buildItems(_itemCount);
+    _lastEscalation = Date.now();
+    console.log('Escalating to ' + _itemCount + ' items (' + (_itemCount * 8) + ' nodes)');
+  }
+}, 100);
+
+// Telemetry at 4Hz
+setInterval(function() {
+  _frames++;
+  setFrameCount(_frames);
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+console.log('Visible stress test loaded. Starting at ' + _itemCount + ' items');

@@ -1,0 +1,21 @@
+import { MetricCardBox, MetricLabel, MetricValue, MetricHint } from './style_clsmod';
+
+function MetricCard({ label, value, hint }) {
+  return (
+    <C.MetricCardBox>
+      <C.MetricLabel>{label}</C.MetricLabel>
+      <C.MetricValue>{value}</C.MetricValue>
+      {hint && <C.MetricHint>{hint}</C.MetricHint>}
+    </C.MetricCardBox>
+  );
+}
+
+function App() {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 8, padding: 16 }}>
+      <MetricCard label="Main Axis" value="row" hint="tree and detail panes share one line" />
+      <MetricCard label="Width Source" value="flex grow" hint="detail fills remaining main-axis space" />
+      <MetricCard label="Height Source" value="stretch" hint="cross-axis matches parent inner height" />
+    </Box>
+  );
+}

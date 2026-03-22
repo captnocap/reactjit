@@ -1,0 +1,16 @@
+import { TabPlaceholderSurface, PlaceholderTitle, PlaceholderCopy } from './style_clsmod';
+
+function TabPlaceholder({ title, copy }) {
+  return (
+    <C.TabPlaceholderSurface>
+      <C.PlaceholderTitle>{title}</C.PlaceholderTitle>
+      <C.PlaceholderCopy>{copy}</C.PlaceholderCopy>
+    </C.TabPlaceholderSurface>
+  );
+}
+
+function App() {
+  return (
+    <TabPlaceholder title="Network" copy="HTTP requests and WebSocket frames will appear here." />
+  );
+}
