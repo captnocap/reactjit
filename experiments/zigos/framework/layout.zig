@@ -35,7 +35,7 @@ pub const FlexDirection = enum { row, column };
 pub const JustifyContent = enum { start, center, end, space_between, space_around, space_evenly };
 pub const AlignItems = enum { start, center, end, stretch };
 pub const AlignSelf = enum { auto, start, center, end, stretch };
-pub const FlexWrap = enum { no_wrap, wrap };
+pub const FlexWrap = enum { no_wrap, wrap, wrap_reverse };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
 pub const Overflow = enum { visible, hidden, scroll, auto };
@@ -109,6 +109,7 @@ pub const Style = struct {
     align_items: AlignItems = .stretch,
     align_self: AlignSelf = .auto,
     gap: f32 = 0,
+    order: i32 = 0,
     position: Position = .relative,
     top: ?f32 = null,
     left: ?f32 = null,
@@ -148,10 +149,14 @@ pub const Style = struct {
     pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }
     pub fn padTop(self: Style) f32 { return self.padding_top orelse self.padding; }
     pub fn padBottom(self: Style) f32 { return self.padding_bottom orelse self.padding; }
-    pub fn marLeft(self: Style) f32 { return self.margin_left orelse self.margin; }
-    pub fn marRight(self: Style) f32 { return self.margin_right orelse self.margin; }
-    pub fn marTop(self: Style) f32 { return self.margin_top orelse self.margin; }
-    pub fn marBottom(self: Style) f32 { return self.margin_bottom orelse self.margin; }
+    pub fn marLeft(self: Style) f32 { const v = self.margin_left orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
+    pub fn marRight(self: Style) f32 { const v = self.margin_right orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
+    pub fn marTop(self: Style) f32 { const v = self.margin_top orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
+    pub fn marBottom(self: Style) f32 { const v = self.margin_bottom orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
+    pub fn isMarginAutoLeft(self: Style) bool { return if (self.margin_left) |v| std.math.isInf(v) else false; }
+    pub fn isMarginAutoRight(self: Style) bool { return if (self.margin_right) |v| std.math.isInf(v) else false; }
+    pub fn isMarginAutoTop(self: Style) bool { return if (self.margin_top) |v| std.math.isInf(v) else false; }
+    pub fn isMarginAutoBottom(self: Style) bool { return if (self.margin_bottom) |v| std.math.isInf(v) else false; }
 };
 pub const Node = struct {
     style: Style = .{},
@@ -834,11 +839,58 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             visibleCount += 1;
         }
     }
+    // Sort visible children by CSS order property (stable insertion sort)
+    if (visibleCount > 1) {
+        var hasOrder = false;
+        for (0..visibleCount) |i| {
+            if (node.children[visibleIndices[i]].style.order != 0) { hasOrder = true; break; }
+        }
+        if (hasOrder) {
+            var si: usize = 1;
+            while (si < visibleCount) : (si += 1) {
+                const keyIdx = visibleIndices[si];
+                const keyOrder = node.children[keyIdx].style.order;
+                const keyBasis = childBasis[si];
+                const keyGrow = childGrow[si];
+                const keyShrink = childShrink[si];
+                const keyMain = childMainSize[si];
+                const keyCross = childCrossSize[si];
+                const keyMMS = childMainMarginStart[si];
+                const keyMME = childMainMarginEnd[si];
+                const keyCMS = childCrossMarginStart[si];
+                const keyCME = childCrossMarginEnd[si];
+                var j: usize = si;
+                while (j > 0 and node.children[visibleIndices[j - 1]].style.order > keyOrder) {
+                    visibleIndices[j] = visibleIndices[j - 1];
+                    childBasis[j] = childBasis[j - 1];
+                    childGrow[j] = childGrow[j - 1];
+                    childShrink[j] = childShrink[j - 1];
+                    childMainSize[j] = childMainSize[j - 1];
+                    childCrossSize[j] = childCrossSize[j - 1];
+                    childMainMarginStart[j] = childMainMarginStart[j - 1];
+                    childMainMarginEnd[j] = childMainMarginEnd[j - 1];
+                    childCrossMarginStart[j] = childCrossMarginStart[j - 1];
+                    childCrossMarginEnd[j] = childCrossMarginEnd[j - 1];
+                    j -= 1;
+                }
+                visibleIndices[j] = keyIdx;
+                childBasis[j] = keyBasis;
+                childGrow[j] = keyGrow;
+                childShrink[j] = keyShrink;
+                childMainSize[j] = keyMain;
+                childCrossSize[j] = keyCross;
+                childMainMarginStart[j] = keyMMS;
+                childMainMarginEnd[j] = keyMME;
+                childCrossMarginStart[j] = keyCMS;
+                childCrossMarginEnd[j] = keyCME;
+            }
+        }
+    }
     const MAX_LINES = 64;
     var lineStarts = std.mem.zeroes([MAX_LINES]usize);
     var lineCounts = std.mem.zeroes([MAX_LINES]usize);
     var numLines: usize = 0;
-    if (s.flex_wrap == .wrap and visibleCount > 0) {
+    if ((s.flex_wrap == .wrap or s.flex_wrap == .wrap_reverse) and visibleCount > 0) {
         var lineMain: f32 = 0;
         var lineStartIdx: usize = 0;
         var itemsOnLine: usize = 0;
@@ -871,6 +923,21 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         lineStarts[@intCast(0)] = 0;
         lineCounts[@intCast(0)] = visibleCount;
         numLines = if (visibleCount > 0) 1 else 0;
+    }
+    // wrap_reverse: reverse line order so last line appears first on cross axis
+    if (s.flex_wrap == .wrap_reverse and numLines > 1) {
+        var lo: usize = 0;
+        var hi: usize = numLines - 1;
+        while (lo < hi) {
+            const tmpS = lineStarts[lo];
+            const tmpC = lineCounts[lo];
+            lineStarts[lo] = lineStarts[hi];
+            lineCounts[lo] = lineCounts[hi];
+            lineStarts[hi] = tmpS;
+            lineCounts[hi] = tmpC;
+            lo += 1;
+            hi -= 1;
+        }
     }
     var crossCursor: f32 = 0;
     var contentMainEnd: f32 = 0;
@@ -1061,12 +1128,43 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 }
             }
             const freeMain = mainSize - usedMain - lineGaps;
+            // Auto margins: distribute free space to auto margins before justify-content
+            var autoMarginCount: usize = 0;
+            if (freeMain > 0) {
+                var am_i = ls;
+                while (am_i < ls + lc) : (am_i += 1) {
+                    const am_ci = visibleIndices[@intCast(am_i)];
+                    const cs2 = node.children[@intCast(am_ci)].style;
+                    if (isRow) {
+                        if (cs2.isMarginAutoLeft()) autoMarginCount += 1;
+                        if (cs2.isMarginAutoRight()) autoMarginCount += 1;
+                    } else {
+                        if (cs2.isMarginAutoTop()) autoMarginCount += 1;
+                        if (cs2.isMarginAutoBottom()) autoMarginCount += 1;
+                    }
+                }
+                if (autoMarginCount > 0) {
+                    const perAuto = freeMain / @as(f32, @floatFromInt(autoMarginCount));
+                    var am_j = ls;
+                    while (am_j < ls + lc) : (am_j += 1) {
+                        const am_cj = visibleIndices[@intCast(am_j)];
+                        const am_cs = node.children[@intCast(am_cj)].style;
+                        if (isRow) {
+                            if (am_cs.isMarginAutoLeft()) childMainMarginStart[@intCast(am_j)] = perAuto;
+                            if (am_cs.isMarginAutoRight()) childMainMarginEnd[@intCast(am_j)] = perAuto;
+                        } else {
+                            if (am_cs.isMarginAutoTop()) childMainMarginStart[@intCast(am_j)] = perAuto;
+                            if (am_cs.isMarginAutoBottom()) childMainMarginEnd[@intCast(am_j)] = perAuto;
+                        }
+                    }
+                }
+            }
             var mainOffset: f32 = 0;
             var extraGap: f32 = 0;
             // Don't apply justify offsets when the main axis is auto-sized (h == null for columns).
             // The 9999 sentinel is not a real size — centering against it produces absurd offsets.
             const mainAxisAuto = if (isRow) false else autoHeight;
-            if (!mainAxisAuto) {
+            if (!mainAxisAuto and autoMarginCount == 0) {
                 switch (justify) {
                     .center => {
                         mainOffset = @floor(freeMain / 2);

@@ -68,7 +68,13 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
             } else if (mapStyleKey(key)) |zig_key| {
                 if (self.curKind() == .string) {
                     const str_val = try parseStringAttrInline(self);
-                    if (std.mem.startsWith(u8, str_val, "theme-")) {
+                    if (std.mem.eql(u8, str_val, "auto")) {
+                        // margin auto: encode as inf sentinel for layout engine
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = std.math.inf(f32)");
+                    } else if (std.mem.startsWith(u8, str_val, "theme-")) {
                         if (parseStyleTokenValue(self, str_val[6..])) |expr| {
                             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                             try fields.appendSlice(self.alloc, ".");
@@ -643,7 +649,7 @@ pub fn mapStyleKey(key: []const u8) ?[]const u8 {
         .{ "minWidth", "min_width" }, .{ "maxWidth", "max_width" },
         .{ "minHeight", "min_height" }, .{ "maxHeight", "max_height" },
         .{ "flexGrow", "flex_grow" }, .{ "flexShrink", "flex_shrink" }, .{ "flexBasis", "flex_basis" },
-        .{ "gap", "gap" },
+        .{ "gap", "gap" }, .{ "order", "order" },
         .{ "padding", "padding" }, .{ "paddingLeft", "padding_left" }, .{ "paddingRight", "padding_right" },
         .{ "paddingTop", "padding_top" }, .{ "paddingBottom", "padding_bottom" },
         .{ "margin", "margin" }, .{ "marginLeft", "margin_left" }, .{ "marginRight", "margin_right" },
@@ -693,7 +699,7 @@ pub fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, prefix, "d")) { if (std.mem.eql(u8, value, "flex")) return ".flex"; if (std.mem.eql(u8, value, "none")) return ".none"; }
     if (std.mem.eql(u8, prefix, "ta")) { if (std.mem.eql(u8, value, "left")) return ".left"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "right")) return ".right"; }
     if (std.mem.eql(u8, prefix, "as")) { if (std.mem.eql(u8, value, "auto")) return ".auto"; if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flexStart") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flexEnd") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
-    if (std.mem.eql(u8, prefix, "fw")) { if (std.mem.eql(u8, value, "nowrap") or std.mem.eql(u8, value, "noWrap")) return ".no_wrap"; if (std.mem.eql(u8, value, "wrap")) return ".wrap"; }
+    if (std.mem.eql(u8, prefix, "fw")) { if (std.mem.eql(u8, value, "nowrap") or std.mem.eql(u8, value, "noWrap")) return ".no_wrap"; if (std.mem.eql(u8, value, "wrap")) return ".wrap"; if (std.mem.eql(u8, value, "wrap-reverse") or std.mem.eql(u8, value, "wrapReverse")) return ".wrap_reverse"; }
     if (std.mem.eql(u8, prefix, "pos")) { if (std.mem.eql(u8, value, "relative")) return ".relative"; if (std.mem.eql(u8, value, "absolute")) return ".absolute"; }
     if (std.mem.eql(u8, prefix, "ov")) { if (std.mem.eql(u8, value, "visible")) return ".visible"; if (std.mem.eql(u8, value, "hidden")) return ".hidden"; if (std.mem.eql(u8, value, "scroll")) return ".scroll"; }
     if (std.mem.eql(u8, prefix, "gd")) { if (std.mem.eql(u8, value, "vertical")) return ".vertical"; if (std.mem.eql(u8, value, "horizontal")) return ".horizontal"; if (std.mem.eql(u8, value, "none")) return ".none"; }
