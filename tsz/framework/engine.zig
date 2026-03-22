@@ -1082,7 +1082,7 @@ pub fn run(config: AppConfig) !void {
                             } else if (h.href) |url| {
                                 openUrl(url);
                             }
-                        } else if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
+                        } else if (events.findCanvasNode(config.root, mx, my)) |cn| {
                             // Canvas click + drag start (only if no HUD element was clicked)
                             input.unfocus();
                             if (canvas.getHoveredNode() != null) canvas.clickNode();
@@ -1137,7 +1137,6 @@ pub fn run(config: AppConfig) !void {
                         const local_x = mx - input_drag_node_x - input_drag_node_pl;
                         input.updateDrag(input_drag_id, local_x, input_drag_font_size);
                     }
-                    if (devtools_visible) updateHover(&devtools.root, mx, my);
                     updateHover(config.root, mx, my);
                     // Canvas hit testing — find which Canvas.Node the mouse is over
                     {
@@ -1245,30 +1244,18 @@ pub fn run(config: AppConfig) !void {
                         }
                     }
                     // Native terminal special key routing
-                    if (terminal_initialized and sym != c.SDLK_F12) {
+                    if (terminal_initialized) {
                         terminalHandleKey(sym, mod);
                         continue;
                     }
                     // PTY special key routing (arrows, enter, backspace, ctrl combos)
-                    if (qjs_runtime.ptyActive() and sym != c.SDLK_F12) {
+                    if (qjs_runtime.ptyActive()) {
                         qjs_runtime.ptyHandleKeyDown(sym, mod);
                         continue;
                     }
-                    // Render surface key forwarding (before F12 check so F12 still works)
-                    if (sym != c.SDLK_F12 and render_surfaces.handleKeyDown(sym)) continue;
-                    // F12: toggle devtools
-                    if (sym == c.SDLK_F12) {
-                        devtools_visible = !devtools_visible;
-                        std.debug.print("[devtools] F12 pressed — visible={}\n", .{devtools_visible});
-                        if (devtools_visible and !devtools_initialized) {
-                            std.debug.print("[devtools] calling _appInit...\n", .{});
-                            devtools._appInit();
-                            std.debug.print("[devtools] _appInit done, evaluating JS ({d} bytes)...\n", .{devtools.JS_LOGIC.len});
-                            if (devtools.JS_LOGIC.len > 0) qjs_runtime.evalScript(devtools.JS_LOGIC);
-                            std.debug.print("[devtools] JS done, initialized\n", .{});
-                            devtools_initialized = true;
-                        }
-                    } else {
+                    // Render surface key forwarding
+                    if (render_surfaces.handleKeyDown(sym)) continue;
+                    {
                         const ctrl = (mod & c.KMOD_CTRL) != 0;
                         const input_consumed = if (input.getFocusedId() != null)
                             (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
@@ -1303,8 +1290,8 @@ pub fn run(config: AppConfig) !void {
                             }
                         }
                     }
-                    // Canvas zoom — built-in (check devtools first, then app)
-                    if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
+                    // Canvas zoom — built-in
+                    if (events.findCanvasNode(config.root, mx, my)) |cn| {
                         const delta: f32 = @floatFromInt(event.wheel.y);
                         canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
@@ -1338,10 +1325,7 @@ pub fn run(config: AppConfig) !void {
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
 
-        // Devtools tick
-        if (devtools_visible and devtools_initialized) {
-            devtools._appTick(c.SDL_GetTicks());
-        }
+        // (devtools tick removed — inspector lives in tsz-tools)
 
         // Transition tick — interpolate active transitions AFTER style updates, BEFORE layout
         {
@@ -1385,11 +1369,8 @@ pub fn run(config: AppConfig) !void {
 
         // Layout (main window)
         const t2 = std.time.microTimestamp();
-        const app_h = if (devtools_visible) @max(100, win_h - DEVTOOLS_HEIGHT) else win_h;
+        const app_h = win_h;
         layout.layout(config.root, 0, 0, win_w, app_h);
-        if (devtools_visible) {
-            layout.layout(&devtools.root, 0, app_h, win_w, DEVTOOLS_HEIGHT);
-        }
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
 
@@ -1432,11 +1413,7 @@ pub fn run(config: AppConfig) !void {
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
 
-        // Paint devtools panel (below app)
-        if (devtools_visible) {
-            gpu.drawRect(0, app_h, win_w, 2, 0.4, 0.2, 0.9, 1.0, 0, 0, 0, 0, 0, 0);
-            paintNode(&devtools.root);
-        }
+        // (devtools paint removed — inspector lives in tsz-tools)
 
         // Tooltip overlay (always on top of main tree)
         tooltip.paintOverlay(measureCallback, win_w, win_h);

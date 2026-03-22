@@ -105,9 +105,28 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
 | `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
 
+### `<script>` vs `<zscript>` — when to use which
+
+Both let you drop out of JSX into imperative code. The difference is where it runs.
+
+| | `<script>` / `.script.tsz` | `<zscript>` / `.zscript.tsz` |
+|---|---|---|
+| **Runs in** | QuickJS (JS runtime) | Native Zig (compiled into binary) |
+| **When** | Runtime — after app starts | Compile time — baked into the binary |
+| **Good for** | Timers, async fetches, dynamic data, mock data | Performance-critical math, tests, FFI, framework access |
+| **Speed** | Fast enough for UI logic | 57M ops/sec on the bridge (`8b7451b1`) |
+
+We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec before any FPS drop (`8b7451b1`). But for tight loops, FFI, and anything that needs direct access to Zig's type system, `<zscript>` compiles to zero-overhead native code — no bridge, no QuickJS, no serialization.
+
+Key commits:
+- `f662eb0d` — FFI option 1: JS host functions, proved the bridge works but showed overhead for tight FFI
+- `8b7451b1` — Bridge benchmark: 52M calls/sec, proved JS→Zig bridge is not a bottleneck
+- `3c7b6b78` — `<zscript>` inline Zig blocks, for when you need zero overhead
+- `205e2505` — `_zscript.tsz` imperative mode, compiles TypeScript-like code directly to `.zig` modules
+
 ### `<script>` — JS at runtime (QuickJS)
 
-Inline JavaScript that runs in the QuickJS runtime. Use for timers, async data fetching, or anything that needs to run dynamically. Has access to app state via `set*` functions.
+Inline JavaScript that runs in the QuickJS runtime. Use for timers, async data, or anything dynamic.
 
 ```tsx
 <script>
@@ -134,7 +153,7 @@ setEarningData(items);
 
 ### `<zscript>` — Zig at compile time
 
-Inline Zig code emitted directly into the generated source. Runs at native speed, not in QuickJS. Use for performance-critical logic, test functions, or direct framework access.
+Inline Zig code emitted directly into the generated source. Runs at native speed. Use for performance-critical logic, test functions, or direct framework access.
 
 ```tsx
 <zscript>
@@ -148,7 +167,7 @@ fn test_counter_increments() !void {
 
 ### `.zscript.tsz` — Zig as a file
 
-Standalone imperative Zig module — no JSX, compiles directly to a `.zig` file. Use for utility modules, math, data processing, or anything that should be pure Zig.
+Standalone imperative Zig module — no JSX, compiles TypeScript-like code directly to a `.zig` module. Use for utility modules, math, data processing, or anything that should be pure native Zig with no runtime overhead.
 
 ## Quick Start
 
