@@ -215,6 +215,65 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
     } else {
         self.component_children_exprs = null;
     }
+
+    // Per-instance state: scan component body for useState and allocate new slots
+    const saved_remap_count = self.state_remap_count;
+    {
+        // Scan backwards from body_pos to find useState declarations in component body
+        // Component body is between the function's { and return statement
+        var scan = comp.body_pos;
+        // Walk backwards to find the function's opening brace
+        while (scan > 0) : (scan -= 1) {
+            if (self.lex.get(scan).kind == .lbrace) break;
+        }
+        // Scan forward for useState declarations
+        var si = scan;
+        while (si < comp.body_pos) : (si += 1) {
+            const tk = self.lex.get(si);
+            if (tk.kind == .identifier and std.mem.eql(u8, tk.text(self.source), "useState")) {
+                // Found useState — find the getter/setter names
+                // Pattern: const [ getter , setter ] = useState(...)
+                // Walk backwards to find getter and setter
+                var bi = si;
+                while (bi > scan and bi > 2) {
+                    bi -= 1;
+                    if (self.lex.get(bi).kind == .lbracket) break;
+                }
+                if (self.lex.get(bi).kind == .lbracket) {
+                    bi += 1; // skip [
+                    if (self.lex.get(bi).kind == .identifier) {
+                        const getter_name = self.lex.get(bi).text(self.source);
+                        bi += 1; // skip getter
+                        if (self.lex.get(bi).kind == .comma) bi += 1;
+                        if (bi < self.lex.count and self.lex.get(bi).kind == .identifier) {
+                            const setter_name = self.lex.get(bi).text(self.source);
+                            // Find the original slot
+                            if (self.isState(getter_name)) |orig_id| {
+                                // Allocate a new slot with same type/initial
+                                if (self.state_count < codegen.MAX_STATE_SLOTS) {
+                                    const new_id: u32 = @intCast(self.state_count);
+                                    self.state_slots[self.state_count] = self.state_slots[orig_id];
+                                    self.state_slots[self.state_count].getter = getter_name;
+                                    self.state_slots[self.state_count].setter = setter_name;
+                                    self.state_count += 1;
+                                    // Push remap
+                                    if (self.state_remap_count < 32) {
+                                        self.state_remap[self.state_remap_count] = .{
+                                            .getter = getter_name,
+                                            .setter = setter_name,
+                                            .slot_id = new_id,
+                                        };
+                                        self.state_remap_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     self.pos = comp.body_pos; // jump to the component's return position
     const result = if (self.isMapAhead())
         try jsx_map.parseMapExpression(self) // Component returns .map() directly
@@ -222,6 +281,7 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         try jsx.parseJSXElement(self);
     self.pos = saved_pos; // jump back to caller
     self.prop_stack_count = saved_prop_count; // pop props
+    self.state_remap_count = saved_remap_count; // pop state remaps
     self.component_children_exprs = saved_children;
     return result;
 }

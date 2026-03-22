@@ -233,6 +233,12 @@ pub const FFIHook = struct {
     slot_id: u32,
 };
 
+pub const StateRemap = struct {
+    getter: []const u8,
+    setter: []const u8,
+    slot_id: u32,
+};
+
 pub const AnimKind = enum { transition, spring };
 pub const EasingKind = enum { linear, ease_in, ease_out, ease_in_out };
 
@@ -427,6 +433,10 @@ pub const Generator = struct {
     // Utility functions (non-component, non-App, lowercase)
     util_funcs: [MAX_UTIL_FUNCS]UtilFunc,
     util_func_count: u32,
+
+    // State remap for per-instance component state (pushed/popped during inline)
+    state_remap: [32]StateRemap,
+    state_remap_count: u32,
 
     // Mutable let vars (runtime variables, not compile-time substitution)
     let_vars: [MAX_LET_VARS]LetVar,
@@ -696,6 +706,8 @@ pub const Generator = struct {
             .local_count = 0,
             .util_funcs = undefined,
             .util_func_count = 0,
+            .state_remap = undefined,
+            .state_remap_count = 0,
             .let_vars = undefined,
             .let_count = 0,
             .components = undefined,
@@ -781,6 +793,12 @@ pub const Generator = struct {
     }
 
     pub fn isSetter(self: *Generator, name: []const u8) ?u32 {
+        // Check per-instance remap first
+        var ri: u32 = self.state_remap_count;
+        while (ri > 0) {
+            ri -= 1;
+            if (std.mem.eql(u8, self.state_remap[ri].setter, name)) return self.state_remap[ri].slot_id;
+        }
         for (0..self.state_count) |i| {
             if (std.mem.eql(u8, self.state_slots[i].setter, name)) return @intCast(i);
         }
@@ -865,6 +883,12 @@ pub const Generator = struct {
     }
 
     pub fn isState(self: *Generator, name: []const u8) ?u32 {
+        // Check per-instance remap first (component state isolation)
+        var ri: u32 = self.state_remap_count;
+        while (ri > 0) {
+            ri -= 1;
+            if (std.mem.eql(u8, self.state_remap[ri].getter, name)) return self.state_remap[ri].slot_id;
+        }
         for (0..self.state_count) |i| {
             if (std.mem.eql(u8, self.state_slots[i].getter, name)) return @intCast(i);
         }
