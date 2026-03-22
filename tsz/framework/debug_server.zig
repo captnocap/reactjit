@@ -42,6 +42,11 @@ var pairing_code: [6]u8 = undefined;
 var session_path_buf: [256]u8 = undefined;
 var session_path_len: usize = 0;
 
+// Persistent pairing — SHA-256 fingerprint of trusted tools pubkeys
+const MAX_TRUSTED = 8;
+var trusted_fingerprints: [MAX_TRUSTED][32]u8 = undefined;
+var trusted_count: u8 = 0;
+
 const RESP_SIZE = 65536;
 var resp_buf: [RESP_SIZE]u8 = undefined;
 
@@ -102,6 +107,7 @@ fn startServer() void {
     server = ipc.Server.bind(0) catch return;
     enabled = true;
     our_keypair = X25519.KeyPair.generate();
+    loadTrustedKeys();
     const port = server.?.getPort();
     writeSessionFile(port);
     var port_buf: [64]u8 = undefined;
@@ -154,62 +160,208 @@ fn removeSessionFile() void {
 
 // ── Handshake ──────────────────────────────────────────────────────
 
-/// Phase 1: client sends pubkey → app generates pairing code, shows modal overlay.
-/// Code is NOT sent over the wire — user reads it from the app window.
+/// Compute pairing hash: SHA256(app_pubkey || tools_pubkey). Key pinning
+/// prevents MITM key substitution between sessions.
+fn computePairingHash(tools_pubkey: [32]u8) [32]u8 {
+    var combined: [64]u8 = undefined;
+    @memcpy(combined[0..32], &our_keypair.public_key);
+    @memcpy(combined[32..64], &tools_pubkey);
+    return app_crypto.hmacSha256("tsz-pairing-pin", &combined);
+}
+
+/// Fingerprint a tools pubkey: SHA256(pubkey).
+fn keyFingerprint(pubkey: [32]u8) [32]u8 {
+    return app_crypto.hmacSha256("tsz-key-fp", &pubkey);
+}
+
+/// Phase 1: client sends pubkey → check trust or show pairing code.
 fn handleHandshake(srv: *ipc.Server, raw: []const u8) void {
     const hex = jsonStr(raw, "pubkey") orelse {
         dropClient(srv);
         return;
     };
     if (hex.len != 64) { dropClient(srv); return; }
-
     _ = app_crypto.hexToBytes(hex, &pending_client_pubkey) catch { dropClient(srv); return; };
 
-    // Generate 6-digit pairing code from CSPRNG
+    // Check persistent trust: is this tools key already paired?
+    const fp = keyFingerprint(pending_client_pubkey);
+    for (trusted_fingerprints[0..trusted_count]) |tfp| {
+        if (std.crypto.timing_safe.eql([32]u8, tfp, fp)) {
+            // Key is trusted — verify pinning hash to detect key substitution
+            if (verifyPinningHash(pending_client_pubkey)) {
+                // Auto-reconnect: skip modal, complete DH silently
+                completeDH(srv) catch { dropClient(srv); return; };
+                _ = srv.sendLine("{\"challenge\":\"trusted\"}");
+                return;
+            }
+            // Pinning hash mismatch — possible MITM, force fresh pairing
+            break;
+        }
+    }
+
+    // Not trusted or pin mismatch — require visual pairing
     var rng_bytes: [4]u8 = undefined;
     std.crypto.random.bytes(&rng_bytes);
     const rng_val = std.mem.readInt(u32, &rng_bytes, .little) % 1_000_000;
     _ = std.fmt.bufPrint(&pairing_code, "{d:0>6}", .{rng_val}) catch {};
-
     awaiting_code = true;
-
-    // Tell client to prompt user for the code (code itself is NOT sent)
     _ = srv.sendLine("{\"challenge\":\"enter_code\"}");
 }
 
-/// Phase 2: client sends code → app verifies → completes DH + encrypted channel.
+/// Phase 2: client sends code → verify → complete DH → save trust.
 fn handleCodeVerify(srv: *ipc.Server, raw: []const u8) void {
     const code = jsonStr(raw, "code") orelse {
         dropClient(srv);
         awaiting_code = false;
         return;
     };
-
-    // Constant-time compare to prevent timing attacks
     if (code.len != 6 or !std.crypto.timing_safe.eql([6]u8, code[0..6].*, pairing_code)) {
         dropClient(srv);
         awaiting_code = false;
         return;
     }
 
-    // Code verified — complete DH key exchange
-    const dh_shared = X25519.scalarmult(our_keypair.secret_key, pending_client_pubkey) catch {
+    completeDH(srv) catch {
         dropClient(srv);
         awaiting_code = false;
         return;
     };
+    awaiting_code = false;
 
+    // Save persistent trust
+    savePairing(pending_client_pubkey);
+}
+
+/// Complete X25519 DH + HKDF → shared key, mark authenticated.
+fn completeDH(srv: *ipc.Server) !void {
+    _ = srv;
+    const dh_shared = try X25519.scalarmult(our_keypair.secret_key, pending_client_pubkey);
     const prk = app_crypto.hkdfExtract("tsz-debug-v1", &dh_shared);
-    app_crypto.hkdfExpand(&prk, "debug-channel", &shared_key) catch {
-        dropClient(srv);
-        awaiting_code = false;
-        return;
-    };
-
+    try app_crypto.hkdfExpand(&prk, "debug-channel", &shared_key);
     tx_nonce_counter = 0;
     authenticated = true;
-    awaiting_code = false;
-    sendEncrypted(srv, "{\"method\":\"debug.handshake\",\"ok\":true}");
+    sendEncrypted(&(server.?), "{\"method\":\"debug.handshake\",\"ok\":true}");
+}
+
+// ── Persistent pairing ────────────────────────────────────────────
+
+fn loadTrustedKeys() void {
+    trusted_count = 0;
+    const home = std.posix.getenv("HOME") orelse return;
+    var path_buf: [256]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.tsz/paired/zigos.json", .{home}) catch return;
+    const cwd = std.fs.cwd();
+    const file = cwd.openFile(path, .{}) catch return;
+    defer file.close();
+    var buf: [1024]u8 = undefined;
+    const n = file.readAll(&buf) catch return;
+    const data = buf[0..n];
+
+    // Extract fingerprint hex and last_active from JSON
+    const fp_hex = jsonStr(data, "tools_key_fingerprint") orelse return;
+    const ts_str = jsonStr(data, "last_active") orelse return;
+    const last_active = std.fmt.parseInt(i64, ts_str, 10) catch return;
+
+    // Check 15 minute freshness
+    const now = std.time.timestamp();
+    if (now - last_active > 15 * 60) return; // stale — require fresh pairing
+
+    if (fp_hex.len != 64) return;
+    if (trusted_count < MAX_TRUSTED) {
+        _ = app_crypto.hexToBytes(fp_hex, &trusted_fingerprints[trusted_count]) catch return;
+        trusted_count += 1;
+    }
+}
+
+fn verifyPinningHash(tools_pubkey: [32]u8) bool {
+    const home = std.posix.getenv("HOME") orelse return false;
+    var path_buf: [256]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.tsz/paired/zigos.json", .{home}) catch return false;
+    const cwd = std.fs.cwd();
+    const file = cwd.openFile(path, .{}) catch return false;
+    defer file.close();
+    var buf: [1024]u8 = undefined;
+    const n = file.readAll(&buf) catch return false;
+    const data = buf[0..n];
+
+    const stored_hex = jsonStr(data, "pairing_hash") orelse return false;
+    if (stored_hex.len != 64) return false;
+    var stored_hash: [32]u8 = undefined;
+    _ = app_crypto.hexToBytes(stored_hex, &stored_hash) catch return false;
+
+    const computed = computePairingHash(tools_pubkey);
+    return std.crypto.timing_safe.eql([32]u8, stored_hash, computed);
+}
+
+fn savePairing(tools_pubkey: [32]u8) void {
+    const home = std.posix.getenv("HOME") orelse return;
+
+    // Ensure ~/.tsz/paired/ exists
+    var dir_buf: [256:0]u8 = [_:0]u8{0} ** 256;
+    _ = std.fmt.bufPrint(dir_buf[0..255], "{s}/.tsz/paired", .{home}) catch return;
+    _ = mkdir(&dir_buf, 0o755);
+
+    // Compute key pinning hash and fingerprint
+    const pin_hash = computePairingHash(tools_pubkey);
+    const fp = keyFingerprint(tools_pubkey);
+
+    var pin_hex: [64]u8 = undefined;
+    app_crypto.bytesToHex(&pin_hash, &pin_hex);
+    var fp_hex: [64]u8 = undefined;
+    app_crypto.bytesToHex(&fp, &fp_hex);
+
+    const now = std.time.timestamp();
+
+    var json_buf: [512]u8 = undefined;
+    const json = std.fmt.bufPrint(&json_buf,
+        "{{\"pairing_hash\":\"{s}\",\"tools_key_fingerprint\":\"{s}\",\"last_active\":\"{d}\"}}\n",
+        .{ pin_hex[0..64], fp_hex[0..64], now },
+    ) catch return;
+
+    var path_buf: [256]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.tsz/paired/zigos.json", .{home}) catch return;
+    const cwd = std.fs.cwd();
+    const file = cwd.createFile(path, .{}) catch return;
+    defer file.close();
+    file.writeAll(json) catch {};
+
+    // Update in-memory trust
+    if (trusted_count < MAX_TRUSTED) {
+        trusted_fingerprints[trusted_count] = fp;
+        trusted_count += 1;
+    }
+}
+
+/// Update last_active timestamp on incoming debug messages.
+fn touchPairing() void {
+    const home = std.posix.getenv("HOME") orelse return;
+    var path_buf: [256]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "{s}/.tsz/paired/zigos.json", .{home}) catch return;
+    const cwd = std.fs.cwd();
+    const file = cwd.openFile(path, .{ .mode = .read_write }) catch return;
+    defer file.close();
+    var buf: [1024]u8 = undefined;
+    const n = file.readAll(&buf) catch return;
+    const data = buf[0..n];
+
+    // Find and replace last_active value
+    const key = "\"last_active\":\"";
+    const key_pos = std.mem.indexOf(u8, data, key) orelse return;
+    const val_start = key_pos + key.len;
+    const val_end_pos = std.mem.indexOfPos(u8, data, val_start, "\"") orelse return;
+
+    // Rebuild with new timestamp
+    const now = std.time.timestamp();
+    var new_buf: [1024]u8 = undefined;
+    var pos: usize = 0;
+    ap(&new_buf, &pos, data[0..val_start]);
+    var ts_buf: [20]u8 = undefined;
+    const ts_str = std.fmt.bufPrint(&ts_buf, "{d}", .{now}) catch return;
+    ap(&new_buf, &pos, ts_str);
+    ap(&new_buf, &pos, data[val_end_pos..n]);
+
+    file.seekTo(0) catch return;
+    file.writeAll(new_buf[0..pos]) catch {};
 }
 
 fn dropClient(srv: *ipc.Server) void {
@@ -271,6 +423,9 @@ fn handleEncrypted(srv: *ipc.Server, raw: []const u8) void {
 
 fn handleRequest(srv: *ipc.Server, raw: []const u8) void {
     const method = jsonStr(raw, "method") orelse return;
+
+    // Bump last_active on meaningful authenticated traffic
+    touchPairing();
 
     if (eql(method, "debug.tree")) {
         respondTree(srv);
