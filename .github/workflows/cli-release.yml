@@ -1,0 +1,113 @@
+name: CLI Release
+
+on:
+  push:
+    tags: ['cli-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux
+            artifact: tsz-linux-x64
+          - os: macos-latest
+            target: aarch64-macos
+            artifact: tsz-macos-arm64
+          - os: macos-13
+            target: x86_64-macos
+            artifact: tsz-macos-x64
+          - os: ubuntu-latest
+            target: x86_64-windows
+            artifact: tsz-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Build compiler
+        run: |
+          cd tsz
+          zig build compiler -Dtarget=${{ matrix.target }} -Doptimize=ReleaseFast
+          cp zig-out/bin/zigos-compiler* ../${{ matrix.artifact }} || cp zig-out/bin/zigos-compiler ../${{ matrix.artifact }}
+
+      - name: Build lean runtime
+        run: |
+          cd tsz
+          zig build app -Dtarget=${{ matrix.target }} -Doptimize=ReleaseFast
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # Flatten artifacts
+          for dir in artifacts/*/; do
+            cp "$dir"* release/ 2>/dev/null || true
+          done
+          # Make linux/mac executable
+          chmod +x release/tsz-linux-x64 release/tsz-macos-arm64 release/tsz-macos-x64 2>/dev/null || true
+          ls -la release/
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/cli-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "tsz CLI v${{ steps.version.outputs.version }}"
+          body: |
+            ## tsz CLI v${{ steps.version.outputs.version }}
+
+            TypeScript-to-native compiler for ReactJIT.
+
+            ### Download
+
+            | Platform | Binary |
+            |----------|--------|
+            | Linux x64 | `tsz-linux-x64` |
+            | macOS ARM64 (Apple Silicon) | `tsz-macos-arm64` |
+            | macOS x64 (Intel) | `tsz-macos-x64` |
+            | Windows x64 | `tsz-windows-x64.exe` |
+
+            ### Quick Start
+
+            ```bash
+            chmod +x tsz-linux-x64  # or tsz-macos-arm64
+            mv tsz-linux-x64 /usr/local/bin/tsz
+            tsz build myapp.tsz
+            ./myapp
+            ```
+
+            ### What's Included
+
+            - `.tsz` compiler (TypeScript + JSX → Zig → native binary)
+            - Flex layout engine
+            - GPU rendering (wgpu)
+            - Base primitives (Box, Text, Pressable, ScrollView, TextInput)
+          files: release/*
+          draft: false
+          prerelease: false
