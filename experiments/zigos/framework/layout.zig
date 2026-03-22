@@ -776,7 +776,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const y = py + mt;
     const innerW = w - pl - pr;
     const autoHeight = h == null;
-    const innerH = if (h != null) h.? - pt - pb else 9999;
+    // Scroll containers: use unlimited inner height so children don't shrink to fit.
+    // The container itself will still be constrained to its explicit height.
+    const isScrollContainer = (s.overflow == .scroll or s.overflow == .auto) and h != null;
+    const innerH = if (h != null and !isScrollContainer) h.? - pt - pb else @as(f32, 9999);
     const isRow = s.flex_direction == .row;
     const gap = s.gap;
     const justify = s.justify_content;
