@@ -223,10 +223,12 @@ pub const DynStyle = struct {
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
-    /// If non-empty, this DynStyle uses transition.set() instead of direct assignment.
-    /// Contains the Zig literal for transition.TransitionConfig, e.g.:
-    ///   ".{ .duration_ms = 300, .easing = .{ .named = .ease_in_out } }"
+    /// If non-empty, this DynStyle uses transition.set()/setSpring() instead of direct assignment.
+    /// For timing: Zig literal for transition.TransitionConfig
+    /// For spring: Zig literal for transition.SpringConfig
     transition_config: []const u8 = "",
+    /// true if this transition uses spring physics (emit setSpring instead of set)
+    transition_is_spring: bool = false,
     /// true if this is a color property (needs .color AnimValue wrapper)
     is_color: bool = false,
 };

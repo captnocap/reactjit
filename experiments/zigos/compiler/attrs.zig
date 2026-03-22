@@ -34,6 +34,7 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
     var trans_fields: [16][]const u8 = undefined; // Zig field names
     var trans_configs: [16][]const u8 = undefined; // Zig TransitionConfig literals
     var trans_is_color: [16]bool = undefined;
+    var trans_is_spring: [16]bool = undefined;
     var trans_count: u32 = 0;
 
     while (self.curKind() != .rbrace and self.curKind() != .eof) {
@@ -59,19 +60,44 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                 } else {
                     // Non-string color — could be prop (hex string) or item.field (packed int)
                     const val = consumeStyleValueExpr(self);
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".");
-                    try fields.appendSlice(self.alloc, color_field);
-                    // Check if resolved value is a quoted hex string (from prop)
-                    if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
-                        const inner_hex = val[1 .. val.len - 1];
-                        const color = try parseColorValue(self, inner_hex);
-                        try fields.appendSlice(self.alloc, " = ");
-                        try fields.appendSlice(self.alloc, color);
+                    // State getter in a color field → dynamic color binding
+                    if (std.mem.indexOf(u8, val, "state.getSlot") != null or
+                        std.mem.indexOf(u8, val, "state.getSlotFloat") != null)
+                    {
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, color_field);
+                        try fields.appendSlice(self.alloc, " = Color{}");
+                        // Register dynamic color style for runtime update
+                        if (self.dyn_style_count < codegen.MAX_DYN_STYLES) {
+                            const color_expr = try std.fmt.allocPrint(self.alloc,
+                                "Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                                .{ val, val, val });
+                            self.dyn_styles[self.dyn_style_count] = .{
+                                .field = color_field,
+                                .expression = color_expr,
+                                .arr_name = "",
+                                .arr_index = 0,
+                                .has_ref = false,
+                                .is_color = true,
+                            };
+                            self.dyn_style_count += 1;
+                        }
                     } else {
-                        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            " = Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
-                            .{ val, val, val }));
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, color_field);
+                        // Check if resolved value is a quoted hex string (from prop)
+                        if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                            const inner_hex = val[1 .. val.len - 1];
+                            const color = try parseColorValue(self, inner_hex);
+                            try fields.appendSlice(self.alloc, " = ");
+                            try fields.appendSlice(self.alloc, color);
+                        } else {
+                            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                " = Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                                .{ val, val, val }));
+                        }
                     }
                 }
             } else if (mapStyleKeyI16(key)) |zig_key| {
@@ -180,12 +206,16 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                                 (if (std.mem.eql(u8, prop_key, "all")) "all" else prop_key));
                             const is_color = mapColorKey(prop_key) != null;
 
-                            // Parse the config object { duration: N, easing: "...", delay: N }
+                            // Parse config: { duration: N, easing: "...", delay: N, type: "spring", stiffness: N, damping: N }
                             if (self.curKind() == .lbrace) {
                                 self.advance_token();
                                 var dur: u16 = 300;
                                 var del: u16 = 0;
                                 var easing_str: []const u8 = "ease_in_out";
+                                var is_spring = false;
+                                var stiffness: u16 = 100;
+                                var damping_val: u16 = 10;
+                                var mass: u16 = 1;
                                 while (self.curKind() != .rbrace and self.curKind() != .eof) {
                                     if (self.curKind() == .identifier) {
                                         const cfg_key = self.curText();
@@ -207,6 +237,28 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                                                 easing_str = mapEasingName(if (raw.len >= 2) raw[1 .. raw.len - 1] else raw);
                                                 self.advance_token();
                                             }
+                                        } else if (std.mem.eql(u8, cfg_key, "type")) {
+                                            if (self.curKind() == .string) {
+                                                const raw = self.curText();
+                                                const type_val = if (raw.len >= 2) raw[1 .. raw.len - 1] else raw;
+                                                if (std.mem.eql(u8, type_val, "spring")) is_spring = true;
+                                                self.advance_token();
+                                            }
+                                        } else if (std.mem.eql(u8, cfg_key, "stiffness")) {
+                                            if (self.curKind() == .number) {
+                                                stiffness = std.fmt.parseInt(u16, self.curText(), 10) catch 100;
+                                                self.advance_token();
+                                            }
+                                        } else if (std.mem.eql(u8, cfg_key, "damping")) {
+                                            if (self.curKind() == .number) {
+                                                damping_val = std.fmt.parseInt(u16, self.curText(), 10) catch 10;
+                                                self.advance_token();
+                                            }
+                                        } else if (std.mem.eql(u8, cfg_key, "mass")) {
+                                            if (self.curKind() == .number) {
+                                                mass = std.fmt.parseInt(u16, self.curText(), 10) catch 1;
+                                                self.advance_token();
+                                            }
                                         } else {
                                             // Unknown config key — skip value
                                             if (self.curKind() != .rbrace) self.advance_token();
@@ -218,13 +270,20 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                                 }
                                 if (self.curKind() == .rbrace) self.advance_token();
 
-                                // Build Zig TransitionConfig literal
+                                // Build Zig config literal
                                 if (trans_count < 16) {
                                     trans_fields[trans_count] = zig_field;
-                                    trans_configs[trans_count] = try std.fmt.allocPrint(self.alloc,
-                                        ".{{ .duration_ms = {d}, .delay_ms = {d}, .easing = .{{ .named = .{s} }} }}",
-                                        .{ dur, del, easing_str });
                                     trans_is_color[trans_count] = is_color;
+                                    trans_is_spring[trans_count] = is_spring;
+                                    if (is_spring) {
+                                        trans_configs[trans_count] = try std.fmt.allocPrint(self.alloc,
+                                            ".{{ .stiffness = {d}, .damping = {d}, .mass = {d}, .delay_ms = {d} }}",
+                                            .{ stiffness, damping_val, mass, del });
+                                    } else {
+                                        trans_configs[trans_count] = try std.fmt.allocPrint(self.alloc,
+                                            ".{{ .duration_ms = {d}, .delay_ms = {d}, .easing = .{{ .named = .{s} }} }}",
+                                            .{ dur, del, easing_str });
+                                    }
                                     trans_count += 1;
                                 }
                             } else {
@@ -264,6 +323,7 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                     std.mem.eql(u8, trans_fields[ti], "all"))
                 {
                     self.dyn_styles[dsi].transition_config = trans_configs[ti];
+                    self.dyn_styles[dsi].transition_is_spring = trans_is_spring[ti];
                     self.dyn_styles[dsi].is_color = trans_is_color[ti] or mapColorKey(ds_field) != null;
                     break;
                 }

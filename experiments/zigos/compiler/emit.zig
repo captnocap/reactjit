@@ -781,12 +781,22 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.map_count > 0) {
         try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
         for (0..self.map_count) |mi| {
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "const MAX_MAP_{d}: usize = 256;\n" ++
-                "var _map_pool_{d}: [MAX_MAP_{d}]Node = undefined;\n" ++
-                "var _map_count_{d}: usize = 0;\n",
-                .{ mi, mi, mi, mi }));
             const m = self.maps[mi];
+            if (m.parent_map_idx >= 0) {
+                // Nested map: 2D pool [MAX_OUTER][MAX_INNER] for per-column pools
+                const pmi: u32 = @intCast(m.parent_map_idx);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "const MAX_MAP_{d}: usize = 256;\n" ++
+                    "var _map_pool_{d}: [MAX_MAP_{d}][MAX_MAP_{d}]Node = undefined;\n" ++
+                    "var _map_count_{d}: [MAX_MAP_{d}]usize = [_]usize{{0}} ** MAX_MAP_{d};\n",
+                    .{ mi, mi, pmi, mi, mi, pmi, pmi }));
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "const MAX_MAP_{d}: usize = 256;\n" ++
+                    "var _map_pool_{d}: [MAX_MAP_{d}]Node = undefined;\n" ++
+                    "var _map_count_{d}: usize = 0;\n",
+                    .{ mi, mi, mi, mi }));
+            }
             if (m.inner_count > 0 and !m.is_self_closing) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
@@ -906,6 +916,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         for (0..self.map_count) |mi| {
             const m = self.maps[mi];
             if (m.parent_arr_name.len == 0) continue;
+            if (m.parent_map_idx >= 0) continue; // nested maps rebuilt inline by parent
 
             if (m.is_computed) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -1200,17 +1211,18 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         const ds = &self.dyn_styles[dsi];
         if (!ds.has_ref) continue;
 
-        // CSS transition path: emit transition.set() instead of direct assignment
+        // CSS transition path: emit transition.set()/setSpring() instead of direct assignment
         if (ds.transition_config.len > 0) {
             const value_wrapper = if (ds.is_color) "color" else "float";
+            const fn_name = if (ds.transition_is_spring) "setSpring" else "set";
             if (ds.arr_name.len == 0) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    transition.set(&_root, .{s}, .{{ .{s} = {s} }}, {s});\n",
-                    .{ ds.field, value_wrapper, ds.expression, ds.transition_config }));
+                    "    transition.{s}(&_root, .{s}, .{{ .{s} = {s} }}, {s});\n",
+                    .{ fn_name, ds.field, value_wrapper, ds.expression, ds.transition_config }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    transition.set(&{s}[{d}], .{s}, .{{ .{s} = {s} }}, {s});\n",
-                    .{ ds.arr_name, ds.arr_index, ds.field, value_wrapper, ds.expression, ds.transition_config }));
+                    "    transition.{s}(&{s}[{d}], .{s}, .{{ .{s} = {s} }}, {s});\n",
+                    .{ fn_name, ds.arr_name, ds.arr_index, ds.field, value_wrapper, ds.expression, ds.transition_config }));
             }
             continue;
         }
