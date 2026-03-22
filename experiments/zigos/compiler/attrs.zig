@@ -158,6 +158,17 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
     return try self.alloc.dupe(u8, fields.items);
 }
 
+/// Check if a string is a simple identifier (letters, digits, underscore only).
+/// Used to distinguish `bar.pct` (simple field) from `bar.pct + 3` (arithmetic).
+fn isSimpleFieldAccess(s: []const u8) bool {
+    if (s.len == 0) return false;
+    for (s) |ch| {
+        if (!((ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or
+            (ch >= '0' and ch <= '9') or ch == '_')) return false;
+    }
+    return true;
+}
+
 pub fn skipStyleValue(self: *Generator) void {
     if (self.curKind() == .string or self.curKind() == .number or self.curKind() == .identifier) {
         self.advance_token();
@@ -471,6 +482,50 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                 try fmt.appendSlice(self.alloc, "{d}");
                 if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                 try args.appendSlice(self.alloc, expr);
+            } else if (self.map_item_param != null and std.mem.startsWith(u8, expr, self.map_item_param.?) and
+                expr.len > self.map_item_param.?.len and expr[self.map_item_param.?.len] == '.' and
+                isSimpleFieldAccess(expr[self.map_item_param.?.len + 1 ..]))
+            {
+                // .map() item field access: bar.pct → _oa{N}_{field}[_i]
+                // Only matches simple field access (no arithmetic operators)
+                const field_name = expr[self.map_item_param.?.len + 1 ..];
+                if (self.map_obj_array_idx) |oa_idx| {
+                    const oa = self.object_arrays[oa_idx];
+                    var resolved = false;
+                    for (0..oa.field_count) |fi| {
+                        if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                            switch (oa.fields[fi].field_type) {
+                                .string => {
+                                    try fmt.appendSlice(self.alloc, "{s}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]", .{ oa_idx, field_name, oa_idx, field_name }));
+                                },
+                                else => {
+                                    try fmt.appendSlice(self.alloc, "{d}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "_oa{d}_{s}[_i]", .{ oa_idx, field_name }));
+                                },
+                            }
+                            resolved = true;
+                            break;
+                        }
+                    }
+                    if (!resolved) {
+                        // Field not found in object array — emit as {d} with raw access
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "_oa{d}_{s}[_i]", .{ oa_idx, field_name }));
+                    }
+                } else {
+                    // Regular array item field: _item.field
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "_item.{s}", .{field_name}));
+                }
             } else if (self.map_index_param != null and std.mem.eql(u8, expr, self.map_index_param.?)) {
                 // .map() index param — will be rewritten to _i at emit time
                 try fmt.appendSlice(self.alloc, "{d}");

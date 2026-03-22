@@ -212,7 +212,6 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                 if (self.curKind() == .template_literal) {
                     const tl = try attrs.parseTemplateLiteral(self);
                     self.advance_token(); // template literal token
-                    // Text on the outer element itself (Text element case)
                     if (is_text and inner_count < codegen.MAX_MAP_INNER) {
                         inner_nodes[inner_count] = .{
                             .font_size = font_size,
@@ -225,8 +224,86 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                         };
                         inner_count += 1;
                     }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                } else if (self.curKind() == .identifier) {
+                    // {item.field} or {index} — identifier reference in map template
+                    const ident = self.curText();
+                    var handled = false;
+                    if (self.map_item_param) |param| {
+                        if (std.mem.eql(u8, ident, param)) {
+                            self.advance_token();
+                            if (self.curKind() == .dot and self.map_obj_array_idx != null) {
+                                self.advance_token(); // .
+                                const field_name = self.curText();
+                                self.advance_token(); // field
+                                if (self.curKind() == .rbrace) {
+                                    // Simple {item.field} expression
+                                    const oa_idx = self.map_obj_array_idx.?;
+                                    const oa = self.object_arrays[oa_idx];
+                                    if (inner_count < codegen.MAX_MAP_INNER) {
+                                        var text_fmt_r: []const u8 = "{d}";
+                                        var text_args_r: []const u8 = "";
+                                        for (0..oa.field_count) |fi| {
+                                            if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                                                switch (oa.fields[fi].field_type) {
+                                                    .string => {
+                                                        text_fmt_r = "{s}";
+                                                        text_args_r = std.fmt.allocPrint(self.alloc,
+                                                            "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]",
+                                                            .{ oa_idx, field_name, oa_idx, field_name }) catch "";
+                                                    },
+                                                    else => {
+                                                        text_args_r = std.fmt.allocPrint(self.alloc,
+                                                            "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "";
+                                                    },
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        if (text_args_r.len == 0) {
+                                            text_args_r = std.fmt.allocPrint(self.alloc,
+                                                "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "";
+                                        }
+                                        inner_nodes[inner_count] = .{
+                                            .font_size = font_size,
+                                            .text_color = text_color,
+                                            .text_fmt = text_fmt_r,
+                                            .text_args = text_args_r,
+                                            .is_dynamic_text = true,
+                                            .static_text = "",
+                                            .style = "",
+                                        };
+                                        inner_count += 1;
+                                    }
+                                    self.advance_token(); // }
+                                    handled = true;
+                                }
+                                // else: complex expression like {item.field == val} — fall through to skip
+                            }
+                            // else: no dot or no obj array — fall through
+                        }
+                    }
+                    if (!handled) {
+                        // Skip balanced braces for remaining expression
+                        var bd: u32 = 1;
+                        while (bd > 0 and self.curKind() != .eof) {
+                            if (self.curKind() == .lbrace) bd += 1;
+                            if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
+                            self.advance_token();
+                        }
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    }
+                } else {
+                    // Skip balanced braces for non-identifier expressions
+                    // (e.g., {tasks.map(...)}, {cond && <JSX>})
+                    var brace_depth: u32 = 1;
+                    while (brace_depth > 0 and self.curKind() != .eof) {
+                        if (self.curKind() == .lbrace) brace_depth += 1;
+                        if (self.curKind() == .rbrace) { brace_depth -= 1; if (brace_depth == 0) break; }
+                        self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
                 }
-                if (self.curKind() == .rbrace) self.advance_token();
             } else {
                 // Raw text content
                 const raw = attrs.collectTextContent(self);
@@ -427,7 +504,20 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                         }
                     }
                 }
-                if (self.curKind() == .rbrace) self.advance_token();
+                // Skip remaining tokens until closing } (handles complex expressions
+                // like {cond && <JSX>}, {tasks.map(...)}, {item.field == val})
+                {
+                    var bd: u32 = 1;
+                    while (bd > 0 and self.curKind() != .eof) {
+                        if (self.curKind() == .lbrace) bd += 1;
+                        if (self.curKind() == .rbrace) {
+                            bd -= 1;
+                            if (bd == 0) break;
+                        }
+                        self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
+                }
             } else if (self.curKind() != .lt_slash) {
                 const raw = attrs.collectTextContent(self);
                 if (raw.len > 0) static_text = raw;
