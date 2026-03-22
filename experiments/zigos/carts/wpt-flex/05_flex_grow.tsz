@@ -1,0 +1,53 @@
+function App() {
+  return (
+    <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
+      <h1 style={{ fontSize: 18 }}>WPT: flex-grow</h1>
+
+      <p style={{ fontSize: 11 }}>All items flexGrow:1 — equal width</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#4CAF50' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>1</span>
+        </div>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#2196F3' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>1</span>
+        </div>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#FF9800' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>1</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11 }}>Grow 1:2:1 — middle item gets double space</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#4CAF50' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>1</span>
+        </div>
+        <div style={{ flexGrow: 2, height: 40, backgroundColor: '#2196F3' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>2</span>
+        </div>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#FF9800' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>1</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11 }}>One item grows, others fixed — remaining space to grower</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>
+        <div style={{ width: 50, height: 40, backgroundColor: '#4CAF50' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>50px</span>
+        </div>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#2196F3' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>grow</span>
+        </div>
+        <div style={{ width: 50, height: 40, backgroundColor: '#FF9800' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>50px</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11 }}>No grow (all 0) — items at natural size, space at end</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>
+        <div style={{ width: 50, height: 40, backgroundColor: '#4CAF50' }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#2196F3' }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#FF9800' }} />
+      </div>
+    </div>
+  );
+}

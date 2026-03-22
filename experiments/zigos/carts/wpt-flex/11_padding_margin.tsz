@@ -1,0 +1,44 @@
+function App() {
+  return (
+    <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
+      <h1 style={{ fontSize: 18 }}>WPT: padding and margin interactions</h1>
+
+      <p style={{ fontSize: 11 }}>Container padding — items positioned inside padding</p>
+      <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', padding: 20, gap: 10 }}>
+        <div style={{ width: 50, height: 40, backgroundColor: '#4CAF50' }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#2196F3' }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#FF9800' }} />
+      </div>
+
+      <p style={{ fontSize: 11 }}>Item margin — space around individual items</p>
+      <div style={{ flexDirection: 'row', width: 300, height: 60, backgroundColor: '#333' }}>
+        <div style={{ width: 50, height: 40, backgroundColor: '#4CAF50', margin: 10 }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#2196F3', margin: 10 }} />
+        <div style={{ width: 50, height: 40, backgroundColor: '#FF9800', margin: 10 }} />
+      </div>
+
+      <p style={{ fontSize: 11 }}>Mixed padding on container + margin on items</p>
+      <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', padding: 10 }}>
+        <div style={{ width: 40, height: 40, backgroundColor: '#4CAF50', marginRight: 20 }} />
+        <div style={{ width: 40, height: 40, backgroundColor: '#2196F3', marginLeft: 10, marginRight: 10 }} />
+        <div style={{ width: 40, height: 40, backgroundColor: '#FF9800', marginLeft: 20 }} />
+      </div>
+
+      <p style={{ fontSize: 11 }}>Padding + flexGrow — padding reduces available space for grow</p>
+      <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', padding: 20 }}>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#4CAF50' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>grow</span>
+        </div>
+        <div style={{ width: 60, height: 40, backgroundColor: '#2196F3' }}>
+          <span style={{ color: '#FFF', fontSize: 10 }}>60px</span>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11 }}>Per-side padding</p>
+      <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', paddingLeft: 30, paddingRight: 10, paddingTop: 5, paddingBottom: 15 }}>
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#4CAF50' }} />
+        <div style={{ flexGrow: 1, height: 40, backgroundColor: '#2196F3' }} />
+      </div>
+    </div>
+  );
+}
