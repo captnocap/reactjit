@@ -121,6 +121,62 @@ test "wraparound" {
     try std.testing.expectEqual(@as(?u32, 6), buf.pop());
 }
 
+test "drain with small output buffer" {
+    var buf = RingBuffer(u32, 8){};
+    _ = buf.push(1);
+    _ = buf.push(2);
+    _ = buf.push(3);
+    _ = buf.push(4);
+    _ = buf.push(5);
+    var out: [2]u32 = undefined;
+    const n1 = buf.drain(&out);
+    try std.testing.expectEqual(@as(usize, 2), n1);
+    try std.testing.expectEqual(@as(u32, 1), out[0]);
+    try std.testing.expectEqual(@as(u32, 2), out[1]);
+    try std.testing.expectEqual(@as(usize, 3), buf.len());
+    const n2 = buf.drain(&out);
+    try std.testing.expectEqual(@as(usize, 2), n2);
+    try std.testing.expectEqual(@as(u32, 3), out[0]);
+    try std.testing.expectEqual(@as(u32, 4), out[1]);
+    const n3 = buf.drain(&out);
+    try std.testing.expectEqual(@as(usize, 1), n3);
+    try std.testing.expectEqual(@as(u32, 5), out[0]);
+    try std.testing.expect(buf.isEmpty());
+}
+
+test "struct payload" {
+    const Msg = struct { id: u32, val: f32 };
+    var buf = RingBuffer(Msg, 4){};
+    try std.testing.expect(buf.push(.{ .id = 1, .val = 3.14 }));
+    try std.testing.expect(buf.push(.{ .id = 2, .val = 2.72 }));
+    const m1 = buf.pop().?;
+    try std.testing.expectEqual(@as(u32, 1), m1.id);
+    const m2 = buf.pop().?;
+    try std.testing.expectEqual(@as(u32, 2), m2.id);
+    try std.testing.expect(buf.isEmpty());
+}
+
+test "len and isEmpty" {
+    var buf = RingBuffer(u8, 4){};
+    try std.testing.expect(buf.isEmpty());
+    try std.testing.expectEqual(@as(usize, 0), buf.len());
+    _ = buf.push(1);
+    try std.testing.expect(!buf.isEmpty());
+    try std.testing.expectEqual(@as(usize, 1), buf.len());
+    _ = buf.push(2);
+    _ = buf.push(3);
+    _ = buf.push(4);
+    try std.testing.expectEqual(@as(usize, 4), buf.len());
+    _ = buf.pop();
+    try std.testing.expectEqual(@as(usize, 3), buf.len());
+}
+
+test "drain empty buffer" {
+    var buf = RingBuffer(u32, 4){};
+    var out: [4]u32 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), buf.drain(&out));
+}
+
 test "threaded push/pop" {
     const RB = RingBuffer(u32, 256);
     var buf = RB{};
