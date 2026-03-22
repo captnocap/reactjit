@@ -106,11 +106,12 @@ test "error: actual mismatched JSX tags" {
 // HTML TAGS
 // ═══════════════════════════════════════════════════════════════════════
 
-test "warn: div" { try testing.expect(hasDiag(runLint("function App() { return <div /> }"), "<Box>")); }
-test "warn: span" { try testing.expect(hasDiag(runLint("function App() { return <span>hi</span> }"), "<Text>")); }
-test "warn: img" { try testing.expect(hasDiag(runLint("function App() { return <img src=\"x\" /> }"), "<Image>")); }
-test "warn: button" { try testing.expect(hasDiag(runLint("function App() { return <button>click</button> }"), "<Pressable>")); }
-test "warn: input" { try testing.expect(hasDiag(runLint("function App() { return <input /> }"), "<TextInput>")); }
+// HTML tags are now accepted natively — no warnings expected
+test "no warn: div" { try testing.expect(!hasDiag(runLint("function App() { return <div /> }"), "<Box>")); }
+test "no warn: span" { try testing.expect(!hasDiag(runLint("function App() { return <span>hi</span> }"), "<Text>")); }
+test "no warn: img" { try testing.expect(!hasDiag(runLint("function App() { return <img src=\"x\" /> }"), "<Image>")); }
+test "no warn: button" { try testing.expect(!hasDiag(runLint("function App() { return <button>click</button> }"), "<Pressable>")); }
+test "no warn: input" { try testing.expect(!hasDiag(runLint("function App() { return <input /> }"), "<TextInput>")); }
 
 // ═══════════════════════════════════════════════════════════════════════
 // REACT HABITS
@@ -210,13 +211,14 @@ test "hint: no App function" {
 // ═══════════════════════════════════════════════════════════════════════
 
 test "diagnostics have correct line numbers" {
-    const src = "// line 1\n// line 2\nfunction App() { return <div /> }";
+    // Use onClick (still warned) to verify line numbers are accurate
+    const src = "// line 1\n// line 2\nfunction App() { return <Box onClick={() => {}} /> }";
     var lex = Lexer.init(src);
     lex.tokenize();
     var linter = lint.Linter.init(test_alloc, &lex, src);
     const r = linter.run();
     for (r.diagnostics) |d| {
-        if (std.mem.indexOf(u8, d.message, "<div>") != null) {
+        if (std.mem.indexOf(u8, d.message, "onClick") != null) {
             try testing.expectEqual(@as(u32, 3), d.line);
             return;
         }
