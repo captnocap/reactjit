@@ -488,6 +488,212 @@ pub fn sanitizeHtml(input: []const u8, out: []u8) usize {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// FFI test runner — callable from .tsz carts via @ffi <crypto_test.h>
+// Runs all known-answer vectors, prints green/red to terminal.
+// Returns number of tests passed (0..13).
+// ════════════════════════════════════════════════════════════════════════
+
+fn printPass(name: [*:0]const u8) void {
+    std.debug.print("\x1b[32m  \xe2\x9c\x93 {s}\x1b[0m\n", .{name});
+}
+fn printFail(name: [*:0]const u8) void {
+    std.debug.print("\x1b[31m  \xe2\x9c\x97 {s}\x1b[0m\n", .{name});
+}
+
+export fn crypto_run_all_tests() callconv(.c) c_int {
+    var passed: c_int = 0;
+
+    std.debug.print("\n\x1b[1mCrypto Test Suite\x1b[0m\n", .{});
+
+    // 1. HMAC-SHA256 RFC 4231
+    {
+        const mac = hmacSha256("key", "The quick brown fox jumps over the lazy dog");
+        var hex: [64]u8 = undefined;
+        bytesToHex(&mac, &hex);
+        if (std.mem.eql(u8, "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8", &hex)) {
+            printPass("HMAC-SHA256 RFC 4231 known vector");
+            passed += 1;
+        } else printFail("HMAC-SHA256 RFC 4231 known vector");
+    }
+
+    // 2. HKDF RFC 5869 test case 1
+    {
+        var out: [168]u8 = undefined;
+        if (hkdfDeriveHex(
+            "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+            "000102030405060708090a0b0c",
+            "f0f1f2f3f4f5f6f7f8f9",
+            42,
+            &out,
+        )) |_| {
+            if (std.mem.eql(u8, "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865", out[0..84])) {
+                printPass("HKDF RFC 5869 test case 1");
+                passed += 1;
+            } else printFail("HKDF RFC 5869 test case 1");
+        } else |_| printFail("HKDF RFC 5869 test case 1");
+    }
+
+    // 3. HKDF RFC 5869 test case 2
+    {
+        var out: [328]u8 = undefined;
+        if (hkdfDeriveHex(
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+            "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+            "b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+            82,
+            &out,
+        )) |_| {
+            if (std.mem.eql(u8, "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87", out[0..164])) {
+                printPass("HKDF RFC 5869 test case 2");
+                passed += 1;
+            } else printFail("HKDF RFC 5869 test case 2");
+        } else |_| printFail("HKDF RFC 5869 test case 2");
+    }
+
+    // 4. HKDF RFC 5869 test case 3 (empty salt/info)
+    {
+        var out: [168]u8 = undefined;
+        if (hkdfDeriveHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b", "", "", 42, &out)) |_| {
+            if (std.mem.eql(u8, "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8", out[0..84])) {
+                printPass("HKDF RFC 5869 test case 3 (empty salt/info)");
+                passed += 1;
+            } else printFail("HKDF RFC 5869 test case 3 (empty salt/info)");
+        } else |_| printFail("HKDF RFC 5869 test case 3 (empty salt/info)");
+    }
+
+    // 5. HKDF rejects overlong output
+    {
+        var out: [1024]u8 = undefined;
+        const result = hkdfDeriveHex("aa", "", "", 8161, &out);
+        if (result) |_| {
+            printFail("HKDF rejects overlong output");
+        } else |_| {
+            printPass("HKDF rejects overlong output");
+            passed += 1;
+        }
+    }
+
+    // 6. Shamir GF(256) hardcoded vector
+    {
+        const coeffs = [_]u8{ 0x42, 0x17, 0x99 };
+        const eval_ok = gf256PolyEval(&coeffs, 1) == 0xCC;
+        const xs = [_]u8{ 1, 2, 3 };
+        const ys = [_]u8{ 0xCC, 0x3E, 0xB0 };
+        const recovered = gf256LagrangeInterp0(&xs, &ys);
+        if (eval_ok and recovered == 0x42) {
+            printPass("Shamir GF(256) hardcoded vector");
+            passed += 1;
+        } else printFail("Shamir GF(256) hardcoded vector");
+    }
+
+    // 7. Shamir combine hex API
+    {
+        const indices = [_]u8{ 1, 2, 3 };
+        const shares = [_][]const u8{ "cc", "3e", "b0" };
+        var out: [4]u8 = undefined;
+        if (shamirCombine(&indices, &shares, &out)) |_| {
+            if (std.mem.eql(u8, "42", out[0..2])) {
+                printPass("Shamir combine hex API");
+                passed += 1;
+            } else printFail("Shamir combine hex API");
+        } else |_| printFail("Shamir combine hex API");
+    }
+
+    // 8. Envelope encrypt/decrypt round trip
+    {
+        const kek = [_]u8{0x11} ** 32;
+        const pt = [_]u8{ 0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE };
+        const env = envelopeEncrypt(&pt, &kek);
+        var dec: [8]u8 = undefined;
+        if (envelopeDecrypt(&env, &kek, &dec)) |len| {
+            if (len == 8 and std.mem.eql(u8, &pt, dec[0..8])) {
+                printPass("Envelope encrypt/decrypt round trip");
+                passed += 1;
+            } else printFail("Envelope encrypt/decrypt round trip");
+        } else |_| printFail("Envelope encrypt/decrypt round trip");
+    }
+
+    // 9. Envelope rejects wrong KEK
+    {
+        const kek_a = [_]u8{0x11} ** 32;
+        const kek_b = [_]u8{0x22} ** 32;
+        const pt = [_]u8{ 0xDE, 0xAD, 0xBE, 0xEF };
+        const env = envelopeEncrypt(&pt, &kek_a);
+        var out: [4]u8 = undefined;
+        if (envelopeDecrypt(&env, &kek_b, &out)) |_| {
+            printFail("Envelope rejects wrong KEK");
+        } else |_| {
+            printPass("Envelope rejects wrong KEK");
+            passed += 1;
+        }
+    }
+
+    // 10. Envelope fresh randomness
+    {
+        const kek = [_]u8{0xEF} ** 32;
+        const pt = [_]u8{ 0x11, 0x22, 0x33, 0x44 };
+        const env1 = envelopeEncrypt(&pt, &kek);
+        const env2 = envelopeEncrypt(&pt, &kek);
+        if (!std.mem.eql(u8, &env1.dek_nonce, &env2.dek_nonce) and
+            !std.mem.eql(u8, &env1.data_nonce, &env2.data_nonce) and
+            !std.mem.eql(u8, &env1.encrypted_dek, &env2.encrypted_dek))
+        {
+            printPass("Envelope uses fresh randomness");
+            passed += 1;
+        } else printFail("Envelope uses fresh randomness");
+    }
+
+    // 11. PII detection: email + SSN
+    {
+        const input = "mail alice@example.com ssn 123-45-6789";
+        var matches: [8]PiiMatch = undefined;
+        const count = detectPii(input, &matches);
+        var email_found = false;
+        var ssn_found = false;
+        for (matches[0..count]) |m| {
+            if (m.pii_type == .email and std.mem.eql(u8, "alice@example.com", input[m.start..m.end])) email_found = true;
+            if (m.pii_type == .ssn and std.mem.eql(u8, "123-45-6789", input[m.start..m.end])) ssn_found = true;
+        }
+        if (email_found and ssn_found) {
+            printPass("PII detection: email + SSN");
+            passed += 1;
+        } else printFail("PII detection: email + SSN");
+    }
+
+    // 12. PII redaction
+    {
+        const input = "u=bob@example.com cc=4111 1111 1111 1111";
+        var out: [256]u8 = undefined;
+        const len = redactPii(input, &out);
+        const redacted = out[0..len];
+        if (std.mem.indexOf(u8, redacted, "bob@example.com") == null and
+            std.mem.indexOf(u8, redacted, "4111 1111 1111 1111") == null)
+        {
+            printPass("PII redaction removes values");
+            passed += 1;
+        } else printFail("PII redaction removes values");
+    }
+
+    // 13. HTML sanitization
+    {
+        const input = "<script>alert('xss')</script>";
+        var out: [256]u8 = undefined;
+        const len = sanitizeHtml(input, &out);
+        const sanitized = out[0..len];
+        if (std.mem.indexOf(u8, sanitized, "<script>") == null and
+            std.mem.indexOf(u8, sanitized, "&lt;script&gt;") != null)
+        {
+            printPass("HTML sanitization prevents XSS");
+            passed += 1;
+        } else printFail("HTML sanitization prevents XSS");
+    }
+
+    const color = if (passed == 13) "\x1b[32m" else "\x1b[33m";
+    std.debug.print("\n{s}{d}/13 tests passed\x1b[0m\n\n", .{ color, passed });
+    return passed;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Tests — RFC known-answer vectors
 // ════════════════════════════════════════════════════════════════════════
 

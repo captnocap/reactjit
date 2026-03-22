@@ -1,6 +1,6 @@
 //! Window geometry persistence — save/restore window position and size.
 //!
-//! Saves to /tmp/zigos-geometry-<app-name>.dat as 16 bytes
+//! Saves to /tmp/tsz-geometry-<app-name>.dat as 16 bytes
 //! (4 x i32: x, y, width, height). Validates against SDL display bounds
 //! on restore to handle monitor changes.
 //!
@@ -24,7 +24,7 @@ var path_buf: [256]u8 = undefined;
 var path_len: usize = 0;
 
 pub fn init(app_name: []const u8) void {
-    const prefix = "/tmp/zigos-geometry-";
+    const prefix = "/tmp/tsz-geometry-";
     const suffix = ".dat";
     const total = prefix.len + app_name.len + suffix.len;
     if (total >= path_buf.len) return;
@@ -35,7 +35,7 @@ pub fn init(app_name: []const u8) void {
 }
 
 fn getPath() [:0]const u8 {
-    if (path_len == 0) return "/tmp/zigos-geometry.dat";
+    if (path_len == 0) return "/tmp/tsz-geometry.dat";
     path_buf[path_len] = 0;
     return path_buf[0..path_len :0];
 }

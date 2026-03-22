@@ -1,4 +1,4 @@
-//! ZigOS Child Window — entry point for independent window processes.
+//! ReactJIT Child Window — entry point for independent window processes.
 //!
 //! Spawned by the parent engine via process.zig when a window is opened
 //! with .independent kind. Connects to the parent over TCP/NDJSON,

@@ -1,6 +1,6 @@
 # Autobahn WebSocket Conformance
 
-Tests the zigos WebSocket server against the Autobahn fuzzing test suite (~500 RFC 6455 test cases).
+Tests the tsz WebSocket server against the Autobahn fuzzing test suite (~500 RFC 6455 test cases).
 
 ## Setup
 

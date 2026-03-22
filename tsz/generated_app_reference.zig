@@ -25,7 +25,7 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 }
 
 // ── Generated node tree ─────────────────────────────────────────
-var _arr_0 = [_]Node{ .{ .text = "ZigOS Dashboard", .text_color = Color.rgb(230, 237, 243) }, .{ .text = "", .text_color = Color.rgb(63, 185, 80) }, .{ .style = .{ .flex_grow = 1 } }, .{ .text = "", .text_color = Color.rgb(110, 118, 129) }, .{ .text = "", .font_size = 12, .no_wrap = true, .text_color = Color.rgb(110, 118, 129) } };
+var _arr_0 = [_]Node{ .{ .text = "ReactJIT Dashboard", .text_color = Color.rgb(230, 237, 243) }, .{ .text = "", .text_color = Color.rgb(63, 185, 80) }, .{ .style = .{ .flex_grow = 1 } }, .{ .text = "", .text_color = Color.rgb(110, 118, 129) }, .{ .text = "", .font_size = 12, .no_wrap = true, .text_color = Color.rgb(110, 118, 129) } };
 var _arr_1 = [_]Node{ .{ .text = "CPU", .text_color = Color.rgb(110, 118, 129) }, .{ .text = "", .font_size = 22, .text_color = Color.rgb(63, 185, 80) } }; // StatCard
 var _arr_2 = [_]Node{ .{ .text = "Memory", .text_color = Color.rgb(110, 118, 129) }, .{ .text = "", .font_size = 22, .text_color = Color.rgb(88, 166, 255) } }; // StatCard
 var _arr_3 = [_]Node{ .{ .text = "Requests", .text_color = Color.rgb(110, 118, 129) }, .{ .text = "", .font_size = 22, .text_color = Color.rgb(230, 237, 243) } }; // StatCard

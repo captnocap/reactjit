@@ -18,7 +18,7 @@ For feature verification, compiler capability checks, and architecture compariso
 Measured evidence in this repo:
 - Direct Opus read: ~1m13s, correct result
 - Explore-agent path: ~3m46s, incorrect result
-- Explore has already produced materially false feature reports here (example: claimed zigos had .map() when it did not)
+- Explore has already produced materially false feature reports here (example: claimed tsz had .map() when it did not)
 - Prior tested feature audit showed ~57.5% false-claim rate from Explore on this codebase
 Why:
 - This repo contains a custom compiler, DSL, and runtime not represented in training data.

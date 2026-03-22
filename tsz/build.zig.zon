@@ -1,6 +1,6 @@
 .{
-    .fingerprint = 0x559f3db12a90c089,
-    .name = .zigos,
+    .fingerprint = 0x187bab89c558070c,
+    .name = .tsz,
     .version = "0.0.0",
     .dependencies = .{
         .wgpu_native_zig = .{

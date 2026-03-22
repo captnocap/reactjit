@@ -2,7 +2,7 @@
    "outdir": "/reports/server",
    "servers": [
       {
-         "agent": "zigos-wsserver",
+         "agent": "tsz-wsserver",
          "url": "ws://127.0.0.1:9001"
       }
    ],

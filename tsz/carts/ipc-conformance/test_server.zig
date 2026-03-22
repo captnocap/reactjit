@@ -2,7 +2,7 @@
 // Starts an NDJSON-over-TCP server, accepts one client, echoes messages back.
 // Prints the assigned port on stdout so the test runner knows where to connect.
 //
-// Build: cd experiments/zigos && zig build-exe --dep ipc -Mroot=carts/ipc-conformance/test_server.zig -Mipc=framework/net/ipc.zig -femit-bin=carts/ipc-conformance/test_server
+// Build: cd tsz && zig build-exe --dep ipc -Mroot=carts/ipc-conformance/test_server.zig -Mipc=framework/net/ipc.zig -femit-bin=carts/ipc-conformance/test_server
 
 const std = @import("std");
 const ipc = @import("ipc");

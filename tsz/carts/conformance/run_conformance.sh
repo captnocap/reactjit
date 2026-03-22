@@ -1,5 +1,5 @@
 #!/bin/bash
-# Conformance test runner for the zigos TSX compiler
+# Conformance test runner for the tsz compiler
 #
 # 1. Verify checksums (test files are immutable — fix the compiler, not the tests)
 # 2. Compile each entry point with zigos-compiler build

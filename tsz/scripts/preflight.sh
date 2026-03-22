@@ -2,7 +2,7 @@
 # preflight.sh — Dependency-aware preflight check for .tsz entry points.
 #
 # Triggered on .tsz file saves (via Claude Code hook or manually).
-# Determines which entry points are affected, runs `zigos-compiler check`
+# Determines which entry points are affected, runs `tsz compiler check`
 # on each, and writes per-entry-point cache files to .tsz-preflight/.
 #
 # Usage:

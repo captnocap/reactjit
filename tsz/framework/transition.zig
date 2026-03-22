@@ -1,4 +1,4 @@
-//! transition.zig — CSS transition engine for the zigos framework
+//! transition.zig — CSS transition engine for the tsz framework
 //!
 //! Manages per-property per-node transitions. When the generated code changes a style
 //! value and that property has a transition config, the engine interpolates smoothly

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebSocket RFC 6455 conformance test suite for the zigos echo server.
+WebSocket RFC 6455 conformance test suite for the tsz echo server.
 
 Covers the same categories as the Autobahn test suite:
   1.x  Text message echo

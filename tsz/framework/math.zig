@@ -1,4 +1,4 @@
-//! math.zig — Complete math library for the zigos framework
+//! math.zig — Complete math library for the tsz framework
 //!
 //! Full port of love2d/lua/math_utils.lua. All 10 modules:
 //! vec2, vec3, vec4, mat4, quat, bbox, geo, interp, noise, bezier

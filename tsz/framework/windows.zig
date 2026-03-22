@@ -1,4 +1,4 @@
-//! ZigOS Multi-Window Manager
+//! ReactJIT Multi-Window Manager
 //!
 //! Three window types, one API:
 //!

@@ -539,7 +539,7 @@ pub fn run() !void {
     const ih: c_int = @intFromFloat(win_h);
 
     const window = c.SDL_CreateWindow(
-        "ZigOS Child",
+        "tsz child",
         c.SDL_WINDOWPOS_CENTERED,
         c.SDL_WINDOWPOS_CENTERED,
         iw,

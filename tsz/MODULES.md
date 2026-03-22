@@ -1,4 +1,4 @@
-# ZigOS Modules
+# TSZ Modules
 
 Framework modules live in `framework/`. The engine owns the lifecycle — adding a module never touches codegen.
 

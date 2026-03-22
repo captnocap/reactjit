@@ -31,6 +31,12 @@ const HAS_EFFECTS = if (@hasDecl(build_options, "has_effects")) build_options.ha
 const HAS_CANVAS = if (@hasDecl(build_options, "has_canvas")) build_options.has_canvas else true;
 const HAS_3D = if (@hasDecl(build_options, "has_3d")) build_options.has_3d else true;
 const HAS_TRANSITIONS = if (@hasDecl(build_options, "has_transitions")) build_options.has_transitions else true;
+const HAS_CRYPTO = if (@hasDecl(build_options, "has_crypto")) build_options.has_crypto else true;
+
+// Force-reference crypto.zig so its export fn symbols (e.g. crypto_run_all_tests) are available to the linker.
+comptime {
+    if (HAS_CRYPTO) _ = @import("crypto.zig");
+}
 
 const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
     pub fn initVM() void {}
@@ -749,6 +755,28 @@ noinline fn paintTerminal(node: *Node) void {
     var row: u16 = 0;
     while (row < rows) : (row += 1) {
         const cy = base_y + @as(f32, @floatFromInt(row)) * cell_h;
+
+        // Alternating row background for visual tracking
+        if (row % 2 == 1) {
+            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+        }
+
+        // Left accent bar: bright for classified tokens, dim for output
+        if (row >= sb_visible) {
+            const live_r = row - sb_visible;
+            const tok = classifier.getRowToken(live_r);
+            if (tok != .output and tok != .text) {
+                const ac = classifier.tokenColor(tok);
+                gpu.drawRect(r.x, cy, 2, cell_h,
+                    @as(f32, @floatFromInt(ac.r)) / 255.0,
+                    @as(f32, @floatFromInt(ac.g)) / 255.0,
+                    @as(f32, @floatFromInt(ac.b)) / 255.0,
+                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            } else {
+                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+        }
+
         var col: u16 = 0;
         while (col < cols) : (col += 1) {
             const cell = if (row < sb_visible)

@@ -4,7 +4,7 @@
 //! windows, but available to anything that needs to spawn children.
 //!
 //! Port of love2d/lua/process_registry.lua — PID file at
-//! /tmp/zigos_children_<PARENT_PID> so a watchdog can clean up after crashes.
+//! /tmp/tsz_children_<PARENT_PID> so a watchdog can clean up after crashes.
 //!
 //! Usage:
 //!   var child = try process.spawn(.{ .exe = "./zig-out/bin/zigos-app" });
@@ -201,7 +201,7 @@ fn ensureRegistryInit() void {
     if (registry_initialized) return;
     registry_initialized = true;
     const parent_pid = getpid();
-    registry_path_len = (std.fmt.bufPrint(&registry_path_buf, "/tmp/zigos_children_{d}", .{parent_pid}) catch return).len;
+    registry_path_len = (std.fmt.bufPrint(&registry_path_buf, "/tmp/tsz_children_{d}", .{parent_pid}) catch return).len;
 }
 
 fn registryPath() ?[*:0]const u8 {

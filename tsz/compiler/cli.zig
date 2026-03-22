@@ -1,4 +1,4 @@
-//! ZigOS compiler — tsz build|check <file.tsz>
+//! tsz compiler — tsz build|check <file.tsz>
 //! build: Compiles .tsz to generated_app.zig, then builds the binary.
 //! check: Preflight validation — runs full pipeline without writing output or building.
 //!        Outputs structured PREFLIGHT: lines to stdout for tooling consumption.
@@ -8,6 +8,8 @@ const codegen = @import("codegen.zig");
 const lexer_mod = @import("lexer.zig");
 const lint = @import("lint.zig");
 const modulegen = @import("modulegen.zig");
+const cli_init = @import("cli_init.zig");
+const cli_convert = @import("cli_convert.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -18,17 +20,36 @@ pub fn main() !void {
     defer std.process.argsFree(alloc, args);
 
     // Subcommand routing
-    if (args.len >= 2 and std.mem.eql(u8, args[1], "check")) {
-        runCheck(alloc, args);
-        return;
-    }
-    if (args.len >= 2 and std.mem.eql(u8, args[1], "test")) {
-        runTest(alloc, args);
-        return;
+    if (args.len >= 2) {
+        const cmd = args[1];
+        if (std.mem.eql(u8, cmd, "check") or std.mem.eql(u8, cmd, "preflight")) {
+            runCheck(alloc, args);
+            return;
+        }
+        if (std.mem.eql(u8, cmd, "lint")) {
+            runLint(alloc, args);
+            return;
+        }
+        if (std.mem.eql(u8, cmd, "test")) {
+            runTest(alloc, args);
+            return;
+        }
+        if (std.mem.eql(u8, cmd, "setup-editor")) {
+            runSetupEditor(alloc);
+            return;
+        }
+        if (std.mem.eql(u8, cmd, "init")) {
+            cli_init.run(alloc, args);
+            return;
+        }
+        if (std.mem.eql(u8, cmd, "convert")) {
+            cli_convert.run(alloc, args);
+            return;
+        }
     }
 
     if (args.len < 3) {
-        std.debug.print("Usage: zigos-compiler build|check|test [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: tsz build|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
         return;
     }
 
@@ -308,6 +329,12 @@ fn findImportPaths(source: []const u8, paths_out: *[MAX_IMPORTS][]const u8) u32 
 fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path: []const u8) ?[]const u8 {
     const dir = std.fs.path.dirname(importer) orelse ".";
 
+    // Strip leading './' from import path to prevent path accumulation (./././file)
+    const raw = if (std.mem.startsWith(u8, import_path, "./"))
+        import_path[2..]
+    else
+        import_path;
+
     // Explicit suffix in the import path — resolve directly
     // e.g., './style_cls' → style_cls.tsz, './StatCard_c' → StatCard_c.tsz
     const suffix_map = [_]struct { suffix: []const u8, ext: []const u8 }{
@@ -322,8 +349,8 @@ fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path
         .{ .suffix = ".script", .ext = ".script.tsz" },
     };
     for (suffix_map) |m| {
-        if (std.mem.endsWith(u8, import_path, m.suffix)) {
-            const base = import_path[0 .. import_path.len - m.suffix.len];
+        if (std.mem.endsWith(u8, raw, m.suffix)) {
+            const base = raw[0 .. raw.len - m.suffix.len];
             const candidate = std.fmt.allocPrint(alloc, "{s}/{s}{s}", .{ dir, base, m.ext }) catch continue;
             if (std.fs.cwd().access(candidate, .{})) |_| return candidate else |_| {}
         }
@@ -336,10 +363,10 @@ fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path
         ".c.tsz",   ".cls.tsz",    ".script.tsz", // legacy
     };
     for (extensions) |ext| {
-        const candidate = std.fmt.allocPrint(alloc, "{s}/{s}{s}", .{ dir, import_path, ext }) catch continue;
+        const candidate = std.fmt.allocPrint(alloc, "{s}/{s}{s}", .{ dir, raw, ext }) catch continue;
         if (std.fs.cwd().access(candidate, .{})) |_| return candidate else |_| {}
     }
-    return std.fmt.allocPrint(alloc, "{s}/{s}.tsz", .{ dir, import_path }) catch null;
+    return std.fmt.allocPrint(alloc, "{s}/{s}.tsz", .{ dir, raw }) catch null;
 }
 
 fn mergeImports(alloc: std.mem.Allocator, input_file: []const u8, source: []const u8, visited: *[MAX_IMPORTS][]const u8, visited_count: *u32, merged: *std.ArrayListUnmanaged(u8)) void {
@@ -385,10 +412,128 @@ fn loadScriptImports(alloc: std.mem.Allocator, input_file: []const u8, source: [
     return js.items;
 }
 
-// ── Preflight check ─────────────────────────────────────────────
+// ── Lint subcommand ─────────────────────────────────────────────
+//
+// tsz lint [--strict] <file.tsz>
+//
+// Standalone lint pass — no codegen. Outputs parseable diagnostics to stderr:
+//   [tsz] file:line:col: level: message
+
+fn runLint(alloc: std.mem.Allocator, args: []const []const u8) void {
+    var strict_mode = false;
+    var input_idx: usize = 2;
+    while (input_idx < args.len) {
+        if (std.mem.eql(u8, args[input_idx], "--strict")) {
+            strict_mode = true;
+            input_idx += 1;
+        } else break;
+    }
+    if (input_idx >= args.len) {
+        std.debug.print("Usage: tsz lint [--strict] <file.tsz>\n", .{});
+        return;
+    }
+
+    const input_path = args[input_idx];
+    const source = std.fs.cwd().readFileAlloc(alloc, input_path, 4 * 1024 * 1024) catch |err| {
+        std.debug.print("[tsz] {s}:0:0: error: cannot read file: {}\n", .{ std.fs.path.basename(input_path), err });
+        std.process.exit(1);
+    };
+
+    // Resolve imports so we lint the full merged source
+    const final_source = buildMergedSource(alloc, input_path, source);
+
+    var lex = lexer_mod.Lexer.init(final_source);
+    lex.tokenize();
+
+    var linter = lint.Linter.init(alloc, &lex, final_source);
+    const result = linter.run();
+
+    const basename = std.fs.path.basename(input_path);
+    var error_count: u32 = 0;
+    for (result.diagnostics) |d| {
+        const level_str: []const u8 = switch (d.level) {
+            .err => "error",
+            .warn => "warning",
+            .hint => "hint",
+        };
+        std.debug.print("[tsz] {s}:{d}:{d}: {s}: {s}\n", .{ basename, d.line, d.col, level_str, d.message });
+        if (d.level == .err) error_count += 1;
+        if (strict_mode and d.level == .warn) error_count += 1;
+    }
+
+    if (result.diagnostics.len == 0) {
+        std.debug.print("[tsz] {s}: OK (0 issues)\n", .{basename});
+    } else {
+        std.debug.print("[tsz] {s}: {d} error(s), {d} warning(s), {d} hint(s)\n", .{
+            basename, result.error_count, result.warning_count, result.hint_count,
+        });
+    }
+
+    if (error_count > 0) std.process.exit(1);
+}
+
+// ── Setup editor ────────────────────────────────────────────────
+//
+// tsz setup-editor
+//
+// Installs the VSCode extension for .tsz file support.
+
+fn runSetupEditor(_: std.mem.Allocator) void {
+    // Check if code is on PATH
+    const code_result = std.process.Child.run(.{
+        .allocator = std.heap.page_allocator,
+        .argv = &.{ "which", "code" },
+    }) catch {
+        std.debug.print("[tsz] VSCode (code) not found on PATH. Install VSCode first.\n", .{});
+        return;
+    };
+    if (code_result.term.Exited != 0) {
+        std.debug.print("[tsz] VSCode (code) not found on PATH. Install VSCode first.\n", .{});
+        return;
+    }
+
+    // Look for .vsix in editor/vscode/
+    const vsix_paths = [_][]const u8{
+        "editor/vscode/tsz.vsix",
+        "editor/vscode/tsz-0.1.0.vsix",
+        "../editor/vscode/tsz.vsix",
+        "../editor/vscode/tsz-0.1.0.vsix",
+    };
+    var found_vsix: ?[]const u8 = null;
+    for (vsix_paths) |p| {
+        if (std.fs.cwd().access(p, .{})) |_| {
+            found_vsix = p;
+            break;
+        } else |_| {}
+    }
+
+    if (found_vsix) |vsix| {
+        std.debug.print("[tsz] Installing VSCode extension from {s}...\n", .{vsix});
+        const install_result = std.process.Child.run(.{
+            .allocator = std.heap.page_allocator,
+            .argv = &.{ "code", "--install-extension", vsix },
+        }) catch |err| {
+            std.debug.print("[tsz] Failed to run code --install-extension: {}\n", .{err});
+            return;
+        };
+        if (install_result.term.Exited == 0) {
+            std.debug.print("[tsz] VSCode extension installed successfully.\n", .{});
+        } else {
+            std.debug.print("[tsz] Extension install failed (exit {d}).\n", .{install_result.term.Exited});
+        }
+    } else {
+        std.debug.print("[tsz] No .vsix found. Expected at editor/vscode/tsz*.vsix\n", .{});
+        std.debug.print("[tsz] Build it first: cd editor/vscode && npx vsce package\n", .{});
+    }
+}
+
+// ── Preflight check / check ─────────────────────────────────────
+//
+// tsz check [--strict] <file.tsz>
+// tsz preflight [--strict] <file.tsz>
 //
 // Runs the full compilation pipeline (lex → lint → codegen phases 1-9)
-// but discards the output. Reports structured PREFLIGHT: lines to stdout
+// but discards the output. Reports structured PREFLIGHT: lines to stderr
 // for consumption by scripts/preflight.sh and Claude Code hooks.
 //
 // Output format (one per line, to stdout):

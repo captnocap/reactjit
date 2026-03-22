@@ -6,6 +6,7 @@ declare function clock_ms(): number;
 
 import { Page, Header, Row, Spacer, Title, Status, Alert, Dim } from './style.cls';
 import { StatCard } from './StatCard.c';
+import { MetricRow } from './MetricRow.c';
 import { metrics } from './metrics.script';
 
 // ── Three reactive models for FFI data ──
@@ -64,7 +65,7 @@ function App() {
   return (
     <C.Page>
       <C.Header>
-        <C.Title>ZigOS Dashboard</C.Title>
+        <C.Title>ReactJIT Dashboard</C.Title>
         <C.Status>{statusText}</C.Status>
         <C.Spacer />
         <C.Alert>{alertText}</C.Alert>

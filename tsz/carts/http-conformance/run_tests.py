@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-HTTP conformance test suite for the zigos httpserver.
+HTTP conformance test suite for the tsz httpserver.
 
 Tests the HTTP server at framework/net/httpserver.zig by compiling and running
 a test server (test_server.zig), then exercising it with http.client requests.
@@ -34,8 +34,8 @@ import sys
 import threading
 import time
 
-ZIGOS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SERVER_BIN = os.path.join(ZIGOS_DIR, "carts", "http-conformance", "test_server")
+TSZ_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+SERVER_BIN = os.path.join(TSZ_DIR, "carts", "http-conformance", "test_server")
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 8099
 RESULTS = {}  # case_id -> {behavior, description, detail}
@@ -55,7 +55,7 @@ def compile_server():
         "-Mhttpserver=framework/net/httpserver.zig",
         "-femit-bin=carts/http-conformance/test_server",
     ]
-    result = subprocess.run(cmd, cwd=ZIGOS_DIR, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=TSZ_DIR, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"COMPILE FAILED:\n{result.stderr}")
         sys.exit(1)

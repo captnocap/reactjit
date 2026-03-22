@@ -29,11 +29,11 @@ eval "$(echo "$INPUT" | jq -r '
 [[ "$FILE" == *.tsz ]] || exit 0
 
 # Need the compiler to be built
-ZIGOS_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}/tsz"
-[[ -d "$ZIGOS_DIR" ]] || ZIGOS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-[[ -x "$ZIGOS_DIR/zig-out/bin/zigos-compiler" ]] || exit 0
+TSZ_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}/tsz"
+[[ -d "$TSZ_DIR" ]] || TSZ_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+[[ -x "$TSZ_DIR/zig-out/bin/zigos-compiler" ]] || exit 0
 
-cd "$ZIGOS_DIR"
+cd "$TSZ_DIR"
 
 # Session attribution
 SHORT="${SID:0:4}"
@@ -49,7 +49,7 @@ elif [ "$TOOL" = "Write" ]; then
     EDIT_DESC="Write: full file rewrite"
 fi
 
-# Convert absolute path to relative from zigos root
+# Convert absolute path to relative from tsz root
 REL=$(python3 -c "import os, sys; print(os.path.relpath(sys.argv[1]))" "$FILE")
 
 # Get just the filename for matching against error lines
