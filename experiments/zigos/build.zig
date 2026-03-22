@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     compiler_exe.linkLibC();
+    compiler_exe.stack_size = 64 * 1024 * 1024; // 64MB — Generator struct + recursive parseJSXElement frames are large
     const compiler_install = b.addInstallArtifact(compiler_exe, .{});
     const compiler_step = b.step("compiler", "Build TSZ compiler");
     compiler_step.dependOn(&compiler_install.step);
