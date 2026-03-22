@@ -18,21 +18,24 @@ pub fn build(b: *std.Build) void {
     });
     const wgpu_mod = wgpu_dep.module("wgpu");
 
+    // ── User flags ──────────────────────────────────────────────────
+    const no_debug = b.option(bool, "no-debug", "Strip debug server from binary (default for dist builds)") orelse false;
+
     // ── App binary (used by compiler: -Dapp-name=X) ──────────────
     const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "zigos-app";
-    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full);
+    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, !no_debug);
     const app_install = b.addInstallArtifact(app_exe, .{});
     const app_step = b.step("app", "tsz app — codegen + layout + rendering");
     app_step.dependOn(&app_install.step);
 
     // ── dist-lean — lean code addict tier ─────────────────────────
-    const lean_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lean", .lean);
+    const lean_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lean", .lean, false);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
     const lean_step = b.step("dist-lean", "Lean tier — layout + GPU + SDL2 only");
     lean_step.dependOn(&lean_install.step);
 
     // ── dist-full — batteries included tier ───────────────────────
-    const full_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-full", .full);
+    const full_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-full", .full, false);
     const full_install = b.addInstallArtifact(full_exe, .{});
     const full_step = b.step("dist-full", "Full tier — networking, QuickJS, physics, 3D, terminal, video, crypto");
     full_step.dependOn(&full_install.step);
@@ -82,6 +85,7 @@ fn addAppExe(
     wgpu_mod: *std.Build.Module,
     name: []const u8,
     tier: Tier,
+    debug_server: bool,
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
     const is_lean = tier == .lean;
@@ -99,6 +103,7 @@ fn addAppExe(
     options.addOption(bool, "has_transitions", !is_lean);
     options.addOption(bool, "has_networking", !is_lean);
     options.addOption(bool, "has_crypto", !is_lean);
+    options.addOption(bool, "has_debug_server", debug_server);
 
     const root_mod = b.createModule(.{
         .root_source_file = b.path("generated_app.zig"),

@@ -33,6 +33,14 @@ const HAS_CANVAS = if (@hasDecl(build_options, "has_canvas")) build_options.has_
 const HAS_3D = if (@hasDecl(build_options, "has_3d")) build_options.has_3d else true;
 const HAS_TRANSITIONS = if (@hasDecl(build_options, "has_transitions")) build_options.has_transitions else true;
 const HAS_CRYPTO = if (@hasDecl(build_options, "has_crypto")) build_options.has_crypto else true;
+const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_options.has_debug_server else false;
+
+const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else struct {
+    pub fn init() void {}
+    pub fn poll() void {}
+    pub fn deinit() void {}
+    pub fn getSelectedNode() i32 { return -1; }
+};
 
 // Force-reference crypto.zig so its export fn symbols (e.g. crypto_run_all_tests) are available to the linker.
 comptime {
@@ -907,6 +915,10 @@ noinline fn paintCanvasContainer(node: *Node) void {
 // ── Engine entry point ──────────────────────────────────────────────────
 
 pub fn run(config: AppConfig) !void {
+    // Debug server — auto-start if TSZ_DEBUG=1 (before SDL so it works headless)
+    debug_server.init();
+    defer debug_server.deinit();
+
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
     defer c.SDL_Quit();
     log.info(.engine, "SDL initialized", .{});
@@ -1470,6 +1482,9 @@ pub fn run(config: AppConfig) !void {
             .window = window,
             .hovered_node = hovered_node,
         });
+
+        // Debug server — poll for requests + push telemetry stream
+        debug_server.poll();
 
         // Telemetry (legacy stderr + qjs_runtime vars)
         fps_frames += 1;
