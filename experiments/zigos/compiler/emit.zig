@@ -1101,10 +1101,14 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                             ".text_color = {s}", .{inner.text_color}));
                         has_field = true;
                     }
-                    if (inner.style.len > 0) {
+                    if (inner.style.len > 0 or (is_nested and m.is_object_array)) {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
+                        const card_style: []const u8 = if (is_nested and m.is_object_array)
+                            ", .padding = 8, .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .margin_bottom = 4"
+                        else
+                            "";
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            ".style = .{{ {s} }}", .{inner.style}));
+                            ".style = .{{ {s}{s} }}", .{ if (inner.style.len > 0) inner.style else "", card_style }));
                         has_field = true;
                     }
                     // Sub-children: assign children pointer to sub-array
