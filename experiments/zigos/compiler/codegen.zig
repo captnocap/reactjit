@@ -273,6 +273,18 @@ pub const CompInstance = struct {
     parent_idx: u32,
 };
 
+pub const MAX_MAP_SUB = 8; // max sub-children per inner node
+
+pub const MapSubNode = struct {
+    font_size: []const u8 = "",
+    text_color: []const u8 = "",
+    text_fmt: []const u8 = "",
+    text_args: []const u8 = "",
+    is_dynamic_text: bool = false,
+    static_text: []const u8 = "",
+    style: []const u8 = "",
+};
+
 pub const MapInnerNode = struct {
     font_size: []const u8,
     text_color: []const u8,
@@ -282,6 +294,8 @@ pub const MapInnerNode = struct {
     static_text: []const u8,
     style: []const u8,
     dyn_text_color: []const u8 = "", // Zig expr for runtime color (e.g., Color.fromHex(...))
+    sub_nodes: [MAX_MAP_SUB]MapSubNode = undefined,
+    sub_count: u32 = 0,
 };
 
 pub const MapInfo = struct {

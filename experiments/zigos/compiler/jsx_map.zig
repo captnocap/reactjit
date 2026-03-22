@@ -447,11 +447,18 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     var is_dynamic_text = false;
     var static_text: []const u8 = "";
 
+    var sub_nodes: [codegen.MAX_MAP_SUB]codegen.MapSubNode = undefined;
+    var sub_count: u32 = 0;
+
     if (!is_self_closing) {
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
             if (self.curKind() == .lt) {
-                // Nested child element — skip it entirely (including its content and closing tag)
-                skipBalancedElement(self);
+                // Nested child element — parse as sub-node to capture text content
+                const sub = try parseMapSubElement(self);
+                if (sub_count < codegen.MAX_MAP_SUB) {
+                    sub_nodes[sub_count] = sub;
+                    sub_count += 1;
+                }
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
                 if (self.curKind() == .template_literal) {
@@ -552,6 +559,126 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .static_text = static_text,
         .style = style_str,
         .dyn_text_color = dyn_text_color,
+        .sub_nodes = sub_nodes,
+        .sub_count = sub_count,
+    };
+}
+
+/// Parse a nested child element inside a map template child and extract its
+/// text/style into a MapSubNode. Handles <Text>{...}</Text> and <Box style={...} />.
+/// For elements with their own nested children, recurses via skipBalancedElement.
+fn parseMapSubElement(self: *Generator) !codegen.MapSubNode {
+    if (self.curKind() != .lt) return .{};
+    self.advance_token(); // <
+    var tag: []const u8 = "";
+    if (self.curKind() == .identifier) { tag = self.curText(); self.advance_token(); }
+    if (self.curKind() == .dot) { self.advance_token(); if (self.curKind() == .identifier) self.advance_token(); }
+
+    var sub_font: []const u8 = "";
+    var sub_color: []const u8 = "";
+    var sub_style: []const u8 = "";
+
+    // Parse attributes
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const a = self.curText();
+            self.advance_token();
+            if (self.curKind() == .equals) {
+                self.advance_token();
+                if (std.mem.eql(u8, a, "style")) {
+                    sub_style = try attrs.parseStyleAttr(self);
+                } else if (std.mem.eql(u8, a, "fontSize")) {
+                    sub_font = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, a, "color")) {
+                    const hex = try attrs.parseStringAttr(self);
+                    sub_color = try attrs.parseColorValue(self, hex);
+                } else {
+                    try attrs.skipAttrValue(self);
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+    }
+
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        return .{ .style = sub_style, .font_size = sub_font, .text_color = sub_color };
+    }
+    if (self.curKind() == .gt) self.advance_token();
+
+    // Parse content — extract text
+    var sub_fmt: []const u8 = "";
+    var sub_args: []const u8 = "";
+    var sub_dynamic = false;
+    var sub_static: []const u8 = "";
+
+    while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+        if (self.curKind() == .lt) {
+            skipBalancedElement(self); // deeper nesting — skip
+        } else if (self.curKind() == .lbrace) {
+            self.advance_token(); // {
+            if (self.curKind() == .template_literal) {
+                const tl = try attrs.parseTemplateLiteral(self);
+                self.advance_token();
+                if (tl.is_dynamic) { sub_dynamic = true; sub_fmt = tl.fmt; sub_args = tl.args; }
+                else { sub_static = tl.static_text; }
+            } else if (self.curKind() == .identifier) {
+                const ident = self.curText();
+                self.advance_token();
+                if (self.map_item_param) |param| {
+                    if (std.mem.eql(u8, ident, param) and self.curKind() == .dot and self.map_obj_array_idx != null) {
+                        self.advance_token(); // .
+                        const field_name = self.curText();
+                        self.advance_token(); // field
+                        const oa_idx = self.map_obj_array_idx.?;
+                        const oa = self.object_arrays[oa_idx];
+                        for (0..oa.field_count) |fi| {
+                            if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                                sub_dynamic = true;
+                                if (oa.fields[fi].field_type == .string) {
+                                    sub_fmt = "{s}";
+                                    sub_args = std.fmt.allocPrint(self.alloc,
+                                        "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]",
+                                        .{ oa_idx, field_name, oa_idx, field_name }) catch "";
+                                } else {
+                                    sub_fmt = "{d}";
+                                    sub_args = std.fmt.allocPrint(self.alloc,
+                                        "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "";
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Skip to closing }
+            var bd: u32 = 1;
+            while (bd > 0 and self.curKind() != .eof) {
+                if (self.curKind() == .lbrace) bd += 1;
+                if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
+                self.advance_token();
+            }
+            if (self.curKind() == .rbrace) self.advance_token();
+        } else {
+            const raw = attrs.collectTextContent(self);
+            if (raw.len > 0) sub_static = raw;
+        }
+    }
+
+    // Skip closing tag
+    if (self.curKind() == .lt_slash) self.advance_token();
+    if (self.curKind() == .identifier) self.advance_token();
+    if (self.curKind() == .gt) self.advance_token();
+
+    return .{
+        .font_size = sub_font,
+        .text_color = sub_color,
+        .text_fmt = sub_fmt,
+        .text_args = sub_args,
+        .is_dynamic_text = sub_dynamic,
+        .static_text = sub_static,
+        .style = sub_style,
     };
 }
 

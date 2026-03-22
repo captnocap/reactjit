@@ -790,6 +790,21 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         "var _map_texts_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
                         .{ mi, ni, mi, mi, ni, mi }));
                 }
+                // Sub-child arrays and text buffers for inner nodes with nested children
+                const inner = m.inner_nodes[ni];
+                if (inner.sub_count > 0) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_sub_{d}_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
+                        .{ mi, ni, mi, inner.sub_count }));
+                    for (0..inner.sub_count) |si| {
+                        if (inner.sub_nodes[si].is_dynamic_text) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "var _map_stb_{d}_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                                "var _map_stx_{d}_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
+                                .{ mi, ni, si, mi, mi, ni, si, mi }));
+                        }
+                    }
+                }
             }
             // Per-map onPress handler (comptime per-index factory + lookup table)
             if (m.handler_body.len > 0) {
@@ -931,6 +946,58 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
 
+            // Emit sub-node text assignments and sub-child arrays
+            for (0..m.inner_count) |ni| {
+                const inner = m.inner_nodes[ni];
+                if (inner.sub_count == 0) continue;
+                for (0..inner.sub_count) |si| {
+                    const sub = inner.sub_nodes[si];
+                    if (sub.is_dynamic_text) {
+                        const rewritten_args = try emit_map.rewriteMapArgs(self, sub.text_args, m.item_param, m.index_param);
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _map_stx_{d}_{d}_{d}[_i] = std.fmt.bufPrint(&_map_stb_{d}_{d}_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                            .{ mi, ni, si, mi, ni, si, sub.text_fmt, rewritten_args }));
+                    }
+                }
+                // Build sub-child array
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _map_sub_{d}_{d}[_i] = [{d}]Node{{ ", .{ mi, ni, inner.sub_count }));
+                for (0..inner.sub_count) |si| {
+                    const sub = inner.sub_nodes[si];
+                    if (si > 0) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, ".{ ");
+                    var sf = false;
+                    if (sub.is_dynamic_text) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = _map_stx_{d}_{d}_{d}[_i]", .{ mi, ni, si }));
+                        sf = true;
+                    } else if (sub.static_text.len > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = \"{s}\"", .{sub.static_text}));
+                        sf = true;
+                    }
+                    if (sub.font_size.len > 0) {
+                        if (sf) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".font_size = {s}", .{sub.font_size}));
+                        sf = true;
+                    }
+                    if (sub.text_color.len > 0) {
+                        if (sf) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text_color = {s}", .{sub.text_color}));
+                        sf = true;
+                    }
+                    if (sub.style.len > 0) {
+                        if (sf) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".style = .{{ {s} }}", .{sub.style}));
+                    }
+                    try out.appendSlice(self.alloc, " }");
+                }
+                try out.appendSlice(self.alloc, " };\n");
+            }
+
             // Emit inner children array assignment
             if (m.inner_count > 0 and !m.is_self_closing) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -970,6 +1037,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             ".style = .{{ {s} }}", .{inner.style}));
+                        has_field = true;
+                    }
+                    // Sub-children: assign children pointer to sub-array
+                    if (inner.sub_count > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".children = &_map_sub_{d}_{d}[_i]", .{ mi, ni }));
                     }
                     try out.appendSlice(self.alloc, " }");
                 }
