@@ -2,8 +2,8 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: overflow hidden</Text>
-      <div style={{ backgroundColor: '#B71C1C', padding: 4, borderRadius: 4 }}>
-        <Text color="#FFF" fontSize={12}>FAIL — NOT IMPLEMENTED: renderer does not clip children at overflow:hidden boundary</Text>
+      <div style={{ backgroundColor: '#2E7D32', padding: 4, borderRadius: 4 }}>
+        <Text color="#FFF" fontSize={12}>PASS — overflow hidden clips children correctly</Text>
       </div>
 
       <Text fontSize={11}>overflow visible (default) — child extends beyond parent</Text>
