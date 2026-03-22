@@ -237,14 +237,27 @@ noinline fn paintNodeVisuals(node: *Node) void {
         if (bg_raw.a > 0) {
             const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
-            gpu.drawRect(
-                r.x, r.y, r.w, r.h,
-                @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
-                @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                node.style.border_radius, 0,
-                @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
-            );
+            const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
+            if (has_transform) {
+                gpu.drawRectTransformed(
+                    r.x, r.y, r.w, r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.border_radius, node.style.border_width,
+                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    node.style.rotation, node.style.scale_x, node.style.scale_y,
+                );
+            } else {
+                gpu.drawRect(
+                    r.x, r.y, r.w, r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.border_radius, node.style.border_width,
+                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                );
+            }
         }
     }
 

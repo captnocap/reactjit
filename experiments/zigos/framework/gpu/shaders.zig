@@ -22,9 +22,9 @@ pub const rect_wgsl =
     \\    @location(3) border_color: vec4f,// border RGBA [0..1]
     \\    @location(4) radii: vec4f,       // border-radius: tl, tr, br, bl
     \\    @location(5) border_width: f32,  // border thickness in pixels
-    \\    @location(6) _pad0: f32,
-    \\    @location(7) _pad1: f32,
-    \\    @location(8) _pad2: f32,
+    \\    @location(6) rotation: f32,     // degrees
+    \\    @location(7) scale_x: f32,
+    \\    @location(8) scale_y: f32,
     \\};
     \\
     \\// ── Vertex output ────────────────────────────────────────────
@@ -51,7 +51,20 @@ pub const rect_wgsl =
     \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
     \\    let uv = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
     \\
-    \\    let pixel_pos = inst.pos + uv * inst.size;
+    \\    // Per-node transform: rotate + scale around rect center
+    \\    let center = inst.pos + inst.size * 0.5;
+    \\    var local = (uv - 0.5) * inst.size; // offset from center
+    \\    // Apply scale
+    \\    local = vec2f(local.x * inst.scale_x, local.y * inst.scale_y);
+    \\    // Apply rotation (degrees to radians)
+    \\    let rad = inst.rotation * 3.14159265 / 180.0;
+    \\    let cos_r = cos(rad);
+    \\    let sin_r = sin(rad);
+    \\    let rotated = vec2f(
+    \\        local.x * cos_r - local.y * sin_r,
+    \\        local.x * sin_r + local.y * cos_r,
+    \\    );
+    \\    let pixel_pos = center + rotated;
     \\    let ndc = vec2f(
     \\        pixel_pos.x / globals.screen_size.x * 2.0 - 1.0,
     \\        1.0 - pixel_pos.y / globals.screen_size.y * 2.0,

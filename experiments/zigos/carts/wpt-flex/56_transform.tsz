@@ -2,8 +2,8 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: transforms</Text>
-      <div style={{ backgroundColor: '#B71C1C', padding: 4, borderRadius: 4 }}>
-        <Text color="#FFF" fontSize={12}>FAIL — NOT IMPLEMENTED: rotation/scale only work on Canvas elements, not regular nodes</Text>
+      <div style={{ backgroundColor: '#2E7D32', padding: 4, borderRadius: 4 }}>
+        <Text color="#FFF" fontSize={12}>PASS — rotation/scale applied via GPU vertex shader transform</Text>
       </div>
 
       <Text fontSize={11}>rotation — 0, 15, 45, 90 degrees</Text>

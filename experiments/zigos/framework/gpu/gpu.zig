@@ -18,6 +18,7 @@ pub const images = @import("images.zig");
 // ════════════════════════════════════════════════════════════════════════
 
 pub const drawRect = rects.drawRect;
+pub const drawRectTransformed = rects.drawRectTransformed;
 pub const drawTextLine = text.drawTextLine;
 pub const drawTextWrapped = text.drawTextWrapped;
 pub const drawSelectionRects = text.drawSelectionRects;
