@@ -1160,6 +1160,9 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     } else {
                         if (child.style.height == null and child.style.flex_grow > 0) {
                             child._stretch_h = chFinal;
+                        } else if (child.style.height != null and chFinal < (resolveMaybePct(child.style.height, innerH) orelse chFinal)) {
+                            // Flex shrink: child was compressed below its explicit height
+                            child._stretch_h = chFinal;
                         }
                         if (child.style.width == null and effAlign == .stretch) {
                             child._flex_w = cwFinal;

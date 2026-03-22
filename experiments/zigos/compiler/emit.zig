@@ -988,10 +988,19 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                             ".text_color = {s}", .{sub.text_color}));
                         sf = true;
                     }
-                    if (sub.style.len > 0) {
+                    // Style + conditional display
+                    if (sub.display_cond.len > 0 or sub.style.len > 0) {
                         if (sf) try out.appendSlice(self.alloc, ", ");
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            ".style = .{{ {s} }}", .{sub.style}));
+                        try out.appendSlice(self.alloc, ".style = .{ ");
+                        if (sub.style.len > 0) {
+                            try out.appendSlice(self.alloc, sub.style);
+                        }
+                        if (sub.display_cond.len > 0) {
+                            if (sub.style.len > 0) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                ".display = if ({s}) .flex else .none", .{sub.display_cond}));
+                        }
+                        try out.appendSlice(self.alloc, " }");
                     }
                     try out.appendSlice(self.alloc, " }");
                 }

@@ -28,6 +28,7 @@ function App() {
           <span style={{ color: '#FFF', fontSize: 10 }}>50</span>
         </div>
       </div>
+      <div style={{ height: 60 }} />
 
       <p style={{ fontSize: 11 }}>Min-width prevents full shrink — partial overflow</p>
       <div style={{ flexDirection: 'row', width: 200, height: 40, backgroundColor: '#333' }}>

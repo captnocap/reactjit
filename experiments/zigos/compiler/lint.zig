@@ -164,8 +164,8 @@ pub const Linter = struct {
             // Opening tag: < Identifier ... > (not < / or < >)
             if (k == .lt and i + 1 < self.lex.count and self.kind(i + 1) == .identifier) {
                 const tag_name = self.text(i + 1);
-                // Skip lowercase tags (html-like, handled by checkHTMLTags)
-                if (tag_name.len == 0 or (tag_name[0] >= 'a' and tag_name[0] <= 'z')) {
+                // Skip empty tags
+                if (tag_name.len == 0) {
                     i += 1;
                     continue;
                 }
@@ -213,51 +213,9 @@ pub const Linter = struct {
         }
     }
 
-    /// HTML tags used instead of primitives
+    /// HTML tags used instead of primitives — now accepted natively, no warning needed.
     fn checkHTMLTags(self: *Linter) void {
-        const html_map = .{
-            .{ "div", "Box" },
-            .{ "span", "Text" },
-            .{ "p", "Text" },
-            .{ "h1", "Text" },
-            .{ "h2", "Text" },
-            .{ "h3", "Text" },
-            .{ "h4", "Text" },
-            .{ "h5", "Text" },
-            .{ "h6", "Text" },
-            .{ "img", "Image" },
-            .{ "button", "Pressable" },
-            .{ "a", "Pressable" },
-            .{ "input", "TextInput" },
-            .{ "textarea", "TextInput" },
-            .{ "section", "Box" },
-            .{ "main", "Box" },
-            .{ "nav", "Box" },
-            .{ "header", "Box" },
-            .{ "footer", "Box" },
-            .{ "article", "Box" },
-            .{ "aside", "Box" },
-            .{ "ul", "Box" },
-            .{ "ol", "Box" },
-            .{ "li", "Box" },
-            .{ "form", "Box" },
-            .{ "label", "Text" },
-        };
-
-        var i: u32 = 0;
-        while (i < self.lex.count) : (i += 1) {
-            if (self.kind(i) == .lt and i + 1 < self.lex.count and self.kind(i + 1) == .identifier) {
-                const tag = self.text(i + 1);
-                inline for (html_map) |entry| {
-                    if (std.mem.eql(u8, tag, entry[0])) {
-                        const msg = std.fmt.allocPrint(self.alloc,
-                            "<{s}> is not a .tsz primitive — use <{s}> instead", .{ entry[0], entry[1] }) catch "Use .tsz primitive";
-                        self.emit(self.tok(i + 1).start, .warn, msg);
-                        break;
-                    }
-                }
-            }
-        }
+        _ = self;
     }
 
     /// React habits that don't work in .tsz
@@ -532,8 +490,8 @@ pub const Linter = struct {
             // Opening tag: < Identifier ...
             if (k == .lt and i + 1 < self.lex.count and self.kind(i + 1) == .identifier) {
                 const tag_name = self.text(i + 1);
-                // Skip lowercase (html) tags
-                if (tag_name.len == 0 or (tag_name[0] >= 'a' and tag_name[0] <= 'z')) {
+                // Skip unknown lowercase tags (HTML tags are now accepted)
+                if (tag_name.len == 0) {
                     i += 1;
                     continue;
                 }

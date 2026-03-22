@@ -10,6 +10,7 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const TokenKind = codegen.TokenKind;
+const html_tags = @import("html_tags.zig");
 
 const primitives = [_][]const u8{
     "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas",
@@ -23,7 +24,8 @@ fn isPrimitive(name: []const u8) bool {
     for (primitives) |p| {
         if (std.mem.eql(u8, p, name)) return true;
     }
-    return false;
+    // Also accept HTML tags — they resolve to primitives at parse time
+    return html_tags.isHtmlTag(name);
 }
 
 fn isSpecialTag(name: []const u8) bool {

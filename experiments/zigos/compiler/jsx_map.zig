@@ -449,6 +449,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
 
     var sub_nodes: [codegen.MAX_MAP_SUB]codegen.MapSubNode = undefined;
     var sub_count: u32 = 0;
+    var handled_cond = false;
 
     if (!is_self_closing) {
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
@@ -526,16 +527,27 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                         }
                     }
                 }
-                // Skip remaining tokens until closing } (handles complex expressions
-                // like {cond && <JSX>}, {tasks.map(...)}, {item.field == val})
-                {
+                // Check for conditional: {cond && <JSX>} or try balanced skip
+                if (!is_dynamic_text and !handled_cond) {
+                    if (try tryParseMapConditional(self, &sub_nodes, &sub_count)) {
+                        // Conditional sub-node added — closing } already consumed
+                        handled_cond = false; // reset for next iteration
+                    } else {
+                        // Not a conditional — skip balanced braces
+                        var bd: u32 = 1;
+                        while (bd > 0 and self.curKind() != .eof) {
+                            if (self.curKind() == .lbrace) bd += 1;
+                            if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
+                            self.advance_token();
+                        }
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    }
+                } else {
+                    // Already handled text — skip to closing }
                     var bd: u32 = 1;
                     while (bd > 0 and self.curKind() != .eof) {
                         if (self.curKind() == .lbrace) bd += 1;
-                        if (self.curKind() == .rbrace) {
-                            bd -= 1;
-                            if (bd == 0) break;
-                        }
+                        if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
                         self.advance_token();
                     }
                     if (self.curKind() == .rbrace) self.advance_token();
@@ -562,6 +574,122 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .sub_nodes = sub_nodes,
         .sub_count = sub_count,
     };
+}
+
+/// Try to parse a conditional expression inside braces: {cond && <JSX>}
+/// Pattern: identifier.field == value && <Element>...</Element>
+/// Returns true if a conditional sub-node was added, false if not a conditional.
+/// The caller's brace depth tracking is at depth 1 (already consumed opening {).
+fn tryParseMapConditional(
+    self: *Generator,
+    sub_nodes: *[codegen.MAX_MAP_SUB]codegen.MapSubNode,
+    sub_count: *u32,
+) !bool {
+    // Look ahead: need identifier (possibly with .field), then comparison op, then value, then &&
+    const saved = self.pos;
+
+    // Build condition expression by consuming tokens until we hit &&
+    var cond: std.ArrayListUnmanaged(u8) = .{};
+    var found_and = false;
+    var depth: u32 = 0;
+    while (self.curKind() != .eof) {
+        if (self.curKind() == .amp_amp and depth == 0) {
+            found_and = true;
+            self.advance_token(); // skip &&
+            break;
+        }
+        if (self.curKind() == .rbrace and depth == 0) break; // no && found
+        if (self.curKind() == .lparen) depth += 1;
+        if (self.curKind() == .rparen and depth > 0) depth -= 1;
+        // Resolve map references in the condition
+        const txt = self.curText();
+        const k = self.curKind();
+        if (k == .identifier) {
+            if (self.map_item_param) |param| {
+                if (std.mem.eql(u8, txt, param) and self.pos + 2 < self.lex.count and
+                    self.lex.get(self.pos + 1).kind == .dot)
+                {
+                    self.advance_token(); // item
+                    self.advance_token(); // .
+                    const field = self.curText();
+                    self.advance_token(); // field
+                    if (self.map_obj_array_idx) |oa_idx| {
+                        try cond.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                            "_oa{d}_{s}[_i]", .{ oa_idx, field }) catch "0");
+                    } else {
+                        try cond.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                            "_item.{s}", .{field}) catch "0");
+                    }
+                    continue;
+                }
+            }
+            if (self.map_index_param) |idx_p| {
+                if (std.mem.eql(u8, txt, idx_p)) {
+                    try cond.appendSlice(self.alloc, "@as(i64, @intCast(_i))");
+                    self.advance_token();
+                    continue;
+                }
+            }
+            if (self.isState(txt)) |slot_id| {
+                const rid = self.regularSlotId(slot_id);
+                try cond.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                    "state.getSlot({d})", .{rid}) catch "0");
+                self.advance_token();
+                continue;
+            }
+        }
+        if (k == .eq_eq) {
+            try cond.appendSlice(self.alloc, " == ");
+        } else if (k == .not_eq) {
+            try cond.appendSlice(self.alloc, " != ");
+        } else if (k == .gt_eq) {
+            try cond.appendSlice(self.alloc, " >= ");
+        } else if (k == .lt) {
+            try cond.appendSlice(self.alloc, " < ");
+        } else if (k == .gt) {
+            try cond.appendSlice(self.alloc, " > ");
+        } else {
+            try cond.appendSlice(self.alloc, txt);
+        }
+        self.advance_token();
+    }
+
+    if (!found_and or cond.items.len == 0) {
+        self.pos = saved; // restore — not a conditional
+        return false;
+    }
+
+    // After &&, expect <JSX> element
+    if (self.curKind() != .lt) {
+        // Skip to closing }
+        var bd: u32 = 1;
+        while (bd > 0 and self.curKind() != .eof) {
+            if (self.curKind() == .lbrace) bd += 1;
+            if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
+            self.advance_token();
+        }
+        if (self.curKind() == .rbrace) self.advance_token();
+        return true; // consumed but no element to render
+    }
+
+    // Parse the conditional element as a sub-node
+    var sub = try parseMapSubElement(self);
+    sub.display_cond = try self.alloc.dupe(u8, cond.items);
+
+    if (sub_count.* < codegen.MAX_MAP_SUB) {
+        sub_nodes[sub_count.*] = sub;
+        sub_count.* += 1;
+    }
+
+    // Skip to closing }
+    var bd: u32 = 1;
+    while (bd > 0 and self.curKind() != .eof) {
+        if (self.curKind() == .lbrace) bd += 1;
+        if (self.curKind() == .rbrace) { bd -= 1; if (bd == 0) break; }
+        self.advance_token();
+    }
+    if (self.curKind() == .rbrace) self.advance_token();
+    return true;
 }
 
 /// Parse a nested child element inside a map template child and extract its

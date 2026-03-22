@@ -11,6 +11,7 @@ const attrs = @import("attrs.zig");
 const handlers = @import("handlers.zig");
 const components = @import("components.zig");
 const jsx_map = @import("jsx_map.zig");
+const html_tags = @import("html_tags.zig");
 
 const MAX_DYN_TEXTS = codegen.MAX_DYN_TEXTS;
 const MAX_DYN_DEPS = codegen.MAX_DYN_DEPS;
@@ -95,6 +96,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
     var tag_name = self.curText();
     self.advance_token();
+
+    // HTML tag → primitive resolution (div→Box, span→Text, etc.)
+    if (html_tags.resolve(tag_name)) |prim| {
+        tag_name = prim;
+    }
 
     // C.Name classifier reference
     var classifier_idx: ?u32 = null;

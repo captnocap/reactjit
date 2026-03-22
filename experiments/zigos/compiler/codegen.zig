@@ -283,6 +283,7 @@ pub const MapSubNode = struct {
     is_dynamic_text: bool = false,
     static_text: []const u8 = "",
     style: []const u8 = "",
+    display_cond: []const u8 = "", // Zig condition expr for conditional display (empty = always show)
 };
 
 pub const MapInnerNode = struct {
