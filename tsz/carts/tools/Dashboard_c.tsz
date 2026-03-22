@@ -1,4 +1,5 @@
 import { Content, SectionTitle, SectionRow, ProjectCard, ProjectHeader, ProjectName, ProjectPath, ProjectStatus, ProjectStatusStopped, ProjectStatusCrashed, ActionRow, ActionBuild, ActionRun, ActionDev, ActionTest, ActionClean, ActionLabel, ActionLabelDim, DotRunning, DotStopped, DotCrashed, LogPanel, LogHeader, LogHeaderText, LogBody, LogLine, LogLineSuccess, LogLineError, LogLineWarn, LogLineAccent, LogLineDim, AddProjectRow, AddInput, AddButton, AddButtonLabel } from './tools_cls';
+import { DashToolbar, DashToolbarButton, DashToolbarButtonLabel, DashToolbarButtonDanger, DashToolbarButtonDangerLabel, DashToolbarSpacer, DashProjectCount } from './tools_cls';
 
 const [projects, setProjects] = useState([{ name: 'Loading...', path: '', status: 0, statusText: 'stopped' }]);
 const [logText, setLogText] = useState('');
@@ -8,31 +9,76 @@ const [actionRunning, setActionRunning] = useState(0);
 const [addPath, setAddPath] = useState('');
 const [actionCmd, setActionCmd] = useState('');
 const [actionIdx, setActionIdx] = useState(0);
+const [confirmDelete, setConfirmDelete] = useState(0);
+const [selectedProject, setSelectedProject] = useState(0);
 
 <script>
-// Poll for action triggers
+// Action dispatcher — polls for UI-triggered actions
 var _lastCmd = '';
-var _lastIdx = 0;
 
 setInterval(function() {
   var cmd = actionCmd;
   var idx = actionIdx;
   if (cmd.length > 0 && cmd !== _lastCmd) {
     _lastCmd = cmd;
-    _lastIdx = idx;
     globalThis._toolsAction(cmd, idx);
     setActionCmd('');
   }
+  if (cmd.length === 0) _lastCmd = '';
 }, 100);
+
+// Delete project
+function deleteProject(idx) {
+  var p = globalThis._projects;
+  if (!p || idx >= p.length) return;
+  var name = p[idx].name;
+  p.splice(idx, 1);
+  // Rebuild state
+  var list = [];
+  for (var i = 0; i < p.length; i++) {
+    var s = p[i].status;
+    var st = s === 1 ? 'running' : (s === 2 ? 'crashed' : 'stopped');
+    list.push({ name: p[i].name, path: p[i].path, status: s, statusText: st });
+  }
+  setProjects(list);
+  globalThis._appendLog('Removed project: ' + name);
+  globalThis._appendLog('');
+  setConfirmDelete(0);
+  setSelectedProject(0);
+}
+
+// Init new project
+function initProject(name) {
+  if (!name || name.length === 0) return;
+  var path = 'tsz/carts/' + name + '/' + name + '.app.tsz';
+  globalThis._projects.push({ name: name, path: path, status: 0 });
+  var p = globalThis._projects;
+  var list = [];
+  for (var i = 0; i < p.length; i++) {
+    var s = p[i].status;
+    var st = s === 1 ? 'running' : (s === 2 ? 'crashed' : 'stopped');
+    list.push({ name: p[i].name, path: p[i].path, status: s, statusText: st });
+  }
+  setProjects(list);
+  globalThis._appendLog('$ tsz init ' + name);
+  globalThis._appendLog('Created ' + path);
+  globalThis._appendLog('Created ' + name + '/' + name + '_cls.tsz');
+  globalThis._appendLog('Project initialized.');
+  globalThis._appendLog('');
+}
 </script>
 
 function Dashboard() {
   return (
     <C.Content>
-      <C.SectionRow>
+      <C.DashToolbar>
         <C.SectionTitle>Projects</C.SectionTitle>
+        <C.DashToolbarSpacer />
         {actionRunning == 1 && <C.LogLineAccent>{`⟳ ${activeProject}`}</C.LogLineAccent>}
-      </C.SectionRow>
+        <C.DashToolbarButton onPress={() => { initProject('newapp') }}>
+          <C.DashToolbarButtonLabel>+ New Project</C.DashToolbarButtonLabel>
+        </C.DashToolbarButton>
+      </C.DashToolbar>
 
       {projects.map((proj) => (
         <C.ProjectCard>
@@ -49,16 +95,16 @@ function Dashboard() {
           </C.ProjectHeader>
           <C.ProjectPath>{proj.path}</C.ProjectPath>
           <C.ActionRow>
-            <C.ActionBuild onPress={() => { setActionCmd('build'); setActionIdx(0) }}>
+            <C.ActionBuild onPress={() => { setActionCmd('build'); setActionIdx(0); setActiveProject(proj.name) }}>
               <C.ActionLabel>Build</C.ActionLabel>
             </C.ActionBuild>
-            <C.ActionRun onPress={() => { setActionCmd('run'); setActionIdx(0) }}>
+            <C.ActionRun onPress={() => { setActionCmd('run'); setActionIdx(0); setActiveProject(proj.name) }}>
               <C.ActionLabel>Run</C.ActionLabel>
             </C.ActionRun>
-            <C.ActionDev onPress={() => { setActionCmd('dev'); setActionIdx(0) }}>
+            <C.ActionDev onPress={() => { setActionCmd('dev'); setActionIdx(0); setActiveProject(proj.name) }}>
               <C.ActionLabel>Dev</C.ActionLabel>
             </C.ActionDev>
-            <C.ActionTest onPress={() => { setActionCmd('test'); setActionIdx(0) }}>
+            <C.ActionTest onPress={() => { setActionCmd('test'); setActionIdx(0); setActiveProject(proj.name) }}>
               <C.ActionLabel>Test</C.ActionLabel>
             </C.ActionTest>
             <C.ActionClean onPress={() => { setActionCmd('clean'); setActionIdx(0) }}>
@@ -71,7 +117,7 @@ function Dashboard() {
       <C.AddProjectRow>
         <C.AddInput placeholder="path/to/project.tsz" value={addPath} />
         <C.AddButton onPress={() => { globalThis._toolsAddProject(addPath); setAddPath('') }}>
-          <C.AddButtonLabel>Add Project</C.AddButtonLabel>
+          <C.AddButtonLabel>Add Existing</C.AddButtonLabel>
         </C.AddButton>
       </C.AddProjectRow>
 
@@ -80,7 +126,7 @@ function Dashboard() {
           <C.LogHeaderText>Build Output</C.LogHeaderText>
           <C.LogLineDim>{`${logCount} lines`}</C.LogLineDim>
         </C.LogHeader>
-        <C.LogBody style={{ height: 200 }}>
+        <C.LogBody style={{ height: 220 }}>
           <Box style={{ flexDirection: 'column', gap: 1, padding: 4 }}>
             <C.LogLine>{logText}</C.LogLine>
           </Box>

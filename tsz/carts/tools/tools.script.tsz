@@ -21,6 +21,7 @@ setProjects([
 var _logLines = [];
 var _actionQueue = [];
 
+globalThis._appendLog = appendLog;
 function appendLog(line) {
   _logLines.push(line);
   if (_logLines.length > 200) _logLines = _logLines.slice(-200);
