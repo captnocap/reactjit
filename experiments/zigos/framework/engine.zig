@@ -25,6 +25,7 @@ const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 const capture = @import("capture.zig");
 const effects = @import("effects.zig");
+const scene3d = @import("gpu/scene3d.zig");
 const transition = @import("transition.zig");
 
 const input = @import("input.zig");
@@ -303,6 +304,10 @@ noinline fn paintNodeVisuals(node: *Node) void {
     if (node.effect_render) |render_fn| {
         _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
+    // Scene3D — 3D viewport rendered offscreen, composited here
+    if (node.scene3d) {
+        _ = scene3d.render(r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
 
     selection.paintHighlight(node, r.x, r.y);
 
@@ -313,11 +318,19 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const pt = node.style.padTop();
             const pr = node.style.padRight();
             const final_a = @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity;
-            _ = gpu.drawTextWrapped(
+            const text_h = gpu.drawTextWrapped(
                 t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
                 @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                 @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
             );
+            // Underline for href links
+            if (node.href != null) {
+                const underline_y = r.y + pt + text_h - 2;
+                gpu.drawRect(r.x + pl, underline_y, r.w - pl - pr, 1,
+                    @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                    @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
+                    0, 0, 0, 0, 0, 0);
+            }
         }
     }
 
@@ -804,6 +817,7 @@ pub fn run(config: AppConfig) !void {
 
         // Effects update — animate and render all effect instances
         effects.update(dt_sec);
+        scene3d.update(dt_sec);
 
         // Paint (main window — wgpu)
         selection.resetWalkState();
