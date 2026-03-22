@@ -175,6 +175,15 @@ var g_composite_bind_group: ?*wgpu.BindGroup = null;
 var g_rt_width: u32 = 0;
 var g_rt_height: u32 = 0;
 
+// Deferred cleanup — old render target resources must stay alive until after images.drawAll,
+// because their bind groups may still be queued in the images pipeline from earlier 3D views
+// rendered this frame. Released at frame end via frameCleanup().
+const MAX_DEFERRED_RT = 4;
+var g_deferred_bg: [MAX_DEFERRED_RT]?*wgpu.BindGroup = .{null} ** MAX_DEFERRED_RT;
+var g_deferred_view: [MAX_DEFERRED_RT]?*wgpu.TextureView = .{null} ** MAX_DEFERRED_RT;
+var g_deferred_tex: [MAX_DEFERRED_RT]?*wgpu.Texture = .{null} ** MAX_DEFERRED_RT;
+var g_deferred_count: usize = 0;
+
 // ════════════════════════════════════════════════════════════════════════
 // Init / deinit (same as before — pipeline, bind groups, sampler)
 // ════════════════════════════════════════════════════════════════════════
@@ -253,6 +262,7 @@ pub fn init() void {
 }
 
 pub fn deinit() void {
+    frameCleanup();
     if (g_composite_bind_group) |bg| bg.release();
     if (g_sampler) |s| s.release();
     if (g_depth_view) |v| v.release();
@@ -267,16 +277,44 @@ pub fn deinit() void {
     g_initialized = false;
 }
 
+/// Release deferred render target resources from earlier 3D views this frame.
+/// Must be called AFTER images.drawAll() — typically at frame end in gpu.zig.
+pub fn frameCleanup() void {
+    for (0..g_deferred_count) |i| {
+        if (g_deferred_bg[i]) |bg| bg.release();
+        if (g_deferred_view[i]) |v| v.release();
+        if (g_deferred_tex[i]) |t| t.destroy();
+        g_deferred_bg[i] = null;
+        g_deferred_view[i] = null;
+        g_deferred_tex[i] = null;
+    }
+    g_deferred_count = 0;
+}
+
 fn ensureRenderTarget(w: u32, h: u32) bool {
     if (w == 0 or h == 0) return false;
     if (g_rt_width == w and g_rt_height == h and g_color_view != null) return true;
     const device = core.getDevice() orelse return false;
-    if (g_composite_bind_group) |bg| bg.release();
-    if (g_color_view) |v| v.release();
-    if (g_color_texture) |t| t.destroy();
+    // Defer old render target cleanup — bind group may still be queued in images
+    if (g_composite_bind_group != null or g_color_view != null or g_color_texture != null) {
+        if (g_deferred_count < MAX_DEFERRED_RT) {
+            g_deferred_bg[g_deferred_count] = g_composite_bind_group;
+            g_deferred_view[g_deferred_count] = g_color_view;
+            g_deferred_tex[g_deferred_count] = g_color_texture;
+            g_deferred_count += 1;
+        } else {
+            // Overflow — release immediately (rare: >4 3D resizes per frame)
+            if (g_composite_bind_group) |bg| bg.release();
+            if (g_color_view) |v| v.release();
+            if (g_color_texture) |t| t.destroy();
+        }
+    }
+    // Depth buffer is not referenced by bind groups — safe to destroy immediately
     if (g_depth_view) |v| v.release();
     if (g_depth_texture) |t| t.destroy();
     g_composite_bind_group = null;
+    g_color_view = null;
+    g_color_texture = null;
     g_color_texture = device.createTexture(&.{
         .label = wgpu.StringView.fromSlice("r3d_color"),
         .size = .{ .width = w, .height = h, .depth_or_array_layers = 1 },

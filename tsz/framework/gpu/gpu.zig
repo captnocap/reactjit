@@ -12,6 +12,7 @@ const rects = @import("rects.zig");
 const text = @import("text.zig");
 const curves = @import("curves.zig");
 pub const images = @import("images.zig");
+const scene3d = @import("3d.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Re-exports — callers use gpu.drawRect(), gpu.RectInstance, etc.
@@ -633,6 +634,9 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
 
     // Blocking poll — reclaim all staging buffers
     _ = device.poll(true, null);
+
+    // Release deferred 3D render targets (must happen after images.drawAll, before reset)
+    scene3d.frameCleanup();
 
     // Reset for next frame
     rects.reset();
