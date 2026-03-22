@@ -421,6 +421,55 @@ test "app with useEffect watch" {
     try testing.expect(std.mem.indexOf(u8, out, "state.isDirty()") != null);
 }
 
+// ── Effect API tests ──
+
+test "Effect element with onRender emits render function" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { return <Effect onRender={(e) => { e.setPixel(0, 0, 1, 0, 0, 1) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // Should emit effect_ctx import
+    try testing.expect(std.mem.indexOf(u8, out, "effect_ctx") != null);
+    // Should emit effect_render function
+    try testing.expect(std.mem.indexOf(u8, out, "_effect_render_0") != null);
+    // Should emit ctx.setPixel call
+    try testing.expect(std.mem.indexOf(u8, out, "ctx.setPixel(") != null);
+    // Node should have .effect_render field
+    try testing.expect(std.mem.indexOf(u8, out, ".effect_render = _effect_render_0") != null);
+}
+
+test "Effect onRender translates math builtins" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { return <Effect onRender={(e) => { e.setPixel(0, 0, e.sin(e.time), 0, 0, 1) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    // e.sin(x) → @sin(x)
+    try testing.expect(std.mem.indexOf(u8, out, "@sin(") != null);
+    // e.time → ctx.time
+    try testing.expect(std.mem.indexOf(u8, out, "ctx.time") != null);
+}
+
+test "Effect onRender translates ctx methods" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { return <Effect onRender={(e) => { e.clear(); e.fade(0.97) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "ctx.clear(") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "ctx.fade(") != null);
+}
+
 test "app with script block" {
     var a = arena();
     defer a.deinit();

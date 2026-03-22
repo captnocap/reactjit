@@ -132,11 +132,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_video = std.mem.eql(u8, tag_name, "Video");
     // Render → Box with render_src field
     const is_render = std.mem.eql(u8, tag_name, "Render");
-    // Effect → Box with effect_type field (generative visuals)
+    // Effect → Box with effect_type field (legacy named effects)
     const is_effect = std.mem.eql(u8, tag_name, "Spirograph") or std.mem.eql(u8, tag_name, "Rings") or
         std.mem.eql(u8, tag_name, "Constellation") or std.mem.eql(u8, tag_name, "FlowParticles") or
         std.mem.eql(u8, tag_name, "Voronoi") or std.mem.eql(u8, tag_name, "Terrain") or
         std.mem.eql(u8, tag_name, "Sunburst") or std.mem.eql(u8, tag_name, "Cymatics");
+    // Effect → Box with effect_render callback (composable user-defined effects)
+    const is_custom_effect = std.mem.eql(u8, tag_name, "Effect");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
     // Graph → Box with graph_container (SVG paths, no pan/zoom)
@@ -197,6 +199,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_drift_y_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
+    var on_render_start: ?u32 = null; // <Effect onRender={...}>
 
     // Pre-populate from classifier
     if (classifier_idx) |idx| {
@@ -277,6 +280,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "onChangeText")) {
                     if (self.curKind() == .lbrace) {
                         on_change_text_start = self.pos;
+                        try attrs.skipBalanced(self);
+                    } else {
+                        try attrs.skipAttrValue(self);
+                    }
+                } else if (std.mem.eql(u8, attr_name, "onRender") and is_custom_effect) {
+                    if (self.curKind() == .lbrace) {
+                        on_render_start = self.pos;
                         try attrs.skipBalanced(self);
                     } else {
                         try attrs.skipAttrValue(self);
@@ -733,6 +743,19 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".effect_type = \"");
         try fields.appendSlice(self.alloc, tag_name);
         try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // onRender callback (Effect element)
+    if (on_render_start) |start| {
+        const render_name = try std.fmt.allocPrint(self.alloc, "_effect_render_{d}", .{self.handler_counter});
+        self.handler_counter += 1;
+        const body = try handlers.emitEffectRenderBody(self, start);
+        const render_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(ctx: *effect_ctx.EffectContext) void {{\n{s}}}", .{ render_name, body });
+        try self.handler_decls.append(self.alloc, render_fn);
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".effect_render = ");
+        try fields.appendSlice(self.alloc, render_name);
+        self.has_effect_render = true;
     }
 
     // onPress handler

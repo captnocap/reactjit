@@ -334,6 +334,33 @@ fn emitStatement(
         return;
     }
 
+    // ── 6b. Effect param method call: e.setPixel(...) → ctx.setPixel(...); ──
+    if (self.effect_param) |ep| {
+        if (std.mem.eql(u8, name, ep) and self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .dot) {
+            self.advance_token(); // skip param name
+            self.advance_token(); // skip '.'
+            if (self.curKind() == .identifier) {
+                const method = try self.alloc.dupe(u8, self.curText());
+                self.advance_token(); // skip method name
+                if (self.curKind() == .lparen) {
+                    self.advance_token(); // skip '('
+                    var args_buf: std.ArrayListUnmanaged(u8) = .{};
+                    var arg_count: u32 = 0;
+                    while (self.curKind() != .rparen and self.curKind() != .eof) {
+                        if (arg_count > 0) try args_buf.appendSlice(self.alloc, ", ");
+                        const arg = try emitStateExpr(self);
+                        try args_buf.appendSlice(self.alloc, arg);
+                        arg_count += 1;
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
+                    if (self.curKind() == .rparen) self.advance_token();
+                    try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}ctx.{s}({s});\n", .{ pad, method, args_buf.items }));
+                    return;
+                }
+            }
+        }
+    }
+
     // ── 7. Unknown call — capture first string arg if present, call via QJS bridge ──
     const call_name = try self.alloc.dupe(u8, name);
     self.advance_token();
@@ -431,6 +458,43 @@ pub fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
     while (self.curKind() == .identifier or self.curKind() == .comma) self.advance_token();
     if (self.curKind() == .rparen) self.advance_token();
     if (self.curKind() == .arrow) self.advance_token();
+
+    var stmts: std.ArrayListUnmanaged(u8) = .{};
+    if (self.curKind() == .lbrace) self.advance_token(); // consume function body {
+    try emitBlockBody(self, &stmts, 1);
+
+    return try self.alloc.dupe(u8, stmts.items);
+}
+
+/// Parse an onRender callback body for <Effect> and emit Zig statements.
+///
+/// Input: { (e) => { e.setPixel(x, y, r, g, b, a); ... } }
+/// Output: Zig code using ctx: *effect_ctx.EffectContext parameter.
+///
+/// Sets self.effect_param during body compilation so emitStateAtom and
+/// emitStatement translate e.xxx → ctx.xxx / @builtin.
+pub fn emitEffectRenderBody(self: *Generator, start: u32) ![]const u8 {
+    const saved_pos = self.pos;
+    const saved_locals = self.local_count;
+    const saved_effect_param = self.effect_param;
+    self.pos = start;
+    defer {
+        self.pos = saved_pos;
+        self.local_count = saved_locals;
+        self.effect_param = saved_effect_param;
+    }
+
+    // Parse arrow function preamble: { (e) => { body } }
+    if (self.curKind() == .lbrace) self.advance_token(); // outer { from JSX attr
+    if (self.curKind() == .lparen) self.advance_token(); // (
+    // Extract parameter name
+    if (self.curKind() == .identifier) {
+        self.effect_param = try self.alloc.dupe(u8, self.curText());
+        self.advance_token();
+    }
+    while (self.curKind() == .comma or self.curKind() == .identifier) self.advance_token();
+    if (self.curKind() == .rparen) self.advance_token(); // )
+    if (self.curKind() == .arrow) self.advance_token(); // =>
 
     var stmts: std.ArrayListUnmanaged(u8) = .{};
     if (self.curKind() == .lbrace) self.advance_token(); // consume function body {
@@ -747,6 +811,91 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
             if (std.mem.eql(u8, name, idx_p)) {
                 self.advance_token();
                 return "@as(i64, @intCast(_i))";
+            }
+        }
+        // Effect render param: e.time → ctx.time, e.sin(x) → @sin(x), etc.
+        if (self.effect_param) |ep| {
+            if (std.mem.eql(u8, name, ep)) {
+                self.advance_token(); // skip param name
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // skip '.'
+                    if (self.curKind() == .identifier) {
+                        const member = self.curText();
+                        self.advance_token(); // skip member name
+
+                        // Properties → ctx.property
+                        if (std.mem.eql(u8, member, "time") or std.mem.eql(u8, member, "dt") or
+                            std.mem.eql(u8, member, "width") or std.mem.eql(u8, member, "height") or
+                            std.mem.eql(u8, member, "frame") or std.mem.eql(u8, member, "mouse_x") or
+                            std.mem.eql(u8, member, "mouse_y") or std.mem.eql(u8, member, "mouse_inside"))
+                        {
+                            return try std.fmt.allocPrint(self.alloc, "ctx.{s}", .{member});
+                        }
+
+                        // Math builtins: e.sin(x) → @sin(x)
+                        if (self.curKind() == .lparen) {
+                            if (std.mem.eql(u8, member, "sin") or std.mem.eql(u8, member, "cos") or
+                                std.mem.eql(u8, member, "sqrt") or std.mem.eql(u8, member, "abs") or
+                                std.mem.eql(u8, member, "floor") or std.mem.eql(u8, member, "ceil"))
+                            {
+                                self.advance_token(); // skip '('
+                                const arg = try emitStateExpr(self);
+                                if (self.curKind() == .rparen) self.advance_token();
+                                return try std.fmt.allocPrint(self.alloc, "@{s}({s})", .{ member, arg });
+                            }
+                            if (std.mem.eql(u8, member, "mod")) {
+                                self.advance_token(); // skip '('
+                                const a = try emitStateExpr(self);
+                                if (self.curKind() == .comma) self.advance_token();
+                                const b = try emitStateExpr(self);
+                                if (self.curKind() == .rparen) self.advance_token();
+                                return try std.fmt.allocPrint(self.alloc, "@mod({s}, {s})", .{ a, b });
+                            }
+
+                            // ctx methods: e.noise(x,y) → ctx.noise(x,y)
+                            if (std.mem.eql(u8, member, "noise") or std.mem.eql(u8, member, "lerp") or
+                                std.mem.eql(u8, member, "remap") or std.mem.eql(u8, member, "smoothstep") or
+                                std.mem.eql(u8, member, "dist") or std.mem.eql(u8, member, "getPixel") or
+                                std.mem.eql(u8, member, "noise3") or std.mem.eql(u8, member, "fbm") or
+                                std.mem.eql(u8, member, "clamp"))
+                            {
+                                const zig_name = if (std.mem.eql(u8, member, "clamp")) "clampVal" else member;
+                                self.advance_token(); // skip '('
+                                var args_buf: std.ArrayListUnmanaged(u8) = .{};
+                                var arg_count: u32 = 0;
+                                while (self.curKind() != .rparen and self.curKind() != .eof) {
+                                    if (arg_count > 0) try args_buf.appendSlice(self.alloc, ", ");
+                                    const arg = try emitStateExpr(self);
+                                    try args_buf.appendSlice(self.alloc, arg);
+                                    arg_count += 1;
+                                    if (self.curKind() == .comma) self.advance_token();
+                                }
+                                if (self.curKind() == .rparen) self.advance_token();
+                                return try std.fmt.allocPrint(self.alloc, "ctx.{s}({s})", .{ zig_name, args_buf.items });
+                            }
+
+                            // Color: e.hsv(h,s,v) → effect_ctx.EffectContext.hsvToRgb(h,s,v)
+                            if (std.mem.eql(u8, member, "hsv") or std.mem.eql(u8, member, "hsl")) {
+                                const fn_name = if (std.mem.eql(u8, member, "hsv")) "hsvToRgb" else "hslToRgb";
+                                self.advance_token(); // skip '('
+                                var args_buf: std.ArrayListUnmanaged(u8) = .{};
+                                var arg_count: u32 = 0;
+                                while (self.curKind() != .rparen and self.curKind() != .eof) {
+                                    if (arg_count > 0) try args_buf.appendSlice(self.alloc, ", ");
+                                    const arg = try emitStateExpr(self);
+                                    try args_buf.appendSlice(self.alloc, arg);
+                                    arg_count += 1;
+                                    if (self.curKind() == .comma) self.advance_token();
+                                }
+                                if (self.curKind() == .rparen) self.advance_token();
+                                return try std.fmt.allocPrint(self.alloc, "effect_ctx.EffectContext.{s}({s})", .{ fn_name, args_buf.items });
+                            }
+                        }
+                        // Fallback: unknown member → ctx.member
+                        return try std.fmt.allocPrint(self.alloc, "ctx.{s}", .{member});
+                    }
+                }
+                return "ctx";
             }
         }
         // State getter

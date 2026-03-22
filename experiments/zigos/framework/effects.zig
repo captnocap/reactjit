@@ -1,22 +1,19 @@
-//! Effects — Generative canvas effect registry and lifecycle manager.
+//! Effects — Composable pixel-buffer effect system.
 //!
-//! Port of love2d/lua/effects.lua. Manages off-screen pixel buffers for
-//! procedural visual effects that render standalone (filling their own layout box)
-//! or as a background texture behind a parent element's children.
+//! Two paths:
+//!   1. Registry path (legacy): named EffectModule with create/update/draw/destroy.
+//!      Used by <Spirograph />, <Rings />, etc. Kept for backward compat.
+//!   2. Custom render path (new): <Effect onRender={fn}> with user-compiled callbacks.
+//!      The framework provides pixel buffer + timing; user code does the math.
 //!
-//! Architecture (matching Lua):
-//!   1. Registry: effect type name → create/update/draw function pointers
-//!   2. Per-instance state: pixel buffer, wgpu texture, dimensions, animation state
-//!   3. Lifecycle: syncWithTree → updateAll(dt) → engine paint composites
-//!   4. Two modes: standalone (own node) and background (behind parent's children)
-//!
-//! Effects render to CPU pixel buffers (RGBA), then upload to wgpu textures.
-//! This matches how render_surfaces and videos work — same images.queueQuad() pipeline.
+//! Both paths share the same Instance lifecycle: CPU pixel buffer → wgpu texture → quad.
 //!
 //! Usage in .tsz:
-//!   <Spirograph />                           — standalone, fills own box
-//!   <Spirograph background />                — behind parent's children
-//!   <Spirograph speed={1.5} decay={0.02} />  — with props
+//!   <Effect onRender={(e) => {
+//!     for (let y = 0; y < e.height; y++)
+//!       for (let x = 0; x < e.width; x++)
+//!         e.setPixel(x, y, e.sin(x * 0.1 + e.time) * 0.5 + 0.5, 0, 0, 1);
+//!   }} width={400} height={300} />
 
 const std = @import("std");
 const wgpu = @import("wgpu");
@@ -24,19 +21,20 @@ const gpu_core = @import("gpu/gpu.zig");
 const images = @import("gpu/images.zig");
 const log = @import("log.zig");
 const layout = @import("layout.zig");
+const effect_ctx = @import("effect_ctx.zig");
+
+pub const EffectContext = effect_ctx.EffectContext;
+pub const RenderFn = effect_ctx.RenderFn;
 
 const Node = layout.Node;
 const page_alloc = std.heap.page_allocator;
 
 // ════════════════════════════════════════════════════════════════════════
-// Effect module interface
+// Legacy registry interface (kept for backward compat)
 // ════════════════════════════════════════════════════════════════════════
 
-/// Opaque effect state — each effect type defines its own struct.
-/// Stored as a pointer to heap-allocated state.
 const EffectState = *anyopaque;
 
-/// Mouse state passed to update/draw (local coordinates relative to effect bounds).
 pub const MouseInfo = struct {
     x: f32 = 0,
     y: f32 = 0,
@@ -47,23 +45,12 @@ pub const MouseInfo = struct {
     idle: f32 = 0,
 };
 
-/// Effect module — the interface each effect type implements.
-/// Matches Lua's { create, update, draw } pattern.
 pub const EffectModule = struct {
-    /// Create initial state for a new instance.
     create: *const fn (w: u32, h: u32) EffectState,
-    /// Update animation state (called every frame).
     update: *const fn (state: EffectState, dt: f32, w: u32, h: u32, mouse: MouseInfo) void,
-    /// Draw to pixel buffer (RGBA, w*h*4 bytes). Effect owns the drawing — no clear by default
-    /// (allows trails/accumulation). Effect should clear if it wants a fresh frame.
     draw: *const fn (state: EffectState, buf: []u8, w: u32, h: u32) void,
-    /// Destroy state (free heap allocations).
     destroy: *const fn (state: EffectState) void,
 };
-
-// ════════════════════════════════════════════════════════════════════════
-// Registry
-// ════════════════════════════════════════════════════════════════════════
 
 const MAX_EFFECT_TYPES = 32;
 
@@ -75,7 +62,6 @@ const RegistryEntry = struct {
 var registry: [MAX_EFFECT_TYPES]RegistryEntry = [_]RegistryEntry{.{}} ** MAX_EFFECT_TYPES;
 var registry_count: usize = 0;
 
-/// Register an effect type by name.
 pub fn register(name: []const u8, module: EffectModule) void {
     if (registry_count >= MAX_EFFECT_TYPES) return;
     registry[registry_count] = .{ .name = name, .module = module };
@@ -90,20 +76,24 @@ fn findModule(name: []const u8) ?*const EffectModule {
     return null;
 }
 
-/// Check if a name is a registered effect type.
 pub fn isEffect(name: []const u8) bool {
     return findModule(name) != null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Instances
+// Instances — shared between registry and custom render paths
 // ════════════════════════════════════════════════════════════════════════
 
-const MAX_INSTANCES = 16;
+const MAX_INSTANCES = 32;
 
 const Instance = struct {
     active: bool = false,
-    effect_type: []const u8 = "",
+
+    // Identity — one of these is set, not both
+    effect_type: []const u8 = "", // registry path
+    render_fn: ?RenderFn = null, // custom render path
+
+    // Registry path state
     state: ?EffectState = null,
     module: ?*const EffectModule = null,
 
@@ -117,9 +107,11 @@ const Instance = struct {
     bind_group: ?*wgpu.BindGroup = null,
     dirty: bool = false,
 
-    // Mode
-    is_background: bool = false,
-    // Bounding rect (for mouse hit testing)
+    // Timing (for custom render path)
+    time: f32 = 0,
+    frame_count: u32 = 0,
+
+    // Position (for mouse hit testing)
     screen_x: f32 = 0,
     screen_y: f32 = 0,
 
@@ -145,15 +137,13 @@ const Instance = struct {
         if (w == 0 or h == 0) return;
         if (self.width == w and self.height == h) return;
 
-        // Resize pixel buffer
         if (self.pixel_buf) |buf| page_alloc.free(buf);
         self.pixel_buf = page_alloc.alloc(u8, @as(usize, w) * @as(usize, h) * 4) catch return;
-        // Clear to black
         @memset(self.pixel_buf.?, 0);
         self.width = w;
         self.height = h;
 
-        // Invalidate wgpu resources (will be recreated)
+        // Invalidate wgpu resources
         if (self.bind_group) |bg| bg.release();
         if (self.sampler) |s| s.release();
         if (self.texture_view) |tv| tv.release();
@@ -163,7 +153,7 @@ const Instance = struct {
         self.texture_view = null;
         self.texture = null;
 
-        // Re-create effect state at new size
+        // Re-create registry effect state at new size
         if (self.module) |m| {
             if (self.state) |s| m.destroy(s);
             self.state = m.create(w, h);
@@ -304,12 +294,17 @@ fn instanceMouse(inst: *const Instance) MouseInfo {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Public API (called from engine.zig)
+// Frame timing (stored during update, used by paint)
+// ════════════════════════════════════════════════════════════════════════
+
+var g_dt: f32 = 0;
+
+// ════════════════════════════════════════════════════════════════════════
+// Public API
 // ════════════════════════════════════════════════════════════════════════
 
 pub fn init() void {
-    // Register built-in effects
-    registerBuiltins();
+    // No built-in effects — users compose their own via <Effect onRender>
 }
 
 pub fn deinit() void {
@@ -317,20 +312,52 @@ pub fn deinit() void {
     instance_count = 0;
 }
 
-/// Called every frame: update all effect animation states and render to pixel buffers.
+/// Called every frame: update registry-based effect instances and store dt.
 pub fn update(dt: f32) void {
+    g_dt = dt;
+
     for (instances[0..instance_count]) |*inst| {
         if (!inst.active) continue;
-        const m = inst.module orelse continue;
-        const s = inst.state orelse continue;
-        if (inst.width == 0 or inst.height == 0) continue;
 
-        const mouse = instanceMouse(inst);
-        m.update(s, dt, inst.width, inst.height, mouse);
+        // Accumulate time for all instances
+        inst.time += dt;
+        inst.frame_count +%= 1;
 
-        // Draw to pixel buffer
-        if (inst.pixel_buf) |buf| {
-            m.draw(s, buf, inst.width, inst.height);
+        // Registry path: call module update+draw
+        if (inst.module) |m| {
+            const s = inst.state orelse continue;
+            if (inst.width == 0 or inst.height == 0) continue;
+
+            const mouse = instanceMouse(inst);
+            m.update(s, dt, inst.width, inst.height, mouse);
+
+            if (inst.pixel_buf) |buf| {
+                m.draw(s, buf, inst.width, inst.height);
+                inst.dirty = true;
+            }
+        }
+
+        // Custom render path: call user function with EffectContext
+        if (inst.render_fn) |render| {
+            if (inst.width == 0 or inst.height == 0) continue;
+            const buf = inst.pixel_buf orelse continue;
+
+            var ctx = EffectContext{
+                .buf = buf.ptr,
+                .width = inst.width,
+                .height = inst.height,
+                .stride = inst.width * 4,
+                .time = inst.time,
+                .dt = dt,
+                .mouse_x = g_mouse_x - inst.screen_x,
+                .mouse_y = g_mouse_y - inst.screen_y,
+                .mouse_inside = (g_mouse_x - inst.screen_x) >= 0 and
+                    (g_mouse_x - inst.screen_x) <= @as(f32, @floatFromInt(inst.width)) and
+                    (g_mouse_y - inst.screen_y) >= 0 and
+                    (g_mouse_y - inst.screen_y) <= @as(f32, @floatFromInt(inst.height)),
+                .frame = inst.frame_count,
+            };
+            render(&ctx);
             inst.dirty = true;
         }
 
@@ -341,20 +368,17 @@ pub fn update(dt: f32) void {
     }
 }
 
-/// Paint a standalone effect (called from engine.paintNode when node has effect_type).
-/// Returns true if an effect quad was queued.
+/// Paint a registry-based effect (node has effect_type string).
 pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
-    // Find or create instance
-    var inst = findInstance(effect_type);
+    var inst = findInstanceByType(effect_type);
     if (inst == null) {
-        inst = createInstance(effect_type, false);
+        inst = createRegistryInstance(effect_type);
     }
     const i = inst orelse return false;
     i.active = true;
     i.screen_x = x;
     i.screen_y = y;
 
-    // Ensure dimensions match
     const iw: u32 = @intFromFloat(@max(1, w));
     const ih: u32 = @intFromFloat(@max(1, h));
     i.ensureSize(iw, ih);
@@ -366,27 +390,48 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     return true;
 }
 
-/// Paint a background effect for a parent node.
-/// Called from engine.paintNode after the parent's background but before children.
-pub fn paintBackground(effect_type: []const u8, parent_x: f32, parent_y: f32, parent_w: f32, parent_h: f32, opacity: f32) bool {
-    var inst = findInstance(effect_type);
+/// Paint a custom effect (node has effect_render function pointer).
+/// Called from engine.paintNode when node.effect_render is set.
+pub fn paintCustomEffect(render_fn: RenderFn, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
+    var inst = findInstanceByFn(render_fn);
     if (inst == null) {
-        inst = createInstance(effect_type, true);
+        inst = createCustomInstance(render_fn);
     }
     const i = inst orelse return false;
     i.active = true;
-    i.is_background = true;
-    i.screen_x = parent_x;
-    i.screen_y = parent_y;
+    i.screen_x = x;
+    i.screen_y = y;
 
-    const iw: u32 = @intFromFloat(@max(1, parent_w));
-    const ih: u32 = @intFromFloat(@max(1, parent_h));
+    const iw: u32 = @intFromFloat(@max(1, w));
+    const ih: u32 = @intFromFloat(@max(1, h));
     i.ensureSize(iw, ih);
 
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
 
-    images.queueQuad(parent_x, parent_y, parent_w, parent_h, opacity, bg);
+    images.queueQuad(x, y, w, h, opacity, bg);
+    return true;
+}
+
+/// Paint a background effect for a parent node (registry path).
+pub fn paintBackground(effect_type: []const u8, px: f32, py: f32, pw: f32, ph: f32, opacity: f32) bool {
+    var inst = findInstanceByType(effect_type);
+    if (inst == null) {
+        inst = createRegistryInstance(effect_type);
+    }
+    const i = inst orelse return false;
+    i.active = true;
+    i.screen_x = px;
+    i.screen_y = py;
+
+    const iw: u32 = @intFromFloat(@max(1, pw));
+    const ih: u32 = @intFromFloat(@max(1, ph));
+    i.ensureSize(iw, ih);
+
+    const bg = i.bind_group orelse return false;
+    if (i.width == 0 or i.height == 0) return false;
+
+    images.queueQuad(px, py, pw, ph, opacity, bg);
     return true;
 }
 
@@ -394,14 +439,23 @@ pub fn paintBackground(effect_type: []const u8, parent_x: f32, parent_y: f32, pa
 // Instance management
 // ════════════════════════════════════════════════════════════════════════
 
-fn findInstance(effect_type: []const u8) ?*Instance {
+fn findInstanceByType(effect_type: []const u8) ?*Instance {
     for (instances[0..instance_count]) |*inst| {
-        if (std.mem.eql(u8, inst.effect_type, effect_type) and inst.active) return inst;
+        if (inst.active and inst.module != null and std.mem.eql(u8, inst.effect_type, effect_type))
+            return inst;
     }
     return null;
 }
 
-fn createInstance(effect_type: []const u8, is_background: bool) ?*Instance {
+fn findInstanceByFn(render_fn: RenderFn) ?*Instance {
+    for (instances[0..instance_count]) |*inst| {
+        if (inst.active and inst.render_fn != null and inst.render_fn.? == render_fn)
+            return inst;
+    }
+    return null;
+}
+
+fn createRegistryInstance(effect_type: []const u8) ?*Instance {
     if (instance_count >= MAX_INSTANCES) return null;
     const m = findModule(effect_type) orelse return null;
 
@@ -410,211 +464,19 @@ fn createInstance(effect_type: []const u8, is_background: bool) ?*Instance {
         .active = true,
         .effect_type = effect_type,
         .module = m,
-        .is_background = is_background,
     };
     instance_count += 1;
     return inst;
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// Built-in effects (ported from lua/effects/)
-// ════════════════════════════════════════════════════════════════════════
+fn createCustomInstance(render_fn: RenderFn) ?*Instance {
+    if (instance_count >= MAX_INSTANCES) return null;
 
-fn registerBuiltins() void {
-    register("Spirograph", spirograph_module);
-    register("Rings", rings_module);
-}
-
-// ── Spirograph ──────────────────────────────────────────────────────────
-// Port of lua/effects/spirograph.lua — parametric hypotrochoid curves
-
-const SpiroState = struct {
-    time: f32 = 0,
-    angle: f32 = 0,
-    cx: f32 = 0,
-    cy: f32 = 0,
-    scale: f32 = 0,
-    R1: f32 = 0,
-    R2: f32 = 0,
-    d: f32 = 0,
-    hue: f32 = 0,
-    prev_x: f32 = 0,
-    prev_y: f32 = 0,
-    has_prev: bool = false,
-};
-
-fn spiroCreate(w: u32, h: u32) EffectState {
-    const s = page_alloc.create(SpiroState) catch return undefined;
-    const fw: f32 = @floatFromInt(w);
-    const fh: f32 = @floatFromInt(h);
-    const scale = @min(fw, fh) * 0.35;
-    s.* = .{
-        .cx = fw / 2,
-        .cy = fh / 2,
-        .scale = scale,
-        .R1 = scale * 0.8,
-        .R2 = scale * 0.35,
-        .d = scale * 0.45,
-        .hue = @as(f32, @floatFromInt(@as(u32, @truncate(@as(u64, @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())))))))) / 4294967296.0,
+    const inst = &instances[instance_count];
+    inst.* = .{
+        .active = true,
+        .render_fn = render_fn,
     };
-    return @ptrCast(s);
+    instance_count += 1;
+    return inst;
 }
-
-fn spiroUpdate(state: EffectState, dt: f32, w: u32, h: u32, mouse: MouseInfo) void {
-    _ = w;
-    _ = h;
-    _ = mouse;
-    const s: *SpiroState = @ptrCast(@alignCast(state));
-    s.time += dt;
-}
-
-fn spiroDraw(state: EffectState, buf: []u8, w: u32, h: u32) void {
-    const s: *SpiroState = @ptrCast(@alignCast(state));
-    const t = s.time;
-
-    // Fade existing content (trail effect)
-    const buf_size = @as(usize, w) * @as(usize, h) * 4;
-    var i: usize = 0;
-    while (i < buf_size) : (i += 4) {
-        // Reduce alpha slightly for trail decay
-        if (buf[i + 3] > 2) {
-            buf[i + 3] -= 2;
-        } else {
-            buf[i] = 0;
-            buf[i + 1] = 0;
-            buf[i + 2] = 0;
-            buf[i + 3] = 0;
-        }
-    }
-
-    // Draw spirograph points
-    const steps: u32 = 200;
-    var step: u32 = 0;
-    while (step < steps) : (step += 1) {
-        const angle = t * 2.0 + @as(f32, @floatFromInt(step)) * 0.02;
-        const R1 = s.R1;
-        const R2 = s.R2 + @sin(t * 0.3) * s.scale * 0.1;
-        const d = s.d + @cos(t * 0.7) * s.scale * 0.05;
-
-        const px = (R1 - R2) * @cos(angle) + d * @cos(angle * (R1 - R2) / R2);
-        const py = (R1 - R2) * @sin(angle) - d * @sin(angle * (R1 - R2) / R2);
-
-        const x: i32 = @intFromFloat(s.cx + px);
-        const y: i32 = @intFromFloat(s.cy + py);
-
-        if (x >= 0 and x < @as(i32, @intCast(w)) and y >= 0 and y < @as(i32, @intCast(h))) {
-            const idx = (@as(usize, @intCast(y)) * @as(usize, w) + @as(usize, @intCast(x))) * 4;
-            // HSV to RGB (hue rotates with time)
-            const hue = s.hue + t * 0.1 + @as(f32, @floatFromInt(step)) * 0.002;
-            const r_f = @abs(@mod(hue * 6.0, 6.0) - 3.0) - 1.0;
-            const g_f = 2.0 - @abs(@mod(hue * 6.0 - 2.0, 6.0) - 3.0);
-            const b_f = 2.0 - @abs(@mod(hue * 6.0 - 4.0, 6.0) - 3.0);
-            buf[idx] = @intFromFloat(std.math.clamp(r_f, 0, 1) * 255);
-            buf[idx + 1] = @intFromFloat(std.math.clamp(g_f, 0, 1) * 255);
-            buf[idx + 2] = @intFromFloat(std.math.clamp(b_f, 0, 1) * 255);
-            buf[idx + 3] = 255;
-
-            // Draw a small 3x3 dot for visibility
-            const offsets = [_]i32{ -1, 0, 1 };
-            for (offsets) |ox| {
-                for (offsets) |oy| {
-                    if (ox == 0 and oy == 0) continue;
-                    const nx = x + ox;
-                    const ny = y + oy;
-                    if (nx >= 0 and nx < @as(i32, @intCast(w)) and ny >= 0 and ny < @as(i32, @intCast(h))) {
-                        const nidx = (@as(usize, @intCast(ny)) * @as(usize, w) + @as(usize, @intCast(nx))) * 4;
-                        buf[nidx] = @intFromFloat(std.math.clamp(r_f, 0, 1) * 200);
-                        buf[nidx + 1] = @intFromFloat(std.math.clamp(g_f, 0, 1) * 200);
-                        buf[nidx + 2] = @intFromFloat(std.math.clamp(b_f, 0, 1) * 200);
-                        buf[nidx + 3] = 180;
-                    }
-                }
-            }
-        }
-    }
-
-    s.hue += 0.001;
-}
-
-fn spiroDestroy(state: EffectState) void {
-    const s: *SpiroState = @ptrCast(@alignCast(state));
-    page_alloc.destroy(s);
-}
-
-const spirograph_module = EffectModule{
-    .create = spiroCreate,
-    .update = spiroUpdate,
-    .draw = spiroDraw,
-    .destroy = spiroDestroy,
-};
-
-// ── Rings ───────────────────────────────────────────────────────────────
-// Concentric expanding rings with color cycling
-
-const RingsState = struct {
-    time: f32 = 0,
-    cx: f32 = 0,
-    cy: f32 = 0,
-};
-
-fn ringsCreate(w: u32, h: u32) EffectState {
-    const s = page_alloc.create(RingsState) catch return undefined;
-    s.* = .{
-        .cx = @as(f32, @floatFromInt(w)) / 2,
-        .cy = @as(f32, @floatFromInt(h)) / 2,
-    };
-    return @ptrCast(s);
-}
-
-fn ringsUpdate(state: EffectState, dt: f32, w: u32, h: u32, mouse: MouseInfo) void {
-    _ = w;
-    _ = h;
-    _ = mouse;
-    const s: *RingsState = @ptrCast(@alignCast(state));
-    s.time += dt;
-}
-
-fn ringsDraw(state: EffectState, buf: []u8, w: u32, h: u32) void {
-    const s: *RingsState = @ptrCast(@alignCast(state));
-    const t = s.time;
-    const cx = s.cx;
-    const cy = s.cy;
-
-    var y: u32 = 0;
-    while (y < h) : (y += 1) {
-        var x: u32 = 0;
-        while (x < w) : (x += 1) {
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
-            const dx = fx - cx;
-            const dy = fy - cy;
-            const dist = @sqrt(dx * dx + dy * dy);
-
-            // Concentric rings expanding outward
-            const ring = @sin(dist * 0.05 - t * 3.0) * 0.5 + 0.5;
-            const hue = dist * 0.01 + t * 0.2;
-
-            const r_f = @abs(@mod(hue * 6.0, 6.0) - 3.0) - 1.0;
-            const g_f = 2.0 - @abs(@mod(hue * 6.0 - 2.0, 6.0) - 3.0);
-            const b_f = 2.0 - @abs(@mod(hue * 6.0 - 4.0, 6.0) - 3.0);
-
-            const idx = (@as(usize, y) * @as(usize, w) + @as(usize, x)) * 4;
-            buf[idx] = @intFromFloat(std.math.clamp(r_f, 0, 1) * ring * 255);
-            buf[idx + 1] = @intFromFloat(std.math.clamp(g_f, 0, 1) * ring * 255);
-            buf[idx + 2] = @intFromFloat(std.math.clamp(b_f, 0, 1) * ring * 255);
-            buf[idx + 3] = @intFromFloat(ring * 255);
-        }
-    }
-}
-
-fn ringsDestroy(state: EffectState) void {
-    const s: *RingsState = @ptrCast(@alignCast(state));
-    page_alloc.destroy(s);
-}
-
-const rings_module = EffectModule{
-    .create = ringsCreate,
-    .update = ringsUpdate,
-    .draw = ringsDraw,
-    .destroy = ringsDestroy,
-};
