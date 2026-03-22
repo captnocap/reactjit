@@ -101,9 +101,11 @@ var g_text_engine: ?*TextEngine = null;
 
 /// Open a URL in the system browser.
 fn openUrl(url: []const u8) void {
-    const argv = [_][]const u8{ "xdg-open", url };
+    var cmd_buf: [2048]u8 = undefined;
+    const cmd = std.fmt.bufPrint(&cmd_buf, "xdg-open '{s}' &", .{url}) catch return;
+    const argv = [_][]const u8{ "sh", "-c", cmd };
     var child = std.process.Child.init(&argv, std.heap.page_allocator);
-    _ = child.spawn() catch return;
+    _ = child.spawnAndWait() catch {};
 }
 
 fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {

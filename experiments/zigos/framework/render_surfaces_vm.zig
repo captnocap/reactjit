@@ -686,12 +686,7 @@ fn sdlKeyToKeysym(sym: c_int) ?u32 {
 /// Handle mouse button down. Returns true if consumed by a render surface.
 pub fn handleMouseDown(mx: f32, my: f32, button: u8) bool {
     const feed_count = parent.feed_count;
-    std.debug.print("[rsurface:input] mouseDown at ({d:.0},{d:.0}) btn={d} feeds={d}\n", .{ mx, my, button, feed_count });
-    for (0..feed_count) |di| {
-        const nr = feed_draw_rects[di].node;
-        const dr = feed_draw_rects[di].draw;
-        std.debug.print("[rsurface:input]   feed[{d}] node=({d:.0},{d:.0},{d:.0},{d:.0}) draw=({d:.0},{d:.0},{d:.0},{d:.0}) interactive={} status={s}\n", .{ di, nr.x, nr.y, nr.w, nr.h, dr.x, dr.y, dr.w, dr.h, parent.feeds[di].interactive, @tagName(parent.feeds[di].status) });
-    }
+    _ = feed_count;
     if (hitTestFeeds(mx, my)) |idx| {
         focused_feed = idx;
         const pos = screenToFb(idx, mx, my);
@@ -702,11 +697,11 @@ pub fn handleMouseDown(mx: f32, my: f32, button: u8) bool {
             else => 0,
         };
         vnc_button_mask |= bit_val;
-        std.debug.print("[rsurface:input] HIT feed[{d}] → pointer ({d},{d}) mask={d} backend={s}\n", .{ idx, pos.x, pos.y, vnc_button_mask, @tagName(parent.feeds[idx].backend) });
+        // debug: HIT feed
         sendPointer(&parent.feeds[idx], pos.x, pos.y, vnc_button_mask, .down, button);
         return true;
     }
-    std.debug.print("[rsurface:input] MISS — no feed hit\n", .{});
+    // debug: MISS
     focused_feed = null;
     return false;
 }

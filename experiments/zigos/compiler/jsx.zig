@@ -198,6 +198,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_drift_x_str: []const u8 = "";
     var canvas_drift_y_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
+    var href_str: []const u8 = "";
     var hoverable: bool = false;
     var on_render_start: ?u32 = null; // <Effect onRender={...}>
     var effect_is_background: bool = false; // <Effect background ...>
@@ -295,6 +296,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     }
                 } else if (std.mem.eql(u8, attr_name, "tooltip")) {
                     tooltip_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "href")) {
+                    href_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "hoverable")) {
                     hoverable = true;
                     try attrs.skipAttrValue(self);
@@ -794,6 +797,16 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".tooltip = \"");
         for (tooltip_str) |ch| {
+            if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
+        }
+        try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // Href (clickable hyperlink)
+    if (href_str.len > 0) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".href = \"");
+        for (href_str) |ch| {
             if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
         }
         try fields.appendSlice(self.alloc, "\"");
