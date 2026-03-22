@@ -261,7 +261,7 @@ pub fn getActivePalette() *Palette {
 // ── Palette builder ───────────────────────────────────────────────────
 
 /// Comptime helper: build a Palette from a struct of named colors.
-fn buildPalette(colors: anytype) Palette {
+pub fn buildPalette(colors: anytype) Palette {
     var p: Palette = undefined;
     inline for (@typeInfo(Token).@"enum".fields) |f| {
         const tok: Token = @enumFromInt(f.value);
@@ -272,7 +272,7 @@ fn buildPalette(colors: anytype) Palette {
 }
 
 /// Comptime helper: build a StylePalette from a struct of named f32 values.
-fn buildStylePalette(values: anytype) StylePalette {
+pub fn buildStylePalette(values: anytype) StylePalette {
     var p: StylePalette = undefined;
     inline for (@typeInfo(StyleToken).@"enum".fields) |f| {
         p[f.value] = @field(values, f.name);

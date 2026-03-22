@@ -21,6 +21,12 @@ function ThemeDemo() {
 
         {themeIdx == 2 && <C.Button onPress={() => { setThemeIdx(2); setVariant(2) }}><C.ButtonLabel>Brutalist</C.ButtonLabel></C.Button>}
         {themeIdx != 2 && <C.ButtonOutline onPress={() => { setThemeIdx(2); setVariant(2) }}><C.ButtonOutlineLabel>Brutalist</C.ButtonOutlineLabel></C.ButtonOutline>}
+
+        {themeIdx == 3 && <C.Button onPress={() => { setThemeIdx(3); setVariant(3) }}><C.ButtonLabel>BIOS</C.ButtonLabel></C.Button>}
+        {themeIdx != 3 && <C.ButtonOutline onPress={() => { setThemeIdx(3); setVariant(3) }}><C.ButtonOutlineLabel>BIOS</C.ButtonOutlineLabel></C.ButtonOutline>}
+
+        {themeIdx == 4 && <C.Button onPress={() => { setThemeIdx(4); setVariant(4) }}><C.ButtonLabel>Win95</C.ButtonLabel></C.Button>}
+        {themeIdx != 4 && <C.ButtonOutline onPress={() => { setThemeIdx(4); setVariant(4) }}><C.ButtonOutlineLabel>Win95</C.ButtonOutlineLabel></C.ButtonOutline>}
       </C.Row>
 
       <C.Divider />
