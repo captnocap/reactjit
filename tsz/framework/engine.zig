@@ -79,12 +79,7 @@ const canvas = if (HAS_CANVAS) @import("canvas.zig") else struct {
     pub fn getNodeDim(_: u16) f32 { return 1.0; }
     pub fn getFlowOverride(_: u16) bool { return true; }
 };
-const devtools = if (HAS_QUICKJS) @import("devtools.zig") else struct {
-    pub var root: layout.Node = .{};
-    pub fn _appInit() void {}
-    pub fn _appTick(_: u32) void {}
-    pub const JS_LOGIC: []const u8 = "";
-};
+// devtools removed — inspector lives in tsz-tools (standalone IPC app)
 const testharness = if (HAS_QUICKJS) @import("testharness.zig") else struct {
     pub fn envEnabled() bool { return false; }
     pub fn enable() void {}
@@ -170,10 +165,7 @@ const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 
-// ── Devtools state ──────────────────────────────────────────────────────
-var devtools_visible: bool = false;
-var devtools_initialized: bool = false;
-const DEVTOOLS_HEIGHT: f32 = 360;
+// ── Devtools removed — inspector lives in tsz-tools ─────────────────────
 
 // ── Cursor blink state ───────────────────────────────────────────────────
 var g_cursor_visible: bool = true;
@@ -1060,9 +1052,7 @@ pub fn run(config: AppConfig) !void {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
                         const events = @import("events.zig");
-                        // Hit test devtools first (if visible), then app tree
-                        const devtools_hit = if (devtools_visible) layout.hitTest(&devtools.root, mx, my) else null;
-                        const hit = devtools_hit orelse layout.hitTest(config.root, mx, my);
+                        const hit = layout.hitTest(config.root, mx, my);
                         const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;

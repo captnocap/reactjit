@@ -124,5 +124,9 @@ function _getVisible() {
 }
 
 function todo_init() {
+  // Seed with demo todos so we can verify rendering works
+  _todos.push({ id: 'demo1', title: 'Buy groceries', completed: false });
+  _todos.push({ id: 'demo2', title: 'Learn React', completed: false });
+  _todos.push({ id: 'demo3', title: 'Build TodoMVC in tsz', completed: true });
   _syncState();
 }

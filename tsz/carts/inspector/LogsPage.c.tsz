@@ -116,7 +116,7 @@ function LogsPage() {
           <C.ChannelToggleOn><C.ChannelDotOn /></C.ChannelToggleOn>
           <C.ChannelInfo>
             <C.LogsHmrLabel>State Preservation</C.LogsHmrLabel>
-            <C.LogsHmrDesc>useState survives hot reload</C.LogsHmrDesc>
+            <C.LogsHmrDesc>state hooks survive hot reload</C.LogsHmrDesc>
           </C.ChannelInfo>
         </C.ChannelRow>
 

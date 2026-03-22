@@ -9,6 +9,8 @@ import { ConsolePage } from './ConsolePage_cmod';
 import { LogsPage } from './LogsPage_cmod';
 import { ConstraintGraphPage } from './ConstraintGraphPage_cmod';
 import { OverlayPage } from './OverlayPage_cmod';
+import { MetricCard } from './MetricCard_cmod';
+import { TabPlaceholder } from './TabPlaceholder_cmod';
 import { telemetry } from './telemetry.script';
 import { graph } from './graph.script';
 

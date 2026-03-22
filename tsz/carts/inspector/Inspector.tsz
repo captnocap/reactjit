@@ -9,6 +9,8 @@ import { ConsolePage } from './ConsolePage.c';
 import { LogsPage } from './LogsPage.c';
 import { ConstraintGraphPage } from './ConstraintGraphPage.c';
 import { OverlayPage } from './OverlayPage.c';
+import { MetricCard } from './MetricCard.c';
+import { TabPlaceholder } from './TabPlaceholder.c';
 import { telemetry } from './telemetry.script';
 import { graph } from './graph.script';
 import { elements } from './elements.script';

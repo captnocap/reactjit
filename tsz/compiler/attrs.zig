@@ -424,11 +424,21 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
         } else {
             // JS ternary → Zig if/else: "cond ? a : b" → "(if (cond != 0) a else b)"
             if (k == .question) {
-                // Wrap everything so far: "(if (" ++ expr ++ " != 0) "
+                // Check if expression already produces a bool (contains comparison operator)
+                const is_already_bool = std.mem.indexOf(u8, expr.items, "==") != null or
+                    std.mem.indexOf(u8, expr.items, "!=") != null or
+                    std.mem.indexOf(u8, expr.items, ">=") != null or
+                    std.mem.indexOf(u8, expr.items, "<=") != null or
+                    std.mem.indexOf(u8, expr.items, " > ") != null or
+                    std.mem.indexOf(u8, expr.items, " < ") != null;
                 var wrapped: std.ArrayListUnmanaged(u8) = .{};
                 wrapped.appendSlice(self.alloc, "(if (") catch {};
                 wrapped.appendSlice(self.alloc, expr.items) catch {};
-                wrapped.appendSlice(self.alloc, " != 0) ") catch {};
+                if (is_already_bool) {
+                    wrapped.appendSlice(self.alloc, ") ") catch {};
+                } else {
+                    wrapped.appendSlice(self.alloc, " != 0) ") catch {};
+                }
                 expr.items.len = 0;
                 expr.appendSlice(self.alloc, wrapped.items) catch {};
                 in_ternary = true;

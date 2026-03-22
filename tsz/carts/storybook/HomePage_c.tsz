@@ -4,6 +4,16 @@ import { ScrollDemo } from './tiles/ScrollDemo_c';
 import { Hyperlinks } from './tiles/Hyperlinks_c';
 import { OpacityDemo } from './tiles/OpacityDemo_c';
 import { TextAreaDemo } from './tiles/TextAreaDemo_c';
+import { AnimationTile } from './tiles/AnimationTile_c';
+import { CanvasTile } from './tiles/CanvasTile_c';
+import { ChartsTile } from './tiles/ChartsTile_c';
+import { ColorPaletteTile } from './tiles/ColorPaletteTile_c';
+import { FormTile } from './tiles/FormTile_c';
+import { NetworkTile } from './tiles/NetworkTile_c';
+import { PhysicsTile } from './tiles/PhysicsTile_c';
+import { TerminalTile } from './tiles/TerminalTile_c';
+import { ThreeDTile } from './tiles/ThreeDTile_c';
+import { TypographyTile } from './tiles/TypographyTile_c';
 
 <script>
 function hopToTile(idx) {
@@ -584,6 +594,46 @@ function HomePage() {
 
         <Canvas.Node gx={1050} gy={-166} gw={260} gh={0}>
           <TextAreaDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={60} gw={260} gh={0}>
+          <AnimationTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={100} gw={260} gh={0}>
+          <CanvasTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={50} gw={260} gh={0}>
+          <ChartsTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={80} gw={260} gh={0}>
+          <ColorPaletteTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={40} gw={260} gh={0}>
+          <FormTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={70} gw={260} gh={0}>
+          <NetworkTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={55} gw={260} gh={0}>
+          <PhysicsTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={90} gw={260} gh={0}>
+          <TerminalTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={280} gw={260} gh={0}>
+          <ThreeDTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={250} gw={260} gh={0}>
+          <TypographyTile />
         </Canvas.Node>
 
         <Canvas.Clamp>

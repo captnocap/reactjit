@@ -1,0 +1,14 @@
+{
+  "parser": "typescript",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "overrides": [
+    {
+      "files": "*.tsz",
+      "options": {
+        "parser": "typescript"
+      }
+    }
+  ]
+}

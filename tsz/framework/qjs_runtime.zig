@@ -2,25 +2,35 @@
 //!
 //! Provides: SDL2 windowing, QuickJS VM, state bridge, SDL2 painter, telemetry.
 //! The generated_app.zig just needs to provide: root node, JS_LOGIC, state init.
+//! In lean builds (has_quickjs=false), all public functions are no-ops.
 
 const std = @import("std");
+const build_options = @import("build_options");
+const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
+
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const state = @import("state.zig");
-const pty_mod = @import("pty.zig");
+const pty_mod = if (HAS_QUICKJS) @import("pty.zig") else struct {
+    pub const Pty = struct {};
+};
 
 const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 
-// ── QuickJS C bindings ──────────────────────────────────────────
-const qjs = @cImport({
+// ── QuickJS C bindings (only in full builds) ────────────────────
+const qjs = if (HAS_QUICKJS) @cImport({
     @cDefine("_GNU_SOURCE", "1");
     @cDefine("QUICKJS_NG_BUILD", "1");
     @cInclude("quickjs.h");
-});
-const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };
+}) else struct {
+    pub const JSValue = extern struct { u: extern union { int32: i32 } = .{ .int32 = 0 }, tag: i64 = 0 };
+    pub const JSRuntime = opaque {};
+    pub const JSContext = opaque {};
+};
+const QJS_UNDEFINED = if (HAS_QUICKJS) (qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 }) else qjs.JSValue{};
 
 var g_qjs_rt: ?*qjs.JSRuntime = null;
 var g_qjs_ctx: ?*qjs.JSContext = null;
@@ -648,12 +658,14 @@ fn hostPtyAlive(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue
 
 /// Returns true if a PTY is active and should consume keyboard input.
 pub fn ptyActive() bool {
+    if (comptime !HAS_QUICKJS) return false;
     if (g_pty) |*p| return p.alive();
     return false;
 }
 
 /// Forward SDL_TEXTINPUT text to the PTY (printable chars, already UTF-8).
 pub fn ptyHandleTextInput(text: [*:0]const u8) void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_pty) |*p| {
         _ = p.writeData(std.mem.span(text));
     }
@@ -663,6 +675,7 @@ pub fn ptyHandleTextInput(text: [*:0]const u8) void {
 /// SDL constants are included via the c.zig import in engine.zig, so we
 /// accept the raw i32 sym and u16 mod values directly.
 pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
+    if (comptime !HAS_QUICKJS) return;
     const SDLK_RETURN    = 13;
     const SDLK_BACKSPACE = 8;
     const SDLK_DELETE    = 127;
@@ -708,6 +721,7 @@ pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
 // ── QuickJS lifecycle ───────────────────────────────────────────
 
 pub fn initVM() void {
+    if (comptime !HAS_QUICKJS) return;
     const rt = qjs.JS_NewRuntime() orelse return;
     qjs.JS_SetMemoryLimit(rt, 64 * 1024 * 1024);
     qjs.JS_SetMaxStackSize(rt, 1024 * 1024);
@@ -779,6 +793,7 @@ pub fn initVM() void {
 /// Register a native function on the JS global object. Call after initVM, before evalScript.
 /// Accepts a raw function pointer to avoid @cImport type conflicts between compilation units.
 pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         const global = qjs.JS_GetGlobalObject(ctx);
         defer qjs.JS_FreeValue(ctx, global);
@@ -791,6 +806,7 @@ pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) 
 
 /// Eval the app's JS logic. Call after initVM and any registerHostFn calls.
 pub fn evalScript(js_logic: []const u8) void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         const val = qjs.JS_Eval(ctx, js_logic.ptr, js_logic.len, "<app>", qjs.JS_EVAL_TYPE_GLOBAL);
         if (qjs.JS_IsException(val)) {
@@ -809,6 +825,7 @@ pub fn evalScript(js_logic: []const u8) void {
 /// Call a global JS function by name (no arguments). Used by Zig event handlers
 /// to invoke functions defined in <script> blocks.
 pub fn callGlobal(name: [*:0]const u8) void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         const global = qjs.JS_GetGlobalObject(ctx);
         defer qjs.JS_FreeValue(ctx, global);
@@ -823,6 +840,7 @@ pub fn callGlobal(name: [*:0]const u8) void {
 
 /// Check if a global JS function exists.
 pub fn hasGlobal(name: [*:0]const u8) bool {
+    if (comptime !HAS_QUICKJS) return false;
     if (g_qjs_ctx) |ctx| {
         const global = qjs.JS_GetGlobalObject(ctx);
         defer qjs.JS_FreeValue(ctx, global);
@@ -835,6 +853,7 @@ pub fn hasGlobal(name: [*:0]const u8) bool {
 
 /// Call a global JS function with one string argument.
 pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         const global = qjs.JS_GetGlobalObject(ctx);
         defer qjs.JS_FreeValue(ctx, global);
@@ -850,6 +869,7 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
 }
 
 pub fn tick() void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         const global = qjs.JS_GetGlobalObject(ctx);
         defer qjs.JS_FreeValue(ctx, global);
@@ -867,6 +887,7 @@ pub fn tick() void {
 }
 
 pub fn deinit() void {
+    if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| qjs.JS_FreeContext(ctx);
     if (g_qjs_rt) |rt| qjs.JS_FreeRuntime(rt);
 }
@@ -874,6 +895,7 @@ pub fn deinit() void {
 // ── SDL2 painter ────────────────────────────────────────────────
 
 pub fn paintNode(renderer: *c.SDL_Renderer, te: *TextEngine, node: *Node) void {
+    if (comptime !HAS_QUICKJS) return;
     if (node.style.display == .none) return;
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) return;
@@ -912,6 +934,7 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 }
 
 pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, updateTexts: *const fn () void) !void {
+    if (comptime !HAS_QUICKJS) return;
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
     defer c.SDL_Quit();
 

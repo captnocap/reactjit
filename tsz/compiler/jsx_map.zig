@@ -172,19 +172,38 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
         tag = prim;
     }
     // Handle C.Name classifier references
+    var cls_idx: ?u32 = null;
     if (std.mem.eql(u8, tag, "C") and self.curKind() == .dot) {
         self.advance_token(); // .
         const cls_name = self.curText();
         self.advance_token(); // actual name
         if (self.findClassifier(cls_name)) |idx| {
             tag = self.classifier_primitives[idx];
+            cls_idx = @intCast(idx);
         }
     }
     const is_text = std.mem.eql(u8, tag, "Text");
 
-    var style_str: []const u8 = "";
+    // Pre-populate from classifier (style + text props)
+    var style_str: []const u8 = if (cls_idx) |ci| self.classifier_styles[ci] else "";
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
+    if (cls_idx) |ci| {
+        const tp = self.classifier_text_props[ci];
+        if (tp.len > 0) {
+            if (std.mem.indexOf(u8, tp, ".font_size = ")) |fs_pos| {
+                const after = tp[fs_pos + 13 ..];
+                const end = std.mem.indexOfAny(u8, after, &[_]u8{ ',', 0 }) orelse after.len;
+                font_size = after[0..end];
+            }
+            if (std.mem.indexOf(u8, tp, ".text_color = ")) |tc_pos| {
+                const after = tp[tc_pos + 14 ..];
+                // text_color value ends at comma or end-of-string
+                const end = std.mem.indexOf(u8, after, ", .") orelse after.len;
+                text_color = after[0..end];
+            }
+        }
+    }
     var handler_body: []const u8 = "";
     var pool_display_cond: []const u8 = "";
     var is_self_closing = false;
@@ -470,17 +489,38 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     self.advance_token(); // <
     self.advance_token(); // tag name (or "C")
     // Handle C.Name classifier references
+    var inner_cls_idx: ?u32 = null;
     if (self.curKind() == .dot) {
         self.advance_token(); // .
+        const cls_name = self.curText();
         self.advance_token(); // actual name
+        if (self.findClassifier(cls_name)) |idx| {
+            inner_cls_idx = @intCast(idx);
+        }
     }
 
+    // Pre-populate from classifier
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
     var dyn_text_color: []const u8 = "";
     var dyn_href: []const u8 = "";
-    var style_str: []const u8 = "";
+    var style_str: []const u8 = if (inner_cls_idx) |ci| self.classifier_styles[ci] else "";
     var is_self_closing = false;
+    if (inner_cls_idx) |ci| {
+        const tp = self.classifier_text_props[ci];
+        if (tp.len > 0) {
+            if (std.mem.indexOf(u8, tp, ".font_size = ")) |fs_pos| {
+                const after = tp[fs_pos + 13 ..];
+                const end = std.mem.indexOfAny(u8, after, &[_]u8{ ',', 0 }) orelse after.len;
+                font_size = after[0..end];
+            }
+            if (std.mem.indexOf(u8, tp, ".text_color = ")) |tc_pos| {
+                const after = tp[tc_pos + 14 ..];
+                const end = std.mem.indexOf(u8, after, ", .") orelse after.len;
+                text_color = after[0..end];
+            }
+        }
+    }
 
     while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {

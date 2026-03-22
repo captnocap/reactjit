@@ -1,11 +1,14 @@
+from './style_cls'
+from './Legend.c'
+
 function App() {
   return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'column', backgroundColor: '#080c14' }}>
-      <Box style={{ flexDirection: 'row', padding: 10, gap: 12, backgroundColor: '#10141e', alignItems: 'center' }}>
+    <C.Page>
+      <C.Toolbar>
         <Text fontSize={18} color="#e0e6f0">Constraint Graph</Text>
-        <Box style={{ flexGrow: 1 }} />
+        <C.Spacer />
         <Text fontSize={13} color="#4a5568">Canvas.Clamp test</Text>
-      </Box>
+      </C.Toolbar>
       <Canvas type="constraint-graph" style={{ flexGrow: 1 }} viewX={0} viewY={100} viewZoom={1}>
         <Canvas.Path d="M 0,25 L 0,75" stroke="#a855f7" strokeWidth={3} />
         <Canvas.Path d="M 0,125 C 0,160 -200,160 -200,175" stroke="#a855f7" strokeWidth={2} />
@@ -39,6 +42,7 @@ function App() {
         <Canvas.Clamp>
           <Box style={{ flexDirection: 'column', width: '100%', height: '100%' }}>
             <Box style={{ flexGrow: 1 }} />
+            <Legend />
             <Box style={{ flexDirection: 'row', padding: 10 }}>
               <Box style={{ flexGrow: 1 }} />
               <Box style={{ padding: 6, backgroundColor: '#10141e', borderRadius: 4 }}>
@@ -48,6 +52,6 @@ function App() {
           </Box>
         </Canvas.Clamp>
       </Canvas>
-    </Box>
+    </C.Page>
   );
 }

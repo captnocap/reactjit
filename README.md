@@ -16,13 +16,39 @@ native binary (SDL2 + wgpu + FreeType + QuickJS)
 ```
 
 ```tsx
+// ── State — standard React useState, lives at the top level ──
 const [count, setCount] = useState(0);
+const [fps, setFps] = useState(0);
 
+// ── useEffect — same as React, but compiles to native Zig ──
+useEffect(() => {
+  setCount(count + 1);
+});
+
+// ── <script> — inline JS that runs in QuickJS at runtime ──
+<script>
+setInterval(function() {
+  setFps(getFps());
+}, 250);
+</script>
+
+// ── <zscript> — inline Zig emitted directly into the binary ──
+<zscript>
+fn computeHeavy(n: i64) i64 {
+    var sum: i64 = 0;
+    var i: i64 = 0;
+    while (i < n) : (i += 1) sum += i;
+    return sum;
+}
+</zscript>
+
+// ── JSX — your UI, same syntax as React ──
 function App() {
   return (
     <Box style={{ padding: 32, gap: 16, backgroundColor: '#1e1e2a' }}>
       <Text fontSize={28} color="#ffffff">Counter</Text>
       <Text fontSize={48} color="#ff79c6">{`${count}`}</Text>
+      <Text fontSize={12} color="#8b949e">{`${fps} fps`}</Text>
       <Pressable onPress={() => { setCount(count + 1) }}
         style={{ padding: 16, backgroundColor: '#4ec9b0', borderRadius: 8 }}>
         <Text fontSize={16} color="#ffffff">+ Increment</Text>
@@ -32,7 +58,7 @@ function App() {
 }
 ```
 
-That's the entire app. Compiles to a native binary.
+That's one file. State, effects, JS scripting, native Zig, and JSX — all compile to a single native binary.
 
 ---
 
@@ -71,13 +97,58 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 
 | Extension | What | Example |
 |-----------|------|---------|
-| `.app.tsz` | App → binary | `counter.app.tsz` |
+| `.tsz` | App entry point | `Counter.tsz` |
+| `.c.tsz` | Component | `Button.c.tsz` |
 | `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
-| `.tsz` | Component import | `Button.tsz` |
-| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+| `.cmod.tsz` | Component module | `Badge.cmod.tsz` |
 | `.script.tsz` | QuickJS runtime script | `data.script.tsz` |
-| `_c.tsz` | Component module | `Header_c.tsz` |
-| `_cmod.tsz` | Component module (alt) | `Badge_cmod.tsz` |
+| `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
+| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+
+### `<script>` — JS at runtime (QuickJS)
+
+Inline JavaScript that runs in the QuickJS runtime. Use for timers, async data fetching, or anything that needs to run dynamically. Has access to app state via `set*` functions.
+
+```tsx
+<script>
+setInterval(function() {
+  setFps(getFps());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+</script>
+```
+
+### `.script.tsz` — JS as a file
+
+Same as `<script>` but in its own file. Good for mock data, initialization logic, or separating runtime behavior from layout.
+
+```js
+// dashboard.script.tsz
+var items = [
+  { title: 'Customers', amount: '39,354', percentage: '-4%' },
+  { title: 'Products', amount: '4,396', percentage: '+23%' },
+];
+setEarningData(items);
+```
+
+### `<zscript>` — Zig at compile time
+
+Inline Zig code emitted directly into the generated source. Runs at native speed, not in QuickJS. Use for performance-critical logic, test functions, or direct framework access.
+
+```tsx
+<zscript>
+fn test_counter_increments() !void {
+    const state = @import("state.zig");
+    state.setSlot(0, 42);
+    try std.testing.expectEqual(@as(i64, 42), state.getSlot(0));
+}
+</zscript>
+```
+
+### `.zscript.tsz` — Zig as a file
+
+Standalone imperative Zig module — no JSX, compiles directly to a `.zig` file. Use for utility modules, math, data processing, or anything that should be pure Zig.
 
 ## Quick Start
 

@@ -33,10 +33,15 @@ SHORT="${SID:0:4}"
 NOW=$(date +%s)
 
 # ── Tool call lifecycle status ───────────────────────────────────────────────
+# PreToolUse = active (working), PostToolUse = still active (more calls may follow)
+# Stop/StopFailure = idle (turn finished, model done generating)
+# PermissionRequest = blocked (waiting for user to approve a tool call)
 case "$HOOK" in
-  PreToolUse)    STATUS="active" ;;
-  PostToolUse)   STATUS="done" ;;
-  *)             STATUS="" ;;
+  PreToolUse)        STATUS="active" ;;
+  PostToolUse)       STATUS="active" ;;
+  Stop|StopFailure)  STATUS="idle" ;;
+  PermissionRequest) STATUS="blocked" ;;
+  *)                 STATUS="" ;;
 esac
 
 # ── SessionEnd: deregister and exit ──────────────────────────────────────────
