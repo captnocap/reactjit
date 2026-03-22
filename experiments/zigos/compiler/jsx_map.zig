@@ -743,7 +743,15 @@ fn parseMapSubElement(self: *Generator) !codegen.MapSubNode {
 
     while (self.curKind() != .lt_slash and self.curKind() != .eof) {
         if (self.curKind() == .lt) {
-            skipBalancedElement(self); // deeper nesting — skip
+            // Recurse into nested children to extract text (flattening)
+            const nested = try parseMapSubElement(self);
+            if (nested.is_dynamic_text and !sub_dynamic) {
+                sub_dynamic = true;
+                sub_fmt = nested.text_fmt;
+                sub_args = nested.text_args;
+            } else if (nested.static_text.len > 0 and sub_static.len == 0 and !sub_dynamic) {
+                sub_static = nested.static_text;
+            }
         } else if (self.curKind() == .lbrace) {
             self.advance_token(); // {
             if (self.curKind() == .template_literal) {
