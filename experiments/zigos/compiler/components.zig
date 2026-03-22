@@ -187,7 +187,7 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
             scan += 1;
         }
     }
-    const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children and !has_body_conditionals;
+    const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children and !has_body_conditionals and comp.prop_count == 0;
     if (eligible) {
         var has_state_prop = false;
         for (saved_prop_count..self.prop_stack_count) |pi| {
