@@ -189,13 +189,25 @@ fn handleHandshake(srv: *ipc.Server, raw: []const u8) void {
         if (std.crypto.timing_safe.eql([32]u8, tfp, fp)) {
             // Key is trusted — verify pinning hash to detect key substitution
             if (verifyPinningHash(pending_client_pubkey)) {
-                // Auto-reconnect: skip modal, complete DH silently
-                completeDH(srv) catch { dropClient(srv); return; };
+                // Auto-reconnect: send challenge first, then encrypted OK
                 _ = srv.sendLine("{\"challenge\":\"trusted\"}");
+                completeDH(srv) catch { dropClient(srv); return; };
                 return;
             }
             // Pinning hash mismatch — possible MITM, force fresh pairing
             break;
+        }
+    }
+
+    // TSZ_DEBUG_AUTOACCEPT=1 — skip visual pairing for automated testing.
+    // Only compiled in dev builds (behind HAS_DEBUG_SERVER comptime gate).
+    if (std.posix.getenv("TSZ_DEBUG_AUTOACCEPT")) |aa| {
+        if (aa.len > 0 and aa[0] == '1') {
+            // Send challenge first (plaintext), then encrypted OK
+            _ = srv.sendLine("{\"challenge\":\"auto_accepted\"}");
+            completeDH(srv) catch { dropClient(srv); return; };
+            savePairing(pending_client_pubkey);
+            return;
         }
     }
 

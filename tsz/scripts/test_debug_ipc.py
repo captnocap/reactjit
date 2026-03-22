@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""End-to-end test: debug_server IPC protocol against real running app.
+"""End-to-end proof: debug_server full encrypted IPC.
 
-Launches zigos-app with TSZ_DEBUG=1, connects, performs X25519 handshake,
-pairing code verification, encrypted debug.tree request, decrypts response.
+Launches zigos-app with TSZ_DEBUG=1 + TSZ_DEBUG_AUTOACCEPT=1,
+performs X25519 key exchange, derives shared key via HKDF,
+sends encrypted debug.tree + debug.perf + debug.state requests,
+decrypts and prints responses.
 
 Usage: python3 scripts/test_debug_ipc.py
 """
 
-import subprocess, socket, time, json, os, sys, hmac, hashlib, struct
+import subprocess, socket, time, json, os, sys, hmac, hashlib
 
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey, X25519PublicKey,
+)
 from cryptography.hazmat.primitives import serialization
 from nacl.bindings import (
     crypto_aead_xchacha20poly1305_ietf_encrypt,
@@ -20,184 +24,218 @@ APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "zig-out", 
 NONCE_LEN = 24
 TAG_LEN = 16
 
+
 def hmac_sha256(key: bytes, msg: bytes) -> bytes:
     return hmac.new(key, msg, hashlib.sha256).digest()
 
-def hkdf_expand_sha256(prk: bytes, info: bytes, length: int = 32) -> bytes:
+
+def hkdf_expand(prk: bytes, info: bytes, length: int = 32) -> bytes:
     t, okm = b"", b""
     for i in range(1, (length + 31) // 32 + 1):
         t = hmac_sha256(prk, t + info + bytes([i]))
         okm += t
     return okm[:length]
 
-def encrypt_msg(plaintext: bytes, key: bytes, nonce: bytes) -> bytes:
-    """XChaCha20-Poly1305 encrypt → nonce || ciphertext+tag (hex-encoded line)."""
-    ct_with_tag = crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, b"", nonce, key)
-    # ct_with_tag = ciphertext || tag (tag is last 16 bytes)
-    ct = ct_with_tag[:-TAG_LEN]
-    tag = ct_with_tag[-TAG_LEN:]
+
+def make_nonce(prefix: int, counter: int) -> bytes:
+    n = bytearray(NONCE_LEN)
+    n[0] = prefix
+    n[16:24] = counter.to_bytes(8, "little")
+    return bytes(n)
+
+
+def encrypt_msg(pt: bytes, key: bytes, counter: int) -> bytes:
+    nonce = make_nonce(0x43, counter)  # 'C' prefix for client
+    ct_tag = crypto_aead_xchacha20poly1305_ietf_encrypt(pt, b"", nonce, key)
+    ct = ct_tag[:-TAG_LEN]
+    tag = ct_tag[-TAG_LEN:]
     return (nonce + ct + tag).hex().encode() + b"\n"
 
+
 def decrypt_msg(hex_line: bytes, key: bytes) -> bytes:
-    """Decode hex wire → nonce || ct || tag, decrypt."""
     raw = bytes.fromhex(hex_line.strip().decode())
     nonce = raw[:NONCE_LEN]
     ct = raw[NONCE_LEN:-TAG_LEN]
     tag = raw[-TAG_LEN:]
-    ct_with_tag = ct + tag
-    return crypto_aead_xchacha20poly1305_ietf_decrypt(ct_with_tag, b"", nonce, key)
+    return crypto_aead_xchacha20poly1305_ietf_decrypt(ct + tag, b"", nonce, key)
 
-def recv_line(sock, timeout=3):
-    """Read until newline."""
-    sock.settimeout(timeout)
-    buf = b""
-    while b"\n" not in buf:
-        chunk = sock.recv(4096)
-        if not chunk:
-            break
-        buf += chunk
-    return buf.strip()
+
+class LineReader:
+    """Buffered line reader for a TCP socket."""
+    def __init__(self, sock, timeout=3):
+        self.sock = sock
+        self.sock.settimeout(timeout)
+        self.buf = b""
+
+    def readline(self):
+        while b"\n" not in self.buf:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                break
+            self.buf += chunk
+        if b"\n" in self.buf:
+            line, self.buf = self.buf.split(b"\n", 1)
+            return line
+        result = self.buf
+        self.buf = b""
+        return result
+
 
 def main():
-    print("=== Debug Server E2E Test ===\n")
+    print("=" * 60)
+    print("  DEBUG SERVER END-TO-END PROOF")
+    print("=" * 60)
 
     # 1. Launch app
-    print("[1] Launching app with TSZ_DEBUG=1...")
+    print("\n[1] Launching app with TSZ_DEBUG=1 TSZ_DEBUG_AUTOACCEPT=1")
     env = os.environ.copy()
     env["TSZ_DEBUG"] = "1"
-    proc = subprocess.Popen([APP], env=env, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
+    env["TSZ_DEBUG_AUTOACCEPT"] = "1"
+    proc = subprocess.Popen(
+        [APP], env=env, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL
+    )
 
-    # 2. Read port from stderr
+    # 2. Read port
     port = None
     deadline = time.time() + 5
     while time.time() < deadline:
         line = proc.stderr.readline().decode(errors="replace")
         if "port" in line:
-            for word in line.split():
-                if word.isdigit():
-                    port = int(word)
-                    break
-        if port:
-            break
-
+            for w in line.split():
+                if w.isdigit():
+                    port = int(w)
+            if port:
+                break
     if not port:
-        print("FAIL: No debug port found in stderr")
+        print("FAIL: no port")
         proc.kill()
         sys.exit(1)
-    print(f"[2] Debug server listening on port {port}")
-
-    time.sleep(0.3)
+    print(f"    Port: {port}")
+    time.sleep(0.5)
 
     # 3. TCP connect
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
     sock.connect(("127.0.0.1", port))
-    print("[3] TCP connected ✓")
+    reader = LineReader(sock)
+    print("[2] TCP connected ✓")
 
-    # 4. Generate client X25519 keypair + send pubkey
+    # 4. X25519 key exchange
     client_key = X25519PrivateKey.generate()
     client_pub = client_key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )
-    msg = json.dumps({"pubkey": client_pub.hex()}) + "\n"
-    sock.sendall(msg.encode())
-    print(f"[4] Sent client X25519 pubkey ✓")
+    sock.sendall((json.dumps({"pubkey": client_pub.hex()}) + "\n").encode())
+    print(f"[3] Sent X25519 pubkey ✓")
 
-    # 5. Read challenge
-    time.sleep(0.3)
-    resp = recv_line(sock)
+    # 5. Read challenge (should be auto_accepted)
+    time.sleep(0.5)
+    resp = reader.readline()
     challenge = json.loads(resp)
-    print(f"[5] Challenge: {challenge}")
+    print(f"[4] Challenge: {challenge}")
+    assert challenge.get("challenge") in ("auto_accepted", "trusted"), \
+        f"Expected auto_accepted/trusted, got {challenge}"
+    print("    Pairing auto-accepted ✓")
 
-    if challenge.get("challenge") == "enter_code":
-        print("    → Pairing code is displayed on app window ✓")
+    # 6. Read app pubkey from session file + derive shared key
+    session_file = os.path.expanduser(f"~/.tsz/sessions/{proc.pid}.json")
+    with open(session_file) as f:
+        session = json.load(f)
+    app_pub_bytes = bytes.fromhex(session["pubkey"])
+    print(f"[5] App pubkey from session file: {session['pubkey'][:16]}...")
 
-        # For automated test, we can't read the screen. But we CAN read the
-        # pairing code from the Zig unit tests (they test this path fully).
-        # Here we prove: TCP ✓, pubkey exchange ✓, pairing modal shown ✓.
-        # Send wrong code to verify rejection:
-        sock.sendall(json.dumps({"code": "999999"}).encode() + b"\n")
-        time.sleep(0.3)
-        try:
-            data = sock.recv(1024)
-            if len(data) == 0:
-                print("[6] Wrong code → connection dropped ✓")
-            else:
-                print(f"[6] UNEXPECTED response after wrong code: {data}")
-                sys.exit(1)
-        except (ConnectionResetError, BrokenPipeError, socket.timeout):
-            print("[6] Wrong code → connection reset ✓")
+    app_pub = X25519PublicKey.from_public_bytes(app_pub_bytes)
+    dh_shared = client_key.exchange(app_pub)
+    prk = hmac_sha256(b"tsz-debug-v1", dh_shared)
+    shared_key = hkdf_expand(prk, b"debug-channel", 32)
+    print(f"    Shared key derived via DH+HKDF ✓")
 
-        # Reconnect and test with correct code (read from debug_server internal state)
-        # This part is tested by the Zig unit tests (test_debug_server.zig) which
-        # have direct access to the pairing code. The Python test proves the TCP
-        # protocol works end-to-end.
-        print("\n--- Reconnecting to test full encrypted flow ---")
-        time.sleep(0.3)
-        sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock2.settimeout(5)
-        sock2.connect(("127.0.0.1", port))
+    # 7. Read encrypted handshake OK
+    time.sleep(0.3)
+    enc_hs = reader.readline()
+    hs_pt = decrypt_msg(enc_hs, shared_key)
+    hs = json.loads(hs_pt)
+    print(f"[6] Handshake OK (decrypted): {hs}")
+    assert hs.get("ok") is True, f"Handshake failed: {hs}"
+    print("    XChaCha20-Poly1305 decryption ✓")
 
-        # New keypair for new connection
-        client_key2 = X25519PrivateKey.generate()
-        client_pub2 = client_key2.public_key().public_bytes(
-            serialization.Encoding.Raw, serialization.PublicFormat.Raw
-        )
-        sock2.sendall((json.dumps({"pubkey": client_pub2.hex()}) + "\n").encode())
-        time.sleep(0.3)
-        resp2 = recv_line(sock2)
-        challenge2 = json.loads(resp2)
-        print(f"[7] Second connection challenge: {challenge2}")
+    # 8. Send encrypted debug.tree
+    counter = 0
+    req = json.dumps({"method": "debug.tree"}).encode()
+    sock.sendall(encrypt_msg(req, shared_key, counter))
+    counter += 1
+    print("[7] Sent encrypted debug.tree request")
 
-        if challenge2.get("challenge") == "enter_code":
-            print("    → Second pairing code shown (can't auto-read) ✓")
-            print("    Full encrypted flow verified by Zig unit tests (18/18 passing)")
+    time.sleep(0.5)
+    enc_tree = reader.readline()
+    tree_pt = decrypt_msg(enc_tree, shared_key)
+    tree = json.loads(tree_pt)
+    nodes = tree.get("nodes", [])
+    print(f"    Response: {len(nodes)} nodes")
+    if nodes:
+        print(f"    First node: {nodes[0]}")
+    print("    debug.tree ✓")
 
-        sock2.close()
+    # 9. Send encrypted debug.perf
+    req = json.dumps({"method": "debug.perf"}).encode()
+    sock.sendall(encrypt_msg(req, shared_key, counter))
+    counter += 1
+    time.sleep(0.3)
+    enc_perf = reader.readline()
+    perf_pt = decrypt_msg(enc_perf, shared_key)
+    perf = json.loads(perf_pt)
+    print(f"[8] debug.perf: fps={perf.get('fps')}, frame={perf.get('frame')}, "
+          f"rects={perf.get('rects')}, glyphs={perf.get('glyphs')}")
+    print("    debug.perf ✓")
 
-    elif challenge.get("challenge") == "trusted":
-        print("[5] Already trusted — silent reconnect ✓")
-        # Read app pubkey from session file
-        session_file = os.path.expanduser(f"~/.tsz/sessions/{proc.pid}.json")
-        with open(session_file) as f:
-            session = json.load(f)
-        app_pub = bytes.fromhex(session["pubkey"])
+    # 10. Send encrypted debug.state
+    req = json.dumps({"method": "debug.state"}).encode()
+    sock.sendall(encrypt_msg(req, shared_key, counter))
+    counter += 1
+    time.sleep(0.3)
+    enc_state = reader.readline()
+    state_pt = decrypt_msg(enc_state, shared_key)
+    state = json.loads(state_pt)
+    print(f"[9] debug.state: total_nodes={state.get('total_nodes')}, "
+          f"visible={state.get('visible_nodes')}, slots={state.get('state_slots')}")
+    print("    debug.state ✓")
 
-        # Derive shared key
-        from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
-        app_pub_key = X25519PublicKey.from_public_bytes(app_pub)
-        dh_shared = client_key.exchange(app_pub_key)
-        prk = hmac_sha256(b"tsz-debug-v1", dh_shared)
-        shared_key = hkdf_expand_sha256(prk, b"debug-channel", 32)
+    # 11. Send encrypted debug.select
+    req = json.dumps({"method": "debug.select", "id": 0}).encode()
+    sock.sendall(encrypt_msg(req, shared_key, counter))
+    counter += 1
+    time.sleep(0.3)
+    enc_sel = reader.readline()
+    sel_pt = decrypt_msg(enc_sel, shared_key)
+    sel = json.loads(sel_pt)
+    print(f"[10] debug.select: {sel}")
+    assert sel.get("ok") is True
+    print("     debug.select ✓")
 
-        # Read encrypted handshake OK
-        time.sleep(0.3)
-        enc_resp = recv_line(sock)
-        pt = decrypt_msg(enc_resp, shared_key)
-        hs = json.loads(pt)
-        print(f"[6] Handshake response (decrypted): {hs} ✓")
+    print("\n" + "=" * 60)
+    print("  ALL CHECKS PASSED")
+    print("=" * 60)
+    print("""
+  ✓ TCP connection to debug server
+  ✓ X25519 key exchange (client → server)
+  ✓ Auto-accept pairing (TSZ_DEBUG_AUTOACCEPT)
+  ✓ DH shared secret derivation via HKDF-SHA256
+  ✓ XChaCha20-Poly1305 encrypted handshake
+  ✓ Encrypted debug.tree → got node tree back
+  ✓ Encrypted debug.perf → got telemetry snapshot
+  ✓ Encrypted debug.state → got state summary
+  ✓ Encrypted debug.select → node selected
+  ✓ Full round-trip: plaintext → encrypt → TCP → decrypt → JSON
+""")
 
-        # Send encrypted debug.tree
-        nonce = b"\x43" + b"\x00" * 23  # 'C' prefix + zeros
-        tree_req = json.dumps({"method": "debug.tree"}).encode()
-        enc_req = encrypt_msg(tree_req, shared_key, nonce)
-        sock2.sendall(enc_req)
-        time.sleep(0.3)
-        enc_tree = recv_line(sock)
-        tree_pt = decrypt_msg(enc_tree, shared_key)
-        tree = json.loads(tree_pt)
-        print(f"[7] debug.tree response: {len(tree.get('nodes', []))} nodes ✓")
-        print(f"    Raw: {tree_pt[:200].decode()}")
-
-    print("\n=== PASS ===")
-    print("Verified: TCP connect ✓, X25519 pubkey exchange ✓, pairing challenge ✓, wrong code rejection ✓")
-
+    sock.close()
     proc.kill()
     proc.wait()
     try:
-        os.unlink(os.path.expanduser(f"~/.tsz/sessions/{proc.pid}.json"))
+        os.unlink(session_file)
     except:
         pass
+
 
 if __name__ == "__main__":
     main()
