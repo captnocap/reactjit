@@ -190,7 +190,57 @@ pub const Node = struct {
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
-    scene3d: bool = false,             // true = 3D viewport (renders offscreen, composites)
+    // 3D elements — inline in the 2D tree, rendered by gpu/scene3d.zig
+    scene3d: bool = false,             // true = contains 3D.* children
+    scene3d_mesh: bool = false,        // true = 3D.Mesh
+    scene3d_camera: bool = false,      // true = 3D.Camera
+    scene3d_light: bool = false,       // true = 3D.Light
+    scene3d_group: bool = false,       // true = 3D.Group
+    scene3d_geometry: ?[]const u8 = null,  // "box", "sphere", "plane", etc.
+    scene3d_light_type: ?[]const u8 = null, // "ambient", "directional", "point"
+    scene3d_color_r: f32 = 0.8,
+    scene3d_color_g: f32 = 0.8,
+    scene3d_color_b: f32 = 0.8,
+    scene3d_pos_x: f32 = 0,
+    scene3d_pos_y: f32 = 0,
+    scene3d_pos_z: f32 = 0,
+    scene3d_rot_x: f32 = 0,
+    scene3d_rot_y: f32 = 0,
+    scene3d_rot_z: f32 = 0,
+    scene3d_scale_x: f32 = 1,
+    scene3d_scale_y: f32 = 1,
+    scene3d_scale_z: f32 = 1,
+    scene3d_look_x: f32 = 0,          // Camera lookAt target
+    scene3d_look_y: f32 = 0,
+    scene3d_look_z: f32 = 0,
+    scene3d_dir_x: f32 = 0,           // Light direction
+    scene3d_dir_y: f32 = -1,
+    scene3d_dir_z: f32 = 0,
+    scene3d_fov: f32 = 60,            // Camera fov in degrees
+    scene3d_intensity: f32 = 1.0,     // Light intensity
+    scene3d_radius: f32 = 0.5,        // Sphere/cylinder radius
+    scene3d_size_x: f32 = 1,          // Box/plane width
+    scene3d_size_y: f32 = 1,          // Box/plane height
+    scene3d_size_z: f32 = 1,          // Box depth
+    // Physics 2D — inline in the 2D tree, driven by framework/physics2d.zig
+    physics_world: bool = false,       // true = Physics.World container
+    physics_body: bool = false,        // true = Physics.Body (wraps child nodes)
+    physics_collider: bool = false,    // true = Physics.Collider (shape definition, no visual)
+    physics_body_type: u8 = 2,         // 0=static, 1=kinematic, 2=dynamic
+    physics_x: f32 = 0,               // initial body position (pixels)
+    physics_y: f32 = 0,
+    physics_angle: f32 = 0,
+    physics_gravity_x: f32 = 0,       // world gravity (pixels/s^2)
+    physics_gravity_y: f32 = 980,
+    physics_density: f32 = 1.0,
+    physics_friction: f32 = 0.3,
+    physics_restitution: f32 = 0.1,
+    physics_radius: f32 = 0,          // circle collider radius (pixels)
+    physics_shape: u8 = 0,            // 0=rectangle, 1=circle
+    physics_body_idx: i16 = -1,       // runtime: assigned body index from physics2d
+    physics_fixed_rotation: bool = false,
+    physics_bullet: bool = false,
+    physics_gravity_scale: f32 = 1.0,
     graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)

@@ -27,6 +27,7 @@ const capture = @import("capture.zig");
 const effects = @import("effects.zig");
 const scene3d = @import("gpu/scene3d.zig");
 const transition = @import("transition.zig");
+const physics2d = @import("physics2d.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -41,6 +42,71 @@ const DEVTOOLS_HEIGHT: f32 = 360;
 // ── Cursor blink state ───────────────────────────────────────────────────
 var g_cursor_visible: bool = true;
 var g_prev_tick: u32 = 0;
+
+// ── Physics 2D state ────────────────────────────────────────────────────
+var physics_initialized: bool = false;
+
+/// Walk the node tree to find Physics.World/Body/Collider nodes and set up the simulation.
+fn initPhysicsFromTree(root: *Node) void {
+    initPhysicsNode(root);
+}
+
+fn initPhysicsNode(node: *Node) void {
+    if (node.physics_world) {
+        physics2d.init(node.physics_gravity_x, node.physics_gravity_y);
+        // Recurse into world children to find bodies
+        for (node.children) |*child| {
+            initPhysicsNode(child);
+        }
+        return;
+    }
+    if (node.physics_body) {
+        // Create the physics body
+        // Find the first visual child to link the body to
+        var visual_child: ?*Node = null;
+        var collider_child: ?*Node = null;
+        for (node.children) |*child| {
+            if (child.physics_collider) {
+                collider_child = child;
+            } else if (!child.physics_world and !child.physics_body) {
+                visual_child = child;
+            }
+        }
+        const body_type: physics2d.BodyType = switch (node.physics_body_type) {
+            0 => .static_body,
+            1 => .kinematic,
+            else => .dynamic,
+        };
+        // Link to the visual child node (or self if no visual child)
+        const target = visual_child orelse node;
+        if (physics2d.createBody(body_type, node.physics_x, node.physics_y, node.physics_angle, target)) |idx| {
+            node.physics_body_idx = @intCast(idx);
+            // Apply body properties
+            if (node.physics_fixed_rotation) physics2d.setFixedRotation(idx, true);
+            if (node.physics_bullet) physics2d.setBullet(idx, true);
+            if (node.physics_gravity_scale != 1.0) physics2d.setGravityScale(idx, node.physics_gravity_scale);
+            // Attach collider if found
+            if (collider_child) |col| {
+                if (col.physics_shape == 1) {
+                    // Circle
+                    physics2d.addCircleCollider(idx, col.physics_radius,
+                        col.physics_density, col.physics_friction, col.physics_restitution);
+                } else {
+                    // Rectangle — use the visual child's dimensions or collider's own
+                    const w = if (visual_child) |v| (v.style.width orelse 40) else 40;
+                    const h = if (visual_child) |v| (v.style.height orelse 40) else 40;
+                    physics2d.addBoxCollider(idx, w, h,
+                        col.physics_density, col.physics_friction, col.physics_restitution);
+                }
+            }
+        }
+        return;
+    }
+    // Recurse
+    for (node.children) |*child| {
+        initPhysicsNode(child);
+    }
+}
 
 // ── Hover state ─────────────────────────────────────────────────────────
 
@@ -783,6 +849,18 @@ pub fn run(config: AppConfig) !void {
             const dt_t = now_t -% g_prev_tick;
             const dt_t_sec = @as(f32, @floatFromInt(dt_t)) / 1000.0;
             _ = transition.tick(dt_t_sec);
+        }
+
+        // Physics 2D tick — step world, sync body positions to nodes
+        if (!physics_initialized) {
+            initPhysicsFromTree(config.root);
+            physics_initialized = true;
+        }
+        if (physics2d.isInitialized()) {
+            const now_p = c.SDL_GetTicks();
+            const dt_p = now_p -% g_prev_tick;
+            const dt_p_sec = @as(f32, @floatFromInt(dt_p)) / 1000.0;
+            physics2d.tick(dt_p_sec);
         }
 
         // Layout (main window)
