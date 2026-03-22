@@ -62,7 +62,7 @@ Everything is composed from these. A dashboard is Boxes and Text. There are no s
 
 ## Layout Rules (shared)
 
-The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and tsz (`tsz/runtime/tsz/layout.tsz` → compiles to `tsz/runtime/compiled/layout.zig`).
+The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and the Zig runtime (`tsz/framework/layout.zig`).
 
 ### Sizing tiers (first match wins)
 1. **Explicit dimensions** — `width`, `height`, `flexGrow`, `flexBasis`
