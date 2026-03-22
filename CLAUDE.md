@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
+For feature verification, compiler capability checks, and architecture comparisons in this repo:
+- NEVER invoke the built-in Explore agent.
+- Read files directly with Read / Grep / Glob / Bash.
+- Treat "does this exist?" and "what is missing?" as source-verification tasks.
+Measured evidence in this repo:
+- Direct Opus read: ~1m13s, correct result
+- Explore-agent path: ~3m46s, incorrect result
+- Explore has already produced materially false feature reports here (example: claimed zigos had .map() when it did not)
+- Prior tested feature audit showed ~57.5% false-claim rate from Explore on this codebase
+Why:
+- This repo contains a custom compiler, DSL, and runtime not represented in training data.
+- Explore summaries are less reliable than direct source inspection here.
+- Delegation is slower and increases hallucination risk.
+
 ## Who Maintains This
 
 **You do.** Bugs are from other versions of yourself in parallel instances. If a bug from another Claude is blocking you, fix it — it is your code. All of it.
