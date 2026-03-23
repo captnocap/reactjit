@@ -243,38 +243,49 @@ async function initLinux() {
     vga_bios: { url: 'v86/vgabios.bin' },
     bzimage: { url: 'vmlinuz' },
     initrd: { url: 'initrd.cpio.gz' },
-    cmdline: 'rdinit=/init console=ttyS0 loglevel=3',
-    memory_size: 128 * 1024 * 1024,
-    vga_memory_size: 0,
+    cmdline: 'rdinit=/init console=ttyS0 loglevel=7',
+    memory_size: 256 * 1024 * 1024,
+    vga_memory_size: 2 * 1024 * 1024,
     autostart: true,
-    disable_keyboard: true,
-    disable_mouse: true,
-    disable_speaker: true,
-    serial_container_xtermjs: null,
   });
 
+  emulator.add_listener('emulator-ready', () => { log('v86 emulator ready', 'pass'); });
+  emulator.add_listener('emulator-started', () => { log('v86 emulator started', 'accent'); });
+
   // Capture serial output (Linux console)
+  let serialBytes = 0;
   emulator.add_listener('serial0-output-byte', function(byte) {
+    serialBytes++;
     const char = String.fromCharCode(byte);
     serialBuffer += char;
     if (char === '\n') {
-      const line = serialBuffer.trimEnd();
+      // Strip ANSI escape sequences
+      const line = serialBuffer.trimEnd().replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\[[\?]?[0-9;]*[a-zA-Z]/g, '');
       serialBuffer = '';
-      if (line.length > 0) {
+      if (line.length > 0 && line.trim().length > 0) {
         termWrite(line + '\n', 'kernel');
-        // Detect boot complete
-        if (line.includes('Kernel is running') || line.includes('dropping to shell')) {
-          if (!linuxReady) {
-            linuxReady = true;
-            setStatus('s-linux', 'on');
-            log('Linux kernel booted', 'pass');
-            // Render the UI now that all 3 layers are up
-            renderDashboard();
-          }
+        if ((line.includes('Kernel is running') || line.includes('dropping to shell') || line.includes('/ #')) && !linuxReady) {
+          linuxReady = true;
+          setStatus('s-linux', 'on');
+          log('Linux kernel booted', 'pass');
+          renderDashboard();
         }
       }
     }
   });
+
+  // Debug: check if any serial bytes arrive
+  setTimeout(() => {
+    log('serial bytes received: ' + serialBytes, serialBytes > 0 ? 'pass' : 'fail');
+    if (serialBytes === 0) {
+      log('No serial output — kernel may be incompatible with v86', 'fail');
+      log('Trying to read v86 screen text...', 'accent');
+      try {
+        const text = emulator.screen_adapter && emulator.screen_adapter.get_text ? emulator.screen_adapter.get_text() : '(no screen adapter)';
+        log('Screen: ' + text.substring(0, 200), 'accent');
+      } catch(e) { log('Screen read failed: ' + e.message, 'fail'); }
+    }
+  }, 10000);
 }
 
 // Send a command to Linux via serial

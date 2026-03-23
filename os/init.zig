@@ -167,7 +167,7 @@ pub fn main() void {
         var status: u32 = 0;
         _ = linux.wait4(@intCast(pid_rc), &status, 0, null);
         puts("");
-        puts("  [init] QuickJS exited");
+        puts("  [init] boot script done");
     } else {
         puts("  [init] fork failed");
     }
