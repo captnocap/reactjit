@@ -17,7 +17,7 @@ QJS_SRC="$REPO_ROOT/love2d/quickjs"
 
 ALPINE_VERSION="v3.21"
 ALPINE_MIRROR="https://dl-cdn.alpinelinux.org/alpine"
-ALPINE_ARCH="x86_64"
+ALPINE_ARCH="x86"
 
 echo ""
 echo "  CartridgeOS build (kernel + busybox + QuickJS)"
@@ -30,7 +30,7 @@ mkdir -p "$DIST_DIR" "$STAGING" "$PARTS" "$CACHE_DIR"
 echo "  [1/5] Compiling init.zig..."
 zig build-exe \
     "$SCRIPT_DIR/init.zig" \
-    -target x86_64-linux-musl \
+    -target x86-linux-musl \
     -OReleaseFast \
     --name init \
     -femit-bin="$DIST_DIR/init" \
@@ -42,7 +42,7 @@ echo "        init: $(du -sh "$DIST_DIR/init" | cut -f1)"
 echo "        compiling bridge..."
 zig build-exe \
     "$SCRIPT_DIR/bridge.zig" \
-    -target x86_64-linux-musl \
+    -target x86-linux-musl \
     -OReleaseFast \
     --name bridge \
     -femit-bin="$DIST_DIR/bridge" \
@@ -65,7 +65,7 @@ QJS_SRCS=(
     "$QJS_SRC/gen/standalone.c"
 )
 
-zig cc -target x86_64-linux-musl -O2 -static \
+zig cc -target x86-linux-musl -O2 -static \
     -D_GNU_SOURCE -DQUICKJS_NG_BUILD \
     -I"$QJS_SRC" \
     "${QJS_SRCS[@]}" \
@@ -134,10 +134,10 @@ chmod +x "$STAGING/bin/busybox" "$STAGING/usr/bin/qjs"
 # musl libc (busybox is static but qjs links dynamically? no — both static)
 # For a fully static setup we don't need libc .so files at all.
 # But include musl just in case anything needs the dynamic linker.
-MUSL=$(find "$PARTS/lib" -name 'ld-musl-x86_64.so*' -type f 2>/dev/null | head -1)
+MUSL=$(find "$PARTS/lib" -name 'ld-musl-*.so*' -type f 2>/dev/null | head -1)
 if [ -n "$MUSL" ]; then
-    cp "$MUSL" "$STAGING/lib/ld-musl-x86_64.so.1"
-    ln -sf /lib/ld-musl-x86_64.so.1 "$STAGING/lib/libc.musl-x86_64.so.1"
+    MUSL_NAME=$(basename "$MUSL")
+    cp "$MUSL" "$STAGING/lib/$MUSL_NAME"
 fi
 
 # /init (Zig PID 1) + bridge (HTTP server)
