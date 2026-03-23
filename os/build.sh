@@ -37,6 +37,18 @@ zig build-exe \
     2>&1
 chmod +x "$DIST_DIR/init"
 echo "        init: $(du -sh "$DIST_DIR/init" | cut -f1)"
+
+# Compile bridge (HTTP server)
+echo "        compiling bridge..."
+zig build-exe \
+    "$SCRIPT_DIR/bridge.zig" \
+    -target x86_64-linux-musl \
+    -OReleaseFast \
+    --name bridge \
+    -femit-bin="$DIST_DIR/bridge" \
+    2>&1
+chmod +x "$DIST_DIR/bridge"
+echo "        bridge: $(du -sh "$DIST_DIR/bridge" | cut -f1)"
 echo ""
 
 # ── Step 2: Build QuickJS (static musl binary) ────────────────────────
@@ -128,15 +140,17 @@ if [ -n "$MUSL" ]; then
     ln -sf /lib/ld-musl-x86_64.so.1 "$STAGING/lib/libc.musl-x86_64.so.1"
 fi
 
-# /init (Zig PID 1)
+# /init (Zig PID 1) + bridge (HTTP server)
 cp "$DIST_DIR/init" "$STAGING/init"
+cp "$DIST_DIR/bridge" "$STAGING/usr/bin/bridge"
+chmod +x "$STAGING/usr/bin/bridge"
 
 # Default app
 cat > "$STAGING/app/main.js" << 'MAINJS'
-// CartridgeOS — QuickJS on bare Linux kernel
 print('');
 print('  CartridgeOS (kernel mode)');
 print('  QuickJS on bare Alpine kernel');
+print('  HTTP bridge on :8080');
 print('  Rendering: WASM (not here)');
 print('');
 print('  Kernel is running.');
@@ -149,6 +163,7 @@ echo ""
 echo "        === staging manifest ==="
 echo "          $(du -sh "$STAGING/bin/busybox" | cut -f1)  /bin/busybox"
 echo "          $(du -sh "$STAGING/usr/bin/qjs" | cut -f1)  /usr/bin/qjs"
+echo "          $(du -sh "$STAGING/usr/bin/bridge" | cut -f1)  /usr/bin/bridge"
 echo "          $(du -sh "$STAGING/init" | cut -f1)  /init"
 
 STAGING_SIZE=$(du -sm "$STAGING" | cut -f1)

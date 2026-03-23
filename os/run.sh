@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # CartridgeOS run.sh — boots kernel + busybox + QuickJS in QEMU
+# HTTP bridge on port 8080 forwarded to host port 9080
 # No GPU, no display. Serial console only.
 set -euo pipefail
 
@@ -17,6 +18,7 @@ echo ""
 echo "  CartridgeOS (kernel mode)"
 echo "  kernel: $KERNEL ($(du -sh "$KERNEL" | cut -f1))"
 echo "  initrd: $INITRD ($(du -sh "$INITRD" | cut -f1))"
+echo "  bridge: http://localhost:9080/cgi-bin/info"
 echo ""
 
 KVM=""
@@ -37,4 +39,6 @@ qemu-system-x86_64 \
     -initrd "$INITRD" \
     -append "rdinit=/init console=ttyS0 loglevel=3" \
     -nographic \
-    -no-reboot
+    -no-reboot \
+    -netdev user,id=net0,hostfwd=tcp::9080-:8080 \
+    -device virtio-net-pci,netdev=net0

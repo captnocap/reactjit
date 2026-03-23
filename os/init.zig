@@ -113,15 +113,45 @@ pub fn main() void {
     puts("  Kernel mode — rendering is WASM's job");
     puts("");
 
-    // ── Launch QuickJS ──────────────────────────────────────────────────
-    puts("  Launching QuickJS...");
-    puts("");
-
     const envp = [_:null]?[*:0]const u8{
         "HOME=/tmp",
         "PATH=/bin:/usr/bin",
         null,
     };
+
+    // ── Network setup ───────────────────────────────────────────────────
+    puts("  Configuring network...");
+    // Bring up loopback
+    const lo_up = [_:null]?[*:0]const u8{ "/bin/ifconfig", "lo", "up", null };
+    run_wait(&lo_up);
+    // Bring up eth0
+    const eth_up = [_:null]?[*:0]const u8{ "/bin/ifconfig", "eth0", "up", null };
+    run_wait(&eth_up);
+    // DHCP — busybox udhcpc
+    const dhcp = [_:null]?[*:0]const u8{ "/bin/udhcpc", "-i", "eth0", "-q", "-s", "/bin/true", null };
+    run_wait(&dhcp);
+    sleep_us(500_000);
+    // Check IP
+    const ip_check = [_:null]?[*:0]const u8{ "/bin/ifconfig", "eth0", null };
+    run_wait(&ip_check);
+
+    // ── Start HTTP bridge (Zig server using framework/net/httpserver) ───
+    // Browser WASM frontend talks to kernel via HTTP on port 8080.
+    puts("  Starting HTTP bridge on :8080...");
+    const bridge_argv = [_:null]?[*:0]const u8{ "/usr/bin/bridge", null };
+    const bridge_pid_rc = linux.fork();
+    const bridge_pid: isize = @bitCast(bridge_pid_rc);
+    if (bridge_pid == 0) {
+        _ = linux.execve(bridge_argv[0].?, &bridge_argv, &envp);
+        linux.exit(1);
+    }
+    if (bridge_pid > 0) {
+        puts("  HTTP bridge: running");
+    }
+
+    // ── Launch QuickJS ──────────────────────────────────────────────────
+    puts("  Launching QuickJS...");
+    puts("");
 
     const qjs_argv = [_:null]?[*:0]const u8{ "/usr/bin/qjs", "/app/main.js", null };
 
