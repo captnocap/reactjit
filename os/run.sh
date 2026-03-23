@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# CartridgeOS run.sh — boots in QEMU with virtio-gpu
+# CartridgeOS run.sh — boots kernel + busybox + QuickJS in QEMU
+# No GPU, no display. Serial console only.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$SCRIPT_DIR/dist"
 KERNEL="$DIST_DIR/vmlinuz"
 INITRD="$DIST_DIR/initrd.cpio.gz"
-LOG="$DIST_DIR/boot.log"
 
 if [ ! -f "$KERNEL" ] || [ ! -f "$INITRD" ]; then
     echo "ERROR: run build.sh first"
@@ -14,10 +14,9 @@ if [ ! -f "$KERNEL" ] || [ ! -f "$INITRD" ]; then
 fi
 
 echo ""
-echo "  CartridgeOS (Zig + QuickJS)"
+echo "  CartridgeOS (kernel mode)"
 echo "  kernel: $KERNEL ($(du -sh "$KERNEL" | cut -f1))"
 echo "  initrd: $INITRD ($(du -sh "$INITRD" | cut -f1))"
-echo "  log:    $LOG"
 echo ""
 
 KVM=""
@@ -28,17 +27,14 @@ else
     echo "  KVM: disabled"
 fi
 
-echo "  Booting... serial output → $LOG"
+echo "  Booting... (serial console, Ctrl-A X to quit)"
 echo ""
 
 qemu-system-x86_64 \
     $KVM \
-    -m 2048M \
+    -m 512M \
     -kernel "$KERNEL" \
     -initrd "$INITRD" \
-    -append "rdinit=/init console=ttyS0 loglevel=7 cart_dev=1" \
-    -device virtio-vga-gl \
-    -display sdl,gl=on \
-    -usb -device usb-tablet \
-    -serial file:"$LOG" \
+    -append "rdinit=/init console=ttyS0 loglevel=3" \
+    -nographic \
     -no-reboot

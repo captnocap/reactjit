@@ -9,7 +9,7 @@ const linux = std.os.linux;
 // ── Syscall helpers ─────────────────────────────────────────────────────
 
 fn mount(source: [*:0]const u8, target: [*:0]const u8, fstype: [*:0]const u8, flags: u32, data: ?[*:0]const u8) void {
-    _ = linux.mount(source, target, fstype, flags, @as(?[*]const u8, if (data) |d| @ptrCast(d) else null));
+    _ = linux.mount(source, target, fstype, flags, if (data) |d| @intFromPtr(d) else 0);
 }
 
 fn mkdir(path: [*:0]const u8) void {
@@ -30,7 +30,7 @@ fn puts(msg: []const u8) void {
     write_all(1, "\n");
 }
 
-fn open_file(path: [*:0]const u8, flags: u32) i32 {
+fn open_file(path: [*:0]const u8, flags: linux.O) i32 {
     const rc = linux.open(path, flags, 0);
     return if (@as(isize, @bitCast(rc)) < 0) -1 else @intCast(rc);
 }
@@ -81,34 +81,21 @@ fn run_wait(argv: [*:null]const ?[*:0]const u8) void {
 
 // ── Main ────────────────────────────────────────────────────────────────
 
-pub export fn _start() callconv(.Naked) noreturn {
-    asm volatile ("mov %rsp, %rdi" ++
-        "\n\t" ++ "and $-16, %rsp" ++
-        "\n\t" ++ "call %[main]" ++
-        "\n\t" ++ "mov $60, %rax" ++
-        "\n\t" ++ "xor %rdi, %rdi" ++
-        "\n\t" ++ "syscall"
-        :
-        : [main] "X" (&main),
-    );
-    unreachable;
-}
-
-fn main() void {
+pub fn main() void {
     // ── Mount filesystems ───────────────────────────────────────────────
     mount("proc", "/proc", "proc", 0, null);
     mount("sysfs", "/sys", "sysfs", 0, null);
     mount("devtmpfs", "/dev", "devtmpfs", 0, null);
 
     // Suppress kernel messages on console
-    const printk_fd = open_file("/proc/sys/kernel/printk", linux.O.WRONLY);
+    const printk_fd = open_file("/proc/sys/kernel/printk", .{ .ACCMODE = .WRONLY });
     if (printk_fd >= 0) {
         write_all(printk_fd, "1\n");
         close_fd(printk_fd);
     }
 
     // Redirect stdio to console
-    const con = open_file("/dev/console", linux.O.RDWR);
+    const con = open_file("/dev/console", .{ .ACCMODE = .RDWR });
     if (con >= 0) {
         dup2(con, 0);
         dup2(con, 1);
@@ -123,47 +110,14 @@ fn main() void {
     // ── Banner ──────────────────────────────────────────────────────────
     puts("");
     puts("  CartridgeOS v0.2 (Zig + QuickJS)");
-    puts("  no X11, no Wayland, no display server");
+    puts("  Kernel mode — rendering is WASM's job");
     puts("");
-
-    // ── Load virtio-gpu ─────────────────────────────────────────────────
-    puts("  Loading virtio-gpu driver...");
-    const modprobe_argv = [_:null]?[*:0]const u8{ "/bin/busybox", "modprobe", "virtio-gpu", null };
-    run_wait(&modprobe_argv);
-    sleep_us(1_500_000);
-
-    if (access("/dev/dri/card0")) {
-        puts("  DRM: /dev/dri/card0 ready");
-    } else {
-        puts("  WARNING: /dev/dri/card0 missing");
-    }
-    if (access("/dev/dri/renderD128")) {
-        puts("  DRM: /dev/dri/renderD128 ready");
-    }
-
-    // ── Load input modules ──────────────────────────────────────────────
-    puts("  Loading input modules...");
-    const input_mods = [_][*:0]const u8{ "hid", "hid-generic", "evdev", "mousedev", "psmouse", "virtio_input" };
-    for (input_mods) |mod| {
-        const argv = [_:null]?[*:0]const u8{ "/bin/busybox", "modprobe", mod, null };
-        run_wait(&argv);
-    }
-    sleep_us(300_000);
 
     // ── Launch QuickJS ──────────────────────────────────────────────────
-    puts("");
     puts("  Launching QuickJS...");
     puts("");
 
-    // Environment for DRM/KMS rendering
     const envp = [_:null]?[*:0]const u8{
-        "SDL_VIDEODRIVER=kmsdrm",
-        "LD_LIBRARY_PATH=/app:/usr/lib:/lib",
-        "LIBGL_DRIVERS_PATH=/usr/lib/dri",
-        "LIBGL_DRIVERS_DIR=/usr/lib/dri",
-        "EGL_PLATFORM=gbm",
-        "MESA_EGL_NO_X11=1",
-        "MESA_LOADER_DRIVER_OVERRIDE=virtio_gpu",
         "HOME=/tmp",
         "PATH=/bin:/usr/bin",
         null,
