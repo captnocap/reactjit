@@ -20,22 +20,23 @@ pub fn build(b: *std.Build) void {
 
     // ── User flags ──────────────────────────────────────────────────
     const no_debug = b.option(bool, "no-debug", "Strip debug server from binary (default for dist builds)") orelse false;
+    const sysroot = b.option([]const u8, "sysroot", "Cross-compile sysroot path (e.g., Alpine rootfs with -dev packages)");
 
     // ── App binary (used by compiler: -Dapp-name=X) ──────────────
     const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "zigos-app";
-    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, !no_debug);
+    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, !no_debug, sysroot);
     const app_install = b.addInstallArtifact(app_exe, .{});
     const app_step = b.step("app", "tsz app — codegen + layout + rendering");
     app_step.dependOn(&app_install.step);
 
     // ── dist-lean — lean code addict tier ─────────────────────────
-    const lean_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lean", .lean, false);
+    const lean_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lean", .lean, false, sysroot);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
     const lean_step = b.step("dist-lean", "Lean tier — layout + GPU + SDL2 only");
     lean_step.dependOn(&lean_install.step);
 
     // ── dist-full — batteries included tier ───────────────────────
-    const full_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-full", .full, false);
+    const full_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-full", .full, false, sysroot);
     const full_install = b.addInstallArtifact(full_exe, .{});
     const full_step = b.step("dist-full", "Full tier — networking, QuickJS, physics, 3D, terminal, video, crypto");
     full_step.dependOn(&full_install.step);
@@ -203,6 +204,7 @@ fn addAppExe(
     name: []const u8,
     tier: Tier,
     debug_server: bool,
+    sysroot: ?[]const u8,
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
     const is_lean = tier == .lean;
@@ -245,8 +247,20 @@ fn addAppExe(
         exe.linkSystemLibrary("m");
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
-        exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
-        exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        if (sysroot) |sr| {
+            // Cross-compile: use sysroot paths (Alpine musl)
+            exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
+            exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+            exe.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
+        } else {
+            // Native build: use host system paths
+            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+        // musl compat shim: glibc-built static libs (wgpu-native) need stat64/mmap64 aliases
+        if (target.result.abi == .musl) {
+            exe.root_module.addCSourceFile(.{ .file = b.path("ffi/musl_compat.c"), .flags = &.{"-O2"} });
+        }
     } else if (os == .macos) {
         exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
@@ -285,7 +299,11 @@ fn addAppExe(
         exe.linkSystemLibrary("curl");
         exe.linkSystemLibrary("archive");
         if (os == .linux) {
-            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+            if (sysroot) |sr| {
+                exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+            } else {
+                exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+            }
         } else if (os == .macos) {
             exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         }

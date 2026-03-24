@@ -1018,6 +1018,11 @@ noinline fn paintCanvasContainer(node: *Node) void {
         }
     }
     gpu.resetTransform();
+    // Force a scissor segment boundary so tile text (batched) renders
+    // BEFORE the clamp's background rect. Without this, all rects draw
+    // first then all text — tile text bleeds over the clamp background.
+    gpu.popScissor();
+    gpu.pushScissor(r.x, r.y, r.w, r.h);
     for (node.children) |*child| {
         if (child.canvas_clamp) {
             layout.layoutNode(child, r.x, r.y, r.w, r.h);

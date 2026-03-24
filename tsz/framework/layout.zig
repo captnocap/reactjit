@@ -30,6 +30,7 @@ inline fn asF32(val: anytype) f32 {
 const events = @import("events.zig");
 const EventHandler = events.EventHandler;
 const effect_ctx = @import("effect_ctx.zig");
+const context_menu = @import("context_menu.zig");
 
 // ── Type definitions ────────────────────────────────
 pub const FlexDirection = enum { row, column };
@@ -241,6 +242,7 @@ pub const Node = struct {
     physics_fixed_rotation: bool = false,
     physics_bullet: bool = false,
     physics_gravity_scale: f32 = 1.0,
+    context_menu_items: ?[]const context_menu.MenuItem = null,
     terminal: bool = false,           // true = Terminal element (cell-grid rendering via vterm)
     terminal_font_size: u16 = 13,     // monospace font size for terminal cell grid
     graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)

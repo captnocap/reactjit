@@ -128,6 +128,27 @@ pub fn findCanvasNode(node: *Node, mx: f32, my: f32) ?*Node {
     return null;
 }
 
+/// Walk the tree back-to-front to find the deepest node containing (mx, my)
+/// that has a right-click handler or context_menu_items.
+pub fn hitTestRightClick(node: *Node, mx: f32, my: f32) ?*Node {
+    if (node.style.display == .none) return null;
+
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitTestRightClick(&node.children[i], mx, my)) |hit| return hit;
+    }
+
+    if (node.handlers.on_right_click != null or node.context_menu_items != null) {
+        const r = node.computed;
+        if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
+            return node;
+        }
+    }
+
+    return null;
+}
+
 pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) return null;
 
