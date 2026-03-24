@@ -234,6 +234,32 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
 
+            // Check embedded <script> logic for setter/getter references.
+            // compute_js stores the original script source, so the raw getter/setter names
+            // are the correct forms to search for here.
+            if (!getter_used or !setter_used) {
+                if (self.compute_js) |js| {
+                    if (!setter_used and std.mem.indexOf(u8, js, slot.setter) != null) {
+                        setter_used = true;
+                    }
+                    if (!getter_used and std.mem.indexOf(u8, js, slot.getter) != null) {
+                        getter_used = true;
+                    }
+                }
+            }
+
+            // Check embedded <zscript> logic for setter/getter references.
+            if (!getter_used or !setter_used) {
+                if (self.compute_zig) |zig_code| {
+                    if (!setter_used and std.mem.indexOf(u8, zig_code, slot.setter) != null) {
+                        setter_used = true;
+                    }
+                    if (!getter_used and std.mem.indexOf(u8, zig_code, slot.getter) != null) {
+                        getter_used = true;
+                    }
+                }
+            }
+
             if (!getter_used or !setter_used) {
                 const slot_read = try slotReadExpr(self, @intCast(si));
                 for (0..self.anim_hook_count) |ai| {
@@ -842,6 +868,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
         for (0..self.map_count) |mi| {
             const m = self.maps[mi];
+            var deep_seq_decl: u32 = 0; // per-map counter for deep node declarations
             if (m.parent_map_idx >= 0) {
                 // Nested map: 2D pool [MAX_OUTER][MAX_INNER] for per-column pools
                 const pmi: u32 = @intCast(m.parent_map_idx);
@@ -902,6 +929,31 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                                         "var _map_ltb_{d}_{d}_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
                                         "var _map_ltx_{d}_{d}_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
                                         .{ mi, ni, si, li, mi, mi, ni, si, li, mi }));
+                                }
+                                // Deep node declarations for leaves with recursive children
+                                if (sub.leaves[li].children.len > 0) {
+                                    _ = try emit_map.emitDeepNodeDecls(self, &out, @intCast(mi), sub.leaves[li].children, m.item_param, m.index_param, &deep_seq_decl);
+                                }
+                                // Handler factory for leaf nodes with onPress
+                                if (sub.leaves[li].handler_body.len > 0) {
+                                    const lmi: u32 = @intCast(mi);
+                                    const lni: u32 = @intCast(ni);
+                                    const lsi: u32 = @intCast(si);
+                                    const lli: u32 = @intCast(li);
+                                    const body_uses_i3 = std.mem.indexOf(u8, sub.leaves[li].handler_body, "_i") != null;
+                                    const i_decl3: []const u8 = if (body_uses_i3) "        const _i = _map_ci;\n" else "        _ = _map_ci;\n";
+                                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "fn _mapLeafPress{d}_{d}_{d}_{d}(comptime _map_ci: usize) *const fn () void {{\n" ++
+                                        "    return &struct {{ fn handler() void {{\n{s}{s}" ++
+                                        "        state.markDirty();\n    }} }}.handler;\n}}\n" ++
+                                        "const _map_leaf_h_{d}_{d}_{d}_{d}: [MAX_MAP_{d}]*const fn () void = blk_lf{d}_{d}_{d}_{d}: {{\n" ++
+                                        "    @setEvalBranchQuota(100000);\n" ++
+                                        "    var _h: [MAX_MAP_{d}]*const fn () void = undefined;\n" ++
+                                        "    for (0..MAX_MAP_{d}) |_ci| {{ _h[_ci] = _mapLeafPress{d}_{d}_{d}_{d}(_ci); }}\n" ++
+                                        "    break :blk_lf{d}_{d}_{d}_{d} _h;\n}};\n",
+                                        .{ lmi, lni, lsi, lli, i_decl3, sub.leaves[li].handler_body,
+                                           lmi, lni, lsi, lli, lmi, lmi, lni, lsi, lli,
+                                           lmi, lmi, lmi, lni, lsi, lli, lmi, lni, lsi, lli }));
                                 }
                             }
                         }
@@ -1051,6 +1103,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.map_count > 0) {
         for (0..self.map_count) |mi| {
             const m = self.maps[mi];
+            var deep_seq_rebuild: u32 = 0; // per-map counter for deep node rebuild (matches deep_seq_decl)
             if (m.parent_arr_name.len == 0 and m.parent_map_idx < 0) continue;
             const is_nested = m.parent_map_idx >= 0;
             const fn_params: []const u8 = if (is_nested) "(_ci: usize)" else "()";
@@ -1138,6 +1191,14 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                                 .{ mi, ni, si, li, mi, ni, si, li, leaf.text_fmt, rw_args }));
                         }
                     }
+                    // Emit deep node rebuild code (text fills + array construction for depth > 3)
+                    // Must come before leaf array construction so deep arrays are filled first
+                    var leaf_deep_names: [codegen.MAX_MAP_LEAVES][]const u8 = .{""} ** codegen.MAX_MAP_LEAVES;
+                    for (0..sub.leaf_count) |li| {
+                        if (sub.leaves[li].children.len > 0) {
+                            leaf_deep_names[li] = try emit_map.emitDeepNodeRebuild(self, &out, @intCast(mi), sub.leaves[li].children, m.item_param, m.index_param, &deep_seq_rebuild);
+                        }
+                    }
                     // Build leaf child array for this sub-node
                     if (sub.leaf_count > 0) {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -1168,10 +1229,30 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                                     ".text_color = {s}", .{leaf.text_color}));
                                 lf = true;
                             }
-                            if (leaf.style.len > 0) {
+                            if (leaf.style.len > 0 or leaf.display_cond.len > 0) {
+                                if (lf) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, ".style = .{ ");
+                                if (leaf.style.len > 0) try out.appendSlice(self.alloc, leaf.style);
+                                if (leaf.display_cond.len > 0) {
+                                    if (leaf.style.len > 0) try out.appendSlice(self.alloc, ", ");
+                                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        ".display = if ({s}) .flex else .none", .{leaf.display_cond}));
+                                }
+                                try out.appendSlice(self.alloc, " }");
+                                lf = true;
+                            }
+                            // Children pointer for deep recursive children
+                            if (leaf_deep_names[li].len > 0) {
                                 if (lf) try out.appendSlice(self.alloc, ", ");
                                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                    ".style = .{{ {s} }}", .{leaf.style}));
+                                    ".children = &{s}[_i]", .{leaf_deep_names[li]}));
+                                lf = true;
+                            }
+                            // Handler for Pressable leaf nodes
+                            if (leaf.handler_body.len > 0) {
+                                if (lf) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".handlers = .{{ .on_press = _map_leaf_h_{d}_{d}_{d}_{d}[_i] }}", .{ mi, ni, si, li }));
                             }
                             try out.appendSlice(self.alloc, " }");
                         }
@@ -1940,4 +2021,3 @@ pub fn emitModuleSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     return try out.toOwnedSlice(self.alloc);
 }
-

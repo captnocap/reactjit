@@ -4,17 +4,6 @@
 var _scrollOffset = 0;
 var _selectedIdx = 0;
 
-function tagToColor(tag) {
-  if (tag == 'Text') return 0xd99571;
-  if (tag == 'Pressable') return 0xe6bd6d;
-  if (tag == 'Box') return 0x77c1b3;
-  if (tag == 'ScrollView') return 0x77c1b3;
-  if (tag == 'Image') return 0x9ccc65;
-  if (tag == 'TextInput') return 0xe6bd6d;
-  if (tag == 'Graph') return 0x9c88ff;
-  if (tag == 'Canvas') return 0x9c88ff;
-  return 0x8fabef;
-}
 
 function pollTree() {
   var count = __tel_node_count();
@@ -25,11 +14,12 @@ function pollTree() {
   for (var i = _scrollOffset; i < end; i++) {
     var n = __tel_node(i);
     if (n) {
+      var indent = '';
+      for (var d = 0; d < n.depth; d++) indent += '  ';
+      var marker = n.child_count > 0 ? '▸ ' : '  ';
       rows.push({
-        depth: n.depth,
-        hasKids: n.child_count > 0 ? 1 : 0,
+        caret: indent + marker,
         tag: '<' + n.tag + '>',
-        tagColor: tagToColor(n.tag),
         dim: Math.round(n.w) + 'x' + Math.round(n.h),
       });
     }

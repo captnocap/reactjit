@@ -1,3 +1,7 @@
+// !! ZSCRIPT VALIDATION: If compiling this test produces a standalone .zig file
+// !! (e.g. d26b_timer.zig) instead of embedding into generated_app.zig, it is a FAIL.
+// !! The zscript block must compile INTO the app binary, not beside it.
+//
 // DEATH TEST 31B: State machine — <zscript> variant
 // Finite state machine with valid/invalid transitions, history tracking.
 // This is how auth flows, checkout wizards, game states, and modals work.

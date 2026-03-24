@@ -2,6 +2,8 @@
 // Compile: zigos-compiler build carts/tools/Tools.app.tsz
 
 import { tools_init } from "./tools.script";
+import { telemetry } from "../inspector/telemetry.script";
+import { elements } from "../inspector/elements.script";
 import { Dashboard } from "./Dashboard_c";
 import { BsodViewer } from "./BsodViewer_c";
 import { Inspector } from "./Inspector_c";

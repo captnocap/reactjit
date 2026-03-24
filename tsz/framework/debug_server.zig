@@ -41,6 +41,8 @@ var pairing_code: [6]u8 = undefined;
 
 var session_path_buf: [256]u8 = undefined;
 var session_path_len: usize = 0;
+var app_name_buf: [128]u8 = undefined;
+var app_name_len: usize = 0;
 
 // Persistent pairing — SHA-256 fingerprint of trusted tools pubkeys
 const MAX_TRUSTED = 8;
@@ -52,7 +54,11 @@ var resp_buf: [RESP_SIZE]u8 = undefined;
 
 // ── Public API ─────────────────────────────────────────────────────
 
-pub fn init() void {
+pub fn init(title: [*:0]const u8) void {
+    const name = std.mem.span(title);
+    const n = @min(name.len, 128);
+    @memcpy(app_name_buf[0..n], name[0..n]);
+    app_name_len = n;
     const env = std.posix.getenv("TSZ_DEBUG") orelse return;
     if (env.len == 0 or env[0] != '1') return;
     startServer();
@@ -140,8 +146,8 @@ fn writeSessionFile(port: u16) void {
     // Write JSON
     var json_buf: [512]u8 = undefined;
     const json = std.fmt.bufPrint(&json_buf,
-        "{{\"pid\":{d},\"port\":{d},\"pubkey\":\"{s}\",\"app\":\"zigos\"}}\n",
-        .{ pid, port, pubkey_hex[0..64] },
+        "{{\"pid\":{d},\"port\":{d},\"pubkey\":\"{s}\",\"app\":\"{s}\"}}\n",
+        .{ pid, port, pubkey_hex[0..64], app_name_buf[0..app_name_len] },
     ) catch return;
 
     // Use std.fs for file I/O (handles null-termination correctly)

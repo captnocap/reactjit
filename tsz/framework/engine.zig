@@ -37,7 +37,7 @@ const HAS_CRYPTO = if (@hasDecl(build_options, "has_crypto")) build_options.has_
 const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_options.has_debug_server else false;
 
 const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else struct {
-    pub fn init() void {}
+    pub fn init(_: [*:0]const u8) void {}
     pub fn poll() void {}
     pub fn deinit() void {}
     pub fn getSelectedNode() i32 { return -1; }
@@ -1036,7 +1036,7 @@ noinline fn paintCanvasContainer(node: *Node) void {
 
 pub fn run(config: AppConfig) !void {
     // Debug server — auto-start if TSZ_DEBUG=1 (before SDL so it works headless)
-    debug_server.init();
+    debug_server.init(config.title);
     defer debug_server.deinit();
 
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;

@@ -1,3 +1,7 @@
+// !! ZSCRIPT VALIDATION: If compiling this test produces a standalone .zig file
+// !! (e.g. d26b_timer.zig) instead of embedding into generated_app.zig, it is a FAIL.
+// !! The zscript block must compile INTO the app binary, not beside it.
+//
 // DEATH TEST 27B: Array methods — <zscript> variant
 // filter, sort, reduce, find — the lodash basics.
 // Data table with category filter, sort toggle, and computed aggregate footer.

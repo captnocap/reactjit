@@ -81,7 +81,9 @@ pub fn main() !void {
     defer alloc.free(source);
 
     // Imperative compilation: _zscript.tsz → .zig module (no JSX)
-    if (file_kind == .zscript) {
+    // If the file also has an App function, route through the app path instead —
+    // <zscript> blocks will be treated as JS for QuickJS by the codegen.
+    if (file_kind == .zscript and std.mem.indexOf(u8, source, "function App()") == null) {
         var lex = lexer_mod.Lexer.init(source);
         lex.tokenize();
         const zig_source = modulegen.generate(alloc, &lex, source, input_path) catch |err| {
@@ -178,8 +180,23 @@ pub fn main() !void {
     if (gen.errors.items.len > 0) return;
     defer alloc.free(zig_source);
 
+    // Resolve tsz root (where build.zig lives) from compiler binary location.
+    // Compiler is at <tsz_root>/zig-out/bin/zigos-compiler — go up 3 levels.
+    const tsz_root: ?[]const u8 = blk: {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_path = std.fs.selfExePath(&buf) catch break :blk null;
+        var dir = std.fs.path.dirname(exe_path) orelse break :blk null; // bin/
+        dir = std.fs.path.dirname(dir) orelse break :blk null; // zig-out/
+        dir = std.fs.path.dirname(dir) orelse break :blk null; // tsz_root/
+        break :blk std.fmt.allocPrint(alloc, "{s}", .{dir}) catch null;
+    };
+
     // Write output — embedded goes to framework/devtools.zig, normal to generated_app.zig
-    const out_path = if (embed_mode) "framework/devtools.zig" else "generated_app.zig";
+    // Resolve paths relative to tsz root so the build system can find them.
+    const out_path = if (embed_mode)
+        if (tsz_root) |root| std.fmt.allocPrint(alloc, "{s}/framework/devtools.zig", .{root}) catch "framework/devtools.zig" else "framework/devtools.zig"
+    else
+        if (tsz_root) |root| std.fmt.allocPrint(alloc, "{s}/generated_app.zig", .{root}) catch "generated_app.zig" else "generated_app.zig";
     {
         const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("Error creating {s}: {any}\n", .{ out_path, err });
@@ -201,9 +218,12 @@ pub fn main() !void {
 
     std.debug.print("[tsz] Building...\n", .{});
     var child = std.process.Child.init(
-        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+        &.{ "zig", "build", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
         alloc,
     );
+    if (tsz_root) |root| {
+        child.cwd = root;
+    }
     child.stderr_behavior = .Inherit;
     child.stdout_behavior = .Inherit;
     const term = child.spawnAndWait() catch |err| {

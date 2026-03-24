@@ -83,6 +83,171 @@ pub fn isIdentByte(ch: u8) bool {
     return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
 }
 
+/// Recursively emit static array declarations for deep leaf children (depth > 3).
+/// Both functions traverse the tree in the same depth-first order with the same seq
+/// counter, so declaration names match rebuild references.
+/// Returns the array name for this children group.
+pub fn emitDeepNodeDecls(
+    self: *Generator,
+    out: *std.ArrayListUnmanaged(u8),
+    mi: u32,
+    children: []const codegen.MapLeafNode,
+    item_param: []const u8,
+    index_param: ?[]const u8,
+    seq: *u32,
+) ![]const u8 {
+    _ = item_param;
+    _ = index_param;
+    const my_seq = seq.*;
+    seq.* += 1;
+    const arr_name = try std.fmt.allocPrint(self.alloc, "_map_dn_{d}_{d}", .{ mi, my_seq });
+
+    // Declare the node array
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "var {s}: [MAX_MAP_{d}][{d}]Node = undefined;\n", .{ arr_name, mi, children.len }));
+
+    for (children, 0..) |child, ci_raw| {
+        const ci: u32 = @intCast(ci_raw);
+
+        // Text buffer declarations for dynamic text
+        if (child.is_dynamic_text) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "var _map_dtb_{d}_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                "var _map_dtx_{d}_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
+                .{ mi, my_seq, ci, mi, mi, my_seq, ci, mi }));
+        }
+
+        // Handler factory for pressable children
+        if (child.handler_body.len > 0) {
+            const body_uses_i = std.mem.indexOf(u8, child.handler_body, "_i") != null;
+            const i_decl: []const u8 = if (body_uses_i) "        const _i = _map_ci;\n" else "        _ = _map_ci;\n";
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "fn _mapDnPress_{d}_{d}_{d}(comptime _map_ci: usize) *const fn () void {{\n" ++
+                "    return &struct {{ fn handler() void {{\n{s}{s}" ++
+                "        state.markDirty();\n    }} }}.handler;\n}}\n" ++
+                "const _map_dn_h_{d}_{d}_{d}: [MAX_MAP_{d}]*const fn () void = blk_dn{d}_{d}_{d}: {{\n" ++
+                "    @setEvalBranchQuota(100000);\n" ++
+                "    var _h: [MAX_MAP_{d}]*const fn () void = undefined;\n" ++
+                "    for (0..MAX_MAP_{d}) |_ci| {{ _h[_ci] = _mapDnPress_{d}_{d}_{d}(_ci); }}\n" ++
+                "    break :blk_dn{d}_{d}_{d} _h;\n}};\n",
+                .{ mi, my_seq, ci, i_decl, child.handler_body,
+                   mi, my_seq, ci, mi, mi, my_seq, ci,
+                   mi, mi, mi, my_seq, ci, mi, my_seq, ci }));
+        }
+
+        // Recurse into child's children
+        if (child.children.len > 0) {
+            _ = try emitDeepNodeDecls(self, out, mi, child.children, "", null, seq);
+        }
+    }
+
+    return arr_name;
+}
+
+/// Recursively emit rebuild code for deep leaf children.
+/// Must be called with the same seq counter start value as emitDeepNodeDecls.
+/// Returns the array name for this children group.
+pub fn emitDeepNodeRebuild(
+    self: *Generator,
+    out: *std.ArrayListUnmanaged(u8),
+    mi: u32,
+    children: []const codegen.MapLeafNode,
+    item_param: []const u8,
+    index_param: ?[]const u8,
+    seq: *u32,
+) ![]const u8 {
+    const my_seq = seq.*;
+    seq.* += 1;
+    const arr_name = try std.fmt.allocPrint(self.alloc, "_map_dn_{d}_{d}", .{ mi, my_seq });
+
+    // First pass: text formatting and recursive children (so deeper arrays are filled first)
+    var child_arr_names: [32][]const u8 = undefined;
+    for (&child_arr_names) |*n| n.* = "";
+
+    for (children, 0..) |child, ci_raw| {
+        const ci: u32 = @intCast(ci_raw);
+
+        // Text buffer fill for dynamic text
+        if (child.is_dynamic_text) {
+            const rw_args = try rewriteMapArgs(self, child.text_args, item_param, index_param);
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "        _map_dtx_{d}_{d}_{d}[_i] = std.fmt.bufPrint(&_map_dtb_{d}_{d}_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                .{ mi, my_seq, ci, mi, my_seq, ci, child.text_fmt, rw_args }));
+        }
+
+        // Recurse into child's children
+        if (child.children.len > 0 and ci_raw < 32) {
+            child_arr_names[ci_raw] = try emitDeepNodeRebuild(self, out, mi, child.children, item_param, index_param, seq);
+        }
+    }
+
+    // Build this level's array
+    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "        {s}[_i] = [{d}]Node{{ ", .{ arr_name, children.len }));
+
+    for (children, 0..) |child, ci_raw| {
+        const ci: u32 = @intCast(ci_raw);
+        if (ci_raw > 0) try out.appendSlice(self.alloc, ", ");
+        try out.appendSlice(self.alloc, ".{ ");
+        var f = false;
+
+        // Text
+        if (child.is_dynamic_text) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".text = _map_dtx_{d}_{d}_{d}[_i]", .{ mi, my_seq, ci }));
+            f = true;
+        } else if (child.static_text.len > 0) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".text = \"{s}\"", .{child.static_text}));
+            f = true;
+        }
+        // Font size
+        if (child.font_size.len > 0) {
+            if (f) try out.appendSlice(self.alloc, ", ");
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".font_size = {s}", .{child.font_size}));
+            f = true;
+        }
+        // Text color
+        if (child.text_color.len > 0) {
+            if (f) try out.appendSlice(self.alloc, ", ");
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".text_color = {s}", .{child.text_color}));
+            f = true;
+        }
+        // Style (+ display_cond)
+        if (child.style.len > 0 or child.display_cond.len > 0) {
+            if (f) try out.appendSlice(self.alloc, ", ");
+            try out.appendSlice(self.alloc, ".style = .{ ");
+            if (child.style.len > 0) try out.appendSlice(self.alloc, child.style);
+            if (child.display_cond.len > 0) {
+                if (child.style.len > 0) try out.appendSlice(self.alloc, ", ");
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    ".display = if ({s}) .flex else .none", .{child.display_cond}));
+            }
+            try out.appendSlice(self.alloc, " }");
+            f = true;
+        }
+        // Children pointer
+        if (ci_raw < 32 and child_arr_names[ci_raw].len > 0) {
+            if (f) try out.appendSlice(self.alloc, ", ");
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".children = &{s}[_i]", .{child_arr_names[ci_raw]}));
+            f = true;
+        }
+        // Handler
+        if (child.handler_body.len > 0) {
+            if (f) try out.appendSlice(self.alloc, ", ");
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                ".handlers = .{{ .on_press = _map_dn_h_{d}_{d}_{d}[_i] }}", .{ mi, my_seq, ci }));
+        }
+        try out.appendSlice(self.alloc, " }");
+    }
+    try out.appendSlice(self.alloc, " };\n");
+
+    return arr_name;
+}
+
 /// Scan <zscript> contents for `fn test_*` function definitions and emit
 /// testharness.register() calls for each one in _appInit.
 pub fn emitTestRegistrations(self: *Generator, out: *std.ArrayListUnmanaged(u8), zig_code: []const u8) !void {

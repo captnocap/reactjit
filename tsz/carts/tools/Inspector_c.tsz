@@ -36,7 +36,7 @@ const [sessionCount, setSessionCount] = useState(0);
 const [inspTab, setInspTab] = useState(0);
 
 // ── Tree node data (set by elements.script) ──
-const [treeNodes, setTreeNodes] = useState([{ depth: 0, hasKids: 0, tag: '', tagColor: 0x8fabef, dim: '' }]);
+const [treeNodes, setTreeNodes] = useState([{ indent: '', marker: '', tag0: '', tag1: '', tag2: '', tag3: '', desc: '', dim: '' }]);
 
 // ── Detail pane state (set by elements.script) ──
 const [detTag, setDetTag] = useState('--');
@@ -119,6 +119,99 @@ function disconnectApp() {
   setConnectedApp(0);
   setConnectedName('');
 }
+
+// ── Telemetry polling ──
+function pollStatus() {
+  const frame = __tel_frame();
+  const nodes = __tel_nodes();
+  const sys = __tel_system();
+  const gpu = __tel_gpu();
+  const st = __tel_state();
+  setStatusFps(frame.fps);
+  setStatusNodes(nodes.total);
+  setStatusWinW(sys.window_w);
+  setStatusWinH(sys.window_h);
+  setStatusDirty(st.dirty ? 1 : 0);
+  setStatusLayoutUs(frame.layout_us);
+  setStatusPaintUs(frame.paint_us);
+  setStatusRects(gpu.rect_count);
+  setStatusGlyphs(gpu.glyph_count);
+}
+setInterval(pollStatus, 250);
+pollStatus();
+
+// ── Element tree polling ──
+var _scrollOffset = 0;
+var _selectedIdx = 0;
+
+function _tagType(tag) {
+  if (tag == 'Box') return 1;
+  if (tag == 'ScrollView') return 1;
+  if (tag == 'Pressable') return 2;
+  if (tag == 'TextInput') return 2;
+  if (tag == 'Text') return 3;
+  return 0;
+}
+
+function pollTree() {
+  var count = __tel_node_count();
+  var rows = [];
+  var windowSize = 50;
+  var end = Math.min(_scrollOffset + windowSize, count);
+  for (var i = _scrollOffset; i < end; i++) {
+    var n = __tel_node(i);
+    if (n) {
+      var indent = '';
+      for (var d = 0; d < n.depth; d++) indent += '  ';
+      var marker = n.child_count > 0 ? '+' : '-';
+      var tagStr = '<' + n.tag + '>';
+      var tt = _tagType(n.tag);
+      var desc = n.child_count > 0 ? n.child_count + ' children' : 'leaf';
+      rows.push({
+        indent: indent,
+        marker: marker,
+        tag0: tt == 0 ? tagStr : '',
+        tag1: tt == 1 ? tagStr : '',
+        tag2: tt == 2 ? tagStr : '',
+        tag3: tt == 3 ? tagStr : '',
+        desc: desc,
+        dim: Math.round(n.w) + 'x' + Math.round(n.h),
+      });
+    }
+  }
+  setTreeNodes(rows);
+  updateDetail();
+}
+
+function updateDetail() {
+  var n = __tel_node(_selectedIdx);
+  if (!n) return;
+  setDetTag('<' + n.tag + '>');
+  setDetDim(Math.round(n.w) + ' x ' + Math.round(n.h));
+  setDetPos(Math.round(n.x) + ', ' + Math.round(n.y));
+  setDetKids(n.child_count);
+  var style = __tel_node_style(_selectedIdx);
+  if (style) {
+    setDetGrow(Math.round(style.flex_grow));
+    setDetDir(style.flex_direction == 0 ? 'column' : 'row');
+    setDetOver(style.overflow == 0 ? 'visible' : style.overflow == 1 ? 'hidden' : 'scroll');
+  }
+  var box = __tel_node_box_model(_selectedIdx);
+  if (box) {
+    setDetPT(Math.round(box.pad_top));
+    setDetPR(Math.round(box.pad_right));
+    setDetPB(Math.round(box.pad_bottom));
+    setDetPL(Math.round(box.pad_left));
+    setDetMT(Math.round(box.margin_top));
+    setDetMR(Math.round(box.margin_right));
+    setDetMB(Math.round(box.margin_bottom));
+    setDetML(Math.round(box.margin_left));
+    setDetCW(Math.round(box.content_w));
+    setDetCH(Math.round(box.content_h));
+  }
+}
+setInterval(pollTree, 500);
+pollTree();
 </script>
 
 function Inspector() {

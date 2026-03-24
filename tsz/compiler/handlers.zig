@@ -433,6 +433,18 @@ fn emitStatement(
                 "{s}}}\n",
                 .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
         }
+    } else if (self.compute_zig != null) {
+        // <zscript> — direct native Zig function call
+        if (arg_count == 0) {
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s}();\n", .{ pad, call_name }));
+        } else {
+            var args_buf: std.ArrayListUnmanaged(u8) = .{};
+            for (0..arg_count) |ai| {
+                if (ai > 0) try args_buf.appendSlice(self.alloc, ", ");
+                try args_buf.appendSlice(self.alloc, arg_exprs[ai]);
+            }
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s}({s});\n", .{ pad, call_name, args_buf.items }));
+        }
     } else {
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: {s}(...)\n", .{ pad, call_name }));
     }

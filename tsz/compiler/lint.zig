@@ -169,6 +169,27 @@ pub const Linter = struct {
                     i += 1;
                     continue;
                 }
+                // Raw <script>/<zscript> contents are not JSX and may contain '<' operators.
+                // Skip directly to the matching closing tag so balance checking doesn't
+                // misinterpret expressions like `j < list.length` as nested JSX tags.
+                if (std.mem.eql(u8, tag_name, "script") or std.mem.eql(u8, tag_name, "zscript")) {
+                    var j = i + 2;
+                    while (j < self.lex.count and self.kind(j) != .gt and self.kind(j) != .eof) j += 1;
+                    i = j;
+                    while (i < self.lex.count) : (i += 1) {
+                        if (self.kind(i) == .lt_slash and
+                            i + 1 < self.lex.count and
+                            self.kind(i + 1) == .identifier)
+                        {
+                            const close_name = self.text(i + 1);
+                            if (std.mem.eql(u8, close_name, tag_name)) {
+                                while (i < self.lex.count and self.kind(i) != .gt and self.kind(i) != .eof) i += 1;
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 // Scan forward to see if self-closing
                 var j = i + 2;
                 var is_self_closing = false;

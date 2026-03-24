@@ -1361,34 +1361,52 @@ pub fn findReturnStatement(self: *Generator) void {
     if (self.curKind() == .lparen) self.advance_token();
 }
 
-/// Phase 5: Extract JavaScript from <script>...</script> blocks.
+/// Phase 5: Extract JavaScript from <script> blocks.
 /// This JS gets embedded in the generated Zig as JS_LOGIC and runs in QuickJS.
 /// Scans raw source bytes (not tokens) since <script> content isn't tokenized.
 /// Concatenates ALL <script> blocks (app + imported components) with newlines.
 pub fn extractComputeBlock(self: *Generator) void {
     const src = self.source;
-    const open_tag = "<script>";
-    const close_tag = "</script>";
     var parts: std.ArrayListUnmanaged(u8) = .{};
+    scanTagContent(self.alloc, src, "<script>", "</script>", &parts);
+    if (parts.items.len > 0) {
+        self.compute_js = self.alloc.dupe(u8, parts.items) catch return;
+    }
+}
+
+fn scanTagContent(alloc: std.mem.Allocator, src: []const u8, open_tag: []const u8, close_tag: []const u8, parts: *std.ArrayListUnmanaged(u8)) void {
     var i: usize = 0;
     while (i + open_tag.len <= src.len) : (i += 1) {
         if (std.mem.eql(u8, src[i .. i + open_tag.len], open_tag)) {
+            // Only match tags at the start of a line (with optional whitespace).
+            // Reject matches inside comments like: // — <script> variant
+            const is_line_start = blk: {
+                if (i == 0) break :blk true;
+                // Scan backwards to find start of line or non-whitespace
+                var k = i;
+                while (k > 0) {
+                    k -= 1;
+                    if (src[k] == '\n') break :blk true;
+                    if (src[k] != ' ' and src[k] != '\t') break :blk false;
+                }
+                break :blk true; // start of file
+            };
+            if (!is_line_start) {
+                continue;
+            }
             const body_start = i + open_tag.len;
             var j = body_start;
             while (j + close_tag.len <= src.len) : (j += 1) {
                 if (std.mem.eql(u8, src[j .. j + close_tag.len], close_tag)) {
                     if (parts.items.len > 0) {
-                        parts.appendSlice(self.alloc, "\n") catch return;
+                        parts.appendSlice(alloc, "\n") catch return;
                     }
-                    parts.appendSlice(self.alloc, src[body_start..j]) catch return;
+                    parts.appendSlice(alloc, src[body_start..j]) catch return;
                     i = j + close_tag.len;
                     break;
                 }
             }
         }
-    }
-    if (parts.items.len > 0) {
-        self.compute_js = self.alloc.dupe(u8, parts.items) catch return;
     }
 }
 
@@ -1402,6 +1420,20 @@ pub fn extractZscriptBlock(self: *Generator) void {
     var i: usize = 0;
     while (i + open_tag.len <= src.len) : (i += 1) {
         if (std.mem.eql(u8, src[i .. i + open_tag.len], open_tag)) {
+            // Only match tags at the start of a line (skip matches inside comments)
+            const is_line_start = blk: {
+                if (i == 0) break :blk true;
+                var k = i;
+                while (k > 0) {
+                    k -= 1;
+                    if (src[k] == '\n') break :blk true;
+                    if (src[k] != ' ' and src[k] != '\t') break :blk false;
+                }
+                break :blk true;
+            };
+            if (!is_line_start) {
+                continue;
+            }
             const body_start = i + open_tag.len;
             var j = body_start;
             while (j + close_tag.len <= src.len) : (j += 1) {
@@ -1518,6 +1550,97 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
                         if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "let ")) break;
                         const tag = std.meta.activeTag(self.state_slots[si].initial);
                         const fn_name = if (tag == .string) "__getStateString" else "__getState";
+                        try result.appendSlice(self.alloc, fn_name);
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d})", .{si}));
+                        ii += getter.len;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) {
+                try result.append(self.alloc, line[ii]);
+                ii += 1;
+            }
+        }
+        try result.append(self.alloc, '\n');
+    }
+    return try result.toOwnedSlice(self.alloc);
+}
+
+/// Rewrite <zscript> JS state refs to Zig state API calls for native compilation.
+///
+/// Input JS:  setCount(count + 1); setName("hello");
+/// Output:    state.setSlot(0, state.getSlot(0) + 1); state.setSlotString(1, "hello");
+///
+/// Also strips useState() lines (state is managed by the app framework).
+pub fn rewriteZscriptState(self: *Generator, js: []const u8) ![]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var line_iter = std.mem.splitScalar(u8, js, '\n');
+    while (line_iter.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t', '\r' });
+        // Strip useState lines — state is managed by framework
+        if (std.mem.indexOf(u8, trimmed, "useState(") != null) continue;
+        // Skip comment lines
+        if (std.mem.startsWith(u8, trimmed, "//")) {
+            try result.appendSlice(self.alloc, line);
+            try result.append(self.alloc, '\n');
+            continue;
+        }
+        var ii: usize = 0;
+        while (ii < line.len) {
+            // Skip string literals
+            if (line[ii] == '\'' or line[ii] == '"') {
+                const quote = line[ii];
+                try result.append(self.alloc, quote);
+                ii += 1;
+                while (ii < line.len and line[ii] != quote) {
+                    if (line[ii] == '\\' and ii + 1 < line.len) {
+                        try result.append(self.alloc, line[ii]);
+                        try result.append(self.alloc, line[ii + 1]);
+                        ii += 2;
+                    } else {
+                        try result.append(self.alloc, line[ii]);
+                        ii += 1;
+                    }
+                }
+                if (ii < line.len) { try result.append(self.alloc, line[ii]); ii += 1; }
+                continue;
+            }
+            var matched = false;
+            // Rewrite state setters: setFoo(val) → state.setSlot(N, val) / state.setSlotString(N, val)
+            for (0..self.state_count) |si| {
+                const setter = self.state_slots[si].setter;
+                if (setter.len == 0) continue;
+                if (ii + setter.len + 1 <= line.len and
+                    std.mem.eql(u8, line[ii .. ii + setter.len], setter) and
+                    line[ii + setter.len] == '(')
+                {
+                    if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                    const tag = std.meta.activeTag(self.state_slots[si].initial);
+                    const fn_name = if (tag == .string) "state.setSlotString" else "state.setSlot";
+                    try result.appendSlice(self.alloc, fn_name);
+                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                    ii += setter.len + 1;
+                    matched = true;
+                    break;
+                }
+            }
+            // Rewrite state getters: foo → state.getSlot(N) / state.getSlotString(N)
+            if (!matched) {
+                for (0..self.state_count) |si| {
+                    const getter = self.state_slots[si].getter;
+                    if (getter.len == 0) continue;
+                    if (ii + getter.len <= line.len and
+                        std.mem.eql(u8, line[ii .. ii + getter.len], getter))
+                    {
+                        if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                        if (ii + getter.len < line.len and Generator.isIdentByte(line[ii + getter.len])) break;
+                        // Don't rewrite var declarations
+                        if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "var ")) break;
+                        if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "let ")) break;
+                        const tag = std.meta.activeTag(self.state_slots[si].initial);
+                        const fn_name = if (tag == .string) "state.getSlotString" else "state.getSlot";
                         try result.appendSlice(self.alloc, fn_name);
                         try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d})", .{si}));
                         ii += getter.len;

@@ -39,6 +39,7 @@ const collect = @import("collect.zig");
 const jsx = @import("jsx.zig");
 const emit_mod = @import("emit.zig");
 const validate = @import("validate.zig");
+const modulegen = @import("modulegen.zig");
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -1272,6 +1273,12 @@ pub const Generator = struct {
 
         // Phase 6.5: Collect let variables
         collect.collectLetVars(self, app_start);
+
+        // Phase 5c: Compile <zscript> JS to native Zig (needs state slots from Phase 6)
+        if (self.compute_zig) |raw_js| {
+            const rewritten = try collect.rewriteZscriptState(self, raw_js);
+            self.compute_zig = try modulegen.compileBlock(self.alloc, rewritten);
+        }
 
         // Phase 7: Count component usage in App body
         collect.countComponentUsage(self, app_start);

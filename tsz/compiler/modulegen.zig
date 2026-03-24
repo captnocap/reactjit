@@ -85,6 +85,19 @@ pub fn generate(
     return try alloc.dupe(u8, out.items);
 }
 
+/// Compile a raw JS code block to Zig. Used for <zscript> blocks in app context.
+/// The input should already have state setter/getter calls rewritten to Zig state API.
+/// Produces only variables + functions (no file header, no imports).
+pub fn compileBlock(alloc: std.mem.Allocator, source: []const u8) ![]const u8 {
+    var lex = Lexer.init(source);
+    lex.tokenize();
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    try emitModuleVars(alloc, &lex, source, &out);
+    collectEnumNames(&lex, source);
+    try emitFunctions(alloc, &lex, source, &out);
+    return try alloc.dupe(u8, out.items);
+}
+
 // ── Import handling ─────────────────────────────────────────────────
 // import { EventHandler } from './events';
 // → const events = @import("events.zig");
