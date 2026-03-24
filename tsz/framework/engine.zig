@@ -539,81 +539,61 @@ var canvas_dump_frame: u8 = 0;
 
 /// Auto-stack canvas tiles per column with randomized stagger.
 /// Produces jagged top/bottom edges — no flat horizontal boundary.
+/// Scans ALL children for each column (tiles may be non-contiguous).
 fn autoStackCanvasColumns(parent: *Node) void {
-    // Seed from SDL ticks so each session looks different
     var seed: u32 = @as(u32, @intCast(c.SDL_GetTicks())) *% 2654435761;
 
-    var i: usize = 0;
-    while (i < parent.children.len) {
-        // Skip non-canvas children (paths, clamp, etc.)
-        if (!parent.children[i].canvas_node) {
-            i += 1;
-            continue;
+    // Collect unique gx values (max 16 columns)
+    var columns: [16]f32 = undefined;
+    var col_count: usize = 0;
+    for (parent.children) |*child| {
+        if (!child.canvas_node) continue;
+        var found = false;
+        for (columns[0..col_count]) |cx| {
+            if (cx == child.canvas_gx) { found = true; break; }
         }
-        const col_gx = parent.children[i].canvas_gx;
-
-        // Find extent of this column (contiguous run of same gx, skipping non-canvas)
-        const col_start = i;
-        var col_end = i + 1;
-        while (col_end < parent.children.len) {
-            if (!parent.children[col_end].canvas_node) {
-                col_end += 1;
-                continue;
-            }
-            if (parent.children[col_end].canvas_gx == col_gx) {
-                col_end += 1;
-            } else {
-                break;
-            }
+        if (!found and col_count < 16) {
+            columns[col_count] = child.canvas_gx;
+            col_count += 1;
         }
-
-        // Count canvas nodes in this column
-        var tile_count: usize = 0;
-        {
-            var k = col_start;
-            while (k < col_end) : (k += 1) {
-                if (parent.children[k].canvas_node) tile_count += 1;
+    }
+    // Sort columns left-to-right (bubble sort, max 16)
+    for (0..col_count) |a| {
+        for (a + 1..col_count) |b| {
+            if (columns[b] < columns[a]) {
+                const tmp = columns[a];
+                columns[a] = columns[b];
+                columns[b] = tmp;
             }
         }
+    }
 
-        // Random stagger: offset the anchor by -250..+250 per column
+    // Stack each column: outward from staggered anchor, 30px gap
+    for (columns[0..col_count]) |col_gx| {
         seed = seed *% 2246822519 +% 1;
         const stagger: f32 = @as(f32, @floatFromInt(seed % 500)) - 250.0;
-        const anchor_gy: f32 = stagger;
 
-        // Stack outward from anchor:
-        //   tile 0 = at anchor
-        //   tile 1 = below anchor
-        //   tile 2 = above anchor
-        //   tile 3 = further below
-        //   etc.
-        var down_cursor: f32 = 0; // bottom edge of last downward tile
-        var up_cursor: f32 = 0; // top edge of last upward tile
+        var down_cursor: f32 = 0;
+        var up_cursor: f32 = 0;
         var tile_idx: usize = 0;
-        var j = col_start;
-        while (j < col_end) : (j += 1) {
-            const child = &parent.children[j];
-            if (!child.canvas_node) continue;
+
+        for (parent.children) |*child| {
+            if (!child.canvas_node or child.canvas_gx != col_gx) continue;
             const h = child.canvas_gh;
 
             if (tile_idx == 0) {
-                // First tile: centered at anchor
-                child.canvas_gy = anchor_gy;
-                down_cursor = anchor_gy + h / 2;
-                up_cursor = anchor_gy - h / 2;
+                child.canvas_gy = stagger;
+                down_cursor = stagger + h / 2;
+                up_cursor = stagger - h / 2;
             } else if (tile_idx % 2 == 1) {
-                // Odd: grow downward
                 child.canvas_gy = down_cursor + CANVAS_NODE_GAP + h / 2;
                 down_cursor = child.canvas_gy + h / 2;
             } else {
-                // Even: grow upward
                 child.canvas_gy = up_cursor - CANVAS_NODE_GAP - h / 2;
                 up_cursor = child.canvas_gy - h / 2;
             }
             tile_idx += 1;
         }
-
-        i = col_end;
     }
 }
 

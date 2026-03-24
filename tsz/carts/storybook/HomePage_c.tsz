@@ -14,6 +14,14 @@ import { PhysicsTile } from './tiles/PhysicsTile_c';
 import { TerminalTile } from './tiles/TerminalTile_c';
 import { ThreeDTile } from './tiles/ThreeDTile_c';
 import { TypographyTile } from './tiles/TypographyTile_c';
+import { ClockTile } from './tiles/ClockTile_c';
+import { CounterTile } from './tiles/CounterTile_c';
+import { TodoTile } from './tiles/TodoTile_c';
+import { StopwatchTile } from './tiles/StopwatchTile_c';
+import { TabsTile } from './tiles/TabsTile_c';
+import { StateTile } from './tiles/StateTile_c';
+import { GameTile } from './tiles/GameTile_c';
+import { ColorMixTile } from './tiles/ColorMixTile_c';
 
 <script>
 function hopToTile(idx) {
@@ -634,6 +642,38 @@ function HomePage() {
 
         <Canvas.Node gx={-450} gy={250} gw={260} gh={0}>
           <TypographyTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={200} gw={260} gh={0}>
+          <ClockTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={400} gw={260} gh={0}>
+          <GameTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={380} gw={260} gh={0}>
+          <ColorMixTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={220} gw={260} gh={0}>
+          <CounterTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={200} gw={260} gh={0}>
+          <TodoTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={230} gw={260} gh={0}>
+          <StopwatchTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={210} gw={260} gh={0}>
+          <TabsTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={240} gw={260} gh={0}>
+          <StateTile />
         </Canvas.Node>
 
         <Canvas.Clamp>
