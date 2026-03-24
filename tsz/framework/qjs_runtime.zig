@@ -378,6 +378,81 @@ fn hostSemExport(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVa
     return arr;
 }
 
+/// Single-shot semantic snapshot — the standardized consumer format.
+/// Returns a versioned JS object with state + classified rows + graph.
+/// Consumer calls JSON.stringify(__sem_snapshot()) to get the wire format.
+///
+/// Schema (v1):
+///   { version, classifier, frame,
+///     state: { mode, streaming, streaming_kind, awaiting_input, ... },
+///     rows: [ { row, kind, role, lane, turn_id, group_id, text, color } ],
+///     graph: { node_count, turn_count, tree } }
+fn hostSemSnapshot(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const root = qjs.JS_NewObject(c2);
+
+    // Version + metadata
+    setF(c2, root, "version", 1.0);
+    const cls_name = if (classifier.getMode() == .claude_code) "claude_code" else "basic";
+    _ = qjs.JS_SetPropertyStr(c2, root, "classifier", qjs.JS_NewStringLen(c2, cls_name.ptr, @intCast(cls_name.len)));
+    setF(c2, root, "frame", @floatFromInt(semantic.getFrame()));
+
+    // State
+    const s = semantic.getState();
+    const st = qjs.JS_NewObject(c2);
+    const mode_name = @tagName(s.mode);
+    _ = qjs.JS_SetPropertyStr(c2, st, "mode", qjs.JS_NewStringLen(c2, mode_name.ptr, @intCast(mode_name.len)));
+    setB(c2, st, "streaming", s.streaming);
+    const sk = @tagName(s.streaming_kind);
+    _ = qjs.JS_SetPropertyStr(c2, st, "streaming_kind", qjs.JS_NewStringLen(c2, sk.ptr, @intCast(sk.len)));
+    setB(c2, st, "awaiting_input", s.awaiting_input);
+    setB(c2, st, "awaiting_decision", s.awaiting_decision);
+    setB(c2, st, "modal_open", s.modal_open);
+    setB(c2, st, "interrupt_pending", s.interrupt_pending);
+    setF(c2, st, "turn_count", @floatFromInt(s.turn_count));
+    setF(c2, st, "current_turn_id", @floatFromInt(s.current_turn_id));
+    setF(c2, st, "node_count", @floatFromInt(s.node_count));
+    setF(c2, st, "group_count", @floatFromInt(s.group_count));
+    _ = qjs.JS_SetPropertyStr(c2, root, "state", st);
+
+    // Rows — classified cache with role/lane from the token definitions
+    const count = semantic.cacheCount();
+    const rows = qjs.JS_NewArray(c2);
+    var i: u16 = 0;
+    while (i < count) : (i += 1) {
+        const entry = semantic.getCacheEntry(i) orelse continue;
+        const obj = qjs.JS_NewObject(c2);
+        setF(c2, obj, "row", @floatFromInt(entry.row));
+        const kn = @tagName(entry.kind);
+        _ = qjs.JS_SetPropertyStr(c2, obj, "kind", qjs.JS_NewStringLen(c2, kn.ptr, @intCast(kn.len)));
+        const role = @tagName(semantic.roleOf(entry.kind));
+        _ = qjs.JS_SetPropertyStr(c2, obj, "role", qjs.JS_NewStringLen(c2, role.ptr, @intCast(role.len)));
+        const lane = @tagName(semantic.laneOf(entry.kind));
+        _ = qjs.JS_SetPropertyStr(c2, obj, "lane", qjs.JS_NewStringLen(c2, lane.ptr, @intCast(lane.len)));
+        setF(c2, obj, "turn_id", @floatFromInt(entry.turn_id));
+        setF(c2, obj, "group_id", @floatFromInt(entry.group_id));
+        const text = vterm_mod.getRowText(entry.row);
+        _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len)));
+        const tc = classifier.tokenColor(entry.kind);
+        var hb: [8]u8 = undefined;
+        const hx = std.fmt.bufPrint(&hb, "#{x:0>2}{x:0>2}{x:0>2}", .{ tc.r, tc.g, tc.b }) catch "#e2e8f0";
+        _ = qjs.JS_SetPropertyStr(c2, obj, "color", qjs.JS_NewStringLen(c2, hx.ptr, @intCast(hx.len)));
+        _ = qjs.JS_SetPropertyUint32(c2, rows, @intCast(i), obj);
+    }
+    _ = qjs.JS_SetPropertyStr(c2, root, "rows", rows);
+
+    // Graph summary
+    const g = qjs.JS_NewObject(c2);
+    setF(c2, g, "node_count", @floatFromInt(semantic.nodeCount()));
+    setF(c2, g, "turn_count", @floatFromInt(s.turn_count));
+    var tree_buf: [4096]u8 = undefined;
+    const tree = semantic.formatTree(&tree_buf);
+    _ = qjs.JS_SetPropertyStr(c2, g, "tree", qjs.JS_NewStringLen(c2, tree.ptr, @intCast(tree.len)));
+    _ = qjs.JS_SetPropertyStr(c2, root, "graph", g);
+
+    return root;
+}
+
 fn setF(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: f64) void {
     _ = qjs.JS_SetPropertyStr(ctx, obj, name, qjs.JS_NewFloat64(ctx, val));
 }
@@ -1072,6 +1147,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_has_diff", qjs.JS_NewCFunction(ctx, hostSemHasDiff, "__sem_has_diff", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_frame", qjs.JS_NewCFunction(ctx, hostSemFrame, "__sem_frame", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_export", qjs.JS_NewCFunction(ctx, hostSemExport, "__sem_export", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_snapshot", qjs.JS_NewCFunction(ctx, hostSemSnapshot, "__sem_snapshot", 0));
 
     // Filesystem bridge (session discovery for tsz-tools inspector)
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_scandir", qjs.JS_NewCFunction(ctx, hostFsScandir, "__fs_scandir", 1));

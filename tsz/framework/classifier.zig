@@ -104,6 +104,10 @@ var row_cache: [MAX_ROWS]Token = [_]Token{.output} ** MAX_ROWS;
 var cache_dirty: bool = true;
 var active_mode: Mode = .basic;
 
+pub fn getMode() Mode {
+    return active_mode;
+}
+
 pub fn setMode(mode: Mode) void {
     if (mode != active_mode) {
         active_mode = mode;

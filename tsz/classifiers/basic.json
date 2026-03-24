@@ -1,0 +1,43 @@
+{
+  "name": "basic",
+  "version": "1.0",
+  "description": "Minimal classifier for any shell — detects errors, success, commands, headings, separators, progress",
+  "command": [],
+  "tokens": {
+    "command":   { "role": "user",   "lane": "prompt", "color": "#60a5fa", "block": false },
+    "output":    { "role": "system", "lane": "text",   "color": "#e2e8f0", "block": true },
+    "error":     { "role": "system", "lane": "error",  "color": "#f87171", "block": true },
+    "success":   { "role": "system", "lane": "text",   "color": "#4ade80", "block": true },
+    "heading":   { "role": "system", "lane": "state",  "color": "#e2e8f0", "block": false },
+    "separator": { "role": "system", "lane": "state",  "color": "#334155", "block": false },
+    "progress":  { "role": "system", "lane": "state",  "color": "#f97316", "block": false }
+  },
+  "rules": [
+    { "token": "separator", "match": "regex",      "pattern": "^[\\-=~*_─═╌╍┄┅┈┉]{3,}$", "on": "trimmed" },
+    { "token": "error",     "match": "starts_with", "value": "Error",   "case": "insensitive" },
+    { "token": "error",     "match": "starts_with", "value": "Failed",  "case": "insensitive" },
+    { "token": "error",     "match": "starts_with", "value": "FAIL" },
+    { "token": "error",     "match": "starts_with", "value": "panic:" },
+    { "token": "error",     "match": "starts_with", "value": "fatal:" },
+    { "token": "error",     "match": "contains",    "value": "\u2717" },
+    { "token": "error",     "match": "contains",    "value": "\u2718" },
+    { "token": "success",   "match": "starts_with", "value": "Done",    "case": "insensitive" },
+    { "token": "success",   "match": "starts_with", "value": "OK" },
+    { "token": "success",   "match": "starts_with", "value": "PASS" },
+    { "token": "success",   "match": "starts_with", "value": "Success", "case": "insensitive" },
+    { "token": "success",   "match": "contains",    "value": "\u2713" },
+    { "token": "success",   "match": "contains",    "value": "\u2714" },
+    { "token": "progress",  "match": "regex",       "pattern": "\\d+%" },
+    { "token": "progress",  "match": "contains",    "value": "ETA" },
+    { "token": "command",   "match": "regex",       "pattern": "^\\s*\\$\\s+." },
+    { "token": "command",   "match": "regex",       "pattern": "^\\s*>\\s+." },
+    { "token": "command",   "match": "regex",       "pattern": "\\w+@\\w+[:\\~].*[\\$#]\\s+." },
+    { "token": "heading",   "match": "regex",       "pattern": "^[A-Z][A-Z\\s\\-_:]+$", "on": "trimmed", "max_len": 60 }
+  ],
+  "adjacency": [
+    { "when_prev": ["command"],  "when_current": "output", "promote_to": "output" }
+  ],
+  "turn_start": ["command"],
+  "groups": {},
+  "default_token": "output"
+}
