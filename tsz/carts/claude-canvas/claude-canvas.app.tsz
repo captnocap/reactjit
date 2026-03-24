@@ -110,8 +110,8 @@ var TC = {
 
 function nodeColor(kind) { return TC[kind] || '#475569'; }
 
-// Initialize classifier to claude_code
-__sem_set_mode(1);
+// Initialize classifier to claude_code (0=none, 1=basic, 2=claude_code)
+__sem_set_mode(2);
 
 function selectNode(idx) { setSelectedIdx(idx); }
 
@@ -235,7 +235,8 @@ setInterval(function() {
 }, 300);
 
 function toggleClassifier() {
-  var next = classMode === 0 ? 1 : 0;
+  // 0=none, 1=basic, 2=claude_code
+  var next = classMode === 0 ? 1 : classMode === 1 ? 2 : 0;
   setClassMode(next);
   __sem_set_mode(next);
 }
@@ -280,7 +281,7 @@ function App() {
         <Text fontSize={13} color="#e2e8f0" bold>Claude Canvas</Text>
         <Pressable onPress={() => { toggleClassifier() }}>
           <Box style={{ backgroundColor: '#334155', borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-            <Text fontSize={10} color="#94a3b8">{classMode === 0 ? 'basic' : 'claude_code'}</Text>
+            <Text fontSize={10} color="#94a3b8">{classMode === 0 ? 'none' : classMode === 1 ? 'basic' : 'claude_code'}</Text>
           </Box>
         </Pressable>
         <Text fontSize={10} color={modeName === 'idle' ? '#4ade80' : modeName === 'thinking' ? '#a78bfa' : '#f97316'}>{modeName}</Text>

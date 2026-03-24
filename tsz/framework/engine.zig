@@ -15,6 +15,7 @@ const windows = @import("windows.zig");
 const svg_path = @import("svg_path.zig");
 const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
+const context_menu = @import("context_menu.zig");
 const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
 const input = @import("input.zig");
@@ -134,16 +135,32 @@ const VtermStub = struct {
         fg: ?VtColor = null, bg: ?VtColor = null, bold: bool = false,
         italic: bool = false, underline: bool = false, strike: bool = false, reverse: bool = false,
     };
+    pub fn initVterm(_: u16, _: u16) void {}
+    pub fn feed(_: []const u8) void {}
+    pub fn readOutput(_: []u8) ?[]const u8 { return null; }
+    pub fn getRowText(_: u16) []const u8 { return ""; }
+    pub fn getCell(_: u16, _: u16) Cell { return .{}; }
+    pub fn getCursorRow() u16 { return 0; }
+    pub fn getCursorCol() u16 { return 0; }
+    pub fn getCursorVisible() bool { return false; }
+    pub fn hasDamage() bool { return false; }
+    pub fn clearDamageState() void {}
+    pub fn getRows() u16 { return 0; }
+    pub fn getCols() u16 { return 0; }
+    pub fn resizeVterm(_: u16, _: u16) void {}
+    pub fn deinit() void {}
     pub fn spawnShell(_: anytype, _: u16, _: u16) void {}
     pub fn pollPty() bool { return false; }
     pub fn writePty(_: []const u8) void {}
-    pub fn getCell(_: u16, _: u16) Cell { return .{}; }
-    pub fn getRows() u16 { return 0; }
-    pub fn getCols() u16 { return 0; }
-    pub fn getCursorVisible() bool { return false; }
-    pub fn getCursorRow() u16 { return 0; }
-    pub fn getCursorCol() u16 { return 0; }
-    pub fn resizeVterm(_: u16, _: u16) void {}
+    pub fn ptyAlive() bool { return false; }
+    pub fn closePty() void {}
+    pub fn getScrollbackCell(_: u16, _: u16) Cell { return .{}; }
+    pub fn scrollbackCount() u16 { return 0; }
+    pub fn scrollOffset() u16 { return 0; }
+    pub fn scrollUp(_: u16) void {}
+    pub fn scrollDown(_: u16) void {}
+    pub fn scrollToBottom() void {}
+    pub fn copySelectedText(_: u16, _: u16, _: u16, _: u16, _: []u8) usize { return 0; }
 };
 const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
     pub const BodyType = enum(c_int) { static_body = 0, kinematic = 1, dynamic = 2 };
@@ -477,9 +494,32 @@ fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
 }
 
 /// Translate Canvas.Node children from flex positions to raw graph-space.
-/// gx/gy is the center of the node in graph space.
-/// GPU transform maps graph space → screen space.
+/// On drift-enabled canvases, auto-stacks tiles per column on first frame:
+///   - Groups tiles by gx (columns), tiles must be ordered by gx in source
+///   - Each column gets a randomized anchor gy (stagger) — no flat horizontal edges
+///   - Tiles stack outward from anchor: odd-indexed down, even-indexed up
+///   - Uniform CANVAS_NODE_GAP (30px) between all tiles
 fn positionCanvasNodes(parent: *Node) void {
+    // Auto-stack: run once on first frame for drift-enabled canvases
+    if (parent.canvas_drift_active and !canvas_stacked) {
+        canvas_stacked = true;
+        autoStackCanvasColumns(parent);
+        // Dump immediately after stacking if CANVAS_DUMP is set
+        if (std.posix.getenv("CANVAS_DUMP")) |_| {
+            // Position nodes first so computed values are correct for dump
+            for (parent.children) |*child| {
+                if (!child.canvas_node) continue;
+                const tx = child.canvas_gx - child.computed.w / 2;
+                const ty = child.canvas_gy - child.computed.h / 2;
+                const ddx = tx - child.computed.x;
+                const ddy = ty - child.computed.y;
+                child.computed.x = tx;
+                child.computed.y = ty;
+                for (child.children) |*gc| offsetNodeXY(gc, ddx, ddy);
+            }
+            dumpCanvasNodes(parent);
+        }
+    }
     for (parent.children) |*child| {
         if (!child.canvas_node) continue;
         // Place at raw graph coordinates (gx/gy = center)
@@ -493,6 +533,106 @@ fn positionCanvasNodes(parent: *Node) void {
     }
 }
 
+const CANVAS_NODE_GAP: f32 = 30.0;
+var canvas_stacked: bool = false;
+var canvas_dump_frame: u8 = 0;
+
+/// Auto-stack canvas tiles per column with randomized stagger.
+/// Produces jagged top/bottom edges — no flat horizontal boundary.
+fn autoStackCanvasColumns(parent: *Node) void {
+    // Seed from SDL ticks so each session looks different
+    var seed: u32 = @as(u32, @intCast(c.SDL_GetTicks())) *% 2654435761;
+
+    var i: usize = 0;
+    while (i < parent.children.len) {
+        // Skip non-canvas children (paths, clamp, etc.)
+        if (!parent.children[i].canvas_node) {
+            i += 1;
+            continue;
+        }
+        const col_gx = parent.children[i].canvas_gx;
+
+        // Find extent of this column (contiguous run of same gx, skipping non-canvas)
+        const col_start = i;
+        var col_end = i + 1;
+        while (col_end < parent.children.len) {
+            if (!parent.children[col_end].canvas_node) {
+                col_end += 1;
+                continue;
+            }
+            if (parent.children[col_end].canvas_gx == col_gx) {
+                col_end += 1;
+            } else {
+                break;
+            }
+        }
+
+        // Count canvas nodes in this column
+        var tile_count: usize = 0;
+        {
+            var k = col_start;
+            while (k < col_end) : (k += 1) {
+                if (parent.children[k].canvas_node) tile_count += 1;
+            }
+        }
+
+        // Random stagger: offset the anchor by -250..+250 per column
+        seed = seed *% 2246822519 +% 1;
+        const stagger: f32 = @as(f32, @floatFromInt(seed % 500)) - 250.0;
+        const anchor_gy: f32 = stagger;
+
+        // Stack outward from anchor:
+        //   tile 0 = at anchor
+        //   tile 1 = below anchor
+        //   tile 2 = above anchor
+        //   tile 3 = further below
+        //   etc.
+        var down_cursor: f32 = 0; // bottom edge of last downward tile
+        var up_cursor: f32 = 0; // top edge of last upward tile
+        var tile_idx: usize = 0;
+        var j = col_start;
+        while (j < col_end) : (j += 1) {
+            const child = &parent.children[j];
+            if (!child.canvas_node) continue;
+            const h = child.canvas_gh;
+
+            if (tile_idx == 0) {
+                // First tile: centered at anchor
+                child.canvas_gy = anchor_gy;
+                down_cursor = anchor_gy + h / 2;
+                up_cursor = anchor_gy - h / 2;
+            } else if (tile_idx % 2 == 1) {
+                // Odd: grow downward
+                child.canvas_gy = down_cursor + CANVAS_NODE_GAP + h / 2;
+                down_cursor = child.canvas_gy + h / 2;
+            } else {
+                // Even: grow upward
+                child.canvas_gy = up_cursor - CANVAS_NODE_GAP - h / 2;
+                up_cursor = child.canvas_gy - h / 2;
+            }
+            tile_idx += 1;
+        }
+
+        i = col_end;
+    }
+}
+
+fn dumpCanvasNodes(parent: *Node) void {
+    std.debug.print("CANVAS_DUMP_START\n", .{});
+    var idx: u16 = 0;
+    for (parent.children) |*child| {
+        if (child.canvas_node) {
+            std.debug.print("NODE {d} gx={d:.0} gy={d:.0} gw={d:.0} gh={d:.0} computed_w={d:.0} computed_h={d:.0}\n", .{
+                idx, child.canvas_gx, child.canvas_gy, child.canvas_gw, child.canvas_gh,
+                child.computed.w, child.computed.h,
+            });
+        }
+        idx += 1;
+    }
+    std.debug.print("CANVAS_DUMP_END\n", .{});
+    std.posix.exit(0);
+}
+
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
@@ -500,6 +640,8 @@ var g_dt_sec: f32 = 0;
 var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
 var g_hover_changed: bool = false; // debug flag
+var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
+var g_semantic_detected: bool = false; // true once we auto-detected a CLI classifier
 
 // Canvas drag state — tracks which canvas is being dragged for pan
 var canvas_drag_node: ?*Node = null;
@@ -806,8 +948,8 @@ noinline fn paintTerminal(node: *Node) void {
             if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
                 const default_fg = @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 };
                 const raw_fg = if (cell.reverse) (cell.bg orelse @TypeOf(cell.bg.?){ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
-                // Use semantic classifier color for live screen rows
-                const fg = if (row >= sb_visible) blk: {
+                // Use semantic classifier color for live screen rows (only when overlay active)
+                const fg = if (g_semantic_overlay and row >= sb_visible) blk: {
                     const live_row = row - sb_visible;
                     const token = classifier.getRowToken(live_row);
                     if (token != .output and token != .text) {
@@ -856,8 +998,8 @@ noinline fn paintCanvasContainer(node: *Node) void {
         canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
         node.canvas_view_set = false;
     }
-    // Apply drift — continuous camera animation (pauses during drag)
-    if (node.canvas_drift_active and canvas_drag_node == null and g_dt_sec > 0) {
+    // Apply drift — continuous camera animation (pauses during drag or node selection)
+    if (node.canvas_drift_active and canvas_drag_node == null and canvas.getSelectedNode() == null and g_dt_sec > 0) {
         canvas.handleDrag(-node.canvas_drift_x * g_dt_sec, -node.canvas_drift_y * g_dt_sec);
     }
     gpu.pushScissor(r.x, r.y, r.w, r.h);
@@ -1048,6 +1190,28 @@ pub fn run(config: AppConfig) !void {
                         const pmy: f32 = @floatFromInt(event.button.y);
                         physics2d.startDrag(pmx, pmy);
                     }
+                    // Context menu: dismiss on left-click, consume if item was hit
+                    if (event.button.button == c.SDL_BUTTON_LEFT and context_menu.isVisible()) {
+                        const cmx: f32 = @floatFromInt(event.button.x);
+                        const cmy: f32 = @floatFromInt(event.button.y);
+                        if (context_menu.handleClick(cmx, cmy)) continue;
+                        // handleClick returns false for outside clicks (and hides the menu)
+                        // — fall through to normal left-click handling
+                    }
+                    // Right-click — context menu items or on_right_click handler
+                    if (event.button.button == c.SDL_BUTTON_RIGHT) {
+                        const mx: f32 = @floatFromInt(event.button.x);
+                        const my: f32 = @floatFromInt(event.button.y);
+                        context_menu.hide(); // dismiss any existing menu first
+                        const rc_events = @import("events.zig");
+                        if (rc_events.hitTestRightClick(config.root, mx, my)) |h| {
+                            if (h.handlers.on_right_click) |handler| {
+                                handler(mx, my);
+                            } else if (h.context_menu_items) |items| {
+                                context_menu.show(mx, my, items);
+                            }
+                        }
+                    }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
@@ -1083,12 +1247,56 @@ pub fn run(config: AppConfig) !void {
                                 openUrl(url);
                             }
                         } else if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                            // Canvas click + drag start (only if no HUD element was clicked)
-                            input.unfocus();
-                            if (canvas.getHoveredNode() != null) canvas.clickNode();
-                            canvas_drag_node = cn;
-                            canvas_drag_last_x = mx;
-                            canvas_drag_last_y = my;
+                            // Canvas click — check for interactive elements inside Canvas.Nodes
+                            // Convert screen coords to graph space for canvas-child hit testing
+                            const vp_cx = cn.computed.x + cn.computed.w / 2;
+                            const vp_cy = cn.computed.y + cn.computed.h / 2;
+                            const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                            // Find which Canvas.Node child contains the click
+                            var canvas_child_hit: ?*Node = null;
+                            for (cn.children) |*child| {
+                                if (child.canvas_node) {
+                                    const hw = child.canvas_gw / 2;
+                                    const hh = child.canvas_gh / 2;
+                                    if (gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
+                                        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh)
+                                    {
+                                        // Hit-test this node's subtree for interactive elements (graph-space coords)
+                                        canvas_child_hit = layout.hitTest(child, gpos[0], gpos[1]);
+                                        break;
+                                    }
+                                }
+                            }
+                            // Dispatch interactive element if found, otherwise select node + start drag
+                            var handled_interactive = false;
+                            if (canvas_child_hit) |h| {
+                                if (h.input_id) |id| {
+                                    input.focus(id);
+                                    const pl = h.style.padLeft();
+                                    const local_x = gpos[0] - h.computed.x - pl;
+                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    input_drag_active = true;
+                                    input_drag_id = id;
+                                    input_drag_node_x = h.computed.x;
+                                    input_drag_node_pl = pl;
+                                    input_drag_font_size = h.font_size;
+                                    handled_interactive = true;
+                                } else if (h.handlers.on_press) |handler| {
+                                    handler();
+                                    handled_interactive = true;
+                                } else if (h.href) |url| {
+                                    openUrl(url);
+                                    handled_interactive = true;
+                                }
+                            }
+                            if (!handled_interactive) {
+                                // Background click — select/deselect canvas node and start drag
+                                input.unfocus();
+                                if (canvas.getHoveredNode() != null) canvas.clickNode();
+                                canvas_drag_node = cn;
+                                canvas_drag_last_x = mx;
+                                canvas_drag_last_y = my;
+                            }
                         } else if (terminal_initialized) {
                             if (findTerminalNode(config.root)) |tn| {
                                 const tr = tn.computed;
@@ -1138,6 +1346,8 @@ pub fn run(config: AppConfig) !void {
                         input.updateDrag(input_drag_id, local_x, input_drag_font_size);
                     }
                     updateHover(config.root, mx, my);
+                    // Context menu hover tracking
+                    context_menu.updateHover(mx, my);
                     // Canvas hit testing — find which Canvas.Node the mouse is over
                     {
                         const mevents = @import("events.zig");
@@ -1231,6 +1441,17 @@ pub fn run(config: AppConfig) !void {
                                     _ = c.SDL_SetClipboardText(@ptrCast(&copy_buf));
                                 }
                             }
+                            continue;
+                        }
+                        // Ctrl+Shift+D — toggle semantic overlay
+                        if (t_ctrl and t_shift and sym == c.SDLK_d) {
+                            g_semantic_overlay = !g_semantic_overlay;
+                            // When overlay turns on, activate basic classifier if none set
+                            if (g_semantic_overlay and classifier.getMode() == .none) {
+                                classifier.setMode(.basic);
+                                classifier.markDirty();
+                            }
+                            std.debug.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
                             continue;
                         }
                         if (t_ctrl and t_shift and sym == c.SDLK_v) {
@@ -1353,8 +1574,24 @@ pub fn run(config: AppConfig) !void {
             if (vterm_mod.pollPty()) {
                 classifier.markDirty();
             }
-            // Re-classify when damage occurred
-            if (classifier.isDirty()) {
+            // Auto-detect CLI from banner text (first 6 rows)
+            // When a known CLI is detected, auto-activate its classifier
+            if (!g_semantic_detected) {
+                const detect_rows = @min(vterm_mod.getRows(), 6);
+                var dr: u16 = 0;
+                while (dr < detect_rows) : (dr += 1) {
+                    const dt = vterm_mod.getRowText(dr);
+                    if (dt.len > 0 and std.mem.indexOf(u8, dt, "Claude Code") != null) {
+                        classifier.setMode(.claude_code);
+                        classifier.markDirty();
+                        g_semantic_detected = true;
+                        std.debug.print("[semantic] auto-detected: claude_code\n", .{});
+                        break;
+                    }
+                }
+            }
+            // Re-classify when damage occurred (skip when mode=none)
+            if (classifier.isDirty() and classifier.getMode() != .none) {
                 const cls_rows = vterm_mod.getRows();
                 var cls_r: u16 = 0;
                 while (cls_r < cls_rows) : (cls_r += 1) {
@@ -1417,6 +1654,9 @@ pub fn run(config: AppConfig) !void {
 
         // Tooltip overlay (always on top of main tree)
         tooltip.paintOverlay(measureCallback, win_w, win_h);
+
+        // Context menu overlay (on top of everything except debug pairing)
+        context_menu.paintOverlay(measureCallback, win_w, win_h);
 
         // Debug pairing overlay — modal with 6-digit code
         if (debug_server.getPairingCode()) |code| {

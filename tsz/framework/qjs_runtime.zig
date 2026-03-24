@@ -340,7 +340,12 @@ fn hostSemSetMode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     if (argc < 1) return QJS_UNDEFINED;
     var mode: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &mode, argv[0]);
-    classifier.setMode(if (mode == 1) .claude_code else .basic);
+    // 0=none (no classification), 1=basic, 2=claude_code
+    classifier.setMode(switch (mode) {
+        1 => .basic,
+        2 => .claude_code,
+        else => .none,
+    });
     classifier.markDirty();
     return QJS_UNDEFINED;
 }
@@ -393,7 +398,11 @@ fn hostSemSnapshot(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JS
 
     // Version + metadata
     setF(c2, root, "version", 1.0);
-    const cls_name = if (classifier.getMode() == .claude_code) "claude_code" else "basic";
+    const cls_name = switch (classifier.getMode()) {
+        .none => "none",
+        .basic => "basic",
+        .claude_code => "claude_code",
+    };
     _ = qjs.JS_SetPropertyStr(c2, root, "classifier", qjs.JS_NewStringLen(c2, cls_name.ptr, @intCast(cls_name.len)));
     setF(c2, root, "frame", @floatFromInt(semantic.getFrame()));
 

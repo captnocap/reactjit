@@ -95,14 +95,14 @@ pub fn tokenColor(token: Token) Color {
 
 // ── Classifier mode ─────────────────────────────────────────────────
 
-pub const Mode = enum { basic, claude_code };
+pub const Mode = enum { none, basic, claude_code };
 
 // ── Classification cache ────────────────────────────────────────────
 
 const MAX_ROWS: u16 = 256;
 var row_cache: [MAX_ROWS]Token = [_]Token{.output} ** MAX_ROWS;
 var cache_dirty: bool = true;
-var active_mode: Mode = .basic;
+var active_mode: Mode = .none;
 
 pub fn getMode() Mode {
     return active_mode;
@@ -139,9 +139,14 @@ pub fn classifyAndCache(row: u16, text: []const u8, total_rows: u16) void {
     if (row >= MAX_ROWS) return;
     const prev: Token = if (row > 0) row_cache[row - 1] else .output;
     var kind = switch (active_mode) {
+        .none => Token.output,
         .basic => classifyBasic(text, row, total_rows),
         .claude_code => classifyClaude(text, row, total_rows),
     };
+    if (active_mode == .none) {
+        row_cache[row] = .output;
+        return;
+    }
     kind = refineAdjacency(kind, prev, text);
     row_cache[row] = kind;
 }
@@ -406,6 +411,7 @@ fn isUpperLine(s: []const u8) bool {
 
 pub fn isTurnStart(kind: Token) bool {
     return switch (active_mode) {
+        .none => false,
         .basic => kind == .command,
         .claude_code => kind == .user_prompt,
     };
