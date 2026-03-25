@@ -27,31 +27,69 @@ useEffect(() => {
   if (tier == 4) { setRectCount(800); }
 });
 
-function ColorRow({ c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 }) {
-  return (
-    <Box style={{ flexDirection: 'row', gap: 1 }}>
-      <Box style={{ width: 24, height: 24, backgroundColor: c1, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c2, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c3, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c4, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c5, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c6, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c7, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c8, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c9, borderRadius: 4 }} />
-      <Box style={{ width: 24, height: 24, backgroundColor: c10, borderRadius: 4 }} />
-    </Box>
-  );
-}
-
-function GridBlock() {
+function GridBlock({ color }) {
   return (
     <Box style={{ gap: 1 }}>
-      <ColorRow c1="#ef4444" c2="#f97316" c3="#eab308" c4="#22c55e" c5="#06b6d4" c6="#3b82f6" c7="#8b5cf6" c8="#ec4899" c9="#f43f5e" c10="#14b8a6" />
-      <ColorRow c1="#dc2626" c2="#ea580c" c3="#ca8a04" c4="#16a34a" c5="#0891b2" c6="#2563eb" c7="#7c3aed" c8="#db2777" c9="#e11d48" c10="#0d9488" />
-      <ColorRow c1="#b91c1c" c2="#c2410c" c3="#a16207" c4="#15803d" c5="#0e7490" c6="#1d4ed8" c7="#6d28d9" c8="#be185d" c9="#be123c" c10="#0f766e" />
-      <ColorRow c1="#991b1b" c2="#9a3412" c3="#854d0e" c4="#166534" c5="#155e75" c6="#1e40af" c7="#5b21b6" c8="#9d174d" c9="#9f1239" c10="#115e59" />
-      <ColorRow c1="#7f1d1d" c2="#7c2d12" c3="#713f12" c4="#14532d" c5="#164e63" c6="#1e3a8a" c7="#4c1d95" c8="#831843" c9="#881337" c10="#134e4a" />
+      <Box style={{ flexDirection: 'row', gap: 1 }}>
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 1 }}>
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 1 }}>
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 1 }}>
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 1 }}>
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
+      </Box>
     </Box>
   );
 }
@@ -101,22 +139,22 @@ function App() {
 
       <ScrollView style={{ flexGrow: 1, height: 250 }}>
         <Box style={{ gap: 4, flexWrap: 'wrap', flexDirection: 'row' }}>
-          <GridBlock />
-          {tier > 0 && <GridBlock />}
-          {tier > 0 && <GridBlock />}
-          {tier > 1 && <GridBlock />}
-          {tier > 1 && <GridBlock />}
-          {tier > 1 && <GridBlock />}
-          {tier > 2 && <GridBlock />}
-          {tier > 2 && <GridBlock />}
-          {tier > 2 && <GridBlock />}
-          {tier > 2 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
-          {tier > 3 && <GridBlock />}
+          <GridBlock color="#ef4444" />
+          {tier > 0 && <GridBlock color="#f97316" />}
+          {tier > 0 && <GridBlock color="#eab308" />}
+          {tier > 1 && <GridBlock color="#22c55e" />}
+          {tier > 1 && <GridBlock color="#06b6d4" />}
+          {tier > 1 && <GridBlock color="#3b82f6" />}
+          {tier > 2 && <GridBlock color="#8b5cf6" />}
+          {tier > 2 && <GridBlock color="#ec4899" />}
+          {tier > 2 && <GridBlock color="#14b8a6" />}
+          {tier > 2 && <GridBlock color="#dc2626" />}
+          {tier > 3 && <GridBlock color="#ea580c" />}
+          {tier > 3 && <GridBlock color="#16a34a" />}
+          {tier > 3 && <GridBlock color="#0891b2" />}
+          {tier > 3 && <GridBlock color="#2563eb" />}
+          {tier > 3 && <GridBlock color="#7c3aed" />}
+          {tier > 3 && <GridBlock color="#db2777" />}
         </Box>
       </ScrollView>
     </Box>
