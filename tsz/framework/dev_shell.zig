@@ -1,47 +1,149 @@
-//! Hot-reload development shell for tsz apps.
+//! CartridgeOS — multi-app host shell with hot-reload.
 //!
-//! Loads a compiled .tsz app from a shared library (.so), runs the engine,
-//! and hot-reloads when the .so is recompiled. The window stays open, GPU
-//! context is preserved, and only the app code (node tree, state, handlers)
-//! is swapped.
+//! Loads multiple .tsz app .so files as "cartridges" in a tabbed interface.
+//! Each cartridge has its own state, event handlers, and lifecycle.
+//! Cartridges can be hot-reloaded independently — state survives.
 //!
-//! Usage: tsz-dev <path-to-app.so>
+//! Usage:
+//!   tsz-dev app1.so app2.so app3.so    — load multiple apps in tabs
+//!   tsz-dev app.so                     — single app (no tab bar)
 
 const std = @import("std");
 const layout = @import("layout.zig");
 const engine = @import("engine.zig");
+const cartridge = @import("cartridge.zig");
 const Node = layout.Node;
+const Color = layout.Color;
 
-// ── Function pointer types matching the C ABI exports from generated code ──
+// ── Shell UI colors ──
 
-const GetRootFn = *const fn () callconv(.c) *Node;
-const GetInitFn = *const fn () callconv(.c) ?*const fn () void;
-const GetTickFn = *const fn () callconv(.c) ?*const fn (u32) void;
-const GetTitleFn = *const fn () callconv(.c) [*:0]const u8;
-const GetJsLogicFn = *const fn () callconv(.c) [*]const u8;
-const GetJsLogicLenFn = *const fn () callconv(.c) usize;
+const TAB_BG = Color.rgb(17, 24, 39);
+const TAB_ACTIVE_BG = Color.rgb(30, 58, 138);
+const TAB_TEXT = Color.rgb(148, 163, 184);
+const TAB_ACTIVE_TEXT = Color.rgb(219, 234, 254);
+const STATUS_BG = Color.rgb(17, 24, 39);
+const STATUS_TEXT = Color.rgb(100, 116, 139);
 
-// State preservation function types
-const StateCountFn = *const fn () callconv(.c) usize;
-const SlotTypeFn = *const fn (usize) callconv(.c) u8;
-const GetIntFn = *const fn (usize) callconv(.c) i64;
-const SetIntFn = *const fn (usize, i64) callconv(.c) void;
-const GetFloatFn = *const fn (usize) callconv(.c) f64;
-const SetFloatFn = *const fn (usize, f64) callconv(.c) void;
-const GetBoolFn = *const fn (usize) callconv(.c) u8;
-const SetBoolFn = *const fn (usize, u8) callconv(.c) void;
-const GetStrPtrFn = *const fn (usize) callconv(.c) [*]const u8;
-const GetStrLenFn = *const fn (usize) callconv(.c) usize;
-const SetStrFn = *const fn (usize, [*]const u8, usize) callconv(.c) void;
-const MarkDirtyFn = *const fn () callconv(.c) void;
+// ── Shell UI node storage ──
 
-// ── Module-level state for the hot-reload mechanism ──
+const MAX_TABS = cartridge.MAX_CARTRIDGES;
 
-var g_lib: ?std.DynLib = null;
-var g_lib_path: []const u8 = "";
-var g_last_mtime: i128 = 0;
-var g_shadow_counter: u32 = 0;
-var g_shadow_buf: [256]u8 = undefined;
+var tab_text_nodes: [MAX_TABS]Node = [_]Node{.{}} ** MAX_TABS;
+var tab_inner: [MAX_TABS][1]Node = undefined;
+var tab_buttons: [MAX_TABS]Node = [_]Node{.{}} ** MAX_TABS;
+var tab_bar_kids: [MAX_TABS]Node = [_]Node{.{}} ** MAX_TABS;
+
+var content_child = [1]Node{.{}};
+var content_area = Node{ .style = .{ .flex_grow = 1, .flex_basis = 0 } };
+var status_text_node = Node{ .text = "CartridgeOS", .font_size = 11, .text_color = STATUS_TEXT };
+var status_child = [1]Node{.{}};
+var status_bar = Node{ .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 4, .padding_bottom = 4, .background_color = STATUS_BG } };
+var tab_bar = Node{ .style = .{ .flex_direction = .row, .gap = 2, .padding_left = 8, .padding_right = 8, .padding_top = 6, .padding_bottom = 6, .background_color = TAB_BG } };
+
+var shell_kids_multi = [3]Node{ .{}, .{}, .{} };
+var shell_root_multi = Node{ .style = .{ .width = -1, .height = -1 } };
+
+var loaded_count: usize = 0;
+
+// ── Tab click handlers (comptime-generated dispatch table) ──
+
+fn switchTo(idx: usize) void {
+    cartridge.setActive(idx);
+    refreshUI();
+}
+
+fn makeHandler(comptime i: usize) *const fn () void {
+    return &struct { fn h() void { switchTo(i); } }.h;
+}
+
+const tab_handlers = blk: {
+    var h: [MAX_TABS]*const fn () void = undefined;
+    for (0..MAX_TABS) |i| h[i] = makeHandler(i);
+    break :blk h;
+};
+
+// ── UI refresh ──
+
+fn refreshUI() void {
+    const n = loaded_count;
+    const act = cartridge.activeIndex();
+
+    // Update tab highlights
+    for (0..n) |i| {
+        tab_buttons[i].style.background_color = if (i == act) TAB_ACTIVE_BG else null;
+        tab_text_nodes[i].text_color = if (i == act) TAB_ACTIVE_TEXT else TAB_TEXT;
+        tab_inner[i][0] = tab_text_nodes[i];
+        tab_buttons[i].children = &tab_inner[i];
+        tab_bar_kids[i] = tab_buttons[i];
+    }
+    tab_bar.children = tab_bar_kids[0..n];
+
+    // Swap content to active cartridge
+    if (cartridge.getActiveRoot()) |root| {
+        content_child[0] = root.*;
+        content_area.children = &content_child;
+    }
+
+    // Status text
+    var buf: [128]u8 = undefined;
+    if (cartridge.get(act)) |cart| {
+        const s = std.fmt.bufPrint(&buf, "{d} cartridge(s) | active: {s}", .{ n, cart.titleSlice() }) catch "CartridgeOS";
+        // Copy to persistent buffer since buf is stack-local
+        @memcpy(g_status_buf[0..s.len], s);
+        g_status_len = s.len;
+    }
+    status_text_node.text = g_status_buf[0..g_status_len];
+    status_child[0] = status_text_node;
+    status_bar.children = &status_child;
+
+    // Reassemble root
+    shell_kids_multi[0] = tab_bar;
+    shell_kids_multi[1] = content_area;
+    shell_kids_multi[2] = status_bar;
+    shell_root_multi.children = &shell_kids_multi;
+}
+
+var g_status_buf: [128]u8 = undefined;
+var g_status_len: usize = 0;
+
+// ── Engine callbacks ──
+
+fn shellTick(now: u32) void {
+    cartridge.tickAll(now);
+
+    // Cross-cartridge sync: counter's count (cart 0 slot 0) → colors' size (cart 1 slot 1)
+    if (loaded_count > 1) {
+        const count = cartridge.getStateInt(0, 0);
+        const new_size = 100 + count * 20; // each click grows the box by 20px
+        cartridge.setStateInt(1, 1, new_size);
+    }
+
+    // Refresh content (tick may have changed the tree)
+    if (cartridge.getActiveRoot()) |root| {
+        content_child[0] = root.*;
+        content_area.children = &content_child;
+        shell_kids_multi[1] = content_area;
+    }
+}
+
+fn shellCheckReload(config: *engine.AppConfig) bool {
+    if (cartridge.checkReloads()) |idx| {
+        if (idx == cartridge.activeIndex()) {
+            refreshUI();
+            if (loaded_count > 1) {
+                config.root = &shell_root_multi;
+            } else if (cartridge.getActiveRoot()) |root| {
+                config.root = root;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+fn shellPostReload() void {
+    // State already restored by cartridge manager
+}
 
 // ── Entry point ──
 
@@ -52,253 +154,62 @@ pub fn main() !void {
 
     const args = try std.process.argsAlloc(alloc);
     if (args.len < 2) {
-        std.debug.print("Usage: tsz-dev <path-to-app.so>\n", .{});
-        std.debug.print("\nHot-reload development shell. Loads a .tsz app from a shared library\n", .{});
-        std.debug.print("and automatically reloads when the .so is recompiled.\n", .{});
-        std.debug.print("\nBuild the .so with: zig build app-lib\n", .{});
+        std.debug.print("Usage: tsz-dev <app1.so> [app2.so] ...\n", .{});
+        std.debug.print("\nCartridgeOS — multi-app host with hot-reload.\n", .{});
         return;
     }
 
-    g_lib_path = args[1];
+    for (args[1..]) |so_path| {
+        _ = cartridge.load(so_path) catch |err| {
+            std.debug.print("[cartridge] Failed to load {s}: {}\n", .{ so_path, err });
+        };
+    }
 
-    // Initial load
-    loadLibrary() catch |err| {
-        std.debug.print("[dev-shell] Failed to load {s}: {}\n", .{ g_lib_path, err });
+    loaded_count = cartridge.count();
+    if (loaded_count == 0) {
+        std.debug.print("[cartridge] No cartridges loaded\n", .{});
         return;
-    };
-
-    // Record initial mtime
-    if (std.fs.cwd().statFile(g_lib_path)) |stat| {
-        g_last_mtime = stat.mtime;
-    } else |_| {}
-
-    // Build AppConfig from .so symbols
-    var config = buildConfig() catch |err| {
-        std.debug.print("[dev-shell] Symbol lookup failed: {}\n", .{err});
-        return;
-    };
-    config.check_reload = &checkReload;
-    config.post_reload = &restoreState;
-
-    std.debug.print("[dev-shell] Loaded {s}\n", .{g_lib_path});
-    std.debug.print("[dev-shell] Watching for changes... (rebuild .so to hot-reload)\n", .{});
-
-    try engine.run(config);
-}
-
-// ── Library loading ──
-
-fn loadLibrary() !void {
-    // Close existing library
-    if (g_lib) |*lib| lib.close();
-
-    // Shadow copy to a temp file — avoids file lock conflicts during rebuild.
-    // Each reload gets a new temp path so dlopen sees a fresh library.
-    const shadow_path = std.fmt.bufPrint(&g_shadow_buf, "/tmp/tsz_hot_{d}.so", .{g_shadow_counter}) catch
-        return error.FileNotFound;
-    g_shadow_counter += 1;
-
-    // Copy the .so to the shadow path
-    const src = std.fs.cwd().openFile(g_lib_path, .{}) catch return error.FileNotFound;
-    defer src.close();
-
-    const dst_path_abs = shadow_path;
-    const dst = std.fs.createFileAbsolute(dst_path_abs, .{}) catch return error.FileNotFound;
-    defer dst.close();
-
-    // Read and write in chunks
-    var buf: [65536]u8 = undefined;
-    while (true) {
-        const n = src.read(&buf) catch return error.FileNotFound;
-        if (n == 0) break;
-        dst.writeAll(buf[0..n]) catch return error.FileNotFound;
     }
 
-    // Open the shadow copy as a dynamic library
-    g_lib = std.DynLib.open(dst_path_abs) catch |err| {
-        std.debug.print("[dev-shell] dlopen failed for {s}: {}\n", .{ dst_path_abs, err });
-        return error.FileNotFound;
-    };
-}
-
-// ── Symbol lookup ──
-
-fn buildConfig() !engine.AppConfig {
-    var lib = g_lib orelse return error.FileNotFound;
-
-    const get_root = lib.lookup(GetRootFn, "app_get_root") orelse {
-        std.debug.print("[dev-shell] Missing symbol: app_get_root\n", .{});
-        return error.FileNotFound;
-    };
-    const get_init = lib.lookup(GetInitFn, "app_get_init") orelse {
-        std.debug.print("[dev-shell] Missing symbol: app_get_init\n", .{});
-        return error.FileNotFound;
-    };
-    const get_tick = lib.lookup(GetTickFn, "app_get_tick") orelse {
-        std.debug.print("[dev-shell] Missing symbol: app_get_tick\n", .{});
-        return error.FileNotFound;
-    };
-    const get_title = lib.lookup(GetTitleFn, "app_get_title") orelse {
-        std.debug.print("[dev-shell] Missing symbol: app_get_title\n", .{});
-        return error.FileNotFound;
-    };
-
-    var config = engine.AppConfig{
-        .title = get_title(),
-        .root = get_root(),
-        .init = get_init(),
-        .tick = get_tick(),
-    };
-
-    // JS logic (optional — may not be present in all apps)
-    const maybe_js = lib.lookup(GetJsLogicFn, "app_get_js_logic");
-    const maybe_js_len = lib.lookup(GetJsLogicLenFn, "app_get_js_logic_len");
-    if (maybe_js) |get_js| {
-        if (maybe_js_len) |get_len| {
-            const ptr = get_js();
-            const len = get_len();
-            if (len > 0) {
-                config.js_logic = ptr[0..len];
-            }
+    std.debug.print("[cartridge] Loaded {d} cartridge(s)\n", .{loaded_count});
+    for (0..loaded_count) |i| {
+        if (cartridge.get(i)) |c| {
+            std.debug.print("[cartridge]   [{d}] {s}\n", .{ i + 1, c.titleSlice() });
         }
     }
 
-    // Update the stored lib handle (we may have used a local copy)
-    g_lib = lib;
-
-    return config;
-}
-
-// ── State snapshot for preservation across reloads ──
-
-const MAX_SNAP_SLOTS = 256;
-const MAX_SNAP_STR = 512;
-
-const SlotSnapshot = struct {
-    slot_type: u8, // 0=int, 1=float, 2=bool, 3=string
-    int_val: i64 = 0,
-    float_val: f64 = 0,
-    bool_val: u8 = 0,
-    str_buf: [MAX_SNAP_STR]u8 = undefined,
-    str_len: usize = 0,
-};
-
-var g_snapshot: [MAX_SNAP_SLOTS]SlotSnapshot = undefined;
-var g_snapshot_count: usize = 0;
-
-fn snapshotState() void {
-    var lib = g_lib orelse return;
-    const count_fn = lib.lookup(StateCountFn, "app_state_count") orelse return;
-    const type_fn = lib.lookup(SlotTypeFn, "app_state_slot_type") orelse return;
-    const count = count_fn();
-    if (count > MAX_SNAP_SLOTS) return;
-
-    const get_int = lib.lookup(GetIntFn, "app_state_get_int");
-    const get_float = lib.lookup(GetFloatFn, "app_state_get_float");
-    const get_bool = lib.lookup(GetBoolFn, "app_state_get_bool");
-    const get_str_ptr = lib.lookup(GetStrPtrFn, "app_state_get_string_ptr");
-    const get_str_len = lib.lookup(GetStrLenFn, "app_state_get_string_len");
-
-    for (0..count) |i| {
-        const t = type_fn(i);
-        g_snapshot[i] = .{ .slot_type = t };
-        switch (t) {
-            0 => { // int
-                if (get_int) |f| g_snapshot[i].int_val = f(i);
-            },
-            1 => { // float
-                if (get_float) |f| g_snapshot[i].float_val = f(i);
-            },
-            2 => { // bool
-                if (get_bool) |f| g_snapshot[i].bool_val = f(i);
-            },
-            3 => { // string
-                if (get_str_ptr) |fp| {
-                    if (get_str_len) |fl| {
-                        const len = fl(i);
-                        const ptr = fp(i);
-                        const copy_len = @min(len, MAX_SNAP_STR);
-                        @memcpy(g_snapshot[i].str_buf[0..copy_len], ptr[0..copy_len]);
-                        g_snapshot[i].str_len = copy_len;
-                    }
-                }
-            },
-            else => {}, // array/string_array — skip for now
+    // Build tab buttons
+    for (0..loaded_count) |i| {
+        if (cartridge.get(i)) |c| {
+            tab_text_nodes[i] = .{ .text = c.titleSlice(), .font_size = 12, .text_color = TAB_TEXT };
+            tab_buttons[i] = .{
+                .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6, .border_radius = 4 },
+                .handlers = .{ .on_press = tab_handlers[i] },
+            };
         }
     }
-    g_snapshot_count = count;
-    std.debug.print("[hot-reload] Saved {d} state slots\n", .{count});
-}
 
-fn restoreState() void {
-    var lib = g_lib orelse return;
-    if (g_snapshot_count == 0) return;
+    refreshUI();
 
-    const count_fn = lib.lookup(StateCountFn, "app_state_count") orelse return;
-    const new_count = count_fn();
-    const restore_count = @min(g_snapshot_count, new_count);
+    // Single app: use cartridge root directly. Multi: use shell root with tabs.
+    const config_root: *Node = if (loaded_count > 1)
+        &shell_root_multi
+    else
+        cartridge.getActiveRoot() orelse return;
 
-    const set_int = lib.lookup(SetIntFn, "app_state_set_int");
-    const set_float = lib.lookup(SetFloatFn, "app_state_set_float");
-    const set_bool = lib.lookup(SetBoolFn, "app_state_set_bool");
-    const set_str = lib.lookup(SetStrFn, "app_state_set_string");
-    const mark_dirty = lib.lookup(MarkDirtyFn, "app_state_mark_dirty");
-
-    var restored: usize = 0;
-    for (0..restore_count) |i| {
-        const snap = g_snapshot[i];
-        switch (snap.slot_type) {
-            0 => { if (set_int) |f| { f(i, snap.int_val); restored += 1; } },
-            1 => { if (set_float) |f| { f(i, snap.float_val); restored += 1; } },
-            2 => { if (set_bool) |f| { f(i, snap.bool_val); restored += 1; } },
-            3 => {
-                if (set_str) |f| {
-                    f(i, &snap.str_buf, snap.str_len);
-                    restored += 1;
-                }
-            },
-            else => {},
+    const title: [*:0]const u8 = if (loaded_count > 1) "CartridgeOS" else blk: {
+        if (cartridge.get(0)) |c| {
+            c.title[c.title_len] = 0;
+            break :blk @ptrCast(&c.title);
         }
-    }
-    // Mark dirty so the app rebuilds dynamic texts
-    if (mark_dirty) |f| f();
-
-    std.debug.print("[hot-reload] Restored {d}/{d} state slots\n", .{ restored, restore_count });
-}
-
-// ── Hot-reload check (called every frame by the engine) ──
-
-fn checkReload(config: *engine.AppConfig) bool {
-    // Poll the .so file's modification time
-    const stat = std.fs.cwd().statFile(g_lib_path) catch return false;
-    if (stat.mtime == g_last_mtime) return false;
-
-    // Modification detected — wait briefly for the file to be fully written
-    std.Thread.sleep(100 * std.time.ns_per_ms);
-
-    // Re-check mtime (in case it changed again during the wait)
-    const stat2 = std.fs.cwd().statFile(g_lib_path) catch return false;
-    g_last_mtime = stat2.mtime;
-
-    // Snapshot state from the OLD .so before unloading
-    snapshotState();
-
-    // Load the new library
-    loadLibrary() catch |err| {
-        std.debug.print("[hot-reload] Load failed: {}\n", .{err});
-        return false;
+        break :blk "tsz-dev";
     };
 
-    // Look up new symbols and update the config
-    const new_config = buildConfig() catch |err| {
-        std.debug.print("[hot-reload] Symbol lookup failed: {}\n", .{err});
-        return false;
-    };
-
-    config.root = new_config.root;
-    config.init = new_config.init;
-    config.tick = new_config.tick;
-    // post_reload is already set — engine calls it after init, before tick
-
-    return true;
+    try engine.run(.{
+        .title = title,
+        .root = config_root,
+        .tick = shellTick,
+        .check_reload = shellCheckReload,
+        .post_reload = shellPostReload,
+    });
 }
