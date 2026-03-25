@@ -368,6 +368,8 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
     var expr: std.ArrayListUnmanaged(u8) = .{};
     var depth: u32 = 0;
     var in_ternary = false; // tracking JS ternary ? : → Zig if/else
+    var last_was_string_slot = false; // true immediately after emitting getSlotString(N)
+    var in_string_cmp = false; // true between == and its string RHS, inside std.mem.eql rewrite
     while (self.curKind() != .eof) {
         const k = self.curKind();
         // Stop at comma or closing brace (unless inside nested parens/braces)
@@ -413,34 +415,112 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                 if (st == .float) {
                     expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
                         "state.getSlotFloat({d})", .{rid}) catch "") catch {};
+                    last_was_string_slot = false;
+                } else if (st == .string) {
+                    expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                        "state.getSlotString({d})", .{rid}) catch "") catch {};
+                    last_was_string_slot = true;
                 } else {
                     expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
                         "state.getSlot({d})", .{rid}) catch "") catch {};
+                    last_was_string_slot = false;
                 }
             } else {
                 expr.appendSlice(self.alloc, txt) catch {};
             }
         } else {
+            // String equality: rewrite getSlotString(N) == 'val' → std.mem.eql(u8, ..., "val")
+            if ((k == .eq_eq or k == .not_eq) and last_was_string_slot) {
+                const prefix = "state.getSlotString(";
+                if (std.mem.lastIndexOf(u8, expr.items, prefix)) |pos| {
+                    const before = self.alloc.dupe(u8, expr.items[0..pos]) catch "";
+                    const getslot = self.alloc.dupe(u8, expr.items[pos..]) catch "";
+                    expr.clearRetainingCapacity();
+                    expr.appendSlice(self.alloc, before) catch {};
+                    if (k == .not_eq) {
+                        expr.appendSlice(self.alloc, "!std.mem.eql(u8, ") catch {};
+                    } else {
+                        expr.appendSlice(self.alloc, "std.mem.eql(u8, ") catch {};
+                    }
+                    expr.appendSlice(self.alloc, getslot) catch {};
+                    expr.appendSlice(self.alloc, ", ") catch {};
+                }
+                in_string_cmp = true;
+                last_was_string_slot = false;
+                self.advance_token();
+                continue;
+            }
+            // String RHS of equality: close std.mem.eql with the literal and )
+            if (k == .string and in_string_cmp) {
+                const raw = txt;
+                const inner = if (raw.len >= 2 and (raw[0] == '\'' or raw[0] == '"')) raw[1 .. raw.len - 1] else raw;
+                expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc, "\"{s}\")", .{inner}) catch "") catch {};
+                in_string_cmp = false;
+                self.advance_token();
+                continue;
+            }
+            // Logical operators: && → and, || → or
+            if (k == .amp_amp) {
+                expr.appendSlice(self.alloc, " and ") catch {};
+                last_was_string_slot = false;
+                self.advance_token();
+                continue;
+            }
+            if (k == .pipe_pipe) {
+                expr.appendSlice(self.alloc, " or ") catch {};
+                last_was_string_slot = false;
+                self.advance_token();
+                continue;
+            }
             // JS ternary → Zig if/else: "cond ? a : b" → "(if (cond != 0) a else b)"
             if (k == .question) {
-                // Check if expression already produces a bool (contains comparison operator)
-                const is_already_bool = std.mem.indexOf(u8, expr.items, "==") != null or
-                    std.mem.indexOf(u8, expr.items, "!=") != null or
-                    std.mem.indexOf(u8, expr.items, ">=") != null or
-                    std.mem.indexOf(u8, expr.items, "<=") != null or
-                    std.mem.indexOf(u8, expr.items, " > ") != null or
-                    std.mem.indexOf(u8, expr.items, " < ") != null;
-                var wrapped: std.ArrayListUnmanaged(u8) = .{};
-                wrapped.appendSlice(self.alloc, "(if (") catch {};
-                wrapped.appendSlice(self.alloc, expr.items) catch {};
-                if (is_already_bool) {
-                    wrapped.appendSlice(self.alloc, ") ") catch {};
+                if (in_ternary) {
+                    // Nested ternary: only the tail after last " else " is the new condition.
+                    // Transform "...prefix else cond" + "?" → "...prefix else if (cond) "
+                    const last_else = std.mem.lastIndexOf(u8, expr.items, " else ") orelse 0;
+                    const cond_start = last_else + 6; // " else ".len == 6
+                    const cond = expr.items[cond_start..];
+                    const cond_is_bool = std.mem.indexOf(u8, cond, "==") != null or
+                        std.mem.indexOf(u8, cond, "!=") != null or
+                        std.mem.indexOf(u8, cond, ">=") != null or
+                        std.mem.indexOf(u8, cond, "<=") != null or
+                        std.mem.indexOf(u8, cond, " > ") != null or
+                        std.mem.indexOf(u8, cond, " < ") != null or
+                        std.mem.indexOf(u8, cond, "std.mem.eql") != null;
+                    const cond_copy = self.alloc.dupe(u8, cond) catch cond;
+                    expr.items.len = last_else;
+                    if (cond_is_bool) {
+                        expr.appendSlice(self.alloc, " else if (") catch {};
+                    } else {
+                        expr.appendSlice(self.alloc, " else if (") catch {};
+                    }
+                    expr.appendSlice(self.alloc, cond_copy) catch {};
+                    if (cond_is_bool) {
+                        expr.appendSlice(self.alloc, ") ") catch {};
+                    } else {
+                        expr.appendSlice(self.alloc, " != 0) ") catch {};
+                    }
                 } else {
-                    wrapped.appendSlice(self.alloc, " != 0) ") catch {};
+                    // First ternary: wrap full expr as condition
+                    const is_already_bool = std.mem.indexOf(u8, expr.items, "==") != null or
+                        std.mem.indexOf(u8, expr.items, "!=") != null or
+                        std.mem.indexOf(u8, expr.items, ">=") != null or
+                        std.mem.indexOf(u8, expr.items, "<=") != null or
+                        std.mem.indexOf(u8, expr.items, " > ") != null or
+                        std.mem.indexOf(u8, expr.items, " < ") != null or
+                        std.mem.indexOf(u8, expr.items, "std.mem.eql") != null;
+                    var wrapped: std.ArrayListUnmanaged(u8) = .{};
+                    wrapped.appendSlice(self.alloc, "(if (") catch {};
+                    wrapped.appendSlice(self.alloc, expr.items) catch {};
+                    if (is_already_bool) {
+                        wrapped.appendSlice(self.alloc, ") ") catch {};
+                    } else {
+                        wrapped.appendSlice(self.alloc, " != 0) ") catch {};
+                    }
+                    expr.items.len = 0;
+                    expr.appendSlice(self.alloc, wrapped.items) catch {};
+                    in_ternary = true;
                 }
-                expr.items.len = 0;
-                expr.appendSlice(self.alloc, wrapped.items) catch {};
-                in_ternary = true;
                 self.advance_token();
                 continue;
             }
@@ -451,17 +531,42 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                 continue;
             }
             // Operators need spaces around them for valid Zig
-            if (k == .plus or k == .minus or k == .star or k == .slash) {
+            // Division: Zig requires @divTrunc for signed integers — wrap here
+            if (k == .slash) {
+                self.advance_token(); // consume the /
+                const rhs_txt = self.curText();
+                if (self.curKind() == .number) {
+                    const lhs_copy = self.alloc.dupe(u8, expr.items) catch expr.items;
+                    expr.items.len = 0;
+                    const new_e = std.fmt.allocPrint(self.alloc, "@divTrunc({s}, {s})", .{ lhs_copy, rhs_txt }) catch lhs_copy;
+                    expr.appendSlice(self.alloc, new_e) catch {};
+                    // bottom advance_token() will consume the rhs number
+                } else {
+                    // Complex rhs — emit bare / and let next iteration handle rhs
+                    expr.appendSlice(self.alloc, " / ") catch {};
+                    continue; // skip bottom advance; rhs token is next iteration
+                }
+            } else if (k == .plus or k == .minus or k == .star) {
                 if (expr.items.len > 0 and expr.items[expr.items.len - 1] != ' ')
                     expr.append(self.alloc, ' ') catch {};
                 expr.appendSlice(self.alloc, txt) catch {};
                 expr.append(self.alloc, ' ') catch {};
             } else if (k == .number and in_ternary) {
-                // Inside ternary: give literals a concrete f32 type
-                // so the outer @as(f32, ...) works through runtime control flow
-                expr.appendSlice(self.alloc, "@as(f32, ") catch {};
-                expr.appendSlice(self.alloc, txt) catch {};
-                expr.appendSlice(self.alloc, ")") catch {};
+                // Inside ternary: give literals a concrete f32 type for result values.
+                // But NOT for comparison operands (e.g. x == 1 ? ...) — those stay bare.
+                const after_cmp = std.mem.endsWith(u8, expr.items, "==") or
+                    std.mem.endsWith(u8, expr.items, "!=") or
+                    std.mem.endsWith(u8, expr.items, ">=") or
+                    std.mem.endsWith(u8, expr.items, "<=") or
+                    std.mem.endsWith(u8, expr.items, "> ") or
+                    std.mem.endsWith(u8, expr.items, "< ");
+                if (after_cmp) {
+                    expr.appendSlice(self.alloc, txt) catch {};
+                } else {
+                    expr.appendSlice(self.alloc, "@as(f32, ") catch {};
+                    expr.appendSlice(self.alloc, txt) catch {};
+                    expr.appendSlice(self.alloc, ")") catch {};
+                }
             } else if (k == .string and txt.len == 9 and txt[1] == '#') {
                 // Hex color string in style expression → convert to typed hex integer
                 // "#1f2937" → @as(u32, 0x1f2937) (concrete type for runtime control flow)
@@ -811,6 +916,19 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                 try fmt.appendSlice(self.alloc, "{d}");
                 if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                 try args.appendSlice(self.alloc, resolved);
+            } else if (std.mem.indexOf(u8, expr, "?") != null) {
+                // Possible string-returning ternary with state refs
+                // e.g. mode == 0 ? "default" : mode == 1 ? "compact" : "expanded"
+                if (try resolveStringTernaryFromText(self, expr, &dep_slots, &dep_count)) |zig_expr| {
+                    try fmt.appendSlice(self.alloc, "{s}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, zig_expr);
+                } else {
+                    const warn_msg = std.fmt.allocPrint(self.alloc,
+                        "expression '${{{s}}}' in template literal could not be resolved — embedded as static text", .{expr}) catch "unresolved template expression";
+                    self.addWarning(0, warn_msg);
+                    try fmt.appendSlice(self.alloc, expr);
+                }
             } else {
                 // Unknown expression — embed as static text
                 const warn_msg = std.fmt.allocPrint(self.alloc,
@@ -819,7 +937,10 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                 try fmt.appendSlice(self.alloc, expr);
             }
         } else {
-            try fmt.append(self.alloc, inner[i]);
+            // Escape double-quote and backslash for Zig string literal
+            if (inner[i] == '"') try fmt.appendSlice(self.alloc, "\\\"")
+            else if (inner[i] == '\\') try fmt.appendSlice(self.alloc, "\\\\")
+            else try fmt.append(self.alloc, inner[i]);
             i += 1;
         }
     }
@@ -841,6 +962,91 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
     else
         inner;
     return .{ .is_dynamic = false, .static_text = resolved, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
+}
+
+// ── String ternary resolver (for template literal ${...} expressions) ──
+
+/// Resolve a condition like "mode == 0" → "state.getSlot(1) == 0".
+/// Returns null if no state variable is found in the condition.
+fn resolveConditionStateRefs(self: *Generator, cond: []const u8, dep_slots: *[codegen.MAX_DYN_DEPS]u32, dep_count: *u32) !?[]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var found_state = false;
+    var i: usize = 0;
+    while (i < cond.len) {
+        const c = cond[i];
+        if (std.ascii.isAlphabetic(c) or c == '_') {
+            const start = i;
+            while (i < cond.len and (std.ascii.isAlphanumeric(cond[i]) or cond[i] == '_')) : (i += 1) {}
+            const ident = cond[start..i];
+            if (self.isState(ident)) |slot_id| {
+                const rid = self.regularSlotId(slot_id);
+                const st = self.stateTypeById(slot_id);
+                if (dep_count.* < codegen.MAX_DYN_DEPS) { dep_slots.*[dep_count.*] = rid; dep_count.* += 1; }
+                found_state = true;
+                const getter = if (st == .string)
+                    try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid})
+                else if (st == .float)
+                    try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid})
+                else
+                    try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid});
+                try result.appendSlice(self.alloc, getter);
+            } else {
+                try result.appendSlice(self.alloc, ident);
+            }
+        } else {
+            try result.append(self.alloc, c);
+            i += 1;
+        }
+    }
+    if (!found_state) return null;
+    return try self.alloc.dupe(u8, result.items);
+}
+
+/// Resolve a JS string-returning ternary expression to a Zig if/else expression.
+/// e.g. `mode == 0 ? "default" : mode == 1 ? "compact" : "expanded"`
+///   →  `if (state.getSlot(1) == 0) "default" else if (state.getSlot(1) == 1) "compact" else "expanded"`
+/// Returns null if the expression cannot be resolved.
+fn resolveStringTernaryFromText(self: *Generator, expr: []const u8, dep_slots: *[codegen.MAX_DYN_DEPS]u32, dep_count: *u32) !?[]const u8 {
+    const trimmed = std.mem.trim(u8, expr, " \t");
+    // Base case: string literal "..."
+    if (trimmed.len >= 2 and trimmed[0] == '"' and trimmed[trimmed.len - 1] == '"') {
+        return trimmed;
+    }
+    // Find '?' at depth 0, skipping quoted strings
+    var depth: u32 = 0;
+    var in_str = false;
+    var q_pos: ?usize = null;
+    var i: usize = 0;
+    while (i < trimmed.len) : (i += 1) {
+        const c = trimmed[i];
+        if (in_str) { if (c == '"') in_str = false; continue; }
+        if (c == '"') { in_str = true; continue; }
+        if (c == '(' or c == '[') { depth += 1; continue; }
+        if (c == ')' or c == ']') { if (depth > 0) depth -= 1; continue; }
+        if (depth == 0 and c == '?') { q_pos = i; break; }
+    }
+    const qp = q_pos orelse return null;
+    const cond_raw = std.mem.trim(u8, trimmed[0..qp], " \t");
+    const after_q = std.mem.trim(u8, trimmed[qp + 1 ..], " \t");
+    // Find ':' at depth 0 in after_q, skipping quoted strings
+    depth = 0; in_str = false;
+    var colon_pos: ?usize = null;
+    i = 0;
+    while (i < after_q.len) : (i += 1) {
+        const c = after_q[i];
+        if (in_str) { if (c == '"') in_str = false; continue; }
+        if (c == '"') { in_str = true; continue; }
+        if (c == '(' or c == '[') { depth += 1; continue; }
+        if (c == ')' or c == ']') { if (depth > 0) depth -= 1; continue; }
+        if (depth == 0 and c == ':') { colon_pos = i; break; }
+    }
+    const cp = colon_pos orelse return null;
+    const true_raw = std.mem.trim(u8, after_q[0..cp], " \t");
+    const false_raw = std.mem.trim(u8, after_q[cp + 1 ..], " \t");
+    const zig_cond = (try resolveConditionStateRefs(self, cond_raw, dep_slots, dep_count)) orelse return null;
+    const true_zig = (try resolveStringTernaryFromText(self, true_raw, dep_slots, dep_count)) orelse return null;
+    const false_zig = (try resolveStringTernaryFromText(self, false_raw, dep_slots, dep_count)) orelse return null;
+    return try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ zig_cond, true_zig, false_zig });
 }
 
 // ── Color parsing ──

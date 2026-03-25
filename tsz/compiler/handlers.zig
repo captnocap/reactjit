@@ -370,7 +370,7 @@ fn emitStatement(
     const call_name = try self.alloc.dupe(u8, name);
     self.advance_token();
     var arg_exprs: [8][]const u8 = undefined;
-    var arg_types: [8]enum { int, string } = undefined;
+    var arg_types: [8]enum { int, string, js_ident } = undefined;
     var arg_count: u32 = 0;
     var has_dynamic_args = false;
     if (self.curKind() == .lparen) {
@@ -379,15 +379,20 @@ fn emitStatement(
             const arg_expr = try emitStateExpr(self);
             // Determine if arg is a string expression
             const is_str = self.isStringExpr(arg_expr);
-            arg_exprs[arg_count] = arg_expr;
-            arg_types[arg_count] = if (is_str) .string else .int;
-            // Check if any arg references runtime data (_oa, _i, state)
-            if (std.mem.indexOf(u8, arg_expr, "_oa") != null or
+            const is_dynamic = std.mem.indexOf(u8, arg_expr, "_oa") != null or
                 std.mem.indexOf(u8, arg_expr, "_i") != null or
-                std.mem.indexOf(u8, arg_expr, "state.") != null)
-            {
-                has_dynamic_args = true;
-            }
+                std.mem.indexOf(u8, arg_expr, "state.") != null;
+            // Plain JS-scope identifier: alphanumeric/underscore, no Zig binding
+            const is_js_ident = !is_str and !is_dynamic and blk: {
+                if (arg_expr.len == 0) break :blk false;
+                if (!std.ascii.isAlphabetic(arg_expr[0]) and arg_expr[0] != '_') break :blk false;
+                for (arg_expr) |c| { if (!std.ascii.isAlphanumeric(c) and c != '_') break :blk false; }
+                // Must not be a known state variable
+                break :blk self.isState(arg_expr) == null;
+            };
+            arg_exprs[arg_count] = arg_expr;
+            arg_types[arg_count] = if (is_str) .string else if (is_js_ident) .js_ident else .int;
+            if (is_dynamic) has_dynamic_args = true;
             arg_count += 1;
             if (self.curKind() == .comma) self.advance_token();
         }
@@ -412,26 +417,34 @@ fn emitStatement(
             try js_fmt.appendSlice(self.alloc, call_name);
             try js_fmt.append(self.alloc, '(');
             for (0..arg_count) |ai| {
-                if (ai > 0) {
-                    try js_fmt.appendSlice(self.alloc, ", ");
-                    try js_args.appendSlice(self.alloc, ", ");
-                }
+                if (ai > 0) try js_fmt.appendSlice(self.alloc, ", ");
                 if (arg_types[ai] == .string) {
                     try js_fmt.appendSlice(self.alloc, "'{s}'");
+                    if (js_args.items.len > 0) try js_args.appendSlice(self.alloc, ", ");
                     try js_args.appendSlice(self.alloc, arg_exprs[ai]);
+                } else if (arg_types[ai] == .js_ident) {
+                    // JS-scope variable — embed name directly, no Zig format arg
+                    try js_fmt.appendSlice(self.alloc, arg_exprs[ai]);
                 } else {
                     try js_fmt.appendSlice(self.alloc, "{d}");
+                    if (js_args.items.len > 0) try js_args.appendSlice(self.alloc, ", ");
                     try js_args.appendSlice(self.alloc, arg_exprs[ai]);
                 }
             }
             try js_fmt.append(self.alloc, ')');
-            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "{s}{{\n" ++
-                "{s}    var _eb: [512]u8 = undefined;\n" ++
-                "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
-                "{s}    qjs_runtime.evalExpr(_ev);\n" ++
-                "{s}}}\n",
-                .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
+            if (js_args.items.len == 0) {
+                // All args are static/JS-scope — emit direct evalExpr
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "{s}qjs_runtime.evalExpr(\"{s}\");\n", .{ pad, js_fmt.items }));
+            } else {
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "{s}{{\n" ++
+                    "{s}    var _eb: [512]u8 = undefined;\n" ++
+                    "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
+                    "{s}    qjs_runtime.evalExpr(_ev);\n" ++
+                    "{s}}}\n",
+                    .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
+            }
         }
     } else if (self.compute_zig != null) {
         // <zscript> — direct native Zig function call

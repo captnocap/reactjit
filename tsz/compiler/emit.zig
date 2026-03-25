@@ -399,7 +399,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
     // Warn about dynamic styles that were never bound
     for (0..self.dyn_style_count) |dsi| {
-        if (!self.dyn_styles[dsi].has_ref) {
+        if (!self.dyn_styles[dsi].has_ref and !self.dyn_styles[dsi].map_claimed) {
             const msg = std.fmt.allocPrint(self.alloc,
                 "dynamic style '{s}' was never bound to a node — will not update at runtime",
                 .{self.dyn_styles[dsi].field}) catch "unbound dynamic style";
@@ -712,7 +712,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             }
         }
         for (0..self.dyn_style_count) |dsi| {
-            if (!self.dyn_styles[dsi].has_ref) {
+            if (!self.dyn_styles[dsi].has_ref and !self.dyn_styles[dsi].map_claimed) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "comptime {{ @compileError(\"{s}: dynamic style '{s}' was never bound — will not update at runtime\"); }}\n",
                     .{ basename, self.dyn_styles[dsi].field }));
@@ -1609,10 +1609,38 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     try out.appendSlice(self.alloc, " }");
                 }
                 try out.appendSlice(self.alloc, " };\n");
+                // Emit inline background_color updates for inner nodes with dyn_background_color
+                for (0..m.inner_count) |ni| {
+                    const inner = m.inner_nodes[ni];
+                    if (inner.dyn_background_color.len > 0) {
+                        const out_idx_bg: []const u8 = if (is_nested) "_nc" else "_i";
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _map_inner_{d}{s}[{s}][{d}].style.background_color = {s};\n",
+                            .{ mi, pool_prefix, out_idx_bg, ni, inner.dyn_background_color }));
+                    }
+                }
             }
 
             // Emit pool node
             const out_idx2: []const u8 = if (is_nested) "_nc" else "_i";
+            // When map root is a component — pool_raw_expr has the fully inlined node
+            if (m.pool_raw_expr.len > 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _map_pool_{d}{s}[{s}] = {s};\n", .{ mi, pool_prefix, out_idx2, m.pool_raw_expr }));
+                if (is_nested) try out.appendSlice(self.alloc, "        _nc += 1;\n");
+                try out.appendSlice(self.alloc, "    }\n");
+                if (is_nested) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _map_count_{d}[_ci] = _nc;\n", .{mi}));
+                }
+                if (!is_nested) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}[{d}].children = _map_pool_{d}[0.._map_count_{d}];\n",
+                        .{ m.parent_arr_name, m.child_idx, mi, mi }));
+                }
+                try out.appendSlice(self.alloc, "}\n\n");
+                continue;
+            }
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "        _map_pool_{d}{s}[{s}] = .{{ ", .{ mi, pool_prefix, out_idx2 }));
             var has_outer_field = false;
@@ -1797,9 +1825,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         // state.getSlotFloat() returns f64 → @floatCast
         const needs_int_cast = std.mem.eql(u8, ds.field, "canvas_flow_speed");
         const is_scene3d_field = std.mem.startsWith(u8, ds.field, "scene3d_");
+        // Color fields: i64 packed 0xRRGGBB → Color.rgb(r, g, b)
+        // Only wrap if expression isn't already a Color.rgb() call (attrs.zig pre-wraps style colors)
+        const is_color_field = (std.mem.eql(u8, ds.field, "text_color") or
+            std.mem.eql(u8, ds.field, "background_color") or
+            std.mem.eql(u8, ds.field, "border_color") or
+            std.mem.eql(u8, ds.field, "shadow_color") or
+            std.mem.eql(u8, ds.field, "gradient_color_end")) and
+            !std.mem.startsWith(u8, ds.expression, "Color.rgb(") and
+            std.mem.indexOf(u8, ds.expression, "Color.rgb(") == null;
         // scene3d fields: f32 direct node fields from f64 state.getSlotFloat → need @floatCast
         const needs_float_cast = is_scene3d_field;
-        const expr = if (needs_float_cast)
+        const expr = if (is_color_field)
+            try std.fmt.allocPrint(self.alloc, "Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))", .{ ds.expression, ds.expression, ds.expression })
+        else if (needs_float_cast)
             try std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{ds.expression})
         else
             ds.expression;
