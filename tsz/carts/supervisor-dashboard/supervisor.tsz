@@ -20,10 +20,11 @@ import { loadAll, loadMemories, selectTask, closeDetail, loadDetail, startDrag, 
 import { MemoryPage } from './memory';
 import { DevServerPage } from './devserver';
 import { InspectorPage } from './inspector';
+import { ViolationsPage } from './violations';
 
 const [refreshTick] = useFFI(sv_refresh, 3000);
 
-// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector
+// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector, 5=violations
 const [activeTab, setActiveTab] = useState(0);
 
 // Splitter
@@ -143,6 +144,16 @@ const [inspDetMarLeft, setInspDetMarLeft] = useState(0);
 const [inspDetContentW, setInspDetContentW] = useState(0);
 const [inspDetContentH, setInspDetContentH] = useState(0);
 
+// Violations state (used by violations.tsz)
+const [vioFeed, setVioFeed] = useState([{ id: 0, rule: '', action: '', matched: '', resolved: 0, time: '', dotColor: 0x484f58, actionBg: 0x1f2937, actionColor: 0x6b7280 }]);
+const [vioRules, setVioRules] = useState([{ id: 0, name: '', pattern: '', action: '', description: '', enabled: 0, totalHits: 0, openHits: 0, actionColor: 0x6b7280, actionBg: 0x1f2937 }]);
+const [vioTotal, setVioTotal] = useState(0);
+const [vioOpen, setVioOpen] = useState(0);
+const [vioRuleCount, setVioRuleCount] = useState(0);
+const [vioDenyCount, setVioDenyCount] = useState(0);
+const [vioPauseCount, setVioPauseCount] = useState(0);
+const [vioFlagCount, setVioFlagCount] = useState(0);
+
 function App() {
   return (
     <C.Page>
@@ -166,6 +177,10 @@ function App() {
         <Pressable onPress={() => { setActiveTab(4) }}>
           {activeTab == 4 && <C.TabActive><C.TabTextActive>{`Inspector (${inspNodeCount})`}</C.TabTextActive></C.TabActive>}
           {activeTab != 4 && <C.Tab><C.TabText>{`Inspector (${inspNodeCount})`}</C.TabText></C.Tab>}
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(5) }}>
+          {activeTab == 5 && <C.TabActive><C.TabTextActive>{`Violations (${vioOpen})`}</C.TabTextActive></C.TabActive>}
+          {activeTab != 5 && <C.Tab><C.TabText>{`Violations (${vioOpen})`}</C.TabText></C.Tab>}
         </Pressable>
       </C.TabBar>
 
@@ -395,6 +410,8 @@ function App() {
         {activeTab == 3 && <DevServerPage />}
 
         {activeTab == 4 && <InspectorPage />}
+
+        {activeTab == 5 && <ViolationsPage />}
       </C.TabContent>
     </C.Page>
   );
