@@ -180,6 +180,20 @@ pub const Lexer = struct {
                 continue;
             }
 
+            // Block comments: /* ... */ (including JSX comments {/* ... */})
+            if (ch == '/' and self.peekAt(1) == '*') {
+                self.pos += 2;
+                while (self.pos + 1 < self.source.len) {
+                    if (self.source[self.pos] == '*' and self.source[self.pos + 1] == '/') {
+                        self.pos += 2;
+                        break;
+                    }
+                    self.pos += 1;
+                }
+                self.emit(.comment, start, self.pos);
+                continue;
+            }
+
             // String literals
             // Single quotes are only string delimiters after = : ( [ , { operators.
             // Inside JSX text content, ' is an apostrophe (e.g., "doesn't").

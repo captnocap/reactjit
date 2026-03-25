@@ -55,6 +55,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 try frag_children.append(self.alloc, try parseJSXElement(self));
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
+                // {/* JSX comment */} — skip block comments
+                if (self.curKind() == .comment) {
+                    self.advance_token();
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    continue;
+                }
                 // {children} splice
                 if (self.isIdent("children") and self.component_children_exprs != null) {
                     self.advance_token();
@@ -523,6 +529,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 }
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
+
+                // {/* JSX comment */} — skip block comments
+                if (self.curKind() == .comment) {
+                    self.advance_token();
+                    if (self.curKind() == .rbrace) self.advance_token();
+                    continue;
+                }
 
                 // {children} splice
                 if (self.isIdent("children") and self.component_children_exprs != null) {
