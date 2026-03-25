@@ -488,6 +488,76 @@ fn processLfo(m: *Module, num_samples: u32) void {
     m.phase = phase;
 }
 
+// Pre-allocated delay line storage (shared across all delay modules)
+const MAX_DELAY_SAMPLES = SAMPLE_RATE * 2; // 2 seconds max
+const MAX_DELAY_MODULES = 8;
+var g_delay_storage: [MAX_DELAY_MODULES][MAX_DELAY_SAMPLES]f32 = [_][MAX_DELAY_SAMPLES]f32{[_]f32{0} ** MAX_DELAY_SAMPLES} ** MAX_DELAY_MODULES;
+var g_delay_alloc_count: u32 = 0;
+
+fn processDelay(m: *Module, num_samples: u32) void {
+    const in_buf = m.ports[0].buffer;
+    const out_buf = m.ports[1].buffer;
+    const delay_time = m.params[0].value; // seconds
+    const feedback = m.params[1].value;
+    const mix = m.params[2].value;
+
+    // Lazy-allocate from pool
+    if (m.delay_buffer == null) {
+        if (g_delay_alloc_count < MAX_DELAY_MODULES) {
+            m.delay_buffer = &g_delay_storage[g_delay_alloc_count];
+            g_delay_alloc_count += 1;
+        } else return;
+    }
+    const dbuf = m.delay_buffer.?;
+
+    const delay_samples: u32 = @intFromFloat(@min(
+        @as(f64, @floatFromInt(MAX_DELAY_SAMPLES - 1)),
+        delay_time * @as(f64, @floatFromInt(SAMPLE_RATE)),
+    ));
+    if (delay_samples == 0) {
+        @memcpy(out_buf[0..num_samples], in_buf[0..num_samples]);
+        return;
+    }
+
+    var wp = m.delay_write_pos;
+    for (0..num_samples) |i| {
+        const rp = (wp + MAX_DELAY_SAMPLES - delay_samples) % MAX_DELAY_SAMPLES;
+        const delayed: f64 = @floatCast(dbuf[rp]);
+        const dry: f64 = @floatCast(in_buf[i]);
+        dbuf[wp] = @floatCast(dry + delayed * feedback);
+        out_buf[i] = @floatCast(dry * (1.0 - mix) + delayed * mix);
+        wp = (wp + 1) % MAX_DELAY_SAMPLES;
+    }
+    m.delay_write_pos = wp;
+}
+
+fn processSequencer(m: *Module, num_samples: u32) void {
+    const freq_out = m.ports[0].buffer;
+    const gate_out = m.ports[1].buffer;
+    const bpm = m.params[0].value;
+    const steps_f = m.params[1].value;
+    const steps: u32 = @intFromFloat(@max(1, @min(32, steps_f)));
+    var phase = m.phase;
+    const inv_sr = 1.0 / @as(f64, @floatFromInt(SAMPLE_RATE));
+    const step_freq = bpm / 60.0; // steps per second
+
+    // Simple C-major scale pattern
+    const scale = [_]f64{ 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
+                          587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7,
+                          261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
+                          587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7 };
+
+    for (0..num_samples) |i| {
+        const step: u32 = @intFromFloat(@mod(phase * step_freq, @as(f64, @floatFromInt(steps))));
+        freq_out[i] = @floatCast(scale[step % 32]);
+        // Gate: high for first 80% of step, low for last 20%
+        const step_phase = @mod(phase * step_freq, 1.0);
+        gate_out[i] = if (step_phase < 0.8) @as(f32, 1.0) else @as(f32, 0.0);
+        phase += inv_sr;
+    }
+    m.phase = phase;
+}
+
 fn processModule(m: *Module, num_samples: u32) void {
     if (!m.active) return;
     switch (m.module_type) {
@@ -497,7 +567,9 @@ fn processModule(m: *Module, num_samples: u32) void {
         .mixer => processMixer(m, num_samples),
         .envelope => processEnvelope(m, num_samples),
         .lfo => processLfo(m, num_samples),
-        .delay, .sequencer, .sampler, .custom => {}, // TODO
+        .delay => processDelay(m, num_samples),
+        .sequencer => processSequencer(m, num_samples),
+        .sampler, .custom => {},
     }
 }
 
@@ -993,6 +1065,62 @@ fn hostAudioGetPeakLevel(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qj
     return jsFloat(@floatCast(peak));
 }
 
+fn hostAudioGetParamCount(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return jsFloat(0);
+    var mid: i32 = 0;
+    _ = qjs.JS_ToInt32(null, &mid, argv[0]);
+    if (findModule(@intCast(mid))) |m| return jsFloat(@floatFromInt(m.param_count));
+    return jsFloat(0);
+}
+
+fn hostAudioGetPortCount(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return jsFloat(0);
+    var mid: i32 = 0;
+    _ = qjs.JS_ToInt32(null, &mid, argv[0]);
+    if (findModule(@intCast(mid))) |m| return jsFloat(@floatFromInt(m.port_count));
+    return jsFloat(0);
+}
+
+fn hostAudioGetModuleType(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return jsFloat(-1);
+    var mid: i32 = 0;
+    _ = qjs.JS_ToInt32(null, &mid, argv[0]);
+    if (findModule(@intCast(mid))) |m| return jsFloat(@floatFromInt(@intFromEnum(m.module_type)));
+    return jsFloat(-1);
+}
+
+fn hostAudioGetParamMin(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 2) return jsFloat(0);
+    var mid: i32 = 0;
+    var pidx: i32 = 0;
+    _ = qjs.JS_ToInt32(null, &mid, argv[0]);
+    _ = qjs.JS_ToInt32(null, &pidx, argv[1]);
+    if (findModule(@intCast(mid))) |m| {
+        if (pidx >= 0 and pidx < m.param_count) return jsFloat(m.params[@intCast(pidx)].min);
+    }
+    return jsFloat(0);
+}
+
+fn hostAudioGetParamMax(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 2) return jsFloat(0);
+    var mid: i32 = 0;
+    var pidx: i32 = 0;
+    _ = qjs.JS_ToInt32(null, &mid, argv[0]);
+    _ = qjs.JS_ToInt32(null, &pidx, argv[1]);
+    if (findModule(@intCast(mid))) |m| {
+        if (pidx >= 0 and pidx < m.param_count) return jsFloat(m.params[@intCast(pidx)].max);
+    }
+    return jsFloat(0);
+}
+
+fn hostAudioGetConnectionCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return jsFloat(@floatFromInt(g_engine.connection_count));
+}
+
+fn hostAudioIsInitialized(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return jsFloat(if (g_engine.initialized) 1 else 0);
+}
+
 /// Register all audio host functions onto the QuickJS global object.
 /// Called from engine.zig after qjs_runtime.initVM().
 pub fn registerQjsHostFunctions() void {
@@ -1016,4 +1144,11 @@ pub fn registerQjsHostFunctions() void {
     reg("__audio_get_sample_rate", @ptrCast(&hostAudioGetSampleRate), 0);
     reg("__audio_get_buffer_size", @ptrCast(&hostAudioGetBufferSize), 0);
     reg("__audio_get_peak_level", @ptrCast(&hostAudioGetPeakLevel), 0);
+    reg("__audio_get_param_count", @ptrCast(&hostAudioGetParamCount), 1);
+    reg("__audio_get_port_count", @ptrCast(&hostAudioGetPortCount), 1);
+    reg("__audio_get_module_type", @ptrCast(&hostAudioGetModuleType), 1);
+    reg("__audio_get_param_min", @ptrCast(&hostAudioGetParamMin), 2);
+    reg("__audio_get_param_max", @ptrCast(&hostAudioGetParamMax), 2);
+    reg("__audio_get_connection_count", @ptrCast(&hostAudioGetConnectionCount), 0);
+    reg("__audio_is_initialized", @ptrCast(&hostAudioIsInitialized), 0);
 }
