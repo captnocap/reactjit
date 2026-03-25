@@ -242,6 +242,34 @@ CREATE TABLE IF NOT EXISTS worker_assignments (
 );
 
 -- =============================================================================
+-- Violation rules: semantic nets that flag worker behavior
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS violation_rules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id),
+    name        TEXT NOT NULL,
+    pattern     TEXT NOT NULL,          -- regex pattern to match against worker output/edits
+    action      TEXT NOT NULL DEFAULT 'flag'
+                CHECK (action IN ('flag', 'pause', 'deny')),
+    description TEXT DEFAULT '',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS violation_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id     INTEGER NOT NULL REFERENCES violation_rules(id),
+    worker_id   INTEGER REFERENCES workers(id),
+    task_id     INTEGER REFERENCES tasks(id),
+    matched_text TEXT NOT NULL,         -- the text that triggered the rule
+    action_taken TEXT NOT NULL,         -- flag/pause/deny
+    resolved    INTEGER NOT NULL DEFAULT 0,
+    resolved_at TEXT,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- =============================================================================
 -- Indexes
 -- =============================================================================
 
@@ -259,3 +287,5 @@ CREATE INDEX IF NOT EXISTS idx_edits_task      ON task_edits(task_id, timestamp)
 CREATE INDEX IF NOT EXISTS idx_notes_task      ON task_notes(task_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_milestones_plan ON milestones(plan_id, after_phase);
 CREATE INDEX IF NOT EXISTS idx_worker_assign   ON worker_assignments(plan_id, worker_id);
+CREATE INDEX IF NOT EXISTS idx_violation_rules ON violation_rules(project_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_violation_log   ON violation_log(rule_id, created_at);
