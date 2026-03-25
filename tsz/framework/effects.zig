@@ -16,15 +16,18 @@
 //!   }} width={400} height={300} />
 
 const std = @import("std");
+const builtin = @import("builtin");
 const wgpu = @import("wgpu");
 const gpu_core = @import("gpu/gpu.zig");
 const images = @import("gpu/images.zig");
 const log = @import("log.zig");
 const layout = @import("layout.zig");
 const effect_ctx = @import("effect_ctx.zig");
+const effect_shader = @import("effect_shader.zig");
 
 pub const EffectContext = effect_ctx.EffectContext;
 pub const RenderFn = effect_ctx.RenderFn;
+pub const GpuShaderDesc = effect_shader.GpuShaderDesc;
 
 const Node = layout.Node;
 const page_alloc = std.heap.page_allocator;
@@ -86,12 +89,28 @@ pub fn isEffect(name: []const u8) bool {
 
 const MAX_INSTANCES = 32;
 
+const BackendPref = enum { auto, cpu, gpu };
+const InstanceBackend = enum { cpu, gpu };
+
+const GpuUniforms = extern struct {
+    size_w: f32,
+    size_h: f32,
+    time: f32,
+    dt: f32,
+    frame: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_inside: f32,
+};
+
 const Instance = struct {
     active: bool = false,
 
     // Identity — one of these is set, not both
     effect_type: []const u8 = "", // registry path
     render_fn: ?RenderFn = null, // custom render path
+    shader_desc: ?GpuShaderDesc = null, // optional GPU path for custom effects
+    node_key: usize = 0, // stable identity for custom effects
     name: ?[]const u8 = null, // user-assigned name for referencing as fill source
 
     // Registry path state
@@ -107,6 +126,11 @@ const Instance = struct {
     sampler: ?*wgpu.Sampler = null,
     bind_group: ?*wgpu.BindGroup = null,
     dirty: bool = false,
+    backend: InstanceBackend = .cpu,
+    gpu_failed: bool = false,
+    gpu_pipeline: ?*wgpu.RenderPipeline = null,
+    gpu_uniform_buffer: ?*wgpu.Buffer = null,
+    gpu_bind_group: ?*wgpu.BindGroup = null,
 
     // Timing (for custom render path)
     time: f32 = 0,
@@ -125,16 +149,33 @@ const Instance = struct {
         if (self.sampler) |s| s.release();
         if (self.texture_view) |tv| tv.release();
         if (self.texture) |t| t.destroy();
+        if (self.gpu_bind_group) |bg| bg.release();
+        if (self.gpu_uniform_buffer) |buf| buf.release();
+        if (self.gpu_pipeline) |pipe| pipe.release();
         self.bind_group = null;
         self.sampler = null;
         self.texture_view = null;
         self.texture = null;
+        self.gpu_bind_group = null;
+        self.gpu_uniform_buffer = null;
+        self.gpu_pipeline = null;
         if (self.pixel_buf) |buf| page_alloc.free(buf);
         self.pixel_buf = null;
         self.active = false;
     }
 
-    fn ensureSize(self: *Instance, w: u32, h: u32) void {
+    fn releaseTarget(self: *Instance) void {
+        if (self.bind_group) |bg| bg.release();
+        if (self.sampler) |s| s.release();
+        if (self.texture_view) |tv| tv.release();
+        if (self.texture) |t| t.destroy();
+        self.bind_group = null;
+        self.sampler = null;
+        self.texture_view = null;
+        self.texture = null;
+    }
+
+    fn ensureCpuSize(self: *Instance, w: u32, h: u32) void {
         if (w == 0 or h == 0) return;
         if (self.width == w and self.height == h) return;
 
@@ -144,15 +185,7 @@ const Instance = struct {
         self.width = w;
         self.height = h;
 
-        // Invalidate wgpu resources
-        if (self.bind_group) |bg| bg.release();
-        if (self.sampler) |s| s.release();
-        if (self.texture_view) |tv| tv.release();
-        if (self.texture) |t| t.destroy();
-        self.bind_group = null;
-        self.sampler = null;
-        self.texture_view = null;
-        self.texture = null;
+        self.releaseTarget();
 
         // Re-create registry effect state at new size
         if (self.module) |m| {
@@ -161,7 +194,7 @@ const Instance = struct {
         }
     }
 
-    fn ensureTexture(self: *Instance) bool {
+    fn ensureTarget(self: *Instance, render_attachment: bool) bool {
         if (self.bind_group != null) return true;
         const device = gpu_core.getDevice() orelse return false;
         if (self.width == 0 or self.height == 0) return false;
@@ -173,7 +206,10 @@ const Instance = struct {
             .sample_count = 1,
             .dimension = .@"2d",
             .format = .rgba8_unorm,
-            .usage = wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.copy_dst,
+            .usage = if (render_attachment)
+                (wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.render_attachment)
+            else
+                (wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.copy_dst),
         }) orelse return false;
 
         const view = tex.createView(&.{
@@ -253,6 +289,8 @@ const Instance = struct {
 
 var instances: [MAX_INSTANCES]Instance = [_]Instance{.{}} ** MAX_INSTANCES;
 var instance_count: usize = 0;
+var g_backend_pref: BackendPref = .auto;
+var g_gpu_bind_group_layout: ?*wgpu.BindGroupLayout = null;
 
 // ════════════════════════════════════════════════════════════════════════
 // Mouse state (polled once per frame)
@@ -304,13 +342,222 @@ var g_dt: f32 = 0;
 // Public API
 // ════════════════════════════════════════════════════════════════════════
 
+fn parseBackendPref() BackendPref {
+    if (builtin.cpu.arch == .wasm32) return .cpu;
+    const env = std.posix.getenv("ZIGOS_EFFECTS_BACKEND") orelse return .cpu;
+    if (std.mem.eql(u8, env, "cpu")) return .cpu;
+    if (std.mem.eql(u8, env, "gpu")) return .gpu;
+    return .cpu;
+}
+
+fn shouldTryGpu(node: *const Node) bool {
+    if (g_backend_pref == .cpu) return false;
+    if (node.effect_shader == null) return false;
+    if (node.effect_name != null) return false; // fillEffect still samples CPU pixels
+    if (node.effect_mask) return false; // mask pipeline still CPU-only
+    return true;
+}
+
+fn ensureGpuBindGroupLayout(device: *wgpu.Device) ?*wgpu.BindGroupLayout {
+    if (g_gpu_bind_group_layout) |layout_ref| return layout_ref;
+    const layout_ref = device.createBindGroupLayout(&.{
+        .entry_count = 1,
+        .entries = @ptrCast(&wgpu.BindGroupLayoutEntry{
+            .binding = 0,
+            .visibility = wgpu.ShaderStages.fragment,
+            .buffer = .{
+                .@"type" = .uniform,
+                .has_dynamic_offset = 0,
+                .min_binding_size = @sizeOf(GpuUniforms),
+            },
+        }),
+    }) orelse return null;
+    g_gpu_bind_group_layout = layout_ref;
+    return layout_ref;
+}
+
+fn ensureGpuPipeline(self: *Instance) bool {
+    if (self.gpu_pipeline != null and self.gpu_bind_group != null and self.gpu_uniform_buffer != null) return true;
+    const shader_desc = self.shader_desc orelse return false;
+    const device = gpu_core.getDevice() orelse return false;
+    const bgl = ensureGpuBindGroupLayout(device) orelse return false;
+
+    const uniform_buf = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("effect_gpu_uniforms"),
+        .size = @sizeOf(GpuUniforms),
+        .usage = wgpu.BufferUsages.uniform | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    }) orelse return false;
+
+    const effect_bg = device.createBindGroup(&.{
+        .layout = bgl,
+        .entry_count = 1,
+        .entries = @ptrCast(&wgpu.BindGroupEntry{
+            .binding = 0,
+            .buffer = uniform_buf,
+            .offset = 0,
+            .size = @sizeOf(GpuUniforms),
+        }),
+    }) orelse {
+        uniform_buf.release();
+        return false;
+    };
+
+    const module_desc = wgpu.shaderModuleWGSLDescriptor(.{
+        .label = "effect_gpu_shader",
+        .code = shader_desc.wgsl,
+    });
+    const shader_module = device.createShaderModule(&module_desc) orelse {
+        effect_bg.release();
+        uniform_buf.release();
+        return false;
+    };
+    defer shader_module.release();
+
+    const pipeline_layout = device.createPipelineLayout(&.{
+        .bind_group_layout_count = 1,
+        .bind_group_layouts = @ptrCast(&bgl),
+    }) orelse {
+        effect_bg.release();
+        uniform_buf.release();
+        return false;
+    };
+    defer pipeline_layout.release();
+
+    const color_target = wgpu.ColorTargetState{
+        .format = .rgba8_unorm,
+        .blend = null,
+        .write_mask = wgpu.ColorWriteMasks.all,
+    };
+
+    const fragment_state = wgpu.FragmentState{
+        .module = shader_module,
+        .entry_point = wgpu.StringView.fromSlice("fs_main"),
+        .target_count = 1,
+        .targets = @ptrCast(&color_target),
+    };
+
+    const pipeline = device.createRenderPipeline(&.{
+        .layout = pipeline_layout,
+        .vertex = .{
+            .module = shader_module,
+            .entry_point = wgpu.StringView.fromSlice("vs_main"),
+            .buffer_count = 0,
+            .buffers = &[0]wgpu.VertexBufferLayout{},
+        },
+        .primitive = .{ .topology = .triangle_list },
+        .multisample = .{},
+        .fragment = &fragment_state,
+    }) orelse {
+        effect_bg.release();
+        uniform_buf.release();
+        return false;
+    };
+
+    self.gpu_uniform_buffer = uniform_buf;
+    self.gpu_bind_group = effect_bg;
+    self.gpu_pipeline = pipeline;
+    return true;
+}
+
+fn ensureGpuSize(self: *Instance, w: u32, h: u32) bool {
+    if (w == 0 or h == 0) return false;
+    if (self.width != w or self.height != h) {
+        self.width = w;
+        self.height = h;
+        self.releaseTarget();
+    }
+    return self.ensureTarget(true);
+}
+
+fn renderGpu(self: *Instance) bool {
+    const device = gpu_core.getDevice() orelse return false;
+    const queue = gpu_core.getQueue() orelse return false;
+    const pipeline = self.gpu_pipeline orelse return false;
+    const effect_bg = self.gpu_bind_group orelse return false;
+    const uniform_buf = self.gpu_uniform_buffer orelse return false;
+    const target_view = self.texture_view orelse return false;
+
+    const uniforms = GpuUniforms{
+        .size_w = @floatFromInt(self.width),
+        .size_h = @floatFromInt(self.height),
+        .time = self.time,
+        .dt = g_dt,
+        .frame = @floatFromInt(self.frame_count),
+        .mouse_x = g_mouse_x - self.screen_x,
+        .mouse_y = g_mouse_y - self.screen_y,
+        .mouse_inside = if ((g_mouse_x - self.screen_x) >= 0 and
+            (g_mouse_x - self.screen_x) <= @as(f32, @floatFromInt(self.width)) and
+            (g_mouse_y - self.screen_y) >= 0 and
+            (g_mouse_y - self.screen_y) <= @as(f32, @floatFromInt(self.height))) 1.0 else 0.0,
+    };
+    queue.writeBuffer(uniform_buf, 0, @ptrCast(&uniforms), @sizeOf(GpuUniforms));
+
+    const encoder = device.createCommandEncoder(&.{ .label = wgpu.StringView.fromSlice("effect_gpu") }) orelse return false;
+    const pass = encoder.beginRenderPass(&.{
+        .color_attachment_count = 1,
+        .color_attachments = @ptrCast(&wgpu.ColorAttachment{
+            .view = target_view,
+            .load_op = .clear,
+            .store_op = .store,
+            .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
+        }),
+    }) orelse {
+        encoder.release();
+        return false;
+    };
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, effect_bg, 0, null);
+    pass.draw(6, 1, 0, 0);
+    pass.end();
+    pass.release();
+
+    const command = encoder.finish(&.{ .label = wgpu.StringView.fromSlice("effect_gpu_cmd") }) orelse {
+        encoder.release();
+        return false;
+    };
+    encoder.release();
+    queue.submit(&.{command});
+    command.release();
+    return true;
+}
+
+fn renderCpuNow(self: *Instance) bool {
+    const render = self.render_fn orelse return false;
+    const buf = self.pixel_buf orelse return false;
+    var ctx = EffectContext{
+        .buf = buf.ptr,
+        .width = self.width,
+        .height = self.height,
+        .stride = self.width * 4,
+        .time = self.time,
+        .dt = g_dt,
+        .mouse_x = g_mouse_x - self.screen_x,
+        .mouse_y = g_mouse_y - self.screen_y,
+        .mouse_inside = (g_mouse_x - self.screen_x) >= 0 and
+            (g_mouse_x - self.screen_x) <= @as(f32, @floatFromInt(self.width)) and
+            (g_mouse_y - self.screen_y) >= 0 and
+            (g_mouse_y - self.screen_y) <= @as(f32, @floatFromInt(self.height)),
+        .frame = self.frame_count,
+    };
+    render(&ctx);
+    self.dirty = true;
+    if (self.ensureTarget(false)) {
+        self.upload();
+        return self.bind_group != null;
+    }
+    return false;
+}
+
 pub fn init() void {
-    // No built-in effects — users compose their own via <Effect onRender>
+    g_backend_pref = parseBackendPref();
 }
 
 pub fn deinit() void {
     for (instances[0..instance_count]) |*inst| inst.deinit();
     instance_count = 0;
+    if (g_gpu_bind_group_layout) |layout_ref| layout_ref.release();
+    g_gpu_bind_group_layout = null;
 }
 
 /// Called every frame: update registry-based effect instances and store dt.
@@ -340,6 +587,7 @@ pub fn update(dt: f32) void {
 
         // Custom render path: call user function with EffectContext
         if (inst.render_fn) |render| {
+            if (inst.backend != .cpu) continue;
             if (inst.width == 0 or inst.height == 0) continue;
             const buf = inst.pixel_buf orelse continue;
 
@@ -364,7 +612,7 @@ pub fn update(dt: f32) void {
 
         // Upload to GPU
         if (inst.dirty) {
-            if (inst.ensureTexture()) inst.upload();
+            if (inst.ensureTarget(false)) inst.upload();
         }
     }
 }
@@ -379,10 +627,11 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     i.active = true;
     i.screen_x = x;
     i.screen_y = y;
+    i.backend = .cpu;
 
     const iw: u32 = @intFromFloat(@max(1, w));
     const ih: u32 = @intFromFloat(@max(1, h));
-    i.ensureSize(iw, ih);
+    i.ensureCpuSize(iw, ih);
 
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
@@ -391,12 +640,12 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     return true;
 }
 
-/// Paint a custom effect (node has effect_render function pointer).
-/// Called from engine.paintNode when node.effect_render is set.
-pub fn paintCustomEffect(render_fn: RenderFn, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
-    var inst = findInstanceByFn(render_fn);
+/// Paint a custom effect (node has effect_render and optional effect_shader).
+/// GPU is used when a shader-safe lowering exists; otherwise this falls back to CPU.
+pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
+    var inst = findInstanceByNode(@intFromPtr(node));
     if (inst == null) {
-        inst = createCustomInstance(render_fn);
+        inst = createCustomInstance(node);
     }
     const i = inst orelse return false;
     i.active = true;
@@ -405,10 +654,21 @@ pub fn paintCustomEffect(render_fn: RenderFn, x: f32, y: f32, w: f32, h: f32, op
 
     const iw: u32 = @intFromFloat(@max(1, w));
     const ih: u32 = @intFromFloat(@max(1, h));
-    i.ensureSize(iw, ih);
+    if (shouldTryGpu(node) and !i.gpu_failed) {
+        i.backend = .gpu;
+        if (ensureGpuSize(i, iw, ih) and ensureGpuPipeline(i) and renderGpu(i)) {
+            const bg = i.bind_group orelse return false;
+            images.queueQuad(x, y, w, h, opacity, bg);
+            return true;
+        }
+        i.gpu_failed = true;
+    }
 
-    const bg = i.bind_group orelse return false;
+    i.backend = .cpu;
+    i.ensureCpuSize(iw, ih);
     if (i.width == 0 or i.height == 0) return false;
+    if (i.bind_group == null and !renderCpuNow(i)) return false;
+    const bg = i.bind_group orelse return false;
 
     images.queueQuad(x, y, w, h, opacity, bg);
     return true;
@@ -424,10 +684,11 @@ pub fn paintBackground(effect_type: []const u8, px: f32, py: f32, pw: f32, ph: f
     i.active = true;
     i.screen_x = px;
     i.screen_y = py;
+    i.backend = .cpu;
 
     const iw: u32 = @intFromFloat(@max(1, pw));
     const ih: u32 = @intFromFloat(@max(1, ph));
-    i.ensureSize(iw, ih);
+    i.ensureCpuSize(iw, ih);
 
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
@@ -448,9 +709,9 @@ fn findInstanceByType(effect_type: []const u8) ?*Instance {
     return null;
 }
 
-fn findInstanceByFn(render_fn: RenderFn) ?*Instance {
+fn findInstanceByNode(node_key: usize) ?*Instance {
     for (instances[0..instance_count]) |*inst| {
-        if (inst.active and inst.render_fn != null and inst.render_fn.? == render_fn)
+        if (inst.active and inst.node_key == node_key and inst.render_fn != null)
             return inst;
     }
     return null;
@@ -470,13 +731,16 @@ fn createRegistryInstance(effect_type: []const u8) ?*Instance {
     return inst;
 }
 
-fn createCustomInstance(render_fn: RenderFn) ?*Instance {
+fn createCustomInstance(node: *const Node) ?*Instance {
     if (instance_count >= MAX_INSTANCES) return null;
+    const render_fn = node.effect_render orelse return null;
 
     const inst = &instances[instance_count];
     inst.* = .{
         .active = true,
         .render_fn = render_fn,
+        .shader_desc = node.effect_shader,
+        .node_key = @intFromPtr(node),
     };
     instance_count += 1;
     return inst;
@@ -519,22 +783,24 @@ pub fn getEffectFill(effect_name: []const u8) ?EffectFillInfo {
 /// Paint a named custom effect — same as paintCustomEffect but stores the name
 /// for later lookup by Graph.Path fillEffect references. Does NOT draw an image
 /// quad — the effect is invisible until referenced by a fill.
-pub fn paintNamedEffect(render_fn: RenderFn, effect_name: []const u8, x: f32, y: f32, w: f32, h: f32) bool {
-    var inst = findInstanceByFn(render_fn);
+pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f32, w: f32, h: f32) bool {
+    var inst = findInstanceByNode(@intFromPtr(node));
     if (inst == null) {
-        inst = createCustomInstance(render_fn);
+        inst = createCustomInstance(node);
     }
     const i = inst orelse return false;
     i.active = true;
+    i.backend = .cpu;
     i.name = effect_name;
     i.screen_x = x;
     i.screen_y = y;
 
     const iw: u32 = @intFromFloat(@max(1, w));
     const ih: u32 = @intFromFloat(@max(1, h));
-    i.ensureSize(iw, ih);
+    i.ensureCpuSize(iw, ih);
 
     if (i.width == 0 or i.height == 0) return false;
+    if (i.bind_group == null and !renderCpuNow(i)) return false;
     // Don't draw — the effect is only drawn when referenced by a polygon fill
     return true;
 }

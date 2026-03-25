@@ -1,6 +1,6 @@
 # Effects API
 
-Composable pixel-buffer effects where the framework provides primitives (pixel ops, math, timing) and users write the math in .tsz.
+Composable effects with the same `onRender` API surface. The runtime keeps the CPU pixel-buffer path for full compatibility, and now opportunistically compiles shader-safe effects to a GPU path with automatic CPU fallback.
 
 ## .tsz API
 
@@ -46,13 +46,13 @@ Composable pixel-buffer effects where the framework provides primitives (pixel o
 
 **Drawing:** `line(x0, y0, x1, y1, r, g, b, a)`, `circle(cx, cy, radius, r, g, b, a)`, `circleFill(cx, cy, radius, r, g, b, a)`
 
-**Math builtins (compiled to @sin etc):** `sin`, `cos`, `sqrt`, `abs`, `floor`, `ceil`, `mod`
+**Math builtins (compiled to @sin etc):** `sin`, `cos`, `sqrt`, `abs`, `floor`, `ceil`, `mod`, `atan2`
 
-**Math delegates (call math.zig):** `noise(x, y)`, `lerp(a, b, t)`, `remap(v, inMin, inMax, outMin, outMax)`, `smoothstep(e0, e1, x)`, `clamp(v, lo, hi)`, `dist(x0, y0, x1, y1)`
+**Math delegates (call math.zig):** `noise(x, y)`, `noise3(x, y, z)`, `fbm(x, y, octaves)`, `lerp(a, b, t)`, `remap(v, inMin, inMax, outMin, outMax)`, `smoothstep(e0, e1, x)`, `clamp(v, lo, hi)`, `dist(x0, y0, x1, y1)`
 
 **Color:** `hsv(h, s, v)` -> [3]f32, `hsl(h, s, l)` -> [3]f32
 
-**Mask-only:** `getSource(x, y)` -> [4]f32
+**Mask-only:** `getSource(x, y)` -> [4]f32, `getSourceAlpha(x, y)`, `getSourceR(x, y)`, `getSourceG(x, y)`, `getSourceB(x, y)`
 
 ## Framework files
 - `framework/effect_ctx.zig` — EffectContext struct, all pixel/math/color methods
@@ -69,6 +69,6 @@ Composable pixel-buffer effects where the framework provides primitives (pixel o
 ## Known limitations
 - Mask pipeline not fully wired — getSource() API ready but engine doesn't capture parent to offscreen texture yet
 - For-loop variables are i32, auto-cast to f32 for effect math — may lose precision for large values
-- No GPU-accelerated effects (all CPU pixel buffer) — fine for <800x600, slow for fullscreen
+- GPU path currently targets the canonical per-pixel loop form; effects that use feedback, arbitrary writes, or named/mask modes fall back to CPU
 - HSV/HSL return [3]f32 arrays — array indexing (`rgb[0]`) works but destructuring doesn't
-- Effect instances matched by function pointer — if two Effect elements use the same onRender function, they share state
+- GPU effects can be forced off with `ZIGOS_EFFECTS_BACKEND=cpu`; `auto` is the default and falls back to CPU when shader lowering or pipeline creation fails

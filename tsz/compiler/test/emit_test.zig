@@ -470,6 +470,74 @@ test "Effect onRender translates ctx methods" {
     try testing.expect(std.mem.indexOf(u8, out, "ctx.fade(") != null);
 }
 
+test "Effect onRender preserves array indexing on color helper results" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "function App() { return <Effect onRender={(e) => { const rgb = e.hsv(e.time, 0.8, 0.9); e.setPixel(0, 0, rgb[0], rgb[1], rgb[2], 1) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "rgb[0]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "rgb[1]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "rgb[2]") != null);
+}
+
+test "Effect onRender emits GPU shader metadata for canonical per-pixel loops" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "function App() { return <Effect onRender={(e) => { const t = e.time; for (let y = 0; y < e.height; y++) { for (let x = 0; x < e.width; x++) { const rgb = e.hsv(t + x * 0.01, 0.8, 0.9); e.setPixel(x, y, rgb[0], rgb[1], rgb[2], 1) } } }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "const effect_shader = ") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "_effect_shader_") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".effect_shader = _effect_shader_") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "hsv_to_rgb(") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "let _pixel = vec2f(floor(frag_pos.x), floor(frag_pos.y));") != null);
+}
+
+test "Effect onRender keeps CPU-only bodies off the GPU path" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src = "function App() { return <Effect onRender={(e) => { e.fade(0.97); e.setPixel(0, 0, 1, 0, 0, 1) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, ".effect_render = _effect_render_0") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".effect_shader = ") == null);
+}
+
+test "STRICT: Effect onRender supports mutable locals and single-statement else-if in dither-style pipelines" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "function App() { return <Effect onRender={(e) => { let threshold = 0.0; let hueBias = 0.05; if (e.mod(e.frame, 4) == 0) threshold = 0.00; else if (e.mod(e.frame, 4) == 1) threshold = 0.50; else if (e.mod(e.frame, 4) == 2) threshold = 0.12; else threshold = 0.62; if (hueBias < threshold) hueBias = threshold; const rgb = e.hsv((e.time + threshold + hueBias), 0.8, 0.9); e.setPixel(0, 0, rgb[0], rgb[1], rgb[2], threshold) }} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "var threshold = 0.0;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "var hueBias = 0.05;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.00;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.50;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.12;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.62;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "hueBias = threshold;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "const rgb = effect_ctx.EffectContext.hsvToRgb(") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "// unsupported: else(") == null);
+    try testing.expect(std.mem.indexOf(u8, out, "// unsupported: threshold(") == null);
+    try testing.expect(std.mem.indexOf(u8, out, "// unsupported: hueBias(") == null);
+}
+
 test "app with script block" {
     var a = arena();
     defer a.deinit();

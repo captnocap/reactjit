@@ -71,6 +71,26 @@ fn emitBlockBody(
     }
 }
 
+fn emitStatementOrBlock(
+    self: *Generator,
+    stmts: *std.ArrayListUnmanaged(u8),
+    depth: u32,
+) anyerror!void {
+    const saved_locals = self.local_count;
+    defer self.local_count = saved_locals;
+
+    if (self.curKind() == .lbrace) {
+        self.advance_token(); // consume {
+        try emitBlockBody(self, stmts, depth);
+        if (self.curKind() == .rbrace) self.advance_token(); // consume }
+        return;
+    }
+
+    const pad = try indentStr(self.alloc, depth);
+    try emitStatement(self, stmts, pad, depth);
+    while (self.curKind() == .semicolon) self.advance_token();
+}
+
 /// Emit a single handler statement. Called by emitBlockBody and recursively
 /// by if/while/for handlers for their nested blocks.
 fn emitStatement(
@@ -186,6 +206,7 @@ fn emitStatement(
         std.mem.eql(u8, name, "let") or
         std.mem.eql(u8, name, "var"))
     {
+        const decl_kw = name;
         self.advance_token(); // skip keyword
         if (self.curKind() != .identifier) return;
         const var_name = try self.alloc.dupe(u8, self.curText());
@@ -198,14 +219,40 @@ fn emitStatement(
         if (self.curKind() == .equals) self.advance_token(); // skip =
         const val_expr = try emitStateExpr(self);
         if (self.local_count < codegen.MAX_LOCALS) {
-            self.local_vars[self.local_count] = .{
-                .name = var_name,
-                .expr = val_expr,
-                .state_type = .int,
-            };
+            if (self.effect_param != null) {
+                const zig_kw = if (std.mem.eql(u8, decl_kw, "const")) "const" else "var";
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s} {s} = {s};\n", .{ pad, zig_kw, var_name, val_expr }));
+                self.local_vars[self.local_count] = .{
+                    .name = var_name,
+                    .expr = var_name,
+                    .assign_expr = if (std.mem.eql(u8, decl_kw, "const")) null else var_name,
+                    .state_type = .int,
+                };
+            } else {
+                self.local_vars[self.local_count] = .{
+                    .name = var_name,
+                    .expr = val_expr,
+                    .state_type = .int,
+                };
+            }
             self.local_count += 1;
         }
         return;
+    }
+
+    // ── 4b. Local assignment: foo = expr ──
+    if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .equals) {
+        if (self.isLocalVar(name)) |lv| {
+            self.advance_token(); // skip local name
+            self.advance_token(); // skip =
+            const val_expr = try emitStateExpr(self);
+            if (lv.assign_expr) |assign_expr| {
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s} = {s};\n", .{ pad, assign_expr, val_expr }));
+            } else {
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: assignment to immutable local {s}\n", .{ pad, name }));
+            }
+            return;
+        }
     }
 
     // ── 4. if / else ──
@@ -215,15 +262,11 @@ fn emitStatement(
         const cond = try emitStateExpr(self);
         if (self.curKind() == .rparen) self.advance_token();
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}if ({s}) {{\n", .{ pad, cond }));
-        if (self.curKind() == .lbrace) self.advance_token(); // consume {
-        try emitBlockBody(self, stmts, depth + 1);
-        if (self.curKind() == .rbrace) self.advance_token(); // consume }
+        try emitStatementOrBlock(self, stmts, depth + 1);
         if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "else")) {
             self.advance_token(); // skip "else"
             try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}}} else {{\n", .{pad}));
-            if (self.curKind() == .lbrace) self.advance_token();
-            try emitBlockBody(self, stmts, depth + 1);
-            if (self.curKind() == .rbrace) self.advance_token();
+            try emitStatementOrBlock(self, stmts, depth + 1);
         }
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}}}\n", .{pad}));
         return;
@@ -236,9 +279,7 @@ fn emitStatement(
         const cond = try emitStateExpr(self);
         if (self.curKind() == .rparen) self.advance_token();
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}while ({s}) {{\n", .{ pad, cond }));
-        if (self.curKind() == .lbrace) self.advance_token();
-        try emitBlockBody(self, stmts, depth + 1);
-        if (self.curKind() == .rbrace) self.advance_token();
+        try emitStatementOrBlock(self, stmts, depth + 1);
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}}}\n", .{pad}));
         return;
     }
@@ -317,6 +358,7 @@ fn emitStatement(
             self.local_vars[self.local_count] = .{
                 .name = loop_var_ts,
                 .expr = lv_expr,
+                .assign_expr = lv_zig,
                 .state_type = .int,
             };
             self.local_count += 1;
@@ -331,9 +373,7 @@ fn emitStatement(
         // Emit: var _for_i_N: i32 = init; while (cond) : (incr) { body }
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}var {s}: i32 = @intCast({s});\n", .{ pad, lv_zig, init_expr }));
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}while ({s}) : ({s}) {{\n", .{ pad, cond, incr }));
-        if (self.curKind() == .lbrace) self.advance_token();
-        try emitBlockBody(self, stmts, depth + 1);
-        if (self.curKind() == .rbrace) self.advance_token();
+        try emitStatementOrBlock(self, stmts, depth + 1);
         self.local_count = for_local_base; // pop loop var (emitBlockBody already popped body locals)
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}}}\n", .{pad}));
         return;
@@ -386,7 +426,9 @@ fn emitStatement(
             const is_js_ident = !is_str and !is_dynamic and blk: {
                 if (arg_expr.len == 0) break :blk false;
                 if (!std.ascii.isAlphabetic(arg_expr[0]) and arg_expr[0] != '_') break :blk false;
-                for (arg_expr) |c| { if (!std.ascii.isAlphanumeric(c) and c != '_') break :blk false; }
+                for (arg_expr) |c| {
+                    if (!std.ascii.isAlphanumeric(c) and c != '_') break :blk false;
+                }
                 // Must not be a known state variable
                 break :blk self.isState(arg_expr) == null;
             };
@@ -434,16 +476,13 @@ fn emitStatement(
             try js_fmt.append(self.alloc, ')');
             if (js_args.items.len == 0) {
                 // All args are static/JS-scope — emit direct evalExpr
-                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "{s}qjs_runtime.evalExpr(\"{s}\");\n", .{ pad, js_fmt.items }));
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.evalExpr(\"{s}\");\n", .{ pad, js_fmt.items }));
             } else {
-                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "{s}{{\n" ++
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{{\n" ++
                     "{s}    var _eb: [512]u8 = undefined;\n" ++
                     "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
                     "{s}    qjs_runtime.evalExpr(_ev);\n" ++
-                    "{s}}}\n",
-                    .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
+                    "{s}}}\n", .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
             }
         }
     } else if (self.compute_zig != null) {
@@ -749,7 +788,18 @@ fn emitUnary(self: *Generator) ![]const u8 {
         const operand = try emitUnary(self);
         return try std.fmt.allocPrint(self.alloc, "(~{s})", .{operand});
     }
-    return try emitStateAtom(self);
+    return try emitPostfix(self);
+}
+
+fn emitPostfix(self: *Generator) anyerror![]const u8 {
+    var expr = try emitStateAtom(self);
+    while (self.curKind() == .lbracket) {
+        self.advance_token();
+        const idx = try emitStateExpr(self);
+        if (self.curKind() == .rbracket) self.advance_token();
+        expr = try std.fmt.allocPrint(self.alloc, "{s}[{s}]", .{ expr, idx });
+    }
+    return expr;
 }
 
 /// Lowest-precedence: parse a single value (literal, state getter, prop, FFI call, etc).
@@ -857,6 +907,8 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                 self.advance_token();
                 if (self.curKind() == .dot) {
                     const field_name = self.consumeCompoundField();
+                    // Inside component inline: _i doesn't exist at file scope, default to 0
+                    if (self.current_inline_component != null) return "0";
                     if (self.map_obj_array_idx) |oa_idx| {
                         // Check if this is a string field — needs length slice
                         const oa = self.object_arrays[oa_idx];
@@ -869,6 +921,7 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                     }
                     return try std.fmt.allocPrint(self.alloc, "_item.{s}", .{field_name});
                 }
+                if (self.current_inline_component != null) return "0";
                 return "_item";
             }
         }
@@ -876,6 +929,8 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
         if (self.map_index_param) |idx_p| {
             if (std.mem.eql(u8, name, idx_p)) {
                 self.advance_token();
+                // Inside component inline: _i doesn't exist at file scope
+                if (self.current_inline_component != null) return "0";
                 if (self.resolve_map_index_as_parent)
                     return "@as(i64, @intCast(_ci))";
                 return "@as(i64, @intCast(_i))";
@@ -1025,8 +1080,9 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
             if (self.curKind() == .rparen) self.advance_token();
             return try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ name, args_buf.items });
         }
-        // Bare identifier fallback
+        // Bare identifier fallback — if inside a component inline, default unresolved props to 0
         self.advance_token();
+        if (self.current_inline_component != null) return "0";
         return name;
     }
     self.advance_token();
