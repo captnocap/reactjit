@@ -2,6 +2,7 @@ import { Shell, Content, Footer, FooterCrumb, FooterCrumbActive, FooterSep, Foot
 import { Primitives } from './Primitives_c';
 import { ThemeDemo } from './ThemeDemo_c';
 import { HomePage } from './HomePage_c';
+import { CreativeConcepts } from './CreativeConcepts_c';
 
 const [activeNav, setActiveNav] = useState(0);
 
@@ -13,6 +14,7 @@ function App() {
         <Routes>
           <Route path="/primitives" element={<Primitives />} />
           <Route path="/theme" element={<ThemeDemo />} />
+          <Route path="/concepts" element={<CreativeConcepts />} />
         </Routes>
       </C.Content>}
 
@@ -26,6 +28,7 @@ function App() {
         {activeNav == 2 && <C.FooterCrumbActive>Layout</C.FooterCrumbActive>}
         {activeNav == 3 && <C.FooterCrumbActive>State</C.FooterCrumbActive>}
         {activeNav == 4 && <C.FooterCrumbActive>Canvas</C.FooterCrumbActive>}
+        {activeNav == 5 && <C.FooterCrumbActive>Concepts</C.FooterCrumbActive>}
 
         <C.FooterSpacer />
 
@@ -44,7 +47,10 @@ function App() {
         {activeNav == 4 && <C.NavPillActive onPress={() => { navigate('/canvas') }}><C.NavPillLabelActive>Canvas</C.NavPillLabelActive></C.NavPillActive>}
         {activeNav != 4 && <C.NavPill onPress={() => { setActiveNav(4); navigate('/canvas') }}><C.NavPillLabel>Canvas</C.NavPillLabel></C.NavPill>}
 
-        <C.FooterCounter>{`${activeNav + 1} of 5 stories`}</C.FooterCounter>
+        {activeNav == 5 && <C.NavPillActive onPress={() => { navigate('/concepts') }}><C.NavPillLabelActive>Concepts</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 5 && <C.NavPill onPress={() => { setActiveNav(5); navigate('/concepts') }}><C.NavPillLabel>Concepts</C.NavPillLabel></C.NavPill>}
+
+        <C.FooterCounter>{`${activeNav + 1} of 6 stories`}</C.FooterCounter>
       </C.Footer>
     </C.Shell>
   );
