@@ -140,6 +140,10 @@ pub const Style = struct {
     scale_x: f32 = 1.0,
     scale_y: f32 = 1.0,
     border_width: f32 = 0,
+    border_top_width: ?f32 = null,
+    border_right_width: ?f32 = null,
+    border_bottom_width: ?f32 = null,
+    border_left_width: ?f32 = null,
     border_color: ?Color = null,
     z_index: i16 = 0,
     gradient_color_end: ?Color = null,
@@ -153,6 +157,10 @@ pub const Style = struct {
     pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }
     pub fn padTop(self: Style) f32 { return self.padding_top orelse self.padding; }
     pub fn padBottom(self: Style) f32 { return self.padding_bottom orelse self.padding; }
+    pub fn brdTop(self: Style) f32 { return self.border_top_width orelse self.border_width; }
+    pub fn brdRight(self: Style) f32 { return self.border_right_width orelse self.border_width; }
+    pub fn brdBottom(self: Style) f32 { return self.border_bottom_width orelse self.border_width; }
+    pub fn brdLeft(self: Style) f32 { return self.border_left_width orelse self.border_width; }
     pub fn marLeft(self: Style) f32 { const v = self.margin_left orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
     pub fn marRight(self: Style) f32 { const v = self.margin_right orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
     pub fn marTop(self: Style) f32 { const v = self.margin_top orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
@@ -177,6 +185,7 @@ pub const Node = struct {
     image_src: ?[]const u8 = null,
     video_src: ?[]const u8 = null,
     render_src: ?[]const u8 = null,
+    cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
     placeholder: ?[]const u8 = null,
@@ -245,6 +254,7 @@ pub const Node = struct {
     context_menu_items: ?[]const context_menu.MenuItem = null,
     terminal: bool = false,           // true = Terminal element (cell-grid rendering via vterm)
     terminal_font_size: u16 = 13,     // monospace font size for terminal cell grid
+    terminal_id: u8 = 0,              // multi-terminal slot index (0..MAX_TERMINALS-1)
     graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)

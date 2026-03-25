@@ -2082,19 +2082,21 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
                 try out.appendSlice(self.alloc, " };\n");
             }
-            try out.appendSlice(self.alloc,
-                "export fn app_state_slot_type(id: usize) u8 { " ++
-                    "if (id < _slot_types.len) return _slot_types[id]; return 0; }\n" ++
-                "export fn app_state_get_int(id: usize) i64 { return state.getSlot(id); }\n" ++
-                "export fn app_state_set_int(id: usize, val: i64) void { state.setSlot(id, val); }\n" ++
-                "export fn app_state_get_float(id: usize) f64 { return state.getSlotFloat(id); }\n" ++
-                "export fn app_state_set_float(id: usize, val: f64) void { state.setSlotFloat(id, val); }\n" ++
-                "export fn app_state_get_bool(id: usize) u8 { return if (state.getSlotBool(id)) 1 else 0; }\n" ++
-                "export fn app_state_set_bool(id: usize, val: u8) void { state.setSlotBool(id, val != 0); }\n" ++
-                "export fn app_state_get_string_ptr(id: usize) [*]const u8 { return state.getSlotString(id).ptr; }\n" ++
-                "export fn app_state_get_string_len(id: usize) usize { return state.getSlotString(id).len; }\n" ++
-                "export fn app_state_set_string(id: usize, ptr: [*]const u8, len: usize) void { state.setSlotString(id, ptr[0..len]); }\n" ++
-                "export fn app_state_mark_dirty() void { state.markDirty(); }\n");
+            if (sc > 0) {
+                try out.appendSlice(self.alloc,
+                    "export fn app_state_slot_type(id: usize) u8 { " ++
+                        "if (id < _slot_types.len) return _slot_types[id]; return 0; }\n" ++
+                    "export fn app_state_get_int(id: usize) i64 { return state.getSlot(id); }\n" ++
+                    "export fn app_state_set_int(id: usize, val: i64) void { state.setSlot(id, val); }\n" ++
+                    "export fn app_state_get_float(id: usize) f64 { return state.getSlotFloat(id); }\n" ++
+                    "export fn app_state_set_float(id: usize, val: f64) void { state.setSlotFloat(id, val); }\n" ++
+                    "export fn app_state_get_bool(id: usize) u8 { return if (state.getSlotBool(id)) 1 else 0; }\n" ++
+                    "export fn app_state_set_bool(id: usize, val: u8) void { state.setSlotBool(id, val != 0); }\n" ++
+                    "export fn app_state_get_string_ptr(id: usize) [*]const u8 { return state.getSlotString(id).ptr; }\n" ++
+                    "export fn app_state_get_string_len(id: usize) usize { return state.getSlotString(id).len; }\n" ++
+                    "export fn app_state_set_string(id: usize, ptr: [*]const u8, len: usize) void { state.setSlotString(id, ptr[0..len]); }\n" ++
+                    "export fn app_state_mark_dirty() void { state.markDirty(); }\n");
+            }
         }
 
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,

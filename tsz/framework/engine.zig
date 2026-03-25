@@ -23,6 +23,7 @@ const classifier = @import("classifier.zig");
 const semantic = @import("semantic.zig");
 const pty_remote = @import("pty_remote.zig");
 const crashlog = @import("crashlog.zig");
+const cart = @import("cartridge.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
 const build_options = @import("build_options");
@@ -416,6 +417,45 @@ var hovered_node: ?*Node = null;
 var cursor_hand: ?*c.SDL_Cursor = null;
 var cursor_arrow: ?*c.SDL_Cursor = null;
 var cursor_is_hand: bool = false;
+
+/// Walk the node tree looking for nodes with cartridge_src set.
+/// For each one found, load the .so (if not already loaded) and set
+/// the cartridge node's children to the loaded app's root children.
+fn scanCartridgeNodes(node: *Node) void {
+    if (node.cartridge_src) |src| {
+        // Check if already loaded (children non-empty means we already set it up)
+        if (node.children.len == 0) {
+            const idx = cart.load(src) catch |err| {
+                std.debug.print("[engine] Failed to load cartridge {s}: {}\n", .{ src, err });
+                return;
+            };
+            if (cart.get(idx)) |cr| {
+                // Set this node's children to the cartridge's root children
+                node.children = cr.root.children;
+                // Inherit background color if the cartridge root has one
+                if (cr.root.style.background_color != null and node.style.background_color == null) {
+                    node.style.background_color = cr.root.style.background_color;
+                }
+                std.debug.print("[engine] Loaded cartridge: {s}\n", .{cr.titleSlice()});
+            }
+        } else {
+            // Already loaded — refresh children from the active root
+            // (the cartridge's tick may have changed the tree)
+            for (0..cart.count()) |i| {
+                if (cart.get(i)) |cr| {
+                    if (std.mem.eql(u8, cr.soPathSlice(), src)) {
+                        node.children = cr.root.children;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    // Recurse into children
+    for (node.children) |*child| {
+        scanCartridgeNodes(child);
+    }
+}
 
 fn updateHover(root: *Node, mx: f32, my: f32) void {
     const events = @import("events.zig");
@@ -1214,6 +1254,7 @@ pub fn run(config_in: AppConfig) !void {
 
     // Main loop
     var running = true;
+    var g_carts_scanned = false;
     var fps_frames: u32 = 0;
     var fps_last: u32 = c.SDL_GetTicks();
 
@@ -1650,6 +1691,13 @@ pub fn run(config_in: AppConfig) !void {
 
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
+
+        // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
+        if (cart.count() > 0) cart.tickAll(c.SDL_GetTicks());
+        if (!g_carts_scanned) {
+            g_carts_scanned = true;
+            scanCartridgeNodes(config.root);
+        }
 
         // (devtools tick removed — inspector lives in tsz-tools)
 

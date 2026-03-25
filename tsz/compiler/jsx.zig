@@ -176,6 +176,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var is_canvas_node = false;
     var is_canvas_path = false;
     var is_canvas_clamp = false;
+    // Cartridge → embedded .so app (loaded at runtime via dlopen)
+    const is_cartridge = std.mem.eql(u8, tag_name, "Cartridge");
     // Terminal → cell-grid rendering via vterm
     const is_terminal = std.mem.eql(u8, tag_name, "Terminal");
     var terminal_font_size: []const u8 = "";
@@ -545,7 +547,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     // Do NOT copy visual properties (background, padding, border, etc.)
                     if (std.mem.eql(u8, map_result, ".{}") and style_str.len > 0) {
                         var layout_props: std.ArrayListUnmanaged(u8) = .{};
-                        const layout_keys = [_][]const u8{ ".flex_direction", ".flex_grow", ".gap", ".flex_wrap", ".align_items", ".justify_content" };
+                        const layout_keys = [_][]const u8{ ".flex_direction", ".flex_grow", ".gap", ".flex_wrap", ".align_items", ".justify_content", ".width", ".height" };
                         for (layout_keys) |key| {
                             if (std.mem.indexOf(u8, style_str, key)) |pos| {
                                 // Extract "key = value" until next comma or end
@@ -870,13 +872,21 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
-    // Image / Video / Render src
+    // Image / Video / Render / Cartridge src
     if (src_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         if (is_render) {
             // Render sources are URIs (screen:0, vm:path, vnc:host:port) — pass raw, no path resolution
             try fields.appendSlice(self.alloc, ".render_src = \"");
             try fields.appendSlice(self.alloc, src_str);
+        } else if (is_cartridge) {
+            // Cartridge sources are .so paths — resolve relative to the .tsz file
+            try fields.appendSlice(self.alloc, ".cartridge_src = \"");
+            if (std.fs.path.dirname(self.input_file)) |dir| {
+                try fields.appendSlice(self.alloc, try std.fs.path.resolve(self.alloc, &.{ dir, src_str }));
+            } else {
+                try fields.appendSlice(self.alloc, src_str);
+            }
         } else {
             try fields.appendSlice(self.alloc, if (is_video) ".video_src = \"" else ".image_src = \"");
             if (std.fs.path.dirname(self.input_file)) |dir| {
