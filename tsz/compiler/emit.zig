@@ -809,7 +809,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "var _oa{d}_count: usize = 0;\n" ++
+                "var _oa{d}_len: usize = 0;\n" ++
                 "var _oa{d}_dirty: bool = false;\n\n",
                 .{ oi, oi }));
 
@@ -948,7 +948,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "        qjs.JS_FreeValue(c2, elem);\n" ++
                 "    }}\n" ++
-                "    _oa{d}_count = count;\n" ++
+                "    _oa{d}_len = count;\n" ++
                 "    _oa{d}_dirty = true;\n" ++
                 "    state.markDirty();\n" ++
                 "    return QJS_UNDEFINED;\n" ++
@@ -1227,12 +1227,12 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "fn _rebuildMap{d}{s} void {{\n" ++
                         "    var _nc: usize = 0;\n" ++
-                        "    for (0..@min(_oa{d}_count, MAX_MAP_{d})) |_i| {{\n",
+                        "    for (0..@min(_oa{d}_len, MAX_MAP_{d})) |_i| {{\n",
                         .{ mi, fn_params, m.object_array_idx, mi }));
                 } else {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "fn _rebuildMap{d}{s} void {{\n" ++
-                        "    _map_count_{d}{s} = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
+                        "    _map_count_{d}{s} = @min(_oa{d}_len, MAX_MAP_{d});\n" ++
                         "    for (0.._map_count_{d}{s}) |_i| {{\n",
                         .{ mi, fn_params, mi, pool_prefix, m.object_array_idx, mi, mi, pool_prefix }));
                 }
