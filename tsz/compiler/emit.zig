@@ -747,6 +747,14 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     // comptime factory + lookup table so the map index is available at runtime.
     var map_ci_handler_names: [64][]const u8 = undefined;
     var map_ci_handler_count: usize = 0;
+    // Pre-compute which dyn_texts reference map item data ([_i]) and must be
+    // emitted inside _rebuildMap instead of _updateDynamicTexts
+    var map_dep_dyn: [128]bool = [_]bool{false} ** 128;
+    for (0..self.dyn_count) |di| {
+        if (di < 128 and self.dyn_texts[di].has_ref and std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, "[_i]") != null) {
+            map_dep_dyn[di] = true;
+        }
+    }
     if (self.handler_decls.items.len > 0) {
         try out.appendSlice(self.alloc, "\n// ── Event handlers ──────────────────────────────────────────────\n");
         for (self.handler_decls.items) |h| {
@@ -1641,6 +1649,25 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 try out.appendSlice(self.alloc, "        _nc += 1;\n");
             }
 
+            // Emit map-dependent dyn_text updates inside the loop (where _i is in scope)
+            for (0..self.dyn_count) |di| {
+                if (di < 128 and map_dep_dyn[di]) {
+                    const dt = &self.dyn_texts[di];
+                    if (!dt.has_ref) continue;
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "        _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n",
+                        .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args }));
+                    if (dt.arr_name.len == 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _root.text = _dyn_text_{d};\n", .{dt.buf_id}));
+                    } else {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ dt.arr_name, dt.arr_index, dt.buf_id }));
+                    }
+                }
+            }
+
             // Close for loop
             try out.appendSlice(self.alloc, "    }\n");
             if (is_nested) {
@@ -1710,6 +1737,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (0..self.dyn_count) |di| {
         const dt = &self.dyn_texts[di];
         if (!dt.has_ref) continue;
+        // Skip dyn_texts that reference map item data (_oa*[_i]) — these are
+        // component text interpolations inside maps, emitted in _rebuildMap instead
+        if (di < 128 and map_dep_dyn[di]) continue;
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n",
             .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args }));
