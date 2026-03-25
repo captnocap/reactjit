@@ -485,6 +485,8 @@ pub const AppConfig = struct {
     /// Hot-reload callback — called at the start of each frame.
     /// If it returns true, root/init/tick were swapped and the engine re-inits.
     check_reload: ?*const fn (*AppConfig) bool = null,
+    /// Called after init during a hot-reload, before tick. Used for state restoration.
+    post_reload: ?*const fn () void = null,
 };
 
 // ── Text measurement (framework-owned) ──────────────────────────────────
@@ -1227,6 +1229,8 @@ pub fn run(config_in: AppConfig) !void {
                 g_hover_changed = true;
                 // Re-init the new app
                 if (config.init) |initFn| initFn();
+                // Restore preserved state (after init resets to defaults, before tick uses it)
+                if (config.post_reload) |postFn| postFn();
                 if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
                 if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
                 std.debug.print("[hot-reload] App reloaded\n", .{});

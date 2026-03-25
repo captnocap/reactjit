@@ -2056,8 +2056,6 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         const basename = std.fs.path.basename(self.input_file);
         const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
         const app_name = basename[0..dot_pos];
-        // Export symbols for dlopen loading by the engine.
-        // The engine binary loads this .so and reads these to configure engine.run().
         // Export symbols for dlopen loading by the dev shell.
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "export fn app_get_root() *Node {{ return &_root; }}\n" ++
@@ -2065,9 +2063,42 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "export fn app_get_tick() ?*const fn (u32) void {{ return _appTick; }}\n" ++
             "export fn app_get_js_logic() [*]const u8 {{ return JS_LOGIC.ptr; }}\n" ++
             "export fn app_get_js_logic_len() usize {{ return JS_LOGIC.len; }}\n" ++
-            "export fn app_get_title() [*:0]const u8 {{ return \"{s}\"; }}\n" ++
-            "\n" ++
-            "// Standalone mode — when compiled as an executable directly (skipped in .so builds)\n" ++
+            "export fn app_get_title() [*:0]const u8 {{ return \"{s}\"; }}\n", .{app_name}));
+
+        // State preservation exports (for hot-reload state survival)
+        {
+            // Emit slot type array: 0=int, 1=float, 2=bool, 3=string, 4=array, 5=string_array
+            const sc = self.state_count;
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "\nexport fn app_state_count() usize {{ return {d}; }}\n", .{sc}));
+            if (sc > 0) {
+                try out.appendSlice(self.alloc, "const _slot_types = [_]u8{ ");
+                for (0..sc) |i| {
+                    if (i > 0) try out.appendSlice(self.alloc, ", ");
+                    const t: u8 = switch (self.state_slots[i].initial) {
+                        .int => 0, .float => 1, .boolean => 2, .string => 3, .array => 4, .string_array => 5,
+                    };
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{t}));
+                }
+                try out.appendSlice(self.alloc, " };\n");
+            }
+            try out.appendSlice(self.alloc,
+                "export fn app_state_slot_type(id: usize) u8 { " ++
+                    "if (id < _slot_types.len) return _slot_types[id]; return 0; }\n" ++
+                "export fn app_state_get_int(id: usize) i64 { return state.getSlot(id); }\n" ++
+                "export fn app_state_set_int(id: usize, val: i64) void { state.setSlot(id, val); }\n" ++
+                "export fn app_state_get_float(id: usize) f64 { return state.getSlotFloat(id); }\n" ++
+                "export fn app_state_set_float(id: usize, val: f64) void { state.setSlotFloat(id, val); }\n" ++
+                "export fn app_state_get_bool(id: usize) u8 { return if (state.getSlotBool(id)) 1 else 0; }\n" ++
+                "export fn app_state_set_bool(id: usize, val: u8) void { state.setSlotBool(id, val != 0); }\n" ++
+                "export fn app_state_get_string_ptr(id: usize) [*]const u8 { return state.getSlotString(id).ptr; }\n" ++
+                "export fn app_state_get_string_len(id: usize) usize { return state.getSlotString(id).len; }\n" ++
+                "export fn app_state_set_string(id: usize, ptr: [*]const u8, len: usize) void { state.setSlotString(id, ptr[0..len]); }\n" ++
+                "export fn app_state_mark_dirty() void { state.markDirty(); }\n");
+        }
+
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "\n// Standalone mode — when compiled as an executable directly (skipped in .so builds)\n" ++
             "pub fn main() !void {{\n" ++
             "    if (IS_LIB) return;\n" ++
             "    try engine.run(.{{\n" ++
@@ -2077,7 +2108,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "        .init = _appInit,\n" ++
             "        .tick = _appTick,\n" ++
             "    }});\n" ++
-            "}}\n", .{ app_name, app_name }));
+            "}}\n", .{app_name}));
     }
 
     return try out.toOwnedSlice(self.alloc);
