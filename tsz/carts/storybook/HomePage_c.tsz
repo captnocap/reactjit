@@ -35,56 +35,42 @@ const [hpTogB, setHpTogB] = useState(0);
 
 function HomePage() {
   return (
-      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={0.25} driftX={0} driftY={0}>
+      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={0.8} driftX={0} driftY={0}>
 
-        <Canvas.Path d="M -5000,-5000 L -5000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -4500,-5000 L -4500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -4000,-5000 L -4000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -3500,-5000 L -3500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -3000,-5000 L -3000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -2500,-5000 L -2500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -2000,-5000 L -2000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -1500,-5000 L -1500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -1000,-5000 L -1000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -500,-5000 L -500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 0,-5000 L 0,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 500,-5000 L 500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 1000,-5000 L 1000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 1500,-5000 L 1500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 2000,-5000 L 2000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 2500,-5000 L 2500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 3000,-5000 L 3000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 3500,-5000 L 3500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 4000,-5000 L 4000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 4500,-5000 L 4500,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M 5000,-5000 L 5000,5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-5000 L 5000,-5000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-4500 L 5000,-4500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-4000 L 5000,-4000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-3500 L 5000,-3500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-3000 L 5000,-3000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-2500 L 5000,-2500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-2000 L 5000,-2000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-1500 L 5000,-1500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-1000 L 5000,-1000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,-500 L 5000,-500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,0 L 5000,0" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,500 L 5000,500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,1000 L 5000,1000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,1500 L 5000,1500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,2000 L 5000,2000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,2500 L 5000,2500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,3000 L 5000,3000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,3500 L 5000,3500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,4000 L 5000,4000" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,4500 L 5000,4500" stroke="#1a1b26" strokeWidth={1} />
-        <Canvas.Path d="M -5000,5000 L 5000,5000" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-1500 L -1500,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1200,-1500 L -1200,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -900,-1500 L -900,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -600,-1500 L -600,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -300,-1500 L -300,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 0,-1500 L 0,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 300,-1500 L 300,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 600,-1500 L 600,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 900,-1500 L 900,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 1200,-1500 L 1200,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M 1500,-1500 L 1500,1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-1500 L 1500,-1500" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-1200 L 1500,-1200" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-900 L 1500,-900" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-600 L 1500,-600" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,-300 L 1500,-300" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,0 L 1500,0" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,300 L 1500,300" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,600 L 1500,600" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,900 L 1500,900" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,1200 L 1500,1200" stroke="#1a1b26" strokeWidth={1} />
+        <Canvas.Path d="M -1500,1500 L 1500,1500" stroke="#1a1b26" strokeWidth={1} />
+
+
+
+
+
+
 
 
 
 
         {/* ═══ COL 1: Dracula (gx=-1050, stagger gy+0) ═══ */}
-        <Canvas.Node gx={-4186} gy={-3775} gw={260} gh={0}>
+        <Canvas.Node gx={-430} gy={-362} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#bd93f9">Dracula · Bar Chart</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
@@ -102,7 +88,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-2519} gy={-4250} gw={260} gh={0}>
+        <Canvas.Node gx={-179} gy={-342} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#6272a4">Toggles</Text>
             <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -122,7 +108,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-872} gy={-3158} gw={260} gh={0}>
+        <Canvas.Node gx={127} gy={-358} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#6272a4">Progress</Text>
             <Box style={{ height: 8, backgroundColor: '#44475a', borderRadius: 4 }}>
@@ -140,7 +126,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={1304} gy={-3542} gw={260} gh={0}>
+        <Canvas.Node gx={414} gy={-361} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#6272a4">Dracula Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -156,7 +142,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 2: Catppuccin Mocha (gx=-750, stagger gy+40) ═══ */}
-        <Canvas.Node gx={3289} gy={-2668} gw={260} gh={0}>
+        <Canvas.Node gx={-464} gy={-164} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1e1e2e', borderWidth: 1, borderColor: '#313244', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={20} color="#cdd6f4">Heading</Text>
             <Text fontSize={14} color="#bac2de">Subheading text</Text>
@@ -166,7 +152,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={3932} gy={-1270} gw={260} gh={0}>
+        <Canvas.Node gx={-146} gy={-183} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1e1e2e', borderWidth: 1, borderColor: '#313244', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#a6adc8">Cards</Text>
             <Box style={{ backgroundColor: '#313244', borderRadius: 6, padding: 8, flexDirection: 'column', gap: 2 }}>
@@ -180,7 +166,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-4005} gy={423} gw={260} gh={0}>
+        <Canvas.Node gx={147} gy={-172} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1e1e2e', borderWidth: 1, borderColor: '#313244', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#a6adc8">Catppuccin Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -194,7 +180,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-1562} gy={2017} gw={260} gh={0}>
+        <Canvas.Node gx={402} gy={-185} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1e1e2e', borderWidth: 1, borderColor: '#313244', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#a6adc8">Text Input</Text>
             <TextInput placeholder="Type here..." fontSize={11} style={{ backgroundColor: '#313244', borderWidth: 1, borderColor: '#45475a', borderRadius: 5, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }} />
@@ -202,7 +188,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 3: Nord (gx=-450, stagger gy+20) ═══ */}
-        <Canvas.Node gx={1727} gy={2774} gw={260} gh={0}>
+        <Canvas.Node gx={-465} gy={1} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#2e3440', borderWidth: 1, borderColor: '#434c5e', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#88c0d0">Nord · Status</Text>
             <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
@@ -222,7 +208,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={3703} gy={3458} gw={260} gh={0}>
+        <Canvas.Node gx={-166} gy={11} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#2e3440', borderWidth: 1, borderColor: '#434c5e', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#4c566a">Nord · Chart</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
@@ -238,7 +224,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-2871} gy={3725} gw={260} gh={0}>
+        <Canvas.Node gx={148} gy={-5} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#2e3440', borderWidth: 1, borderColor: '#434c5e', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#4c566a">Nord Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -253,7 +239,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 4: Tokyo Night (gx=-150, stagger gy+60) ═══ */}
-        <Canvas.Node gx={659} gy={3984} gw={260} gh={0}>
+        <Canvas.Node gx={435} gy={1} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1a1b26', borderWidth: 1, borderColor: '#292e42', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={18} color="#c0caf5">Tokyo Night</Text>
             <Text fontSize={13} color="#a9b1d6">Modern dark theme inspired by Tokyo city lights.</Text>
@@ -261,7 +247,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-4794} gy={-937} gw={260} gh={0}>
+        <Canvas.Node gx={-436} gy={188} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1a1b26', borderWidth: 1, borderColor: '#292e42', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#565f89">Spacing</Text>
             <Box style={{ flexDirection: 'column', gap: 3 }}>
@@ -274,7 +260,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={4632} gy={1548} gw={260} gh={0}>
+        <Canvas.Node gx={-166} gy={189} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#1a1b26', borderWidth: 1, borderColor: '#292e42', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#565f89">Tokyo Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -289,7 +275,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 5: Rose Pine (gx=150, stagger gy+10) ═══ */}
-        <Canvas.Node gx={-16} gy={-641} gw={260} gh={0}>
+        <Canvas.Node gx={147} gy={183} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#191724', borderWidth: 1, borderColor: '#26233a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#c4a7e7">Rose Pine · Flex Column</Text>
             <Box style={{ flexDirection: 'column', gap: 3 }}>
@@ -300,7 +286,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-4080} gy={-3456} gw={260} gh={0}>
+        <Canvas.Node gx={400} gy={199} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#191724', borderWidth: 1, borderColor: '#26233a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#908caa">Rose Pine · Flex Wrap</Text>
             <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
@@ -313,7 +299,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-2696} gy={-4406} gw={260} gh={0}>
+        <Canvas.Node gx={-460} gy={377} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#191724', borderWidth: 1, borderColor: '#26233a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#908caa">Distribution</Text>
             <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'end' }}>
@@ -328,7 +314,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-711} gy={-3201} gw={260} gh={0}>
+        <Canvas.Node gx={-153} gy={365} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#191724', borderWidth: 1, borderColor: '#26233a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#908caa">Rose Pine Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -343,7 +329,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 6: Gruvbox Dark (gx=450, stagger gy+50) ═══ */}
-        <Canvas.Node gx={1567} gy={-3748} gw={260} gh={0}>
+        <Canvas.Node gx={127} gy={359} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282828', borderWidth: 1, borderColor: '#504945', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#928374">Gruvbox · Shapes</Text>
             <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -355,7 +341,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={3470} gy={-3056} gw={260} gh={0}>
+        <Canvas.Node gx={413} gy={385} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282828', borderWidth: 1, borderColor: '#504945', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#928374">Gruvbox · Pills</Text>
             <Box style={{ flexDirection: 'row', gap: 6 }}>
@@ -372,7 +358,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={4370} gy={-751} gw={260} gh={0}>
+        <Canvas.Node gx={-777} gy={-699} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282828', borderWidth: 1, borderColor: '#504945', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#928374">Input States</Text>
             <TextInput placeholder="Default state..." fontSize={11} style={{ backgroundColor: '#3c3836', borderWidth: 1, borderColor: '#504945', borderRadius: 5, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }} />
@@ -380,7 +366,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-3973} gy={587} gw={260} gh={0}>
+        <Canvas.Node gx={781} gy={-615} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282828', borderWidth: 1, borderColor: '#504945', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#928374">Gruvbox Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -395,7 +381,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 7: Solarized Dark (gx=750, stagger gy+30) ═══ */}
-        <Canvas.Node gx={-1720} gy={2065} gw={260} gh={0}>
+        <Canvas.Node gx={-751} gy={486} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#002b36', borderWidth: 1, borderColor: '#586e75', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#268bd2">Solarized · Node Tree</Text>
             <Box style={{ flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
@@ -423,7 +409,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={2000} gy={2570} gw={260} gh={0}>
+        <Canvas.Node gx={847} gy={602} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#002b36', borderWidth: 1, borderColor: '#586e75', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#586e75">Solarized · Flex Row</Text>
             <Box style={{ flexDirection: 'row', gap: 4 }}>
@@ -434,7 +420,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={4091} gy={3096} gw={260} gh={0}>
+        <Canvas.Node gx={-497} gy={-704} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#002b36', borderWidth: 1, borderColor: '#586e75', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#586e75">Solarized Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -449,7 +435,7 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COL 8: One Dark (gx=1050, stagger gy+15) ═══ */}
-        <Canvas.Node gx={-3229} gy={3546} gw={260} gh={0}>
+        <Canvas.Node gx={1067} gy={-591} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282c34', borderWidth: 1, borderColor: '#3e4452', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#5c6370">One Dark · Buttons</Text>
             <Box style={{ flexDirection: 'row', gap: 6 }}>
@@ -466,7 +452,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={433} gy={3996} gw={260} gh={0}>
+        <Canvas.Node gx={-451} gy={487} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282c34', borderWidth: 1, borderColor: '#3e4452', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#5c6370">Outline Buttons</Text>
             <Box style={{ flexDirection: 'row', gap: 6 }}>
@@ -483,7 +469,7 @@ function HomePage() {
           </Box>
         </Canvas.Node>
 
-        <Canvas.Node gx={-4719} gy={-862} gw={260} gh={0}>
+        <Canvas.Node gx={1139} gy={585} gw={260} gh={0}>
           <Box style={{ backgroundColor: '#282c34', borderWidth: 1, borderColor: '#3e4452', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
             <Text fontSize={11} color="#5c6370">One Dark Palette</Text>
             <Box style={{ flexDirection: 'row', gap: 3 }}>
@@ -498,101 +484,101 @@ function HomePage() {
         </Canvas.Node>
 
         {/* ═══ COMPONENT TILES — Row 1 (staggered y) ═══ */}
-        <Canvas.Node gx={4303} gy={1589} gw={260} gh={0}>
+        <Canvas.Node gx={-790} gy={-522} gw={260} gh={0}>
           <Transitions />
         </Canvas.Node>
 
-        <Canvas.Node gx={-16} gy={-336} gw={260} gh={0}>
+        <Canvas.Node gx={815} gy={-401} gw={260} gh={0}>
           <ThreeDScene />
         </Canvas.Node>
 
-        <Canvas.Node gx={-3927} gy={-3634} gw={260} gh={0}>
+        <Canvas.Node gx={-752} gy={696} gw={260} gh={0}>
           <ScrollDemo />
         </Canvas.Node>
 
-        <Canvas.Node gx={-2421} gy={-4137} gw={260} gh={0}>
+        <Canvas.Node gx={837} gy={764} gw={260} gh={0}>
           <Hyperlinks />
         </Canvas.Node>
 
-        <Canvas.Node gx={-886} gy={-3027} gw={260} gh={0}>
+        <Canvas.Node gx={-533} gy={-526} gw={260} gh={0}>
           <OpacityDemo />
         </Canvas.Node>
 
-        <Canvas.Node gx={1273} gy={-3925} gw={260} gh={0}>
+        <Canvas.Node gx={1114} gy={-422} gw={260} gh={0}>
           <TextAreaDemo />
         </Canvas.Node>
 
         {/* ═══ COMPONENT TILES — Row 2 ═══ */}
-        <Canvas.Node gx={3746} gy={-2850} gw={260} gh={0}>
+        <Canvas.Node gx={-480} gy={674} gw={260} gh={0}>
           <AnimationTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={4067} gy={-827} gw={260} gh={0}>
+        <Canvas.Node gx={1121} gy={784} gw={260} gh={0}>
           <CanvasTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-3712} gy={476} gw={260} gh={0}>
+        <Canvas.Node gx={-1409} gy={-1164} gw={260} gh={0}>
           <ChartsTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-1230} gy={1724} gw={260} gh={0}>
+        <Canvas.Node gx={13} gy={-1439} gw={260} gh={0}>
           <ColorPaletteTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={2032} gy={2257} gw={260} gh={0}>
+        <Canvas.Node gx={1414} gy={-1090} gw={260} gh={0}>
           <FormTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={3734} gy={2932} gw={260} gh={0}>
+        <Canvas.Node gx={-1327} gy={-12} gw={260} gh={0}>
           <NetworkTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-2977} gy={3910} gw={260} gh={0}>
+        <Canvas.Node gx={1338} gy={175} gw={260} gh={0}>
           <PhysicsTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={474} gy={3767} gw={260} gh={0}>
+        <Canvas.Node gx={-1437} gy={1256} gw={260} gh={0}>
           <TerminalTile />
         </Canvas.Node>
 
         {/* ═══ COMPONENT TILES — Row 3 ═══ */}
-        <Canvas.Node gx={-4584} gy={-520} gw={260} gh={0}>
+        <Canvas.Node gx={-18} gy={1361} gw={260} gh={0}>
           <ThreeDTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={4522} gy={1417} gw={260} gh={0}>
+        <Canvas.Node gx={1438} gy={1317} gw={260} gh={0}>
           <TypographyTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={211} gy={-395} gw={260} gh={0}>
+        <Canvas.Node gx={-1411} gy={-1138} gw={260} gh={0}>
           <ClockTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-3831} gy={-3654} gw={260} gh={0}>
+        <Canvas.Node gx={-24} gy={-1397} gw={260} gh={0}>
           <GameTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-2529} gy={-4358} gw={260} gh={0}>
+        <Canvas.Node gx={1334} gy={-1122} gw={260} gh={0}>
           <ColorMixTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-848} gy={-2726} gw={260} gh={0}>
+        <Canvas.Node gx={-1372} gy={0} gw={260} gh={0}>
           <CounterTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={1751} gy={-3831} gw={260} gh={0}>
+        <Canvas.Node gx={1422} gy={88} gw={260} gh={0}>
           <TodoTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={3798} gy={-2662} gw={260} gh={0}>
+        <Canvas.Node gx={-1464} gy={1174} gw={260} gh={0}>
           <StopwatchTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={4497} gy={-892} gw={260} gh={0}>
+        <Canvas.Node gx={65} gy={1400} gw={260} gh={0}>
           <TabsTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-3730} gy={424} gw={260} gh={0}>
+        <Canvas.Node gx={1374} gy={1347} gw={260} gh={0}>
           <StateTile />
         </Canvas.Node>
 
@@ -601,7 +587,7 @@ function HomePage() {
             <Box style={{ flexDirection: 'column', alignItems: 'center', gap: 8, padding: 32, backgroundColor: '#0d1117e0', borderRadius: 16, borderWidth: 1, borderColor: '#30363d' }}>
               <Text fontSize={32} color="#e6edf3">reactjit</Text>
               <Text fontSize={14} color="#8b949e">Native UI from JSX. No runtime. No DOM.</Text>
-              <Text fontSize={11} color="#484f58">scroll to zoom · drag to explore · 10,000 x 10,000 canvas · everything is interactive</Text>
+              <Text fontSize={11} color="#484f58">scroll to zoom · drag to explore · everything is interactive</Text>
             </Box>
           </Box>
         </Canvas.Clamp>
