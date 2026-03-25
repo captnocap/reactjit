@@ -985,6 +985,22 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
             if (self.curKind() == .rparen) self.advance_token();
             return try std.fmt.allocPrint(self.alloc, "ffi.{s}({s})", .{ name, ffi_args.items });
         }
+        // Zscript / unknown function call: name(args) → name(args)
+        if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .lparen) {
+            self.advance_token(); // skip name
+            self.advance_token(); // skip (
+            var args_buf: std.ArrayListUnmanaged(u8) = .{};
+            var arg_count: u32 = 0;
+            while (self.curKind() != .rparen and self.curKind() != .eof) {
+                if (arg_count > 0) try args_buf.appendSlice(self.alloc, ", ");
+                const arg = try emitStateExpr(self);
+                try args_buf.appendSlice(self.alloc, arg);
+                arg_count += 1;
+                if (self.curKind() == .comma) self.advance_token();
+            }
+            if (self.curKind() == .rparen) self.advance_token();
+            return try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ name, args_buf.items });
+        }
         // Bare identifier fallback
         self.advance_token();
         return name;
