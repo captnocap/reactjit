@@ -1593,6 +1593,15 @@ pub fn evalExpr(code: []const u8) void {
     if (g_qjs_ctx) |ctx| {
         if (code.len == 0) return;
         const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<handler>", 0);
+        if (qjs.JS_IsException(r)) {
+            const ex = qjs.JS_GetException(ctx);
+            const str = qjs.JS_ToCString(ctx, ex);
+            if (str) |s| {
+                std.debug.print("[evalExpr error] {s}: {s}\n", .{ code, s });
+                qjs.JS_FreeCString(ctx, s);
+            }
+            qjs.JS_FreeValue(ctx, ex);
+        }
         qjs.JS_FreeValue(ctx, r);
     }
 }

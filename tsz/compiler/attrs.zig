@@ -431,6 +431,10 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
         } else {
             // String equality: rewrite getSlotString(N) == 'val' → std.mem.eql(u8, ..., "val")
             if ((k == .eq_eq or k == .not_eq) and last_was_string_slot) {
+                // absorb trailing = from === or !== (lexed as eq_eq/not_eq + equals)
+                if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .equals) {
+                    self.advance_token();
+                }
                 const prefix = "state.getSlotString(";
                 if (std.mem.lastIndexOf(u8, expr.items, prefix)) |pos| {
                     const before = self.alloc.dupe(u8, expr.items[0..pos]) catch "";

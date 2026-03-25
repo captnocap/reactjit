@@ -106,6 +106,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .computed_element_type = self.computed_arrays[ci].element_type,
                 .handler_body = template.handler_body,
                 .pool_display_cond = template.pool_display_cond,
+                .pool_raw_expr = template.pool_raw_expr,
             };
         } else if (obj_arr_idx) |oi| {
             self.maps[my_map_idx] = .{
@@ -125,6 +126,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .object_array_idx = oi,
                 .handler_body = template.handler_body,
                 .pool_display_cond = template.pool_display_cond,
+                .pool_raw_expr = template.pool_raw_expr,
             };
         } else {
             const si = state_idx.?;
@@ -146,6 +148,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .string_array_slot_id = if (is_str_arr) self.stringArraySlotId(si) else 0,
                 .handler_body = template.handler_body,
                 .pool_display_cond = template.pool_display_cond,
+                .pool_raw_expr = template.pool_raw_expr,
             };
         }
         // map_count already incremented via pre-reservation
@@ -186,6 +189,47 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
             cls_idx = @intCast(idx);
         }
     }
+    // If tag is still uppercase after html_tags resolve + classifier, it's a component
+    const is_known_prim = std.mem.eql(u8, tag, "Box") or std.mem.eql(u8, tag, "Text") or
+        std.mem.eql(u8, tag, "Image") or std.mem.eql(u8, tag, "Pressable") or
+        std.mem.eql(u8, tag, "ScrollView") or std.mem.eql(u8, tag, "TextInput") or
+        std.mem.eql(u8, tag, "Cartridge") or std.mem.eql(u8, tag, "Canvas") or
+        std.mem.eql(u8, tag, "Graph");
+    if (tag.len > 0 and tag[0] >= 'A' and tag[0] <= 'Z' and !is_known_prim) {
+        // Root of map template is a component — inline it and return pool_raw_expr
+        var comp_idx: ?usize = null;
+        for (0..self.component_count) |ci| {
+            if (std.mem.eql(u8, self.components[ci].name, tag)) { comp_idx = ci; break; }
+        }
+        if (comp_idx) |ci| {
+            const comp_expr = try components.inlineComponent(self, &self.components[ci]);
+            return .{
+                .outer_style = "",
+                .outer_font_size = "",
+                .outer_text_color = "",
+                .inner_nodes = undefined,
+                .inner_count = 0,
+                .is_self_closing = true,
+                .is_text_element = false,
+                .pool_raw_expr = comp_expr,
+            };
+        }
+        // Unknown component — skip to end of tag
+        while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) {
+            self.advance_token();
+        }
+        if (self.curKind() == .slash_gt) self.advance_token();
+        return .{
+            .outer_style = "",
+            .outer_font_size = "",
+            .outer_text_color = "",
+            .inner_nodes = undefined,
+            .inner_count = 0,
+            .is_self_closing = true,
+            .is_text_element = false,
+        };
+    }
+
     const is_text = std.mem.eql(u8, tag, "Text");
 
     // Pre-populate from classifier (style + text props)
@@ -492,6 +536,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     var text_color: []const u8 = "";
     var dyn_text_color: []const u8 = "";
     var dyn_href: []const u8 = "";
+    var dyn_background_color: []const u8 = "";
     var handler_body: []const u8 = "";
     var style_str: []const u8 = if (inner_cls_idx) |ci| self.classifier_styles[ci] else "";
     var is_self_closing = false;
@@ -518,7 +563,20 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
             if (self.curKind() == .equals) {
                 self.advance_token();
                 if (std.mem.eql(u8, attr, "style")) {
+                    const pre_dyn_count = self.dyn_style_count;
                     style_str = try attrs.parseStyleAttr(self);
+                    // Claim any background_color DynStyle added inside this map context.
+                    // Such expressions reference _i and must be emitted inline in _rebuildMap.
+                    if (self.map_index_param != null or self.map_item_param != null) {
+                        var dsi = pre_dyn_count;
+                        while (dsi < self.dyn_style_count) : (dsi += 1) {
+                            if (std.mem.eql(u8, self.dyn_styles[dsi].field, "background_color")) {
+                                dyn_background_color = self.dyn_styles[dsi].expression;
+                                self.dyn_styles[dsi].map_claimed = true;
+                                break;
+                            }
+                        }
+                    }
                 } else if (std.mem.eql(u8, attr, "fontSize")) {
                     font_size = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr, "color")) {
@@ -532,6 +590,34 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                                 self.advance_token(); // .
                                 const field_name = self.curText();
                                 self.advance_token(); // field
+                                // Check for ternary: v.field >= 0 ? "#hex1" : "#hex2"
+                                const is_cmp = self.curKind() == .gt_eq or self.curKind() == .lt_eq or
+                                    self.curKind() == .eq_eq or self.curKind() == .not_eq or
+                                    self.curKind() == .gt or self.curKind() == .lt;
+                                if (is_cmp) {
+                                    const oa_idx2 = self.map_obj_array_idx.?;
+                                    const arr_expr2 = try std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx2, field_name });
+                                    var cmp_op: []const u8 = ">=";
+                                    if (self.curKind() == .gt_eq) cmp_op = ">="
+                                    else if (self.curKind() == .lt_eq) cmp_op = "<="
+                                    else if (self.curKind() == .eq_eq) cmp_op = "=="
+                                    else if (self.curKind() == .not_eq) cmp_op = "!="
+                                    else if (self.curKind() == .gt) cmp_op = ">"
+                                    else if (self.curKind() == .lt) cmp_op = "<";
+                                    self.advance_token(); // op
+                                    const rhs_txt = self.curText();
+                                    self.advance_token(); // rhs value
+                                    if (self.curKind() == .question) self.advance_token(); // ?
+                                    const then_hex = try attrs.parseStringAttr(self);
+                                    const then_color = try attrs.parseColorValue(self, then_hex);
+                                    if (self.curKind() == .colon) self.advance_token(); // :
+                                    const else_hex = try attrs.parseStringAttr(self);
+                                    const else_color = try attrs.parseColorValue(self, else_hex);
+                                    if (self.curKind() == .rbrace) self.advance_token(); // }
+                                    dyn_text_color = try std.fmt.allocPrint(self.alloc,
+                                        "if ({s} {s} {s}) {s} else {s}",
+                                        .{ arr_expr2, cmp_op, rhs_txt, then_color, else_color });
+                                } else {
                                 if (self.curKind() == .rbrace) self.advance_token(); // }
                                 const oa_idx = self.map_obj_array_idx.?;
                                 const oa = self.object_arrays[oa_idx];
@@ -551,6 +637,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                                         }
                                         break;
                                     }
+                                }
                                 }
                             } else {
                                 self.pos = saved;
@@ -788,6 +875,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .style = style_str,
         .dyn_text_color = dyn_text_color,
         .dyn_href = dyn_href,
+        .dyn_background_color = dyn_background_color,
         .sub_nodes = sub_nodes,
         .sub_count = sub_count,
         .handler_body = handler_body,
@@ -898,8 +986,16 @@ fn tryParseMapConditional(
         }
         if (k == .eq_eq) {
             try cond.appendSlice(self.alloc, " == ");
+            // absorb trailing = from === (lexed as eq_eq + equals)
+            if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .equals) {
+                self.advance_token();
+            }
         } else if (k == .not_eq) {
             try cond.appendSlice(self.alloc, " != ");
+            // absorb trailing = from !== (lexed as not_eq + equals)
+            if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .equals) {
+                self.advance_token();
+            }
         } else if (k == .gt_eq) {
             try cond.appendSlice(self.alloc, " >= ");
         } else if (k == .lt) {
@@ -910,6 +1006,29 @@ fn tryParseMapConditional(
             try cond.appendSlice(self.alloc, " and ");
         } else if (k == .pipe_pipe) {
             try cond.appendSlice(self.alloc, " or ");
+        } else if (k == .string and last_oa_string_field.len > 0 and
+            !std.mem.eql(u8, txt, "''") and !std.mem.eql(u8, txt, "\"\""))
+        {
+            // Non-empty string comparison with OA string field:
+            //   status === 'ok' → std.mem.eql(u8, _oa0_status[_i][0.._oa0_status_lens[_i]], "ok")
+            //   status !== 'ok' → !std.mem.eql(...)
+            const is_neq = std.mem.endsWith(u8, cond.items, " != ");
+            const op_len: usize = if (is_neq) 4 else if (std.mem.endsWith(u8, cond.items, " == ")) 4 else 0;
+            if (op_len > 0) {
+                const field_ref = std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ last_oa_string_idx, last_oa_string_field }) catch "";
+                const remove_len = field_ref.len + op_len;
+                if (cond.items.len >= remove_len) {
+                    cond.items.len -= @intCast(remove_len);
+                }
+                const inner = if (txt.len >= 2) txt[1..txt.len-1] else txt;
+                const prefix: []const u8 = if (is_neq) "!" else "";
+                try cond.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                    "{s}std.mem.eql(u8, _oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]], \"{s}\")",
+                    .{ prefix, last_oa_string_idx, last_oa_string_field, last_oa_string_idx, last_oa_string_field, inner }) catch "false");
+            } else {
+                try cond.appendSlice(self.alloc, txt);
+            }
+            last_oa_string_field = "";
         } else if (k == .string and last_oa_string_field.len > 0 and
             (std.mem.eql(u8, txt, "''") or std.mem.eql(u8, txt, "\"\"")))
         {
