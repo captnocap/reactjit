@@ -815,9 +815,18 @@ fn tryParseMapConditional(
     var last_oa_string_idx: u32 = 0;
     while (self.curKind() != .eof) {
         if (self.curKind() == .amp_amp and depth == 0) {
-            found_and = true;
-            self.advance_token(); // skip &&
-            break;
+            // Only treat as render gate if the next token is '<' (start of JSX)
+            const next_pos = self.pos + 1;
+            const next_is_jsx = next_pos < self.lex.count and self.lex.get(next_pos).kind == .lt;
+            if (next_is_jsx) {
+                found_and = true;
+                self.advance_token(); // skip &&
+                break;
+            }
+            // Otherwise, this && is part of a compound condition (a && b && <JSX>)
+            try cond.appendSlice(self.alloc, " and ");
+            self.advance_token();
+            continue;
         }
         if (self.curKind() == .rbrace and depth == 0) break; // no && found
         if (self.curKind() == .lparen) depth += 1;
@@ -897,6 +906,10 @@ fn tryParseMapConditional(
             try cond.appendSlice(self.alloc, " < ");
         } else if (k == .gt) {
             try cond.appendSlice(self.alloc, " > ");
+        } else if (k == .amp_amp) {
+            try cond.appendSlice(self.alloc, " and ");
+        } else if (k == .pipe_pipe) {
+            try cond.appendSlice(self.alloc, " or ");
         } else if (k == .string and last_oa_string_field.len > 0 and
             (std.mem.eql(u8, txt, "''") or std.mem.eql(u8, txt, "\"\"")))
         {

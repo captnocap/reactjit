@@ -843,9 +843,7 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
             if (std.mem.eql(u8, name, param)) {
                 self.advance_token();
                 if (self.curKind() == .dot) {
-                    self.advance_token(); // .
-                    const field_name = self.curText();
-                    self.advance_token(); // field
+                    const field_name = self.consumeCompoundField();
                     if (self.map_obj_array_idx) |oa_idx| {
                         // Check if this is a string field — needs length slice
                         const oa = self.object_arrays[oa_idx];
