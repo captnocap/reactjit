@@ -334,7 +334,7 @@ fn checkImportAllowed(importer: []const u8, importee: []const u8) ?[]const u8 {
 
 // ── Import resolution ───────────────────────────────────────────
 
-const MAX_IMPORTS = 32;
+const MAX_IMPORTS = 64;
 
 fn buildMergedSource(alloc: std.mem.Allocator, input_file: []const u8, source: []const u8) []const u8 {
     var paths: [MAX_IMPORTS][]const u8 = undefined;

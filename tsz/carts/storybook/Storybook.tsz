@@ -10,13 +10,9 @@ function App() {
   return (
     <C.Shell>
       {activeNav == 0 && <HomePage />}
-      {activeNav != 0 && <C.Content>
-        <Routes>
-          <Route path="/primitives" element={<Primitives />} />
-          <Route path="/theme" element={<ThemeDemo />} />
-          <Route path="/concepts" element={<CreativeConcepts />} />
-        </Routes>
-      </C.Content>}
+      {activeNav == 1 && <C.Content><ThemeDemo /></C.Content>}
+      {activeNav == 5 && <C.Content><CreativeConcepts /></C.Content>}
+      {activeNav != 0 && activeNav != 1 && activeNav != 5 && <C.Content><Primitives /></C.Content>}
 
       <C.Footer>
         <C.FooterCrumb>Storybook</C.FooterCrumb>
