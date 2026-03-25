@@ -55,8 +55,8 @@ else
         -kernel "$KERNEL" \
         -initrd "$INITRD" \
         -append "rdinit=/init console=ttyS0 loglevel=3" \
-        -device virtio-gpu-pci \
-        -display sdl \
+        -device virtio-vga-gl \
+        -display sdl,gl=on \
         -serial stdio \
         -no-reboot \
         -netdev user,id=net0,hostfwd=tcp::9080-:8080 \
