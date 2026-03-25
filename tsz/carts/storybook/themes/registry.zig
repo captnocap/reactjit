@@ -389,6 +389,14 @@ pub const bios = @import("bios.zig");
 
 pub const win95 = @import("win95.zig");
 
+// ── Custom: Winamp ──────────────────────────────────────────────────
+
+pub const winamp = @import("winamp.zig");
+
+// ── Custom: Glass ───────────────────────────────────────────────────
+
+pub const glass = @import("glass.zig");
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 pub const Entry = struct {
@@ -418,6 +426,8 @@ pub const all = [_]Entry{
     .{ .name = "Tokyo Night Storm", .palette = tokyo_night_storm },
     .{ .name = "BIOS", .palette = bios.palette, .styles = bios.styles },
     .{ .name = "Win95 Vaporwave", .palette = win95.palette, .styles = win95.styles },
+    .{ .name = "Winamp", .palette = winamp.palette, .styles = winamp.styles },
+    .{ .name = "Glass", .palette = glass.palette, .styles = glass.styles },
 };
 
 pub const count = all.len;
