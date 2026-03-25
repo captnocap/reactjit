@@ -58,6 +58,12 @@ comptime {
     if (HAS_CRYPTO) _ = @import("crypto.zig");
 }
 
+// Force-reference luajit_worker.zig so its export fn symbols are available to the linker.
+// LuaJIT workers are compute-only, off-thread — they never touch rendering, layout, or state.
+comptime {
+    _ = @import("luajit_worker.zig");
+}
+
 const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
     pub fn initVM() void {}
     pub fn deinit() void {}
@@ -1237,11 +1243,14 @@ pub fn run(config_in: AppConfig) !void {
     var init_h: c_int = @intCast(config.height);
     var init_x: c_int = c.SDL_WINDOWPOS_CENTERED;
     var init_y: c_int = c.SDL_WINDOWPOS_CENTERED;
+    const explicit_size = config.width != 1280 or config.height != 800;
     if (geometry.load()) |g| {
         init_x = g.x;
         init_y = g.y;
-        init_w = g.width;
-        init_h = g.height;
+        if (!explicit_size) {
+            init_w = g.width;
+            init_h = g.height;
+        }
         log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
     }
 
@@ -1300,6 +1309,13 @@ pub fn run(config_in: AppConfig) !void {
     // QuickJS VM
     qjs_runtime.initVM();
     defer qjs_runtime.deinit();
+
+    // Register window-open bridge so JS can call __openWindow
+    qjs_runtime.setOpenWindowFn(struct {
+        fn open(title: [*:0]const u8, w: c_int, h: c_int) void {
+            _ = windows.open(.{ .title = title, .width = w, .height = h, .kind = .in_process });
+        }
+    }.open);
 
     // App init (FFI registration, initial state)
     if (config.init) |initFn| initFn();
@@ -1410,7 +1426,7 @@ pub fn run(config_in: AppConfig) !void {
                         const my: f32 = event.button.y;
                         const events = @import("events.zig");
                         const hit = layout.hitTest(config.root, mx, my);
-                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.href != null) else false;
+                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
@@ -1436,6 +1452,13 @@ pub fn run(config_in: AppConfig) !void {
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
                                 handler();
+                                // Also run JS handler if present
+                                if (h.handlers.js_on_press) |js_expr| {
+                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                }
+                            } else if (h.handlers.js_on_press) |js_expr| {
+                                input.unfocus();
+                                qjs_runtime.evalExpr(std.mem.span(js_expr));
                             } else if (h.href) |url| {
                                 openUrl(url);
                             }
@@ -1476,6 +1499,12 @@ pub fn run(config_in: AppConfig) !void {
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
                                     handler();
+                                    if (h.handlers.js_on_press) |js_expr| {
+                                        qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                    }
+                                    handled_interactive = true;
+                                } else if (h.handlers.js_on_press) |js_expr| {
+                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
                                     handled_interactive = true;
                                 } else if (h.href) |url| {
                                     openUrl(url);
@@ -1688,6 +1717,8 @@ pub fn run(config_in: AppConfig) !void {
                             false;
                         if (!input_consumed and !videos.handleKey(sym)) {
                             selection.onKeyDown(config.root, sym, mod);
+                            // Forward key events to QuickJS script layer
+                            qjs_runtime.callGlobalInt("__onKeyDown", @intCast(sym));
                         }
                     }
                 },
@@ -1949,6 +1980,7 @@ pub fn run(config_in: AppConfig) !void {
             });
             qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;
             qjs_runtime.bridge_calls_this_second = 0;
+            @import("luajit_worker.zig").logTelemetry();
             g_paint_count = 0;
             g_hover_changed = false;
             g_hidden_count = 0;

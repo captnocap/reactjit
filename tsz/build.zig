@@ -50,7 +50,9 @@ pub fn build(b: *std.Build) void {
     app_lib_step.dependOn(&app_lib_install.step);
 
     // ── Dev shell (hot-reload host — loads app .so at runtime) ───
-    const dev_shell_exe = addDevShellExe(b, target, optimize, wgpu_mod, sysroot);
+    // Always build dev shell in ReleaseFast — Debug mode tanks layout perf
+    const dev_shell_optimize = if (optimize == .Debug) .ReleaseFast else optimize;
+    const dev_shell_exe = addDevShellExe(b, target, dev_shell_optimize, wgpu_mod, sysroot);
     const dev_shell_install = b.addInstallArtifact(dev_shell_exe, .{});
     const dev_shell_step = b.step("dev-shell", "Build the hot-reload development shell");
     dev_shell_step.dependOn(&dev_shell_install.step);
@@ -203,6 +205,36 @@ pub fn build(b: *std.Build) void {
     const wasm_rt_install = b.addInstallArtifact(wasm_rt, .{});
     const wasm_rt_step = b.step("wasm-rt", "WASM Runtime — QuickJS + layout + WebGPU");
     wasm_rt_step.dependOn(&wasm_rt_install.step);
+
+    // ── LuaJIT benchmarks (zluajit) ─────────────────────────────────
+    {
+        const zluajit_dep = b.dependency("zluajit", .{
+            .target = target,
+            .optimize = optimize,
+            .system = true,
+        });
+
+        const bench_mod = b.createModule(.{
+            .root_source_file = b.path("bench_zluajit.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        bench_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
+
+        const bench_exe = b.addExecutable(.{
+            .name = "bench-luajit",
+            .root_module = bench_mod,
+        });
+        bench_exe.linkLibC();
+        bench_exe.linkSystemLibrary("luajit-5.1");
+
+        const bench_install = b.addInstallArtifact(bench_exe, .{});
+        const bench_run = b.addRunArtifact(bench_exe);
+        bench_run.step.dependOn(&bench_install.step);
+
+        const bench_step = b.step("bench-luajit", "Run LuaJIT worker benchmarks (zluajit bindings)");
+        bench_step.dependOn(&bench_run.step);
+    }
 }
 
 // ── Distribution tiers ──────────────────────────────────────────────────
@@ -283,6 +315,14 @@ fn addAppExe(
     });
     root_mod.addOptions("build_options", options);
 
+    // ── zluajit (LuaJIT worker compute) ─────────────────────────
+    const zluajit_dep = b.dependency("zluajit", .{
+        .target = target,
+        .optimize = optimize,
+        .system = true,
+    });
+    root_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
+
     const exe = b.addExecutable(.{
         .name = name,
         .root_module = root_mod,
@@ -294,6 +334,8 @@ fn addAppExe(
     exe.linkLibC();
     exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
+    exe.linkSystemLibrary("luajit-5.1");
+    exe.linkSystemLibrary("X11");
 
     if (os == .linux) {
         exe.linkSystemLibrary("m");
@@ -459,6 +501,8 @@ fn addDevShellExe(
     exe.linkLibC();
     exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
+    exe.linkSystemLibrary("luajit-5.1");
+    exe.linkSystemLibrary("X11");
 
     if (os == .linux) {
         exe.linkSystemLibrary("m");
@@ -496,7 +540,10 @@ fn addDevShellExe(
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addIncludePath(b.path("ffi"));
+    exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+    exe.linkSystemLibrary("luajit-5.1");
     exe.linkSystemLibrary("box2d");
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("vterm");

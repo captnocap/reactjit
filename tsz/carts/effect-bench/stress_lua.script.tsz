@@ -1,0 +1,51 @@
+// Lua bridge stress — escalating messages to background LuaJIT worker
+// Each frame: send N messages to worker thread (non-blocking)
+// Compare with stress_js.script which hammers __setState on main thread
+
+let N = 10;
+let _frames = 0;
+let _lastEscalation = Date.now();
+
+// Start the Lua worker thread
+lua_worker_start();
+lua_worker_set_n(N);
+
+function stressTick() {
+  const t0 = Date.now();
+
+  // Send N messages to the background worker (non-blocking)
+  lua_worker_send(N);
+
+  const elapsed = Date.now() - t0;
+  setBridgeUs(elapsed * 1000);
+
+  // Poll how many the worker has processed total
+  const recv = lua_worker_recv_count();
+  setTotalRecv(recv);
+
+  _frames++;
+  setFrameCount(_frames);
+  setN(N);
+
+  // Escalate every 3 seconds
+  if (Date.now() - _lastEscalation > 3000) {
+    N = N * 2;
+    lua_worker_set_n(N);
+    _lastEscalation = Date.now();
+    console.log('Lua escalating to N=' + N);
+  }
+}
+
+// Run every frame
+setInterval(stressTick, 16);
+
+// Telemetry at 4Hz
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+stressTick();
+console.log('Lua bridge stress test loaded. Starting N=' + N);

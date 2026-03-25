@@ -1,0 +1,101 @@
+// Compute benchmark — Lua worker path
+// Lua worker does heavy compute on background thread
+// Compare with ComputeJS (main-thread QuickJS) and ComputeZig (useFFI)
+// Lua worker: FPS should stay flat even at high N
+
+// @ffi <lua_worker_shim.h>
+declare function lua_worker_start(): number;
+declare function lua_worker_send(n: number): number;
+declare function lua_worker_recv_count(): number;
+declare function lua_worker_bridge_n(): number;
+declare function lua_worker_set_n(n: number): number;
+declare function lua_worker_elapsed_us(): number;
+
+const [latencyUs] = useFFI(lua_worker_elapsed_us, 16);
+
+const [result, setResult] = useState(0);
+const [n, setN] = useState(10);
+const [fps, setFps] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [frameCount, setFrameCount] = useState(0);
+const [totalRecv, setTotalRecv] = useState(0);
+
+<script>
+lua_worker_start();
+
+var _currentN = 10;
+var _lastEscalation = Date.now();
+var _frames = 0;
+
+// Send escalating work to Lua worker each frame
+setInterval(function() {
+  lua_worker_send(_currentN);
+
+  var recv = lua_worker_recv_count();
+  setTotalRecv(recv);
+  setResult(recv);
+  setN(_currentN);
+
+  _frames++;
+  setFrameCount(_frames);
+
+  if (Date.now() - _lastEscalation > 3000) {
+    _currentN = _currentN * 2;
+    lua_worker_set_n(_currentN);
+    _lastEscalation = Date.now();
+    console.log('Lua compute escalating to N=' + _currentN);
+  }
+}, 16);
+
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+}, 250);
+
+console.log('Lua compute bench loaded. N=' + _currentN);
+</script>
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 20, gap: 16 }}>
+      <Text fontSize={24} color="#e6edf3">Compute: LuaJIT Worker</Text>
+      <Text fontSize={13} color="#8b949e">Background pthread — compare with ComputeJS / ComputeZig</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">N (msgs/frame)</Text>
+          <Text fontSize={28} color="#f78166">{`${n}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Worker processed</Text>
+          <Text fontSize={28} color="#3fb950">{`${totalRecv}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Round-trip</Text>
+          <Text fontSize={28} color="#d2992a">{`${latencyUs}us`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8 }}>
+        <Text fontSize={14} color="#e6edf3">Engine Telemetry</Text>
+        <Box style={{ flexDirection: 'row', gap: 24, paddingTop: 8 }}>
+          <Text fontSize={12} color="#3fb950">{`FPS: ${fps}`}</Text>
+          <Text fontSize={12} color="#6e7681">{`tick: ${tickUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`layout: ${layoutUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`paint: ${paintUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`frames: ${frameCount}`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8 }}>
+        <Text fontSize={12} color="#8b949e">N doubles every 3 seconds</Text>
+        <Text fontSize={12} color="#8b949e">Worker: LuaJIT VM on background pthread</Text>
+        <Text fontSize={12} color="#8b949e">Main thread only sends — FPS should stay flat</Text>
+      </Box>
+    </Box>
+  );
+}
