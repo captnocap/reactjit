@@ -167,6 +167,24 @@ pub fn classifyAndCache(row: u16, text: []const u8, total_rows: u16) void {
     row_cache[row] = kind;
 }
 
+// ── Indexed compat stubs (engine.zig expects multi-terminal API) ─────
+// The refactor consolidated to single-terminal. These ignore the index.
+
+pub fn getModeIdx(_: u8) Mode { return getMode(); }
+pub fn setModeIdx(_: u8, mode: Mode) void { setMode(mode); }
+pub fn markDirtyIdx(_: u8) void { markDirty(); }
+pub fn isDirtyIdx(_: u8) bool { return isDirty(); }
+pub fn clearDirtyIdx(_: u8) void { clearDirty(); }
+pub fn getRowTokenIdx(_: u8, row: u16) Token { return getRowToken(row); }
+pub fn classifyAndCacheIdx(_: u8, row: u16, text: []const u8, total_rows: u16) void { classifyAndCache(row, text, total_rows); }
+pub fn isTurnStartIdx(_: u8, kind: Token) bool {
+    return switch (active_mode) {
+        .none, .json => false,
+        .basic => kind == .command,
+        .claude_code => kind == .user_prompt,
+    };
+}
+
 // ── Basic classifier (port of classifiers/basic.lua) ────────────────
 
 fn classifyBasic(text: []const u8, row: u16, total: u16) Token {

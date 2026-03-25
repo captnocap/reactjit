@@ -144,6 +144,8 @@ pub const Cell = struct {
     reverse: bool = false,
 };
 
+pub const MAX_TERMINALS: u8 = 4;
+
 // ── VTerm wrapper ───────────────────────────────────────────────────
 
 pub const VTerm = struct {
@@ -698,4 +700,25 @@ pub fn copySelectedText(
         pos = last_nonspace; // trim trailing spaces
     }
     return pos;
+}
+
+// ── Indexed compat stubs (engine.zig expects these) ─────────────────
+// The refactor consolidated to a single terminal, but the engine API
+// still passes a terminal index. These ignore the index and delegate.
+
+pub fn scrollToBottomIdx(_: u8) void {
+    scrollToBottom();
+}
+
+pub fn copySelectedTextIdx(
+    _: u8,
+    start_row: u16, start_col: u16,
+    end_row: u16, end_col: u16,
+    buf: []u8,
+) usize {
+    return copySelectedText(start_row, start_col, end_row, end_col, buf);
+}
+
+pub fn writePtyIdx(_: u8, data: []const u8) void {
+    writePty(data);
 }
