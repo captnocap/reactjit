@@ -450,7 +450,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "    pub fn callGlobal(_: []const u8) void {{}}\n" ++
             "    pub fn callGlobalStr(_: []const u8, _: []const u8) void {{}}\n" ++
             "    pub fn callGlobalInt(_: []const u8, _: i64) void {{}}\n" ++
-            "    pub fn registerHostFn(_: []const u8, _: anytype, _: u8) void {{}}\n" ++
+            "    pub fn registerHostFn(_: []const u8, _: ?*const anyopaque, _: u8) void {{}}\n" ++
             "    pub fn evalExpr(_: []const u8) void {{}}\n" ++
             "}} else @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
     }
@@ -631,6 +631,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 "const qjs = if (IS_LIB) struct {\n" ++
                 "    pub const JSValue = extern struct { tag: i64 = 3, u: extern union { int32: i32, float64: f64, ptr: ?*anyopaque } = .{ .int32 = 0 } };\n" ++
                 "    pub const JSContext = opaque {};\n" ++
+                "    pub fn JS_GetPropertyStr(_: ?*const @This().JSContext, _: @This().JSValue, _: [*:0]const u8) @This().JSValue { return .{}; }\n" ++
+                "    pub fn JS_GetPropertyUint32(_: ?*const @This().JSContext, _: @This().JSValue, _: u32) @This().JSValue { return .{}; }\n" ++
+                "    pub fn JS_ToInt32(_: ?*const @This().JSContext, _: *i32, _: @This().JSValue) i32 { return 0; }\n" ++
+                "    pub fn JS_ToInt64(_: ?*const @This().JSContext, _: *i64, _: @This().JSValue) i32 { return 0; }\n" ++
+                "    pub fn JS_ToFloat64(_: ?*const @This().JSContext, _: *f64, _: @This().JSValue) i32 { return 0; }\n" ++
+                "    pub fn JS_FreeValue(_: ?*const @This().JSContext, _: @This().JSValue) void {}\n" ++
+                "    pub fn JS_ToCString(_: ?*const @This().JSContext, _: @This().JSValue) ?[*:0]const u8 { return null; }\n" ++
+                "    pub fn JS_FreeCString(_: ?*const @This().JSContext, _: ?[*:0]const u8) void {}\n" ++
+                "    pub fn JS_NewFloat64(_: ?*const @This().JSContext, _: f64) @This().JSValue { return .{}; }\n" ++
                 "} else @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
         } else {
             try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
@@ -842,6 +851,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     "const qjs = if (IS_LIB) struct {\n" ++
                     "    pub const JSValue = extern struct { tag: i64 = 3, u: extern union { int32: i32, float64: f64, ptr: ?*anyopaque } = .{ .int32 = 0 } };\n" ++
                     "    pub const JSContext = opaque {};\n" ++
+                    "    pub fn JS_GetPropertyStr(_: ?*const @This().JSContext, _: @This().JSValue, _: [*:0]const u8) @This().JSValue { return .{}; }\n" ++
+                    "    pub fn JS_GetPropertyUint32(_: ?*const @This().JSContext, _: @This().JSValue, _: u32) @This().JSValue { return .{}; }\n" ++
+                    "    pub fn JS_ToInt32(_: ?*const @This().JSContext, _: *i32, _: @This().JSValue) i32 { return 0; }\n" ++
+                    "    pub fn JS_ToInt64(_: ?*const @This().JSContext, _: *i64, _: @This().JSValue) i32 { return 0; }\n" ++
+                    "    pub fn JS_ToFloat64(_: ?*const @This().JSContext, _: *f64, _: @This().JSValue) i32 { return 0; }\n" ++
+                    "    pub fn JS_FreeValue(_: ?*const @This().JSContext, _: @This().JSValue) void {}\n" ++
+                    "    pub fn JS_ToCString(_: ?*const @This().JSContext, _: @This().JSValue) ?[*:0]const u8 { return null; }\n" ++
+                    "    pub fn JS_FreeCString(_: ?*const @This().JSContext, _: ?[*:0]const u8) void {}\n" ++
+                    "    pub fn JS_NewFloat64(_: ?*const @This().JSContext, _: f64) @This().JSValue { return .{}; }\n" ++
                     "} else @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
             } else {
                 try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
