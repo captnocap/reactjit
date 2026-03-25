@@ -849,10 +849,33 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
     else
         std.fmt.allocPrint(alloc, "zig-out/lib/lib{s}.so", .{lib_name}) catch return;
 
+    // Step 5: Check if a dev shell is already running (PID file)
+    const pid_path = "/tmp/tsz-dev.pid";
+    const existing_pid = blk: {
+        const pid_file = std.fs.openFileAbsolute(pid_path, .{}) catch break :blk null;
+        defer pid_file.close();
+        var pid_buf: [32]u8 = undefined;
+        const n = pid_file.read(&pid_buf) catch break :blk null;
+        if (n == 0) break :blk null;
+        const pid_str = std.mem.trimRight(u8, pid_buf[0..n], &.{ '\n', '\r', ' ', 0 });
+        break :blk std.fmt.parseInt(std.posix.pid_t, pid_str, 10) catch null;
+    };
+
+    if (existing_pid) |pid| {
+        // Check if process is still alive (signal 0 = just check, no actual signal sent)
+        if (std.posix.kill(pid, 0)) {
+            // Shell is still running — just rebuild, it'll hot-reload
+            std.debug.print("[dev] Dev shell already running (pid {d}) — rebuilt .so, it will auto-reload\n", .{pid});
+            return;
+        } else |_| {
+            // Process not found or no permission — stale PID file, launch new shell
+        }
+    }
+
     std.debug.print("[dev] Launching: {s} {s}\n", .{ shell_path, so_path });
     std.debug.print("[dev] Watching {s} for changes...\n", .{input_path});
 
-    // Step 5: Launch dev shell as a child process
+    // Launch dev shell as a child process
     var shell_child = std.process.Child.init(&.{ shell_path, so_path }, alloc);
     shell_child.stderr_behavior = .Inherit;
     shell_child.stdout_behavior = .Inherit;
@@ -861,6 +884,13 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
         return;
     };
     const shell_pid = shell_child.id;
+
+    // Write PID file so other sessions know a shell is running
+    if (std.fs.createFileAbsolute(pid_path, .{})) |f| {
+        const pid_str = std.fmt.allocPrint(alloc, "{d}", .{shell_pid}) catch "";
+        f.writeAll(pid_str) catch {};
+        f.close();
+    } else |_| {}
 
     // Step 6: Watch loop — poll all .tsz files in the cart directory for changes
     const watch_dir = std.fs.path.dirname(input_path) orelse ".";
@@ -873,6 +903,7 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
         const wr = std.posix.waitpid(@intCast(shell_pid), 1); // WNOHANG = 1
         if (wr.pid != 0) {
             std.debug.print("[dev] Shell exited\n", .{});
+            std.fs.deleteFileAbsolute("/tmp/tsz-dev.pid") catch {};
             break;
         }
 
