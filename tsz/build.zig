@@ -55,6 +55,26 @@ pub fn build(b: *std.Build) void {
     const dev_shell_step = b.step("dev-shell", "Build the hot-reload development shell");
     dev_shell_step.dependOn(&dev_shell_install.step);
 
+    // ── Custom cartridge .so (build any .zig file as a cartridge) ──
+    const cart_source = b.option([]const u8, "cart-source", "Path to a .zig file to build as a cartridge .so");
+    const cart_name_opt = b.option([]const u8, "cart-name", "Name for the cartridge .so") orelse "custom-cart";
+    if (cart_source) |src| {
+        const cart_mod = b.createModule(.{
+            .root_source_file = b.path(src),
+            .target = target,
+            .optimize = optimize,
+        });
+        const cart_lib = b.addLibrary(.{
+            .linkage = .dynamic,
+            .name = cart_name_opt,
+            .root_module = cart_mod,
+        });
+        cart_lib.linkLibC();
+        const cart_install = b.addInstallArtifact(cart_lib, .{});
+        const cart_step = b.step("cart", "Build a custom .zig file as a cartridge .so");
+        cart_step.dependOn(&cart_install.step);
+    }
+
     // ── Compiler tests ───────────────────────────────────────────
     const compiler_tests = b.addTest(.{
         .root_module = b.createModule(.{
