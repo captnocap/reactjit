@@ -232,6 +232,21 @@ fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSV
     const buttons = c.SDL_GetMouseState(&mx, &my);
     return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_LMASK != 0) 1.0 else 0.0);
 }
+fn hostGetMouseRightDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var mx: f32 = 0;
+    var my: f32 = 0;
+    const buttons = c.SDL_GetMouseState(&mx, &my);
+    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_RMASK != 0) 1.0 else 0.0);
+}
+fn hostIsKeyDown(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewFloat64(null, 0);
+    var scancode: c_int = 0;
+    _ = qjs.JS_ToInt32(null, &scancode, argv[0]);
+    const keys = c.SDL_GetKeyboardState(null);
+    if (keys == null) return qjs.JS_NewFloat64(null, 0);
+    const pressed = keys[@intCast(scancode)];
+    return qjs.JS_NewFloat64(null, if (pressed) @as(f64, 1) else @as(f64, 0));
+}
 
 // ── Telemetry host functions (build JS objects from unified snapshot) ──
 
@@ -1241,6 +1256,8 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseX", qjs.JS_NewCFunction(ctx, hostGetMouseX, "getMouseX", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseY", qjs.JS_NewCFunction(ctx, hostGetMouseY, "getMouseY", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "isKeyDown", qjs.JS_NewCFunction(ctx, hostIsKeyDown, "isKeyDown", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseRightDown", qjs.JS_NewCFunction(ctx, hostGetMouseRightDown, "getMouseRightDown", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));

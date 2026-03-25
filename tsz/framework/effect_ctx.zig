@@ -112,6 +112,50 @@ pub const EffectContext = struct {
         };
     }
 
+    /// Read just the alpha of a source pixel (mask mode only).
+    /// Returns 0.0 if outside bounds or no source. Useful for shape clipping.
+    pub fn getSourceAlpha(self: *const EffectContext, x: f32, y: f32) f32 {
+        const src = self.source orelse return 0;
+        if (x < 0 or y < 0) return 0;
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.source_width or uy >= self.source_height) return 0;
+        const src_stride = self.source_width * 4;
+        const idx = @as(usize, uy) * @as(usize, src_stride) + @as(usize, ux) * 4;
+        return @as(f32, @floatFromInt(src[idx + 3])) / 255.0;
+    }
+
+    /// Read the RGB of a source pixel (mask mode only). Returns [r, g, b] as 0..1.
+    pub fn getSourceR(self: *const EffectContext, x: f32, y: f32) f32 {
+        const src = self.source orelse return 0;
+        if (x < 0 or y < 0) return 0;
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.source_width or uy >= self.source_height) return 0;
+        const idx = @as(usize, uy) * @as(usize, self.source_width * 4) + @as(usize, ux) * 4;
+        return @as(f32, @floatFromInt(src[idx])) / 255.0;
+    }
+
+    pub fn getSourceG(self: *const EffectContext, x: f32, y: f32) f32 {
+        const src = self.source orelse return 0;
+        if (x < 0 or y < 0) return 0;
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.source_width or uy >= self.source_height) return 0;
+        const idx = @as(usize, uy) * @as(usize, self.source_width * 4) + @as(usize, ux) * 4;
+        return @as(f32, @floatFromInt(src[idx + 1])) / 255.0;
+    }
+
+    pub fn getSourceB(self: *const EffectContext, x: f32, y: f32) f32 {
+        const src = self.source orelse return 0;
+        if (x < 0 or y < 0) return 0;
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.source_width or uy >= self.source_height) return 0;
+        const idx = @as(usize, uy) * @as(usize, self.source_width * 4) + @as(usize, ux) * 4;
+        return @as(f32, @floatFromInt(src[idx + 2])) / 255.0;
+    }
+
     /// Clear entire buffer to transparent black.
     pub fn clear(self: *EffectContext) void {
         @memset(self.buf[0 .. @as(usize, self.height) * @as(usize, self.stride)], 0);

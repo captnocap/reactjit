@@ -489,6 +489,144 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
     return path;
 }
 
+// ── Filled path rendering (centroid fan decomposition) ─────────────────
+
+/// Fill a closed path using triangle fan from the centroid.
+/// Computes the average of all vertices (centroid), then fans from there.
+/// Works for convex polygons, regular stars, and most simple concave shapes.
+/// Complex self-intersecting paths may need ear-clipping or stencil buffer.
+pub fn drawFill(path: *const Path, fill_r: f32, fill_g: f32, fill_b: f32, fill_a: f32) void {
+    for (0..path.subpath_count) |si| {
+        const sp = &path.subpaths[si];
+        const n_pts = sp.count / 2;
+        if (n_pts < 3) continue;
+
+        // Compute centroid
+        var cx: f32 = 0;
+        var cy: f32 = 0;
+        var pi: u32 = 0;
+        while (pi < sp.count) : (pi += 2) {
+            cx += sp.points[pi];
+            cy += sp.points[pi + 1];
+        }
+        cx /= @floatFromInt(n_pts);
+        cy /= @floatFromInt(n_pts);
+
+        // Fan from centroid through consecutive edge pairs
+        pi = 0;
+        while (pi + 3 < sp.count) : (pi += 2) {
+            const x1 = sp.points[pi];
+            const y1 = sp.points[pi + 1];
+            const x2 = sp.points[pi + 2];
+            const y2 = sp.points[pi + 3];
+            gpu.drawTri(cx, cy, x1, y1, x2, y2, fill_r, fill_g, fill_b, fill_a);
+        }
+        // Close: last vertex → first vertex
+        if (sp.closed and n_pts >= 3) {
+            const lx = sp.points[sp.count - 2];
+            const ly = sp.points[sp.count - 1];
+            const fx = sp.points[0];
+            const fy = sp.points[1];
+            gpu.drawTri(cx, cy, lx, ly, fx, fy, fill_r, fill_g, fill_b, fill_a);
+        }
+    }
+}
+
+/// Fill a closed path sampling per-vertex colors from an effect pixel buffer.
+/// Each triangle vertex gets its color from the effect texture at the corresponding
+/// graph-space position. The GPU interpolates between vertices (Gouraud shading).
+pub fn drawFillFromEffect(
+    path: *const Path,
+    effect_pixels: [*]const u8,
+    effect_w: u32,
+    effect_h: u32,
+    bb_min_x: f32,
+    bb_min_y: f32,
+    bb_w: f32,
+    bb_h: f32,
+) void {
+    if (bb_w <= 0 or bb_h <= 0) return;
+
+    for (0..path.subpath_count) |si| {
+        const sp = &path.subpaths[si];
+        const n_pts = sp.count / 2;
+        if (n_pts < 3) continue;
+
+        // Compute centroid
+        var cx: f32 = 0;
+        var cy: f32 = 0;
+        var pi: u32 = 0;
+        while (pi < sp.count) : (pi += 2) {
+            cx += sp.points[pi];
+            cy += sp.points[pi + 1];
+        }
+        cx /= @floatFromInt(n_pts);
+        cy /= @floatFromInt(n_pts);
+
+        // Sample centroid color once
+        const cc = sampleEffect(effect_pixels, effect_w, effect_h, cx, cy, bb_min_x, bb_min_y, bb_w, bb_h);
+
+        // Fan from centroid — each triangle has 3 distinct vertex colors
+        pi = 0;
+        while (pi + 3 < sp.count) : (pi += 2) {
+            const x1 = sp.points[pi];
+            const y1 = sp.points[pi + 1];
+            const x2 = sp.points[pi + 2];
+            const y2 = sp.points[pi + 3];
+            const c1 = sampleEffect(effect_pixels, effect_w, effect_h, x1, y1, bb_min_x, bb_min_y, bb_w, bb_h);
+            const c2 = sampleEffect(effect_pixels, effect_w, effect_h, x2, y2, bb_min_x, bb_min_y, bb_w, bb_h);
+            gpu.drawTriColored(
+                cx, cy, cc[0], cc[1], cc[2], cc[3],
+                x1, y1, c1[0], c1[1], c1[2], c1[3],
+                x2, y2, c2[0], c2[1], c2[2], c2[3],
+            );
+        }
+        // Close: last vertex → first vertex
+        if (sp.closed and n_pts >= 3) {
+            const lx = sp.points[sp.count - 2];
+            const ly = sp.points[sp.count - 1];
+            const fx = sp.points[0];
+            const fy = sp.points[1];
+            const cl = sampleEffect(effect_pixels, effect_w, effect_h, lx, ly, bb_min_x, bb_min_y, bb_w, bb_h);
+            const cf = sampleEffect(effect_pixels, effect_w, effect_h, fx, fy, bb_min_x, bb_min_y, bb_w, bb_h);
+            gpu.drawTriColored(
+                cx, cy, cc[0], cc[1], cc[2], cc[3],
+                lx, ly, cl[0], cl[1], cl[2], cl[3],
+                fx, fy, cf[0], cf[1], cf[2], cf[3],
+            );
+        }
+    }
+}
+
+/// Sample a color from the effect pixel buffer at a graph-space coordinate.
+fn sampleEffect(
+    pixels: [*]const u8,
+    pw: u32,
+    ph: u32,
+    gx: f32,
+    gy: f32,
+    bb_x: f32,
+    bb_y: f32,
+    bb_w: f32,
+    bb_h: f32,
+) [4]f32 {
+    // Map graph-space → pixel coords
+    const u = (gx - bb_x) / bb_w;
+    const v = (gy - bb_y) / bb_h;
+    const px_i: i32 = @intFromFloat(@max(0, @min(@as(f32, @floatFromInt(pw)) - 1, u * @as(f32, @floatFromInt(pw)))));
+    const py_i: i32 = @intFromFloat(@max(0, @min(@as(f32, @floatFromInt(ph)) - 1, v * @as(f32, @floatFromInt(ph)))));
+    const px: u32 = @intCast(px_i);
+    const py: u32 = @intCast(py_i);
+    const idx: usize = @as(usize, py) * @as(usize, pw) * 4 + @as(usize, px) * 4;
+    // Effect pixel buffer is BGRA8 (premultiplied)
+    return .{
+        @as(f32, @floatFromInt(pixels[idx])) / 255.0,     // B → R (BGRA order)
+        @as(f32, @floatFromInt(pixels[idx + 1])) / 255.0, // G
+        @as(f32, @floatFromInt(pixels[idx + 2])) / 255.0, // R → B
+        @as(f32, @floatFromInt(pixels[idx + 3])) / 255.0, // A
+    };
+}
+
 // ── GPU-native curve stroke rendering ─────────────────────────────────
 
 /// Draw a stroked path using GPU-native SDF bezier curves.
@@ -501,8 +639,11 @@ pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_
         const seg = &path.curves[i];
         switch (seg.kind) {
             .line => {
-                // Lines go through drawRect — proper oriented rectangle
-                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, stroke_a);
+                // Degenerate quadratic curve — control point at midpoint gives a straight line
+                // with proper SDF anti-aliased stroke (no AABB rect artifacts)
+                const mx = (seg.x0 + seg.x3) * 0.5;
+                const my = (seg.y0 + seg.y3) * 0.5;
+                gpu.drawCurve(seg.x0, seg.y0, mx, my, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
             },
             .quadratic => {
                 gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);

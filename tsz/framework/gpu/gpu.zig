@@ -11,6 +11,7 @@ const c = @import("../c.zig").imports;
 const rects = @import("rects.zig");
 const text = @import("text.zig");
 const curves = @import("curves.zig");
+const polys = @import("polys.zig");
 pub const images = @import("images.zig");
 const scene3d = @import("3d.zig");
 
@@ -25,6 +26,8 @@ pub const drawTextWrapped = text.drawTextWrapped;
 pub const drawSelectionRects = text.drawSelectionRects;
 pub const drawCurve = curves.drawCurve;
 pub const drawCubicCurve = curves.drawCubicCurve;
+pub const drawTri = polys.drawTri;
+pub const drawTriColored = polys.drawTriColored;
 pub const initText = text.initText;
 pub const getCharAdvance = text.getCharAdvance;
 pub const getCharWidth = text.getCharWidth;
@@ -237,6 +240,7 @@ const ScissorSegment = struct {
     rect_start: u32,
     glyph_start: u32,
     curve_start: u32,
+    poly_start: u32,
 };
 
 const MAX_SCISSOR_SEGMENTS = 64;
@@ -283,6 +287,7 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
             .rect_start = @intCast(rects.count()),
             .glyph_start = @intCast(text.count()),
             .curve_start = @intCast(curves.count()),
+            .poly_start = @intCast(polys.count()),
         };
         g_scissor_count += 1;
     }
@@ -291,7 +296,7 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
     if (g_scissor_depth < MAX_SCISSOR_STACK) {
         g_scissor_stack[g_scissor_depth] = .{
             .x = sx, .y = sy, .w = sw, .h = sh,
-            .rect_start = 0, .glyph_start = 0, .curve_start = 0,
+            .rect_start = 0, .glyph_start = 0, .curve_start = 0, .poly_start = 0,
         };
         g_scissor_depth += 1;
     }
@@ -309,6 +314,7 @@ pub fn popScissor() void {
                 .rect_start = @intCast(rects.count()),
                 .glyph_start = @intCast(text.count()),
                 .curve_start = @intCast(curves.count()),
+                .poly_start = @intCast(polys.count()),
             };
         } else {
             g_scissor_segments[g_scissor_count] = .{
@@ -316,6 +322,7 @@ pub fn popScissor() void {
                 .rect_start = @intCast(rects.count()),
                 .glyph_start = @intCast(text.count()),
                 .curve_start = @intCast(curves.count()),
+                .poly_start = @intCast(polys.count()),
             };
         }
         g_scissor_count += 1;
@@ -337,6 +344,7 @@ fn frameDataHash() u64 {
     var h = rects.hashData();
     h ^= text.hashData();
     h ^= curves.hashData();
+    h ^= polys.hashData();
     return h;
 }
 
@@ -364,6 +372,7 @@ fn drainMemory() void {
     rects.drain(device, globals_buffer);
     text.drain(device, globals_buffer);
     curves.drain(device, globals_buffer);
+    polys.drain(device, globals_buffer);
     images.drain(device, globals_buffer);
 
     // Force full redraw on next frame
@@ -442,6 +451,7 @@ pub fn init(window: *c.SDL_Window) !void {
     // Initialize pipelines
     rects.initPipeline(device, globals_buffer);
     curves.initPipeline(device, globals_buffer);
+    polys.initPipeline(device, globals_buffer);
     images.initPipeline(device, globals_buffer);
 
     std.debug.print("wgpu initialized: {d}x{d}\n", .{ g_width, g_height });
@@ -449,6 +459,7 @@ pub fn init(window: *c.SDL_Window) !void {
 
 pub fn deinit() void {
     images.deinit();
+    polys.deinit();
     curves.deinit();
     text.deinit();
     rects.deinit();
@@ -492,6 +503,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         rects.reset();
         text.reset();
         curves.reset();
+        polys.reset();
         images.reset();
         g_scissor_count = 0;
         g_scissor_depth = 0;
@@ -524,6 +536,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         rects.upload(queue);
         text.upload(queue);
         curves.upload(queue);
+        polys.upload(queue);
     }
 
     // Image quads always upload (video frames change independently of UI dirty state)
@@ -547,6 +560,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const total_rects: u32 = @intCast(rects.count());
     const total_glyphs: u32 = @intCast(text.count());
     const total_curves: u32 = @intCast(curves.count());
+    const total_polys: u32 = @intCast(polys.count());
 
     if (g_scissor_count == 0) {
         // Fast path — no clip rects, single draw for all primitives
@@ -554,6 +568,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         rects.drawBatch(render_pass, 0, total_rects);
         text.drawBatch(render_pass, 0, total_glyphs);
         curves.drawBatch(render_pass, 0, total_curves);
+        polys.drawBatch(render_pass, 0, total_polys);
     } else {
         // Scissor-segmented rendering
         var segments: [MAX_SCISSOR_SEGMENTS + 1]ScissorSegment = undefined;
@@ -563,6 +578,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         var prev_rect: u32 = 0;
         var prev_glyph: u32 = 0;
         var prev_curve: u32 = 0;
+        var prev_poly: u32 = 0;
         var prev_sx: u32 = 0;
         var prev_sy: u32 = 0;
         var prev_sw: u32 = g_width;
@@ -573,17 +589,20 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
             const rect_end = seg.rect_start;
             const glyph_end = seg.glyph_start;
             const curve_end = seg.curve_start;
+            const poly_end = seg.poly_start;
 
-            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve) {
+            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve or poly_end > prev_poly) {
                 render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
                 if (rect_end > prev_rect) rects.drawBatch(render_pass, prev_rect, rect_end);
                 if (glyph_end > prev_glyph) text.drawBatch(render_pass, prev_glyph, glyph_end);
                 if (curve_end > prev_curve) curves.drawBatch(render_pass, prev_curve, curve_end);
+                if (poly_end > prev_poly) polys.drawBatch(render_pass, prev_poly, poly_end);
             }
 
             prev_rect = rect_end;
             prev_glyph = glyph_end;
             prev_curve = curve_end;
+            prev_poly = poly_end;
             prev_sx = seg.x;
             prev_sy = seg.y;
             prev_sw = seg.w;
@@ -591,11 +610,12 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
 
         // Draw remaining after last segment
-        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve) {
+        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve or total_polys > prev_poly) {
             render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
             if (total_rects > prev_rect) rects.drawBatch(render_pass, prev_rect, total_rects);
             if (total_glyphs > prev_glyph) text.drawBatch(render_pass, prev_glyph, total_glyphs);
             if (total_curves > prev_curve) curves.drawBatch(render_pass, prev_curve, total_curves);
+            if (total_polys > prev_poly) polys.drawBatch(render_pass, prev_poly, total_polys);
         }
     }
 
@@ -632,6 +652,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     rects.reset();
     text.reset();
     curves.reset();
+    polys.reset();
     images.reset();
     g_scissor_count = 0;
     g_scissor_depth = 0;

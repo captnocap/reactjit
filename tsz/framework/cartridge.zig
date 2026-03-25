@@ -37,9 +37,13 @@ var g_handlers_installed: bool = false;
 
 fn installCrashHandlers() void {
     if (g_handlers_installed) return;
-    // Use C sigaction directly — more portable across Zig versions
+    // Use C sigaction directly — portable across glibc and musl
     var sa: c.struct_sigaction = std.mem.zeroes(c.struct_sigaction);
-    sa.__sigaction_handler = .{ .sa_handler = crashHandler };
+    if (@hasField(c.struct_sigaction, "__sigaction_handler")) {
+        sa.__sigaction_handler = .{ .sa_handler = crashHandler }; // glibc
+    } else {
+        sa.__sa_handler = .{ .sa_handler = crashHandler }; // musl
+    }
     sa.sa_flags = c.SA_NODEFER;
     _ = c.sigaction(c.SIGSEGV, &sa, null);
     _ = c.sigaction(c.SIGBUS, &sa, null);

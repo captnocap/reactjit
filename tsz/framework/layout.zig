@@ -279,9 +279,12 @@ pub const Node = struct {
     canvas_path: bool = false,       // true = this is a Canvas.Path
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
+    canvas_fill_color: ?Color = null, // fill color for filled SVG paths (via blend2d)
     canvas_flow_speed: f32 = 0,     // 0 = solid, >0 = flow forward, <0 = flow reverse
+    canvas_fill_effect: ?[]const u8 = null, // effect name to use as polygon fill texture
     // Effect — user-compiled pixel render callback
     effect_render: ?effect_ctx.RenderFn = null,
+    effect_name: ?[]const u8 = null, // named effect — renders but not drawn, referenced by fillEffect
     effect_background: bool = false, // true = render behind parent's children
     effect_mask: bool = false,       // true = post-process parent's rendered content
     _flex_w: ?f32 = null,

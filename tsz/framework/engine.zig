@@ -37,7 +37,13 @@ const HAS_CANVAS = if (@hasDecl(build_options, "has_canvas")) build_options.has_
 const HAS_3D = if (@hasDecl(build_options, "has_3d")) build_options.has_3d else true;
 const HAS_TRANSITIONS = if (@hasDecl(build_options, "has_transitions")) build_options.has_transitions else true;
 const HAS_CRYPTO = if (@hasDecl(build_options, "has_crypto")) build_options.has_crypto else true;
+const HAS_BLEND2D = if (@hasDecl(build_options, "has_blend2d")) build_options.has_blend2d else false;
 const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_options.has_debug_server else false;
+
+const blend2d_gfx = if (HAS_BLEND2D) @import("blend2d.zig") else struct {
+    pub fn fillSVGPath(_: []const u8, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn deinit() void {}
+};
 
 const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else struct {
     pub fn init(_: [*:0]const u8) void {}
@@ -761,6 +767,22 @@ fn paintNode(node: *Node) void {
     // Canvas rendering — separate heavy path
     if (node.canvas_type != null) { paintCanvasContainer(node); return; }
 
+    // Graph container — lightweight canvas with transform for SVG path children
+    if (node.graph_container) {
+        gpu.pushScissor(r.x, r.y, r.w, r.h);
+        // Set up transform: graph-space center (viewX,viewY) maps to element center
+        const vx: f32 = node.canvas_view_x;
+        const vy: f32 = node.canvas_view_y;
+        const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h / 2;
+        gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz);
+        for (node.children) |*child| paintNode(child);
+        gpu.resetTransform();
+        gpu.popScissor();
+        return;
+    }
+
     // Overflow clipping + scroll offset + recurse children
     const ov = node.style.overflow;
     const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
@@ -781,10 +803,49 @@ fn paintNode(node: *Node) void {
     g_paint_opacity = saved_opacity;
 }
 
-/// Paint a Canvas.Path node (SVG stroke curves). Separated to keep paintNode frame small.
+/// Paint a Canvas.Path node (SVG stroke curves + optional blend2d fill).
 fn paintCanvasPath(node: *Node) callconv(.auto) void {
     @setRuntimeSafety(false);
     if (node.canvas_path_d) |d| {
+        // Fill pass — either from named effect texture or flat color
+        if (node.canvas_fill_effect) |ename| {
+            // Look up the named effect's pixel buffer and fill triangles with sampled colors
+            if (effects.getEffectFill(ename)) |info| {
+                const fill_path = svg_path.parsePath(d);
+                // Compute path bounding box for UV mapping
+                var min_x: f32 = 1e9;
+                var min_y: f32 = 1e9;
+                var max_x: f32 = -1e9;
+                var max_y: f32 = -1e9;
+                for (0..fill_path.subpath_count) |si2| {
+                    const sp2 = &fill_path.subpaths[si2];
+                    var pi2: u32 = 0;
+                    while (pi2 + 1 < sp2.count) : (pi2 += 2) {
+                        if (sp2.points[pi2] < min_x) min_x = sp2.points[pi2];
+                        if (sp2.points[pi2 + 1] < min_y) min_y = sp2.points[pi2 + 1];
+                        if (sp2.points[pi2] > max_x) max_x = sp2.points[pi2];
+                        if (sp2.points[pi2 + 1] > max_y) max_y = sp2.points[pi2 + 1];
+                    }
+                }
+                svg_path.drawFillFromEffect(
+                    &fill_path,
+                    info.pixel_buf,
+                    info.width,
+                    info.height,
+                    min_x, min_y, max_x - min_x, max_y - min_y,
+                );
+            }
+        } else if (node.canvas_fill_color) |fc| {
+            const fill_path = svg_path.parsePath(d);
+            svg_path.drawFill(
+                &fill_path,
+                @as(f32, @floatFromInt(fc.r)) / 255.0,
+                @as(f32, @floatFromInt(fc.g)) / 255.0,
+                @as(f32, @floatFromInt(fc.b)) / 255.0,
+                @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity,
+            );
+        }
+        // Stroke pass (GPU-native SDF curves)
         const tc = node.text_color orelse Color.rgb(255, 255, 255);
         const path = svg_path.parsePath(d);
         svg_path.drawStrokeCurves(
@@ -854,7 +915,12 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
     // Custom effect — user-compiled onRender callback
     if (node.effect_render) |render_fn| {
-        _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
+        if (node.effect_name) |ename| {
+            // Named effect: render but don't draw — used as fill source by Graph.Path fillEffect
+            _ = effects.paintNamedEffect(render_fn, ename, r.x, r.y, r.w, r.h);
+        } else {
+            _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
+        }
     }
     // 3D.View — 3D viewport rendered offscreen, composited here
     if (node.scene3d) {

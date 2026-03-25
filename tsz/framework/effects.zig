@@ -92,6 +92,7 @@ const Instance = struct {
     // Identity — one of these is set, not both
     effect_type: []const u8 = "", // registry path
     render_fn: ?RenderFn = null, // custom render path
+    name: ?[]const u8 = null, // user-assigned name for referencing as fill source
 
     // Registry path state
     state: ?EffectState = null,
@@ -479,4 +480,61 @@ fn createCustomInstance(render_fn: RenderFn) ?*Instance {
     };
     instance_count += 1;
     return inst;
+}
+
+fn findInstanceByName(effect_name: []const u8) ?*Instance {
+    for (instances[0..instance_count]) |*inst| {
+        if (inst.active and inst.name != null and std.mem.eql(u8, inst.name.?, effect_name))
+            return inst;
+    }
+    return null;
+}
+
+/// Named effect info for use as polygon fill source.
+pub const EffectFillInfo = struct {
+    bind_group: *wgpu.BindGroup,
+    pixel_buf: [*]const u8,
+    width: u32,
+    height: u32,
+    screen_x: f32,
+    screen_y: f32,
+};
+
+/// Look up a named effect for use as a fill texture source.
+pub fn getEffectFill(effect_name: []const u8) ?EffectFillInfo {
+    const inst = findInstanceByName(effect_name) orelse return null;
+    const bg = inst.bind_group orelse return null;
+    const buf = inst.pixel_buf orelse return null;
+    if (inst.width == 0 or inst.height == 0) return null;
+    return .{
+        .bind_group = bg,
+        .pixel_buf = buf.ptr,
+        .width = inst.width,
+        .height = inst.height,
+        .screen_x = inst.screen_x,
+        .screen_y = inst.screen_y,
+    };
+}
+
+/// Paint a named custom effect — same as paintCustomEffect but stores the name
+/// for later lookup by Graph.Path fillEffect references. Does NOT draw an image
+/// quad — the effect is invisible until referenced by a fill.
+pub fn paintNamedEffect(render_fn: RenderFn, effect_name: []const u8, x: f32, y: f32, w: f32, h: f32) bool {
+    var inst = findInstanceByFn(render_fn);
+    if (inst == null) {
+        inst = createCustomInstance(render_fn);
+    }
+    const i = inst orelse return false;
+    i.active = true;
+    i.name = effect_name;
+    i.screen_x = x;
+    i.screen_y = y;
+
+    const iw: u32 = @intFromFloat(@max(1, w));
+    const ih: u32 = @intFromFloat(@max(1, h));
+    i.ensureSize(iw, ih);
+
+    if (i.width == 0 or i.height == 0) return false;
+    // Don't draw — the effect is only drawn when referenced by a polygon fill
+    return true;
 }

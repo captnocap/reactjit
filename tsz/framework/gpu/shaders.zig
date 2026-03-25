@@ -508,3 +508,63 @@ pub const scene3d_wgsl =
     \\}
 ;
 
+/// Polygon fill pipeline: flat-colored triangles.
+/// Each instance is one triangle (3 vertex positions + RGBA color).
+/// 3 vertices per instance, vertex_index selects which vertex.
+pub const poly_wgsl =
+    \\// ── Uniforms ───────────────────────────────────────────────────
+    \\struct Globals {
+    \\    screen_size: vec2f,
+    \\};
+    \\@group(0) @binding(0) var<uniform> globals: Globals;
+    \\
+    \\// ── Per-instance data: 3 vertices with per-vertex colors ──────
+    \\struct TriInstance {
+    \\    @location(0) v0: vec2f,     // vertex 0 position
+    \\    @location(1) c0: vec4f,     // vertex 0 color
+    \\    @location(2) v1: vec2f,     // vertex 1 position
+    \\    @location(3) c1: vec4f,     // vertex 1 color
+    \\    @location(4) v2: vec2f,     // vertex 2 position
+    \\    @location(5) c2: vec4f,     // vertex 2 color
+    \\};
+    \\
+    \\struct VertexOutput {
+    \\    @builtin(position) clip_pos: vec4f,
+    \\    @location(0) color: vec4f,
+    \\};
+    \\
+    \\@vertex
+    \\fn vs_main(
+    \\    @builtin(vertex_index) vertex_index: u32,
+    \\    inst: TriInstance,
+    \\) -> VertexOutput {
+    \\    var pos: vec2f;
+    \\    var col: vec4f;
+    \\    if (vertex_index == 0u) {
+    \\        pos = inst.v0; col = inst.c0;
+    \\    } else if (vertex_index == 1u) {
+    \\        pos = inst.v1; col = inst.c1;
+    \\    } else {
+    \\        pos = inst.v2; col = inst.c2;
+    \\    }
+    \\
+    \\    let ndc = vec2f(
+    \\        pos.x / globals.screen_size.x * 2.0 - 1.0,
+    \\        1.0 - pos.y / globals.screen_size.y * 2.0,
+    \\    );
+    \\
+    \\    var out: VertexOutput;
+    \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
+    \\    out.color = col;
+    \\    return out;
+    \\}
+    \\
+    \\@fragment
+    \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    \\    if (in.color.a <= 0.0) {
+    \\        discard;
+    \\    }
+    \\    return vec4f(in.color.rgb * in.color.a, in.color.a);
+    \\}
+;
+
