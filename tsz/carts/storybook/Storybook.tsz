@@ -28,23 +28,23 @@ function App() {
 
         <C.FooterSpacer />
 
-        {activeNav == 0 && <C.NavPillActive onPress={() => { setActiveNav(0); navigate('/') }}><C.NavPillLabelActive>Primitives</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 0 && <C.NavPill onPress={() => { setActiveNav(0); navigate('/') }}><C.NavPillLabel>Primitives</C.NavPillLabel></C.NavPill>}
+        {activeNav == 0 && <C.NavPillActive onPress={() => { setActiveNav(0) }}><C.NavPillLabelActive>Primitives</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 0 && <C.NavPill onPress={() => { setActiveNav(0) }}><C.NavPillLabel>Primitives</C.NavPillLabel></C.NavPill>}
 
-        {activeNav == 1 && <C.NavPillActive onPress={() => { navigate('/theme') }}><C.NavPillLabelActive>Theme</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 1 && <C.NavPill onPress={() => { setActiveNav(1); navigate('/theme') }}><C.NavPillLabel>Theme</C.NavPillLabel></C.NavPill>}
+        {activeNav == 1 && <C.NavPillActive onPress={() => { setActiveNav(1) }}><C.NavPillLabelActive>Theme</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 1 && <C.NavPill onPress={() => { setActiveNav(1) }}><C.NavPillLabel>Theme</C.NavPillLabel></C.NavPill>}
 
-        {activeNav == 2 && <C.NavPillActive onPress={() => { navigate('/layout') }}><C.NavPillLabelActive>Layout</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 2 && <C.NavPill onPress={() => { setActiveNav(2); navigate('/layout') }}><C.NavPillLabel>Layout</C.NavPillLabel></C.NavPill>}
+        {activeNav == 2 && <C.NavPillActive onPress={() => { setActiveNav(2) }}><C.NavPillLabelActive>Layout</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 2 && <C.NavPill onPress={() => { setActiveNav(2) }}><C.NavPillLabel>Layout</C.NavPillLabel></C.NavPill>}
 
-        {activeNav == 3 && <C.NavPillActive onPress={() => { navigate('/state') }}><C.NavPillLabelActive>State</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 3 && <C.NavPill onPress={() => { setActiveNav(3); navigate('/state') }}><C.NavPillLabel>State</C.NavPillLabel></C.NavPill>}
+        {activeNav == 3 && <C.NavPillActive onPress={() => { setActiveNav(3) }}><C.NavPillLabelActive>State</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 3 && <C.NavPill onPress={() => { setActiveNav(3) }}><C.NavPillLabel>State</C.NavPillLabel></C.NavPill>}
 
-        {activeNav == 4 && <C.NavPillActive onPress={() => { navigate('/canvas') }}><C.NavPillLabelActive>Canvas</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 4 && <C.NavPill onPress={() => { setActiveNav(4); navigate('/canvas') }}><C.NavPillLabel>Canvas</C.NavPillLabel></C.NavPill>}
+        {activeNav == 4 && <C.NavPillActive onPress={() => { setActiveNav(4) }}><C.NavPillLabelActive>Canvas</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 4 && <C.NavPill onPress={() => { setActiveNav(4) }}><C.NavPillLabel>Canvas</C.NavPillLabel></C.NavPill>}
 
-        {activeNav == 5 && <C.NavPillActive onPress={() => { navigate('/concepts') }}><C.NavPillLabelActive>Concepts</C.NavPillLabelActive></C.NavPillActive>}
-        {activeNav != 5 && <C.NavPill onPress={() => { setActiveNav(5); navigate('/concepts') }}><C.NavPillLabel>Concepts</C.NavPillLabel></C.NavPill>}
+        {activeNav == 5 && <C.NavPillActive onPress={() => { setActiveNav(5) }}><C.NavPillLabelActive>Concepts</C.NavPillLabelActive></C.NavPillActive>}
+        {activeNav != 5 && <C.NavPill onPress={() => { setActiveNav(5) }}><C.NavPillLabel>Concepts</C.NavPillLabel></C.NavPill>}
 
         <C.FooterCounter>{`${activeNav + 1} of 6 stories`}</C.FooterCounter>
       </C.Footer>
