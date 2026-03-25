@@ -8,6 +8,14 @@ node_modules/
 *.love
 bundle.js
 
+# Compiled benchmark binaries (rebuilt from .zig source)
+tsz/bench_lua_stress
+tsz/bench_lua_worker
+
+# Third-party library downloads
+blend2d-*.tar.gz
+blend2d/
+
 # ── Love2D stack (love2d/) ──────────────────────────────
 love2d/cli/runtime/
 love2d/.rjit-lint-cache.json
