@@ -171,11 +171,24 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             var getter_used = false;
             var setter_used = false;
 
-            // Check dynamic text args for getter references
-            for (0..self.dyn_count) |di| {
-                if (std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, slot.getter) != null) {
-                    getter_used = true;
+            // useFFI slots are written by the Zig FFI tick, not a JS setter
+            for (0..self.ffi_hook_count) |hi| {
+                if (self.ffi_hooks[hi].slot_id == @as(u32, @intCast(si))) {
+                    setter_used = true;
                     break;
+                }
+            }
+
+            // Check dynamic text args for getter references (raw name OR compiled state.getSlot form)
+            {
+                const slot_expr = try slotReadExpr(self, @intCast(si));
+                for (0..self.dyn_count) |di| {
+                    if (std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, slot.getter) != null or
+                        std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, slot_expr) != null)
+                    {
+                        getter_used = true;
+                        break;
+                    }
                 }
             }
 
