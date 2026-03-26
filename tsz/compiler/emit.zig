@@ -492,7 +492,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
 
     // luajit_runtime — stubbed in .so mode (has native LuaJIT deps)
-    if (self.compute_lua != null) {
+    // Always emitted when compute_js is set (auto-generates Lua fallback)
+    if (self.compute_lua != null or self.compute_js != null) {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "const luajit_runtime = if (IS_LIB) struct {{\n" ++
             "    pub fn callGlobal(_: []const u8) void {{}}\n" ++

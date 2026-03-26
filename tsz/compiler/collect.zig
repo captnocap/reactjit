@@ -1414,6 +1414,220 @@ pub fn extractComputeBlock(self: *Generator) void {
             self.compute_lua = self.alloc.dupe(u8, lua_parts.items) catch return;
         }
     }
+
+    // Auto-generate Lua fallback from JS <script> if no explicit <lscript>
+    // This enables LuaJIT as a safety net for handlers that fail Zig codegen
+    if (self.compute_lua == null and self.compute_js != null) {
+        self.compute_lua = jsToLuaFallback(self.alloc, self.compute_js.?);
+    }
+}
+
+/// Auto-transpile JS <script> content to Lua for the LuaJIT fallback safety net.
+/// Handles common patterns: function decls, var/let/const, if/else, ===, !==, comments.
+/// Not perfect — complex expressions (ternaries, arrow functions) may produce invalid Lua.
+/// That's OK: the fallback only runs for handlers that failed Zig codegen, and LuaJIT
+/// will log errors for anything it can't parse.
+fn jsToLuaFallback(alloc: std.mem.Allocator, js: []const u8) ?[]const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    result.appendSlice(alloc, "-- Auto-generated Lua fallback from <script>\n") catch return null;
+
+    var line_iter = std.mem.splitScalar(u8, js, '\n');
+    while (line_iter.next()) |raw_line| {
+        const line = std.mem.trim(u8, raw_line, &[_]u8{ '\r' });
+        const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t' });
+
+        // Comment lines: // → --
+        if (std.mem.startsWith(u8, trimmed, "//")) {
+            result.appendSlice(alloc, "--") catch {};
+            result.appendSlice(alloc, trimmed[2..]) catch {};
+            result.append(alloc, '\n') catch {};
+            continue;
+        }
+
+        // Skip useState lines (handled by framework)
+        if (std.mem.indexOf(u8, trimmed, "useState(") != null) continue;
+
+        // Empty lines
+        if (trimmed.len == 0) {
+            result.append(alloc, '\n') catch {};
+            continue;
+        }
+
+        // Lone closing brace → end
+        if (std.mem.eql(u8, trimmed, "}")) {
+            result.appendSlice(alloc, "end\n") catch {};
+            continue;
+        }
+
+        // function declaration: function foo(...) { → function foo(...)
+        if (std.mem.startsWith(u8, trimmed, "function ")) {
+            var fn_line = trimmed;
+            // Strip trailing {
+            if (fn_line.len > 0 and fn_line[fn_line.len - 1] == '{') {
+                fn_line = std.mem.trimRight(u8, fn_line[0 .. fn_line.len - 1], &[_]u8{ ' ', '\t' });
+            }
+            // Strip trailing )  and re-add without {
+            result.appendSlice(alloc, fn_line) catch {};
+            result.append(alloc, '\n') catch {};
+            continue;
+        }
+
+        // } else if (...) { → elseif ... then
+        if (std.mem.startsWith(u8, trimmed, "} else if ") or std.mem.startsWith(u8, trimmed, "} else if(")) {
+            const after = if (std.mem.startsWith(u8, trimmed, "} else if ("))
+                trimmed["} else if (".len..]
+            else if (std.mem.startsWith(u8, trimmed, "} else if("))
+                trimmed["} else if(".len..]
+            else
+                trimmed["} else if ".len..];
+            // Strip trailing ) {
+            var cond = after;
+            if (cond.len > 0 and cond[cond.len - 1] == '{') {
+                cond = std.mem.trimRight(u8, cond[0 .. cond.len - 1], &[_]u8{ ' ', '\t' });
+            }
+            if (cond.len > 0 and cond[cond.len - 1] == ')') {
+                cond = cond[0 .. cond.len - 1];
+            }
+            result.appendSlice(alloc, "elseif ") catch {};
+            appendLuaExpr(alloc, &result, cond);
+            result.appendSlice(alloc, " then\n") catch {};
+            continue;
+        }
+
+        // } else { → else
+        if (std.mem.eql(u8, trimmed, "} else {")) {
+            result.appendSlice(alloc, "else\n") catch {};
+            continue;
+        }
+
+        // if (...) { → if ... then   OR   if (...) stmt; → if ... then stmt end
+        if (std.mem.startsWith(u8, trimmed, "if ") or std.mem.startsWith(u8, trimmed, "if(")) {
+            const after = if (std.mem.startsWith(u8, trimmed, "if ("))
+                trimmed["if (".len..]
+            else if (std.mem.startsWith(u8, trimmed, "if("))
+                trimmed["if(".len..]
+            else
+                trimmed["if ".len..];
+            // Check if multi-line (ends with {) or single-line
+            if (after.len > 0 and after[after.len - 1] == '{') {
+                // Multi-line: if (cond) {
+                var cond = std.mem.trimRight(u8, after[0 .. after.len - 1], &[_]u8{ ' ', '\t' });
+                if (cond.len > 0 and cond[cond.len - 1] == ')') cond = cond[0 .. cond.len - 1];
+                result.appendSlice(alloc, "if ") catch {};
+                appendLuaExpr(alloc, &result, cond);
+                result.appendSlice(alloc, " then\n") catch {};
+            } else {
+                // Single-line: if (cond) stmt;
+                // Find the closing ) that ends the condition
+                var depth: u32 = 1; // we're past the opening (
+                var ci: usize = 0;
+                while (ci < after.len and depth > 0) : (ci += 1) {
+                    if (after[ci] == '(') depth += 1;
+                    if (after[ci] == ')') depth -= 1;
+                }
+                if (ci > 0 and depth == 0) {
+                    const cond = after[0 .. ci - 1];
+                    const stmt = std.mem.trim(u8, after[ci..], &[_]u8{ ' ', '\t' });
+                    result.appendSlice(alloc, "if ") catch {};
+                    appendLuaExpr(alloc, &result, cond);
+                    result.appendSlice(alloc, " then ") catch {};
+                    appendLuaLine(alloc, &result, stmt);
+                    result.appendSlice(alloc, "end\n") catch {};
+                } else {
+                    // Can't parse — emit as-is with comment
+                    result.appendSlice(alloc, "-- [fallback] ") catch {};
+                    result.appendSlice(alloc, trimmed) catch {};
+                    result.append(alloc, '\n') catch {};
+                }
+            }
+            continue;
+        }
+
+        // var/let/const x = ...; → local x = ...
+        if (std.mem.startsWith(u8, trimmed, "var ") or
+            std.mem.startsWith(u8, trimmed, "let ") or
+            std.mem.startsWith(u8, trimmed, "const "))
+        {
+            const rest = if (std.mem.startsWith(u8, trimmed, "const "))
+                trimmed["const ".len..]
+            else
+                trimmed[4..]; // "var " or "let "
+            result.appendSlice(alloc, "local ") catch {};
+            appendLuaLine(alloc, &result, rest);
+            continue;
+        }
+
+        // Default: copy line, strip trailing semicolons, fix operators
+        appendLuaLine(alloc, &result, trimmed);
+    }
+
+    if (result.items.len == 0) return null;
+    return result.items;
+}
+
+/// Append a JS expression with Lua operator fixes (===, !==, !, [])
+/// Skips string literals to avoid mangling content inside quotes.
+fn appendLuaExpr(alloc: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), expr: []const u8) void {
+    var i: usize = 0;
+    while (i < expr.len) {
+        // Skip string literals
+        if (expr[i] == '\'' or expr[i] == '"') {
+            const quote = expr[i];
+            out.append(alloc, quote) catch {};
+            i += 1;
+            while (i < expr.len and expr[i] != quote) {
+                if (expr[i] == '\\' and i + 1 < expr.len) {
+                    out.append(alloc, expr[i]) catch {};
+                    out.append(alloc, expr[i + 1]) catch {};
+                    i += 2;
+                } else {
+                    out.append(alloc, expr[i]) catch {};
+                    i += 1;
+                }
+            }
+            if (i < expr.len) {
+                out.append(alloc, expr[i]) catch {};
+                i += 1;
+            }
+            continue;
+        }
+        // === → ==
+        if (i + 2 < expr.len and expr[i] == '=' and expr[i + 1] == '=' and expr[i + 2] == '=') {
+            out.appendSlice(alloc, "==") catch {};
+            i += 3;
+        // !== → ~=
+        } else if (i + 2 < expr.len and expr[i] == '!' and expr[i + 1] == '=' and expr[i + 2] == '=') {
+            out.appendSlice(alloc, "~=") catch {};
+            i += 3;
+        // != → ~=
+        } else if (i + 1 < expr.len and expr[i] == '!' and expr[i + 1] == '=') {
+            out.appendSlice(alloc, "~=") catch {};
+            i += 2;
+        // ! (not followed by =) → not
+        } else if (expr[i] == '!' and (i + 1 >= expr.len or expr[i + 1] != '=')) {
+            out.appendSlice(alloc, "not ") catch {};
+            i += 1;
+        // [] → {}
+        } else if (i + 1 < expr.len and expr[i] == '[' and expr[i + 1] == ']') {
+            out.appendSlice(alloc, "{}") catch {};
+            i += 2;
+        } else {
+            out.append(alloc, expr[i]) catch {};
+            i += 1;
+        }
+    }
+}
+
+/// Append a JS line with Lua fixes: strip semicolons, fix operators
+fn appendLuaLine(alloc: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), line: []const u8) void {
+    var clean = line;
+    // Strip trailing semicolons
+    while (clean.len > 0 and clean[clean.len - 1] == ';') {
+        clean = clean[0 .. clean.len - 1];
+    }
+    clean = std.mem.trimRight(u8, clean, &[_]u8{ ' ', '\t' });
+    appendLuaExpr(alloc, out, clean);
+    out.append(alloc, '\n') catch {};
 }
 
 fn scanTagContent(alloc: std.mem.Allocator, src: []const u8, open_tag: []const u8, close_tag: []const u8, parts: *std.ArrayListUnmanaged(u8)) void {

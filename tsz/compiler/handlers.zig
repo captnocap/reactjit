@@ -539,6 +539,21 @@ fn emitStatement(
             }
             try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s}({s});\n", .{ pad, call_name, args_buf.items }));
         }
+    } else if (self.compute_lua != null) {
+        // Fallback: auto-generated Lua from <script> — safety net for unsupported codegen
+        if (arg_count == 0) {
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}luajit_runtime.callGlobal(\"{s}\");\n", .{ pad, call_name }));
+        } else {
+            var fb_fmt: std.ArrayListUnmanaged(u8) = .{};
+            try fb_fmt.appendSlice(self.alloc, call_name);
+            try fb_fmt.append(self.alloc, '(');
+            for (0..arg_count) |ai| {
+                if (ai > 0) try fb_fmt.appendSlice(self.alloc, ", ");
+                try fb_fmt.appendSlice(self.alloc, arg_exprs[ai]);
+            }
+            try fb_fmt.append(self.alloc, ')');
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}luajit_runtime.evalExpr(\"{s}\");\n", .{ pad, fb_fmt.items }));
+        }
     } else {
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: {s}(...)\n", .{ pad, call_name }));
     }
