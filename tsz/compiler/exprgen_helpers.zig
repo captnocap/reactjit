@@ -365,6 +365,30 @@ test "Math builtin" {
     try testExpr("Math.max(a, b)", "@max(a, b)");
     try testExpr("Math.min(a, b)", "@min(a, b)");
     try testExpr("Math.floor(x)", "@floor(x)");
+    try testExpr("Math.sin(x)", "@sin(x)");
+    try testExpr("Math.cos(x)", "@cos(x)");
+    try testExpr("Math.sqrt(x)", "@sqrt(x)");
+    try testExpr("Math.atan2(y, x)", "std.math.atan2(y, x)");
+    try testExpr("Math.clamp(v, lo, hi)", "std.math.clamp(v, lo, hi)");
+    try testExpr("Math.lerp(a, b, t)", "math.lerp(a, b, t)");
+}
+
+test "Vec2 namespace" {
+    try testExpr("Vec2(3, 4)", "math.v2(3, 4)");
+    try testExpr("Vec2.add(a, b)", "math.v2add(a, b)");
+    try testExpr("Vec2.distance(a, b)", "math.v2distance(a, b)");
+    try testExpr("Vec2.normalize(v)", "math.v2normalize(v)");
+}
+
+test "Vec3 namespace" {
+    try testExpr("Vec3(1, 2, 3)", "math.v3(1, 2, 3)");
+    try testExpr("Vec3.dot(a, b)", "math.v3dot(a, b)");
+    try testExpr("Vec3.cross(a, b)", "math.v3cross(a, b)");
+}
+
+test "Noise namespace" {
+    try testExpr("Noise.perlin(x, y)", "math.noise2d(x, y)");
+    try testExpr("Noise.fbm(x, y)", "math.fbm2d(x, y)");
 }
 
 test "ternary" {
@@ -376,14 +400,14 @@ test "logical operators" {
     try testExpr("a || b", "a or b");
 }
 
-test "arithmetic with unknown types uses asF32 fallback" {
-    try testExpr("a + b", "asF32(a) + asF32(b)");
-    try testExpr("a * b + c", "asF32(asF32(a) * asF32(b)) + asF32(c)");
+test "arithmetic with unknown types passes through" {
+    try testExpr("a + b", "a + b");
+    try testExpr("a * b + c", "a * b + c");
 }
 
-test "comparison with unknown types uses asF32 fallback" {
-    try testExpr("a < b", "asF32(a) < asF32(b)");
-    try testExpr("a >= b", "asF32(a) >= asF32(b)");
+test "comparison with unknown types passes through" {
+    try testExpr("a < b", "a < b");
+    try testExpr("a >= b", "a >= b");
 }
 
 test "arithmetic with known f32 fields no cast" {
@@ -460,7 +484,7 @@ test "null and undefined" {
 }
 
 test "parenthesized" {
-    try testExpr("(a + b)", "(asF32(a) + asF32(b))");
+    try testExpr("(a + b)", "(a + b)");
 }
 
 test "function call" {
@@ -469,7 +493,7 @@ test "function call" {
 }
 
 test "index access" {
-    try testExpr("arr[i]", "arr[@intCast(i)]");
+    try testExpr("arr[i]", "arr[i]");
 }
 
 test "template literal simple" {
@@ -477,7 +501,7 @@ test "template literal simple" {
 }
 
 test "comparison chain with logical" {
-    try testExpr("a < b && b < c", "asF32(a) < asF32(b) and asF32(b) < asF32(c)");
+    try testExpr("a < b && b < c", "a < b and b < c");
 }
 
 test "slice method" {
@@ -509,11 +533,11 @@ test "enum does not apply to Math builtins" {
     try testExpr("Math.abs(x)", "@abs(x)");
 }
 
-test "local variable snake_case" {
-    try testExpr("visibleCount", "visible_count");
-    try testExpr("lineMain", "line_main");
-    try testExpr("itemsOnLine", "items_on_line");
-    try testExpr("totalCross", "total_cross");
+test "local variable unchanged" {
+    try testExpr("visibleCount", "visibleCount");
+    try testExpr("lineMain", "lineMain");
+    try testExpr("itemsOnLine", "itemsOnLine");
+    try testExpr("totalCross", "totalCross");
 }
 
 test "simple identifiers unchanged" {

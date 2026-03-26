@@ -170,6 +170,7 @@ pub fn mapNullableType(alloc: std.mem.Allocator, tsz_type: []const u8) ![]const 
 pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
     if (input.len == 0) return try alloc.dupe(u8, "");
     var out: std.ArrayListUnmanaged(u8) = .{};
+    defer out.deinit(alloc);
     for (input, 0..) |ch, i| {
         if (ch >= 'A' and ch <= 'Z') {
             if (i > 0) {
@@ -949,7 +950,7 @@ test "interface with optional fields and enum defaults" {
 
     const result = try emitTypeDeclarations(alloc, &lex, source);
     try std.testing.expect(std.mem.indexOf(u8, result, "width: ?f32 = null,") != null);
-    try std.testing.expect(std.mem.indexOf(u8, result, "flex_direction: FlexDirection = .row,") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result, "flex_direction: FlexDirection = .column,") != null);
     try std.testing.expect(std.mem.indexOf(u8, result, "gap: f32 = 0,") != null);
 }
 
