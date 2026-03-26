@@ -103,6 +103,46 @@ const GpuUniforms = extern struct {
     mouse_inside: f32,
 };
 
+var g_paisley_debug_enabled: ?bool = null;
+
+fn paisleyDebugEnabled() bool {
+    if (g_paisley_debug_enabled == null) {
+        g_paisley_debug_enabled = std.posix.getenv("ZIGOS_PAISLEY_DEBUG") != null;
+    }
+    return g_paisley_debug_enabled.?;
+}
+
+fn isPaisleyName(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "paisley-");
+}
+
+fn samplePixelAlpha(buf: []const u8, width: u32, height: u32, x: u32, y: u32) u8 {
+    if (width == 0 or height == 0) return 0;
+    const sx = @min(width - 1, x);
+    const sy = @min(height - 1, y);
+    const idx: usize = @as(usize, sy) * @as(usize, width) * 4 + @as(usize, sx) * 4;
+    if (idx + 3 >= buf.len) return 0;
+    return buf[idx + 3];
+}
+
+fn flipRowsInPlace(buf: []u8, row_bytes: u32, h: u32) void {
+    if (row_bytes == 0 or h <= 1 or row_bytes > 8192) return;
+
+    var tmp: [8192]u8 = undefined;
+    const tmp_row = tmp[0..row_bytes];
+    var top: usize = 0;
+    var bot: usize = h - 1;
+    while (top < bot) {
+        const top_ptr = buf[top * row_bytes ..][0..row_bytes];
+        const bot_ptr = buf[bot * row_bytes ..][0..row_bytes];
+        @memcpy(tmp_row, top_ptr);
+        @memcpy(top_ptr, bot_ptr);
+        @memcpy(bot_ptr, tmp_row);
+        top += 1;
+        bot -= 1;
+    }
+}
+
 const Instance = struct {
     active: bool = false,
 
@@ -260,22 +300,10 @@ const Instance = struct {
         const h = self.height;
         const row_bytes = w * 4;
 
-        // Flip rows for the shared image shader (1.0 - corner.y UV flip)
-        if (row_bytes <= 8192) {
-            var tmp: [8192]u8 = undefined;
-            const tmp_row = tmp[0..row_bytes];
-            var top: usize = 0;
-            var bot: usize = h - 1;
-            while (top < bot) {
-                const top_ptr = buf[top * row_bytes ..][0..row_bytes];
-                const bot_ptr = buf[bot * row_bytes ..][0..row_bytes];
-                @memcpy(tmp_row, top_ptr);
-                @memcpy(top_ptr, bot_ptr);
-                @memcpy(bot_ptr, tmp_row);
-                top += 1;
-                bot -= 1;
-            }
-        }
+        // Flip rows for the shared image shader, then restore the CPU buffer so
+        // CPU-side consumers like fillEffect sampling keep a stable top-down view.
+        const should_flip = row_bytes <= 8192 and h > 1;
+        if (should_flip) flipRowsInPlace(buf, row_bytes, h);
 
         queue.writeTexture(
             &.{ .texture = tex, .mip_level = 0, .origin = .{ .x = 0, .y = 0, .z = 0 }, .aspect = .all },
@@ -284,6 +312,8 @@ const Instance = struct {
             &.{ .offset = 0, .bytes_per_row = w * 4, .rows_per_image = h },
             &.{ .width = w, .height = h, .depth_or_array_layers = 1 },
         );
+
+        if (should_flip) flipRowsInPlace(buf, row_bytes, h);
     }
 };
 
@@ -649,7 +679,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     i.backend = .cpu;
     i.ensureCpuSize(iw, ih);
     if (i.width == 0 or i.height == 0) return false;
-    if (i.bind_group == null and !renderCpuNow(i)) return false;
+    if (!renderCpuNow(i)) return false;
     const bg = i.bind_group orelse return false;
 
     images.queueQuad(x, y, w, h, opacity, bg);
@@ -752,6 +782,15 @@ pub fn getEffectFill(effect_name: []const u8) ?EffectFillInfo {
     const bg = inst.bind_group orelse return null;
     const buf = inst.pixel_buf orelse return null;
     if (inst.width == 0 or inst.height == 0) return null;
+    if (paisleyDebugEnabled() and isPaisleyName(effect_name)) {
+        const cx = if (inst.width > 0) inst.width / 2 else 0;
+        const cy = if (inst.height > 0) inst.height / 2 else 0;
+        const center_a = samplePixelAlpha(buf, inst.width, inst.height, cx, cy);
+        std.debug.print(
+            "[paisley] getEffectFill name={s} size={d}x{d} center_a={d} screen=({d:.1},{d:.1})\n",
+            .{ effect_name, inst.width, inst.height, center_a, inst.screen_x, inst.screen_y },
+        );
+    }
     return .{
         .bind_group = bg,
         .pixel_buf = buf.ptr,
@@ -782,7 +821,20 @@ pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f
     i.ensureCpuSize(iw, ih);
 
     if (i.width == 0 or i.height == 0) return false;
-    if (i.bind_group == null and !renderCpuNow(i)) return false;
+    const ok = renderCpuNow(i);
+    if (paisleyDebugEnabled() and isPaisleyName(effect_name)) {
+        var center_a: u8 = 0;
+        var quarter_a: u8 = 0;
+        if (i.pixel_buf) |buf| {
+            center_a = samplePixelAlpha(buf, i.width, i.height, i.width / 2, i.height / 2);
+            quarter_a = samplePixelAlpha(buf, i.width, i.height, i.width / 4, i.height / 4);
+        }
+        std.debug.print(
+            "[paisley] paintNamedEffect name={s} node={x} box=({d:.1},{d:.1},{d:.1},{d:.1}) tex={d}x{d} ok={} center_a={d} quarter_a={d}\n",
+            .{ effect_name, @intFromPtr(node), x, y, w, h, i.width, i.height, ok, center_a, quarter_a },
+        );
+    }
+    if (!ok) return false;
     // Don't draw — the effect is only drawn when referenced by a polygon fill
     return true;
 }

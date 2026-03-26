@@ -334,6 +334,28 @@ test "extractComputeBlock" {
     try testing.expect(std.mem.indexOf(u8, gen.compute_js.?, "const x = 42") != null);
 }
 
+test "extractComputeBlock does not synthesize lua from js" {
+    const src = "<script>\nconst xs = [1, 2, 3];\n</script>\nfunction App() { return <Box /> }";
+    var lex = tokenize(src);
+    var a = arena();
+    defer a.deinit();
+    var gen = makeGen(a.allocator(), &lex, src);
+    collect.extractComputeBlock(&gen);
+    try testing.expect(gen.compute_js != null);
+    try testing.expect(gen.compute_lua == null);
+}
+
+test "extractComputeBlock lscript" {
+    const src = "<lscript>\nlocal x = 42\n</lscript>\nfunction App() { return <Box /> }";
+    var lex = tokenize(src);
+    var a = arena();
+    defer a.deinit();
+    var gen = makeGen(a.allocator(), &lex, src);
+    collect.extractComputeBlock(&gen);
+    try testing.expect(gen.compute_lua != null);
+    try testing.expect(std.mem.indexOf(u8, gen.compute_lua.?, "local x = 42") != null);
+}
+
 test "extractComputeBlock none" {
     const src = "function App() { return <Box /> }";
     var lex = tokenize(src);

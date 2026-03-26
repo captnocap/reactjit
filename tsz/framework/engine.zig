@@ -42,8 +42,22 @@ const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_
 
 const blend2d_gfx = if (HAS_BLEND2D) @import("blend2d.zig") else struct {
     pub fn fillSVGPath(_: []const u8, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn fillSVGPathFromEffect(_: []const u8, _: [*]const u8, _: u32, _: u32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
     pub fn deinit() void {}
 };
+
+var g_paisley_debug_enabled: ?bool = null;
+
+fn paisleyDebugEnabled() bool {
+    if (g_paisley_debug_enabled == null) {
+        g_paisley_debug_enabled = std.posix.getenv("ZIGOS_PAISLEY_DEBUG") != null;
+    }
+    return g_paisley_debug_enabled.?;
+}
+
+fn isPaisleyName(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "paisley-");
+}
 
 const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else struct {
     pub fn init(_: [*:0]const u8) void {}
@@ -830,6 +844,7 @@ fn paintNode(node: *Node) void {
 fn paintCanvasPath(node: *Node) callconv(.auto) void {
     @setRuntimeSafety(false);
     if (node.canvas_path_d) |d| {
+        const tc = node.text_color orelse Color.rgb(255, 255, 255);
         // Fill pass — either from named effect texture or flat color
         if (node.canvas_fill_effect) |ename| {
             // Look up the named effect's pixel buffer and fill triangles with sampled colors
@@ -850,13 +865,50 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                         if (sp2.points[pi2 + 1] > max_y) max_y = sp2.points[pi2 + 1];
                     }
                 }
-                svg_path.drawFillFromEffect(
-                    &fill_path,
-                    info.pixel_buf,
-                    info.width,
-                    info.height,
-                    min_x, min_y, max_x - min_x, max_y - min_y,
-                );
+                if (paisleyDebugEnabled() and isPaisleyName(ename)) {
+                    std.debug.print(
+                        "[paisley] paintCanvasPath name={s} d_len={d} bbox=({d:.1},{d:.1},{d:.1},{d:.1}) stroke_w={d:.2} curve_count={d} subpaths={d}\n",
+                        .{
+                            ename,
+                            d.len,
+                            min_x,
+                            min_y,
+                            max_x - min_x,
+                            max_y - min_y,
+                            node.canvas_stroke_width,
+                            fill_path.curve_count,
+                            fill_path.subpath_count,
+                        },
+                    );
+                }
+                if (HAS_BLEND2D) {
+                    blend2d_gfx.fillSVGPathFromEffect(
+                        d,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x,
+                        min_y,
+                        max_x - min_x,
+                        max_y - min_y,
+                        g_paint_opacity,
+                        @as(f32, @floatFromInt(tc.r)) / 255.0,
+                        @as(f32, @floatFromInt(tc.g)) / 255.0,
+                        @as(f32, @floatFromInt(tc.b)) / 255.0,
+                        @as(f32, @floatFromInt(tc.a)) / 255.0,
+                        node.canvas_stroke_width,
+                    );
+                } else {
+                    svg_path.drawFillFromEffect(
+                        &fill_path,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x, min_y, max_x - min_x, max_y - min_y,
+                    );
+                }
+            } else if (paisleyDebugEnabled() and isPaisleyName(ename)) {
+                std.debug.print("[paisley] paintCanvasPath name={s} missing fill source\n", .{ename});
             }
         } else if (node.canvas_fill_color) |fc| {
             const fill_path = svg_path.parsePath(d);
@@ -869,7 +921,6 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
             );
         }
         // Stroke pass (GPU-native SDF curves)
-        const tc = node.text_color orelse Color.rgb(255, 255, 255);
         const path = svg_path.parsePath(d);
         svg_path.drawStrokeCurves(
             &path,
@@ -972,8 +1023,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
             if (node.text_effect) |ename| {
                 if (effects.getEffectFill(ename)) |info| {
                     gpu.setTextEffect(info.pixel_buf, info.width, info.height, info.screen_x, info.screen_y);
-                } else {
-                    std.debug.print("textEffect '{s}' not found\n", .{ename});
                 }
             }
             const text_h = gpu.drawTextWrapped(
@@ -1043,8 +1092,29 @@ fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
         // Fill: effect texture or flat color
         var used_effect = false;
         if (glyph.fill_effect) |ename| {
+            std.debug.print("glyph fill_effect='{s}'\n", .{ename});
             if (effects.getEffectFill(ename)) |info| {
-                svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
+                std.debug.print("  -> found effect w={d} h={d}\n", .{info.width, info.height});
+                if (HAS_BLEND2D) {
+                    blend2d_gfx.fillSVGPathFromEffect(
+                        glyph.d,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x,
+                        min_y,
+                        pw,
+                        ph,
+                        g_paint_opacity,
+                        @as(f32, @floatFromInt(glyph.stroke.r)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.g)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.b)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.a)) / 255.0,
+                        glyph.stroke_width,
+                    );
+                } else {
+                    svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
+                }
                 used_effect = true;
             }
         }

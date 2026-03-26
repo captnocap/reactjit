@@ -11,6 +11,15 @@ const std = @import("std");
 const gpu = @import("gpu/gpu.zig");
 const wgpu = @import("wgpu");
 
+var g_paisley_debug_enabled: ?bool = null;
+
+fn paisleyDebugEnabled() bool {
+    if (g_paisley_debug_enabled == null) {
+        g_paisley_debug_enabled = std.posix.getenv("ZIGOS_PAISLEY_DEBUG") != null;
+    }
+    return g_paisley_debug_enabled.?;
+}
+
 // ── C FFI declarations (from ffi/blend2d_shim.h) ──────────────────────
 
 const B2DSurface = opaque {};
@@ -168,6 +177,127 @@ pub fn fillSVGPath(
 
     // Upload to GPU and draw as image quad positioned in graph-space.
     // The active GPU canvas transform will map this to screen.
+    uploadToGPU(pw, ph);
+    if (g_bind_group) |bg| {
+        gpu.images.queueQuad(bb_min_x, bb_min_y, bb_w, bb_h, 1.0, bg);
+    }
+}
+
+/// Fill an SVG path with a named effect surface as a real textured mask.
+/// Unlike the fallback Gouraud vertex sampling path, this preserves effect detail.
+pub fn fillSVGPathFromEffect(
+    d: []const u8,
+    effect_pixels: [*]const u8,
+    effect_w: u32,
+    effect_h: u32,
+    bb_min_x: f32,
+    bb_min_y: f32,
+    bb_w: f32,
+    bb_h: f32,
+    opacity: f32,
+    stroke_r: f32,
+    stroke_g: f32,
+    stroke_b: f32,
+    stroke_a: f32,
+    stroke_w: f32,
+) void {
+    if (bb_w <= 0 or bb_h <= 0 or effect_w == 0 or effect_h == 0) return;
+    const alpha_mul = @max(0.0, @min(1.0, opacity));
+    if (alpha_mul <= 0) return;
+
+    const pw: u32 = @max(1, @min(effect_w, 2048));
+    const ph: u32 = @max(1, @min(effect_h, 2048));
+    const s = ensureSurface(pw, ph) orelse return;
+
+    // First rasterize the SVG fill into the surface alpha channel.
+    b2d_clear(s);
+    b2d_reset_transform(s);
+    const pw_f: f64 = @floatFromInt(pw);
+    const ph_f: f64 = @floatFromInt(ph);
+    const sx: f64 = pw_f / @as(f64, @floatCast(bb_w));
+    const sy: f64 = ph_f / @as(f64, @floatCast(bb_h));
+    b2d_scale(s, sx, sy);
+    b2d_translate(s, -@as(f64, @floatCast(bb_min_x)), -@as(f64, @floatCast(bb_min_y)));
+    b2d_set_fill_rgba32(s, 0xFFFFFFFF);
+    b2d_path_reset(s);
+    b2d_path_from_svg(s, d.ptr, d.len);
+    b2d_fill_path(s);
+
+    // Then replace the white fill with effect pixels, modulated by the mask alpha.
+    const mask_pixels_const = b2d_get_pixels(s) orelse return;
+    const out_pixels: [*]u8 = @constCast(mask_pixels_const);
+    var y: u32 = 0;
+    while (y < ph) : (y += 1) {
+        const src_y = @min(effect_h - 1, (y * effect_h) / ph);
+        var x: u32 = 0;
+        while (x < pw) : (x += 1) {
+            const dst_idx: usize = @as(usize, y) * @as(usize, pw) * 4 + @as(usize, x) * 4;
+            const mask_a = out_pixels[dst_idx + 3];
+            if (mask_a == 0) {
+                out_pixels[dst_idx] = 0;
+                out_pixels[dst_idx + 1] = 0;
+                out_pixels[dst_idx + 2] = 0;
+                out_pixels[dst_idx + 3] = 0;
+                continue;
+            }
+
+            const src_x = @min(effect_w - 1, (x * effect_w) / pw);
+            const src_idx: usize = @as(usize, src_y) * @as(usize, effect_w) * 4 + @as(usize, src_x) * 4;
+            const sr = @as(f32, @floatFromInt(effect_pixels[src_idx])) / 255.0;
+            const sg = @as(f32, @floatFromInt(effect_pixels[src_idx + 1])) / 255.0;
+            const sb = @as(f32, @floatFromInt(effect_pixels[src_idx + 2])) / 255.0;
+            const sa = @as(f32, @floatFromInt(effect_pixels[src_idx + 3])) / 255.0;
+            const ma = @as(f32, @floatFromInt(mask_a)) / 255.0;
+            const out_a = sa * ma * alpha_mul;
+
+            if (out_a <= 0) {
+                out_pixels[dst_idx] = 0;
+                out_pixels[dst_idx + 1] = 0;
+                out_pixels[dst_idx + 2] = 0;
+                out_pixels[dst_idx + 3] = 0;
+                continue;
+            }
+
+            out_pixels[dst_idx] = @intFromFloat(@max(0.0, @min(255.0, sb * out_a * 255.0)));
+            out_pixels[dst_idx + 1] = @intFromFloat(@max(0.0, @min(255.0, sg * out_a * 255.0)));
+            out_pixels[dst_idx + 2] = @intFromFloat(@max(0.0, @min(255.0, sr * out_a * 255.0)));
+            out_pixels[dst_idx + 3] = @intFromFloat(@max(0.0, @min(255.0, out_a * 255.0)));
+        }
+    }
+
+    if (paisleyDebugEnabled()) {
+        var covered: usize = 0;
+        var max_a: u8 = 0;
+        var i: usize = 0;
+        while (i + 3 < @as(usize, pw) * @as(usize, ph) * 4) : (i += 4) {
+            const a = out_pixels[i + 3];
+            if (a > 0) covered += 1;
+            if (a > max_a) max_a = a;
+        }
+        std.debug.print(
+            "[paisley] fillSVGPathFromEffect bbox=({d:.1},{d:.1},{d:.1},{d:.1}) src={d}x{d} raster={d}x{d} covered={d}/{d} max_a={d} stroke_w={d:.2}\n",
+            .{ bb_min_x, bb_min_y, bb_w, bb_h, effect_w, effect_h, pw, ph, covered, @as(usize, pw) * @as(usize, ph), max_a, stroke_w },
+        );
+    }
+
+    if (stroke_w > 0 and stroke_a > 0) {
+        b2d_reset_transform(s);
+        b2d_scale(s, sx, sy);
+        b2d_translate(s, -@as(f64, @floatCast(bb_min_x)), -@as(f64, @floatCast(bb_min_y)));
+
+        const sa: u32 = @intFromFloat(@max(0.0, @min(255.0, stroke_a * alpha_mul * 255.0)));
+        const sr: u32 = @intFromFloat(@max(0.0, @min(255.0, stroke_r * 255.0)));
+        const sg: u32 = @intFromFloat(@max(0.0, @min(255.0, stroke_g * 255.0)));
+        const sb: u32 = @intFromFloat(@max(0.0, @min(255.0, stroke_b * 255.0)));
+        const rgba32 = (sa << 24) | (sr << 16) | (sg << 8) | sb;
+
+        b2d_set_stroke_rgba32(s, rgba32);
+        b2d_set_stroke_width(s, stroke_w);
+        b2d_path_reset(s);
+        b2d_path_from_svg(s, d.ptr, d.len);
+        b2d_stroke_path(s);
+    }
+
     uploadToGPU(pw, ph);
     if (g_bind_group) |bg| {
         gpu.images.queueQuad(bb_min_x, bb_min_y, bb_w, bb_h, 1.0, bg);

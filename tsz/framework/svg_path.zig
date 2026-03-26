@@ -618,12 +618,12 @@ fn sampleEffect(
     const px: u32 = @intCast(px_i);
     const py: u32 = @intCast(py_i);
     const idx: usize = @as(usize, py) * @as(usize, pw) * 4 + @as(usize, px) * 4;
-    // Effect pixel buffer is BGRA8 (premultiplied)
+    // Effect pixel buffer is RGBA8 in CPU memory.
     return .{
-        @as(f32, @floatFromInt(pixels[idx])) / 255.0,     // B → R (BGRA order)
-        @as(f32, @floatFromInt(pixels[idx + 1])) / 255.0, // G
-        @as(f32, @floatFromInt(pixels[idx + 2])) / 255.0, // R → B
-        @as(f32, @floatFromInt(pixels[idx + 3])) / 255.0, // A
+        @as(f32, @floatFromInt(pixels[idx])) / 255.0,
+        @as(f32, @floatFromInt(pixels[idx + 1])) / 255.0,
+        @as(f32, @floatFromInt(pixels[idx + 2])) / 255.0,
+        @as(f32, @floatFromInt(pixels[idx + 3])) / 255.0,
     };
 }
 

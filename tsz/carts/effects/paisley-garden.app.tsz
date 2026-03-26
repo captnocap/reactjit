@@ -253,6 +253,35 @@ function NamedPaisleyEffects() {
               e.setPixel(x, y, r, g, b, 1.0);
             }
           }
+          for (let i = 0; i < 84; i++) {
+            const u = i / 83.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.22 + 3.0 * omt * omt * u * 0.08 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.70;
+            const y = omt * omt * omt * 0.84 + 3.0 * omt * omt * u * 0.48 + 3.0 * omt * u * u * 0.16 + u * u * u * 0.18;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 0.99, 0.95, 0.77, 0.96);
+            e.setPixel(px - 1.0, py, 0.89, 0.76, 0.34, 0.70);
+            e.setPixel(px + 1.0, py, 0.89, 0.76, 0.34, 0.70);
+            e.setPixel(px, py + 1.0, 0.80, 0.56, 0.16, 0.46);
+          }
+          for (let i = 0; i < 56; i++) {
+            const u = i / 55.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.42 + 3.0 * omt * omt * u * 0.58 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.44;
+            const y = omt * omt * omt * 0.66 + 3.0 * omt * omt * u * 0.52 + 3.0 * omt * u * u * 0.28 + u * u * u * 0.20;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 0.98, 0.88, 0.48, 0.88);
+            e.setPixel(px + 1.0, py, 0.98, 0.88, 0.48, 0.52);
+            e.setPixel(px, py + 1.0, 0.98, 0.88, 0.48, 0.44);
+          }
+          for (let i = 0; i < 64; i++) {
+            const a = -2.2 + i * 0.050;
+            const px = (0.40 + e.cos(a) * 0.20) * e.width;
+            const py = (0.40 + e.sin(a) * 0.24) * e.height;
+            e.setPixel(px, py, 0.96, 0.98, 0.92, 0.44);
+          }
         }}
         style={{ width: 320, height: 320, position: 'absolute' }}
       />
@@ -274,6 +303,35 @@ function NamedPaisleyEffects() {
               const b = 0.03 + ring * 0.10;
               e.setPixel(x, y, r, g, b, 1.0);
             }
+          }
+          for (let i = 0; i < 84; i++) {
+            const u = i / 83.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.23 + 3.0 * omt * omt * u * 0.10 + 3.0 * omt * u * u * 0.58 + u * u * u * 0.70;
+            const y = omt * omt * omt * 0.84 + 3.0 * omt * omt * u * 0.50 + 3.0 * omt * u * u * 0.18 + u * u * u * 0.18;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 1.00, 0.90, 0.76, 0.96);
+            e.setPixel(px - 1.0, py, 0.99, 0.67, 0.32, 0.72);
+            e.setPixel(px + 1.0, py, 0.99, 0.67, 0.32, 0.72);
+            e.setPixel(px, py + 1.0, 0.74, 0.18, 0.06, 0.48);
+          }
+          for (let i = 0; i < 56; i++) {
+            const u = i / 55.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.42 + 3.0 * omt * omt * u * 0.58 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.45;
+            const y = omt * omt * omt * 0.66 + 3.0 * omt * omt * u * 0.54 + 3.0 * omt * u * u * 0.30 + u * u * u * 0.20;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 1.00, 0.78, 0.44, 0.86);
+            e.setPixel(px + 1.0, py, 1.00, 0.78, 0.44, 0.52);
+            e.setPixel(px, py + 1.0, 1.00, 0.78, 0.44, 0.42);
+          }
+          for (let i = 0; i < 64; i++) {
+            const a = -2.2 + i * 0.050;
+            const px = (0.40 + e.cos(a) * 0.20) * e.width;
+            const py = (0.40 + e.sin(a) * 0.24) * e.height;
+            e.setPixel(px, py, 1.00, 0.95, 0.86, 0.40);
           }
         }}
         style={{ width: 320, height: 320, position: 'absolute' }}
@@ -297,6 +355,35 @@ function NamedPaisleyEffects() {
               e.setPixel(x, y, r, g, b, 1.0);
             }
           }
+          for (let i = 0; i < 84; i++) {
+            const u = i / 83.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.22 + 3.0 * omt * omt * u * 0.08 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.70;
+            const y = omt * omt * omt * 0.84 + 3.0 * omt * omt * u * 0.48 + 3.0 * omt * u * u * 0.16 + u * u * u * 0.18;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 0.92, 0.99, 0.89, 0.94);
+            e.setPixel(px - 1.0, py, 0.68, 0.95, 0.62, 0.70);
+            e.setPixel(px + 1.0, py, 0.68, 0.95, 0.62, 0.70);
+            e.setPixel(px, py + 1.0, 0.12, 0.40, 0.26, 0.46);
+          }
+          for (let i = 0; i < 56; i++) {
+            const u = i / 55.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.42 + 3.0 * omt * omt * u * 0.58 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.44;
+            const y = omt * omt * omt * 0.66 + 3.0 * omt * omt * u * 0.52 + 3.0 * omt * u * u * 0.28 + u * u * u * 0.20;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 0.84, 1.00, 0.70, 0.84);
+            e.setPixel(px + 1.0, py, 0.84, 1.00, 0.70, 0.50);
+            e.setPixel(px, py + 1.0, 0.84, 1.00, 0.70, 0.40);
+          }
+          for (let i = 0; i < 64; i++) {
+            const a = -2.2 + i * 0.050;
+            const px = (0.40 + e.cos(a) * 0.20) * e.width;
+            const py = (0.40 + e.sin(a) * 0.24) * e.height;
+            e.setPixel(px, py, 0.92, 0.99, 0.89, 0.38);
+          }
         }}
         style={{ width: 320, height: 320, position: 'absolute' }}
       />
@@ -318,6 +405,35 @@ function NamedPaisleyEffects() {
               const b = 0.16 + glow * 0.58 + nebula * 0.10;
               e.setPixel(x, y, r, g, b, 1.0);
             }
+          }
+          for (let i = 0; i < 84; i++) {
+            const u = i / 83.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.22 + 3.0 * omt * omt * u * 0.08 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.70;
+            const y = omt * omt * omt * 0.84 + 3.0 * omt * omt * u * 0.48 + 3.0 * omt * u * u * 0.16 + u * u * u * 0.18;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 0.98, 0.92, 1.00, 0.96);
+            e.setPixel(px - 1.0, py, 0.84, 0.64, 1.00, 0.72);
+            e.setPixel(px + 1.0, py, 0.84, 0.64, 1.00, 0.72);
+            e.setPixel(px, py + 1.0, 0.26, 0.12, 0.42, 0.48);
+          }
+          for (let i = 0; i < 56; i++) {
+            const u = i / 55.0;
+            const omt = 1.0 - u;
+            const x = omt * omt * omt * 0.42 + 3.0 * omt * omt * u * 0.58 + 3.0 * omt * u * u * 0.56 + u * u * u * 0.44;
+            const y = omt * omt * omt * 0.66 + 3.0 * omt * omt * u * 0.52 + 3.0 * omt * u * u * 0.28 + u * u * u * 0.20;
+            const px = x * e.width;
+            const py = y * e.height;
+            e.setPixel(px, py, 1.00, 0.84, 0.72, 0.84);
+            e.setPixel(px + 1.0, py, 1.00, 0.84, 0.72, 0.50);
+            e.setPixel(px, py + 1.0, 1.00, 0.84, 0.72, 0.40);
+          }
+          for (let i = 0; i < 64; i++) {
+            const a = -2.2 + i * 0.050;
+            const px = (0.40 + e.cos(a) * 0.20) * e.width;
+            const py = (0.40 + e.sin(a) * 0.24) * e.height;
+            e.setPixel(px, py, 0.98, 0.92, 1.00, 0.38);
           }
         }}
         style={{ width: 320, height: 320, position: 'absolute' }}
@@ -382,27 +498,27 @@ function App() {
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.haloD} stroke={shape.halo} strokeWidth={shape.haloWidth} />
+              <Graph.Path d={shape.haloD} fillEffect={shape.fillEffect} stroke={shape.halo} strokeWidth={shape.haloWidth} />
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.innerD} fill={shape.innerFill} stroke={shape.stroke} strokeWidth={1.5} />
+              <Graph.Path d={shape.innerD} fillEffect={shape.fillEffect} stroke={shape.stroke} strokeWidth={1.5} />
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.ribbonD} stroke={shape.accent} strokeWidth={shape.ribbonWidth} />
+              <Graph.Path d={shape.ribbonD} fillEffect={shape.fillEffect} stroke={shape.accent} strokeWidth={shape.ribbonWidth} />
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.seedD} fill={shape.seedFill} stroke={shape.stroke} strokeWidth={1.4} />
+              <Graph.Path d={shape.seedD} fillEffect={shape.fillEffect} stroke={shape.stroke} strokeWidth={1.4} />
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.dotD} fill={shape.accent} />
+              <Graph.Path d={shape.dotD} fillEffect={shape.fillEffect} />
             ))}
 
             {paisleys.map((shape) => (
-              <Graph.Path d={shape.orbitD} fill={shape.stroke} />
+              <Graph.Path d={shape.orbitD} fillEffect={shape.fillEffect} />
             ))}
           </Graph>
         </Box>

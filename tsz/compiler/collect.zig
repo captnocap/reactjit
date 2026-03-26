@@ -1415,18 +1415,13 @@ pub fn extractComputeBlock(self: *Generator) void {
         }
     }
 
-    // Auto-generate Lua fallback from JS <script> if no explicit <lscript>
-    // This enables LuaJIT as a safety net for handlers that fail Zig codegen
-    if (self.compute_lua == null and self.compute_js != null) {
-        self.compute_lua = jsToLuaFallback(self.alloc, self.compute_js.?);
-    }
+    // Do not synthesize Lua from JS <script>. The old line-based fallback
+    // produced invalid Lua for normal JS syntax and failed during app startup.
 }
 
-/// Auto-transpile JS <script> content to Lua for the LuaJIT fallback safety net.
-/// Handles common patterns: function decls, var/let/const, if/else, ===, !==, comments.
-/// Not perfect — complex expressions (ternaries, arrow functions) may produce invalid Lua.
-/// That's OK: the fallback only runs for handlers that failed Zig codegen, and LuaJIT
-/// will log errors for anything it can't parse.
+/// Legacy JS→Lua fallback kept for reference only.
+/// It is intentionally not wired into extractComputeBlock because modern JS script
+/// blocks routinely use syntax this line-based rewrite cannot translate safely.
 fn jsToLuaFallback(alloc: std.mem.Allocator, js: []const u8) ?[]const u8 {
     var result: std.ArrayListUnmanaged(u8) = .{};
     result.appendSlice(alloc, "-- Auto-generated Lua fallback from <script>\n") catch return null;

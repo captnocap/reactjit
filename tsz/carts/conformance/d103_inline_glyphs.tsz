@@ -1,6 +1,6 @@
-function GlyphEffects() {
+function App() {
   return (
-    <Box>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', padding: 32, gap: 24 }}>
       <Effect name="plasma" onRender={(e) => {
         for (let y = 0; y < e.height; y++) {
           for (let x = 0; x < e.width; x++) {
@@ -48,14 +48,6 @@ function GlyphEffects() {
           }
         }
       }} style={{ width: 400, height: 200, position: 'absolute' }} />
-    </Box>
-  );
-}
-
-function App() {
-  return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', padding: 32, gap: 24 }}>
-      <GlyphEffects />
 
       <Text fontSize={24} color="#f1f5f9">Inline Glyph + Effect Text Test</Text>
 

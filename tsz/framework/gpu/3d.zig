@@ -47,8 +47,14 @@ const SceneUniforms = extern struct {
     fog_color: [3]f32,
     fog_near: f32,
     fog_far: f32,
-    _pad4: [4]f32 = .{ 0, 0, 0, 0 },
+    _pad4: @Vector(4, f32) = .{ 0, 0, 0, 0 },
 };
+
+comptime {
+    if (@sizeOf(SceneUniforms) != 256 or @alignOf(SceneUniforms) != 16) {
+        @compileError("SceneUniforms must match scene3d_wgsl uniform layout");
+    }
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // Procedural geometry
