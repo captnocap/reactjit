@@ -198,6 +198,79 @@ fn flattenArc(sp: *Subpath, x1: f32, y1: f32, rx_in: f32, ry_in: f32, x_rot_deg:
     }
 }
 
+/// Convert SVG arc to cubic bezier segments and record them for GPU-native stroke rendering.
+fn recordArcCubics(path: *Path, x1: f32, y1: f32, rx_in: f32, ry_in: f32, x_rot_deg: f32, large_arc: bool, sweep: bool, x2: f32, y2: f32) void {
+    if (rx_in == 0 or ry_in == 0) {
+        recordLine(path, x1, y1, x2, y2);
+        return;
+    }
+
+    const rx = @abs(rx_in);
+    const ry = @abs(ry_in);
+    const phi = x_rot_deg * math.pi / 180.0;
+    const cos_phi = @cos(phi);
+    const sin_phi = @sin(phi);
+
+    const dx2 = (x1 - x2) * 0.5;
+    const dy2 = (y1 - y2) * 0.5;
+    const x1p = cos_phi * dx2 + sin_phi * dy2;
+    const y1p = -sin_phi * dx2 + cos_phi * dy2;
+
+    var sq = (rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p) /
+        (rx * rx * y1p * y1p + ry * ry * x1p * x1p);
+    if (sq < 0) sq = 0;
+    var root = @sqrt(sq);
+    if (large_arc == sweep) root = -root;
+    const cxp = root * rx * y1p / ry;
+    const cyp = -root * ry * x1p / rx;
+
+    const mx = (x1 + x2) * 0.5;
+    const my = (y1 + y2) * 0.5;
+    const cx = cos_phi * cxp - sin_phi * cyp + mx;
+    const cy = sin_phi * cxp + cos_phi * cyp + my;
+
+    const theta1 = vecAngle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    var dtheta = vecAngle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    if (!sweep and dtheta > 0) dtheta -= 2.0 * math.pi;
+    if (sweep and dtheta < 0) dtheta += 2.0 * math.pi;
+
+    const n_segs: u32 = @intFromFloat(@ceil(@abs(dtheta) / (math.pi / 2.0)));
+    const seg_angle = dtheta / @as(f32, @floatFromInt(n_segs));
+    const alpha = 4.0 * @tan(seg_angle / 4.0) / 3.0;
+
+    var theta = theta1;
+    var seg_x = x1;
+    var seg_y = y1;
+    var seg_i: u32 = 0;
+    while (seg_i < n_segs) : (seg_i += 1) {
+        const next_theta = theta + seg_angle;
+        const cos_t = @cos(theta);
+        const sin_t = @sin(theta);
+        const cos_nt = @cos(next_theta);
+        const sin_nt = @sin(next_theta);
+
+        const cp1x_local = rx * (cos_t - alpha * sin_t);
+        const cp1y_local = ry * (sin_t + alpha * cos_t);
+        const cp2x_local = rx * (cos_nt + alpha * sin_nt);
+        const cp2y_local = ry * (sin_nt - alpha * cos_nt);
+        const ex_local = rx * cos_nt;
+        const ey_local = ry * sin_nt;
+
+        const cp1x = cos_phi * cp1x_local - sin_phi * cp1y_local + cx;
+        const cp1y = sin_phi * cp1x_local + cos_phi * cp1y_local + cy;
+        const cp2x = cos_phi * cp2x_local - sin_phi * cp2y_local + cx;
+        const cp2y = sin_phi * cp2x_local + cos_phi * cp2y_local + cy;
+        const ex = cos_phi * ex_local - sin_phi * ey_local + cx;
+        const ey = sin_phi * ex_local + cos_phi * ey_local + cy;
+
+        recordCubic(path, seg_x, seg_y, cp1x, cp1y, cp2x, cp2y, ex, ey);
+
+        theta = next_theta;
+        seg_x = ex;
+        seg_y = ey;
+    }
+}
+
 fn vecAngle(ux: f32, uy: f32, vx: f32, vy: f32) f32 {
     const dot = ux * vx + uy * vy;
     const len = @sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
@@ -466,10 +539,7 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
                 const ex = (if (rel) cx else 0) + (readNumber(d, &pos) orelse break);
                 const ey = (if (rel) cy else 0) + (readNumber(d, &pos) orelse break);
                 flattenArc(sp, cx, cy, arx, ary, x_rot, la_f > 0.5, sw_f > 0.5, ex, ey, tol);
-                // Arcs are converted to cubics internally by flattenArc — record as cubics
-                // For now, record the arc endpoints as a line (the flattened version handles quality)
-                // TODO: record the cubic segments from arcToBeziers directly
-                recordLine(&path, cx, cy, ex, ey);
+                recordArcCubics(&path, cx, cy, arx, ary, x_rot, la_f > 0.5, sw_f > 0.5, ex, ey);
                 cx = ex;
                 cy = ey;
             },
