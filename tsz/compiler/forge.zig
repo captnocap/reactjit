@@ -14,8 +14,12 @@ const lexer_mod = @import("lexer.zig");
 const Lexer = lexer_mod.Lexer;
 const smith = @import("smith_bridge.zig");
 
-// Smith JS source — embedded at compile time
-const SMITH_JS = @embedFile("smith/index.js");
+// Smith JS source — embedded at compile time, concatenated in load order
+const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
+    @embedFile("smith/index.js") ++ "\n" ++
+    @embedFile("smith/attrs.js") ++ "\n" ++
+    @embedFile("smith/parse.js") ++ "\n" ++
+    @embedFile("smith/emit.js");
 
 pub fn main() !void {
     var args = std.process.args();
