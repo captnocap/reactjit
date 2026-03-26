@@ -408,8 +408,9 @@ function parseChildren(c) {
         const { fmt, args } = parseTemplateLiteral(raw);
         if (args.length > 0) {
           const bufId = ctx.dynCount;
-          // Buffer size: static text length + 64 per interpolation + padding (match reference)
-          const bufSize = fmt.length + 64 * args.length + 14;
+          // Buffer size: for bare `${expr}` use 64, otherwise formula
+          const staticText = fmt.replace(/\{[ds](?::\.?\d+)?\}/g, '');
+          const bufSize = staticText.length === 0 ? 64 : (fmt.length + 64 * args.length + 14);
           ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize });
           ctx.dynCount++;
           children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
@@ -561,7 +562,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     } else {
       ctx.arrayComments.push('');
     }
-    const compSuffix = ctx.inlineComponent ? ` // ${ctx.inlineComponent}` : '';
+    // Component name comment — only on the FIRST array created during inlining
+    let compSuffix = '';
+    if (ctx.inlineComponent) {
+      compSuffix = ` // ${ctx.inlineComponent}`;
+      ctx.inlineComponent = null; // clear so subsequent arrays don't get it
+    }
     ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };${compSuffix}`);
     // Bind dynamic texts and conditionals to this array
     for (let i = 0; i < children.length; i++) {
