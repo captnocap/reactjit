@@ -105,6 +105,8 @@ let ctx = {};
 function resetCtx() {
   ctx = {
     stateSlots: [],       // [{getter, setter, initial, type}]
+    components: [],       // [{name, propNames, bodyPos}]
+    propStack: {},        // {propName: value} — active during component inlining
     handlers: [],         // [{name, body}]  body = zig source
     handlerCount: 0,
     dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex}]
@@ -112,6 +114,63 @@ function resetCtx() {
     arrayCounter: 0,
     arrayDecls: [],       // ["var _arr_N = [_]Node{ ... };"]
   };
+}
+
+// ── Collection: components ──
+
+function collectComponents(c) {
+  const saved = c.save();
+  c.pos = 0;
+  while (c.pos < c.count - 3) {
+    // function Name({props}) { ... return (...) }
+    if (c.isIdent('function') && c.kindAt(c.pos + 1) === TK.identifier) {
+      const namePos = c.pos + 1;
+      const name = c.textAt(namePos);
+      // Skip 'App' — that's the entry point, not a component
+      if (name === 'App' || !(name[0] >= 'A' && name[0] <= 'Z')) { c.advance(); continue; }
+
+      c.pos = namePos + 1;
+      // Parse props: ({prop1, prop2})
+      const propNames = [];
+      if (c.kind() === TK.lparen) {
+        c.advance();
+        if (c.kind() === TK.lbrace) {
+          c.advance();
+          while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+            if (c.kind() === TK.identifier) { propNames.push(c.text()); }
+            c.advance();
+          }
+          if (c.kind() === TK.rbrace) c.advance(); // }
+        }
+        if (c.kind() === TK.rparen) c.advance(); // )
+      }
+
+      // Find the return statement's JSX position
+      // Scan for 'return' '(' '<'
+      let bodyPos = -1;
+      let braceDepth = 0;
+      while (c.pos < c.count) {
+        if (c.kind() === TK.lbrace) braceDepth++;
+        if (c.kind() === TK.rbrace) { braceDepth--; if (braceDepth < 0) break; }
+        if (c.isIdent('return')) {
+          c.advance();
+          if (c.kind() === TK.lparen) c.advance();
+          if (c.kind() === TK.lt) { bodyPos = c.pos; break; }
+        }
+        c.advance();
+      }
+
+      if (bodyPos >= 0) {
+        ctx.components.push({ name, propNames, bodyPos });
+      }
+    }
+    c.advance();
+  }
+  c.restore(saved);
+}
+
+function findComponent(name) {
+  return ctx.components.find(comp => comp.name === name);
 }
 
 // ── Collection: useState ──
@@ -367,8 +426,64 @@ function parseJSXElement(c) {
   }
 
   const rawTag = c.text();
-  const tag = resolveTag(rawTag);
   c.advance();
+
+  // Check if this is a component call
+  const comp = findComponent(rawTag);
+  if (comp) {
+    // Collect prop values from call site attributes
+    const propValues = {};
+    while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
+      if (c.kind() === TK.identifier) {
+        const attr = c.text(); c.advance();
+        if (c.kind() === TK.equals) {
+          c.advance();
+          if (c.kind() === TK.string) {
+            propValues[attr] = c.text().slice(1, -1); // strip quotes
+            c.advance();
+          } else if (c.kind() === TK.lbrace) {
+            // {expr} prop value — collect tokens as string
+            c.advance();
+            let val = '';
+            let depth = 0;
+            while (c.kind() !== TK.eof) {
+              if (c.kind() === TK.lbrace) depth++;
+              if (c.kind() === TK.rbrace) { if (depth === 0) break; depth--; }
+              val += c.text();
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance();
+            propValues[attr] = val;
+          }
+        }
+      } else { c.advance(); }
+    }
+    // Skip /> or >...</Tag>
+    if (c.kind() === TK.slash_gt) c.advance();
+    else if (c.kind() === TK.gt) {
+      c.advance();
+      // Skip children (component children not yet supported)
+      let depth = 1;
+      while (depth > 0 && c.kind() !== TK.eof) {
+        if (c.kind() === TK.lt && c.kindAt(c.pos + 1) === TK.identifier) depth++;
+        if (c.kind() === TK.lt_slash) depth--;
+        if (depth > 0) c.advance();
+      }
+      if (c.kind() === TK.lt_slash) { c.advance(); if (c.kind() === TK.identifier) c.advance(); if (c.kind() === TK.gt) c.advance(); }
+    }
+
+    // Inline: save state, jump to component body, parse with prop substitution
+    const savedPos = c.save();
+    const savedProps = ctx.propStack;
+    ctx.propStack = propValues;
+    c.pos = comp.bodyPos;
+    const result = parseJSXElement(c);
+    ctx.propStack = savedProps;
+    c.restore(savedPos);
+    return result;
+  }
+
+  const tag = resolveTag(rawTag);
 
   // Parse attributes
   let styleFields = [];
@@ -442,9 +557,15 @@ function parseChildren(c) {
     if (c.kind() === TK.lt) {
       children.push(parseJSXElement(c));
     } else if (c.kind() === TK.lbrace) {
-      // {expr} — check if it's a state getter for dynamic text
+      // {expr} — check props first, then state getters
       c.advance();
-      if (c.kind() === TK.identifier && isGetter(c.text())) {
+      if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
+        // Prop substitution — replace {propName} with the prop value as static text
+        const propVal = ctx.propStack[c.text()];
+        c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+      } else if (c.kind() === TK.identifier && isGetter(c.text())) {
         const getter = c.text();
         const slotIdx = findSlot(getter);
         const bufId = ctx.dynCount;
@@ -680,7 +801,8 @@ function compile() {
 
   resetCtx();
 
-  // Phase 1: Collect state
+  // Phase 1: Collect components and state
+  collectComponents(c);
   collectState(c);
 
   // Find App function
