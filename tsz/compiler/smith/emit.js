@@ -131,8 +131,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       out += `}\n\n`;
 
       // unpack function
-      out += `fn _oa${idx}_unpack(ctx_qjs: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n`;
-      out += `    const c2 = ctx_qjs orelse return QJS_UNDEFINED;\n`;
+      out += `fn _oa${idx}_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n`;
+      out += `    const c2 = ctx orelse return QJS_UNDEFINED;\n`;
       out += `    const arr = argv[0];\n`;
       out += `    const len_val = qjs.JS_GetPropertyStr(c2, arr, "length");\n`;
       out += `    var arr_len: i32 = 0;\n`;
