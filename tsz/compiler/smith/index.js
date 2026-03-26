@@ -110,6 +110,7 @@ function resetCtx() {
     inlineComponent: null, // name of component being inlined (for array comments)
     handlers: [],         // [{name, body}]  body = zig source
     handlerCount: 0,
+    conditionals: [],     // [{condExpr, kind, arrName, arrIndex, trueIdx, falseIdx}]
     dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex, bufSize}]
     arrayComments: [],    // ["// tsz:file:line — <Tag>"] per array decl
     dynCount: 0,
@@ -349,15 +350,28 @@ function parseHandler(c) {
   // Parse body — could be { stmts } or single expression
   let body = '';
   if (c.kind() === TK.lbrace) {
-    // Block body — not yet supported, skip
-    let depth = 1; c.advance();
-    while (depth > 0 && c.kind() !== TK.eof) {
-      if (c.kind() === TK.lbrace) depth++;
-      if (c.kind() === TK.rbrace) depth--;
-      if (depth > 0) c.advance();
+    // Block body: { stmt; stmt; stmt; }
+    c.advance();
+    let body = '';
+    while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+      if (c.kind() === TK.identifier && isSetter(c.text())) {
+        const setter = c.text();
+        const slotIdx = findSlot(setter);
+        c.advance();
+        if (c.kind() === TK.lparen) {
+          c.advance();
+          const valExpr = parseValueExpr(c);
+          const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ') || valExpr.includes(' ? ');
+          const wrapped = needsParens ? `(${valExpr})` : valExpr;
+          body += `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
+          if (c.kind() === TK.rparen) c.advance();
+        }
+      }
+      if (c.kind() === TK.semicolon) c.advance();
+      else if (c.kind() !== TK.rbrace) c.advance();
     }
     if (c.kind() === TK.rbrace) c.advance();
-    return '// block handler not yet ported\n';
+    return body;
   }
 
   // Single expression: setCount(expr)
@@ -404,6 +418,25 @@ function parseValueExpr(c) {
     if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
     if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
     if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
+    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); continue; }
+    if (c.kind() === TK.not_eq) { parts.push(' != '); c.advance(); continue; }
+    if (c.kind() === TK.question) {
+      // Ternary: cond ? trueVal : falseVal → if (cond) @as(i32, trueVal) else @as(i32, falseVal)
+      c.advance();
+      const trueVal = parseValueExpr(c); // reads until : at depth 0
+      // : already consumed by parseValueExpr stopping, or we need to skip it
+      if (c.kind() === TK.colon) c.advance();
+      const falseVal = parseValueExpr(c); // reads until ) at depth 0
+      const cond = parts.join('');
+      parts.length = 0;
+      parts.push(`if ((${cond})) @as(i32, ${trueVal}) else @as(i32, ${falseVal})`);
+      continue;
+    }
+    if (c.kind() === TK.colon) break; // stop for ternary false branch
+    if (c.kind() === TK.string) {
+      const s = c.text(); c.advance();
+      parts.push(s); continue;
+    }
     // Default: skip
     parts.push(c.text());
     c.advance();
@@ -558,14 +591,117 @@ function parseJSXElement(c) {
   return buildNode(tag, styleFields, children, handlerRef, nodeFields, rawTag, tagSrcOffset);
 }
 
+// Try to parse {expr && <JSX>} conditional — returns true if consumed
+function tryParseConditional(c, children) {
+  // Look ahead: identifier (op identifier/number)* && <
+  const saved = c.save();
+  let condParts = [];
+  // Collect condition expression until && or }
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    if (c.kind() === TK.amp_amp) {
+      c.advance();
+      // Check if next is JSX
+      if (c.kind() === TK.lt) {
+        const condExpr = condParts.join('');
+        const jsxNode = parseJSXElement(c);
+        if (c.kind() === TK.rbrace) c.advance();
+        // Register as conditional
+        const condIdx = ctx.conditionals.length;
+        ctx.conditionals.push({ condExpr, kind: 'show_hide' });
+        children.push({ nodeExpr: jsxNode.nodeExpr, condIdx, dynBufId: jsxNode.dynBufId });
+        return true;
+      }
+      // Not JSX after && — might be chained condition, put && back
+      condParts.push(' and ');
+      continue;
+    }
+    // Build condition expression with Zig-compatible ops
+    if (c.kind() === TK.identifier) {
+      const name = c.text();
+      condParts.push(isGetter(name) ? slotGet(name) : name);
+    } else if (c.kind() === TK.number) {
+      condParts.push(c.text());
+    } else if (c.kind() === TK.eq_eq) {
+      condParts.push(' == ');
+    } else if (c.kind() === TK.not_eq) {
+      condParts.push(' != ');
+    } else if (c.kind() === TK.gt_eq) {
+      condParts.push(' >= ');
+    } else if (c.kind() === TK.lt_eq) {
+      condParts.push(' <= ');
+    } else if (c.kind() === TK.gt) {
+      condParts.push(' > ');
+    } else if (c.kind() === TK.lt) {
+      // Could be < operator or start of JSX — if no && seen yet, it's not a conditional
+      break;
+    } else if (c.kind() === TK.question) {
+      // Ternary — not a conditional, bail
+      break;
+    } else {
+      condParts.push(c.text());
+    }
+    c.advance();
+  }
+  // Didn't find && <JSX> pattern — restore and return false
+  c.restore(saved);
+  return false;
+}
+
+// Try to parse {expr == val ? "a" : "b"} ternary text
+function tryParseTernaryText(c, children) {
+  // Look ahead for ? ... : pattern
+  const saved = c.save();
+  // Skip to ? while collecting condition
+  let condParts = [];
+  let foundQuestion = false;
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    if (c.kind() === TK.question) { foundQuestion = true; c.advance(); break; }
+    if (c.kind() === TK.identifier) {
+      const name = c.text();
+      condParts.push(isGetter(name) ? slotGet(name) : name);
+    } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); }
+    else if (c.kind() === TK.not_eq) { condParts.push(' != '); }
+    else if (c.kind() === TK.number) { condParts.push(c.text()); }
+    else if (c.kind() === TK.gt) { condParts.push(' > '); }
+    else { condParts.push(c.text()); }
+    c.advance();
+  }
+  if (!foundQuestion) { c.restore(saved); return false; }
+  // Get true branch value
+  let trueVal = '';
+  if (c.kind() === TK.string) { trueVal = c.text().slice(1, -1); c.advance(); }
+  else { c.restore(saved); return false; }
+  // Expect :
+  if (c.kind() !== TK.colon) { c.restore(saved); return false; }
+  c.advance();
+  // Get false branch value
+  let falseVal = '';
+  if (c.kind() === TK.string) { falseVal = c.text().slice(1, -1); c.advance(); }
+  else { c.restore(saved); return false; }
+  if (c.kind() === TK.rbrace) c.advance();
+  // For now, emit as dynamic text showing the condition — TODO: proper ternary
+  // This creates a conditional that shows one text or the other
+  const condExpr = condParts.join('');
+  const condIdx = ctx.conditionals.length;
+  ctx.conditionals.push({ condExpr, kind: 'ternary', trueVal, falseVal });
+  children.push({ nodeExpr: `.{ .text = "${trueVal}" }`, condIdx });
+  return true;
+}
+
 function parseChildren(c) {
   const children = [];
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
     if (c.kind() === TK.lt) {
       children.push(parseJSXElement(c));
     } else if (c.kind() === TK.lbrace) {
-      // {expr} — check props first, then state getters
       c.advance();
+      // Try conditional: {expr && <JSX>} or {expr != val && <JSX>}
+      const condResult = tryParseConditional(c, children);
+      if (condResult) continue;
+      // Try ternary text: {expr == val ? "a" : "b"}
+      const ternResult = tryParseTernaryText(c, children);
+      if (ternResult) continue;
+      // {expr} — check props first, then state getters
       if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
         // Prop substitution — replace {propName} with the prop value as static text
         const propVal = ctx.propStack[c.text()];
@@ -597,10 +733,14 @@ function parseChildren(c) {
         if (c.kind() === TK.rbrace) c.advance();
       }
     } else if (c.kind() !== TK.rbrace) {
-      // Text content — collect anything that isn't JSX or braces
+      // Text content — collect anything that isn't JSX or braces, preserve spaces
       let text = '';
+      let lastEnd = 0;
       while (c.kind() !== TK.lt && c.kind() !== TK.lt_slash && c.kind() !== TK.lbrace && c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+        // Add space if there was whitespace between tokens in source
+        if (text.length > 0 && c.starts[c.pos] > lastEnd) text += ' ';
         text += c.text();
+        lastEnd = c.ends[c.pos];
         c.advance();
       }
       if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim()}" }` });
@@ -670,11 +810,15 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     }
     const compSuffix = ctx.inlineComponent ? ` // ${ctx.inlineComponent}` : '';
     ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };${compSuffix}`);
-    // Bind dynamic texts to this array
+    // Bind dynamic texts and conditionals to this array
     for (let i = 0; i < children.length; i++) {
       if (children[i].dynBufId !== undefined) {
         const dt = ctx.dynTexts.find(d => d.bufId === children[i].dynBufId);
         if (dt) { dt.arrName = arrName; dt.arrIndex = i; }
+      }
+      if (children[i].condIdx !== undefined) {
+        const cond = ctx.conditionals[children[i].condIdx];
+        if (cond) { cond.arrName = arrName; cond.trueIdx = i; }
       }
     }
     parts.push(`.children = &${arrName}`);
@@ -768,16 +912,44 @@ function emitOutput(rootExpr, file) {
       out += `    _root.text = _dyn_text_${dt.bufId};\n`;
     }
   }
-  out += `}\n\n\n`;
+  out += `}\n\n`;
+
+  const hasConds = ctx.conditionals.length > 0;
+
+  // _updateConditionals
+  if (hasConds) {
+    out += `\nfn _updateConditionals() void {\n`;
+    for (const cond of ctx.conditionals) {
+      if (!cond.arrName) continue;
+      // Wrap condition — if it's already a comparison, use parens; else add != 0
+      const isComparison = cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
+        cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
+        cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
+        cond.condExpr.includes('getBool');
+      const wrapped = isComparison ? `(${cond.condExpr})` : `((${cond.condExpr}) != 0)`;
+      if (cond.kind === 'show_hide') {
+        out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+      }
+    }
+    out += `}\n\n`;
+  }
+
+  out += `\n`;
 
   // _appInit
   out += `fn _appInit() void {\n    _initState();\n`;
   if (hasDynText) out += `    _updateDynamicTexts();\n`;
+  if (hasConds) out += `    _updateConditionals();\n`;
   out += `}\n\n`;
 
   // _appTick
   out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
-  if (hasState) out += `    if (state.isDirty()) { _updateDynamicTexts(); state.clearDirty(); }\n`;
+  if (hasState) {
+    out += `    if (state.isDirty()) {`;
+    out += ` _updateDynamicTexts();`;
+    if (hasConds) out += ` _updateConditionals();`;
+    out += ` state.clearDirty(); }\n`;
+  }
   out += `}\n\n`;
 
   // Exports
