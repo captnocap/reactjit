@@ -331,6 +331,18 @@ function parseStyleValue(c) {
     c.advance(); const val = '-' + c.text(); c.advance();
     return { type: 'number', value: val };
   }
+  if (c.kind() === TK.identifier) {
+    const name = c.text();
+    if (isGetter(name)) {
+      c.advance();
+      return { type: 'state', value: name, zigExpr: slotGet(name) };
+    }
+    // Prop reference
+    if (ctx.propStack[name] !== undefined) {
+      c.advance();
+      return { type: 'number', value: ctx.propStack[name] };
+    }
+  }
   c.advance();
   return { type: 'unknown', value: '' };
 }
@@ -349,7 +361,12 @@ function parseStyleBlock(c) {
       if (colorKeys[key] && val.type === 'string') {
         fields.push(`.${colorKeys[key]} = ${parseColor(val.value)}`);
       } else if (styleKeys[key]) {
-        if (val.type === 'string' && val.value.endsWith('%')) {
+        if (val.type === 'state') {
+          // Dynamic style — placeholder 0, update at runtime
+          fields.push(`.${styleKeys[key]} = 0`);
+          if (!ctx.dynStyles) ctx.dynStyles = [];
+          ctx.dynStyles.push({ field: styleKeys[key], expression: `@floatFromInt(${val.zigExpr})` });
+        } else if (val.type === 'string' && val.value.endsWith('%')) {
           const pct = parseFloat(val.value);
           fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
         } else if (val.type === 'number') {
@@ -631,7 +648,13 @@ function parseJSXElement(c) {
             c.advance();
             if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
               const propVal = ctx.propStack[c.text()];
-              nodeFields.push(`.text_color = ${parseColor(propVal)}`);
+              // Only resolve as color if it's a hex string, otherwise default to black
+              // (template literal prop values like `${value}` aren't hex colors)
+              if (propVal.startsWith('#') || namedColors[propVal]) {
+                nodeFields.push(`.text_color = ${parseColor(propVal)}`);
+              } else {
+                nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+              }
               c.advance();
             }
             if (c.kind() === TK.rbrace) c.advance();
@@ -1379,6 +1402,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       out += `    ${dt.arrName}[${dt.arrIndex}].text = _dyn_text_${dt.bufId};\n`;
     } else {
       out += `    _root.text = _dyn_text_${dt.bufId};\n`;
+    }
+  }
+  // Dynamic style updates
+  if (ctx.dynStyles && ctx.dynStyles.length > 0) {
+    for (const ds of ctx.dynStyles) {
+      // TODO: bind to correct array/index — for now update root
+      out += `    _root.style.${ds.field} = ${ds.expression};\n`;
     }
   }
   out += `}\n\n`;
