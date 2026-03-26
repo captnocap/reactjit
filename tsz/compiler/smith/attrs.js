@@ -36,10 +36,12 @@ function parseStyleValue(c) {
       c.advance();
       return { type: 'state', value: name, zigExpr: slotGet(name) };
     }
-    // Prop reference
+    // Prop reference — detect type from prop value
     if (ctx.propStack[name] !== undefined) {
       c.advance();
-      return { type: 'number', value: ctx.propStack[name] };
+      const pv = ctx.propStack[name];
+      if (pv.startsWith('#') || namedColors[pv]) return { type: 'string', value: pv };
+      return { type: 'number', value: pv };
     }
   }
   c.advance();
@@ -57,8 +59,17 @@ function parseStyleBlock(c) {
       c.advance();
       if (c.kind() === TK.colon) c.advance();
       const val = parseStyleValue(c);
-      if (colorKeys[key] && val.type === 'string') {
-        fields.push(`.${colorKeys[key]} = ${parseColor(val.value)}`);
+      if (colorKeys[key]) {
+        if (val.type === 'string') {
+          fields.push(`.${colorKeys[key]} = ${parseColor(val.value)}`);
+        } else if (val.type === 'number') {
+          // Prop with numeric value passed as color — resolve hex from prop
+          const propVal = ctx.propStack && Object.values(ctx.propStack).length > 0 ? val.value : '0';
+          fields.push(`.${colorKeys[key]} = ${parseColor(propVal)}`);
+        } else {
+          // State or unknown — placeholder Color{}, dynamic update at runtime
+          fields.push(`.${colorKeys[key]} = Color{}`);
+        }
       } else if (styleKeys[key]) {
         if (val.type === 'state') {
           // Dynamic style — placeholder 0, update at runtime
