@@ -264,6 +264,7 @@ function slotGet(name) {
   const i = findSlot(name);
   if (i < 0) return name;
   const s = ctx.stateSlots[i];
+  if (s.type === 'string') return `state.getSlotString(${i})`;
   if (s.type === 'float') return `state.getSlotFloat(${i})`;
   if (s.type === 'boolean') return `state.getSlotBool(${i})`;
   return `state.getSlot(${i})`;
@@ -371,6 +372,7 @@ function parseJSXElement(c) {
 
   // Parse attributes
   let styleFields = [];
+  let nodeFields = []; // direct node fields (font_size, text_color, etc.)
   let handlerRef = null;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
@@ -391,6 +393,21 @@ function parseJSXElement(c) {
             ctx.handlerCount++;
             if (c.kind() === TK.rbrace) c.advance(); // }
           }
+        } else if (attr === 'fontSize') {
+          // fontSize={N} or fontSize="N" → .font_size = N
+          if (c.kind() === TK.lbrace) {
+            c.advance();
+            if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
+            if (c.kind() === TK.rbrace) c.advance();
+          } else if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
+          else if (c.kind() === TK.string) { nodeFields.push(`.font_size = ${c.text().slice(1,-1)}`); c.advance(); }
+        } else if (attr === 'color') {
+          // color="#hex" or color={expr} → .text_color = Color.rgb(...)
+          if (c.kind() === TK.string) {
+            const val = c.text().slice(1, -1);
+            nodeFields.push(`.text_color = ${parseColor(val)}`);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
         } else {
           // Skip unknown attributes
           if (c.kind() === TK.string) c.advance();
@@ -403,7 +420,7 @@ function parseJSXElement(c) {
   // Self-closing: />
   if (c.kind() === TK.slash_gt) {
     c.advance();
-    return buildNode(tag, styleFields, [], handlerRef);
+    return buildNode(tag, styleFields, [], handlerRef, nodeFields);
   }
   if (c.kind() === TK.gt) c.advance();
 
@@ -416,7 +433,7 @@ function parseJSXElement(c) {
     if (c.kind() === TK.gt) c.advance();
   }
 
-  return buildNode(tag, styleFields, children, handlerRef);
+  return buildNode(tag, styleFields, children, handlerRef, nodeFields);
 }
 
 function parseChildren(c) {
@@ -432,9 +449,10 @@ function parseChildren(c) {
         const slotIdx = findSlot(getter);
         const bufId = ctx.dynCount;
         const slot = ctx.stateSlots[slotIdx];
-        const fmt = slot.type === 'float' ? '{d:.2}' : '{d}';
+        const fmt = slot.type === 'string' ? '{s}' : slot.type === 'float' ? '{d:.2}' : '{d}';
+        const bufSize = slot.type === 'string' ? 128 : 64;
         const args = slotGet(getter);
-        ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0 });
+        ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
         ctx.dynCount++;
         c.advance();
         if (c.kind() === TK.rbrace) c.advance();
@@ -473,23 +491,31 @@ function skipBraces(c) {
   if (c.kind() === TK.rbrace) c.advance();
 }
 
-function buildNode(tag, styleFields, children, handlerRef) {
+function buildNode(tag, styleFields, children, handlerRef, nodeFields) {
   const parts = [];
   if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
 
-  // Hoist single text child to .text field (static text or dynamic placeholder)
-  if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
-    const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
-    if (m && tag === 'Text') {
-      parts.push(`.text = "${m[1]}"`);
-      // If it's a dynamic text, propagate the dynBufId to this node so the parent can bind it
-      const dynId = children[0].dynBufId;
+  // For Text nodes: if ANY child has a dynamic text, hoist it to the Text node
+  // and drop all static text siblings (matches reference compiler behavior)
+  if (tag === 'Text') {
+    const dynChild = children.find(ch => ch.dynBufId !== undefined);
+    if (dynChild) {
+      parts.push(`.text = ""`);
+      if (nodeFields) for (const nf of nodeFields) parts.push(nf);
       children = [];
-      if (dynId !== undefined) {
-        const expr = `.{ ${parts.join(', ')} }`;
-        return { nodeExpr: expr, dynBufId: dynId };
-      }
+      const expr = `.{ ${parts.join(', ')} }`;
+      return { nodeExpr: expr, dynBufId: dynChild.dynBufId };
     }
+    // Single static text child — hoist to .text field
+    if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
+      const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
+      if (m) { parts.push(`.text = "${m[1]}"`); children = []; }
+    }
+  }
+
+  // Node-level fields (font_size, text_color) — after text for correct field order
+  if (nodeFields && nodeFields.length > 0) {
+    for (const nf of nodeFields) parts.push(nf);
   }
 
   if (handlerRef) parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
@@ -550,7 +576,8 @@ function emitOutput(rootExpr, file) {
   if (hasDynText) {
     out += `// ── Dynamic text buffers ─────────────────────────────────────────\n`;
     for (let i = 0; i < ctx.dynCount; i++) {
-      out += `var _dyn_buf_${i}: [64]u8 = undefined;\n`;
+      const bs = ctx.dynTexts[i].bufSize || 64;
+      out += `var _dyn_buf_${i}: [${bs}]u8 = undefined;\n`;
       out += `var _dyn_text_${i}: []const u8 = "";\n`;
     }
     out += '\n';
