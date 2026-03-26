@@ -11,19 +11,15 @@ const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const TokenKind = codegen.TokenKind;
 const html_tags = @import("html_tags.zig");
-
-const primitives = [_][]const u8{
-    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas", "Effect", "Physics", "Terminal", "Graph", "Cartridge", "Scene3D", "Glyph",
-};
+const surfaces = @import("surfaces.zig");
 
 const special_tags = [_][]const u8{
     "Route", "Routes", "C",
 };
 
 fn isPrimitive(name: []const u8) bool {
-    for (primitives) |p| {
-        if (std.mem.eql(u8, p, name)) return true;
-    }
+    // Check against the surface manifest (primitives + systems)
+    if (surfaces.isTag(name)) return true;
     // Also accept HTML tags — they resolve to primitives at parse time
     return html_tags.isHtmlTag(name);
 }

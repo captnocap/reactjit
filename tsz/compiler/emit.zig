@@ -329,6 +329,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 // Check if root_expr contains the placeholder for this style
                 const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
                     ".text_color = Color.rgb(0, 0, 0)"
+                else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_path_d"))
+                    ".canvas_path_d = \"0\""
                 else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_flow_speed"))
                     ".canvas_flow_speed = 0"
                 else if (self.dyn_styles[dsi].is_color)
@@ -349,7 +351,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (0..self.dyn_style_count) |dsi| {
         if (!self.dyn_styles[dsi].has_ref) {
             const field = self.dyn_styles[dsi].field;
-            const placeholder = std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch continue;
+            const placeholder = if (std.mem.eql(u8, field, "canvas_path_d"))
+                (self.alloc.dupe(u8, ".canvas_path_d = \"0\"") catch continue)
+            else
+                (std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch continue);
             const color_placeholder = if (self.dyn_styles[dsi].is_color)
                 (std.fmt.allocPrint(self.alloc, ".{s} = Color{{}}", .{field}) catch "")
             else
@@ -942,6 +947,16 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
         try out.appendSlice(self.alloc, "\n// ── Object arrays ───────────────────────────────────────────────\n");
         try out.appendSlice(self.alloc, "const _oa_alloc = std.heap.page_allocator;\n\n");
+        try out.appendSlice(self.alloc,
+            "fn _oaDupString(src: []const u8) []const u8 {\n" ++
+            "    if (src.len == 0) return &[_]u8{};\n" ++
+            "    return _oa_alloc.dupe(u8, src) catch &[_]u8{};\n" ++
+            "}\n\n" ++
+            "fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {\n" ++
+            "    if (len_slot.* > 0) _oa_alloc.free(@constCast(slot.*));\n" ++
+            "    slot.* = &[_]u8{};\n" ++
+            "    len_slot.* = 0;\n" ++
+            "}\n\n");
 
         for (0..self.object_array_count) |oi| {
             const oa = self.object_arrays[oi];
@@ -952,8 +967,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 switch (f.field_type) {
                     .string => {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "var _oa{d}_{s}: [][256]u8 = &[_][256]u8{{}};\n" ++
-                            "var _oa{d}_{s}_lens: []u16 = &[_]u16{{}};\n" ++
+                            "var _oa{d}_{s}: [][]const u8 = &[_][]const u8{{}};\n" ++
+                            "var _oa{d}_{s}_lens: []usize = &[_]usize{{}};\n" ++
                             "var _oa{d}_{s}_cap: usize = 0;\n",
                             .{ oi, f.name, oi, f.name, oi, f.name }));
                     },
@@ -989,13 +1004,16 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     .string => {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "    if (_oa{d}_{s}_cap == 0) {{\n" ++
-                            "        _oa{d}_{s} = _oa_alloc.alloc([256]u8, new_cap) catch return;\n" ++
-                            "        _oa{d}_{s}_lens = _oa_alloc.alloc(u16, new_cap) catch return;\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.alloc([]const u8, new_cap) catch return;\n" ++
+                            "        _oa{d}_{s}_lens = _oa_alloc.alloc(usize, new_cap) catch return;\n" ++
+                            "        for (0..new_cap) |_j| _oa{d}_{s}[_j] = &[_]u8{{}};\n" ++
                             "        @memset(_oa{d}_{s}_lens, 0);\n" ++
                             "    }} else {{\n" ++
-                            "        _oa{d}_{s} = _oa_alloc.realloc(_oa{d}_{s}.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
-                            "        _oa{d}_{s}_lens = _oa_alloc.realloc(_oa{d}_{s}_lens.ptr[0.._oa{d}_{s}_cap], new_cap) catch return;\n" ++
-                            "        @memset(_oa{d}_{s}_lens[_oa{d}_{s}_cap..new_cap], 0);\n" ++
+                            "        const _old_cap = _oa{d}_{s}_cap;\n" ++
+                            "        _oa{d}_{s} = _oa_alloc.realloc(_oa{d}_{s}.ptr[0.._old_cap], new_cap) catch return;\n" ++
+                            "        _oa{d}_{s}_lens = _oa_alloc.realloc(_oa{d}_{s}_lens.ptr[0.._old_cap], new_cap) catch return;\n" ++
+                            "        for (_old_cap..new_cap) |_j| _oa{d}_{s}[_j] = &[_]u8{{}};\n" ++
+                            "        @memset(_oa{d}_{s}_lens[_old_cap..new_cap], 0);\n" ++
                             "    }}\n" ++
                             "    _oa{d}_{s}_cap = new_cap;\n",
                             .{ oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name }));
@@ -1078,9 +1096,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "        const _s = qjs.JS_ToCString(c2, _v);\n" ++
                             "        qjs.JS_FreeValue(c2, _v);\n" ++
-                            "        if (_s) |ss| {{ const sl = std.mem.span(ss); const n = @min(sl.len, 255); @memcpy(_oa{d}_{s}[_i][0..n], sl[0..n]); _oa{d}_{s}_lens[_i] = @intCast(n); qjs.JS_FreeCString(c2, _s); }}\n" ++
-                            "        else {{ _oa{d}_{s}_lens[_i] = 0; }}\n",
-                            .{ oi, f.name, oi, f.name, oi, f.name }));
+                            "        _oaFreeString(&_oa{d}_{s}[_i], &_oa{d}_{s}_lens[_i]);\n" ++
+                            "        if (_s) |ss| {{ const sl = std.mem.span(ss); _oa{d}_{s}[_i] = _oaDupString(sl); _oa{d}_{s}_lens[_i] = _oa{d}_{s}[_i].len; qjs.JS_FreeCString(c2, _s); }}\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name, oi, f.name, oi, f.name }));
                     },
                     .float => {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -1107,10 +1125,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
                 try out.appendSlice(self.alloc, "        }\n");
             }
-
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "        qjs.JS_FreeValue(c2, elem);\n" ++
-                "    }}\n" ++
+                "    }}\n",
+                .{}));
+
+            for (0..oa.field_count) |fi| {
+                const f = oa.fields[fi];
+                if (f.field_type != .string) continue;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    for (count.._oa{d}_len) |_trim_i| _oaFreeString(&_oa{d}_{s}[_trim_i], &_oa{d}_{s}_lens[_trim_i]);\n",
+                    .{ oi, oi, f.name, oi, f.name }));
+            }
+
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "    _oa{d}_len = count;\n" ++
                 "    _oa{d}_dirty = true;\n" ++
                 "    state.markDirty();\n" ++
@@ -1960,6 +1988,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         // arr_name="" means style is on root itself
         if (ds.arr_name.len == 0) {
             const is_root_style = !std.mem.eql(u8, ds.field, "text_color") and
+                !std.mem.eql(u8, ds.field, "canvas_path_d") and
                 !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
                 !std.mem.eql(u8, ds.field, "font_size") and
                 !std.mem.eql(u8, ds.field, "opacity") and
@@ -1978,6 +2007,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             // Style fields (width, height, padding, etc.) live in Node.style
             // Node-level fields (text_color, canvas_flow_speed, scene3d_*) are direct
             const is_style_field = !std.mem.eql(u8, ds.field, "text_color") and
+                !std.mem.eql(u8, ds.field, "canvas_path_d") and
                 !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
                 !std.mem.eql(u8, ds.field, "font_size") and
                 !std.mem.eql(u8, ds.field, "opacity") and
@@ -2284,6 +2314,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
     }
 
+    const has_dirty_sources = self.has_state or self.object_array_count > 0;
+
     var has_per_frame_text = false;
     for (0..self.dyn_count) |di| {
         if (self.dyn_texts[di].dep_count == 0 and self.dyn_texts[di].has_ref) {
@@ -2295,8 +2327,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
         if (has_any_conds) try out.appendSlice(self.alloc, "    _updateConditionals();\n");
         try emit_map.emitMapRebuildCalls(self, &out,"    ");
-        if (self.has_state) try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
-    } else if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds or self.map_count > 0 or self.computed_count > 0)) {
+        if (has_dirty_sources) try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
+    } else if (has_dirty_sources and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds or self.map_count > 0 or self.computed_count > 0)) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateDynamicTexts();");
         if (has_any_conds) try out.appendSlice(self.alloc, " _updateConditionals();");
         // Watch effects — run when watched state slots change
@@ -2315,9 +2347,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             try emit_map.emitMapRebuildCalls(self, &out,"        ");
         }
         try out.appendSlice(self.alloc, " state.clearDirty(); }\n");
-    } else if (self.has_state and has_any_conds) {
+    } else if (has_dirty_sources and has_any_conds) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateConditionals(); state.clearDirty(); }\n");
-    } else if (self.has_state) {
+    } else if (has_dirty_sources) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
     }
     // Watch effects when no dyn texts — need their own dirty check

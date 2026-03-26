@@ -255,8 +255,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_gw_str: []const u8 = "";
     var canvas_gh_str: []const u8 = "";
     var canvas_path_d: []const u8 = "";
+    var canvas_path_d_is_expr = false;
     var canvas_stroke_str: []const u8 = "";
+    var canvas_stroke_is_expr = false;
     var canvas_fill_str: []const u8 = "";
+    var canvas_fill_is_expr = false;
     var canvas_stroke_w_str: []const u8 = "";
     var canvas_flow_speed_str: []const u8 = "";
     var canvas_view_x_str: []const u8 = "";
@@ -288,6 +291,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var effect_is_mask: bool = false; // <Effect mask ...>
     var effect_name_str: []const u8 = ""; // <Effect name="foo">
     var canvas_fill_effect_str: []const u8 = ""; // <Graph.Path fillEffect="foo">
+    var canvas_fill_effect_is_expr = false;
     var text_effect_str: []const u8 = ""; // <Text textEffect="foo">
 
     // Pre-populate from classifier
@@ -400,7 +404,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "name") and is_custom_effect) {
                     effect_name_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "fillEffect") and is_canvas_path) {
-                    canvas_fill_effect_str = try attrs.parseStringAttr(self);
+                    canvas_fill_effect_is_expr = self.curKind() == .lbrace;
+                    canvas_fill_effect_str = if (canvas_fill_effect_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "tooltip")) {
                     tooltip_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "href")) {
@@ -429,11 +434,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "gh") and is_canvas_node) {
                     canvas_gh_str = try parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "d") and is_canvas_path) {
-                    canvas_path_d = try attrs.parseStringAttr(self);
+                    canvas_path_d_is_expr = self.curKind() == .lbrace;
+                    canvas_path_d = if (canvas_path_d_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "stroke") and is_canvas_path) {
-                    canvas_stroke_str = try attrs.parseStringAttr(self);
+                    canvas_stroke_is_expr = self.curKind() == .lbrace;
+                    canvas_stroke_str = if (canvas_stroke_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "fill") and is_canvas_path) {
-                    canvas_fill_str = try attrs.parseStringAttr(self);
+                    canvas_fill_is_expr = self.curKind() == .lbrace;
+                    canvas_fill_str = if (canvas_fill_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "strokeWidth") and is_canvas_path) {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
@@ -1235,11 +1243,22 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".canvas_path = true");
         if (canvas_path_d.len > 0) {
-            try fields.appendSlice(self.alloc, ", .canvas_path_d = \"");
-            for (canvas_path_d) |ch| {
-                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
+            if (canvasPathNeedsDynBinding(canvas_path_d, canvas_path_d_is_expr)) {
+                try fields.appendSlice(self.alloc, ", .canvas_path_d = \"0\"");
+                if (self.dyn_style_count < MAX_DYN_STYLES) {
+                    self.dyn_styles[self.dyn_style_count] = .{
+                        .field = "canvas_path_d",
+                        .expression = canvas_path_d,
+                        .arr_name = "",
+                        .arr_index = 0,
+                        .has_ref = false,
+                    };
+                    self.dyn_style_count += 1;
+                }
+            } else {
+                try fields.appendSlice(self.alloc, ", .canvas_path_d = ");
+                try fields.appendSlice(self.alloc, try resolveCanvasStringValue(self, canvas_path_d, canvas_path_d_is_expr));
             }
-            try fields.appendSlice(self.alloc, "\"");
         }
         if (canvas_stroke_w_str.len > 0) {
             try fields.appendSlice(self.alloc, ", .canvas_stroke_width = ");
@@ -1247,21 +1266,20 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
         // Stroke color → text_color field (reuse existing color field)
         if (canvas_stroke_str.len > 0) {
-            const color = try attrs.parseColorValue(self, canvas_stroke_str);
+            const color = try resolveCanvasColorValue(self, canvas_stroke_str, canvas_stroke_is_expr);
             try fields.appendSlice(self.alloc, ", .text_color = ");
             try fields.appendSlice(self.alloc, color);
         }
         // Fill color → canvas_fill_color field
         if (canvas_fill_str.len > 0) {
-            const fill_color = try attrs.parseColorValue(self, canvas_fill_str);
+            const fill_color = try resolveCanvasColorValue(self, canvas_fill_str, canvas_fill_is_expr);
             try fields.appendSlice(self.alloc, ", .canvas_fill_color = ");
             try fields.appendSlice(self.alloc, fill_color);
         }
         // Fill effect → canvas_fill_effect (reference to named effect texture)
         if (canvas_fill_effect_str.len > 0) {
-            try fields.appendSlice(self.alloc, ", .canvas_fill_effect = \"");
-            try fields.appendSlice(self.alloc, canvas_fill_effect_str);
-            try fields.appendSlice(self.alloc, "\"");
+            try fields.appendSlice(self.alloc, ", .canvas_fill_effect = ");
+            try fields.appendSlice(self.alloc, try resolveCanvasStringValue(self, canvas_fill_effect_str, canvas_fill_effect_is_expr));
         }
         if (canvas_flow_speed_str.len > 0) {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -1438,6 +1456,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 const field = self.dyn_styles[dsi].field;
                 const placeholder = if (std.mem.eql(u8, field, "text_color"))
                     ".text_color = Color.rgb(0, 0, 0)"
+                else if (std.mem.eql(u8, field, "canvas_path_d"))
+                    ".canvas_path_d = \"0\""
                 else if (std.mem.eql(u8, field, "canvas_flow_speed"))
                     ".canvas_flow_speed = 0"
                 else if (std.mem.eql(u8, field, "background_color") or
@@ -1513,6 +1533,30 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     }
 
     return try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{fields.items});
+}
+
+fn resolveCanvasStringValue(self: *Generator, value: []const u8, is_expr: bool) ![]const u8 {
+    if (!is_expr) return try std.fmt.allocPrint(self.alloc, "\"{f}\"", .{std.zig.fmtString(value)});
+    if (std.mem.startsWith(u8, value, "_p_")) return value;
+    if (std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]")) {
+        const base = value[0 .. value.len - 4];
+        return try std.fmt.allocPrint(self.alloc, "{s}[_i][0..{s}_lens[_i]]", .{ base, base });
+    }
+    return value;
+}
+
+fn canvasPathNeedsDynBinding(value: []const u8, is_expr: bool) bool {
+    return is_expr and std.mem.indexOf(u8, value, "state.getSlot") != null;
+}
+
+fn resolveCanvasColorValue(self: *Generator, value: []const u8, is_expr: bool) ![]const u8 {
+    if (!is_expr) return attrs.parseColorValue(self, value);
+    if (std.mem.startsWith(u8, value, "_p_")) return value;
+    if (std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]")) {
+        const base = value[0 .. value.len - 4];
+        return try std.fmt.allocPrint(self.alloc, "Color.fromHex({s}[_i][0..{s}_lens[_i]])", .{ base, base });
+    }
+    return value;
 }
 
 // ── Route element ──

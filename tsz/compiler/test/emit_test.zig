@@ -560,6 +560,37 @@ test "STRICT: component props inside map object arrays preserve member expressio
     try testing.expect(std.mem.indexOf(u8, out, ".canvas_fill_effect = \"0\"") == null);
 }
 
+test "STRICT: direct map Graph.Path root preserves path expressions" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [shapes, setShapes] = useState([{ d: 'M 0,-52 L 45,-26 L 45,26 L 0,52 Z', fillEffect: 'plasma', stroke: '#ffffff55' }]);" ++
+        "function App() { return <Graph>{shapes.map((shape) => (<Graph.Path d={shape.d} fillEffect={shape.fillEffect} stroke={shape.stroke} strokeWidth={2} />))}</Graph> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_path_d = _oa0_d[_i][0.._oa0_d_lens[_i]]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_fill_effect = _oa0_fillEffect[_i][0.._oa0_fillEffect_lens[_i]]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".text_color = Color.fromHex(_oa0_stroke[_i][0.._oa0_stroke_lens[_i]])") != null);
+}
+
+test "Canvas.Path d accepts state string expressions" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [pathD, setPathD] = useState('M 1,1 L 9,9');" ++
+        "function App() { return <Canvas><Canvas.Path d={pathD} stroke=\"#00ff88\" strokeWidth={2} /></Canvas> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_path_d = \"0\"") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_path_d = state.getSlotString(0);") != null);
+}
+
 test "app with script block" {
     var a = arena();
     defer a.deinit();

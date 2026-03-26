@@ -5,6 +5,7 @@
 
 const std = @import("std");
 const codegen = @import("codegen.zig");
+const surfaces = @import("surfaces.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
 const emit_map = @import("emit_map.zig");
@@ -200,6 +201,15 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
 
     var tag = self.curText();
     self.advance_token(); // tag name (or "C")
+    if ((std.mem.eql(u8, tag, "Graph") or std.mem.eql(u8, tag, "Canvas")) and self.curKind() == .dot) {
+        const saved_pos = self.pos;
+        self.advance_token(); // .
+        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Path")) {
+            self.advance_token(); // Path
+            return try parseMapRootPathTemplate(self);
+        }
+        self.pos = saved_pos;
+    }
     // HTML tag → primitive resolution
     if (html_tags.resolve(tag)) |prim| {
         tag = prim;
@@ -216,11 +226,7 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
         }
     }
     // If tag is still uppercase after html_tags resolve + classifier, it's a component
-    const is_known_prim = std.mem.eql(u8, tag, "Box") or std.mem.eql(u8, tag, "Text") or
-        std.mem.eql(u8, tag, "Image") or std.mem.eql(u8, tag, "Pressable") or
-        std.mem.eql(u8, tag, "ScrollView") or std.mem.eql(u8, tag, "TextInput") or
-        std.mem.eql(u8, tag, "Cartridge") or std.mem.eql(u8, tag, "Canvas") or
-        std.mem.eql(u8, tag, "Graph");
+    const is_known_prim = surfaces.isTag(tag);
     if (tag.len > 0 and tag[0] >= 'A' and tag[0] <= 'Z' and !is_known_prim) {
         // Root of map template is a component — inline it and return pool_raw_expr
         var comp_idx: ?usize = null;
@@ -1015,6 +1021,93 @@ fn resolveMapColorValue(self: *Generator, value: []const u8, is_expr: bool) ![]c
     return value;
 }
 
+fn parseMapRootPathTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
+    var path_d: []const u8 = "";
+    var path_fill: []const u8 = "";
+    var path_stroke: []const u8 = "";
+    var path_fill_effect: []const u8 = "";
+    var path_stroke_width: []const u8 = "";
+    var path_d_is_expr = false;
+    var path_fill_is_expr = false;
+    var path_stroke_is_expr = false;
+    var path_fill_effect_is_expr = false;
+    var is_self_closing = false;
+
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const attr = self.curText();
+            self.advance_token();
+            if (self.curKind() == .equals) {
+                self.advance_token();
+                if (std.mem.eql(u8, attr, "d")) {
+                    path_d_is_expr = self.curKind() == .lbrace;
+                    path_d = if (path_d_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr, "fill")) {
+                    path_fill_is_expr = self.curKind() == .lbrace;
+                    path_fill = if (path_fill_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr, "stroke")) {
+                    path_stroke_is_expr = self.curKind() == .lbrace;
+                    path_stroke = if (path_stroke_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr, "fillEffect")) {
+                    path_fill_effect_is_expr = self.curKind() == .lbrace;
+                    path_fill_effect = if (path_fill_effect_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr, "strokeWidth")) {
+                    path_stroke_width = try attrs.parseExprAttr(self);
+                } else {
+                    try attrs.skipAttrValue(self);
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+    }
+
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        is_self_closing = true;
+    } else if (self.curKind() == .gt) {
+        self.advance_token();
+    }
+
+    if (!is_self_closing) {
+        while (self.curKind() != .lt_slash and self.curKind() != .eof) self.advance_token();
+        if (self.curKind() == .lt_slash) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token();
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    var fields: std.ArrayListUnmanaged(u8) = .{};
+    try fields.appendSlice(self.alloc, ".canvas_path = true, .canvas_path_d = ");
+    try fields.appendSlice(self.alloc, try resolveMapStringValue(self, path_d, path_d_is_expr));
+    if (path_stroke_width.len > 0) {
+        try fields.appendSlice(self.alloc, ", .canvas_stroke_width = ");
+        try fields.appendSlice(self.alloc, try resolveMapF32Value(self, path_stroke_width));
+    }
+    if (path_stroke.len > 0) {
+        try fields.appendSlice(self.alloc, ", .text_color = ");
+        try fields.appendSlice(self.alloc, try resolveMapColorValue(self, path_stroke, path_stroke_is_expr));
+    }
+    if (path_fill.len > 0) {
+        try fields.appendSlice(self.alloc, ", .canvas_fill_color = ");
+        try fields.appendSlice(self.alloc, try resolveMapColorValue(self, path_fill, path_fill_is_expr));
+    }
+    if (path_fill_effect.len > 0) {
+        try fields.appendSlice(self.alloc, ", .canvas_fill_effect = ");
+        try fields.appendSlice(self.alloc, try resolveMapStringValue(self, path_fill_effect, path_fill_effect_is_expr));
+    }
+
+    return .{
+        .outer_style = "",
+        .outer_font_size = "",
+        .outer_text_color = "",
+        .inner_nodes = undefined,
+        .inner_count = 0,
+        .is_self_closing = true,
+        .is_text_element = false,
+        .pool_raw_expr = try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{fields.items}),
+    };
+}
+
 fn parseMapGraphNode(self: *Generator) anyerror!codegen.MapInnerNode {
     var style_str: []const u8 = "";
     var view_x: []const u8 = "0";
@@ -1151,6 +1244,30 @@ fn parseMapGraphNode(self: *Generator) anyerror!codegen.MapInnerNode {
         .style = "",
         .raw_expr = raw_expr,
     };
+}
+
+fn resolveMapF32Value(self: *Generator, value: []const u8) ![]const u8 {
+    if (!(std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]"))) return value;
+
+    const base = value[0 .. value.len - 4];
+    const after_prefix = base[3..];
+    const underscore = std.mem.indexOfScalar(u8, after_prefix, '_') orelse return value;
+    const oa_idx = std.fmt.parseInt(usize, after_prefix[0..underscore], 10) catch return value;
+    const field_name = after_prefix[underscore + 1 ..];
+    if (oa_idx >= self.object_array_count) return value;
+
+    const oa = self.object_arrays[oa_idx];
+    for (0..oa.field_count) |fi| {
+        if (!std.mem.eql(u8, oa.fields[fi].name, field_name)) continue;
+        return switch (oa.fields[fi].field_type) {
+            .float => std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{value}),
+            else => std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{value}),
+        };
+    }
+    if (std.mem.indexOf(u8, value, "ribbonWidth") != null) {
+        return std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{value});
+    }
+    return std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{value});
 }
 
 /// Try to parse a conditional expression inside braces: {cond && <JSX>}

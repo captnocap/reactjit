@@ -757,6 +757,18 @@ const Parser = struct {
                     const prop = self.curText();
                     self.advance();
 
+                    // Math.PI / Math.E → std.math constants
+                    if (std.mem.eql(u8, left.text, "Math")) {
+                        if (std.mem.eql(u8, prop, "PI")) {
+                            left = .{ .text = "std.math.pi", .ty = .f32_t };
+                            continue;
+                        }
+                        if (std.mem.eql(u8, prop, "E")) {
+                            left = .{ .text = "std.math.e", .ty = .f32_t };
+                            continue;
+                        }
+                    }
+
                     // .length → .len (always usize)
                     if (std.mem.eql(u8, prop, "length")) {
                         left = .{
@@ -1044,9 +1056,10 @@ const Parser = struct {
 
         const joined = try helpers.joinArgs(self.alloc, args.items);
 
-        // Math builtins
+        // Math builtins — @builtins and std.math delegates
         if (callee.len > 5 and std.mem.eql(u8, callee[0..5], "Math.")) {
             const method = callee[5..];
+            // Single-arg @builtins
             const builtin: ?[]const u8 = if (std.mem.eql(u8, method, "abs"))
                 "@abs"
             else if (std.mem.eql(u8, method, "max"))
@@ -1059,15 +1072,206 @@ const Parser = struct {
                 "@ceil"
             else if (std.mem.eql(u8, method, "sqrt"))
                 "@sqrt"
+            else if (std.mem.eql(u8, method, "sin"))
+                "@sin"
+            else if (std.mem.eql(u8, method, "cos"))
+                "@cos"
+            else if (std.mem.eql(u8, method, "tan"))
+                "@tan"
+            else if (std.mem.eql(u8, method, "log"))
+                "@log"
+            else if (std.mem.eql(u8, method, "exp"))
+                "@exp"
             else
                 null;
 
             if (builtin) |b| {
                 return .{
                     .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ b, joined }),
-                    .ty = .f32_t, // Math builtins return f32
+                    .ty = .f32_t,
                 };
             }
+            // std.math delegates (multi-arg or non-builtin)
+            const std_math: ?[]const u8 = if (std.mem.eql(u8, method, "atan2"))
+                "std.math.atan2"
+            else if (std.mem.eql(u8, method, "pow"))
+                "std.math.pow"
+            else if (std.mem.eql(u8, method, "sign"))
+                "std.math.sign"
+            else if (std.mem.eql(u8, method, "clamp"))
+                "std.math.clamp"
+            else
+                null;
+
+            if (std_math) |sm| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ sm, joined }),
+                    .ty = .f32_t,
+                };
+            }
+            // framework/math.zig delegates
+            const fw_math: ?[]const u8 = if (std.mem.eql(u8, method, "lerp"))
+                "math.lerp"
+            else if (std.mem.eql(u8, method, "smoothstep"))
+                "math.smoothstep"
+            else if (std.mem.eql(u8, method, "remap"))
+                "math.remap"
+            else if (std.mem.eql(u8, method, "random"))
+                "random.float"
+            else
+                null;
+
+            if (fw_math) |fm| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ fm, joined }),
+                    .ty = .f32_t,
+                };
+            }
+        }
+
+        // Vec2.* — 2D vector math (maps to math.v2*)
+        if (callee.len > 5 and std.mem.eql(u8, callee[0..5], "Vec2.")) {
+            const method = callee[5..];
+            const v2fn: ?[]const u8 = if (std.mem.eql(u8, method, "add"))
+                "math.v2add"
+            else if (std.mem.eql(u8, method, "sub"))
+                "math.v2sub"
+            else if (std.mem.eql(u8, method, "mul"))
+                "math.v2mul"
+            else if (std.mem.eql(u8, method, "div"))
+                "math.v2div"
+            else if (std.mem.eql(u8, method, "scale"))
+                "math.v2scale"
+            else if (std.mem.eql(u8, method, "negate"))
+                "math.v2negate"
+            else if (std.mem.eql(u8, method, "dot"))
+                "math.v2dot"
+            else if (std.mem.eql(u8, method, "cross"))
+                "math.v2cross"
+            else if (std.mem.eql(u8, method, "length"))
+                "math.v2length"
+            else if (std.mem.eql(u8, method, "distance"))
+                "math.v2distance"
+            else if (std.mem.eql(u8, method, "normalize"))
+                "math.v2normalize"
+            else if (std.mem.eql(u8, method, "lerp"))
+                "math.v2lerp"
+            else if (std.mem.eql(u8, method, "angle"))
+                "math.v2angle"
+            else if (std.mem.eql(u8, method, "rotate"))
+                "math.v2rotate"
+            else if (std.mem.eql(u8, method, "fromAngle"))
+                "math.v2fromAngle"
+            else
+                null;
+
+            if (v2fn) |fn_name| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ fn_name, joined }),
+                    .ty = .f32_t,
+                };
+            }
+        }
+
+        // Vec3.* — 3D vector math (maps to math.v3*)
+        if (callee.len > 5 and std.mem.eql(u8, callee[0..5], "Vec3.")) {
+            const method = callee[5..];
+            const v3fn: ?[]const u8 = if (std.mem.eql(u8, method, "add"))
+                "math.v3add"
+            else if (std.mem.eql(u8, method, "sub"))
+                "math.v3sub"
+            else if (std.mem.eql(u8, method, "mul"))
+                "math.v3mul"
+            else if (std.mem.eql(u8, method, "div"))
+                "math.v3div"
+            else if (std.mem.eql(u8, method, "scale"))
+                "math.v3scale"
+            else if (std.mem.eql(u8, method, "negate"))
+                "math.v3negate"
+            else if (std.mem.eql(u8, method, "dot"))
+                "math.v3dot"
+            else if (std.mem.eql(u8, method, "cross"))
+                "math.v3cross"
+            else if (std.mem.eql(u8, method, "length"))
+                "math.v3length"
+            else if (std.mem.eql(u8, method, "distance"))
+                "math.v3distance"
+            else if (std.mem.eql(u8, method, "normalize"))
+                "math.v3normalize"
+            else if (std.mem.eql(u8, method, "lerp"))
+                "math.v3lerp"
+            else if (std.mem.eql(u8, method, "reflect"))
+                "math.v3reflect"
+            else if (std.mem.eql(u8, method, "slerp"))
+                "math.v3slerp"
+            else
+                null;
+
+            if (v3fn) |fn_name| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ fn_name, joined }),
+                    .ty = .f32_t,
+                };
+            }
+        }
+
+        // Noise.* — procedural noise (maps to math.noise*)
+        if (callee.len > 6 and std.mem.eql(u8, callee[0..6], "Noise.")) {
+            const method = callee[6..];
+            const nfn: ?[]const u8 = if (std.mem.eql(u8, method, "perlin") or std.mem.eql(u8, method, "perlin2d"))
+                "math.noise2d"
+            else if (std.mem.eql(u8, method, "perlin3d"))
+                "math.noise3d"
+            else if (std.mem.eql(u8, method, "fbm") or std.mem.eql(u8, method, "fbm2d"))
+                "math.fbm2d"
+            else if (std.mem.eql(u8, method, "fbm3d"))
+                "math.fbm3d"
+            else
+                null;
+
+            if (nfn) |fn_name| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ fn_name, joined }),
+                    .ty = .f32_t,
+                };
+            }
+        }
+
+        // Random.* — deterministic PRNG (maps to random.*)
+        if (callee.len > 7 and std.mem.eql(u8, callee[0..7], "Random.")) {
+            const method = callee[7..];
+            const rfn: ?[]const u8 = if (std.mem.eql(u8, method, "float"))
+                "random.float"
+            else if (std.mem.eql(u8, method, "range"))
+                "random.range"
+            else if (std.mem.eql(u8, method, "int"))
+                "random.intRange"
+            else if (std.mem.eql(u8, method, "seed"))
+                "random.seed"
+            else
+                null;
+
+            if (rfn) |fn_name| {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ fn_name, joined }),
+                    .ty = .f32_t,
+                };
+            }
+        }
+
+        // Vec2(x, y) → math.v2(x, y) constructor
+        if (std.mem.eql(u8, callee, "Vec2")) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "math.v2({s})", .{joined}),
+                .ty = .struct_t,
+            };
+        }
+        // Vec3(x, y, z) → math.v3(x, y, z) constructor
+        if (std.mem.eql(u8, callee, "Vec3")) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "math.v3({s})", .{joined}),
+                .ty = .struct_t,
+            };
         }
 
         // Infer return type from known function names
