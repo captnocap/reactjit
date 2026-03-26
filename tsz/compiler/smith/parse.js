@@ -32,14 +32,36 @@ function parseJSXElement(c) {
             propValues[attr] = c.text().slice(1, -1); // strip quotes
             c.advance();
           } else if (c.kind() === TK.lbrace) {
-            // {expr} prop value — collect tokens as string
+            // {expr} prop value — resolve map item access, state getters, etc.
             c.advance();
+            // Check for map item member access: item.field
+            if (ctx.currentMap && c.kind() === TK.identifier && c.text() === ctx.currentMap.itemParam) {
+              c.advance(); // skip item name
+              if (c.kind() === TK.dot) {
+                c.advance(); // skip .
+                if (c.kind() === TK.identifier) {
+                  const field = c.text();
+                  const oa = ctx.currentMap.oa;
+                  const fi = oa.fields.find(ff => ff.name === field);
+                  if (fi && fi.type === 'string') {
+                    propValues[attr] = `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
+                  } else {
+                    propValues[attr] = `_oa${oa.oaIdx}_${field}[_i]`;
+                  }
+                  c.advance();
+                  if (c.kind() === TK.rbrace) c.advance();
+                  continue;
+                }
+              }
+            }
+            // Fallback: collect tokens as string
             let val = '';
             let depth = 0;
             while (c.kind() !== TK.eof) {
               if (c.kind() === TK.lbrace) depth++;
               if (c.kind() === TK.rbrace) { if (depth === 0) break; depth--; }
-              val += c.text();
+              if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
+              else val += c.text();
               c.advance();
             }
             if (c.kind() === TK.rbrace) c.advance();
