@@ -293,6 +293,7 @@ pub const Node = struct {
     scene3d_show_grid: bool = false, // Scene3D navigation grid overlay
     scene3d_show_axes: bool = false, // Scene3D origin axes overlay
     // Physics 2D — inline in the 2D tree, driven by framework/physics2d.zig
+    physics_world_id: u8 = 0, // multi-physics-world instance index (0..MAX_PHYSICS_WORLDS-1)
     physics_world: bool = false, // true = Physics.World container
     physics_body: bool = false, // true = Physics.Body (wraps child nodes)
     physics_collider: bool = false, // true = Physics.Collider (shape definition, no visual)
@@ -316,6 +317,7 @@ pub const Node = struct {
     terminal_font_size: u16 = 13, // monospace font size for terminal cell grid
     terminal_id: u8 = 0, // multi-terminal slot index (0..MAX_TERMINALS-1)
     graph_container: bool = false, // true = Graph element (SVG paths, no pan/zoom)
+    canvas_id: u8 = 0, // multi-canvas instance index (0..MAX_CANVAS_INSTANCES-1)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)
     canvas_view_x: f32 = 0,
@@ -826,7 +828,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         return;
     }
     // Canvas.Path: no layout dimensions, skip.
-    if (node.canvas_path) {
+    if (node.canvas_path or node.canvas_path_d != null) {
         node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
         return;
     }

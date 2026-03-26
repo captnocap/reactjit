@@ -827,6 +827,13 @@ fn renderSW(e: *VideoEntry, queue: *wgpu.Queue) void {
     if (err < 0) return;
     mpv_fns.render_ctx_report_swap(ctx);
 
+    // The shared image shader now respects texture alpha normally, so
+    // software-decoded video frames need an explicit opaque alpha channel.
+    var i: usize = 3;
+    while (i < buf.len) : (i += 4) {
+        buf[i] = 255;
+    }
+
     uploadToWgpu(tex, buf, w, h, queue);
 }
 

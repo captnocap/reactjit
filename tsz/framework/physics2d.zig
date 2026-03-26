@@ -1,13 +1,16 @@
 //! physics2d.zig — 2D physics engine integration (Box2D 2.4.1)
 //!
-//! Manages a Box2D world and maps physics bodies to layout nodes.
-//! Each frame: step the world, then write body positions back to node computed x/y.
+//! Manages Box2D worlds and maps physics bodies to layout nodes.
+//! Each frame: step worlds, then write body positions back to node computed x/y.
+//!
+//! Instance-safe: each <Physics.World> gets its own Box2D world and body pool.
+//! Node.physics_world_id indexes into the world pool. Instance 0 is the default.
 //!
 //! Architecture:
-//!   - Fixed-size body pool (MAX_BODIES), zero allocations
+//!   - Pool of MAX_PHYSICS_WORLDS, each with MAX_BODIES_PER_WORLD bodies
 //!   - Bodies are registered with a pointer to their Node
-//!   - tick(dt) steps the world and syncs positions to nodes
-//!   - Pixel ↔ meter conversion: 1 meter = PIXELS_PER_METER pixels
+//!   - tick(dt) steps all active worlds and syncs positions to nodes
+//!   - Pixel <-> meter conversion: 1 meter = PIXELS_PER_METER pixels
 
 const std = @import("std");
 const layout = @import("layout.zig");
@@ -20,10 +23,10 @@ const c = @cImport({
 
 // ── Constants ──────────────────────────────────────────────────
 
-/// Pixels per Box2D meter. Box2D works in meters; UI works in pixels.
 pub const PIXELS_PER_METER: f32 = 50.0;
-
 pub const MAX_BODIES: usize = 256;
+pub const MAX_BODIES_PER_WORLD: usize = 256;
+pub const MAX_PHYSICS_WORLDS: u8 = 8;
 
 const VELOCITY_ITERATIONS: c_int = 8;
 const POSITION_ITERATIONS: c_int = 3;
@@ -47,236 +50,319 @@ pub const Body = struct {
     active: bool = false,
     handle: c.PhysBody = null,
     node: ?*Node = null,
-    /// Offset from body center to node top-left (half width/height)
     offset_x: f32 = 0,
     offset_y: f32 = 0,
 };
 
-// ── State ──────────────────────────────────────────────────────
+// ── Physics World Instance ─────────────────────────────────────
 
-var world: c.PhysWorld = null;
-var bodies: [MAX_BODIES]Body = [_]Body{.{}} ** MAX_BODIES;
-var body_count: u32 = 0;
-var initialized: bool = false;
+pub const PhysicsWorld = struct {
+    world: c.PhysWorld = null,
+    bodies: [MAX_BODIES_PER_WORLD]Body = [_]Body{.{}} ** MAX_BODIES_PER_WORLD,
+    body_count: u32 = 0,
+    initialized: bool = false,
+    drag_joint: c.PhysJoint = null,
+    drag_body: c.PhysBody = null,
+};
 
-// ── Mouse drag state ────────────────────────────────────────────
-var drag_joint: c.PhysJoint = null;
-var drag_body: c.PhysBody = null;
+var worlds: [MAX_PHYSICS_WORLDS]PhysicsWorld = [_]PhysicsWorld{.{}} ** MAX_PHYSICS_WORLDS;
 
-// ── Public API ─────────────────────────────────────────────────
+fn w(id: u8) *PhysicsWorld {
+    return &worlds[@min(id, MAX_PHYSICS_WORLDS - 1)];
+}
 
-/// Create the physics world with gravity in pixels/s^2.
-/// Gravity is converted to meters internally.
+// ── Public API (backward-compat wrappers → world 0) ───────────
+
 pub fn init(gravity_x: f32, gravity_y: f32) void {
-    if (initialized) deinit();
-    world = c.phys_world_create(
+    initFor(0, gravity_x, gravity_y);
+}
+
+pub fn initFor(id: u8, gravity_x: f32, gravity_y: f32) void {
+    const pw = w(id);
+    if (pw.initialized) deinitFor(id);
+    pw.world = c.phys_world_create(
         gravity_x / PIXELS_PER_METER,
         gravity_y / PIXELS_PER_METER,
     );
-    initialized = true;
-    body_count = 0;
-    for (&bodies) |*b| b.active = false;
+    pw.initialized = true;
+    pw.body_count = 0;
+    for (&pw.bodies) |*b| b.active = false;
 }
 
 pub fn deinit() void {
-    if (!initialized) return;
-    c.phys_world_destroy(world);
-    world = null;
-    initialized = false;
-    body_count = 0;
-    for (&bodies) |*b| b.active = false;
+    deinitFor(0);
 }
 
-/// Create a physics body and link it to a node.
-/// x, y are in pixels (converted to meters internally).
-/// Returns body index or null if pool is full.
-pub fn createBody(
-    body_type: BodyType,
-    x: f32,
-    y: f32,
-    angle: f32,
-    node: ?*Node,
-) ?u32 {
-    if (!initialized) return null;
+pub fn deinitFor(id: u8) void {
+    const pw = w(id);
+    if (!pw.initialized) return;
+    c.phys_world_destroy(pw.world);
+    pw.world = null;
+    pw.initialized = false;
+    pw.body_count = 0;
+    for (&pw.bodies) |*b| b.active = false;
+}
 
-    const idx = allocBody() orelse return null;
+pub fn createBody(body_type: BodyType, x: f32, y: f32, angle: f32, node: ?*Node) ?u32 {
+    return createBodyFor(0, body_type, x, y, angle, node);
+}
+
+pub fn createBodyFor(id: u8, body_type: BodyType, x: f32, y: f32, angle: f32, node: ?*Node) ?u32 {
+    const pw = w(id);
+    if (!pw.initialized) return null;
+
+    const idx = allocBodyIn(pw) orelse return null;
     const handle = c.phys_body_create(
-        world,
+        pw.world,
         @intFromEnum(body_type),
         x / PIXELS_PER_METER,
         y / PIXELS_PER_METER,
         angle,
     );
 
-    bodies[idx] = .{
+    pw.bodies[idx] = .{
         .active = true,
         .handle = handle,
         .node = node,
     };
-    body_count += 1;
+    pw.body_count += 1;
     return @intCast(idx);
 }
 
-/// Attach a box collider to a body. Dimensions in pixels.
-pub fn addBoxCollider(
-    body_idx: u32,
-    width: f32,
-    height: f32,
-    density: f32,
-    friction: f32,
-    restitution: f32,
-) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    const b = &bodies[body_idx];
+pub fn addBoxCollider(body_idx: u32, width: f32, height: f32, density: f32, friction: f32, restitution: f32) void {
+    addBoxColliderFor(0, body_idx, width, height, density, friction, restitution);
+}
+
+pub fn addBoxColliderFor(id: u8, body_idx: u32, width: f32, height: f32, density: f32, friction: f32, restitution: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    const b = &pw.bodies[body_idx];
     const half_w = (width / 2.0) / PIXELS_PER_METER;
     const half_h = (height / 2.0) / PIXELS_PER_METER;
     _ = c.phys_collider_box(b.handle, half_w, half_h, density, friction, restitution);
-    // Store offset for position sync (body center → node top-left)
     b.offset_x = width / 2.0;
     b.offset_y = height / 2.0;
 }
 
-/// Attach a circle collider to a body. Radius in pixels.
-pub fn addCircleCollider(
-    body_idx: u32,
-    radius: f32,
-    density: f32,
-    friction: f32,
-    restitution: f32,
-) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    const b = &bodies[body_idx];
+pub fn addCircleCollider(body_idx: u32, radius: f32, density: f32, friction: f32, restitution: f32) void {
+    addCircleColliderFor(0, body_idx, radius, density, friction, restitution);
+}
+
+pub fn addCircleColliderFor(id: u8, body_idx: u32, radius: f32, density: f32, friction: f32, restitution: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    const b = &pw.bodies[body_idx];
     _ = c.phys_collider_circle(b.handle, radius / PIXELS_PER_METER, density, friction, restitution);
     b.offset_x = radius;
     b.offset_y = radius;
 }
 
-/// Step the physics world and sync body positions to nodes.
-/// dt is in seconds.
+/// Step all active physics worlds and sync body positions to nodes.
 pub fn tick(dt: f32) void {
-    if (!initialized) return;
-    c.phys_world_step(world, dt, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    for (&worlds) |*pw| {
+        if (!pw.initialized) continue;
+        tickWorld(pw, dt);
+    }
+}
 
-    // Sync positions: body center (meters) → node top-left (pixels)
-    for (&bodies) |*b| {
+/// Step a single world by ID.
+pub fn tickFor(id: u8, dt: f32) void {
+    const pw = w(id);
+    if (!pw.initialized) return;
+    tickWorld(pw, dt);
+}
+
+fn tickWorld(pw: *PhysicsWorld, dt: f32) void {
+    c.phys_world_step(pw.world, dt, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    for (&pw.bodies) |*b| {
         if (!b.active or b.node == null) continue;
         const node = b.node.?;
         const bx = c.phys_body_get_x(b.handle) * PIXELS_PER_METER;
         const by = c.phys_body_get_y(b.handle) * PIXELS_PER_METER;
         const angle = c.phys_body_get_angle(b.handle);
-
-        // Write directly to computed position (bypass layout — physics runs after layout)
         node.computed.x = bx - b.offset_x;
         node.computed.y = by - b.offset_y;
         node.style.rotation = angle;
     }
 }
 
-/// Apply a force (in pixels/s^2 * mass) to a body.
 pub fn applyForce(body_idx: u32, fx: f32, fy: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_apply_force(bodies[body_idx].handle, fx / PIXELS_PER_METER, fy / PIXELS_PER_METER);
+    applyForceFor(0, body_idx, fx, fy);
 }
 
-/// Apply an impulse (in pixels/s * mass) to a body.
+pub fn applyForceFor(id: u8, body_idx: u32, fx: f32, fy: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_apply_force(pw.bodies[body_idx].handle, fx / PIXELS_PER_METER, fy / PIXELS_PER_METER);
+}
+
 pub fn applyImpulse(body_idx: u32, ix: f32, iy: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_apply_impulse(bodies[body_idx].handle, ix / PIXELS_PER_METER, iy / PIXELS_PER_METER);
+    applyImpulseFor(0, body_idx, ix, iy);
 }
 
-/// Set linear velocity in pixels/s.
+pub fn applyImpulseFor(id: u8, body_idx: u32, ix: f32, iy: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_apply_impulse(pw.bodies[body_idx].handle, ix / PIXELS_PER_METER, iy / PIXELS_PER_METER);
+}
+
 pub fn setVelocity(body_idx: u32, vx: f32, vy: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_linear_velocity(bodies[body_idx].handle, vx / PIXELS_PER_METER, vy / PIXELS_PER_METER);
+    setVelocityFor(0, body_idx, vx, vy);
 }
 
-/// Set body properties.
+pub fn setVelocityFor(id: u8, body_idx: u32, vx: f32, vy: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_linear_velocity(pw.bodies[body_idx].handle, vx / PIXELS_PER_METER, vy / PIXELS_PER_METER);
+}
+
 pub fn setLinearDamping(body_idx: u32, damping: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_linear_damping(bodies[body_idx].handle, damping);
+    setLinearDampingFor(0, body_idx, damping);
+}
+
+pub fn setLinearDampingFor(id: u8, body_idx: u32, damping: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_linear_damping(pw.bodies[body_idx].handle, damping);
 }
 
 pub fn setAngularDamping(body_idx: u32, damping: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_angular_damping(bodies[body_idx].handle, damping);
+    setAngularDampingFor(0, body_idx, damping);
+}
+
+pub fn setAngularDampingFor(id: u8, body_idx: u32, damping: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_angular_damping(pw.bodies[body_idx].handle, damping);
 }
 
 pub fn setFixedRotation(body_idx: u32, fixed: bool) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_fixed_rotation(bodies[body_idx].handle, if (fixed) 1 else 0);
+    setFixedRotationFor(0, body_idx, fixed);
+}
+
+pub fn setFixedRotationFor(id: u8, body_idx: u32, fixed: bool) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_fixed_rotation(pw.bodies[body_idx].handle, if (fixed) 1 else 0);
 }
 
 pub fn setBullet(body_idx: u32, bullet: bool) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_bullet(bodies[body_idx].handle, if (bullet) 1 else 0);
+    setBulletFor(0, body_idx, bullet);
+}
+
+pub fn setBulletFor(id: u8, body_idx: u32, bullet: bool) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_bullet(pw.bodies[body_idx].handle, if (bullet) 1 else 0);
 }
 
 pub fn setGravityScale(body_idx: u32, scale: f32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_set_gravity_scale(bodies[body_idx].handle, scale);
+    setGravityScaleFor(0, body_idx, scale);
 }
 
-/// Destroy a body and free its slot.
+pub fn setGravityScaleFor(id: u8, body_idx: u32, scale: f32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_set_gravity_scale(pw.bodies[body_idx].handle, scale);
+}
+
 pub fn destroyBody(body_idx: u32) void {
-    if (body_idx >= MAX_BODIES or !bodies[body_idx].active) return;
-    c.phys_body_destroy(world, bodies[body_idx].handle);
-    bodies[body_idx].active = false;
-    if (body_count > 0) body_count -= 1;
+    destroyBodyFor(0, body_idx);
 }
 
-/// Clear all bodies and reset the world.
+pub fn destroyBodyFor(id: u8, body_idx: u32) void {
+    const pw = w(id);
+    if (body_idx >= MAX_BODIES_PER_WORLD or !pw.bodies[body_idx].active) return;
+    c.phys_body_destroy(pw.world, pw.bodies[body_idx].handle);
+    pw.bodies[body_idx].active = false;
+    if (pw.body_count > 0) pw.body_count -= 1;
+}
+
 pub fn clear() void {
-    deinit();
+    clearFor(0);
 }
 
-/// Number of active bodies.
+pub fn clearFor(id: u8) void {
+    deinitFor(id);
+}
+
 pub fn activeCount() u32 {
-    return body_count;
+    return activeCountFor(0);
+}
+
+pub fn activeCountFor(id: u8) u32 {
+    return w(id).body_count;
 }
 
 pub fn isInitialized() bool {
-    return initialized;
+    return isInitializedFor(0);
+}
+
+pub fn isInitializedFor(id: u8) bool {
+    return w(id).initialized;
+}
+
+/// Check if ANY world is initialized (for engine tick guard).
+pub fn anyInitialized() bool {
+    for (&worlds) |*pw| {
+        if (pw.initialized) return true;
+    }
+    return false;
 }
 
 // ── Mouse drag ──────────────────────────────────────────────────
 
-/// Start dragging: query for a dynamic body at (px, py) in pixels.
-/// If found, creates a mouse joint pulling the body toward the mouse.
 pub fn startDrag(px: f32, py: f32) void {
-    if (!initialized or world == null) return;
-    if (drag_joint != null) return; // already dragging
+    startDragFor(0, px, py);
+}
+
+pub fn startDragFor(id: u8, px: f32, py: f32) void {
+    const pw = w(id);
+    if (!pw.initialized or pw.world == null) return;
+    if (pw.drag_joint != null) return;
     const mx = px / PIXELS_PER_METER;
     const my = py / PIXELS_PER_METER;
-    const body = c.phys_query_point(world, mx, my);
+    const body = c.phys_query_point(pw.world, mx, my);
     if (body == null) return;
-    // Create mouse joint: max force = 1000 * body mass (estimated)
-    drag_body = body;
-    drag_joint = c.phys_mouse_joint_create(world, body, mx, my, 5000.0);
+    pw.drag_body = body;
+    pw.drag_joint = c.phys_mouse_joint_create(pw.world, body, mx, my, 5000.0);
 }
 
-/// Update drag target position (call while mouse is held).
 pub fn updateDrag(px: f32, py: f32) void {
-    if (drag_joint == null) return;
-    c.phys_mouse_joint_set_target(drag_joint, px / PIXELS_PER_METER, py / PIXELS_PER_METER);
+    updateDragFor(0, px, py);
 }
 
-/// Release the dragged body.
+pub fn updateDragFor(id: u8, px: f32, py: f32) void {
+    const pw = w(id);
+    if (pw.drag_joint == null) return;
+    c.phys_mouse_joint_set_target(pw.drag_joint, px / PIXELS_PER_METER, py / PIXELS_PER_METER);
+}
+
 pub fn endDrag() void {
-    if (drag_joint == null) return;
-    c.phys_mouse_joint_destroy(drag_joint);
-    drag_joint = null;
-    drag_body = null;
+    endDragFor(0);
+}
+
+pub fn endDragFor(id: u8) void {
+    const pw = w(id);
+    if (pw.drag_joint == null) return;
+    c.phys_mouse_joint_destroy(pw.drag_joint);
+    pw.drag_joint = null;
+    pw.drag_body = null;
 }
 
 pub fn isDragging() bool {
-    return drag_joint != null;
+    return isDraggingFor(0);
+}
+
+pub fn isDraggingFor(id: u8) bool {
+    return w(id).drag_joint != null;
 }
 
 // ── Internal ───────────────────────────────────────────────────
 
-fn allocBody() ?usize {
-    for (0..MAX_BODIES) |i| {
-        if (!bodies[i].active) return i;
+fn allocBodyIn(pw: *PhysicsWorld) ?usize {
+    for (0..MAX_BODIES_PER_WORLD) |i| {
+        if (!pw.bodies[i].active) return i;
     }
     return null;
 }
@@ -318,26 +404,22 @@ test "add colliders" {
 }
 
 test "gravity makes dynamic body fall" {
-    init(0, 980); // gravity down
+    init(0, 980);
     defer deinit();
 
-    // Static floor
     const floor = createBody(.static_body, 400, 600, 0, null).?;
     addBoxCollider(floor, 800, 40, 0, 0.3, 0.1);
 
-    // Dynamic ball
     var ball_node = layout.Node{};
     const ball = createBody(.dynamic, 400, 100, 0, &ball_node).?;
     addCircleCollider(ball, 20, 1.0, 0.3, 0.6);
 
-    // Step 60 frames at 60fps
     for (0..60) |_| {
         tick(1.0 / 60.0);
     }
 
-    // Ball should have fallen (top value increased = moved down)
     const top = ball_node.style.top orelse 0;
-    try std.testing.expect(top > 100); // started at 100, should have fallen
+    try std.testing.expect(top > 100);
 }
 
 test "destroy body" {
@@ -349,4 +431,24 @@ test "destroy body" {
 
     destroyBody(b0);
     try std.testing.expectEqual(@as(u32, 0), activeCount());
+}
+
+test "multi-world isolation" {
+    initFor(0, 0, 980);
+    initFor(1, 0, -980);
+    defer deinitFor(0);
+    defer deinitFor(1);
+
+    const b0 = createBodyFor(0, .dynamic, 100, 100, 0, null);
+    const b1 = createBodyFor(1, .dynamic, 100, 100, 0, null);
+    try std.testing.expect(b0 != null);
+    try std.testing.expect(b1 != null);
+
+    try std.testing.expectEqual(@as(u32, 1), activeCountFor(0));
+    try std.testing.expectEqual(@as(u32, 1), activeCountFor(1));
+
+    // Destroying in world 0 doesn't affect world 1
+    destroyBodyFor(0, b0.?);
+    try std.testing.expectEqual(@as(u32, 0), activeCountFor(0));
+    try std.testing.expectEqual(@as(u32, 1), activeCountFor(1));
 }

@@ -400,6 +400,7 @@ fn drainMemory() void {
 /// Web init — device provided by emscripten, surface from canvas.
 /// Uses the C webgpu.h API directly for surface creation (emscripten-specific).
 pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32) !void {
+    std.debug.print("[gpu.initWeb] start w={} h={}\n", .{ width, height });
     g_device = device;
     g_queue = queue;
     g_width = width;
@@ -407,14 +408,19 @@ pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32
 
     // Create instance + surface from HTML canvas (web only)
     if (is_web) {
+        std.debug.print("[gpu.initWeb] creating instance...\n", .{});
         g_instance = wgpu.Instance.create(null) orelse return error.WGPUInstanceFailed;
+        std.debug.print("[gpu.initWeb] creating canvas surface...\n", .{});
         const instance = g_instance.?;
         g_surface = createCanvasSurface(instance) orelse return error.SurfaceCreateFailed;
+        std.debug.print("[gpu.initWeb] surface created\n", .{});
     }
 
     // Configure surface (same as native path)
+    std.debug.print("[gpu.initWeb] configuring surface...\n", .{});
     configureSurface(width, height);
 
+    std.debug.print("[gpu.initWeb] creating globals buffer...\n", .{});
     g_globals_buffer = device.createBuffer(&.{
         .label = wgpu.StringView.fromSlice("globals"),
         .size = 16,
@@ -424,10 +430,15 @@ pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32
 
     const globals_buffer = g_globals_buffer orelse return error.BufferCreateFailed;
 
+    std.debug.print("[gpu.initWeb] init rects pipeline...\n", .{});
     rects.initPipeline(device, globals_buffer);
+    std.debug.print("[gpu.initWeb] init curves pipeline...\n", .{});
     curves.initPipeline(device, globals_buffer);
+    std.debug.print("[gpu.initWeb] init polys pipeline...\n", .{});
     polys.initPipeline(device, globals_buffer);
+    std.debug.print("[gpu.initWeb] init images pipeline...\n", .{});
     images.initPipeline(device, globals_buffer);
+    std.debug.print("[gpu.initWeb] done\n", .{});
 }
 
 // ── Web-specific surface creation (uses wgpu_web module's C types) ──

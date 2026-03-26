@@ -4,8 +4,8 @@
 //! Content is composed with <Canvas.Node gx={} gy={} gw={} gh={}> children
 //! which are real framework nodes (Box, Text, etc.) positioned in graph space.
 //!
-//! Optional: register a custom render_fn for a canvas type to draw procedural
-//! content (connector lines, grids, particles) alongside the framework nodes.
+//! Instance-safe: each <Canvas> gets its own camera, selection, and dim state.
+//! Node.canvas_id indexes into the instance pool. Instance 0 is the default.
 
 const std = @import("std");
 const gpu = @import("gpu/gpu.zig");
@@ -13,26 +13,49 @@ const gpu = @import("gpu/gpu.zig");
 // ── Camera Transform ────────────────────────────────────────────────────
 
 pub const CameraTransform = struct {
-    cx: f32,      // camera center X in graph space
-    cy: f32,      // camera center Y in graph space
-    scale: f32,   // zoom scale factor (1.0 = 1:1)
+    cx: f32, // camera center X in graph space
+    cy: f32, // camera center Y in graph space
+    scale: f32, // zoom scale factor (1.0 = 1:1)
 };
 
-// ── Built-in camera state (shared by all canvas instances for now) ──────
+// ── Canvas Instance ─────────────────────────────────────────────────────
 
-var cam_x: f32 = 0;
-var cam_y: f32 = 0;
-var cam_zoom: f32 = 1.0;
+pub const MAX_CANVAS_INSTANCES: u8 = 16;
+
+pub const CanvasInstance = struct {
+    // Camera
+    cam_x: f32 = 0,
+    cam_y: f32 = 0,
+    cam_zoom: f32 = 1.0,
+
+    // Selection
+    hovered_node_idx: ?u16 = null,
+    selected_node_idx: ?u16 = null,
+
+    // Node dim/flow overrides
+    node_dim_idx: ?u16 = null,
+    node_dim_opacity: f32 = 1.0,
+    flow_override_idx: ?u16 = null,
+    flow_override_enabled: bool = false,
+
+    // Active flag — true once any operation has touched this instance
+    active: bool = false,
+};
+
+var instances: [MAX_CANVAS_INSTANCES]CanvasInstance = [_]CanvasInstance{.{}} ** MAX_CANVAS_INSTANCES;
+
+fn inst(id: u8) *CanvasInstance {
+    return &instances[@min(id, MAX_CANVAS_INSTANCES - 1)];
+}
 
 // ── Canvas Renderer Interface (optional, for custom drawing) ────────────
 
 pub const CanvasRenderer = struct {
     /// Custom render pass — draws before Canvas.Node children.
-    /// Use for connector lines, grids, overlays, etc.
     render_fn: *const fn (x: f32, y: f32, w: f32, h: f32, cam: CameraTransform) void,
 };
 
-// ── Registry (for custom renderers) ─────────────────────────────────────
+// ── Registry (for custom renderers — shared across instances) ───────────
 
 const MAX_CANVAS_TYPES = 32;
 
@@ -66,100 +89,201 @@ pub fn get(name: []const u8) ?*const CanvasRenderer {
 pub fn init() void {
     if (initialized) return;
     initialized = true;
-    cam_x = 0;
-    cam_y = 0;
-    cam_zoom = 1.0;
+    for (&instances) |*ci| ci.* = .{};
 }
 
-/// Set camera position and zoom (called from initial viewport props).
+/// Set camera position and zoom for a specific canvas instance.
 pub fn setCamera(cx: f32, cy: f32, zoom: f32) void {
-    cam_x = cx;
-    cam_y = cy;
-    cam_zoom = zoom;
+    setCameraFor(0, cx, cy, zoom);
+}
+
+pub fn setCameraFor(id: u8, cx: f32, cy: f32, zoom: f32) void {
+    const ci = inst(id);
+    ci.cam_x = cx;
+    ci.cam_y = cy;
+    ci.cam_zoom = zoom;
+    ci.active = true;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────
 
-/// Render the canvas background + optional custom render pass.
-/// Called by engine before painting Canvas.Node children.
 pub fn renderCanvas(canvas_type: []const u8, x: f32, y: f32, w: f32, h: f32) void {
-    // Background
-    gpu.drawRect(x, y, w, h, 0.03, 0.05, 0.08, 1.0, 0, 0, 0, 0, 0, 0);
+    renderCanvasFor(0, canvas_type, x, y, w, h);
+}
 
-    // Custom render pass (connector lines, etc.)
+pub fn renderCanvasFor(id: u8, canvas_type: []const u8, x: f32, y: f32, w: f32, h: f32) void {
+    gpu.drawRect(x, y, w, h, 0.03, 0.05, 0.08, 1.0, 0, 0, 0, 0, 0, 0);
     if (get(canvas_type)) |renderer| {
-        renderer.render_fn(x, y, w, h, getCameraTransform(x, y, w, h));
+        renderer.render_fn(x, y, w, h, getCameraTransformFor(id, x, y, w, h));
     }
 }
 
-/// Get current camera transform for positioning Canvas.Node children.
 pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform {
-    return .{ .cx = cam_x, .cy = cam_y, .scale = cam_zoom };
+    return getCameraTransformFor(0, 0, 0, 0, 0);
 }
 
-/// Convert screen coordinates to graph space (inverse of GPU transform).
-/// screen = pos * scale + (vp_center - cam * scale)
-/// → pos = (screen - vp_center + cam * scale) / scale
+pub fn getCameraTransformFor(id: u8, _: f32, _: f32, _: f32, _: f32) CameraTransform {
+    const ci = inst(id);
+    return .{ .cx = ci.cam_x, .cy = ci.cam_y, .scale = ci.cam_zoom };
+}
+
 pub fn screenToGraph(screen_x: f32, screen_y: f32, vp_cx: f32, vp_cy: f32) [2]f32 {
-    if (cam_zoom == 0) return .{ 0, 0 };
+    return screenToGraphFor(0, screen_x, screen_y, vp_cx, vp_cy);
+}
+
+pub fn screenToGraphFor(id: u8, screen_x: f32, screen_y: f32, vp_cx: f32, vp_cy: f32) [2]f32 {
+    const ci = inst(id);
+    if (ci.cam_zoom == 0) return .{ 0, 0 };
     return .{
-        (screen_x - vp_cx + cam_x * cam_zoom) / cam_zoom,
-        (screen_y - vp_cy + cam_y * cam_zoom) / cam_zoom,
+        (screen_x - vp_cx + ci.cam_x * ci.cam_zoom) / ci.cam_zoom,
+        (screen_y - vp_cy + ci.cam_y * ci.cam_zoom) / ci.cam_zoom,
     };
 }
 
-/// Hovered node index (set by engine mouse handler)
-var hovered_node_idx: ?u16 = null;
-/// Selected (pinned) node index (set by click)
-var selected_node_idx: ?u16 = null;
+// ── Selection ───────────────────────────────────────────────────────────
 
 pub fn setHoveredNode(idx: ?u16) void {
-    hovered_node_idx = idx;
+    setHoveredNodeFor(0, idx);
+}
+
+pub fn setHoveredNodeFor(id: u8, idx: ?u16) void {
+    inst(id).hovered_node_idx = idx;
 }
 
 pub fn getHoveredNode() ?u16 {
-    return hovered_node_idx;
+    return getHoveredNodeFor(0);
 }
 
-/// Click: toggle selection. Same node = deselect. Different node = select. Empty = deselect.
+pub fn getHoveredNodeFor(id: u8) ?u16 {
+    return inst(id).hovered_node_idx;
+}
+
 pub fn clickNode() void {
-    if (hovered_node_idx) |hi| {
-        selected_node_idx = if (selected_node_idx != null and selected_node_idx.? == hi) null else hi;
+    clickNodeFor(0);
+}
+
+pub fn clickNodeFor(id: u8) void {
+    const ci = inst(id);
+    if (ci.hovered_node_idx) |hi| {
+        ci.selected_node_idx = if (ci.selected_node_idx != null and ci.selected_node_idx.? == hi) null else hi;
     } else {
-        selected_node_idx = null;
+        ci.selected_node_idx = null;
     }
 }
 
 pub fn getSelectedNode() ?u16 {
-    return selected_node_idx;
+    return getSelectedNodeFor(0);
 }
 
-/// Active node for detail panel: selected > hovered
+pub fn getSelectedNodeFor(id: u8) ?u16 {
+    return inst(id).selected_node_idx;
+}
+
 pub fn getActiveNode() ?u16 {
-    return selected_node_idx orelse hovered_node_idx;
+    return getActiveNodeFor(0);
 }
 
-// ── Input handlers (built-in zoom/pan for every canvas) ─────────────────
+pub fn getActiveNodeFor(id: u8) ?u16 {
+    const ci = inst(id);
+    return ci.selected_node_idx orelse ci.hovered_node_idx;
+}
+
+// ── Input handlers ──────────────────────────────────────────────────────
 
 pub fn handleScroll(mx: f32, my: f32, delta: f32, vp_w: f32, vp_h: f32) void {
-    // Zoom toward cursor — keep the point under cursor fixed
-    const old_gx = cam_x + (mx - vp_w / 2) / cam_zoom;
-    const old_gy = cam_y + (my - vp_h / 2) / cam_zoom;
+    handleScrollFor(0, mx, my, delta, vp_w, vp_h);
+}
+
+pub fn handleScrollFor(id: u8, mx: f32, my: f32, delta: f32, vp_w: f32, vp_h: f32) void {
+    const ci = inst(id);
+    const old_gx = ci.cam_x + (mx - vp_w / 2) / ci.cam_zoom;
+    const old_gy = ci.cam_y + (my - vp_h / 2) / ci.cam_zoom;
 
     const factor: f32 = if (delta > 0) 1.15 else 1.0 / 1.15;
-    cam_zoom = @max(0.05, @min(cam_zoom * factor, 100.0));
+    ci.cam_zoom = @max(0.05, @min(ci.cam_zoom * factor, 100.0));
 
-    const new_gx = cam_x + (mx - vp_w / 2) / cam_zoom;
-    const new_gy = cam_y + (my - vp_h / 2) / cam_zoom;
-    cam_x += old_gx - new_gx;
-    cam_y += old_gy - new_gy;
+    const new_gx = ci.cam_x + (mx - vp_w / 2) / ci.cam_zoom;
+    const new_gy = ci.cam_y + (my - vp_h / 2) / ci.cam_zoom;
+    ci.cam_x += old_gx - new_gx;
+    ci.cam_y += old_gy - new_gy;
 }
 
 pub fn handleDrag(dx: f32, dy: f32) void {
-    if (cam_zoom > 0) {
-        cam_x -= dx / cam_zoom;
-        cam_y -= dy / cam_zoom;
+    handleDragFor(0, dx, dy);
+}
+
+pub fn handleDragFor(id: u8, dx: f32, dy: f32) void {
+    const ci = inst(id);
+    if (ci.cam_zoom > 0) {
+        ci.cam_x -= dx / ci.cam_zoom;
+        ci.cam_y -= dy / ci.cam_zoom;
     }
+}
+
+// ── Node dim/flow overrides ─────────────────────────────────────────────
+
+pub fn setNodeDim(idx: u16, opacity: f32) void {
+    setNodeDimFor(0, idx, opacity);
+}
+
+pub fn setNodeDimFor(id: u8, idx: u16, opacity: f32) void {
+    const ci = inst(id);
+    ci.node_dim_idx = idx;
+    ci.node_dim_opacity = opacity;
+}
+
+pub fn resetNodeDim() void {
+    resetNodeDimFor(0);
+}
+
+pub fn resetNodeDimFor(id: u8) void {
+    const ci = inst(id);
+    ci.node_dim_idx = null;
+    ci.node_dim_opacity = 1.0;
+}
+
+pub fn setFlowOverride(idx: u16, enabled: bool) void {
+    setFlowOverrideFor(0, idx, enabled);
+}
+
+pub fn setFlowOverrideFor(id: u8, idx: u16, enabled: bool) void {
+    const ci = inst(id);
+    ci.flow_override_idx = idx;
+    ci.flow_override_enabled = enabled;
+}
+
+pub fn resetFlowOverride() void {
+    resetFlowOverrideFor(0);
+}
+
+pub fn resetFlowOverrideFor(id: u8) void {
+    const ci = inst(id);
+    ci.flow_override_idx = null;
+    ci.flow_override_enabled = false;
+}
+
+pub fn getNodeDim(idx: u16) f32 {
+    return getNodeDimFor(0, idx);
+}
+
+pub fn getNodeDimFor(id: u8, idx: u16) f32 {
+    const ci = inst(id);
+    if (ci.node_dim_idx) |di| {
+        if (di == idx) return ci.node_dim_opacity;
+    }
+    return 1.0;
+}
+
+pub fn getFlowOverride(idx: u16) bool {
+    return getFlowOverrideFor(0, idx);
+}
+
+pub fn getFlowOverrideFor(id: u8, idx: u16) bool {
+    const ci = inst(id);
+    if (ci.flow_override_idx) |fi| {
+        if (fi == idx) return ci.flow_override_enabled;
+    }
+    return true;
 }
 
 // ── Telemetry ────────────────────────────────────────────────────────────
@@ -172,49 +296,15 @@ pub const TelemetryCameraState = struct {
 };
 
 pub fn telemetryCameraState() TelemetryCameraState {
+    return telemetryCameraStateFor(0);
+}
+
+pub fn telemetryCameraStateFor(id: u8) TelemetryCameraState {
+    const ci = inst(id);
     return .{
-        .x = cam_x,
-        .y = cam_y,
-        .zoom = cam_zoom,
+        .x = ci.cam_x,
+        .y = ci.cam_y,
+        .zoom = ci.cam_zoom,
         .type_count = @intCast(type_count),
     };
-}
-
-var node_dim_idx: ?u16 = null;
-var node_dim_opacity: f32 = 1.0;
-var flow_override_idx: ?u16 = null;
-var flow_override_enabled: bool = false;
-
-pub fn setNodeDim(idx: u16, opacity: f32) void {
-    node_dim_idx = idx;
-    node_dim_opacity = opacity;
-}
-
-pub fn resetNodeDim() void {
-    node_dim_idx = null;
-    node_dim_opacity = 1.0;
-}
-
-pub fn setFlowOverride(idx: u16, enabled: bool) void {
-    flow_override_idx = idx;
-    flow_override_enabled = enabled;
-}
-
-pub fn resetFlowOverride() void {
-    flow_override_idx = null;
-    flow_override_enabled = false;
-}
-
-pub fn getNodeDim(idx: u16) f32 {
-    if (node_dim_idx) |di| {
-        if (di == idx) return node_dim_opacity;
-    }
-    return 1.0;
-}
-
-pub fn getFlowOverride(idx: u16) bool {
-    if (flow_override_idx) |fi| {
-        if (fi == idx) return flow_override_enabled;
-    }
-    return true;
 }

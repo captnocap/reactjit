@@ -30,7 +30,7 @@ pub const ImageQuad = extern struct {
 // Constants & State
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_IMAGE_QUADS = 16;
+pub const MAX_IMAGE_QUADS = 256;
 
 var g_quads: [MAX_IMAGE_QUADS]ImageQuad = undefined;
 var g_bind_groups: [MAX_IMAGE_QUADS]?*wgpu.BindGroup = .{null} ** MAX_IMAGE_QUADS;

@@ -430,13 +430,15 @@ pub const image_wgsl =
     \\@fragment
     \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     \\    let color = textureSample(image_tex, image_sampler, in.uv);
-    \\    // Video frames use rgb0 format (alpha=0) — force full opacity.
-    \\    // Instance opacity controls fade effects.
-    \\    let alpha = in.opacity;
+    \\    // Standard premultiplied-alpha compositing for all textured quads.
+    \\    // Video sources must upload explicit alpha instead of relying on
+    \\    // alpha==0 sentinel behavior, otherwise transparent textures such as
+    \\    // masked Graph.Path fills turn into opaque bbox tiles.
+    \\    let alpha = color.a * in.opacity;
     \\    if alpha <= 0.0 {
     \\        discard;
     \\    }
-    \\    return vec4f(color.rgb * alpha, alpha);
+    \\    return vec4f(color.rgb * in.opacity, alpha);
     \\}
 ;
 
