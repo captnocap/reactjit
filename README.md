@@ -6,13 +6,13 @@ Write React. Get a native binary. Your UI compiles to native code — no virtual
 app.tsz (TypeScript + JSX)
    |
    v
-tsz compiler (hand-written Zig, 19K lines)
+tsz compiler (hand-written Zig, 25K lines)
    |
    v
 generated Zig source (layout + GPU paint + events + state)
    |
    v
-native binary (SDL2 + wgpu + FreeType + QuickJS)
+native binary (SDL3 + wgpu + FreeType + QuickJS + LuaJIT)
 ```
 
 ```tsx
@@ -68,13 +68,14 @@ That's one file. State, effects, JS scripting, native Zig, and JSX — all compi
 
 The `.tsz` compiler and native rendering framework. A hand-written lexer, parser, and multi-phase codegen in pure Zig compiles TypeScript + JSX into Zig source that links against the framework runtime.
 
-- **Compiler** — 23 modules, ~19K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI
+- **Compiler** — 30 modules, ~25K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
 - **Cryptography** — HMAC-SHA256 (RFC 4231), HKDF-SHA256 (RFC 5869), Shamir Secret Sharing (GF256), XChaCha20-Poly1305 envelope encryption, PII detection + sanitization
-- **Physics** — Box2D 2.4.1 integration for 2D rigid body simulation
+- **Physics** — Box2D 2.4.1 (2D) and 3D rigid body simulation
 - **3D** — Inline 3D viewports with camera, lights, and mesh primitives (box, sphere, plane, cylinder)
+- **Audio** — SDL3 audio subsystem with modular DSP engine, delay, sequencer, LuaJIT DSP bridge
 - **Terminal** — PTY terminal emulator with cell-grid rendering, scrollback, text selection, copy/paste (Ctrl+Shift+C/V), semantic classifiers
 - **Canvas** — Infinite canvas with zoom/pan/drift, SVG path nodes, graph visualization
 - **Inspector** — Built-in devtools: element tree, style inspector, performance profiler, constraint graph
@@ -105,16 +106,16 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
 | `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
 
-### `<script>` vs `<zscript>` — when to use which
+### `<script>` vs `<lscript>` vs `<zscript>` — when to use which
 
-Both let you drop out of JSX into imperative code. The difference is where it runs.
+Three script runtimes, each with different tradeoffs.
 
-| | `<script>` / `.script.tsz` | `<zscript>` / `.zscript.tsz` |
-|---|---|---|
-| **Runs in** | QuickJS (JS runtime) | Native Zig (compiled into binary) |
-| **When** | Runtime — after app starts | Compile time — baked into the binary |
-| **Good for** | Timers, async fetches, dynamic data, mock data | Performance-critical math, tests, FFI, framework access |
-| **Speed** | 52M ops/sec — hits the wall there | No ceiling — native Zig, keeps scaling |
+| | `<script>` / `.script.tsz` | `<lscript>` | `<zscript>` / `.zscript.tsz` |
+|---|---|---|---|
+| **Runs in** | QuickJS (JS runtime) | LuaJIT (main-thread VM) | Native Zig (compiled into binary) |
+| **When** | Runtime — after app starts | Runtime — after app starts | Compile time — baked into the binary |
+| **Good for** | Timers, async fetches, dynamic data, mock data | Performance-sensitive logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access |
+| **Speed** | 52M ops/sec — hits the wall there | Faster than QuickJS, JIT-compiled | No ceiling — native Zig, keeps scaling |
 
 We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. Both `<script>` and `<zscript>` perform identically up to ~50M ops. The difference only shows up past that mark: JS plateaus while Zig keeps scaling. For anything under 50M ops/sec (which is virtually every UI app), use whichever is more convenient. Use `<zscript>` when you need direct Zig type system access, FFI, or you're genuinely past the 50M threshold.
 
@@ -175,18 +176,21 @@ Standalone imperative Zig module — no JSX, compiles TypeScript-like code direc
 cd tsz
 
 # Build the compiler
-zig build compiler
+zig build tsz              # Lean compiler → bin/tsz
+zig build tsz-full         # Full compiler → bin/tsz-full
 
-# Compile and build a cart
-./zig-out/bin/zigos-compiler build carts/storybook/Storybook.tsz
+# Build a cart
+bin/tsz build carts/storybook/Storybook.tsz
 
-# Run it
-./zig-out/bin/Storybook
+# Or use hot-reload dev mode (63x faster iteration)
+bin/tsz dev carts/storybook/Storybook.tsz
 ```
 
 ## Primitives
 
-`Box` `Text` `Image` `Pressable` `ScrollView` `TextInput` `TextArea` `Graph`
+`Box` `Text` `Image` `Video` `Render` `Pressable` `ScrollView` `TextInput` `TextArea` `Glyph` `Cartridge`
+
+System surfaces: `Canvas` `Graph` `Physics` `Scene3d` `ThreeD` `Effect` `Terminal` `Audio`
 
 Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `header` `footer` `img` `input` — mapped to primitives automatically.
 
@@ -207,8 +211,15 @@ carts/
   constraint-graph/   Constraint graph visualization
   animations/         Animation and physics demos
   effects/            Visual effects demos
-  effect-bench/       Stress tests (57M+ bridge calls/s, 5000+ node layout)
-  conformance/        Compiler conformance suite (16 tests, SHA256-locked)
+  benchmarks/         Subsystem benchmarks (layout, render, state, script)
+  stress-test/        Progressive load across all subsystems
+  parity/             React parity demos (TodoMVC, Slack, VS Code, Gmail, Figma, ...)
+  flatworld/          Flatworld exploration cart
+  audio-ui/           Synth cart with full audio interface
+  supervisor-dashboard/ Task board, terminal, search, violations
+  semantic-terminal/  Terminal with classifier overlay
+  themes/             Theme showcase
+  conformance/        Compiler conformance suite (271 tests)
   wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
   autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
   http-conformance/   HTTP conformance test harness
@@ -219,27 +230,30 @@ carts/
 
 ## Framework Modules
 
-51 modules in the framework runtime:
+71 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
-| Core | engine, state, events, input, layout, text, geometry, math |
-| Rendering | render_surfaces, render_surfaces_vm, effects, easing, transition, canvas, svg_path |
-| UI | theme, classifier, selection, tooltip, router, query, windows |
-| Terminal | pty, vterm, semantic |
-| Networking | http, httpserver, websocket, wsserver, ipc, socks5, tor |
-| Media | player, videos, recorder, capture |
+| Core | engine, state, events, input, layout, text, geometry, math, random |
+| Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello |
+| UI | theme, classifier, selection, tooltip, context_menu, router, query, windows |
+| Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state |
+| Terminal | pty, pty_client, pty_remote, vterm, semantic |
+| Networking | http, httpserver, websocket, wsserver, ipc, qjs_ipc, socks5, tor |
+| Media | audio, player, videos, recorder, capture |
 | Data | fs, fswatch, sqlite, localstore, archive, crypto, privacy |
-| Dev | devtools, devtools_state, telemetry, log, testharness, testdriver, testassert |
-| System | process, child_engine, qjs_runtime, physics2d, filedrop, breakpoint |
+| Scripting | qjs_runtime, luajit_runtime, luajit_worker |
+| Dev | telemetry, log, log_export, testharness, testdriver, testassert, debug_client, debug_server |
+| System | process, child_engine, physics2d, physics3d, filedrop, breakpoint, crashlog |
 
 ## Conformance
 
 | Suite | Score | What |
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
-| WPT Flexbox | 70 | W3C CSS flex spec |
-| Compiler | 16 | Real React app ports + destructive pattern tests |
+| WPT Flexbox | 70/70 | W3C CSS flex spec |
+| Compiler death tests | 75/81 | Language features, script runtimes, integration |
+| Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
 ## Performance
@@ -256,6 +270,78 @@ At 4096 mapped items (5139 visible nodes):
 ## `archive/` Purpose
 
 `archive/` contains `tsz/` (v1) and `tsz-gen/` (v2) — earlier iterations of the compiler and runtime. These are frozen references, not active code. The v1 stack was a hand-written Zig runtime. The v2 stack added `.mod.tsz → .gen.zig` compilation. Both are superseded by the current `tsz/` (v3) which has the multi-phase compiler, QuickJS bridge, inspector, and full networking stack.
+
+---
+
+## Design Philosophy: Postel's Law
+
+**Be conservative in what you send, be liberal in what you accept.**
+
+The compiler accepts anything — HTML divs, `onClick`, `className`, CSS imports, inline styles, React patterns. If a 1.5B parameter model generates soup, it should still compile and render. The framework is liberal in what it accepts.
+
+But the golden path is conservative. First-party code uses strict semantic zones, theme tokens, named shapes, and classifier-driven views. The framework's own code is the style guide.
+
+### Three Tiers
+
+Every surface conformance test exists in three versions that produce identical output:
+
+| Tier | File | What it proves |
+|------|------|----------------|
+| **Soup** | `s01a_counter.tsz` | Real model output (Qwen 1.5B, zero context). Tests compiler resilience — HTML tags, DOM patterns, CSS hallucinations. Slowest compile path. |
+| **Mixed** | `s01b_counter.tsz` | Uses framework primitives (Box, Text, Pressable) with inline styles. Tests today's API surface. Medium compile path. |
+| **Chad** | `s01c_counter.tsz` | Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path — preflight detects the clean structure and skips HTML mapping, style validation, and event normalization entirely. |
+
+The tier system isn't just readability. It's compiler architecture. Clean code compiles faster because the compiler does less work. The framework literally rewards you with speed for following the golden path.
+
+### File Taxonomy (Chad Tier)
+
+```
+app.tsz           — the page/widget (structure + logic + view)
+app.cls.tsz       — base classifiers (what components ARE)
+app.tcls.tsz      — theme tokens (colors, spacing, radii)
+app.vcls.tsz      — variants (per-theme structural overrides)
+app.effects.tsz   — named effect sources (GPU pixel shaders)
+app.glyphs.tsz    — named inline assets (vector shapes, compositions)
+```
+
+### Intent Syntax (Future)
+
+The chad tier is evolving toward an intent-driven syntax where file structure dictates compiler behavior:
+
+```
+<page route=notes>
+  <var>
+    input is ''
+    notes
+    count is 0
+  </var>
+
+  <state>
+    set_input
+    set_notes
+    set_count
+  </state>
+
+  <functions>
+    addNote:
+      input exact '' ? stop : go
+      set_notes to notes.concat([input])
+      set_count to count + 1
+      set_input to ''
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Title>Notes</C.Title>
+      <For each=notes>
+        <C.ListItem><C.Body>{item}</C.Body></C.ListItem>
+      </For>
+    </C.Page>
+  )
+</page>
+```
+
+Each `<tag>` is a parser scope — the compiler switches to a minimal grammar per zone. `<var>` only parses declarations. `<state>` only parses setter names. `<functions>` parses linear chains with guards (`? stop : go`) and composition (`submit = saveCustomer + clearForm`). The return block is pure JSX with classifiers. No ambiguity, no surprises, linear top-to-bottom comprehension.
 
 ---
 
