@@ -163,19 +163,29 @@ function collectComponents(c) {
       if (name === 'App' || !(name[0] >= 'A' && name[0] <= 'Z')) { c.advance(); continue; }
 
       c.pos = namePos + 1;
-      // Parse props: ({prop1, prop2})
+      // Parse props: ({prop1, prop2}) or (prop1, prop2, prop3)
       const propNames = [];
+      let isBareParams = false;
       if (c.kind() === TK.lparen) {
         c.advance();
         if (c.kind() === TK.lbrace) {
+          // Destructured: ({prop1, prop2})
           c.advance();
           while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
             if (c.kind() === TK.identifier) { propNames.push(c.text()); }
             c.advance();
           }
-          if (c.kind() === TK.rbrace) c.advance(); // }
+          if (c.kind() === TK.rbrace) c.advance();
+        } else if (c.kind() === TK.identifier) {
+          // Bare params: (label, value, color)
+          isBareParams = true;
+          while (c.kind() !== TK.rparen && c.kind() !== TK.eof) {
+            if (c.kind() === TK.identifier) { propNames.push(c.text()); }
+            if (c.kind() === TK.comma) c.advance();
+            else c.advance();
+          }
         }
-        if (c.kind() === TK.rparen) c.advance(); // )
+        if (c.kind() === TK.rparen) c.advance();
       }
 
       // Find the return statement's JSX position
@@ -646,15 +656,10 @@ function parseJSXElement(c) {
             c.advance();
           } else if (c.kind() === TK.lbrace) {
             c.advance();
-            if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
-              const propVal = ctx.propStack[c.text()];
-              // Only resolve as color if it's a hex string, otherwise default to black
-              // (template literal prop values like `${value}` aren't hex colors)
-              if (propVal.startsWith('#') || namedColors[propVal]) {
-                nodeFields.push(`.text_color = ${parseColor(propVal)}`);
-              } else {
-                nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-              }
+            // color={expr} — in component context, prop color values don't resolve
+            // (reference compiler behavior: brace-expr color defaults to black)
+            if (c.kind() === TK.identifier) {
+              nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
               c.advance();
             }
             if (c.kind() === TK.rbrace) c.advance();
