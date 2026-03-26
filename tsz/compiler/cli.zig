@@ -11,6 +11,62 @@ const modulegen = @import("modulegen.zig");
 const cli_init = @import("cli_init.zig");
 const cli_convert = @import("cli_convert.zig");
 
+const zig_local_cache_dir = ".zig-cache";
+const zig_global_cache_dir = ".zig-global-cache";
+
+fn resolveBuildRoot(alloc: std.mem.Allocator, tsz_root: ?[]const u8) ?[]const u8 {
+    if (tsz_root) |root| return root;
+    return std.fs.cwd().realpathAlloc(alloc, ".") catch null;
+}
+
+fn ensureZigPackageCacheSeeded(alloc: std.mem.Allocator, build_root: []const u8) void {
+    const cache_root = std.fmt.allocPrint(alloc, "{s}/{s}", .{ build_root, zig_global_cache_dir }) catch return;
+    const cache_packages = std.fmt.allocPrint(alloc, "{s}/p", .{cache_root}) catch return;
+
+    if (std.fs.cwd().access(cache_packages, .{})) |_| return else |_| {}
+
+    std.fs.makeDirAbsolute(cache_root) catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return,
+    };
+
+    const home = std.posix.getenv("HOME") orelse return;
+    const home_packages = std.fmt.allocPrint(alloc, "{s}/.cache/zig/p", .{home}) catch return;
+    if (std.fs.cwd().access(home_packages, .{})) |_| {
+        std.fs.symLinkAbsolute(home_packages, cache_packages, .{}) catch |err| switch (err) {
+            error.PathAlreadyExists => {},
+            else => {},
+        };
+    } else |_| {}
+}
+
+fn cachedZigBuildArgv(alloc: std.mem.Allocator, argv: []const []const u8) ![]const []const u8 {
+    if (argv.len < 2 or
+        !std.mem.eql(u8, argv[0], "zig") or
+        !std.mem.eql(u8, argv[1], "build"))
+    {
+        return argv;
+    }
+
+    for (argv) |arg| {
+        if (std.mem.eql(u8, arg, "--cache-dir") or std.mem.eql(u8, arg, "--global-cache-dir")) {
+            return argv;
+        }
+    }
+
+    // Keep build caches inside the repo instead of relying on ~/.cache/zig.
+    // This avoids poisoned or unwritable global caches breaking tsz builds.
+    const out = try alloc.alloc([]const u8, argv.len + 4);
+    out[0] = argv[0];
+    out[1] = argv[1];
+    out[2] = "--cache-dir";
+    out[3] = zig_local_cache_dir;
+    out[4] = "--global-cache-dir";
+    out[5] = zig_global_cache_dir;
+    @memcpy(out[6..], argv[2..]);
+    return out;
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -156,6 +212,7 @@ pub fn main() !void {
 
     // Extract _script.tsz imports as JS logic (before merging)
     const script_js = loadScriptImports(alloc, input_path, source);
+    const lscript_lua = loadLscriptImports(alloc, input_path, source);
 
     // Resolve imports (inlines _cls.tsz classifiers, _c.tsz components)
     const final_source = buildMergedSource(alloc, input_path, source);
@@ -187,6 +244,10 @@ pub fn main() !void {
     // If we found _script.tsz imports, set compute_js so codegen emits JS_LOGIC
     if (script_js) |js| {
         gen.compute_js = js;
+    }
+    // If we found _lscript.tsz imports, set compute_lua so codegen emits LUA_LOGIC
+    if (lscript_lua) |lua_src| {
+        gen.compute_lua = lua_src;
     }
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[tsz] Compile error: {}\n", .{err});
@@ -243,10 +304,15 @@ pub fn main() !void {
     const app_name_opt = try std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name});
 
     std.debug.print("[tsz] Building...\n", .{});
-    var child = std.process.Child.init(
-        &.{ "zig", "build", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+    const build_argv = cachedZigBuildArgv(
         alloc,
-    );
+        &.{ "zig", "build", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+    ) catch |err| {
+        std.debug.print("[tsz] Failed to prepare build args: {}\n", .{err});
+        return;
+    };
+    if (resolveBuildRoot(alloc, tsz_root)) |build_root| ensureZigPackageCacheSeeded(alloc, build_root);
+    var child = std.process.Child.init(build_argv, alloc);
     if (tsz_root) |root| {
         child.cwd = root;
     }
@@ -466,6 +532,24 @@ fn loadScriptImports(alloc: std.mem.Allocator, input_file: []const u8, source: [
     return js.items;
 }
 
+/// Load all .lscript.tsz imports and concatenate their contents as LUA_LOGIC.
+fn loadLscriptImports(alloc: std.mem.Allocator, input_file: []const u8, source: []const u8) ?[]const u8 {
+    var paths: [MAX_IMPORTS][]const u8 = undefined;
+    const path_count = findImportPaths(source, &paths);
+    var lua_buf: std.ArrayListUnmanaged(u8) = .{};
+
+    for (paths[0..path_count]) |raw_path| {
+        const resolved = resolveImportPath(alloc, input_file, raw_path) orelse continue;
+        if (!std.mem.endsWith(u8, resolved, ".lscript.tsz")) continue;
+        const content = std.fs.cwd().readFileAlloc(alloc, resolved, 1024 * 1024) catch continue;
+        lua_buf.appendSlice(alloc, content) catch continue;
+        lua_buf.append(alloc, '\n') catch {};
+    }
+
+    if (lua_buf.items.len == 0) return null;
+    return lua_buf.items;
+}
+
 // ── Lint subcommand ─────────────────────────────────────────────
 //
 // tsz lint [--strict] <file.tsz>
@@ -622,6 +706,7 @@ fn runCheck(alloc: std.mem.Allocator, args: []const []const u8) void {
 
     // Load script imports for app entry points
     const script_js = if (file_kind != .module) loadScriptImports(alloc, input_path, source) else null;
+    const lscript_lua_chk = if (file_kind != .module) loadLscriptImports(alloc, input_path, source) else null;
 
     // Resolve imports — track full dependency set
     var deps: [MAX_IMPORTS][]const u8 = undefined;
@@ -660,6 +745,7 @@ fn runCheck(alloc: std.mem.Allocator, args: []const []const u8) void {
     gen.strict_mode = strict_mode;
     if (file_kind == .module) gen.is_module = true;
     if (script_js) |js| gen.compute_js = js;
+    if (lscript_lua_chk) |lua_src| gen.compute_lua = lua_src;
 
     _ = gen.generate() catch {
         for (gen.errors.items) |e| {
@@ -722,6 +808,10 @@ fn runTest(alloc: std.mem.Allocator, args: []const []const u8) void {
 
     var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
     if (script_js) |js| gen.compute_js = js;
+    {
+        const lscript_lua_test = loadLscriptImports(alloc, input_path, source);
+        if (lscript_lua_test) |lua_src| gen.compute_lua = lua_src;
+    }
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[test] Compile error: {}\n", .{err});
         gen.printDiagnosticSummary();
@@ -748,10 +838,15 @@ fn runTest(alloc: std.mem.Allocator, args: []const []const u8) void {
     const app_name_opt = std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name}) catch return;
 
     std.debug.print("[test] Building {s}...\n", .{app_name});
-    var build_child = std.process.Child.init(
-        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+    const build_argv = cachedZigBuildArgv(
         alloc,
-    );
+        &.{ "zig", "build", "--build-file", "build.zig", "--prefix", "zig-out", "-Doptimize=ReleaseFast", app_name_opt, "app" },
+    ) catch |err| {
+        std.debug.print("[test] Failed to prepare build args: {}\n", .{err});
+        return;
+    };
+    if (resolveBuildRoot(alloc, null)) |build_root| ensureZigPackageCacheSeeded(alloc, build_root);
+    var build_child = std.process.Child.init(build_argv, alloc);
     build_child.stderr_behavior = .Inherit;
     build_child.stdout_behavior = .Inherit;
     const build_term = build_child.spawnAndWait() catch |err| {
@@ -861,7 +956,7 @@ fn runDevWithUsage(
     const app_name_opt = std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name}) catch return;
 
     std.debug.print("[dev] Building shared library...\n", .{});
-    if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", app_name_opt, "app-lib" })) return;
+    if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", "-Doptimize=ReleaseFast", app_name_opt, "app-lib" })) return;
 
     // Step 3: Build the dev shell (first time only — cached after that)
     const shell_path = if (tsz_root) |root|
@@ -942,7 +1037,7 @@ fn runDevWithUsage(
             continue;
         }
 
-        if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", app_name_opt, "app-lib" })) {
+        if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", "-Doptimize=ReleaseFast", app_name_opt, "app-lib" })) {
             std.debug.print("[dev] .so build failed — keeping last working build\n", .{});
             continue;
         }
@@ -1186,6 +1281,8 @@ fn devCompileTsz(alloc: std.mem.Allocator, input_path: []const u8, tsz_root: ?[]
     var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
     const script_js = loadScriptImports(alloc, input_path, source);
     if (script_js) |js| gen.compute_js = js;
+    const lscript_lua_dev = loadLscriptImports(alloc, input_path, source);
+    if (lscript_lua_dev) |lua_src| gen.compute_lua = lua_src;
 
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[dev] Compile error: {}\n", .{err});
@@ -1212,7 +1309,12 @@ fn devCompileTsz(alloc: std.mem.Allocator, input_path: []const u8, tsz_root: ?[]
 }
 
 fn devRunZigBuild(alloc: std.mem.Allocator, tsz_root: ?[]const u8, argv: []const []const u8) bool {
-    var child = std.process.Child.init(argv, alloc);
+    const build_argv = cachedZigBuildArgv(alloc, argv) catch |err| {
+        std.debug.print("[dev] Failed to prepare build args: {}\n", .{err});
+        return false;
+    };
+    if (resolveBuildRoot(alloc, tsz_root)) |build_root| ensureZigPackageCacheSeeded(alloc, build_root);
+    var child = std.process.Child.init(build_argv, alloc);
     if (tsz_root) |root| child.cwd = root;
     child.stderr_behavior = .Inherit;
     child.stdout_behavior = .Inherit;

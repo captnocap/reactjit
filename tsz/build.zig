@@ -488,6 +488,7 @@ fn addAppExe(
     exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
     exe.linkSystemLibrary("luajit-5.1");
+    exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
     exe.linkSystemLibrary("X11");
 
     if (os == .linux) {

@@ -190,6 +190,7 @@ pub const ComponentInfo = struct {
 pub const LocalVar = struct {
     name: []const u8,
     expr: []const u8,
+    assign_expr: ?[]const u8 = null,
     state_type: StateType,
 };
 
@@ -215,6 +216,7 @@ pub const DynText = struct {
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
+    map_claimed: bool = false, // true = handled by map rebuild, skip in _updateState
     dep_slots: [MAX_DYN_DEPS]u32,
     dep_count: u32,
 };
@@ -233,6 +235,8 @@ pub const DynStyle = struct {
     transition_is_spring: bool = false,
     /// true if this is a color property (needs .color AnimValue wrapper)
     is_color: bool = false,
+    /// true if this DynStyle was claimed by a map inner node (skip global binding check)
+    map_claimed: bool = false,
 };
 
 pub const FFIHook = struct {
@@ -314,6 +318,8 @@ pub const MapSubNode = struct {
     static_text: []const u8 = "",
     style: []const u8 = "",
     display_cond: []const u8 = "", // Zig condition expr for conditional display (empty = always show)
+    dyn_background_color: []const u8 = "", // Zig expr for per-row background_color (computed in _rebuildMap)
+    dyn_border_color: []const u8 = "", // Zig expr for per-row border_color (computed in _rebuildMap)
     leaves: []const MapLeafNode = &[_]MapLeafNode{}, // heap-allocated leaf children
     leaf_count: u32 = 0,
     handler_body: []const u8 = "", // Zig handler body for Pressable sub-nodes
@@ -329,6 +335,8 @@ pub const MapInnerNode = struct {
     style: []const u8,
     dyn_text_color: []const u8 = "", // Zig expr for runtime color (e.g., Color.fromHex(...))
     dyn_href: []const u8 = "", // Zig expr for runtime href (e.g., _oa0_href[_i][0.._oa0_href_lens[_i]])
+    dyn_background_color: []const u8 = "", // Zig expr for per-row background_color (computed in _rebuildMap)
+    dyn_border_color: []const u8 = "", // Zig expr for per-row border_color (computed in _rebuildMap)
     sub_nodes: [MAX_MAP_SUB]MapSubNode = undefined,
     sub_count: u32 = 0,
     raw_expr: []const u8 = "", // Pre-built Zig expression from component inline (bypasses field emit)
@@ -366,6 +374,8 @@ pub const MapInfo = struct {
     parent_inner_idx: u32 = 0,
     // Display condition for the pool (wrapper) node — filters invisible items from gap spacing
     pool_display_cond: []const u8 = "",
+    // When map root is a component — the fully inlined Zig node expression
+    pool_raw_expr: []const u8 = "",
 };
 
 pub const MapTemplateResult = struct {
@@ -378,6 +388,7 @@ pub const MapTemplateResult = struct {
     is_text_element: bool,
     handler_body: []const u8 = "",
     pool_display_cond: []const u8 = "",
+    pool_raw_expr: []const u8 = "",
 };
 
 pub const ComputedArrayKind = enum { filter, split };
@@ -423,6 +434,8 @@ pub const Generator = struct {
     // Effect render callbacks (<Effect onRender={...}>)
     effect_param: ?[]const u8 = null, // parameter name inside onRender arrow fn
     has_effect_render: bool = false, // true if any <Effect onRender> was compiled
+    effect_shader_decls: std.ArrayListUnmanaged([]const u8),
+    has_effect_shader: bool = false, // true if any <Effect onRender> got a GPU shader path
 
     // State (useState declarations)
     state_slots: [MAX_STATE_SLOTS]StateSlot,
@@ -522,6 +535,9 @@ pub const Generator = struct {
     // Embedded JS logic (<script> or _script.tsz)
     compute_js: ?[]const u8 = null,
 
+    // Embedded Lua logic (<lscript> block)
+    compute_lua: ?[]const u8 = null,
+
     // Embedded Zig logic (<zscript> block)
     compute_zig: ?[]const u8 = null,
 
@@ -563,7 +579,6 @@ pub const Generator = struct {
     resolve_map_index_as_parent: bool, // when true, map index resolves to _ci (for component props in map templates)
     map_item_type: ?StateType,
     map_obj_array_idx: ?u32,
-
 
     // Conditionals ({expr && <JSX>})
     conditionals: [MAX_CONDITIONALS]ConditionalInfo,
@@ -705,6 +720,7 @@ pub const Generator = struct {
             .pos = 0,
             .array_decls = .{},
             .handler_decls = .{},
+            .effect_shader_decls = .{},
             .handler_counter = 0,
             .array_counter = 0,
             .state_slots = undefined,
@@ -1027,7 +1043,44 @@ pub const Generator = struct {
         if (look >= self.lex.count) return false;
         const tok = self.lex.get(look);
         if (tok.kind != .identifier) return false;
-        return std.mem.eql(u8, tok.text(self.source), "map");
+        if (std.mem.eql(u8, tok.text(self.source), "map")) return true;
+        // Check for chained methods: identifier.filter(...).sort(...).slice(...).map(...)
+        const method = tok.text(self.source);
+        if (std.mem.eql(u8, method, "filter") or std.mem.eql(u8, method, "sort") or
+            std.mem.eql(u8, method, "slice"))
+        {
+            // Scan ahead through balanced parens to find more chained calls
+            look += 1;
+            while (look < self.lex.count) {
+                // Skip past balanced parens
+                if (self.lex.get(look).kind == .lparen) {
+                    var depth: u32 = 1;
+                    look += 1;
+                    while (look < self.lex.count and depth > 0) {
+                        if (self.lex.get(look).kind == .lparen) depth += 1;
+                        if (self.lex.get(look).kind == .rparen) depth -= 1;
+                        look += 1;
+                    }
+                } else break;
+                // After parens: check for .nextMethod
+                if (look < self.lex.count and self.lex.get(look).kind == .dot) {
+                    look += 1;
+                    if (look < self.lex.count and self.lex.get(look).kind == .identifier) {
+                        const next_method = self.lex.get(look).text(self.source);
+                        if (std.mem.eql(u8, next_method, "map")) return true;
+                        if (std.mem.eql(u8, next_method, "filter") or
+                            std.mem.eql(u8, next_method, "sort") or
+                            std.mem.eql(u8, next_method, "slice"))
+                        {
+                            look += 1;
+                            continue; // keep scanning
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        return false;
     }
 
     /// Resolve a compound expression containing map item references.
@@ -1047,7 +1100,8 @@ pub const Generator = struct {
             if ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or expr[i] == '_') {
                 const id_start = i;
                 while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
-                    (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
+                    (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1)
+                {}
                 const ident = expr[id_start..i];
                 // Check item.field
                 if (self.map_item_param) |param| {
@@ -1058,9 +1112,21 @@ pub const Generator = struct {
                             i += 1; // skip dot
                             const f_start = i;
                             while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
-                                (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
+                                (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1)
+                            {}
                             if (compound.items.len > 0) try compound.append(self.alloc, '_');
                             try compound.appendSlice(self.alloc, expr[f_start..i]);
+                        }
+                        // Also handle static bracket index: cells[0] → cells_0
+                        if (i < expr.len and expr[i] == '[') {
+                            const bracket_start = i + 1;
+                            var j = bracket_start;
+                            while (j < expr.len and expr[j] >= '0' and expr[j] <= '9') : (j += 1) {}
+                            if (j > bracket_start and j < expr.len and expr[j] == ']') {
+                                try compound.append(self.alloc, '_');
+                                try compound.appendSlice(self.alloc, expr[bracket_start..j]);
+                                i = j + 1; // skip past ]
+                            }
                         }
                         const field = compound.items;
                         if (self.map_obj_array_idx) |oa_idx| {
@@ -1118,6 +1184,17 @@ pub const Generator = struct {
             }
         }
         return null;
+    }
+
+    /// Check if an identifier matches any component's declared prop name.
+    /// Used to default unresolved component props to 0 in style expressions.
+    pub fn isComponentPropName(self: *Generator, name: []const u8) bool {
+        for (0..self.component_count) |ci| {
+            for (self.components[ci].prop_names[0..self.components[ci].prop_count]) |pn| {
+                if (std.mem.eql(u8, pn, name)) return true;
+            }
+        }
+        return false;
     }
 
     pub fn classifyExpr(self: *Generator, expr: []const u8) PropType {
@@ -1186,6 +1263,16 @@ pub const Generator = struct {
             compound = std.fmt.allocPrint(self.alloc, "{s}_{s}", .{ compound, next_field }) catch compound;
             self.advance_token(); // field
         }
+        // Also consume static bracket index: .cells[0] → cells_0
+        if (self.curKind() == .lbracket and self.pos + 1 < self.lex.count and
+            self.lex.get(self.pos + 1).kind == .number)
+        {
+            self.advance_token(); // [
+            const idx_txt = self.curText();
+            compound = std.fmt.allocPrint(self.alloc, "{s}_{s}", .{ compound, idx_txt }) catch compound;
+            self.advance_token(); // number
+            if (self.curKind() == .rbracket) self.advance_token(); // ]
+        }
         return compound;
     }
 
@@ -1198,6 +1285,8 @@ pub const Generator = struct {
         if (std.mem.startsWith(u8, expr, "state.getSlotString(")) return true;
         // Object array string field: _oa0_name[_i][0.._oa0_name_lens[_i]]
         if (std.mem.indexOf(u8, expr, "_lens[") != null) return true;
+        // Template literal / string concat expression: (blk_N: { ... bufPrint ... })
+        if (std.mem.startsWith(u8, expr, "(blk_")) return true;
         return false;
     }
 

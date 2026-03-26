@@ -366,7 +366,7 @@ pub fn evalExpr(code: []const u8) void {
 pub fn callGlobal(name: [*:0]const u8) void {
     const L = g_lua orelse return;
     _ = lua.lua_getglobal(L, name);
-    if (lua.lua_isfunction(L, -1) != 0) {
+    if (lua.lua_isfunction(L, -1)) {
         if (lua.lua_pcall(L, 0, 0, 0) != 0) {
             logLuaError(L, std.mem.span(name));
             lua.lua_pop(L, 1);
@@ -380,7 +380,7 @@ pub fn callGlobal(name: [*:0]const u8) void {
 pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
     const L = g_lua orelse return;
     _ = lua.lua_getglobal(L, name);
-    if (lua.lua_isfunction(L, -1) != 0) {
+    if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushstring(L, arg);
         if (lua.lua_pcall(L, 1, 0, 0) != 0) {
             logLuaError(L, std.mem.span(name));
@@ -395,7 +395,7 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
 pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     const L = g_lua orelse return;
     _ = lua.lua_getglobal(L, name);
-    if (lua.lua_isfunction(L, -1) != 0) {
+    if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushinteger(L, @intCast(arg));
         if (lua.lua_pcall(L, 1, 0, 0) != 0) {
             logLuaError(L, std.mem.span(name));
@@ -410,7 +410,7 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
 pub fn hasGlobal(name: [*:0]const u8) bool {
     const L = g_lua orelse return false;
     _ = lua.lua_getglobal(L, name);
-    const is_fn = lua.lua_isfunction(L, -1) != 0;
+    const is_fn = lua.lua_isfunction(L, -1);
     lua.lua_pop(L, 1);
     return is_fn;
 }
@@ -421,7 +421,7 @@ pub fn tick() void {
     const t0 = std.time.microTimestamp();
 
     _ = lua.lua_getglobal(L, "__zigOS_tick");
-    if (lua.lua_isfunction(L, -1) != 0) {
+    if (lua.lua_isfunction(L, -1)) {
         if (lua.lua_pcall(L, 0, 0, 0) != 0) {
             logLuaError(L, "tick");
             lua.lua_pop(L, 1);

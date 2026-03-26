@@ -220,8 +220,11 @@ fn emitStatement(
         const val_expr = try emitStateExpr(self);
         if (self.local_count < codegen.MAX_LOCALS) {
             if (self.effect_param != null) {
-                const zig_kw = if (std.mem.eql(u8, decl_kw, "const")) "const" else "var";
-                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{s} {s} = {s};\n", .{ pad, zig_kw, var_name, val_expr }));
+                if (std.mem.eql(u8, decl_kw, "const")) {
+                    try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}const {s} = {s};\n", .{ pad, var_name, val_expr }));
+                } else {
+                    try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}var {s}: f32 = {s};\n", .{ pad, var_name, val_expr }));
+                }
                 self.local_vars[self.local_count] = .{
                     .name = var_name,
                     .expr = var_name,
@@ -483,6 +486,45 @@ fn emitStatement(
                     "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
                     "{s}    qjs_runtime.evalExpr(_ev);\n" ++
                     "{s}}}\n", .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
+            }
+        }
+    } else if (self.compute_lua != null) {
+        // <lscript> — call Lua function via LuaJIT bridge
+        if (arg_count == 0) {
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}luajit_runtime.callGlobal(\"{s}\");\n", .{ pad, call_name }));
+        } else if (arg_count == 1 and !has_dynamic_args and arg_types[0] == .string) {
+            var stripped = arg_exprs[0];
+            if (stripped.len >= 2 and (stripped[0] == '"')) stripped = stripped[1 .. stripped.len - 1];
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}luajit_runtime.callGlobalStr(\"{s}\", \"{s}\");\n", .{ pad, call_name, stripped }));
+        } else {
+            // Multi-arg — build Lua expression at runtime and eval
+            var lua_fmt: std.ArrayListUnmanaged(u8) = .{};
+            var lua_args: std.ArrayListUnmanaged(u8) = .{};
+            try lua_fmt.appendSlice(self.alloc, call_name);
+            try lua_fmt.append(self.alloc, '(');
+            for (0..arg_count) |ai| {
+                if (ai > 0) try lua_fmt.appendSlice(self.alloc, ", ");
+                if (arg_types[ai] == .string) {
+                    try lua_fmt.appendSlice(self.alloc, "'{s}'");
+                    if (lua_args.items.len > 0) try lua_args.appendSlice(self.alloc, ", ");
+                    try lua_args.appendSlice(self.alloc, arg_exprs[ai]);
+                } else if (arg_types[ai] == .js_ident) {
+                    try lua_fmt.appendSlice(self.alloc, arg_exprs[ai]);
+                } else {
+                    try lua_fmt.appendSlice(self.alloc, "{d}");
+                    if (lua_args.items.len > 0) try lua_args.appendSlice(self.alloc, ", ");
+                    try lua_args.appendSlice(self.alloc, arg_exprs[ai]);
+                }
+            }
+            try lua_fmt.append(self.alloc, ')');
+            if (lua_args.items.len == 0) {
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}luajit_runtime.evalExpr(\"{s}\");\n", .{ pad, lua_fmt.items }));
+            } else {
+                try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}{{\n" ++
+                    "{s}    var _eb: [512]u8 = undefined;\n" ++
+                    "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
+                    "{s}    luajit_runtime.evalExpr(_ev);\n" ++
+                    "{s}}}\n", .{ pad, pad, pad, lua_fmt.items, lua_args.items, pad, pad }));
             }
         }
     } else if (self.compute_zig != null) {

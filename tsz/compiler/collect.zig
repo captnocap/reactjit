@@ -874,6 +874,28 @@ fn parseObjectFields(
                 self.advance_token(); // {
                 parseObjectFields(self, fields, field_count, field_name, field_js_path);
                 if (self.curKind() == .rbrace) self.advance_token(); // }
+            } else if (self.curKind() == .lbracket) {
+                // Array literal: cells: [0, 0, 0] → flatten into cells_0, cells_1, cells_2
+                self.advance_token(); // [
+                var arr_idx: u32 = 0;
+                while (self.curKind() != .rbracket and self.curKind() != .eof) {
+                    if (self.curKind() == .comma) { self.advance_token(); continue; }
+                    const en = std.fmt.allocPrint(self.alloc, "{s}_{d}", .{ field_name, arr_idx }) catch field_name;
+                    const ep = std.fmt.allocPrint(self.alloc, "{s}[{d}]", .{ field_js_path, arr_idx }) catch field_js_path;
+                    var et: codegen.StateType = .int;
+                    if (self.curKind() == .number) {
+                        if (std.mem.indexOf(u8, self.curText(), ".") != null) et = .float;
+                        self.advance_token();
+                    } else if (self.curKind() == .string) {
+                        et = .string; self.advance_token();
+                    } else { self.advance_token(); }
+                    if (field_count.* < codegen.MAX_OBJECT_ARRAY_FIELDS) {
+                        fields[field_count.*] = .{ .name = en, .field_type = et, .js_path = ep };
+                        field_count.* += 1;
+                    }
+                    arr_idx += 1;
+                }
+                if (self.curKind() == .rbracket) self.advance_token(); // ]
             } else {
                 // Leaf value — infer type
                 var field_type: codegen.StateType = .int;
@@ -1363,14 +1385,34 @@ pub fn findReturnStatement(self: *Generator) void {
 
 /// Phase 5: Extract JavaScript from <script> blocks.
 /// This JS gets embedded in the generated Zig as JS_LOGIC and runs in QuickJS.
+/// Also extracts Lua from <lscript> blocks → LUA_LOGIC for LuaJIT runtime.
 /// Scans raw source bytes (not tokens) since <script> content isn't tokenized.
-/// Concatenates ALL <script> blocks (app + imported components) with newlines.
+/// Concatenates ALL <script>/<lscript> blocks (app + imported components) with newlines.
 pub fn extractComputeBlock(self: *Generator) void {
     const src = self.source;
-    var parts: std.ArrayListUnmanaged(u8) = .{};
-    scanTagContent(self.alloc, src, "<script>", "</script>", &parts);
-    if (parts.items.len > 0) {
-        self.compute_js = self.alloc.dupe(u8, parts.items) catch return;
+
+    // JavaScript <script> blocks
+    var js_parts: std.ArrayListUnmanaged(u8) = .{};
+    scanTagContent(self.alloc, src, "<script>", "</script>", &js_parts);
+    if (js_parts.items.len > 0) {
+        if (self.compute_js) |existing| {
+            const combined = std.fmt.allocPrint(self.alloc, "{s}\n{s}", .{ existing, js_parts.items }) catch return;
+            self.compute_js = combined;
+        } else {
+            self.compute_js = self.alloc.dupe(u8, js_parts.items) catch return;
+        }
+    }
+
+    // Lua <lscript> blocks
+    var lua_parts: std.ArrayListUnmanaged(u8) = .{};
+    scanTagContent(self.alloc, src, "<lscript>", "</lscript>", &lua_parts);
+    if (lua_parts.items.len > 0) {
+        if (self.compute_lua) |existing| {
+            const combined = std.fmt.allocPrint(self.alloc, "{s}\n{s}", .{ existing, lua_parts.items }) catch return;
+            self.compute_lua = combined;
+        } else {
+            self.compute_lua = self.alloc.dupe(u8, lua_parts.items) catch return;
+        }
     }
 }
 
@@ -1548,6 +1590,97 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
                         // Skip variable declarations — "var myPid" should not rewrite the declaration
                         if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "var ")) break;
                         if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "let ")) break;
+                        const tag = std.meta.activeTag(self.state_slots[si].initial);
+                        const fn_name = if (tag == .string) "__getStateString" else "__getState";
+                        try result.appendSlice(self.alloc, fn_name);
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d})", .{si}));
+                        ii += getter.len;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) {
+                try result.append(self.alloc, line[ii]);
+                ii += 1;
+            }
+        }
+        try result.append(self.alloc, '\n');
+    }
+    return try result.toOwnedSlice(self.alloc);
+}
+
+/// Rewrite Lua <lscript> setter/getter calls to use the same host API as QuickJS.
+/// setFoo(val) → __setState(0, val), foo → __getState(0)
+/// Same substitution logic as rewriteSetterCalls but respects Lua syntax:
+/// - `local` instead of `var`/`let` for variable declarations
+/// - `--` comments instead of `//`
+pub fn rewriteLuaSetterCalls(self: *Generator, lua_src: []const u8) ![]const u8 {
+    if (lua_src.len == 0) return "";
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var line_iter = std.mem.splitScalar(u8, lua_src, '\n');
+    while (line_iter.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t', '\r' });
+        // Skip Lua comment lines
+        if (std.mem.startsWith(u8, trimmed, "--")) {
+            try result.appendSlice(self.alloc, line);
+            try result.append(self.alloc, '\n');
+            continue;
+        }
+        var ii: usize = 0;
+        while (ii < line.len) {
+            // Skip string literals
+            if (line[ii] == '\'' or line[ii] == '"') {
+                const quote = line[ii];
+                try result.append(self.alloc, quote);
+                ii += 1;
+                while (ii < line.len and line[ii] != quote) {
+                    if (line[ii] == '\\' and ii + 1 < line.len) {
+                        try result.append(self.alloc, line[ii]);
+                        try result.append(self.alloc, line[ii + 1]);
+                        ii += 2;
+                    } else {
+                        try result.append(self.alloc, line[ii]);
+                        ii += 1;
+                    }
+                }
+                if (ii < line.len) {
+                    try result.append(self.alloc, line[ii]);
+                    ii += 1;
+                }
+                continue;
+            }
+            var matched = false;
+            // Rewrite setter calls: setFoo( → __setState(N,
+            for (0..self.state_count) |si| {
+                const setter = self.state_slots[si].setter;
+                if (setter.len == 0) continue;
+                if (ii + setter.len + 1 <= line.len and
+                    std.mem.eql(u8, line[ii .. ii + setter.len], setter) and
+                    line[ii + setter.len] == '(')
+                {
+                    if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                    const tag = std.meta.activeTag(self.state_slots[si].initial);
+                    const fn_name = if (tag == .string) "__setStateString" else "__setState";
+                    try result.appendSlice(self.alloc, fn_name);
+                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                    ii += setter.len + 1;
+                    matched = true;
+                    break;
+                }
+            }
+            // Rewrite getter reads: foo → __getState(N)
+            if (!matched) {
+                for (0..self.state_count) |si| {
+                    const getter = self.state_slots[si].getter;
+                    if (getter.len == 0) continue;
+                    if (ii + getter.len <= line.len and
+                        std.mem.eql(u8, line[ii .. ii + getter.len], getter))
+                    {
+                        if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                        if (ii + getter.len < line.len and Generator.isIdentByte(line[ii + getter.len])) break;
+                        // Skip local declarations
+                        if (ii >= 6 and std.mem.eql(u8, line[ii - 6 .. ii], "local ")) break;
                         const tag = std.meta.activeTag(self.state_slots[si].initial);
                         const fn_name = if (tag == .string) "__getStateString" else "__getState";
                         try result.appendSlice(self.alloc, fn_name);

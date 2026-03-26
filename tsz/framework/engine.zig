@@ -544,6 +544,7 @@ pub const AppConfig = struct {
     min_height: u32 = 240,
     root: *Node,
     js_logic: []const u8 = "",
+    lua_logic: []const u8 = "",
     /// Called once after QuickJS VM is ready. Register FFI host functions, set initial state.
     init: ?*const fn () void = null,
     /// Called every frame before layout. Do FFI polling, state dirty checks, dynamic text updates.
@@ -1347,7 +1348,10 @@ pub fn run(config_in: AppConfig) !void {
     // Run embedded JS
     if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
 
-    // Initial tick — set up dynamic texts after JS is evaluated
+    // Run embedded Lua
+    if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
+
+    // Initial tick — set up dynamic texts after JS/Lua is evaluated
     if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
 
     // PTY remote control socket
@@ -1375,6 +1379,7 @@ pub fn run(config_in: AppConfig) !void {
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+                if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
                 std.debug.print("[hot-reload] App reloaded\n", .{});
             }
@@ -1531,6 +1536,12 @@ pub fn run(config_in: AppConfig) !void {
                                     if (h.handlers.js_on_press) |js_expr| {
                                         qjs_runtime.evalExpr(std.mem.span(js_expr));
                                     }
+                                    if (h.handlers.lua_on_press) |lua_expr| {
+                                        luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                                    }
+                                    handled_interactive = true;
+                                } else if (h.handlers.lua_on_press) |lua_expr| {
+                                    luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.js_on_press) |js_expr| {
                                     qjs_runtime.evalExpr(std.mem.span(js_expr));

@@ -331,8 +331,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     ".text_color = Color.rgb(0, 0, 0)"
                 else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_flow_speed"))
                     ".canvas_flow_speed = 0"
+                else if (self.dyn_styles[dsi].is_color)
+                    (std.fmt.allocPrint(self.alloc, ".{s} = Color{{}}", .{self.dyn_styles[dsi].field}) catch "")
                 else
-                    "";
+                    (std.fmt.allocPrint(self.alloc, ".{s} = 0", .{self.dyn_styles[dsi].field}) catch "");
                 if (placeholder.len > 0 and std.mem.indexOf(u8, root_expr, placeholder) != null) {
                     self.dyn_styles[dsi].arr_name = "";
                     self.dyn_styles[dsi].has_ref = true;
@@ -353,36 +355,70 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             else
                 "";
             for (self.array_decls.items) |decl| {
-                const found_placeholder = std.mem.indexOf(u8, decl, placeholder) != null or
-                    (color_placeholder.len > 0 and std.mem.indexOf(u8, decl, color_placeholder) != null);
-                if (found_placeholder) {
-                    // Extract array name: "var _arr_N = ..."
-                    if (std.mem.indexOf(u8, decl, "var ")) |vs| {
-                        if (std.mem.indexOf(u8, decl[vs + 4 ..], " =")) |es| {
-                            const arr_name = decl[vs + 4 .. vs + 4 + es];
-                            // Find element index: count Node elements before the placeholder
-                            const arr_start = std.mem.indexOf(u8, decl, "[_]Node{ ") orelse continue;
-                            const ph_pos = std.mem.indexOf(u8, decl, placeholder) orelse
-                                (if (color_placeholder.len > 0) std.mem.indexOf(u8, decl, color_placeholder) else null) orelse continue;
-                            const before_placeholder = decl[arr_start..ph_pos];
-                            var elem_idx: u32 = 0;
-                            var bi: usize = 0;
-                            while (bi < before_placeholder.len) {
-                                if (bi + 3 < before_placeholder.len and
-                                    before_placeholder[bi] == '.' and before_placeholder[bi + 1] == '{' and before_placeholder[bi + 2] == ' ')
-                                {
-                                    elem_idx += 1;
-                                }
-                                bi += 1;
+                // Find all placeholder occurrences, skip already-claimed ones
+                var search_start: usize = 0;
+                while (true) {
+                    const ph_pos = blk: {
+                        const p1 = if (search_start < decl.len)
+                            std.mem.indexOf(u8, decl[search_start..], placeholder)
+                        else
+                            null;
+                        const p2 = if (color_placeholder.len > 0 and search_start < decl.len)
+                            std.mem.indexOf(u8, decl[search_start..], color_placeholder)
+                        else
+                            null;
+                        // Pick the earliest match
+                        if (p1) |a| {
+                            if (p2) |b| {
+                                break :blk @min(a, b) + search_start;
                             }
-                            if (elem_idx > 0) elem_idx -= 1; // .{ that contains the placeholder is the target
-                            self.dyn_styles[dsi].arr_name = arr_name;
-                            self.dyn_styles[dsi].arr_index = elem_idx;
-                            self.dyn_styles[dsi].has_ref = true;
+                            break :blk a + search_start;
+                        }
+                        if (p2) |b| break :blk b + search_start;
+                        break :blk @as(?usize, null);
+                    };
+                    if (ph_pos == null) break;
+
+                    // Extract array name: "var _arr_N = ..."
+                    const vs = std.mem.indexOf(u8, decl, "var ") orelse break;
+                    const es = std.mem.indexOf(u8, decl[vs + 4 ..], " =") orelse break;
+                    const arr_name = decl[vs + 4 .. vs + 4 + es];
+                    // Find element index: count Node elements before the placeholder
+                    const arr_start = std.mem.indexOf(u8, decl, "[_]Node{ ") orelse break;
+                    const before_placeholder = decl[arr_start..ph_pos.?];
+                    var elem_idx: u32 = 0;
+                    var bi: usize = 0;
+                    while (bi < before_placeholder.len) {
+                        if (bi + 3 < before_placeholder.len and
+                            before_placeholder[bi] == '.' and before_placeholder[bi + 1] == '{' and before_placeholder[bi + 2] == ' ')
+                        {
+                            elem_idx += 1;
+                        }
+                        bi += 1;
+                    }
+                    if (elem_idx > 0) elem_idx -= 1; // .{ that contains the placeholder is the target
+                    // Check if this arr_name+elem_idx is already claimed by another dyn_style
+                    var already_claimed = false;
+                    for (0..self.dyn_style_count) |other| {
+                        if (other != dsi and self.dyn_styles[other].has_ref and
+                            std.mem.eql(u8, self.dyn_styles[other].arr_name, arr_name) and
+                            self.dyn_styles[other].arr_index == elem_idx and
+                            std.mem.eql(u8, self.dyn_styles[other].field, field))
+                        {
+                            already_claimed = true;
                             break;
                         }
                     }
+                    if (!already_claimed) {
+                        self.dyn_styles[dsi].arr_name = arr_name;
+                        self.dyn_styles[dsi].arr_index = elem_idx;
+                        self.dyn_styles[dsi].has_ref = true;
+                        break;
+                    }
+                    // Skip past this occurrence and try next
+                    search_start = ph_pos.? + 1;
                 }
+                if (self.dyn_styles[dsi].has_ref) break;
             }
         }
     }
@@ -455,6 +491,17 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "}} else @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
     }
 
+    // luajit_runtime — stubbed in .so mode (has native LuaJIT deps)
+    if (self.compute_lua != null) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const luajit_runtime = if (IS_LIB) struct {{\n" ++
+            "    pub fn callGlobal(_: []const u8) void {{}}\n" ++
+            "    pub fn callGlobalStr(_: []const u8, _: []const u8) void {{}}\n" ++
+            "    pub fn callGlobalInt(_: []const u8, _: i64) void {{}}\n" ++
+            "    pub fn evalExpr(_: []const u8) void {{}}\n" ++
+            "}} else @import(\"{s}luajit_runtime.zig\");\n", .{prefix}));
+    }
+
     // input — stubbed in .so mode (has native deps via SDL keycodes)
     if (self.input_counter > 0) {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -499,10 +546,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "}} else @import(\"{s}transition.zig\");\n", .{prefix}));
     }
 
-    // effect_ctx — stubbed in .so mode
+    // effect_ctx / effect_shader — pure Zig helpers, safe in .so mode too
     if (self.has_effect_render) {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "const effect_ctx = if (IS_LIB) struct {{}} else @import(\"{s}effect_ctx.zig\");\n", .{prefix}));
+            "const effect_ctx = @import(\"{s}effect_ctx.zig\");\n", .{prefix}));
+    }
+    if (self.has_effect_shader) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const effect_shader = @import(\"{s}effect_shader.zig\");\n",
+            .{prefix}));
     }
 
     // testharness/query/testassert — stubbed in .so mode
@@ -760,15 +812,22 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     // emitted inside _rebuildMap instead of _updateDynamicTexts
     var map_dep_dyn: [128]bool = [_]bool{false} ** 128;
     for (0..self.dyn_count) |di| {
-        if (di < 128 and self.dyn_texts[di].has_ref and std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, "[_i]") != null) {
+        if (di < 128 and self.dyn_texts[di].has_ref and
+            (std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, "[_i]") != null or
+            std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, "_i)") != null or
+            self.dyn_texts[di].map_claimed))
+        {
             map_dep_dyn[di] = true;
         }
     }
     if (self.handler_decls.items.len > 0) {
         try out.appendSlice(self.alloc, "\n// ── Event handlers ──────────────────────────────────────────────\n");
         for (self.handler_decls.items) |h| {
-            // Check if handler body references _ci (map index in component context)
-            if (std.mem.indexOf(u8, h, "_ci)") != null or std.mem.indexOf(u8, h, "_ci ") != null or std.mem.indexOf(u8, h, "_ci,") != null) {
+            // Check if handler body references _ci or _i (map index in component context)
+            const has_ci_ref = std.mem.indexOf(u8, h, "_ci)") != null or std.mem.indexOf(u8, h, "_ci ") != null or std.mem.indexOf(u8, h, "_ci,") != null;
+            // Also detect _i used as map index (e.g. markRead(_i)) — not preceded by _c
+            const has_map_i_ref = std.mem.indexOf(u8, h, "(_i)") != null or std.mem.indexOf(u8, h, "(_i,") != null;
+            if (has_ci_ref or has_map_i_ref) {
                 // Extract handler name: "fn _handler_press_N() void {\n..."
                 const fn_prefix = "fn ";
                 const fn_start = std.mem.indexOf(u8, h, fn_prefix) orelse {
@@ -786,7 +845,16 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 // Extract body (between first { and last })
                 const body_start = (std.mem.indexOf(u8, h, "{\n") orelse 0) + 2;
                 const body_end = std.mem.lastIndexOf(u8, h, "}") orelse h.len;
-                const body = h[body_start..body_end];
+                var body = h[body_start..body_end];
+                // Normalize: replace (_i) with (_ci) so factory pattern works
+                if (has_map_i_ref and !has_ci_ref) {
+                    if (std.mem.indexOf(u8, body, "(_i)")) |pos| {
+                        body = try std.fmt.allocPrint(self.alloc, "{s}(_ci){s}", .{ body[0..pos], body[pos + 4 ..] });
+                    }
+                    if (std.mem.indexOf(u8, body, "(_i,")) |pos| {
+                        body = try std.fmt.allocPrint(self.alloc, "{s}(_ci,{s}", .{ body[0..pos], body[pos + 4 ..] });
+                    }
+                }
 
                 // Track this handler name for raw_expr replacement
                 if (map_ci_handler_count < 64) {
@@ -815,6 +883,12 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 try out.appendSlice(self.alloc, h);
                 try out.appendSlice(self.alloc, "\n\n");
             }
+        }
+    }
+    if (self.effect_shader_decls.items.len > 0) {
+        try out.appendSlice(self.alloc, "\n// ── GPU effect shaders ─────────────────────────────────────────\n");
+        for (self.effect_shader_decls.items) |decl| {
+            try out.appendSlice(self.alloc, decl);
         }
     }
 
@@ -1502,6 +1576,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     try out.appendSlice(self.alloc, " }");
                 }
                 try out.appendSlice(self.alloc, " };\n");
+                // Emit inline background_color updates for sub-nodes with dyn_background_color
+                for (0..inner.sub_count) |si| {
+                    const sub = inner.sub_nodes[si];
+                    if (sub.dyn_background_color.len > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _map_sub_{d}_{d}[_i][{d}].style.background_color = {s};\n",
+                            .{ mi, ni, si, sub.dyn_background_color }));
+                    }
+                }
             }
 
             // Emit inner children array assignment
@@ -1625,8 +1708,23 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             const out_idx2: []const u8 = if (is_nested) "_nc" else "_i";
             // When map root is a component — pool_raw_expr has the fully inlined node
             if (m.pool_raw_expr.len > 0) {
+                // Apply handler table substitution (same as inner node raw_expr path)
+                var pool_expr = m.pool_raw_expr;
+                for (0..map_ci_handler_count) |chi| {
+                    const hname = map_ci_handler_names[chi];
+                    const sp1 = try std.fmt.allocPrint(self.alloc, "= {s} ", .{hname});
+                    const rp1 = try std.fmt.allocPrint(self.alloc, "= {s}_tbl[_i] ", .{hname});
+                    if (std.mem.indexOf(u8, pool_expr, sp1)) |pos| {
+                        pool_expr = try std.fmt.allocPrint(self.alloc, "{s}{s}{s}", .{ pool_expr[0..pos], rp1, pool_expr[pos + sp1.len ..] });
+                    }
+                    const sp2 = try std.fmt.allocPrint(self.alloc, "= {s} }}", .{hname});
+                    const rp2 = try std.fmt.allocPrint(self.alloc, "= {s}_tbl[_i] }}", .{hname});
+                    if (std.mem.indexOf(u8, pool_expr, sp2)) |pos| {
+                        pool_expr = try std.fmt.allocPrint(self.alloc, "{s}{s}{s}", .{ pool_expr[0..pos], rp2, pool_expr[pos + sp2.len ..] });
+                    }
+                }
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "        _map_pool_{d}{s}[{s}] = {s};\n", .{ mi, pool_prefix, out_idx2, m.pool_raw_expr }));
+                    "        _map_pool_{d}{s}[{s}] = {s};\n", .{ mi, pool_prefix, out_idx2, pool_expr }));
                 if (is_nested) try out.appendSlice(self.alloc, "        _nc += 1;\n");
                 try out.appendSlice(self.alloc, "    }\n");
                 if (is_nested) {
@@ -1699,7 +1797,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             for (0..self.dyn_count) |di| {
                 if (di < 128 and map_dep_dyn[di]) {
                     const dt = &self.dyn_texts[di];
-                    if (!dt.has_ref) continue;
+                    if (!dt.has_ref or dt.map_claimed) continue;
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         "        _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n",
                         .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args }));
@@ -1748,6 +1846,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     while (line_iter.next()) |line| {
         try out.appendSlice(self.alloc, "    \\\\");
         try out.appendSlice(self.alloc, line);
+        try out.appendSlice(self.alloc, "\n");
+    }
+    try out.appendSlice(self.alloc, ";\n\n");
+
+    // LUA_LOGIC
+    try out.appendSlice(self.alloc, "// ── Embedded Lua logic ───────────────────────────────────────\n");
+    try out.appendSlice(self.alloc, if (self.is_embedded) "pub const LUA_LOGIC =\n" else "const LUA_LOGIC =\n");
+    const lua_source = self.compute_lua orelse "";
+    // Lua script blocks use setter calls too — rewrite them for LuaJIT host API
+    const lua_rewritten = try collect.rewriteLuaSetterCalls(self, lua_source);
+    var lua_line_iter = std.mem.splitScalar(u8, lua_rewritten, '\n');
+    while (lua_line_iter.next()) |lua_line| {
+        try out.appendSlice(self.alloc, "    \\\\");
+        try out.appendSlice(self.alloc, lua_line);
         try out.appendSlice(self.alloc, "\n");
     }
     try out.appendSlice(self.alloc, ";\n\n");
@@ -1803,6 +1915,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     for (0..self.dyn_style_count) |dsi| {
         const ds = &self.dyn_styles[dsi];
         if (!ds.has_ref) continue;
+        // Skip per-item dynamic styles that reference _i — handled inline in pool_raw_expr or _rebuildMap
+        if (ds.map_claimed) continue;
+        if (std.mem.indexOf(u8, ds.expression, "_i") != null) continue;
 
         // CSS transition path: emit transition.set()/setSpring() instead of direct assignment
         if (ds.transition_config.len > 0) {
@@ -2240,6 +2355,8 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "export fn app_get_tick() ?*const fn (u32) void {{ return _appTick; }}\n" ++
             "export fn app_get_js_logic() [*]const u8 {{ return JS_LOGIC.ptr; }}\n" ++
             "export fn app_get_js_logic_len() usize {{ return JS_LOGIC.len; }}\n" ++
+            "export fn app_get_lua_logic() [*]const u8 {{ return LUA_LOGIC.ptr; }}\n" ++
+            "export fn app_get_lua_logic_len() usize {{ return LUA_LOGIC.len; }}\n" ++
             "export fn app_get_title() [*:0]const u8 {{ return \"{s}\"; }}\n", .{app_name}));
 
         // State preservation exports (for hot-reload state survival)
@@ -2284,6 +2401,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "        .title = \"{s}\",\n" ++
             "        .root = &_root,\n" ++
             "        .js_logic = JS_LOGIC,\n" ++
+            "        .lua_logic = LUA_LOGIC,\n" ++
             "        .init = _appInit,\n" ++
             "        .tick = _appTick,\n" ++
             "    }});\n" ++
