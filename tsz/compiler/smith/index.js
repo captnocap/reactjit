@@ -89,8 +89,36 @@ function mkCursor(raw, source) {
   return {
     kinds, starts, ends, count, source, pos: 0,
     kind()      { return this.kinds[this.pos]; },
-    text()      { return this.source.slice(this.starts[this.pos], this.ends[this.pos]); },
-    textAt(i)   { return this.source.slice(this.starts[i], this.ends[i]); },
+    text()      { return this._byteSlice(this.starts[this.pos], this.ends[this.pos]); },
+    textAt(i)   { return this._byteSlice(this.starts[i], this.ends[i]); },
+    // Byte-based text access — Zig lexer uses byte offsets, but JS strings
+    // index by char. For ASCII-only sources they match; for multi-byte we map.
+    _byteSlice(start, end) {
+      if (this._isAscii === undefined) {
+        this._isAscii = true;
+        for (let i = 0; i < this.source.length; i++) {
+          if (this.source.charCodeAt(i) > 127) { this._isAscii = false; break; }
+        }
+        if (!this._isAscii) {
+          // Build byte→char offset map
+          this._b2c = [];
+          let byteIdx = 0;
+          for (let ci = 0; ci < this.source.length; ci++) {
+            this._b2c[byteIdx] = ci;
+            const code = this.source.charCodeAt(ci);
+            if (code < 0x80) byteIdx += 1;
+            else if (code < 0x800) byteIdx += 2;
+            else if (code >= 0xD800 && code <= 0xDBFF) { byteIdx += 4; ci++; }
+            else byteIdx += 3;
+          }
+          this._b2c[byteIdx] = this.source.length;
+        }
+      }
+      if (this._isAscii) return this.source.slice(start, end);
+      const cs = this._b2c[start] !== undefined ? this._b2c[start] : start;
+      const ce = this._b2c[end] !== undefined ? this._b2c[end] : end;
+      return this.source.slice(cs, ce);
+    },
     kindAt(i)   { return this.kinds[i]; },
     advance()   { if (this.pos < this.count) this.pos++; },
     isIdent(n)  { return this.kind() === TK.identifier && this.text() === n; },
@@ -1376,12 +1404,19 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // _appTick
   out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
   if (hasState || ctx.objectArrays.length > 0) {
-    out += `    if (state.isDirty()) { _updateDynamicTexts();\n`;
-    for (let mi = 0; mi < ctx.maps.length; mi++) {
-      out += `        _rebuildMap${mi}();\n`;
+    if (ctx.maps.length > 0) {
+      out += `    if (state.isDirty()) { _updateDynamicTexts();\n`;
+      for (let mi = 0; mi < ctx.maps.length; mi++) {
+        out += `        _rebuildMap${mi}();\n`;
+      }
+      if (hasConds) out += `        _updateConditionals();\n`;
+      out += ` state.clearDirty(); }\n`;
+    } else {
+      out += `    if (state.isDirty()) {`;
+      out += ` _updateDynamicTexts();`;
+      if (hasConds) out += ` _updateConditionals();`;
+      out += ` state.clearDirty(); }\n`;
     }
-    if (hasConds) out += `        _updateConditionals();\n`;
-    out += ` state.clearDirty(); }\n`;
   }
   out += `}\n\n`;
 
