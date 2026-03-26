@@ -2,69 +2,116 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>tsz — WebGPU</title>
+<title>tsz — WebGPU + Linux</title>
 <style>
   * { margin: 0; padding: 0; }
-  body { background: #0d1117; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  body { background: #0d1117; display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 12px; font-family: monospace; color: #e6edf3; }
+  h1 { font-size: 16px; color: #58a6ff; }
   canvas { border: 1px solid #30363d; border-radius: 4px; }
-  #status { position: fixed; top: 10px; left: 10px; color: #8b949e; font: 12px monospace; }
+  #terminal { width: 800px; height: 250px; background: #161b22; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 13px; padding: 8px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+  #status { color: #8b949e; font-size: 12px; }
+  button { background: #238636; color: #fff; border: none; padding: 6px 16px; border-radius: 4px; font-family: monospace; cursor: pointer; font-size: 13px; }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #30363d; color: #8b949e; cursor: default; }
+  #v86-screen { display: none; }
 </style>
 </head>
 <body>
-<div id="status">Initializing WebGPU...</div>
-<canvas id="canvas" width="800" height="600"></canvas>
+<h1>tsz web runtime</h1>
+<div id="status">Loading...</div>
 
+<canvas id="canvas" width="800" height="400"></canvas>
+
+<div>
+  <button id="boot-btn" disabled>Boot Linux (v86 x86)</button>
+</div>
+
+<div id="terminal"></div>
+<div id="v86-screen"></div>
+
+<script src="libv86.js"></script>
 <script>
 const statusEl = document.getElementById('status');
+const termEl = document.getElementById('terminal');
 const canvas = document.getElementById('canvas');
+const bootBtn = document.getElementById('boot-btn');
+
+function termWrite(text) {
+  termEl.textContent += text;
+  termEl.scrollTop = termEl.scrollHeight;
+}
+
+// ── WebGPU + tsz wasm ───────────────────────────────────────────
 
 async function init() {
-  // Check WebGPU support
-  if (!navigator.gpu) {
-    statusEl.textContent = 'WebGPU not supported in this browser.';
-    return;
+  let device = null;
+  if (navigator.gpu) {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (adapter) {
+      device = await adapter.requestDevice();
+      const context = canvas.getContext('webgpu');
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({ device, format, alphaMode: 'opaque' });
+      statusEl.textContent = 'WebGPU ready.';
+    } else {
+      statusEl.textContent = 'WebGPU: no adapter. Terminal mode.';
+    }
+  } else {
+    statusEl.textContent = 'No WebGPU. Terminal mode.';
   }
 
-  // Request adapter + device
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    statusEl.textContent = 'No WebGPU adapter found.';
-    return;
-  }
-
-  const device = await adapter.requestDevice();
-  statusEl.textContent = 'WebGPU device acquired. Loading wasm...';
-
-  // Configure canvas context
-  const context = canvas.getContext('webgpu');
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  context.configure({ device, format, alphaMode: 'opaque' });
-
-  // Load the Emscripten module
-  // emdawnwebgpu needs the device set before module init
-  const Module = {
+  // Load tsz wasm
+  window.Module = {
     canvas: canvas,
     preinitializedWebGPUDevice: device,
     onRuntimeInitialized: function() {
-      statusEl.textContent = 'WASM loaded. Calling web_init()...';
-      // Call our exported init function
-      Module.ccall('web_init', null, ['number', 'number'], [canvas.width, canvas.height]);
-      statusEl.textContent = 'tsz running (' + canvas.width + 'x' + canvas.height + ')';
+      statusEl.textContent += ' WASM loaded.';
+      bootBtn.disabled = false;
+
+      if (device) {
+        try {
+          Module._web_init(canvas.width, canvas.height);
+          statusEl.textContent += ' GPU active.';
+
+          // rAF loop from JS
+          function frame() {
+            try { Module._web_frame(); } catch(e) {}
+            requestAnimationFrame(frame);
+          }
+          requestAnimationFrame(frame);
+        } catch(e) {
+          statusEl.textContent += ' GPU init error: ' + e.message;
+          console.error(e);
+        }
+      }
     }
   };
 
-  // Handle resize
-  window.addEventListener('resize', () => {
-    canvas.width = Math.min(window.innerWidth - 40, 1200);
-    canvas.height = Math.min(window.innerHeight - 40, 900);
-    context.configure({ device, format, alphaMode: 'opaque' });
-    if (Module._web_resize) {
-      Module._web_resize(canvas.width, canvas.height);
-    }
+  // Boot Linux via v86 when button clicked
+  bootBtn.addEventListener('click', () => {
+    bootBtn.disabled = true;
+    termWrite('Booting x86 Linux via v86...\n');
+    statusEl.textContent += ' Booting Linux...';
+
+    const emulator = new V86({
+      wasm_path: 'v86.wasm',
+      bios: { url: 'seabios.bin' },
+      vga_bios: { url: 'vgabios.bin' },
+      cdrom: { url: 'alpine-virt.iso' },
+      memory_size: 128 * 1024 * 1024,
+      vga_memory_size: 2 * 1024 * 1024,
+      autostart: true,
+    });
+
+    emulator.add_listener('serial0-output-byte', function(byte) {
+      termWrite(String.fromCharCode(byte));
+    });
+
+    emulator.add_listener('emulator-ready', function() {
+      statusEl.textContent += ' v86 ready.';
+    });
   });
 
-  // Load the JS glue (it picks up the Module global)
-  window.Module = Module;
   const script = document.createElement('script');
   script.src = 'tsz-web.js';
   document.body.appendChild(script);

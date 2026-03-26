@@ -283,8 +283,11 @@ pub fn build(b: *std.Build) void {
                 "fs.c",
                 "fs_utils.c",
             },
-            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DCONFIG_X86EMU", "-DMAX_XLEN=32" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DCONFIG_X86EMU", "-DMAX_XLEN=32", "-DEMSCRIPTEN" },
         });
+        // TinyEMU Emscripten files disabled — using v86 for Linux VM instead.
+        // jsemu.c conflicts with our Emscripten init. TinyEMU core (x86_cpu.c etc.)
+        // is still compiled for future direct integration.
 
         const web_lib = b.addLibrary(.{
             .linkage = .static,
@@ -303,8 +306,12 @@ pub fn build(b: *std.Build) void {
             "-sASYNCIFY",
             "-sALLOW_MEMORY_GROWTH",
             "--preload-file", "../deps/tinyemu/images@/tinyemu",
-            "-sEXPORTED_FUNCTIONS=[\"_web_init\",\"_web_resize\",\"_main\"]",
-            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\"]",
+            "-sEXPORTED_FUNCTIONS=[\"_web_init\",\"_web_resize\",\"_web_frame\",\"_main\",\"_malloc\",\"_free\"]",
+            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"allocateUTF8\",\"HEAPU8\",\"HEAP32\"]",
+            "-sERROR_ON_UNDEFINED_SYMBOLS=0",
+            "-sASSERTIONS=2",
+            "-sNO_EXIT_RUNTIME=1",
+            "-sFETCH",
             "-O2",
             "-o",
         });
@@ -545,6 +552,9 @@ fn addAppExe(
         exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
         exe.linkLibCpp();
 
+        // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
+        exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
+
         if (os == .linux) {
             if (sysroot) |sr| {
                 exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
@@ -708,6 +718,9 @@ fn addDevShellExe(
     exe.root_module.addIncludePath(b.path("../blend2d"));
     exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
     exe.linkLibCpp();
+
+    // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
+    exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
     if (os == .linux) {
         if (sysroot) |sr| {
