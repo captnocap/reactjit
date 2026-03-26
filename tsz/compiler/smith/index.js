@@ -591,6 +591,46 @@ function parseJSXElement(c) {
   return buildNode(tag, styleFields, children, handlerRef, nodeFields, rawTag, tagSrcOffset);
 }
 
+// ── Template literal parser ──
+
+function parseTemplateLiteral(raw) {
+  // Split "text ${expr} more ${expr2}" into fmt string + args
+  let fmt = '';
+  const args = [];
+  let i = 0;
+  while (i < raw.length) {
+    if (raw[i] === '$' && i + 1 < raw.length && raw[i + 1] === '{') {
+      // Find matching }
+      let j = i + 2;
+      let depth = 1;
+      while (j < raw.length && depth > 0) {
+        if (raw[j] === '{') depth++;
+        if (raw[j] === '}') depth--;
+        j++;
+      }
+      const expr = raw.slice(i + 2, j - 1).trim();
+      // Determine format specifier based on expression type
+      const slotIdx = findSlot(expr);
+      if (slotIdx >= 0) {
+        const slot = ctx.stateSlots[slotIdx];
+        fmt += slot.type === 'string' ? '{s}' : '{d}';
+        args.push(slotGet(expr));
+      } else {
+        // Unknown expression — treat as integer
+        fmt += '{d}';
+        // Resolve state getters in the expression
+        const resolved = expr.replace(/\b(\w+)\b/g, (m) => isGetter(m) ? slotGet(m) : m);
+        args.push(resolved);
+      }
+      i = j;
+    } else {
+      fmt += raw[i];
+      i++;
+    }
+  }
+  return { fmt, args };
+}
+
 // Try to parse {expr && <JSX>} conditional — returns true if consumed
 function tryParseConditional(c, children) {
   // Look ahead: identifier (op identifier/number)* && <
@@ -701,6 +741,25 @@ function parseChildren(c) {
       // Try ternary text: {expr == val ? "a" : "b"}
       const ternResult = tryParseTernaryText(c, children);
       if (ternResult) continue;
+      // Template literal: {`text ${expr}`}
+      if (c.kind() === TK.template_literal) {
+        const raw = c.text().slice(1, -1); // strip backticks
+        c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        // Parse template: split on ${...} and build fmt string + args
+        const { fmt, args } = parseTemplateLiteral(raw);
+        if (args.length > 0) {
+          const bufId = ctx.dynCount;
+          // Buffer size: static text length + 64 per interpolation + padding (match reference)
+          const bufSize = fmt.length + 64 * args.length + 14;
+          ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize });
+          ctx.dynCount++;
+          children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+        } else {
+          children.push({ nodeExpr: `.{ .text = "${fmt}" }` });
+        }
+        continue;
+      }
       // {expr} — check props first, then state getters
       if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
         // Prop substitution — replace {propName} with the prop value as static text
