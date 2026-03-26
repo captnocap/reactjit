@@ -304,7 +304,10 @@ function tryParseConditional(c, children) {
       const name = c.text();
       condParts.push(isGetter(name) ? slotGet(name) : name);
     } else if (c.kind() === TK.number) {
-      condParts.push(c.text());
+      // Leading space before numbers after operators (matches reference token spacing)
+      const lastPart = condParts.length > 0 ? condParts[condParts.length - 1] : '';
+      if (lastPart.endsWith(' ')) condParts.push(' ' + c.text());
+      else condParts.push(c.text());
     } else if (c.kind() === TK.eq_eq) {
       condParts.push(' == ');
     } else if (c.kind() === TK.not_eq) {
