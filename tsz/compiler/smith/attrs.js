@@ -141,7 +141,7 @@ function parseHandler(c) {
         if (c.kind() === TK.lparen) {
           c.advance();
           const valExpr = parseValueExpr(c);
-          const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ') || valExpr.includes(' ? ');
+          const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ') || valExpr.includes('if (');
           const wrapped = needsParens ? `(${valExpr})` : valExpr;
           body += `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
           if (c.kind() === TK.rparen) c.advance();

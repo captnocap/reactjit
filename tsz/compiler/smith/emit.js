@@ -17,7 +17,7 @@ function emitOutput(rootExpr, file) {
   out += `const layout = @import("${prefix}layout.zig");\n`;
   out += `const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n`;
   if (hasState || ctx.objectArrays.length > 0) out += `const state = @import("${prefix}state.zig");\n`;
-  out += `const engine = if (IS_LIB) struct {} else if (builtin.os.tag == .emscripten) @import("${prefix}engine_web.zig") else @import("${prefix}engine.zig");\n`;
+  out += `const engine = if (IS_LIB) struct {} else @import("${prefix}engine_web.zig");\n`;
   if (ctx.objectArrays.length > 0 || ctx.scriptBlock) {
     out += `const qjs_runtime = if (IS_LIB) struct {\n`;
     out += `    pub fn callGlobal(_: []const u8) void {}\n`;

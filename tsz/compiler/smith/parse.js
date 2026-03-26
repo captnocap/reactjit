@@ -254,10 +254,15 @@ function parseTemplateLiteral(raw) {
         const slot = ctx.stateSlots[slotIdx];
         fmt += slot.type === 'string' ? '{s}' : '{d}';
         args.push(slotGet(expr));
+      } else if (ctx.propStack[expr] !== undefined) {
+        // Prop substitution — use the concrete prop value
+        const propVal = ctx.propStack[expr];
+        const isNum = /^-?\d+(\.\d+)?$/.test(propVal);
+        fmt += isNum ? '{d}' : '{s}';
+        args.push(isNum ? propVal : `"${propVal}"`);
       } else {
-        // Unknown expression — treat as integer
+        // Unknown expression — treat as integer, resolve state getters
         fmt += '{d}';
-        // Resolve state getters in the expression
         const resolved = expr.replace(/\b(\w+)\b/g, (m) => isGetter(m) ? slotGet(m) : m);
         args.push(resolved);
       }
