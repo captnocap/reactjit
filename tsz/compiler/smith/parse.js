@@ -61,6 +61,7 @@ function parseJSXElement(c) {
               if (c.kind() === TK.lbrace) depth++;
               if (c.kind() === TK.rbrace) { if (depth === 0) break; depth--; }
               if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
+              else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) val += '@as(i64, @intCast(_i))';
               else val += c.text();
               c.advance();
             }
@@ -278,19 +279,18 @@ function tryParseMap(c, oa) {
 
   // Save array state — arrays created during map template go to mapArrayDecls
   // But save top-level refs so component inlining can restore to them
-  const savedArrayCounter = ctx.arrayCounter;
   const savedArrayDecls = ctx.arrayDecls;
   const savedArrayComments = ctx.arrayComments;
   mapInfo._topArrayDecls = savedArrayDecls;
   mapInfo._topArrayComments = savedArrayComments;
   ctx.arrayDecls = mapInfo.mapArrayDecls;
   ctx.arrayComments = mapInfo.mapArrayComments;
+  // DO NOT save/restore arrayCounter — each map gets unique array IDs
 
   // Parse the map template JSX
   const templateNode = parseJSXElement(c);
 
-  // Restore — map arrays are NOT top-level declarations
-  ctx.arrayCounter = savedArrayCounter;
+  // Restore array target — but counter keeps advancing (no overlaps)
   ctx.arrayDecls = savedArrayDecls;
   ctx.arrayComments = savedArrayComments;
 
@@ -306,6 +306,69 @@ function tryParseMap(c, oa) {
 
   // Return a placeholder node — the parent array slot that gets .children set by _rebuildMap
   // Map placeholder — gets .children set by _rebuildMap at runtime
+  return { nodeExpr: `.{}`, mapIdx };
+}
+
+// Nested map: cursor is on field name (e.g. "items" in group.items.map(...))
+function tryParseNestedMap(c, nestedOa, fieldName) {
+  const saved = c.save();
+  c.advance(); // skip field name
+  if (c.kind() !== TK.dot) { c.restore(saved); return null; }
+  c.advance(); // skip .
+  if (!c.isIdent('map')) { c.restore(saved); return null; }
+  c.advance(); // skip 'map'
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance(); // skip (
+
+  // Parse params: (item, i) => or (item) =>
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance(); // skip (
+  let itemParam = '_item';
+  let indexParam = '_j'; // nested uses _j
+  if (c.kind() === TK.identifier) { itemParam = c.text(); c.advance(); }
+  if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { indexParam = c.text(); c.advance(); } }
+  if (c.kind() === TK.rparen) c.advance(); // skip )
+  if (c.kind() === TK.arrow) c.advance(); // skip =>
+  if (c.kind() === TK.lparen) c.advance(); // skip ( before JSX
+
+  // Push nested map context
+  const savedMapCtx = ctx.currentMap;
+  const mapIdx = ctx.maps.length;
+  const mapInfo = {
+    oaIdx: nestedOa.oaIdx, itemParam, indexParam,
+    oa: nestedOa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
+    mapArrayDecls: [], mapArrayComments: [],
+    isNested: true, parentMapIdx: savedMapCtx ? ctx.maps.indexOf(savedMapCtx) : -1,
+    parentOaIdx: savedMapCtx ? savedMapCtx.oaIdx : -1,
+    nestedField: fieldName,
+    iterVar: '_j', // nested loops use _j instead of _i
+  };
+  ctx.currentMap = mapInfo;
+
+  // Save array state
+  const savedArrayDecls = ctx.arrayDecls;
+  const savedArrayComments = ctx.arrayComments;
+  mapInfo._topArrayDecls = savedArrayDecls;
+  mapInfo._topArrayComments = savedArrayComments;
+  ctx.arrayDecls = mapInfo.mapArrayDecls;
+  ctx.arrayComments = mapInfo.mapArrayComments;
+
+  // Parse the map template JSX
+  const templateNode = parseJSXElement(c);
+
+  // Restore
+  ctx.arrayDecls = savedArrayDecls;
+  ctx.arrayComments = savedArrayComments;
+  ctx.currentMap = savedMapCtx;
+
+  // Skip closing ))}
+  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.rparen) c.advance();
+
+  // Register the map
+  mapInfo.templateExpr = templateNode.nodeExpr;
+  ctx.maps.push(mapInfo);
+
   return { nodeExpr: `.{}`, mapIdx };
 }
 
@@ -437,8 +500,13 @@ function tryParseConditional(c, children) {
           if (mm) {
             const oa = ctx.currentMap.oa;
             const resolved = `_oa${oa.oaIdx}_${mm[1]}[_i] == ${mm[3]}`;
-            const displayStyle = `.style = .{ .display = if (${resolved}) .flex else .none }`;
-            const modified = jsxNode.nodeExpr.replace(/ \}$/, `, ${displayStyle} }`);
+            // Merge display into existing style if present, otherwise add new style
+            let modified;
+            if (jsxNode.nodeExpr.includes('.style = .{')) {
+              modified = jsxNode.nodeExpr.replace('.style = .{', `.style = .{ .display = if (${resolved}) .flex else .none,`);
+            } else {
+              modified = jsxNode.nodeExpr.replace(/ \}$/, `, .style = .{ .display = if (${resolved}) .flex else .none } }`);
+            }
             children.push({ nodeExpr: modified, dynBufId: jsxNode.dynBufId });
             return true;
           }
@@ -456,7 +524,25 @@ function tryParseConditional(c, children) {
     // Build condition expression with Zig-compatible ops
     if (c.kind() === TK.identifier) {
       const name = c.text();
-      condParts.push(isGetter(name) ? slotGet(name) : name);
+      if (isGetter(name)) {
+        condParts.push(slotGet(name));
+      } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        // Prop from component — if we're in a map and prop name matches an OA field, use OA access
+        if (ctx.currentMap && ctx.currentMap.oa) {
+          const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
+          if (fi) {
+            condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
+          } else {
+            condParts.push(ctx.propStack[name]);
+          }
+        } else {
+          condParts.push(ctx.propStack[name]);
+        }
+      } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+        condParts.push('@as(i64, @intCast(_i))');
+      } else {
+        condParts.push(name);
+      }
     } else if (c.kind() === TK.number) {
       // Leading space before numbers after operators (matches reference double-space pattern)
       const lastPart = condParts.length > 0 ? condParts[condParts.length - 1] : '';
@@ -497,7 +583,24 @@ function tryParseTernaryJSX(c, children) {
     if (c.kind() === TK.question) { foundQuestion = true; c.advance(); break; }
     if (c.kind() === TK.identifier) {
       const name = c.text();
-      condParts.push(isGetter(name) ? slotGet(name) : name);
+      if (isGetter(name)) {
+        condParts.push(slotGet(name));
+      } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        if (ctx.currentMap && ctx.currentMap.oa) {
+          const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
+          if (fi) {
+            condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
+          } else {
+            condParts.push(ctx.propStack[name]);
+          }
+        } else {
+          condParts.push(ctx.propStack[name]);
+        }
+      } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+        condParts.push('@as(i64, @intCast(_i))');
+      } else {
+        condParts.push(name);
+      }
     } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); }
     else if (c.kind() === TK.not_eq) { condParts.push(' != '); }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
@@ -600,6 +703,31 @@ function parseChildren(c) {
             if (c.kind() === TK.rbrace) c.advance();
             continue;
           }
+        }
+        // Nested map: {group.items.map(...)} inside an outer .map()
+        if (ctx.currentMap && maybeArr === ctx.currentMap.itemParam &&
+            c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+          const saved2 = c.save();
+          c.advance(); // skip item param
+          c.advance(); // skip .
+          if (c.kind() === TK.identifier) {
+            const nestedField = c.text();
+            // Find nested OA for this field
+            const parentOa = ctx.currentMap.oa;
+            const nestedFieldInfo = parentOa.fields.find(f => f.type === 'nested_array' && f.name === nestedField);
+            if (nestedFieldInfo && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+              const nestedOa = ctx.objectArrays.find(o => o.oaIdx === nestedFieldInfo.nestedOaIdx);
+              if (nestedOa) {
+                const mapResult = tryParseNestedMap(c, nestedOa, nestedField);
+                if (mapResult) {
+                  children.push(mapResult);
+                  if (c.kind() === TK.rbrace) c.advance();
+                  continue;
+                }
+              }
+            }
+          }
+          c.restore(saved2);
         }
       }
       // Template literal: {`text ${expr}`}

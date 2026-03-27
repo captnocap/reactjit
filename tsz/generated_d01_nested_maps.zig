@@ -26,8 +26,8 @@ comptime { if (1 != 1) @compileError("state slot count mismatch"); }
 
 // ── Generated node tree ─────────────────────────────────────────
 // tsz:d01_nested_maps.tsz:12 — <ScrollView>
-var _arr_0 = [_]Node{ .{}, .{ .text = "", .font_size = 10, .text_color = Color.rgb(83, 52, 131) } };
-var _root = Node{ .style = .{ .background_color = Color.rgb(26, 26, 46), .padding = 16, .width = -1, .height = -1 }, .children = &_arr_0 };
+var _arr_3 = [_]Node{ .{}, .{ .text = "", .font_size = 10, .text_color = Color.rgb(83, 52, 131) } };
+var _root = Node{ .style = .{ .background_color = Color.rgb(26, 26, 46), .padding = 16, .width = -1, .height = -1 }, .children = &_arr_3 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [64]u8 = undefined;
@@ -64,15 +64,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 var _oa0_name: [][]const u8 = &[_][]const u8{};
 var _oa0_name_lens: []usize = &[_]usize{};
 var _oa0_name_cap: usize = 0;
-var _oa0_items: []i64 = &[_]i64{};
-var _oa0_items_cap: usize = 0;
-var _oa0_label: [][]const u8 = &[_][]const u8{};
-var _oa0_label_lens: []usize = &[_]usize{};
-var _oa0_label_cap: usize = 0;
-var _oa0_value: []i64 = &[_]i64{};
-var _oa0_value_cap: usize = 0;
 var _oa0_len: usize = 0;
 var _oa0_dirty: bool = false;
+
+var _oa1_label: [][]const u8 = &[_][]const u8{};
+var _oa1_label_lens: []usize = &[_]usize{};
+var _oa1_label_cap: usize = 0;
+var _oa1_value: []i64 = &[_]i64{};
+var _oa1_value_cap: usize = 0;
+var _oa1_len: usize = 0;
+var _oa1_parentIdx: []usize = &[_]usize{};
+var _oa1_parentIdx_cap: usize = 0;
+var _oa1_dirty: bool = false;
 
 fn _oa0_ensureCapacity(needed: usize) void {
     if (needed <= _oa0_name_cap) return;
@@ -90,35 +93,40 @@ fn _oa0_ensureCapacity(needed: usize) void {
         @memset(_oa0_name_lens[_old_cap..new_cap], 0);
     }
     _oa0_name_cap = new_cap;
-    if (_oa0_items_cap == 0) {
-        _oa0_items = _oa_alloc.alloc(i64, new_cap) catch return;
-        @memset(_oa0_items, 0);
+}
+
+fn _oa1_ensureCapacity(needed: usize) void {
+    if (needed <= _oa1_label_cap) return;
+    const new_cap = @max(needed, if (_oa1_label_cap == 0) @as(usize, 256) else _oa1_label_cap * 2);
+    if (_oa1_label_cap == 0) {
+        _oa1_label = _oa_alloc.alloc([]const u8, new_cap) catch return;
+        _oa1_label_lens = _oa_alloc.alloc(usize, new_cap) catch return;
+        for (0..new_cap) |_jj| _oa1_label[_jj] = &[_]u8{};
+        @memset(_oa1_label_lens, 0);
     } else {
-        _oa0_items = _oa_alloc.realloc(_oa0_items.ptr[0.._oa0_items_cap], new_cap) catch return;
-        @memset(_oa0_items[_oa0_items_cap..new_cap], 0);
+        const _old_cap = _oa1_label_cap;
+        _oa1_label = _oa_alloc.realloc(_oa1_label.ptr[0.._old_cap], new_cap) catch return;
+        _oa1_label_lens = _oa_alloc.realloc(_oa1_label_lens.ptr[0.._old_cap], new_cap) catch return;
+        for (_old_cap..new_cap) |_jj| _oa1_label[_jj] = &[_]u8{};
+        @memset(_oa1_label_lens[_old_cap..new_cap], 0);
     }
-    _oa0_items_cap = new_cap;
-    if (_oa0_label_cap == 0) {
-        _oa0_label = _oa_alloc.alloc([]const u8, new_cap) catch return;
-        _oa0_label_lens = _oa_alloc.alloc(usize, new_cap) catch return;
-        for (0..new_cap) |_j| _oa0_label[_j] = &[_]u8{};
-        @memset(_oa0_label_lens, 0);
+    _oa1_label_cap = new_cap;
+    if (_oa1_value_cap == 0) {
+        _oa1_value = _oa_alloc.alloc(i64, new_cap) catch return;
+        @memset(_oa1_value, 0);
     } else {
-        const _old_cap = _oa0_label_cap;
-        _oa0_label = _oa_alloc.realloc(_oa0_label.ptr[0.._old_cap], new_cap) catch return;
-        _oa0_label_lens = _oa_alloc.realloc(_oa0_label_lens.ptr[0.._old_cap], new_cap) catch return;
-        for (_old_cap..new_cap) |_j| _oa0_label[_j] = &[_]u8{};
-        @memset(_oa0_label_lens[_old_cap..new_cap], 0);
+        _oa1_value = _oa_alloc.realloc(_oa1_value.ptr[0.._oa1_value_cap], new_cap) catch return;
+        @memset(_oa1_value[_oa1_value_cap..new_cap], 0);
     }
-    _oa0_label_cap = new_cap;
-    if (_oa0_value_cap == 0) {
-        _oa0_value = _oa_alloc.alloc(i64, new_cap) catch return;
-        @memset(_oa0_value, 0);
+    _oa1_value_cap = new_cap;
+    if (_oa1_parentIdx_cap == 0) {
+        _oa1_parentIdx = _oa_alloc.alloc(usize, new_cap) catch return;
+        @memset(_oa1_parentIdx, 0);
     } else {
-        _oa0_value = _oa_alloc.realloc(_oa0_value.ptr[0.._oa0_value_cap], new_cap) catch return;
-        @memset(_oa0_value[_oa0_value_cap..new_cap], 0);
+        _oa1_parentIdx = _oa_alloc.realloc(_oa1_parentIdx.ptr[0.._oa1_parentIdx_cap], new_cap) catch return;
+        @memset(_oa1_parentIdx[_oa1_parentIdx_cap..new_cap], 0);
     }
-    _oa0_value_cap = new_cap;
+    _oa1_parentIdx_cap = new_cap;
 }
 
 fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -130,6 +138,7 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
     qjs.JS_FreeValue(c2, len_val);
     const count: usize = @intCast(@max(0, arr_len));
     _oa0_ensureCapacity(count);
+    var _nested_total_1: usize = 0;
     for (0..count) |_i| {
         const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));
         { const _v = qjs.JS_GetPropertyStr(c2, elem, "name");
@@ -138,23 +147,39 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
         _oaFreeString(&_oa0_name[_i], &_oa0_name_lens[_i]);
         if (_s) |ss| { const sl = std.mem.span(ss); _oa0_name[_i] = _oaDupString(sl); _oa0_name_lens[_i] = _oa0_name[_i].len; qjs.JS_FreeCString(c2, _s); }
         }
-        { const _v = qjs.JS_GetPropertyStr(c2, elem, "items");
-        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);
-        qjs.JS_FreeValue(c2, _v); _oa0_items[_i] = _n;
+        { const _nested_arr = qjs.JS_GetPropertyStr(c2, elem, "items");
+        const _nested_len_val = qjs.JS_GetPropertyStr(c2, _nested_arr, "length");
+        var _nested_len: i32 = 0;
+        _ = qjs.JS_ToInt32(c2, &_nested_len, _nested_len_val);
+        qjs.JS_FreeValue(c2, _nested_len_val);
+        const _ncount: usize = @intCast(@max(0, _nested_len));
+        _oa1_ensureCapacity(_nested_total_1 + _ncount);
+        for (0.._ncount) |_j| {
+            const _nelem = qjs.JS_GetPropertyUint32(c2, _nested_arr, @intCast(_j));
+            const _flat = _nested_total_1;
+            { const _v = qjs.JS_GetPropertyStr(c2, _nelem, "label");
+            const _s = qjs.JS_ToCString(c2, _v);
+            qjs.JS_FreeValue(c2, _v);
+            _oaFreeString(&_oa1_label[_flat], &_oa1_label_lens[_flat]);
+            if (_s) |ss| { const sl = std.mem.span(ss); _oa1_label[_flat] = _oaDupString(sl); _oa1_label_lens[_flat] = _oa1_label[_flat].len; qjs.JS_FreeCString(c2, _s); }
+            }
+            { const _v = qjs.JS_GetPropertyStr(c2, _nelem, "value");
+            var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);
+            qjs.JS_FreeValue(c2, _v); _oa1_value[_flat] = _n;
+            }
+            _oa1_parentIdx[_flat] = _i;
+            _nested_total_1 += 1;
+            qjs.JS_FreeValue(c2, _nelem);
         }
-        { const _v = qjs.JS_GetPropertyStr(c2, elem, "label");
-        const _s = qjs.JS_ToCString(c2, _v);
-        qjs.JS_FreeValue(c2, _v);
-        _oaFreeString(&_oa0_label[_i], &_oa0_label_lens[_i]);
-        if (_s) |ss| { const sl = std.mem.span(ss); _oa0_label[_i] = _oaDupString(sl); _oa0_label_lens[_i] = _oa0_label[_i].len; qjs.JS_FreeCString(c2, _s); }
-        }
-        { const _v = qjs.JS_GetPropertyStr(c2, elem, "value");
-        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);
-        qjs.JS_FreeValue(c2, _v); _oa0_value[_i] = _n;
+        qjs.JS_FreeValue(c2, _nested_arr);
         }
         qjs.JS_FreeValue(c2, elem);
     }
-    for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_name[_trim_i], &_oa0_name_lens[_trim_i]); _oaFreeString(&_oa0_label[_trim_i], &_oa0_label_lens[_trim_i]);
+    _oa1_len = _nested_total_1;
+    _oa1_dirty = true;
+    if (count < _oa0_len) {
+        for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_name[_trim_i], &_oa0_name_lens[_trim_i]);
+    }
     _oa0_len = count;
     _oa0_dirty = true;
     state.markDirty();
@@ -163,16 +188,21 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
 
 
 // ── Map pools ───────────────────────────────────────────────────
-const MAX_MAP_0: usize = 4096;
-var _map_pool_0: [MAX_MAP_0]Node = undefined;
-var _map_count_0: usize = 0;
+const MAX_MAP_1: usize = 4096;
+var _map_pool_1: [MAX_MAP_1]Node = undefined;
+var _map_count_1: usize = 0;
+var _arr_1 = [_]Node{ .{ .style = .{ .gap = 4 } } };
+var _map_inner_1: [MAX_MAP_1][2]Node = undefined;
+const MAX_MAP_0: usize = 64;
+var _map_pool_0: [MAX_MAP_1][MAX_MAP_0]Node = undefined;
+var _map_count_0: [MAX_MAP_1]usize = undefined;
 var _map_inner_0: [MAX_MAP_0][2]Node = undefined;
-var _map_text_bufs_0_0: [MAX_MAP_0][256]u8 = undefined;
-var _map_texts_0_0: [MAX_MAP_0][]const u8 = undefined;
 var _map_text_bufs_0_0: [MAX_MAP_0][256]u8 = undefined;
 var _map_texts_0_0: [MAX_MAP_0][]const u8 = undefined;
 var _map_text_bufs_0_1: [MAX_MAP_0][256]u8 = undefined;
 var _map_texts_0_1: [MAX_MAP_0][]const u8 = undefined;
+var _map_text_bufs_0_2: [MAX_MAP_0][256]u8 = undefined;
+var _map_texts_0_2: [MAX_MAP_0][]const u8 = undefined;
 var _map_lua_bufs_0: [MAX_MAP_0][32]u8 = undefined;
 var _map_lua_ptrs_0: [MAX_MAP_0]?[*:0]const u8 = .{null} ** MAX_MAP_0;
 fn _initMapLuaPtrs0() void {
@@ -182,18 +212,29 @@ fn _initMapLuaPtrs0() void {
         _map_lua_ptrs_0[_i] = @ptrCast(_map_lua_bufs_0[_i][0..n.len :0]);
     }
 }
-fn _rebuildMap0() void {
-    _map_count_0 = @min(_oa0_len, MAX_MAP_0);
-    for (0.._map_count_0) |_i| {
-        _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "Group {d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_name[_i][0.._oa0_name_lens[_i]] }) catch "";
-        _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "{d}", .{ _oa0_items[_i] }) catch "";
-        _map_texts_0_1[_i] = std.fmt.bufPrint(&_map_text_bufs_0_1[_i], "item.value [{d},ii]", .{ @as(i64, @intCast(_i)) }) catch "";
-        _map_inner_0[_i] = [2]Node{ .{ .text = _map_texts_0_0[_i], .font_size = 14, .text_color = Color.rgb(233, 69, 96) }, .{ .style = .{ .margin_top = 8, .gap = 4 }, .children = &_arr_1 } };
-        _map_pool_0[_i] = .{ .style = .{ .margin_bottom = 12, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .padding = 12 }, .children = &_map_inner_0[_i] };
+fn _rebuildMap1() void {
+    _map_count_1 = @min(_oa0_len, MAX_MAP_1);
+    for (0.._map_count_1) |_i| {
+        // Nested map 0: items
+        _map_count_0[_i] = 0;
+        for (0.._oa1_len) |_flat_j| {
+            if (_oa1_parentIdx[_flat_j] == _i) {
+                const _jj = _map_count_0[_i];
+                if (_jj >= MAX_MAP_0) break;
+                _map_texts_0_0[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_0[_jj], "Group {d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_name[_i][0.._oa0_name_lens[_i]] }) catch "";
+                _map_texts_0_1[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_1[_jj], "{s}", .{ _oa1_label[_flat_j][0.._oa1_label_lens[_flat_j]] }) catch "";
+                _map_texts_0_2[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_2[_jj], "{d} [gi,{d}]", .{ _oa1_value[_flat_j], @as(i64, @intCast(_i)) }) catch "";
+                _map_pool_0[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .lua_on_press = _map_lua_ptrs_0[_flat_j] }, .children = &_arr_0 };
+                _map_count_0[_i] += 1;
+            }
+        }
+        _map_inner_1[_i] = [2]Node{ .{ .text = "", .font_size = 14, .text_color = Color.rgb(233, 69, 96) }, .{ .style = .{ .margin_top = 8, .gap = 4 }, .children = &_arr_1 } };
+        _arr_3[0].children = _map_pool_0[_i][0.._map_count_0[_i]];
+        _map_pool_1[_i] = .{ .style = .{ .margin_bottom = 12, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .padding = 12 }, .children = &_map_inner_1[_i] };
     }
-    _arr_0[0].children = _map_pool_0[0.._map_count_0];
 }
 
+var _arr_0 = [_]Node{ .{ .text = "", .font_size = 12, .text_color = Color.rgb(226, 226, 226) }, .{ .text = "", .font_size = 12, .text_color = Color.rgb(233, 69, 96) } };
 
 // ── Embedded JS logic ────────────────────────────────────────
 const JS_LOGIC =
@@ -213,7 +254,7 @@ const JS_LOGIC =
 // ── Embedded Lua logic ───────────────────────────────────────
 const LUA_LOGIC =
     \\-- State variables (mirroring Zig state slots)
-    \\local selected = 0
+    \\selected = 0
     \\
     \\function setSelected(v) selected = v; __setState(0, v) end
     \\
@@ -228,8 +269,8 @@ const LUA_LOGIC =
     \\
     \\
     \\function __mapPress_0(idx)
-    \\  local group = groups[idx + 1]
-    \\  local gi = idx
+    \\  local item = items[idx + 1]
+    \\  local ii = idx
     \\  setSelected(gi * 100 + ii)
     \\end
     \\
@@ -242,7 +283,7 @@ fn _initState() void {
 
 fn _updateDynamicTexts() void {
     _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "selected: {d}", .{ state.getSlot(0) }) catch "";
-    _arr_0[1].text = _dyn_text_0;
+    _arr_3[1].text = _dyn_text_0;
 }
 
 
@@ -250,14 +291,13 @@ fn _appInit() void {
     _initState();
     qjs_runtime.registerHostFn("__setObjArr0", @ptrCast(&_oa0_unpack), 1);
     _updateDynamicTexts();
-    _initMapLuaPtrs0();
-    _rebuildMap0();
+    _rebuildMap1();
 }
 
 fn _appTick(now: u32) void {
     _ = now;
     if (state.isDirty()) { _updateDynamicTexts();
-        _rebuildMap0();
+        _rebuildMap1();
  state.clearDirty(); }
 }
 

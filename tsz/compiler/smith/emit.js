@@ -102,8 +102,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
     // Per-object-array storage + unpack
     for (const oa of ctx.objectArrays) {
+      if (oa.isNested) continue; // nested OAs handled separately below
       const idx = oa.oaIdx;
-      for (const f of oa.fields) {
+      const flatFields = oa.fields.filter(f => f.type !== 'nested_array');
+      for (const f of flatFields) {
         if (f.type === 'string') {
           out += `var _oa${idx}_${f.name}: [][]const u8 = &[_][]const u8{};\n`;
           out += `var _oa${idx}_${f.name}_lens: []usize = &[_]usize{};\n`;
@@ -116,12 +118,35 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       out += `var _oa${idx}_len: usize = 0;\n`;
       out += `var _oa${idx}_dirty: bool = false;\n\n`;
 
+      // Nested OA storage — flat arrays with per-parent offset/count
+      const nestedFields = oa.fields.filter(f => f.type === 'nested_array');
+      for (const nf of nestedFields) {
+        const childOa = ctx.objectArrays.find(o => o.oaIdx === nf.nestedOaIdx);
+        if (!childOa) continue;
+        const cidx = childOa.oaIdx;
+        for (const cf of childOa.fields) {
+          if (cf.type === 'string') {
+            out += `var _oa${cidx}_${cf.name}: [][]const u8 = &[_][]const u8{};\n`;
+            out += `var _oa${cidx}_${cf.name}_lens: []usize = &[_]usize{};\n`;
+            out += `var _oa${cidx}_${cf.name}_cap: usize = 0;\n`;
+          } else {
+            out += `var _oa${cidx}_${cf.name}: []i64 = &[_]i64{};\n`;
+            out += `var _oa${cidx}_${cf.name}_cap: usize = 0;\n`;
+          }
+        }
+        out += `var _oa${cidx}_len: usize = 0;\n`;
+        out += `var _oa${cidx}_parentIdx: []usize = &[_]usize{};\n`; // which parent each item belongs to
+        out += `var _oa${cidx}_parentIdx_cap: usize = 0;\n`;
+        out += `var _oa${cidx}_dirty: bool = false;\n\n`;
+      }
+
       // ensureCapacity
       out += `fn _oa${idx}_ensureCapacity(needed: usize) void {\n`;
-      const firstField = oa.fields[0];
+      const firstField = flatFields[0];
+      if (!firstField) { out += `    _ = needed;\n}\n\n`; continue; }
       out += `    if (needed <= _oa${idx}_${firstField.name}_cap) return;\n`;
       out += `    const new_cap = @max(needed, if (_oa${idx}_${firstField.name}_cap == 0) @as(usize, 64) else _oa${idx}_${firstField.name}_cap * 2);\n`;
-      for (const f of oa.fields) {
+      for (const f of flatFields) {
         if (f.type === 'string') {
           out += `    if (_oa${idx}_${f.name}_cap == 0) {\n`;
           out += `        _oa${idx}_${f.name} = _oa_alloc.alloc([]const u8, new_cap) catch return;\n`;
@@ -149,6 +174,53 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
       out += `}\n\n`;
 
+      // Nested OA ensureCapacity
+      for (const nf of nestedFields) {
+        const childOa = ctx.objectArrays.find(o => o.oaIdx === nf.nestedOaIdx);
+        if (!childOa) continue;
+        const cidx = childOa.oaIdx;
+        const cFirstField = childOa.fields[0];
+        out += `fn _oa${cidx}_ensureCapacity(needed: usize) void {\n`;
+        out += `    if (needed <= _oa${cidx}_${cFirstField.name}_cap) return;\n`;
+        out += `    const new_cap = @max(needed, if (_oa${cidx}_${cFirstField.name}_cap == 0) @as(usize, 256) else _oa${cidx}_${cFirstField.name}_cap * 2);\n`;
+        for (const cf of childOa.fields) {
+          if (cf.type === 'string') {
+            out += `    if (_oa${cidx}_${cf.name}_cap == 0) {\n`;
+            out += `        _oa${cidx}_${cf.name} = _oa_alloc.alloc([]const u8, new_cap) catch return;\n`;
+            out += `        _oa${cidx}_${cf.name}_lens = _oa_alloc.alloc(usize, new_cap) catch return;\n`;
+            out += `        for (0..new_cap) |_jj| _oa${cidx}_${cf.name}[_jj] = &[_]u8{};\n`;
+            out += `        @memset(_oa${cidx}_${cf.name}_lens, 0);\n`;
+            out += `    } else {\n`;
+            out += `        const _old_cap = _oa${cidx}_${cf.name}_cap;\n`;
+            out += `        _oa${cidx}_${cf.name} = _oa_alloc.realloc(_oa${cidx}_${cf.name}.ptr[0.._old_cap], new_cap) catch return;\n`;
+            out += `        _oa${cidx}_${cf.name}_lens = _oa_alloc.realloc(_oa${cidx}_${cf.name}_lens.ptr[0.._old_cap], new_cap) catch return;\n`;
+            out += `        for (_old_cap..new_cap) |_jj| _oa${cidx}_${cf.name}[_jj] = &[_]u8{};\n`;
+            out += `        @memset(_oa${cidx}_${cf.name}_lens[_old_cap..new_cap], 0);\n`;
+            out += `    }\n`;
+            out += `    _oa${cidx}_${cf.name}_cap = new_cap;\n`;
+          } else {
+            out += `    if (_oa${cidx}_${cf.name}_cap == 0) {\n`;
+            out += `        _oa${cidx}_${cf.name} = _oa_alloc.alloc(i64, new_cap) catch return;\n`;
+            out += `        @memset(_oa${cidx}_${cf.name}, 0);\n`;
+            out += `    } else {\n`;
+            out += `        _oa${cidx}_${cf.name} = _oa_alloc.realloc(_oa${cidx}_${cf.name}.ptr[0.._oa${cidx}_${cf.name}_cap], new_cap) catch return;\n`;
+            out += `        @memset(_oa${cidx}_${cf.name}[_oa${cidx}_${cf.name}_cap..new_cap], 0);\n`;
+            out += `    }\n`;
+            out += `    _oa${cidx}_${cf.name}_cap = new_cap;\n`;
+          }
+        }
+        // parentIdx array
+        out += `    if (_oa${cidx}_parentIdx_cap == 0) {\n`;
+        out += `        _oa${cidx}_parentIdx = _oa_alloc.alloc(usize, new_cap) catch return;\n`;
+        out += `        @memset(_oa${cidx}_parentIdx, 0);\n`;
+        out += `    } else {\n`;
+        out += `        _oa${cidx}_parentIdx = _oa_alloc.realloc(_oa${cidx}_parentIdx.ptr[0.._oa${cidx}_parentIdx_cap], new_cap) catch return;\n`;
+        out += `        @memset(_oa${cidx}_parentIdx[_oa${cidx}_parentIdx_cap..new_cap], 0);\n`;
+        out += `    }\n`;
+        out += `    _oa${cidx}_parentIdx_cap = new_cap;\n`;
+        out += `}\n\n`;
+      }
+
       // unpack function
       out += `fn _oa${idx}_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n`;
       out += `    const c2 = ctx orelse return QJS_UNDEFINED;\n`;
@@ -159,10 +231,51 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       out += `    qjs.JS_FreeValue(c2, len_val);\n`;
       out += `    const count: usize = @intCast(@max(0, arr_len));\n`;
       out += `    _oa${idx}_ensureCapacity(count);\n`;
+      // Pre-declare nested flat index counters
+      for (const nf of nestedFields) {
+        const cidx = nf.nestedOaIdx;
+        out += `    var _nested_total_${cidx}: usize = 0;\n`;
+      }
       out += `    for (0..count) |_i| {\n`;
       out += `        const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));\n`;
       for (const f of oa.fields) {
-        if (f.type === 'string') {
+        if (f.type === 'nested_array') {
+          // Unpack nested array: iterate inner array and flatten into child OA
+          const cidx = f.nestedOaIdx;
+          const childOa = ctx.objectArrays.find(o => o.oaIdx === cidx);
+          if (!childOa) continue;
+          out += `        { const _nested_arr = qjs.JS_GetPropertyStr(c2, elem, "${f.name}");\n`;
+          out += `        const _nested_len_val = qjs.JS_GetPropertyStr(c2, _nested_arr, "length");\n`;
+          out += `        var _nested_len: i32 = 0;\n`;
+          out += `        _ = qjs.JS_ToInt32(c2, &_nested_len, _nested_len_val);\n`;
+          out += `        qjs.JS_FreeValue(c2, _nested_len_val);\n`;
+          out += `        const _ncount: usize = @intCast(@max(0, _nested_len));\n`;
+          out += `        _oa${cidx}_ensureCapacity(_nested_total_${cidx} + _ncount);\n`;
+          out += `        for (0.._ncount) |_j| {\n`;
+          out += `            const _nelem = qjs.JS_GetPropertyUint32(c2, _nested_arr, @intCast(_j));\n`;
+          out += `            const _flat = _nested_total_${cidx};\n`;
+          for (const cf of childOa.fields) {
+            if (cf.type === 'string') {
+              out += `            { const _v = qjs.JS_GetPropertyStr(c2, _nelem, "${cf.name}");\n`;
+              out += `            const _s = qjs.JS_ToCString(c2, _v);\n`;
+              out += `            qjs.JS_FreeValue(c2, _v);\n`;
+              out += `            _oaFreeString(&_oa${cidx}_${cf.name}[_flat], &_oa${cidx}_${cf.name}_lens[_flat]);\n`;
+              out += `            if (_s) |ss| { const sl = std.mem.span(ss); _oa${cidx}_${cf.name}[_flat] = _oaDupString(sl); _oa${cidx}_${cf.name}_lens[_flat] = _oa${cidx}_${cf.name}[_flat].len; qjs.JS_FreeCString(c2, _s); }\n`;
+              out += `            }\n`;
+            } else {
+              out += `            { const _v = qjs.JS_GetPropertyStr(c2, _nelem, "${cf.name}");\n`;
+              out += `            var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);\n`;
+              out += `            qjs.JS_FreeValue(c2, _v); _oa${cidx}_${cf.name}[_flat] = _n;\n`;
+              out += `            }\n`;
+            }
+          }
+          out += `            _oa${cidx}_parentIdx[_flat] = _i;\n`;
+          out += `            _nested_total_${cidx} += 1;\n`;
+          out += `            qjs.JS_FreeValue(c2, _nelem);\n`;
+          out += `        }\n`;
+          out += `        qjs.JS_FreeValue(c2, _nested_arr);\n`;
+          out += `        }\n`;
+        } else if (f.type === 'string') {
           out += `        { const _v = qjs.JS_GetPropertyStr(c2, elem, "${f.name}");\n`;
           out += `        const _s = qjs.JS_ToCString(c2, _v);\n`;
           out += `        qjs.JS_FreeValue(c2, _v);\n`;
@@ -178,14 +291,26 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
       out += `        qjs.JS_FreeValue(c2, elem);\n`;
       out += `    }\n`;
+      // Set nested OA lengths
+      for (const nf of nestedFields) {
+        const cidx = nf.nestedOaIdx;
+        out += `    _oa${cidx}_len = _nested_total_${cidx};\n`;
+        out += `    _oa${cidx}_dirty = true;\n`;
+      }
       // Trim old strings
-      const strFields = oa.fields.filter(f => f.type === 'string');
+      const strFields = flatFields.filter(f => f.type === 'string');
       if (strFields.length > 0) {
-        out += `    for (count.._oa${idx}_len) |_trim_i|`;
-        for (const f of strFields) {
-          out += ` _oaFreeString(&_oa${idx}_${f.name}[_trim_i], &_oa${idx}_${f.name}_lens[_trim_i]);`;
+        out += `    if (count < _oa${idx}_len) {\n`;
+        if (strFields.length === 1) {
+          out += `        for (count.._oa${idx}_len) |_trim_i| _oaFreeString(&_oa${idx}_${strFields[0].name}[_trim_i], &_oa${idx}_${strFields[0].name}_lens[_trim_i]);\n`;
+        } else {
+          out += `        for (count.._oa${idx}_len) |_trim_i| {\n`;
+          for (const f of strFields) {
+            out += `            _oaFreeString(&_oa${idx}_${f.name}[_trim_i], &_oa${idx}_${f.name}_lens[_trim_i]);\n`;
+          }
+          out += `        }\n`;
         }
-        out += `\n`;
+        out += `    }\n`;
       }
       out += `    _oa${idx}_len = count;\n`;
       out += `    _oa${idx}_dirty = true;\n`;
@@ -195,14 +320,81 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
   }
 
-  // Map pools
+  // Map pools — two passes: (1) all declarations, (2) all rebuild functions
+  const _emittedMapArrays = new Set();
+  // Pre-compute per-map metadata (innerCount, innerArr, mapDynTexts, etc.) for both passes
+  const _mapMeta = [];
   if (ctx.maps.length > 0) {
     out += `\n// ── Map pools ───────────────────────────────────────────────────\n`;
-    for (let mi = 0; mi < ctx.maps.length; mi++) {
+    // Pass 1: emit all declarations — parent maps first, then nested
+    const mapOrder = [];
+    for (let mi = 0; mi < ctx.maps.length; mi++) { if (!ctx.maps[mi].isNested) mapOrder.push(mi); }
+    for (let mi = 0; mi < ctx.maps.length; mi++) { if (ctx.maps[mi].isNested) mapOrder.push(mi); }
+    for (const mi of mapOrder) {
       const m = ctx.maps[mi];
-      out += `const MAX_MAP_${mi}: usize = 4096;\n`;
-      out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
-      out += `var _map_count_${mi}: usize = 0;\n`;
+      if (m.isNested) {
+        // Nested map: 2D pool — [MAX_PARENT][MAX_NESTED]
+        const parentMap = ctx.maps.find(pm => pm.oaIdx === m.parentOaIdx && !pm.isNested);
+        const parentMi = parentMap ? ctx.maps.indexOf(parentMap) : 0;
+        out += `const MAX_MAP_${mi}: usize = 64;\n`; // max nested items per parent
+        out += `var _map_pool_${mi}: [MAX_MAP_${parentMi}][MAX_MAP_${mi}]Node = undefined;\n`;
+        out += `var _map_count_${mi}: [MAX_MAP_${parentMi}]usize = undefined;\n`;
+      } else {
+        out += `const MAX_MAP_${mi}: usize = 4096;\n`;
+        out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
+        out += `var _map_count_${mi}: usize = 0;\n`;
+      }
+
+      // Resolve which map arrays need per-item pools (transitive dependency)
+      const mapPerItemDecls = [];
+      if (m.mapArrayDecls && m.mapArrayDecls.length > 0) {
+        // Build name→decl map
+        const declMap = {};
+        for (const decl of m.mapArrayDecls) {
+          const nm = decl.match(/^var (_arr_\d+)/);
+          if (nm) declMap[nm[1]] = decl;
+        }
+        // Mark arrays that directly use _i
+        const needsPerItem = new Set();
+        for (const [name, decl] of Object.entries(declMap)) {
+          if (decl.includes('[_i]') || decl.includes('_i)') || decl.includes('(_i')) {
+            needsPerItem.add(name);
+          }
+        }
+        // Propagate: if an array references a per-item array, it's also per-item
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const [name, decl] of Object.entries(declMap)) {
+            if (needsPerItem.has(name)) continue;
+            for (const piName of needsPerItem) {
+              if (decl.includes(`&${piName}`)) { needsPerItem.add(name); changed = true; break; }
+            }
+          }
+        }
+        // Emit
+        for (const [arrName, decl] of Object.entries(declMap)) {
+          if (ctx.arrayDecls.some(d => d.startsWith(`var ${arrName}`))) continue;
+          if (_emittedMapArrays.has(arrName)) continue; // safety: skip if somehow duplicated
+          _emittedMapArrays.add(arrName);
+          const innerMatch2 = m.templateExpr ? m.templateExpr.match(/\.children = &(_arr_\d+)/) : null;
+          if (innerMatch2 && arrName === innerMatch2[1]) continue;
+          if (needsPerItem.has(arrName)) {
+            const content = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
+            let depth = 0, count = content.length > 0 ? 1 : 0;
+            for (let ci = 0; ci < content.length; ci++) {
+              if (content[ci] === '{') depth++;
+              if (content[ci] === '}') depth--;
+              if (content[ci] === ',' && depth === 0) count++;
+            }
+            mapPerItemDecls.push({ name: arrName, decl, elemCount: count });
+            out += `var _map_${arrName}_${mi}: [MAX_MAP_${mi}][${count}]Node = undefined;\n`;
+          } else {
+            out += decl + '\n';
+          }
+        }
+      }
+      m._mapPerItemDecls = mapPerItemDecls;
 
       // Count inner nodes from template
       const innerMatch = m.templateExpr.match(/\.children = &_arr_(\d+)/);
@@ -229,12 +421,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
       // Per-item text buffers for dynamic texts inside the map
       // Buffer index = child position in inner array (matches reference naming)
-      const mapDynTexts = ctx.dynTexts.filter(dt => dt.inMap);
+      const mapDynTexts = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === mi);
       for (const dt of mapDynTexts) {
-        const ti = dt.arrIndex >= 0 ? dt.arrIndex : 0;
-        dt._mapTextIdx = ti;
-        out += `var _map_text_bufs_${mi}_${ti}: [MAX_MAP_${mi}][256]u8 = undefined;\n`;
-        out += `var _map_texts_${mi}_${ti}: [MAX_MAP_${mi}][]const u8 = undefined;\n`;
+        dt._mapTextIdx = dt.bufId;
+        out += `var _map_text_bufs_${mi}_${dt.bufId}: [MAX_MAP_${mi}][256]u8 = undefined;\n`;
+        out += `var _map_texts_${mi}_${dt.bufId}: [MAX_MAP_${mi}][]const u8 = undefined;\n`;
       }
 
       // Lua map handlers — pre-allocated per-item expression strings
@@ -252,7 +443,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `}\n`;
       }
 
-      // Rebuild function
+      // Store metadata for pass 2
+      _mapMeta[mi] = { mapPerItemDecls, innerCount, innerArr, mapDynTexts, mapHandlers };
+      m._mapPerItemDecls = mapPerItemDecls;
+    }
+
+    // Pass 2: emit rebuild functions (all declarations are now above)
+    for (const mi of mapOrder) {
+      const m = ctx.maps[mi];
+      if (m.isNested) continue; // nested rebuilds inlined into parent
+      const { mapPerItemDecls, mapDynTexts, mapHandlers } = _mapMeta[mi];
+      let { innerCount, innerArr } = _mapMeta[mi];
+
       out += `fn _rebuildMap${mi}() void {\n`;
       out += `    _map_count_${mi} = @min(_oa${m.oaIdx}_len, MAX_MAP_${mi});\n`;
       out += `    for (0.._map_count_${mi}) |_i| {\n`;
@@ -261,6 +463,116 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       for (const dt of mapDynTexts) {
         const ti = dt._mapTextIdx;
         out += `        _map_texts_${mi}_${ti}[_i] = std.fmt.bufPrint(&_map_text_bufs_${mi}_${ti}[_i], "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+      }
+
+      // Fill per-item component arrays
+      for (const pid of m._mapPerItemDecls) {
+        const content = pid.decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
+        // Replace references to per-item arrays from ALL maps
+        let fixedContent = content;
+        for (let mj = 0; mj < ctx.maps.length; mj++) {
+          const otherMap = ctx.maps[mj];
+          if (!otherMap._mapPerItemDecls) continue;
+          for (const pid2 of otherMap._mapPerItemDecls) {
+            fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${mj}[_i]`);
+          }
+        }
+        out += `        _map_${pid.name}_${mi}[_i] = [${pid.elemCount}]Node{ ${fixedContent} };\n`;
+      }
+
+      // Per-item conditionals (visibility toggling inside map components)
+      for (const cond of ctx.conditionals) {
+        if (!cond.arrName || !m._mapPerItemDecls) continue;
+        const pid = m._mapPerItemDecls.find(p => p.name === cond.arrName);
+        if (!pid) continue;
+        const poolArr = `_map_${cond.arrName}_${mi}[_i]`;
+        // Resolve item.field references to OA field access
+        let resolvedExpr = cond.condExpr;
+        if (m.oa) {
+          const itemParam = m.itemParam || 'item';
+          for (const f of m.oa.fields) {
+            resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
+          }
+        }
+        const isComparison = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
+          resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
+          resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ');
+        const wrapped = isComparison ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+        if (cond.kind === 'show_hide') {
+          out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+        } else if (cond.kind === 'ternary_jsx') {
+          out += `        ${poolArr}[${cond.trueIdx}].style.display = if (${cond.condExpr}) .flex else .none;\n`;
+          out += `        ${poolArr}[${cond.falseIdx}].style.display = if (${cond.condExpr}) .none else .flex;\n`;
+        }
+      }
+
+      // Per-item dynamic texts (text formatting inside map components)
+      for (const dt of ctx.dynTexts) {
+        if (dt.inMap) continue;  // inMap texts handled separately
+        if (!dt.arrName || !m._mapPerItemDecls) continue;
+        const pid = m._mapPerItemDecls.find(p => p.name === dt.arrName);
+        if (!pid) continue;
+        const poolArr = `_map_${dt.arrName}_${mi}[_i]`;
+        out += `        ${poolArr}[${dt.arrIndex}].text = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+      }
+
+      // Inline nested map rebuilds — for each nested map that belongs to this parent
+      for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
+        const nm = ctx.maps[nmi];
+        if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
+        const nestedOa = nm.oa;
+        const cidx = nestedOa.oaIdx;
+        // Build inner pool by filtering nested OA items by parentIdx
+        out += `        // Nested map ${nmi}: ${nm.nestedField}\n`;
+        out += `        _map_count_${nmi}[_i] = 0;\n`;
+        out += `        for (0.._oa${cidx}_len) |_flat_j| {\n`;
+        out += `            if (_oa${cidx}_parentIdx[_flat_j] == _i) {\n`;
+        out += `                const _jj = _map_count_${nmi}[_i];\n`;
+        out += `                if (_jj >= MAX_MAP_${nmi}) break;\n`;
+        // Build nested pool node from template, replacing field refs
+        let nestedPoolNode = nm.templateExpr;
+        // Replace nested OA field refs: _oaX_field[_i] → _oaX_field[_flat_j]
+        for (const cf of nestedOa.fields) {
+          if (cf.type === 'string') {
+            nestedPoolNode = nestedPoolNode.replace(
+              new RegExp(`_oa${cidx}_${cf.name}\\[_i\\]\\[0\\.\\._{1}oa${cidx}_${cf.name}_lens\\[_i\\]\\]`, 'g'),
+              `_oa${cidx}_${cf.name}[_flat_j][0.._oa${cidx}_${cf.name}_lens[_flat_j]]`
+            );
+          }
+          nestedPoolNode = nestedPoolNode.replace(
+            new RegExp(`_oa${cidx}_${cf.name}\\[_i\\]`, 'g'),
+            `_oa${cidx}_${cf.name}[_flat_j]`
+          );
+        }
+        // Replace nested map dynamic texts
+        const nestedMapDynTexts = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === nmi);
+        for (const dt of nestedMapDynTexts) {
+          const ti = dt._mapTextIdx;
+          // Fix fmt args to use _flat_j instead of _i for nested OA access
+          let fixedArgs = dt.fmtArgs;
+          for (const cf of nestedOa.fields) {
+            fixedArgs = fixedArgs.replace(
+              new RegExp(`_oa${cidx}_${cf.name}\\[_i\\]`, 'g'),
+              `_oa${cidx}_${cf.name}[_flat_j]`
+            );
+            fixedArgs = fixedArgs.replace(
+              new RegExp(`_oa${cidx}_${cf.name}_lens\\[_i\\]`, 'g'),
+              `_oa${cidx}_${cf.name}_lens[_flat_j]`
+            );
+          }
+          out += `                _map_texts_${nmi}_${ti}[_jj] = std.fmt.bufPrint(&_map_text_bufs_${nmi}_${ti}[_jj], "${dt.fmtString}", .{ ${fixedArgs} }) catch "";\n`;
+          nestedPoolNode = nestedPoolNode.replace('.text = ""', `.text = _map_texts_${nmi}_${ti}[_jj]`);
+        }
+        // Replace handler refs
+        const nestedHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === nmi);
+        for (const mh of nestedHandlers) {
+          nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
+          nestedPoolNode = nestedPoolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
+        }
+        out += `                _map_pool_${nmi}[_i][_jj] = ${nestedPoolNode};\n`;
+        out += `                _map_count_${nmi}[_i] += 1;\n`;
+        out += `            }\n`;
+        out += `        }\n`;
       }
 
       // Emit inner array + pool node
@@ -277,13 +589,58 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
               const ti = dt._mapTextIdx;
               inner = inner.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
             }
+            // Replace references to per-item arrays from ALL maps
+            for (let mj = 0; mj < ctx.maps.length; mj++) {
+              const otherMap = ctx.maps[mj];
+              if (!otherMap._mapPerItemDecls) continue;
+              for (const pid of otherMap._mapPerItemDecls) {
+                inner = inner.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+              }
+            }
+            // Replace nested map placeholder children with nested pool slices
+            for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
+              const nm = ctx.maps[nmi];
+              if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
+              // The nested map placeholder is .{} in the inner array — find its parent array slot
+              // and replace its children assignment
+              if (nm.parentArr) {
+                // Find the placeholder in the inner content and replace it
+                // The placeholder is .{} or .{ .style = ... } at position nm.childIdx
+              }
+            }
             out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
           }
         }
+
+        // Assign nested map children to the correct inner array slot
+        for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
+          const nm = ctx.maps[nmi];
+          if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
+          if (nm.parentArr) {
+            // Find which inner array slot this nested map targets
+            // nm.parentArr is the array name, nm.childIdx is the slot index
+            // Check if parentArr is in the inner array
+            const isInnerChild = innerArr && nm.parentArr === innerArr;
+            if (isInnerChild) {
+              out += `        _map_inner_${mi}[_i][${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
+            } else {
+              out += `        ${nm.parentArr}[${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
+            }
+          }
+        }
+
         // Build pool node from template, replacing children ref + handler refs
         let poolNode = m.templateExpr;
         if (innerArr) {
           poolNode = poolNode.replace(`&${innerArr}`, `&_map_inner_${mi}[_i]`);
+        }
+        // Replace per-item array refs in pool node from ALL maps
+        for (let mj = 0; mj < ctx.maps.length; mj++) {
+          const otherMap = ctx.maps[mj];
+          if (!otherMap._mapPerItemDecls) continue;
+          for (const pid of otherMap._mapPerItemDecls) {
+            poolNode = poolNode.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+          }
         }
         // Replace handler refs with Lua per-item handler string pointers
         for (const mh of mapHandlers) {
@@ -311,6 +668,58 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
   }
 
+  // Emit orphaned map arrays — arrays in mapArrayDecls that weren't emitted by any map
+  {
+    const declared = new Set();
+    // Collect all declared array names from the output so far
+    const declMatches = out.matchAll(/^var (_arr_\d+)/gm);
+    for (const dm of declMatches) declared.add(dm[1]);
+    // Also count per-item pool arrays
+    const poolMatches = out.matchAll(/var _map_(_arr_\d+)_\d+/g);
+    for (const pm of poolMatches) declared.add(pm[1]);
+    // Find all referenced arrays
+    const refMatches = out.matchAll(/&(_arr_\d+)\b/g);
+    const missing = new Set();
+    for (const rm of refMatches) {
+      if (!declared.has(rm[1])) missing.add(rm[1]);
+    }
+    // Look for missing arrays everywhere — mapArrayDecls, top-level, component decls
+    if (missing.size > 0) {
+      const allDecls = [...ctx.arrayDecls];
+      for (const m of ctx.maps) {
+        if (m.mapArrayDecls) allDecls.push(...m.mapArrayDecls);
+        if (m._mapPerItemDecls) for (const pid of m._mapPerItemDecls) allDecls.push(pid.decl);
+      }
+      for (const decl of allDecls) {
+        const nm = decl.match(/^var (_arr_\d+)/);
+        if (nm && missing.has(nm[1])) {
+          out += decl + '\n';
+          missing.delete(nm[1]);
+        }
+      }
+      // Last resort: stub any still-missing arrays so the build doesn't fail
+      for (const name of missing) {
+        out += `var ${name} = [_]Node{ .{} }; // orphan stub\n`;
+      }
+    }
+    // Second pass: scan full output for any remaining &_arr_N without a var _arr_N
+    const allRefs2 = [...out.matchAll(/(?:&|\b)(_arr_\d+)\b/g)].map(m => m[1]);
+    const allDecls2 = new Set([...out.matchAll(/^var (_arr_\d+)/gm)].map(m => m[1]));
+    const stubs2 = [];
+    for (const ref of allRefs2) {
+      if (!allDecls2.has(ref)) {
+        stubs2.push(`var ${ref} = [_]Node{ .{} };\n`);
+        allDecls2.add(ref);
+      }
+    }
+    if (stubs2.length > 0) {
+      const insertPoint = out.indexOf('var _root =');
+      if (insertPoint >= 0) {
+        out = out.slice(0, insertPoint) + stubs2.join('') + out.slice(insertPoint);
+      }
+    }
+  }
+
   if (zigOnlyHandlers.length > 0 && !out.endsWith('\n\n')) out += '\n';
 
 
@@ -321,6 +730,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   const jsLines = [];
   // Object array JS vars/setters
   for (const oa of ctx.objectArrays) {
+    if (oa.isNested) continue; // nested OAs unpacked by parent
     jsLines.push(`var ${oa.getter} = [];`);
     jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
   }
@@ -375,6 +785,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   }
   // Object array data loading via Lua
   for (const oa of ctx.objectArrays) {
+    if (oa.isNested) continue; // nested OAs unpacked by parent
     luaLines.push(`local ${oa.getter} = {}`);
     luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
   }
@@ -382,8 +793,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   if (globalThis.__scriptContent) {
     let scriptLines = globalThis.__scriptContent.split('\n');
     for (const line of scriptLines) {
-      // Convert JS array/object syntax to Lua table syntax
+      // Convert JS syntax to Lua
       let luaLine = line;
+      luaLine = luaLine.replace(/\/\/.*$/g, ''); // strip JS comments
       luaLine = luaLine.replace(/\bvar\b/g, 'local');
       luaLine = luaLine.replace(/\[{/g, '{{');
       luaLine = luaLine.replace(/}\]/g, '}}');
@@ -445,9 +857,19 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   out += `}\n\n`;
 
   // _updateDynamicTexts (skip map-internal texts)
+  // Build set of all per-item pool array names across all maps
+  const _mapPoolArrayNames = new Set();
+  for (const m of ctx.maps) {
+    if (m._mapPerItemDecls) {
+      for (const pid of m._mapPerItemDecls) _mapPoolArrayNames.add(pid.name);
+    }
+  }
+
   out += `fn _updateDynamicTexts() void {\n`;
   for (const dt of ctx.dynTexts) {
     if (dt.inMap) continue;
+    // Skip if this dynText targets a map-scoped per-item array
+    if (dt.arrName && _mapPoolArrayNames.has(dt.arrName)) continue;
     out += `    _dyn_text_${dt.bufId} = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
     if (dt.arrName) {
       out += `    ${dt.arrName}[${dt.arrIndex}].text = _dyn_text_${dt.bufId};\n`;
@@ -484,7 +906,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     out += `fn _updateConditionals() void {\n`;
     for (const cond of ctx.conditionals) {
       if (!cond.arrName) continue;
-      // Wrap condition — if it's already a comparison, use parens; else add != 0
+      // Skip if this conditional targets a map-scoped per-item array or uses _i
+      if (_mapPoolArrayNames.has(cond.arrName)) continue;
+      if (cond.condExpr.includes('[_i]') || cond.condExpr.includes('(_i)') || cond.condExpr.includes('task.') || cond.condExpr.includes('tag.') || cond.condExpr.includes(' ci') || cond.condExpr.includes(' ti')) continue;
       const isComparison = cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
         cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
         cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
@@ -505,18 +929,21 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // _appInit
   out += `fn _appInit() void {\n    _initState();\n`;
   for (const oa of ctx.objectArrays) {
+    if (oa.isNested) continue; // nested OAs unpacked by parent
     out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
   }
   if (hasDynText) out += `    _updateDynamicTexts();\n`;
   if (hasConds) out += `    _updateConditionals();\n`;
   // Initialize Lua map handler string pointers before rebuilding maps
   for (let mi = 0; mi < ctx.maps.length; mi++) {
+    if (ctx.maps[mi].isNested) continue;
     const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
     if (mapHandlers.length > 0) {
       out += `    _initMapLuaPtrs${mi}();\n`;
     }
   }
   for (let mi = 0; mi < ctx.maps.length; mi++) {
+    if (ctx.maps[mi].isNested) continue; // nested rebuilds inlined into parent
     out += `    _rebuildMap${mi}();\n`;
   }
   out += `}\n\n`;
@@ -534,6 +961,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (hasConds) out += ` _updateConditionals();`;
       out += `\n`;
       for (let mi = 0; mi < ctx.maps.length; mi++) {
+        if (ctx.maps[mi].isNested) continue;
         out += `        _rebuildMap${mi}();\n`;
       }
       out += ` state.clearDirty(); }\n`;

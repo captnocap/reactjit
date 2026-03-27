@@ -26,10 +26,10 @@ comptime { if (1 != 1) @compileError("state slot count mismatch"); }
 
 // ── Generated node tree ─────────────────────────────────────────
 // tsz:d02_component_returning_map.tsz:24 — <Box>
-var _arr_0 = [_]Node{ .{} };
+var _arr_1 = [_]Node{ .{} };
 // tsz:d02_component_returning_map.tsz:22 — <Box>
-var _arr_1 = [_]Node{ .{ .text = "Tags", .font_size = 16, .text_color = Color.rgb(201, 209, 217) }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .margin_top = 8 }, .children = &_arr_0 }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(72, 79, 88) } };
-var _root = Node{ .style = .{ .background_color = Color.rgb(13, 17, 23), .padding = 20, .width = -1, .height = -1 }, .children = &_arr_1 };
+var _arr_2 = [_]Node{ .{ .text = "Tags", .font_size = 16, .text_color = Color.rgb(201, 209, 217) }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .margin_top = 8 }, .children = &_arr_1 }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(72, 79, 88) } };
+var _root = Node{ .style = .{ .background_color = Color.rgb(13, 17, 23), .padding = 20, .width = -1, .height = -1 }, .children = &_arr_2 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [64]u8 = undefined;
@@ -120,7 +120,9 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
         }
         qjs.JS_FreeValue(c2, elem);
     }
-    for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_name[_trim_i], &_oa0_name_lens[_trim_i]);
+    if (count < _oa0_len) {
+        for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_name[_trim_i], &_oa0_name_lens[_trim_i]);
+    }
     _oa0_len = count;
     _oa0_dirty = true;
     state.markDirty();
@@ -151,7 +153,7 @@ fn _rebuildMap0() void {
         _map_inner_0[_i] = [1]Node{ .{ .text = _map_texts_0_0[_i], .font_size = 11, .text_color = Color.rgb(255, 255, 255) } };
         _map_pool_0[_i] = .{ .style = .{ .background_color = Color.rgb(@intCast((_oa0_color[_i] >> 16) & 0xFF), @intCast((_oa0_color[_i] >> 8) & 0xFF), @intCast(_oa0_color[_i] & 0xFF)), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4, .margin = 2 }, .children = &_map_inner_0[_i], .handlers = .{ .lua_on_press = _map_lua_ptrs_0[_i] } };
     }
-    _arr_0[0].children = _map_pool_0[0.._map_count_0];
+    _arr_1[0].children = _map_pool_0[0.._map_count_0];
 }
 
 
@@ -175,7 +177,7 @@ const JS_LOGIC =
 // ── Embedded Lua logic ───────────────────────────────────────
 const LUA_LOGIC =
     \\-- State variables (mirroring Zig state slots)
-    \\local picked = 0
+    \\picked = 0
     \\
     \\function setPicked(v) picked = v; __setState(0, v) end
     \\
@@ -206,7 +208,7 @@ fn _initState() void {
 
 fn _updateDynamicTexts() void {
     _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "picked: {d}", .{ state.getSlot(0) }) catch "";
-    _arr_1[2].text = _dyn_text_0;
+    _arr_2[2].text = _dyn_text_0;
 }
 
 

@@ -29,10 +29,10 @@ comptime { if (2 != 2) @compileError("state slot count mismatch"); }
 // tsz:d03_conditional_wrapping_map.tsz:14 — <Pressable>
 var _arr_0 = [_]Node{ .{ .text = "", .font_size = 14, .text_color = Color.rgb(255, 255, 255) } };
 // tsz:d03_conditional_wrapping_map.tsz:17 — <Box>
-var _arr_1 = [_]Node{ .{ .style = .{ .gap = 4 } } };
+var _arr_2 = [_]Node{ .{ .style = .{ .gap = 4 } } };
 // tsz:d03_conditional_wrapping_map.tsz:13 — <Box>
-var _arr_2 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(255, 107, 107), .border_radius = 6, .padding = 10, .align_self = .start }, .handlers = .{ .lua_on_press = "setShowList((showList == 0) and 1 or 0)" }, .children = &_arr_0 }, .{ .style = .{ .gap = 4 }, .children = &_arr_1 }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(134, 142, 150) } };
-var _root = Node{ .style = .{ .background_color = Color.rgb(45, 45, 45), .padding = 20, .width = -1, .height = -1, .gap = 12 }, .children = &_arr_2 };
+var _arr_3 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(255, 107, 107), .border_radius = 6, .padding = 10, .align_self = .start }, .handlers = .{ .lua_on_press = "setShowList((showList == 0) and 1 or 0)" }, .children = &_arr_0 }, .{ .style = .{ .gap = 4 }, .children = &_arr_2 }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(134, 142, 150) } };
+var _root = Node{ .style = .{ .background_color = Color.rgb(45, 45, 45), .padding = 20, .width = -1, .height = -1, .gap = 12 }, .children = &_arr_3 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [64]u8 = undefined;
@@ -125,7 +125,9 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
         }
         qjs.JS_FreeValue(c2, elem);
     }
-    for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_text[_trim_i], &_oa0_text_lens[_trim_i]);
+    if (count < _oa0_len) {
+        for (count.._oa0_len) |_trim_i| _oaFreeString(&_oa0_text[_trim_i], &_oa0_text_lens[_trim_i]);
+    }
     _oa0_len = count;
     _oa0_dirty = true;
     state.markDirty();
@@ -138,8 +140,8 @@ const MAX_MAP_0: usize = 4096;
 var _map_pool_0: [MAX_MAP_0]Node = undefined;
 var _map_count_0: usize = 0;
 var _map_inner_0: [MAX_MAP_0][3]Node = undefined;
-var _map_text_bufs_0_2: [MAX_MAP_0][256]u8 = undefined;
-var _map_texts_0_2: [MAX_MAP_0][]const u8 = undefined;
+var _map_text_bufs_0_0: [MAX_MAP_0][256]u8 = undefined;
+var _map_texts_0_0: [MAX_MAP_0][]const u8 = undefined;
 var _map_lua_bufs_0: [MAX_MAP_0][32]u8 = undefined;
 var _map_lua_ptrs_0: [MAX_MAP_0]?[*:0]const u8 = .{null} ** MAX_MAP_0;
 fn _initMapLuaPtrs0() void {
@@ -152,11 +154,11 @@ fn _initMapLuaPtrs0() void {
 fn _rebuildMap0() void {
     _map_count_0 = @min(_oa0_len, MAX_MAP_0);
     for (0.._map_count_0) |_i| {
-        _map_texts_0_2[_i] = std.fmt.bufPrint(&_map_text_bufs_0_2[_i], "{d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_text[_i][0.._oa0_text_lens[_i]] }) catch "";
-        _map_inner_0[_i] = [3]Node{ .{ .text = "[x]", .font_size = 14, .text_color = Color.rgb(81, 207, 102), .style = .{ .display = if (_oa0_done[_i] == 1) .flex else .none } }, .{ .text = "[ ]", .font_size = 14, .text_color = Color.rgb(255, 107, 107), .style = .{ .display = if (_oa0_done[_i] == 0) .flex else .none } }, .{ .text = _map_texts_0_2[_i], .font_size = 14, .text_color = Color.rgb(206, 212, 218) } };
+        _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "{d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_text[_i][0.._oa0_text_lens[_i]] }) catch "";
+        _map_inner_0[_i] = [3]Node{ .{ .text = "[x]", .font_size = 14, .text_color = Color.rgb(81, 207, 102), .style = .{ .display = if (_oa0_done[_i] == 1) .flex else .none } }, .{ .text = "[ ]", .font_size = 14, .text_color = Color.rgb(255, 107, 107), .style = .{ .display = if (_oa0_done[_i] == 0) .flex else .none } }, .{ .text = _map_texts_0_0[_i], .font_size = 14, .text_color = Color.rgb(206, 212, 218) } };
         _map_pool_0[_i] = .{ .style = .{ .flex_direction = .row, .gap = 8, .padding = 8, .background_color = Color.rgb(61, 61, 61), .border_radius = 4 }, .children = &_map_inner_0[_i], .handlers = .{ .lua_on_press = _map_lua_ptrs_0[_i] } };
     }
-    _arr_1[0].children = _map_pool_0[0.._map_count_0];
+    _arr_2[0].children = _map_pool_0[0.._map_count_0];
 }
 
 
@@ -180,8 +182,8 @@ const JS_LOGIC =
 // ── Embedded Lua logic ───────────────────────────────────────
 const LUA_LOGIC =
     \\-- State variables (mirroring Zig state slots)
-    \\local showList = 0
-    \\local count = 0
+    \\showList = 0
+    \\count = 0
     \\
     \\function setShowList(v) showList = v; __setState(0, v) end
     \\function setCount(v) count = v; __setState(1, v) end
@@ -216,11 +218,11 @@ fn _updateDynamicTexts() void {
     _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "{d}", .{ state.getSlot(0) }) catch "";
     _arr_0[0].text = _dyn_text_0;
     _dyn_text_1 = std.fmt.bufPrint(&_dyn_buf_1, "taps: {d}", .{ state.getSlot(1) }) catch "";
-    _arr_2[2].text = _dyn_text_1;
+    _arr_3[2].text = _dyn_text_1;
 }
 
 fn _updateConditionals() void {
-    _arr_2[1].style.display = if ((state.getSlot(0) ==  1)) .flex else .none;
+    _arr_3[1].style.display = if ((state.getSlot(0) ==  1)) .flex else .none;
 }
 
 

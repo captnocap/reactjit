@@ -298,12 +298,72 @@ function collectState(c) {
                         c.advance();
                       }
                       else if (c.isIdent('true') || c.isIdent('false')) { ftype = 'boolean'; c.advance(); }
+                      else if (c.kind() === TK.lbracket) {
+                        // Nested array field: items: [{ label: '', value: 0 }]
+                        // Create a child OA for the nested array
+                        c.advance(); // skip [
+                        if (c.kind() === TK.lbrace) {
+                          const nestedFields = [];
+                          c.advance(); // skip {
+                          while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+                            if (c.kind() === TK.identifier) {
+                              const nfname = c.text(); c.advance();
+                              if (c.kind() === TK.colon) c.advance();
+                              let nftype = 'int';
+                              if (c.kind() === TK.string) { nftype = 'string'; c.advance(); }
+                              else if (c.kind() === TK.number) {
+                                const nnv = c.text();
+                                nftype = nnv.startsWith('0x') ? 'int' : (nnv.includes('.') ? 'float' : 'int');
+                                c.advance();
+                              }
+                              else if (c.isIdent('true') || c.isIdent('false')) { nftype = 'boolean'; c.advance(); }
+                              nestedFields.push({ name: nfname, type: nftype });
+                            }
+                            if (c.kind() === TK.comma) c.advance();
+                            else if (c.kind() !== TK.rbrace) c.advance();
+                          }
+                          // Skip }]
+                          if (c.kind() === TK.rbrace) c.advance();
+                          if (c.kind() === TK.rbracket) c.advance();
+                          const childOaIdx = ctx.objectArrays.length;
+                          // Reserve the child OA slot — will be pushed after parent
+                          ftype = 'nested_array';
+                          // Store nested OA info on the field for later
+                          fields.push({ name: fname, type: ftype, nestedOaIdx: childOaIdx, nestedFields });
+                          // Don't push child OA yet — push after parent is done
+                          continue; // skip the normal fields.push below
+                        } else {
+                          // Bare array (not objects) — skip to ]
+                          let bd = 1;
+                          while (bd > 0 && c.kind() !== TK.eof) {
+                            if (c.kind() === TK.lbracket) bd++;
+                            if (c.kind() === TK.rbracket) bd--;
+                            if (bd > 0) c.advance();
+                          }
+                          if (c.kind() === TK.rbracket) c.advance();
+                        }
+                      }
                       fields.push({ name: fname, type: ftype });
                     }
                     if (c.kind() === TK.comma) c.advance();
                     else if (c.kind() !== TK.rbrace) c.advance();
                   }
-                  ctx.objectArrays.push({ fields, getter, setter, oaIdx: ctx.objectArrays.length });
+                  const parentOaIdx = ctx.objectArrays.length;
+                  ctx.objectArrays.push({ fields, getter, setter, oaIdx: parentOaIdx });
+                  // Now push child OAs for any nested_array fields
+                  for (const f of fields) {
+                    if (f.type === 'nested_array' && f.nestedFields) {
+                      const childOaIdx = ctx.objectArrays.length;
+                      f.nestedOaIdx = childOaIdx; // update with actual index
+                      ctx.objectArrays.push({
+                        fields: f.nestedFields,
+                        getter: f.name, setter: 'set' + f.name[0].toUpperCase() + f.name.slice(1),
+                        oaIdx: childOaIdx,
+                        parentOaIdx: parentOaIdx, parentField: f.name,
+                        isNested: true,
+                      });
+                    }
+                  }
                   type = 'object_array';
                   // Skip to closing ])
                   let depth = 2; // already inside [{
