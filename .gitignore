@@ -89,6 +89,18 @@ os/web/tsz-runtime.wasm
 os/web/vmlinuz
 os/web/v86/
 
+# tsz/web/ OS images (TinyEMU/v86 binaries, rebuilt from source)
+tsz/web/alpine-virt.iso
+tsz/web/initrd.cpio.gz
+tsz/web/vmlinuz
+tsz/web/kernel-x86.bin
+tsz/web/tsz-kernel.bin
+tsz/web/buildroot-bzimage.bin
+tsz/web/v86.wasm
+tsz/web/libv86.js
+tsz/web/seabios.bin
+tsz/web/vgabios.bin
+
 # Rust build artifacts (deps)
 deps/vello_ffi/target/
 
