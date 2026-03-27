@@ -66,9 +66,22 @@ That's one file. State, effects, JS scripting, native Zig, and JSX — all compi
 
 ### `tsz/` — Compiler + Framework (active)
 
-The `.tsz` compiler and native rendering framework. A hand-written lexer, parser, and multi-phase codegen in pure Zig compiles TypeScript + JSX into Zig source that links against the framework runtime.
+The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to Zig source that links against the framework runtime.
 
-- **Compiler** — 30 modules, ~25K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT
+The compiler is split into two parts:
+
+- **Forge** — small Zig kernel (~300 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
+- **Smith** — JS compiler intelligence (~1,600 lines across 5 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
+
+```
+app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
+```
+
+Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Zig has no closures, so each map item can't carry its own handler with a captured index. Smith's solution — emit a `LUA_LOGIC` block of Lua functions (`__mapPress_0_0(idx)`) and during the rebuild loop, pre-format a `lua_on_press` string per item with the index baked in (`"__mapPress_0_0(3)"`). LuaJIT executes the function string at runtime. The Zig side only stores the string — no closure needed.
+
+This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
+
+- **Compiler** — 6 Zig modules + 5 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
