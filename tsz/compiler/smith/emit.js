@@ -38,9 +38,62 @@ function emitOutput(rootExpr, file) {
     out += `comptime { if (${ctx.stateSlots.length} != ${ctx.stateSlots.length}) @compileError("state slot count mismatch"); }\n\n`;
   }
 
+  // Pre-scan: find top-level arrays that will be promoted to per-item in map pools
+  const _promotedToPerItem = new Set();
+  for (const m of ctx.maps) {
+    if (!m.mapArrayDecls) continue;
+    const pendingDT = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === ctx.maps.indexOf(m));
+    if (pendingDT.length === 0) continue;
+    for (const decl of m.mapArrayDecls) {
+      if (decl.includes('.text = ""')) {
+        const nm = decl.match(/^var (_arr_\d+)/);
+        if (nm) _promotedToPerItem.add(nm[1]);
+      }
+    }
+    // Propagate: parent arrays that reference promoted arrays (mapArrayDecls + top-level)
+    const allDecls = [...m.mapArrayDecls, ...ctx.arrayDecls];
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const decl of allDecls) {
+        const nm = decl.match(/^var (_arr_\d+)/);
+        if (!nm || _promotedToPerItem.has(nm[1])) continue;
+        for (const pn of _promotedToPerItem) {
+          if (decl.includes(`&${pn}`)) { _promotedToPerItem.add(nm[1]); changed = true; break; }
+        }
+      }
+      // Also promote top-level arrays that are children OF promoted arrays
+      for (const pn of _promotedToPerItem) {
+        // Find the decl for this promoted array and check its children refs
+        const pDecl = allDecls.find(d => d.startsWith(`var ${pn} `));
+        if (!pDecl) continue;
+        const childRefs = pDecl.match(/&(_arr_\d+)/g);
+        if (!childRefs) continue;
+        for (const ref of childRefs) {
+          const childName = ref.slice(1); // strip &
+          if (!_promotedToPerItem.has(childName)) {
+            _promotedToPerItem.add(childName);
+            changed = true;
+          }
+        }
+      }
+    }
+    // Inject promoted top-level arrays into mapArrayDecls so emit path creates per-item pools
+    for (const decl of ctx.arrayDecls) {
+      const nm = decl.match(/^var (_arr_\d+)/);
+      if (nm && _promotedToPerItem.has(nm[1])) {
+        if (!m.mapArrayDecls.some(d => d.startsWith(`var ${nm[1]}`))) {
+          m.mapArrayDecls.push(decl);
+        }
+      }
+    }
+  }
+
   // Node tree
   out += `// ── Generated node tree ─────────────────────────────────────────\n`;
   for (let i = 0; i < ctx.arrayDecls.length; i++) {
+    const nm = ctx.arrayDecls[i].match(/^var (_arr_\d+)/);
+    if (nm && _promotedToPerItem.has(nm[1])) continue; // emitted as per-item in map pool
     if (ctx.arrayComments[i]) out += ctx.arrayComments[i] + '\n';
     out += ctx.arrayDecls[i] + '\n';
   }
@@ -358,10 +411,19 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           const nm = decl.match(/^var (_arr_\d+)/);
           if (nm) declMap[nm[1]] = decl;
         }
-        // Mark arrays that directly use _i
+        // Mark arrays that directly use _i or have dynText placeholders
         const needsPerItem = new Set();
+        // Seed with arrays already identified as promoted in pre-scan
+        for (const pn of _promotedToPerItem) {
+          if (declMap[pn]) needsPerItem.add(pn);
+        }
+        const pendingMapDynTexts = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === mi);
         for (const [name, decl] of Object.entries(declMap)) {
           if (decl.includes('[_i]') || decl.includes('_i)') || decl.includes('(_i')) {
+            needsPerItem.add(name);
+          }
+          // Arrays with .text = "" placeholders when map dynTexts exist → per-item
+          if (pendingMapDynTexts.length > 0 && decl.includes('.text = ""')) {
             needsPerItem.add(name);
           }
         }
@@ -378,7 +440,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         }
         // Emit
         for (const [arrName, decl] of Object.entries(declMap)) {
-          if (ctx.arrayDecls.some(d => d.startsWith(`var ${arrName}`))) continue;
+          if (ctx.arrayDecls.some(d => d.startsWith(`var ${arrName}`)) && !needsPerItem.has(arrName)) continue;
           if (_emittedMapArrays.has(arrName)) continue; // safety: skip if somehow duplicated
           _emittedMapArrays.add(arrName);
           const innerMatch2 = m.templateExpr ? m.templateExpr.match(/\.children = &(_arr_\d+)/) : null;
@@ -989,6 +1051,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // Color prop + dynamic style runtime assignments — merged and sorted by array index
   const dynUpdates = [];
   for (const dc of ctx.dynColors) {
+    if (dc.arrName && _promotedToPerItem.has(dc.arrName)) continue;
     if (dc.arrName && dc.arrIndex >= 0) {
       const arrNum = parseInt(dc.arrName.replace('_arr_', ''));
       dynUpdates.push({ arrNum, arrIndex: dc.arrIndex, line: `    ${dc.arrName}[${dc.arrIndex}].text_color = ${dc.colorExpr};\n` });
@@ -998,6 +1061,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (const ds of ctx.dynStyles) {
       // Skip dynStyles that reference _i (map loop var) — can't resolve in global update
       if (ds.expression && (ds.expression.includes('_i)') || ds.expression.includes('_i]') || ds.expression.includes('(_i'))) continue;
+      // Skip dynStyles targeting arrays promoted to per-item in map pools
+      if (ds.arrName && _promotedToPerItem.has(ds.arrName)) continue;
       if (ds.arrName && ds.arrIndex >= 0) {
         const arrNum = parseInt(ds.arrName.replace('_arr_', ''));
         const nodeFields = ['text_color', 'font_size', 'text'];

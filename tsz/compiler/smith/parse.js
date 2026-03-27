@@ -60,7 +60,36 @@ function parseJSXElement(c) {
             while (c.kind() !== TK.eof) {
               if (c.kind() === TK.lbrace) depth++;
               if (c.kind() === TK.rbrace) { if (depth === 0) break; depth--; }
-              if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
+              if (c.kind() === TK.template_literal) {
+                // Expand template literal: resolve ${var} refs through current scope
+                const raw = c.text().slice(1, -1); // strip backticks
+                let expanded = '';
+                let ti = 0;
+                while (ti < raw.length) {
+                  if (raw[ti] === '$' && raw[ti + 1] === '{') {
+                    const end = raw.indexOf('}', ti + 2);
+                    if (end >= 0) {
+                      const expr = raw.slice(ti + 2, end).trim();
+                      // Resolve through map item fields
+                      if (ctx.currentMap && ctx.currentMap.oa) {
+                        const oa = ctx.currentMap.oa;
+                        const fi = oa.fields.find(ff => ff.name === expr);
+                        if (fi) {
+                          // Mark as template with OA ref — will be handled as dynText
+                          val = fi.type === 'string'
+                            ? `_oa${oa.oaIdx}_${expr}[_i][0.._oa${oa.oaIdx}_${expr}_lens[_i]]`
+                            : `_oa${oa.oaIdx}_${expr}[_i]`;
+                          break;
+                        }
+                      }
+                      if (isGetter(expr)) { val = slotGet(expr); break; }
+                      val += c.text(); // unresolved — keep as-is
+                      break;
+                    }
+                  }
+                  ti++;
+                }
+              } else if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
               else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) val += '@as(i64, @intCast(_i))';
               else val += c.text();
               c.advance();
@@ -934,11 +963,22 @@ function parseChildren(c) {
       }
       // {expr} — check props first, then state getters
       if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
-        // Prop substitution — replace {propName} with the prop value as static text
         const propVal = ctx.propStack[c.text()];
         c.advance();
         if (c.kind() === TK.rbrace) c.advance();
-        children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+        // OA field refs or Zig expressions inside maps → per-item dynamic text
+        const isMapExpr = propVal.includes('_oa') || propVal.includes('[_i]') || propVal.includes('state.get');
+        if (ctx.currentMap && isMapExpr) {
+          const mapBufId = ctx.dynCount;
+          const isStr = propVal.includes('..');
+          const fmt = isStr ? '{s}' : '{d}';
+          const args = isStr ? propVal : leftFoldExpr(propVal);
+          ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+          ctx.dynCount++;
+          children.push({ nodeExpr: `.{ .text = "" }` });
+        } else {
+          children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+        }
       } else if (c.kind() === TK.identifier && isGetter(c.text())) {
         const getter = c.text();
         const slotIdx = findSlot(getter);
