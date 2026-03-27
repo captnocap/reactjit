@@ -8,12 +8,12 @@
 const builtin = @import("builtin");
 
 pub const imports = @cImport({
-    if (builtin.cpu.arch != .wasm32) {
+    if (builtin.os.tag == .windows) {
+        @cInclude("SDL3/SDL.h");
+    } else {
         @cInclude("SDL3/SDL.h");
     }
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
-    if (builtin.cpu.arch != .wasm32) {
-        @cInclude("stb/stb_image.h");
-    }
+    @cInclude("stb/stb_image.h");
 });

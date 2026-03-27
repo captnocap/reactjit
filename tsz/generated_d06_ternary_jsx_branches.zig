@@ -53,8 +53,8 @@ const JS_LOGIC =
 // ── Embedded Lua logic ───────────────────────────────────────
 const LUA_LOGIC =
     \\-- State variables (mirroring Zig state slots)
-    \\local mode = 0
-    \\local taps = 0
+    \\mode = 0
+    \\taps = 0
     \\
     \\function setMode(v) mode = v; __setState(0, v) end
     \\function setTaps(v) taps = v; __setState(1, v) end

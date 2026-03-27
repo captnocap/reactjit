@@ -13,11 +13,21 @@
 //!   __ipc_response()                 → last decrypted JSON string or undefined
 
 const std = @import("std");
-const qjs_c = @import("qjs_c.zig");
-const qjs = qjs_c.qjs;
-const QJS_UNDEFINED = qjs_c.UNDEFINED;
+const build_options = @import("build_options");
+const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
 
 const dc = @import("debug_client.zig");
+
+const qjs = if (HAS_QUICKJS) @cImport({
+    @cDefine("_GNU_SOURCE", "1");
+    @cDefine("QUICKJS_NG_BUILD", "1");
+    @cInclude("quickjs.h");
+}) else struct {
+    pub const JSContext = opaque {};
+    pub const JSValue = extern struct { u: extern union { int32: i32 } = .{ .int32 = 0 }, tag: i64 = 0 };
+};
+
+const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };
 
 // ── Host functions ─────────────────────────────────────────────────
 
@@ -146,25 +156,26 @@ fn hostIpcEnableTelemetry(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]q
 
 // ── Registration ───────────────────────────────────────────────────
 
-const setF = @import("qjs_value.zig").setF;
+fn setF(ctx: *qjs.JSContext, obj: qjs.JSValue, key: [*:0]const u8, val: f64) void {
+    _ = qjs.JS_SetPropertyStr(ctx, obj, key, qjs.JS_NewFloat64(ctx, val));
+}
 
 pub fn registerAll(raw_ctx: *anyopaque) void {
     const ctx: *qjs.JSContext = @ptrCast(@alignCast(raw_ctx));
-    const jsv = @import("qjs_value.zig");
-    const global = jsv.JsVal.getGlobal(ctx);
-    defer global.deinit();
-    const g = global.raw();
+    const global = qjs.JS_GetGlobalObject(ctx);
 
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_connect", qjs.JS_NewCFunction(ctx, hostIpcConnect, "__ipc_connect", 2));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_disconnect", qjs.JS_NewCFunction(ctx, hostIpcDisconnect, "__ipc_disconnect", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_poll", qjs.JS_NewCFunction(ctx, hostIpcPoll, "__ipc_poll", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_status", qjs.JS_NewCFunction(ctx, hostIpcStatus, "__ipc_status", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_submit_code", qjs.JS_NewCFunction(ctx, hostIpcSubmitCode, "__ipc_submit_code", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_request", qjs.JS_NewCFunction(ctx, hostIpcRequest, "__ipc_request", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_request_node", qjs.JS_NewCFunction(ctx, hostIpcRequestNode, "__ipc_request_node", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_tree_count", qjs.JS_NewCFunction(ctx, hostIpcTreeCount, "__ipc_tree_count", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_tree_node", qjs.JS_NewCFunction(ctx, hostIpcTreeNode, "__ipc_tree_node", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_response", qjs.JS_NewCFunction(ctx, hostIpcResponse, "__ipc_response", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_perf", qjs.JS_NewCFunction(ctx, hostIpcPerf, "__ipc_perf", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, g, "__ipc_enable_telemetry", qjs.JS_NewCFunction(ctx, hostIpcEnableTelemetry, "__ipc_enable_telemetry", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_connect", qjs.JS_NewCFunction(ctx, hostIpcConnect, "__ipc_connect", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_disconnect", qjs.JS_NewCFunction(ctx, hostIpcDisconnect, "__ipc_disconnect", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_poll", qjs.JS_NewCFunction(ctx, hostIpcPoll, "__ipc_poll", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_status", qjs.JS_NewCFunction(ctx, hostIpcStatus, "__ipc_status", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_submit_code", qjs.JS_NewCFunction(ctx, hostIpcSubmitCode, "__ipc_submit_code", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_request", qjs.JS_NewCFunction(ctx, hostIpcRequest, "__ipc_request", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_request_node", qjs.JS_NewCFunction(ctx, hostIpcRequestNode, "__ipc_request_node", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_tree_count", qjs.JS_NewCFunction(ctx, hostIpcTreeCount, "__ipc_tree_count", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_tree_node", qjs.JS_NewCFunction(ctx, hostIpcTreeNode, "__ipc_tree_node", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_response", qjs.JS_NewCFunction(ctx, hostIpcResponse, "__ipc_response", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_perf", qjs.JS_NewCFunction(ctx, hostIpcPerf, "__ipc_perf", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__ipc_enable_telemetry", qjs.JS_NewCFunction(ctx, hostIpcEnableTelemetry, "__ipc_enable_telemetry", 0));
+
+    qjs.JS_FreeValue(ctx, global);
 }

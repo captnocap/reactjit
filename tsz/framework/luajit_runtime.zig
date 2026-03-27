@@ -16,8 +16,11 @@ const std = @import("std");
 const state = @import("state.zig");
 const input_mod = @import("input.zig");
 
-const lua_guard = @import("lua_guard.zig");
-const lua = lua_guard.lua;
+const lua = @cImport({
+    @cInclude("lua.h");
+    @cInclude("lauxlib.h");
+    @cInclude("lualib.h");
+});
 
 // ── Global VM state ─────────────────────────────────────────────────────
 
@@ -327,15 +330,14 @@ pub fn initVM() void {
     }
 
     // Load tsl_stdlib
-    {
-        const guard = lua_guard.StackGuard.init(L);
-        defer guard.deinit();
-        if (lua.luaL_loadstring(L, TSL_STDLIB) != 0) {
-            lua_guard.logLuaError(L, "tsl_stdlib load");
+    if (lua.luaL_loadstring(L, TSL_STDLIB) == 0) {
+        if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+            logLuaError(L, "tsl_stdlib init");
             lua.lua_pop(L, 1);
-        } else {
-            guard.pcallSafe(0, 0, "tsl_stdlib init") catch {};
         }
+    } else {
+        logLuaError(L, "tsl_stdlib load");
+        lua.lua_pop(L, 1);
     }
 
     std.log.info("[luajit-runtime] VM initialized with tsl_stdlib", .{});
@@ -355,14 +357,15 @@ pub fn evalScript(lua_logic: []const u8) void {
     const L = g_lua orelse return;
     if (lua_logic.len == 0) return;
 
-    const guard = lua_guard.StackGuard.init(L);
-    defer guard.deinit();
     if (lua.luaL_loadbuffer(L, lua_logic.ptr, lua_logic.len, "<app>") != 0) {
-        lua_guard.logLuaError(L, "evalScript load");
+        logLuaError(L, "evalScript load");
         lua.lua_pop(L, 1);
         return;
     }
-    guard.pcallSafe(0, 0, "evalScript run") catch {};
+    if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+        logLuaError(L, "evalScript run");
+        lua.lua_pop(L, 1);
+    }
 }
 
 /// Eval a Lua expression (equivalent to qjs_runtime.evalExpr — called on events)
@@ -370,45 +373,58 @@ pub fn evalExpr(code: []const u8) void {
     const L = g_lua orelse return;
     if (code.len == 0) return;
 
-    const guard = lua_guard.StackGuard.init(L);
-    defer guard.deinit();
     if (lua.luaL_loadbuffer(L, code.ptr, code.len, "<handler>") != 0) {
-        lua_guard.logLuaError(L, "evalExpr");
+        logLuaError(L, "evalExpr");
         lua.lua_pop(L, 1);
         return;
     }
-    guard.pcallSafe(0, 0, "evalExpr") catch {};
+    if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+        logLuaError(L, "evalExpr");
+        lua.lua_pop(L, 1);
+    }
 }
 
 /// Call a global Lua function by name (no arguments)
 pub fn callGlobal(name: [*:0]const u8) void {
     const L = g_lua orelse return;
-    const guard = lua_guard.StackGuard.init(L);
-    defer guard.deinit();
-    if (guard.getGlobalFn(name) != null) {
-        guard.pcallSafe(0, 0, std.mem.span(name)) catch {};
+    _ = lua.lua_getglobal(L, name);
+    if (lua.lua_isfunction(L, -1)) {
+        if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+            logLuaError(L, std.mem.span(name));
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
     }
 }
 
 /// Call a global Lua function with one string argument
 pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
     const L = g_lua orelse return;
-    const guard = lua_guard.StackGuard.init(L);
-    defer guard.deinit();
-    if (guard.getGlobalFn(name) != null) {
+    _ = lua.lua_getglobal(L, name);
+    if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushstring(L, arg);
-        guard.pcallSafe(1, 0, std.mem.span(name)) catch {};
+        if (lua.lua_pcall(L, 1, 0, 0) != 0) {
+            logLuaError(L, std.mem.span(name));
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
     }
 }
 
 /// Call a global Lua function with one integer argument
 pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     const L = g_lua orelse return;
-    const guard = lua_guard.StackGuard.init(L);
-    defer guard.deinit();
-    if (guard.getGlobalFn(name) != null) {
+    _ = lua.lua_getglobal(L, name);
+    if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushinteger(L, @intCast(arg));
-        guard.pcallSafe(1, 0, std.mem.span(name)) catch {};
+        if (lua.lua_pcall(L, 1, 0, 0) != 0) {
+            logLuaError(L, std.mem.span(name));
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
     }
 }
 
@@ -426,12 +442,14 @@ pub fn tick() void {
     const L = g_lua orelse return;
     const t0 = std.time.microTimestamp();
 
-    {
-        const guard = lua_guard.StackGuard.init(L);
-        defer guard.deinit();
-        if (guard.getGlobalFn("__zigOS_tick") != null) {
-            guard.pcallSafe(0, 0, "tick") catch {};
+    _ = lua.lua_getglobal(L, "__zigOS_tick");
+    if (lua.lua_isfunction(L, -1)) {
+        if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+            logLuaError(L, "tick");
+            lua.lua_pop(L, 1);
         }
+    } else {
+        lua.lua_pop(L, 1);
     }
 
     telemetry_tick_us = @intCast(std.time.microTimestamp() - t0);
@@ -444,3 +462,13 @@ pub fn tick() void {
     }
 }
 
+// ── Error helper ────────────────────────────────────────────────────────
+
+fn logLuaError(L: *lua.lua_State, context: []const u8) void {
+    var len: usize = 0;
+    const err = lua.lua_tolstring(L, -1, &len);
+    if (err != null) {
+        const msg: []const u8 = @as([*]const u8, @ptrCast(err))[0..len];
+        std.log.err("[luajit-runtime] {s}: {s}", .{ context, msg });
+    }
+}

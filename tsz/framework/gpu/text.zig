@@ -648,10 +648,6 @@ pub fn deinit() void {
     g_atlas_texture = null;
 }
 
-pub fn pipelineReady() bool { return g_text_pipeline != null; }
-pub fn bufferReady() bool { return g_text_buffer != null; }
-pub fn bindGroupReady() bool { return g_text_bind_group != null; }
-
 /// Current number of queued glyphs.
 pub fn count() usize {
     return g_glyph_count;

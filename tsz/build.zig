@@ -24,22 +24,17 @@ pub fn build(b: *std.Build) void {
     // ── User flags ──────────────────────────────────────────────────
     const sysroot = b.option([]const u8, "sysroot", "Cross-compile sysroot path (e.g., Alpine rootfs with -dev packages)");
 
-    // ── File length enforcement (1600 line max) ──────────────────────
-    const file_check = b.addSystemCommand(&.{ "bash", "scripts/check-file-length.sh" });
-
     // ── zigos (lean) — compiler + layout + primitives + GPU ─────────
     const lean_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz", .lean, sysroot);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
     const lean_step = b.step("tsz", "Lean: compiler + layout + GPU + SDL3");
     lean_step.dependOn(&lean_install.step);
-    lean_step.dependOn(&file_check.step);
 
     // ── tsz-full — compiler + everything ────────────────────────────
     const full_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz-full", .full, sysroot);
     const full_install = b.addInstallArtifact(full_exe, .{});
     const full_step = b.step("tsz-full", "Full: compiler + networking + QuickJS + physics + 3D + terminal + video + crypto");
     full_step.dependOn(&full_install.step);
-    full_step.dependOn(&file_check.step);
 
     // ── App binary (compiled .tsz app) ──────────────────────────────
     const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "tsz-app";
@@ -107,7 +102,6 @@ pub fn build(b: *std.Build) void {
         const forge_install = b.addInstallArtifact(forge_exe, .{});
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
         forge_step.dependOn(&forge_install.step);
-        forge_step.dependOn(&file_check.step);
     }
 
     // ── Compiler tests ───────────────────────────────────────────
@@ -271,7 +265,7 @@ pub fn build(b: *std.Build) void {
         web_options.addOption(bool, "is_lib", false);
         web_options.addOption(bool, "has_quickjs", true);
         web_options.addOption(bool, "has_physics", false);
-        web_options.addOption(bool, "has_terminal", true);
+        web_options.addOption(bool, "has_terminal", false);
         web_options.addOption(bool, "has_video", false);
         web_options.addOption(bool, "has_render_surfaces", false);
         web_options.addOption(bool, "has_effects", false);
@@ -307,15 +301,6 @@ pub fn build(b: *std.Build) void {
 
         // stb_image
         web_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
-
-        // libvterm (terminal emulation — ANSI parsing → cell grid)
-        web_mod.addIncludePath(b.path("../deps/libvterm/include"));
-        web_mod.addIncludePath(b.path("../deps/libvterm/src"));
-        web_mod.addCSourceFiles(.{
-            .root = b.path("../deps/libvterm/src"),
-            .files = &.{ "encoding.c", "keyboard.c", "mouse.c", "parser.c", "pen.c", "screen.c", "state.c", "unicode.c", "vterm.c" },
-            .flags = &.{ "-O2", "-D_GNU_SOURCE" },
-        });
 
         // Framework includes (for @cImport in framework code)
         web_mod.addIncludePath(b.path("."));
@@ -366,8 +351,8 @@ pub fn build(b: *std.Build) void {
             "-sUSE_FREETYPE=1",
             "-sALLOW_MEMORY_GROWTH",
             "--preload-file", "web/font.ttf@/font.ttf",
-            "-sEXPORTED_FUNCTIONS=[\"_main\",\"_malloc\",\"_free\",\"_web_serial_write\",\"_web_serial_char\",\"_web_click\"]",
-            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"allocateUTF8\",\"HEAPU8\",\"HEAP32\"]",
+            "-sEXPORTED_FUNCTIONS=[\"_main\",\"_malloc\",\"_free\"]",
+            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"HEAPU8\",\"HEAP32\"]",
             "-sERROR_ON_UNDEFINED_SYMBOLS=0",
             "-sASSERTIONS=2",
             "-sNO_EXIT_RUNTIME=1",

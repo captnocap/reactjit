@@ -90,7 +90,6 @@ pub fn fillSVGPath(
     }
 
     // Cache miss — rasterize with Vello
-    std.debug.print("[vello] cache miss ptr={x} color={x} bb=({d:.1},{d:.1},{d:.1},{d:.1})\n", .{ @intFromPtr(d.ptr), color_key, bb_min_x, bb_min_y, bb_w, bb_h });
     if (g_fill_cache_count >= MAX_FILL_CACHE) return;
     const ppu: f32 = @max(0.5, pixels_per_unit);
     const pw: u32 = @intFromFloat(@max(1, @min(2048, @ceil(bb_w * ppu))));
@@ -108,20 +107,7 @@ pub fn fillSVGPath(
     vello_fill_path(surface, d.ptr, d.len, fill_r, fill_g, fill_b, fill_a, sx, sy, tx, ty);
 
     // Render and get pixel buffer
-    const pixels = vello_render(surface) orelse {
-        std.debug.print("[vello] render returned null!\n", .{});
-        return;
-    };
-    // Check edge pixels for partial alpha
-    var n_partial: u32 = 0;
-    var n_full: u32 = 0;
-    var n_zero: u32 = 0;
-    const total = @as(usize, pw) * @as(usize, ph);
-    for (0..total) |i| {
-        const a = pixels[i * 4 + 3];
-        if (a == 0) { n_zero += 1; } else if (a == 255) { n_full += 1; } else { n_partial += 1; }
-    }
-    std.debug.print("[vello] {d}x{d} pixels: {d} full, {d} partial, {d} zero\n", .{ pw, ph, n_full, n_partial, n_zero });
+    const pixels = vello_render(surface) orelse return;
 
     // Upload to GPU texture
     const device = gpu.getDevice() orelse return;
@@ -188,7 +174,6 @@ pub fn fillSVGPath(
     g_fill_cache_count += 1;
 
     // Draw it
-    std.debug.print("[vello] queued quad at ({d:.0},{d:.0}) {d:.0}x{d:.0}, tex={d}x{d}\n", .{ bb_min_x, bb_min_y, bb_w, bb_h, pw, ph });
     gpu.images.queueQuad(bb_min_x, bb_min_y, bb_w, bb_h, 1.0, bg);
 }
 

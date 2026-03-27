@@ -26,7 +26,6 @@ const crashlog = @import("crashlog.zig");
 const cart = @import("cartridge.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
-const engine_paint = @import("engine_paint.zig");
 const build_options = @import("build_options");
 const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
 const HAS_PHYSICS = if (@hasDecl(build_options, "has_physics")) build_options.has_physics else true;
@@ -41,25 +40,22 @@ const HAS_CRYPTO = if (@hasDecl(build_options, "has_crypto")) build_options.has_
 const HAS_BLEND2D = if (@hasDecl(build_options, "has_blend2d")) build_options.has_blend2d else false;
 const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_options.has_debug_server else false;
 
-const vello_gfx = @import("vello.zig");
 const blend2d_gfx = if (HAS_BLEND2D) @import("blend2d.zig") else struct {
     pub fn fillSVGPath(_: []const u8, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
     pub fn fillSVGPathFromEffect(_: []const u8, _: [*]const u8, _: u32, _: u32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
-    pub fn beginFrame() void {}
     pub fn deinit() void {}
 };
 
 var g_paisley_debug_enabled: ?bool = null;
-pub var g_paisley_graph_logged_once = false;
 
-pub fn paisleyDebugEnabled() bool {
+fn paisleyDebugEnabled() bool {
     if (g_paisley_debug_enabled == null) {
         g_paisley_debug_enabled = std.posix.getenv("ZIGOS_PAISLEY_DEBUG") != null;
     }
     return g_paisley_debug_enabled.?;
 }
 
-pub fn isPaisleyName(name: []const u8) bool {
+fn isPaisleyName(name: []const u8) bool {
     return std.mem.startsWith(u8, name, "paisley-");
 }
 
@@ -253,7 +249,7 @@ const TextEngine = text_mod.TextEngine;
 // ── Devtools removed — inspector lives in tsz-tools ─────────────────────
 
 // ── Cursor blink state ───────────────────────────────────────────────────
-pub var g_cursor_visible: bool = true;
+var g_cursor_visible: bool = true;
 var g_prev_tick: u32 = 0;
 
 // ── Physics 2D state ────────────────────────────────────────────────────
@@ -286,7 +282,7 @@ fn termPixelToCell(tn: *Node, mx: f32, my: f32) struct { row: u16, col: u16 } {
     };
 }
 
-pub fn termCellSelected(row: u16, col: u16) bool {
+fn termCellSelected(row: u16, col: u16) bool {
     if (!term_sel_active) return false;
     var r0 = term_sel_start_row; var c0 = term_sel_start_col;
     var r1 = term_sel_end_row; var c1 = term_sel_end_col;
@@ -459,7 +455,7 @@ fn initPhysicsNode(node: *Node) void {
 
 // ── Hover state ─────────────────────────────────────────────────────────
 
-pub var hovered_node: ?*Node = null;
+var hovered_node: ?*Node = null;
 var cursor_hand: ?*c.SDL_Cursor = null;
 var cursor_arrow: ?*c.SDL_Cursor = null;
 var cursor_is_hand: bool = false;
@@ -545,7 +541,7 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     }
 }
 
-pub fn brighten(color: Color, amount: u8) Color {
+fn brighten(color: Color, amount: u8) Color {
     return .{
         .r = @min(255, @as(u16, color.r) + amount),
         .g = @min(255, @as(u16, color.g) + amount),
@@ -603,14 +599,14 @@ fn openUrl(url: []const u8) void {
     _ = child.spawnAndWait() catch {};
 }
 
-pub fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
     }
     return .{};
 }
 
-pub fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
+fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, 0, 0, 0, 1, true).width;
     }
@@ -623,7 +619,7 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 
 // ── Node painting (framework-owned) ─────────────────────────────────────
 
-pub fn offsetDescendants(node: *Node, dy: f32) void {
+fn offsetDescendants(node: *Node, dy: f32) void {
     for (node.children) |*child| {
         child.computed.y += dy;
         offsetDescendants(child, dy);
@@ -643,7 +639,7 @@ fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
 ///   - Each column gets a randomized anchor gy (stagger) — no flat horizontal edges
 ///   - Tiles stack outward from anchor: odd-indexed down, even-indexed up
 ///   - Uniform CANVAS_NODE_GAP (30px) between all tiles
-pub fn positionCanvasNodes(parent: *Node) void {
+fn positionCanvasNodes(parent: *Node) void {
     // Auto-stack: run once on first frame for drift-enabled canvases
     if (parent.canvas_drift_active and !canvas_stacked) {
         canvas_stacked = true;
@@ -757,6 +753,630 @@ fn dumpCanvasNodes(parent: *Node) void {
     std.posix.exit(0);
 }
 
+var g_paint_count: u32 = 0;
+var g_hidden_count: u32 = 0;
+var g_zero_count: u32 = 0;
+var g_dt_sec: f32 = 0;
+var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
+var g_flow_enabled: bool = true; // per-child flow override for hover mode
+var g_hover_changed: bool = false; // debug flag
+var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
+
+// Canvas drag state — tracks which canvas is being dragged for pan
+var canvas_drag_node: ?*Node = null;
+var canvas_drag_last_x: f32 = 0;
+var canvas_drag_last_y: f32 = 0;
+
+// TextInput drag-select state
+var input_drag_active: bool = false;
+var input_drag_id: u8 = 0;
+var input_drag_node_x: f32 = 0; // node rect x (for computing local_x)
+var input_drag_node_pl: f32 = 0; // node padding-left
+var input_drag_font_size: u16 = 0;
+
+fn paintNode(node: *Node) void {
+    if (node.style.display == .none) { g_hidden_count += 1; return; }
+    g_paint_count += 1;
+
+    // Canvas.Path: draw before size check
+    if (node.canvas_path) { paintCanvasPath(node); return; }
+
+    const r = node.computed;
+    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
+
+    // Apply node opacity (cascades to children via g_paint_opacity)
+    const saved_opacity = g_paint_opacity;
+    if (node.style.opacity < 1.0) {
+        g_paint_opacity *= node.style.opacity;
+    }
+    if (g_paint_opacity <= 0) { g_paint_opacity = saved_opacity; return; }
+
+    // Paint this node's visuals (background, text, input, selection)
+    paintNodeVisuals(node);
+
+    // Background effects — children with effect_background paint behind siblings
+    for (node.children) |*child| {
+        if (child.effect_background and child.effect_render != null) {
+            _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
+        }
+    }
+
+    // Canvas rendering — separate heavy path
+    if (node.canvas_type != null) { paintCanvasContainer(node); return; }
+
+    // Graph container — lightweight canvas with transform for SVG path children
+    if (node.graph_container) {
+        gpu.pushScissor(r.x, r.y, r.w, r.h);
+        // Set up transform: graph-space center (viewX,viewY) maps to element center
+        const vx: f32 = node.canvas_view_x;
+        const vy: f32 = node.canvas_view_y;
+        const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
+        const cx = r.x + r.w / 2;
+        const cy = r.y + r.h / 2;
+        gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz);
+        for (node.children) |*child| paintNode(child);
+        gpu.resetTransform();
+        gpu.popScissor();
+        return;
+    }
+
+    // Overflow clipping + scroll offset + recurse children
+    const ov = node.style.overflow;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    const is_clipped = is_scroll or ov == .hidden;
+
+    if (is_clipped) gpu.pushScissor(r.x, r.y, r.w, r.h);
+
+    if (is_scroll and node.scroll_y != 0) {
+        const sy = node.scroll_y;
+        offsetDescendants(node, -sy);
+        for (node.children) |*child| if (!child.effect_background) paintNode(child);
+        offsetDescendants(node, sy);
+    } else {
+        for (node.children) |*child| if (!child.effect_background) paintNode(child);
+    }
+
+    if (is_clipped) gpu.popScissor();
+    g_paint_opacity = saved_opacity;
+}
+
+/// Paint a Canvas.Path node (SVG stroke curves + optional blend2d fill).
+fn paintCanvasPath(node: *Node) callconv(.auto) void {
+    @setRuntimeSafety(false);
+    if (node.canvas_path_d) |d| {
+        const tc = node.text_color orelse Color.rgb(255, 255, 255);
+        // Fill pass — either from named effect texture or flat color
+        if (node.canvas_fill_effect) |ename| {
+            // Look up the named effect's pixel buffer and fill triangles with sampled colors
+            if (effects.getEffectFill(ename)) |info| {
+                const fill_path = svg_path.parsePath(d);
+                // Compute path bounding box for UV mapping
+                var min_x: f32 = 1e9;
+                var min_y: f32 = 1e9;
+                var max_x: f32 = -1e9;
+                var max_y: f32 = -1e9;
+                for (0..fill_path.subpath_count) |si2| {
+                    const sp2 = &fill_path.subpaths[si2];
+                    var pi2: u32 = 0;
+                    while (pi2 + 1 < sp2.count) : (pi2 += 2) {
+                        if (sp2.points[pi2] < min_x) min_x = sp2.points[pi2];
+                        if (sp2.points[pi2 + 1] < min_y) min_y = sp2.points[pi2 + 1];
+                        if (sp2.points[pi2] > max_x) max_x = sp2.points[pi2];
+                        if (sp2.points[pi2 + 1] > max_y) max_y = sp2.points[pi2 + 1];
+                    }
+                }
+                if (paisleyDebugEnabled() and isPaisleyName(ename)) {
+                    std.debug.print(
+                        "[paisley] paintCanvasPath name={s} d_len={d} bbox=({d:.1},{d:.1},{d:.1},{d:.1}) stroke_w={d:.2} curve_count={d} subpaths={d}\n",
+                        .{
+                            ename,
+                            d.len,
+                            min_x,
+                            min_y,
+                            max_x - min_x,
+                            max_y - min_y,
+                            node.canvas_stroke_width,
+                            fill_path.curve_count,
+                            fill_path.subpath_count,
+                        },
+                    );
+                }
+                if (HAS_BLEND2D) {
+                    blend2d_gfx.fillSVGPathFromEffect(
+                        d,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x,
+                        min_y,
+                        max_x - min_x,
+                        max_y - min_y,
+                        g_paint_opacity,
+                        @as(f32, @floatFromInt(tc.r)) / 255.0,
+                        @as(f32, @floatFromInt(tc.g)) / 255.0,
+                        @as(f32, @floatFromInt(tc.b)) / 255.0,
+                        @as(f32, @floatFromInt(tc.a)) / 255.0,
+                        node.canvas_stroke_width,
+                    );
+                } else {
+                    svg_path.drawFillFromEffect(
+                        &fill_path,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x, min_y, max_x - min_x, max_y - min_y,
+                    );
+                }
+            } else if (paisleyDebugEnabled() and isPaisleyName(ename)) {
+                std.debug.print("[paisley] paintCanvasPath name={s} missing fill source\n", .{ename});
+            }
+        } else if (node.canvas_fill_color) |fc| {
+            const fill_path = svg_path.parsePath(d);
+            svg_path.drawFill(
+                &fill_path,
+                @as(f32, @floatFromInt(fc.r)) / 255.0,
+                @as(f32, @floatFromInt(fc.g)) / 255.0,
+                @as(f32, @floatFromInt(fc.b)) / 255.0,
+                @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity,
+            );
+        }
+        // Stroke pass (GPU-native SDF curves)
+        const path = svg_path.parsePath(d);
+        svg_path.drawStrokeCurves(
+            &path,
+            @as(f32, @floatFromInt(tc.r)) / 255.0,
+            @as(f32, @floatFromInt(tc.g)) / 255.0,
+            @as(f32, @floatFromInt(tc.b)) / 255.0,
+            @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity,
+            node.canvas_stroke_width,
+            if (g_flow_enabled) node.canvas_flow_speed else 0,
+            @as(u32, @truncate(c.SDL_GetTicks())),
+        );
+    }
+}
+
+/// Paint node visuals: background, hover, text, selection, text input.
+/// Separated from paintNode to reduce the recursive frame size.
+noinline fn paintNodeVisuals(node: *Node) void {
+    const r = node.computed;
+    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+
+    if (is_hovered and node.style.background_color == null) {
+        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
+    }
+
+    if (node.style.background_color) |bg_raw| {
+        if (bg_raw.a > 0) {
+            const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
+            const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
+            const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
+            if (has_transform) {
+                gpu.drawRectTransformed(
+                    r.x, r.y, r.w, r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.border_radius, node.style.brdTop(),
+                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    node.style.rotation, node.style.scale_x, node.style.scale_y,
+                );
+            } else {
+                gpu.drawRect(
+                    r.x, r.y, r.w, r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.border_radius, node.style.brdTop(),
+                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                );
+            }
+        }
+    }
+
+    // Video frame — draw after background, before text
+    if (node.video_src) |src| {
+        _ = videos.paintVideo(src, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
+    // Render surface — screen capture, webcam, VM, etc.
+    if (node.render_src) |src| {
+        _ = render_surfaces.paintSurface(src, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
+    // Effect — generative visual
+    if (node.effect_type) |etype| {
+        _ = effects.paintEffect(etype, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+    // Custom effect — user-compiled onRender callback
+    if (node.effect_render) |render_fn| {
+        _ = render_fn;
+        if (node.effect_name) |ename| {
+            // Named effect: render but don't draw — used as fill source by Graph.Path fillEffect
+            _ = effects.paintNamedEffect(node, ename, r.x, r.y, r.w, r.h);
+        } else {
+            _ = effects.paintCustomEffect(node, r.x, r.y, r.w, r.h, g_paint_opacity);
+        }
+    }
+    // 3D.View — 3D viewport rendered offscreen, composited here
+    if (node.scene3d) {
+        _ = r3d.render(node, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
+    selection.paintHighlight(node, r.x, r.y);
+
+    // Terminal — cell-grid rendering via vterm
+    if (node.terminal) {
+        crashlog.logFmt("paint:term id={d}", .{node.terminal_id});
+        paintTerminal(node);
+        crashlog.log("paint:term-done");
+    }
+
+    if (node.text) |t| {
+        if (t.len > 0) {
+            const tc = node.text_color orelse Color.rgb(255, 255, 255);
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            const final_a = @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity;
+            gpu.resetInlineSlots();
+            // Set up text effect if present
+            if (node.text_effect) |ename| {
+                if (effects.getEffectFill(ename)) |info| {
+                    gpu.setTextEffect(info.pixel_buf, info.width, info.height, info.screen_x, info.screen_y);
+                }
+            }
+            const text_h = gpu.drawTextWrapped(
+                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
+                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
+            );
+            // Render inline glyphs into recorded slot positions
+            if (node.inline_glyphs) |glyphs| {
+                paintInlineGlyphs(glyphs, node.font_size);
+            }
+            if (node.text_effect != null) gpu.clearTextEffect();
+            // Underline for href links — span text content width, not node width
+            if (node.href != null) {
+                const text_w = measureWidthOnly(t, node.font_size);
+                const underline_y = r.y + pt + text_h - 2;
+                gpu.drawRect(r.x + pl, underline_y, text_w, 1,
+                    @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                    @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
+                    0, 0, 0, 0, 0, 0);
+            }
+        }
+    }
+
+    if (node.input_id) |id| paintTextInput(node, id);
+}
+
+/// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
+fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
+    @setRuntimeSafety(false);
+    const slot_count = gpu.getInlineSlotCount();
+    const slots = gpu.getInlineSlots();
+    var gi: usize = 0;
+    while (gi < slot_count and gi < glyphs.len) : (gi += 1) {
+        const slot = slots[gi];
+        const glyph = glyphs[gi];
+        const slot_size = slot.size * glyph.scale;
+        if (slot_size <= 0) continue;
+        const path = svg_path.parsePath(glyph.d);
+        if (path.subpath_count == 0) continue;
+        // Compute path bounding box
+        var min_x: f32 = 1e9;
+        var min_y: f32 = 1e9;
+        var max_x: f32 = -1e9;
+        var max_y: f32 = -1e9;
+        for (0..path.subpath_count) |si| {
+            const sp = &path.subpaths[si];
+            var pi: u32 = 0;
+            while (pi + 1 < sp.count) : (pi += 2) {
+                if (sp.points[pi] < min_x) min_x = sp.points[pi];
+                if (sp.points[pi + 1] < min_y) min_y = sp.points[pi + 1];
+                if (sp.points[pi] > max_x) max_x = sp.points[pi];
+                if (sp.points[pi + 1] > max_y) max_y = sp.points[pi + 1];
+            }
+        }
+        const pw = max_x - min_x;
+        const ph = max_y - min_y;
+        if (pw <= 0 or ph <= 0) continue;
+        // Scale to fit slot, centered
+        const scale = @min(slot_size / pw, slot_size / ph);
+        const cx_path = (min_x + max_x) / 2;
+        const cy_path = (min_y + max_y) / 2;
+        const cx_slot = slot.x + slot_size / 2;
+        const cy_slot = slot.y + @as(f32, @floatFromInt(font_size)) / 2;
+        // Transform: translate path center to slot center, scale around slot center
+        gpu.setTransform(cx_path, cy_path, cx_slot - cx_path * scale, cy_slot - cy_path * scale, scale);
+        // Fill: effect texture or flat color
+        var used_effect = false;
+        if (glyph.fill_effect) |ename| {
+            std.debug.print("glyph fill_effect='{s}'\n", .{ename});
+            if (effects.getEffectFill(ename)) |info| {
+                std.debug.print("  -> found effect w={d} h={d}\n", .{info.width, info.height});
+                if (HAS_BLEND2D) {
+                    blend2d_gfx.fillSVGPathFromEffect(
+                        glyph.d,
+                        info.pixel_buf,
+                        info.width,
+                        info.height,
+                        min_x,
+                        min_y,
+                        pw,
+                        ph,
+                        g_paint_opacity,
+                        @as(f32, @floatFromInt(glyph.stroke.r)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.g)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.b)) / 255.0,
+                        @as(f32, @floatFromInt(glyph.stroke.a)) / 255.0,
+                        glyph.stroke_width,
+                    );
+                } else {
+                    svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
+                }
+                used_effect = true;
+            }
+        }
+        if (!used_effect) {
+            const fc = glyph.fill;
+            svg_path.drawFill(&path,
+                @as(f32, @floatFromInt(fc.r)) / 255.0, @as(f32, @floatFromInt(fc.g)) / 255.0,
+                @as(f32, @floatFromInt(fc.b)) / 255.0, @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity);
+        }
+        // Stroke
+        if (glyph.stroke_width > 0 and glyph.stroke.a > 0) {
+            const sc = glyph.stroke;
+            svg_path.drawStrokeCurves(&path,
+                @as(f32, @floatFromInt(sc.r)) / 255.0, @as(f32, @floatFromInt(sc.g)) / 255.0,
+                @as(f32, @floatFromInt(sc.b)) / 255.0, @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity,
+                glyph.stroke_width, 0, 0);
+        }
+        gpu.resetTransform();
+    }
+}
+
+/// Paint TextInput: typed text, placeholder, selection highlight, blinking cursor.
+noinline fn paintTextInput(node: *Node, id: u8) void {
+    const r = node.computed;
+    if (input.isFocused(id)) {
+        const pad: f32 = 4;
+        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30);
+    }
+    const typed = input.getText(id);
+    const is_placeholder = typed.len == 0;
+    if (!is_placeholder) {
+        const sel = input.getSelection(id);
+        if (sel.hi > sel.lo) {
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            gpu.drawSelectionRects(typed, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr), sel.lo, sel.hi);
+        }
+    }
+    const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
+    if (display_text) |t| {
+        if (t.len > 0) {
+            const tc = if (is_placeholder)
+                Color.rgb(100, 100, 110)
+            else
+                (node.text_color orelse Color.rgb(220, 220, 220));
+            const pl = node.style.padLeft();
+            const pt = node.style.padTop();
+            const pr = node.style.padRight();
+            _ = gpu.drawTextWrapped(
+                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
+                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0, 0,
+            );
+        }
+    }
+    if (input.isFocused(id) and g_cursor_visible) {
+        const cursor_pos = input.getCursorPos(id);
+        const pl = node.style.padLeft();
+        const pt = node.style.padTop();
+        const pb = node.style.padBottom();
+        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
+        const cx = r.x + pl + metrics.width;
+        const ch = r.h - pt - pb;
+        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
+    }
+}
+
+/// Paint a Terminal node: cell-grid rendering via vterm.
+/// Each cell gets its own fg color; non-default backgrounds get a bg rect.
+/// Uses span-based batching: consecutive cells with the same fg are drawn as one string.
+noinline fn paintTerminal(node: *Node) void {
+    const ti = node.terminal_id;
+    const r = node.computed;
+    const font_size = node.terminal_font_size;
+    const padding: f32 = 4;
+
+    // Sanity check: don't paint if vterm not initialized
+    if (vterm_mod.getRowsIdx(ti) == 0) {
+        crashlog.logFmt("paint:skip id={d} rows=0", .{ti});
+        return;
+    }
+
+    const cell_w = gpu.getCharWidth(font_size);
+    const cell_h = gpu.getLineHeight(font_size);
+    if (cell_w <= 0 or cell_h <= 0) return;
+
+    const avail_w = r.w - padding * 2;
+    const avail_h = r.h - padding * 2;
+    const cols: u16 = @intFromFloat(@max(1, @floor(avail_w / cell_w)));
+    const rows: u16 = @intFromFloat(@max(1, @floor(avail_h / cell_h)));
+
+    // Auto-resize vterm to match layout (only if changed)
+    const vt_rows = vterm_mod.getRowsIdx(ti);
+    const vt_cols = vterm_mod.getColsIdx(ti);
+    if (vt_rows != rows or vt_cols != cols) {
+        vterm_mod.resizeVtermIdx(ti, rows, cols);
+    }
+
+    const base_x = r.x + padding;
+    const base_y = r.y + padding;
+
+    // Scrollback: when scrolled up, top rows come from scrollback, rest from live screen
+    const scroll_off = vterm_mod.scrollOffsetIdx(ti);
+    const sb_visible: u16 = @min(scroll_off, rows);
+
+    // Draw cells row by row
+    var row: u16 = 0;
+    while (row < rows) : (row += 1) {
+        const cy = base_y + @as(f32, @floatFromInt(row)) * cell_h;
+
+        // Alternating row background for visual tracking
+        if (row % 2 == 1) {
+            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+        }
+
+        // Left accent bar: bright for classified tokens, dim for output
+        if (row >= sb_visible) {
+            const live_r = row - sb_visible;
+            const tok = classifier.getRowTokenIdx(ti, live_r);
+            if (tok != .output and tok != .text) {
+                const ac = classifier.tokenColor(tok);
+                gpu.drawRect(r.x, cy, 2, cell_h,
+                    @as(f32, @floatFromInt(ac.r)) / 255.0,
+                    @as(f32, @floatFromInt(ac.g)) / 255.0,
+                    @as(f32, @floatFromInt(ac.b)) / 255.0,
+                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            } else {
+                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+        }
+
+        var col: u16 = 0;
+        while (col < cols) : (col += 1) {
+            const cell = if (row < sb_visible)
+                vterm_mod.getScrollbackCellIdx(ti, row, col)
+            else
+                vterm_mod.getCellIdx(ti, row - sb_visible, col);
+            const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
+
+            // Selection highlight
+            if (termCellSelected(row, col)) {
+                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+
+            // Background rect (non-default bg only)
+            if (cell.bg) |bg| {
+                const actual_bg = if (cell.reverse) (cell.fg orelse @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 }) else bg;
+                gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h,
+                    @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
+                    @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(actual_bg.b)) / 255.0,
+                    g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+
+            // Foreground glyph — semantic color for live rows, cell color for scrollback
+            if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
+                const default_fg = @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 };
+                const raw_fg = if (cell.reverse) (cell.bg orelse @TypeOf(cell.bg.?){ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
+                // Use semantic classifier color for live screen rows (only when overlay active)
+                const fg = if (g_semantic_overlay and row >= sb_visible) blk: {
+                    const live_row = row - sb_visible;
+                    const token = classifier.getRowTokenIdx(ti, live_row);
+                    if (token != .output and token != .text) {
+                        const tc = classifier.tokenColor(token);
+                        break :blk @TypeOf(raw_fg){ .r = tc.r, .g = tc.g, .b = tc.b };
+                    }
+                    break :blk raw_fg;
+                } else raw_fg;
+                gpu.drawGlyphAt(
+                    cell.char_buf[0..cell.char_len],
+                    cx, cy, font_size,
+                    @as(f32, @floatFromInt(fg.r)) / 255.0,
+                    @as(f32, @floatFromInt(fg.g)) / 255.0,
+                    @as(f32, @floatFromInt(fg.b)) / 255.0,
+                    g_paint_opacity,
+                );
+            }
+
+            // Skip wide characters (CJK occupies 2 cells)
+            if (cell.width > 1) col += cell.width - 1;
+        }
+    }
+
+    // Scrollback indicator — dim bar at top when scrolled up
+    if (scroll_off > 0) {
+        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+    }
+
+    // Cursor — only show when at live view (not scrolled up)
+    if (scroll_off == 0 and vterm_mod.getCursorVisibleIdx(ti) and g_cursor_visible) {
+        const crow = vterm_mod.getCursorRowIdx(ti);
+        const ccol = vterm_mod.getCursorColIdx(ti);
+        if (crow < rows and ccol < cols) {
+            const cx = base_x + @as(f32, @floatFromInt(ccol)) * cell_w;
+            const cy_cur = base_y + @as(f32, @floatFromInt(crow)) * cell_h;
+            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+        }
+    }
+}
+
+/// Paint a Canvas container: transform setup, graph children, HUD layer.
+noinline fn paintCanvasContainer(node: *Node) void {
+    const r = node.computed;
+    const ct = node.canvas_type.?;
+    if (node.canvas_view_set) {
+        canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
+        node.canvas_view_set = false;
+    }
+    // Apply drift — continuous camera animation (pauses during drag or node selection)
+    if (node.canvas_drift_active and canvas_drag_node == null and canvas.getSelectedNode() == null and g_dt_sec > 0) {
+        canvas.handleDrag(-node.canvas_drift_x * g_dt_sec, -node.canvas_drift_y * g_dt_sec);
+    }
+    gpu.pushScissor(r.x, r.y, r.w, r.h);
+    canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
+    positionCanvasNodes(node);
+    const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
+    const vp_cx = r.x + r.w / 2;
+    const vp_cy = r.y + r.h / 2;
+    gpu.setTransform(0, 0, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, cam.scale);
+    {
+        const hovered = canvas.getHoveredNode();
+        const selected = canvas.getSelectedNode();
+        var child_idx: u16 = 0;
+        for (node.children) |*child| {
+            if (!child.canvas_clamp) {
+                if (child.canvas_node) {
+                    const node_selected = selected != null and selected.? == child_idx;
+                    const node_hovered = hovered != null and hovered.? == child_idx;
+                    if (node_selected) {
+                        const hw = child.canvas_gw / 2 + 5;
+                        const hh = child.canvas_gh / 2 + 5;
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
+                    } else if (node_hovered) {
+                        const hw = child.canvas_gw / 2 + 4;
+                        const hh = child.canvas_gh / 2 + 4;
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
+                    }
+                }
+                g_paint_opacity = canvas.getNodeDim(child_idx);
+                g_flow_enabled = canvas.getFlowOverride(child_idx);
+                paintNode(child);
+                g_paint_opacity = 1.0;
+                g_flow_enabled = true;
+            }
+            child_idx += 1;
+        }
+    }
+    gpu.resetTransform();
+    // Force a scissor segment boundary so tile text (batched) renders
+    // BEFORE the clamp's background rect. Without this, all rects draw
+    // first then all text — tile text bleeds over the clamp background.
+    gpu.popScissor();
+    gpu.pushScissor(r.x, r.y, r.w, r.h);
+    for (node.children) |*child| {
+        if (child.canvas_clamp) {
+            layout.layoutNode(child, r.x, r.y, r.w, r.h);
+            paintNode(child);
+        }
+    }
+    gpu.popScissor();
+}
 
 // ── Engine entry point ──────────────────────────────────────────────────
 
@@ -900,11 +1520,11 @@ pub fn run(config_in: AppConfig) !void {
         if (config.check_reload) |check| {
             if (check(&config)) {
                 // Reset stale pointers from the old .so
-                engine_paint.canvas_drag_node = null;
-                engine_paint.input_drag_active = false;
+                canvas_drag_node = null;
+                input_drag_active = false;
                 term_sel_dragging = false;
                 hovered_node = null;
-                engine_paint.g_hover_changed = true;
+                g_hover_changed = true;
                 // Re-init the new app
                 if (config.init) |initFn| initFn();
                 // Restore preserved state (after init resets to defaults, before tick uses it)
@@ -1001,11 +1621,11 @@ pub fn run(config_in: AppConfig) !void {
                                 } else {
                                     input.setCursorFromX(id, local_x, h.font_size);
                                     input.startDrag(id);
-                                    engine_paint.input_drag_active = true;
-                                    engine_paint.input_drag_id = id;
-                                    engine_paint.input_drag_node_x = h.computed.x;
-                                    engine_paint.input_drag_node_pl = pl;
-                                    engine_paint.input_drag_font_size = h.font_size;
+                                    input_drag_active = true;
+                                    input_drag_id = id;
+                                    input_drag_node_x = h.computed.x;
+                                    input_drag_node_pl = pl;
+                                    input_drag_font_size = h.font_size;
                                 }
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
@@ -1020,7 +1640,9 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.lua_on_press) |lua_expr| {
                                 input.unfocus();
+                                std.debug.print("[lua_on_press] eval: '{s}'\n", .{std.mem.span(lua_expr)});
                                 luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                                std.debug.print("[lua_on_press] done\n", .{});
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
                                 qjs_runtime.evalExpr(std.mem.span(js_expr));
@@ -1056,11 +1678,11 @@ pub fn run(config_in: AppConfig) !void {
                                     const pl = h.style.padLeft();
                                     const local_x = gpos[0] - h.computed.x - pl;
                                     input.setCursorFromX(id, local_x, h.font_size);
-                                    engine_paint.input_drag_active = true;
-                                    engine_paint.input_drag_id = id;
-                                    engine_paint.input_drag_node_x = h.computed.x;
-                                    engine_paint.input_drag_node_pl = pl;
-                                    engine_paint.input_drag_font_size = h.font_size;
+                                    input_drag_active = true;
+                                    input_drag_id = id;
+                                    input_drag_node_x = h.computed.x;
+                                    input_drag_node_pl = pl;
+                                    input_drag_font_size = h.font_size;
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
                                     handler();
@@ -1086,9 +1708,9 @@ pub fn run(config_in: AppConfig) !void {
                                 // Background click — select/deselect canvas node and start drag
                                 input.unfocus();
                                 if (canvas.getHoveredNode() != null) canvas.clickNode();
-                                engine_paint.canvas_drag_node = cn;
-                                engine_paint.canvas_drag_last_x = mx;
-                                engine_paint.canvas_drag_last_y = my;
+                                canvas_drag_node = cn;
+                                canvas_drag_last_x = mx;
+                                canvas_drag_last_y = my;
                             }
                         } else {
                             // Check all terminals for click
@@ -1143,9 +1765,9 @@ pub fn run(config_in: AppConfig) !void {
                         }
                     }
                     // TextInput drag selection
-                    if (engine_paint.input_drag_active) {
-                        const local_x = mx - engine_paint.input_drag_node_x - engine_paint.input_drag_node_pl;
-                        input.updateDrag(engine_paint.input_drag_id, local_x, engine_paint.input_drag_font_size);
+                    if (input_drag_active) {
+                        const local_x = mx - input_drag_node_x - input_drag_node_pl;
+                        input.updateDrag(input_drag_id, local_x, input_drag_font_size);
                     }
                     updateHover(config.root, mx, my);
                     // Context menu hover tracking
@@ -1173,20 +1795,20 @@ pub fn run(config_in: AppConfig) !void {
                                 ci += 1;
                             }
                             canvas.setHoveredNode(found_idx);
-                            engine_paint.g_hover_changed = true;
+                            g_hover_changed = true;
                         } else {
-                            if (canvas.getHoveredNode() != null) engine_paint.g_hover_changed = true;
+                            if (canvas.getHoveredNode() != null) g_hover_changed = true;
                             canvas.setHoveredNode(null);
                         }
                     }
                     const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
-                    if (dragging_left and engine_paint.canvas_drag_node != null) {
+                    if (dragging_left and canvas_drag_node != null) {
                         // Canvas pan — built-in
-                        const dx = mx - engine_paint.canvas_drag_last_x;
-                        const dy = my - engine_paint.canvas_drag_last_y;
+                        const dx = mx - canvas_drag_last_x;
+                        const dy = my - canvas_drag_last_y;
                         canvas.handleDrag(dx, dy);
-                        engine_paint.canvas_drag_last_x = mx;
-                        engine_paint.canvas_drag_last_y = my;
+                        canvas_drag_last_x = mx;
+                        canvas_drag_last_y = my;
                     } else if (dragging_left) {
                         selection.onMouseDrag(config.root, mx, my);
                     }
@@ -1201,8 +1823,8 @@ pub fn run(config_in: AppConfig) !void {
                     }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         physics2d.endDrag();
-                        engine_paint.canvas_drag_node = null;
-                        engine_paint.input_drag_active = false;
+                        canvas_drag_node = null;
+                        input_drag_active = false;
                         term_sel_dragging = false;
                         selection.onMouseUp();
                     }
@@ -1251,13 +1873,13 @@ pub fn run(config_in: AppConfig) !void {
                         }
                         // Ctrl+Shift+D — toggle semantic overlay
                         if (t_ctrl and t_shift and sym == c.SDLK_D) {
-                            engine_paint.g_semantic_overlay = !engine_paint.g_semantic_overlay;
+                            g_semantic_overlay = !g_semantic_overlay;
                             // When overlay turns on, activate basic classifier if none set
-                            if (engine_paint.g_semantic_overlay and classifier.getModeIdx(g_focused_terminal) == .none) {
+                            if (g_semantic_overlay and classifier.getModeIdx(g_focused_terminal) == .none) {
                                 classifier.setModeIdx(g_focused_terminal, .basic);
                                 classifier.markDirtyIdx(g_focused_terminal);
                             }
-                            std.debug.print("[semantic] overlay {s}\n", .{if (engine_paint.g_semantic_overlay) "ON" else "OFF"});
+                            std.debug.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
                             continue;
                         }
                         if (t_ctrl and t_shift and sym == c.SDLK_V) {
@@ -1474,11 +2096,10 @@ pub fn run(config_in: AppConfig) !void {
         r3d.update(dt_sec);
 
         // Paint (main window — wgpu)
-        engine_paint.g_dt_sec = dt_sec;
+        g_dt_sec = dt_sec;
         selection.resetWalkState();
-        blend2d_gfx.beginFrame();
         const t4 = std.time.microTimestamp();
-        engine_paint.paintNode(config.root);
+        paintNode(config.root);
 
         // (devtools paint removed — inspector lives in tsz-tools)
 
@@ -1534,9 +2155,9 @@ pub fn run(config_in: AppConfig) !void {
             .fps = qjs_runtime.telemetry_fps,
             .bridge_calls_per_sec = qjs_runtime.telemetry_bridge_calls,
             .root = config.root,
-            .visible_nodes = engine_paint.g_paint_count,
-            .hidden_nodes = engine_paint.g_hidden_count,
-            .zero_size_nodes = engine_paint.g_zero_count,
+            .visible_nodes = g_paint_count,
+            .hidden_nodes = g_hidden_count,
+            .zero_size_nodes = g_zero_count,
             .window = window,
             .hovered_node = hovered_node,
         });
@@ -1550,9 +2171,9 @@ pub fn run(config_in: AppConfig) !void {
         if (now -% fps_last >= 1000) {
             qjs_runtime.telemetry_fps = fps_frames;
             luajit_runtime.telemetry_fps = fps_frames;
-            const ppf = engine_paint.g_paint_count / @max(fps_frames, 1);
-            const hpf = engine_paint.g_hidden_count / @max(fps_frames, 1);
-            const zpf = engine_paint.g_zero_count / @max(fps_frames, 1);
+            const ppf = g_paint_count / @max(fps_frames, 1);
+            const hpf = g_hidden_count / @max(fps_frames, 1);
+            const zpf = g_zero_count / @max(fps_frames, 1);
             std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
                 fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
@@ -1560,10 +2181,10 @@ pub fn run(config_in: AppConfig) !void {
             qjs_runtime.bridge_calls_this_second = 0;
             @import("luajit_worker.zig").logTelemetry();
             @import("audio.zig").logTelemetry();
-            engine_paint.g_paint_count = 0;
-            engine_paint.g_hover_changed = false;
-            engine_paint.g_hidden_count = 0;
-            engine_paint.g_zero_count = 0;
+            g_paint_count = 0;
+            g_hover_changed = false;
+            g_hidden_count = 0;
+            g_zero_count = 0;
             fps_frames = 0;
             fps_last = now;
         }

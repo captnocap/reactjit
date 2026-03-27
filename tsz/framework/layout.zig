@@ -1590,7 +1590,9 @@ fn invalidateCaches(node: *Node) void {
         invalidateCaches(child);
     }
 }
+
 // ── Telemetry ────────────────────────────────────────────────────────────
+
 pub fn telemetryBudget() u32 {
     return LAYOUT_BUDGET;
 }

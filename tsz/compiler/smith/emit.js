@@ -359,7 +359,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (let si = 0; si < ctx.stateSlots.length; si++) {
       const s = ctx.stateSlots[si];
       const luaInit = s.type === 'string' ? `'${s.initial}'` : (s.type === 'boolean' ? (s.initial ? 'true' : 'false') : s.initial);
-      luaLines.push(`local ${s.getter} = ${luaInit}`);
+      luaLines.push(`${s.getter} = ${luaInit}`);
     }
     luaLines.push('');
     // Setter functions: update local + push to Zig state slot
