@@ -270,6 +270,7 @@ carts/
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70/70 | W3C CSS flex spec |
 | Compiler conformance suite | 159/283 | Language features, script runtimes, maps, components, integration |
+| Smith conformance (vs OG Zig) | 89/112 | Forge+Smith output parity against the reference Zig compiler |
 | Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
