@@ -129,14 +129,15 @@ Three script runtimes, each with different tradeoffs.
 |---|---|---|---|
 | **Runs in** | QuickJS (JS runtime) | LuaJIT (main-thread VM) | Native Zig (compiled into binary) |
 | **When** | Runtime — after app starts | Runtime — after app starts | Compile time — baked into the binary |
-| **Good for** | Timers, async fetches, dynamic data, mock data | Performance-sensitive logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access |
-| **Speed** | 52M ops/sec — hits the wall there | Faster than QuickJS, JIT-compiled | No ceiling — native Zig, keeps scaling |
+| **Good for** | Timers, async fetches, dynamic data, mock data | Handler logic, conditionals, .map() logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access |
+| **Speed** | 52M ops/sec — hits the wall there | 2–11x faster than QuickJS (JIT-compiled, traces warm after ~50 calls) | No ceiling — native Zig, keeps scaling |
 
-We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. Both `<script>` and `<zscript>` perform identically up to ~50M ops. The difference only shows up past that mark: JS plateaus while Zig keeps scaling. For anything under 50M ops/sec (which is virtually every UI app), use whichever is more convenient. Use `<zscript>` when you need direct Zig type system access, FFI, or you're genuinely past the 50M threshold.
+We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. LuaJIT beats QuickJS across every test category: host calls, state bridge, conditionals, .map(), string templates, component render, pure compute, and event handlers. The widest gap is on nested ternary conditionals — the exact pattern Smith generates for dynamic styles and handler routing — where LuaJIT is **11.1x faster** (`cb47b7a1`). Use `<lscript>` when the logic is complex or runs frequently. Use `<zscript>` when you need direct Zig type system access, FFI, or you're writing test assertions.
 
 Key commits:
 - `f662eb0d` — FFI option 1: JS host functions, proved the bridge works but showed overhead for tight FFI
 - `8b7451b1` — Bridge benchmark: 52M calls/sec, proved JS→Zig bridge is not a bottleneck
+- `cb47b7a1` — QuickJS vs LuaJIT head-to-head: LuaJIT wins every test, 2–11x faster, 11.1x on nested ternaries
 - `3c7b6b78` — `<zscript>` inline Zig blocks, for when you need zero overhead
 - `205e2505` — `_zscript.tsz` imperative mode, compiles TypeScript-like code directly to `.zig` modules
 
