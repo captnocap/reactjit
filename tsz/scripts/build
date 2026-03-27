@@ -13,6 +13,13 @@ if [ -z "${1:-}" ]; then
     exit 1
 fi
 
+# Auto-rebuild vello if stripped lib is missing (happens after fresh clone or git filter-repo)
+VELLO_LIB="../deps/vello_ffi/target/release/libvello_ffi_stripped.a"
+if [ ! -f "$VELLO_LIB" ]; then
+    echo "[vello_ffi] stripped lib missing — rebuilding..."
+    bash ../deps/vello_ffi/build.sh
+fi
+
 CART="$1"
 NAME=$(basename "$CART" .tsz)
 OPT="${2:---release}"

@@ -6,13 +6,15 @@ Write React. Get a native binary. Your UI compiles to native code — no virtual
 app.tsz (TypeScript + JSX)
    |
    v
-tsz compiler (hand-written Zig, 25K lines)
+Forge (Zig kernel) + Smith (JS compiler brain, runs in QuickJS)
    |
    v
 generated Zig source (layout + GPU paint + events + state)
-   |
-   v
-native binary (SDL3 + wgpu + FreeType + QuickJS + LuaJIT)
+   |        \
+   v         v
+native      LuaJIT (runtime logic: handlers, closures, dynamic dispatch)
+binary
+(SDL3 + wgpu + FreeType + QuickJS + LuaJIT)
 ```
 
 ```tsx
