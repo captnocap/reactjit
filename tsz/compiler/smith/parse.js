@@ -90,6 +90,9 @@ function parseJSXElement(c) {
     const savedMapCtx = ctx.currentMap;
     const savedArrayDecls = ctx.arrayDecls;
     const savedArrayComments = ctx.arrayComments;
+    // Track initial lengths to detect new arrays created during inlining
+    const savedArrayDeclsLen = savedArrayDecls.length;
+    const savedArrayCommentsLen = savedArrayComments.length;
     if (ctx.currentMap) {
       // Restore to top-level arrays during component inlining
       // Keep currentMap active so item member access (n.title) resolves
@@ -123,6 +126,16 @@ function parseJSXElement(c) {
       if (!result) result = { nodeExpr: '.{}' };
     } else {
       result = parseJSXElement(c);
+    }
+    // Preserve arrays created during component inlining inside maps
+    // Component arrays created inside a map go to the parent (topArrayDecls)
+    // We need to append them to the map's own mapArrayDecls to keep them
+    if (ctx.currentMap && ctx.arrayDecls.length > savedArrayDeclsLen) {
+      const newArrayDecls = ctx.arrayDecls.slice(savedArrayDeclsLen);
+      const newArrayComments = ctx.arrayComments.slice(savedArrayCommentsLen);
+      // Append new arrays to the map's mapArrayDecls
+      ctx.currentMap.mapArrayDecls.push(...newArrayDecls);
+      ctx.currentMap.mapArrayComments.push(...newArrayComments);
     }
     ctx.propStack = savedProps;
     ctx.inlineComponent = savedInline;
@@ -437,12 +450,18 @@ function parseTemplateLiteral(raw) {
         // Prop substitution — use the concrete prop value
         const propVal = ctx.propStack[expr];
         const isNum = /^-?\d+(\.\d+)?$/.test(propVal);
-        const isZigExpr = propVal.includes('state.get') || propVal.includes('getSlot');
+        const isZigExpr = propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as');
+        const isStringArray = isZigExpr && propVal.includes('[') && propVal.includes('..');
         if (isNum) {
           fmt += '{d}'; args.push(propVal);
+        } else if (isStringArray) {
+          // String array slice: _oaN_field[_i][0.._oaN_field_lens[_i]]
+          fmt += '{s}'; args.push(propVal);
         } else if (isZigExpr) {
+          // Other Zig expressions (OA integer fields, state getters)
           fmt += '{d}'; args.push(leftFoldExpr(propVal));
         } else {
+          // Plain string literal
           fmt += '{s}'; args.push(`"${propVal}"`);
         }
       } else if (ctx.currentMap && expr === ctx.currentMap.indexParam) {
