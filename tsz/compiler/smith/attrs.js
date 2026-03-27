@@ -79,7 +79,7 @@ function parseTernaryBranch(c, key) {
     if (op === '==' && c.kind() === TK.equals) c.advance();
     let rhs = '';
     if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
-    else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+    else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
     if (c.kind() === TK.question) {
       c.advance();
       const tv = parseTernaryBranch(c, key);
@@ -121,7 +121,7 @@ function parseStyleBlock(c) {
         if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
         else if (c.kind() === TK.minus && c.pos+1 < c.count && c.kindAt(c.pos+1) === TK.number) { c.advance(); rhs = '-' + c.text(); c.advance(); }
         else if (c.kind() === TK.string) { rhs = `"${c.text().slice(1,-1)}"`; c.advance(); }
-        else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+        else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
         if (c.kind() === TK.question) {
           c.advance(); // skip ?
           const trueVal = parseTernaryBranch(c, key);
@@ -185,6 +185,15 @@ function parseStyleBlock(c) {
           const dsId = ctx.dynStyles.length;
           ctx.dynStyles.push({ field: styleKeys[key], expression: `@as(f32, @floatFromInt(${val.zigExpr}))`, arrName: '', arrIndex: -1 });
           fields._dynStyleId = dsId;
+        } else if (val.type === 'map_field') {
+          // Map field in style — e.g. width: bar.pct * 3
+          let expr = val.value;
+          // Consume optional arithmetic: * N, + N, - N
+          while (c.kind() === TK.star || c.kind() === TK.plus || c.kind() === TK.minus) {
+            const op = c.text(); c.advance();
+            if (c.kind() === TK.number) { expr = `(${expr} ${op} ${c.text()})`; c.advance(); }
+          }
+          fields.push(`.${styleKeys[key]} = @as(f32, @floatFromInt(${expr}))`);
         } else if (val.type === 'string' && val.value.endsWith('%')) {
           const pct = parseFloat(val.value);
           fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
@@ -269,6 +278,27 @@ function parseHandler(c) {
           const wrapped = needsParens ? `(${valExpr})` : valExpr;
           body += `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
           if (c.kind() === TK.rparen) c.advance();
+        }
+      } else if (c.kind() === TK.identifier && isScriptFunc(c.text())) {
+        const fname = c.text();
+        c.advance();
+        let args = '';
+        if (c.kind() === TK.lparen) {
+          c.advance();
+          let depth = 1;
+          while (c.kind() !== TK.eof && depth > 0) {
+            if (c.kind() === TK.lparen) depth++;
+            else if (c.kind() === TK.rparen) { depth--; if (depth === 0) { c.advance(); break; } }
+            args += c.text();
+            c.advance();
+          }
+        }
+        args = args.trim();
+        if (args.length === 0) {
+          body += `    qjs_runtime.callGlobal("${fname}");\n`;
+        } else {
+          const escaped = `${fname}(${args})`.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          body += `    qjs_runtime.evalExpr("${escaped}");\n`;
         }
       }
       if (c.kind() === TK.semicolon) c.advance();
@@ -430,6 +460,8 @@ function parseValueExpr(c) {
         parts.push(slotGet(name));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         parts.push('0'); // map index → 0 in handler context (reference behavior)
+      } else if (ctx.propStack && ctx.propStack[name] !== undefined && /^-?\d+(\.\d+)?$/.test(ctx.propStack[name])) {
+        parts.push(ctx.propStack[name]);
       } else {
         parts.push(name);
       }

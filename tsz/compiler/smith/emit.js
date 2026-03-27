@@ -58,12 +58,12 @@ function emitOutput(rootExpr, file) {
     }
   }
 
-  // Handlers (non-map) — only emit Zig fns for handlers without Lua bodies
-  const zigOnlyHandlers = ctx.handlers.filter(h => !h.inMap && !h.luaBody);
+  // Handlers (non-map) — emit Zig fns for ALL non-map handlers (body may be empty)
+  const zigOnlyHandlers = ctx.handlers.filter(h => !h.inMap);
   if (zigOnlyHandlers.length > 0) {
     out += `\n// ── Event handlers ──────────────────────────────────────────────\n`;
     for (const h of zigOnlyHandlers) {
-      out += `fn ${h.name}() void {\n${h.body}}\n\n`;
+      out += `fn ${h.name}() void {\n${h.body || ''}}\n\n`;
     }
   }
 
@@ -475,6 +475,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
 
       // Fill per-item component arrays
+      let dtConsumed = 0;
       for (const pid of m._mapPerItemDecls) {
         const content = pid.decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
         // Replace references to per-item arrays from ALL maps
@@ -485,6 +486,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           for (const pid2 of otherMap._mapPerItemDecls) {
             fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${mj}[_i]`);
           }
+        }
+        // Replace dynamic text refs in this per-item array
+        while (dtConsumed < mapDynTexts.length) {
+          const dt = mapDynTexts[dtConsumed];
+          const ti = dt._mapTextIdx;
+          const next = fixedContent.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
+          if (next === fixedContent) break;
+          fixedContent = next;
+          dtConsumed++;
         }
         out += `        _map_${pid.name}_${mi}[_i] = [${pid.elemCount}]Node{ ${fixedContent} };\n`;
       }
@@ -616,9 +626,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           const decl = (m.mapArrayDecls || []).find(d => d.startsWith(`var ${innerArr}`)) ||
                        ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
           if (decl) {
-            // Replace _dyn_text references with _map_texts
+            // Replace _dyn_text references with _map_texts (skip dt's consumed by per-item arrays)
             let inner = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-            for (const dt of mapDynTexts) {
+            for (let dti = dtConsumed; dti < mapDynTexts.length; dti++) {
+              const dt = mapDynTexts[dti];
               const ti = dt._mapTextIdx;
               inner = inner.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
             }
@@ -672,11 +683,12 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             poolNode = poolNode.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
           }
         }
-        // Replace handler refs with Lua per-item handler string pointers
+        // Replace handler refs with per-item handler string pointers
+        // Use js_on_press when there's a <script> block (QuickJS dispatch)
+        const pressField = ctx.scriptBlock ? 'js_on_press' : 'lua_on_press';
         for (const mh of mapHandlers) {
-          // Replace both lua_on_press and on_press patterns
-          poolNode = poolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${mi}[_i]`);
-          poolNode = poolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${mi}[_i]`);
+          poolNode = poolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.${pressField} = _map_lua_ptrs_${mi}[_i]`);
+          poolNode = poolNode.replace(`.on_press = ${mh.name}`, `.${pressField} = _map_lua_ptrs_${mi}[_i]`);
         }
         // Swap field order: .children before .handlers in map pool nodes (matches reference)
         const hm = poolNode.match(/\.handlers = \.{[^}]+\}/);
@@ -783,7 +795,36 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
       jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; __setState(${idx}, v); }`);
     }
-    jsLines.push(ctx.scriptBlock);
+    for (const line of ctx.scriptBlock.split('\n')) jsLines.push(line);
+    // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
+    for (let mi = 0; mi < ctx.maps.length; mi++) {
+      const m = ctx.maps[mi];
+      const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
+      for (const mh of mapHandlers) {
+        // Build JS handler body from luaBody or Zig body
+        let jsHandlerBody = mh.luaBody || '';
+        if (!jsHandlerBody) {
+          // Extract callGlobal("func") → func()
+          const calls = (mh.body || '').match(/qjs_runtime\.callGlobal\("(\w+)"\)/g);
+          if (calls) jsHandlerBody = calls.map(c => { const m2 = c.match(/"(\w+)"/); return m2 ? m2[1] + '()' : ''; }).filter(Boolean).join('; ');
+          // Extract setSlot(N, expr) → setterName(expr)
+          const sets = (mh.body || '').match(/state\.setSlot\((\d+),\s*([^)]+)\)/g);
+          if (sets) {
+            const setParts = sets.map(s => { const m2 = s.match(/state\.setSlot\((\d+),\s*([^)]+)\)/); if (!m2) return ''; const ss = ctx.stateSlots[parseInt(m2[1])]; return ss ? ss.setter + '(' + m2[2].replace(/state\.getSlot\((\d+)\)/g, (_, si) => { const s2 = ctx.stateSlots[parseInt(si)]; return s2 ? s2.getter : '__getState(' + si + ')'; }) + ')' : ''; }).filter(Boolean);
+            jsHandlerBody = (jsHandlerBody ? jsHandlerBody + '; ' : '') + setParts.join('; ');
+          }
+        }
+        if (jsHandlerBody) {
+          jsLines.push(`function __mapPress_${mi}(idx) {`);
+          if (m.oa) {
+            jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[idx];`);
+            jsLines.push(`  var ${m.indexParam} = idx;`);
+          }
+          jsLines.push(`  ${jsHandlerBody};`);
+          jsLines.push(`}`);
+        }
+      }
+    }
   }
   for (const line of jsLines) {
     out += `    \\\\${line}\n`;
@@ -846,26 +887,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
     }
   }
-  // Script file imports — convert JS to Lua (after handlers)
-  if (globalThis.__scriptContent) {
-    let scriptLines = globalThis.__scriptContent.split('\n');
-    for (const line of scriptLines) {
-      let luaLine = line;
-      luaLine = luaLine.replace(/\/\/.*$/g, '');
-      luaLine = luaLine.replace(/\bvar\b/g, 'local');
-      luaLine = luaLine.replace(/\[{/g, '{{');
-      luaLine = luaLine.replace(/}\]/g, '}}');
-      luaLine = luaLine.replace(/\[$/gm, '{');
-      luaLine = luaLine.replace(/^\s*\];?$/gm, '}');
-      luaLine = luaLine.replace(/(\w+)\s*:\s*(?=[^:])/g, '$1 = ');
-      luaLine = luaLine.replace(/"([^"]*)"/g, "'$1'");
-      luaLines.push(luaLine);
-    }
-    luaLines.push('');
-  }
+  // Script file imports — NOT included in LUA_LOGIC.
+  // QuickJS runs the script content via JS_LOGIC. Including it in Lua
+  // causes syntax errors (JS for loops, .push(), etc.) that abort the
+  // entire Lua chunk, killing setter/handler definitions above it.
   // Inline script block — after handlers
   if (ctx.scriptBlock) {
-    let scriptLines = ctx.scriptBlock.split('\n');
+    // Strip /* ... */ block comments before emitting as Lua (Lua doesn't support them)
+    let cleanedScript = ctx.scriptBlock.replace(/\/\*[\s\S]*?\*\//g, '');
+    let scriptLines = cleanedScript.split('\n');
     for (const line of scriptLines) {
       let luaLine = line;
       luaLine = luaLine.replace(/\bvar\b/g, 'local');
