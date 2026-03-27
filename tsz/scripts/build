@@ -4,8 +4,6 @@
 # Usage:
 #   ./scripts/build carts/conformance/d01_nested_maps.tsz
 #   ./scripts/build carts/conformance/d01_nested_maps.tsz --debug
-#
-# Steps: forge (tsz→zig) → cp → zig build app (zig→binary)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,6 +16,7 @@ fi
 CART="$1"
 NAME=$(basename "$CART" .tsz)
 OPT="${2:---release}"
+GEN="generated_${NAME}.zig"
 
 # Pick optimize flag
 if [ "$OPT" = "--debug" ]; then
@@ -30,11 +29,138 @@ fi
 echo "[$NAME] forge..."
 ./zig-out/bin/forge build "$CART" 2>&1
 
-# Step 2: cp generated file into place
-cp "generated_${NAME}.zig" generated_app.zig
+# ── Step 2: preflight lint — catch smith bugs before wasting a zig build ──
+LINT_FAIL=0
+LINT_WARN=0
 
-# Step 3: zig build (zig → native binary)
+# FATAL: Single-quoted multi-char strings (JS leaked into Zig)
+# Exclude: lines inside \\ JS string literals, and lines inside double-quoted strings
+# (single quotes inside "lua_on_press = '...'" are valid Zig)
+BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | head -5 || true)
+if [ -n "$BAD_QUOTES" ]; then
+    echo "[$NAME] LINT FAIL: JS string leaked into Zig (single-quoted multi-char):"
+    echo "$BAD_QUOTES"
+    LINT_FAIL=1
+fi
+
+# FATAL: Broken JS_LOGIC multiline string — any line not starting with \\ is raw JS leaking
+if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
+    BAD_JS=$(sed -n '/^const JS_LOGIC =/,/^;$/p' "$GEN" | grep -v '^\s*\\\\' | grep -v '^const \|^;$' | head -5 || true)
+    if [ -n "$BAD_JS" ]; then
+        echo "[$NAME] LINT FAIL: raw JS leaked into JS_LOGIC Zig string:"
+        echo "$BAD_JS"
+        LINT_FAIL=1
+    fi
+fi
+
+# FATAL: Handler referenced by node but never declared
+PRESS_REFS=$(grep -oP '\.on_press = (\w+)' "$GEN" 2>/dev/null | sed 's/\.on_press = //' | sort -u || true)
+for P in $PRESS_REFS; do
+    [ "$P" = "null" ] && continue
+    [ "$P" = "undefined" ] && continue
+    DEFINED=$(grep -c "fn ${P}" "$GEN" 2>/dev/null | tail -1 || echo "0")
+    if [ "$DEFINED" -eq "0" ]; then
+        echo "[$NAME] LINT FAIL: .on_press = $P but no fn $P exists"
+        LINT_FAIL=1
+    fi
+done
+
+# FATAL: Handler declared but never assigned to any node
+# Skip if file uses lua_on_press or js_on_press — map handlers dispatch via pointer arrays
+if ! grep -qE 'lua_on_press|js_on_press' "$GEN" 2>/dev/null; then
+    HANDLERS=$(grep -oP '(?<=fn )_handler_\w+' "$GEN" 2>/dev/null || true)
+    for H in $HANDLERS; do
+        if ! grep -q "\\.on_press = $H" "$GEN" 2>/dev/null; then
+            echo "[$NAME] LINT FAIL: handler $H declared but never assigned to any node"
+            LINT_FAIL=1
+        fi
+    done
+fi
+
+# FATAL: lua_on_press inside a map rebuild using string literal instead of _map_lua_ptrs
+# Map handlers must use pre-built pointer arrays, not inline strings with JS loop vars
+if grep -q '_rebuildMap' "$GEN" 2>/dev/null; then
+    BAD_MAP_HANDLERS=$(sed -n '/_rebuildMap/,/^}/p' "$GEN" | grep -n 'lua_on_press = "' | head -5 || true)
+    if [ -n "$BAD_MAP_HANDLERS" ]; then
+        echo "[$NAME] LINT FAIL: lua_on_press inside map rebuild uses string literal instead of _map_lua_ptrs:"
+        echo "$BAD_MAP_HANDLERS"
+        LINT_FAIL=1
+    fi
+fi
+
+# FATAL: JS + operator in Lua handler strings (Lua uses .. for concat)
+BAD_CONCAT=$(grep -n "lua_on_press.*' + " "$GEN" 2>/dev/null | head -5 || true)
+if [ -n "$BAD_CONCAT" ]; then
+    echo "[$NAME] LINT FAIL: JS + operator in Lua handler string (Lua uses .. for concat):"
+    echo "$BAD_CONCAT"
+    LINT_FAIL=1
+fi
+
+# FATAL: Duplicate __mapPress function names in Lua logic
+if grep -q '__mapPress' "$GEN" 2>/dev/null; then
+    DUPES=$(grep -oP '(?<=function )__mapPress_\d+' "$GEN" 2>/dev/null | sort | uniq -d | head -5 || true)
+    if [ -n "$DUPES" ]; then
+        echo "[$NAME] LINT FAIL: duplicate __mapPress functions — second overwrites first:"
+        echo "$DUPES"
+        LINT_FAIL=1
+    fi
+fi
+
+# WARN: Shared static arrays referenced from per-item map nodes
+# If _map_inner_N children point to a non-per-item _arr_, all map items render identical content
+for MI in $(grep -oP '_map_inner_\d+' "$GEN" 2>/dev/null | sort -u || true); do
+    MAP_NUM=${MI#_map_inner_}
+    SHARED=$(grep "$MI\[_i\].*&_arr_" "$GEN" 2>/dev/null | head -3 || true)
+    if [ -n "$SHARED" ]; then
+        echo "[$NAME] LINT WARN: $MI references shared static _arr_ arrays — map items will render identical content"
+        LINT_WARN=1
+    fi
+done
+
+# FATAL: Raw JS syntax in LUA_LOGIC — switch/case/for-of/const/let leaked into Lua
+if grep -q 'LUA_LOGIC' "$GEN" 2>/dev/null; then
+    BAD_LUA=$(sed -n '/LUA_LOGIC/,/^;$/p' "$GEN" | grep -E '^\s*\\\\.*(\b(switch|case |const |let |var |for\s*\(|\.forEach|\.map\(|\.filter\(|\.reduce\()|[)]\s*\{|\bfunction\s+\w+\s*\([^)]*\)\s*\{|= \[)' | head -5 || true)
+    if [ -n "$BAD_LUA" ]; then
+        echo "[$NAME] LINT FAIL: raw JS syntax leaked into LUA_LOGIC (should be in JS_LOGIC only):"
+        echo "$BAD_LUA"
+        LINT_FAIL=1
+    fi
+fi
+
+# WARN: _map_lua_ptrs built but never referenced — handlers not wired
+for PTRS in $(grep -oP '_map_lua_ptrs_\d+' "$GEN" 2>/dev/null | sort -u || true); do
+    # Check if it's used anywhere in a lua_on_press assignment (not just declared)
+    if ! grep -q "on_press = ${PTRS}\|js_on_press = ${PTRS}" "$GEN" 2>/dev/null; then
+        echo "[$NAME] LINT WARN: $PTRS initialized but never used — map handlers not wired"
+        LINT_WARN=1
+    fi
+done
+
+# WARN: Color{} placeholders — app renders but elements invisible/black
+COLOR_EMPTY=$(grep -c 'Color{}' "$GEN" 2>/dev/null || true)
+COLOR_EMPTY=${COLOR_EMPTY:-0}
+if [ "$COLOR_EMPTY" -gt "0" ] 2>/dev/null; then
+    echo "[$NAME] LINT WARN: $COLOR_EMPTY x Color{} — unresolved ternary/state colors (will render black)"
+    LINT_WARN=1
+fi
+
+# WARN: __setObjArr in LUA_LOGIC without registration
+if grep -q '__setObjArr' "$GEN" 2>/dev/null; then
+    echo "[$NAME] LINT WARN: __setObjArr in generated code — verify LuaJIT registration"
+    LINT_WARN=1
+fi
+
+if [ "$LINT_FAIL" -eq 1 ]; then
+    echo "[$NAME] BLOCKED — fix smith before building. Generated file: $GEN"
+    exit 1
+fi
+
+if [ "$LINT_WARN" -eq 1 ]; then
+    echo "[$NAME] warnings above — building anyway but expect visual bugs"
+fi
+
+# Step 3: zig build — compile directly from the named file
 echo "[$NAME] zig build..."
-zig build app -Dapp-name="$NAME" $ZIG_OPT 2>&1
+zig build app -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
 
 echo "[$NAME] done → zig-out/bin/$NAME"

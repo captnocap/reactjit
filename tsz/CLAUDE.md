@@ -1,5 +1,17 @@
 # tsz/ — Active Stack
 
+## THE ONLY BUILD COMMAND
+
+```bash
+tsz-build carts/conformance/CART.tsz
+```
+
+That is it. If you are typing `zig build forge`, `./zig-out/bin/forge`, `cp generated_`, `zig build app`, or ANY combination of those manually — you are doing it wrong. Use `tsz-build`. It does all of that for you.
+
+If `tsz-build` isn't in your PATH: `./scripts/build carts/conformance/CART.tsz`
+
+---
+
 This is the active engine. When the user says "the compiler", "the runtime", "layout", "the inspector" — this is it.
 
 ## Structure

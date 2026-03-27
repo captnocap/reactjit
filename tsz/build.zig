@@ -38,7 +38,8 @@ pub fn build(b: *std.Build) void {
 
     // ── App binary (compiled .tsz app) ──────────────────────────────
     const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "tsz-app";
-    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, sysroot);
+    const app_source = b.option([]const u8, "app-source", "Source .zig file to compile (default: generated_app.zig)") orelse "generated_app.zig";
+    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, sysroot, app_source);
     const app_install = b.addInstallArtifact(app_exe, .{});
     const app_step = b.step("app", "Build a compiled .tsz app (links full engine)");
     app_step.dependOn(&app_install.step);
@@ -494,6 +495,7 @@ fn addAppExe(
     name: []const u8,
     tier: Tier,
     sysroot: ?[]const u8,
+    source: []const u8,
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
     const is_lean = tier == .lean;
@@ -515,7 +517,7 @@ fn addAppExe(
     options.addOption(bool, "has_debug_server", true); // always available, gated by TSZ_DEBUG=1 at runtime
 
     const root_mod = b.createModule(.{
-        .root_source_file = b.path("generated_app.zig"),
+        .root_source_file = b.path(source),
         .target = target,
         .optimize = optimize,
     });
