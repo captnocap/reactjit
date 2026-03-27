@@ -47,7 +47,6 @@ var _arr_5 = [_]Node{ .{ .text = "Evil Kanban", .font_size = 16, .text_color = C
 var _arr_114 = [_]Node{ .{ .style = .{ .gap = 8 } } };
 // tsz:d12_kanban_evil.tsz:127 — <Box>
 var _arr_115 = [_]Node{ .{ .style = .{ .flex_direction = .row, .padding = 12, .gap = 12, .align_items = .center, .border_color = Color.rgb(30, 41, 59), .border_width = 1 }, .children = &_arr_5 }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .gap = 8, .padding = 8 }, .children = &_arr_114 } };
-var _arr_33 = [_]Node{ .{} };
 var _root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(2, 6, 23), .gap = 0 }, .children = &_arr_115 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
@@ -484,81 +483,8 @@ fn _initMapLuaPtrs3() void {
 const MAX_MAP_4: usize = 4096;
 var _map_pool_4: [MAX_MAP_4]Node = undefined;
 var _map_count_4: usize = 0;
-var _arr_14 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
-var _arr_22 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
-var _map__arr_6_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_7 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) } };
-var _map__arr_8_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_9_4: [MAX_MAP_4][1]Node = undefined;
-var _arr_10 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
-var _arr_12 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_10 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_11 } }; // TaskCard
-var _map__arr_13_4: [MAX_MAP_4][4]Node = undefined;
-var _map__arr_15_4: [MAX_MAP_4][3]Node = undefined;
-var _arr_16 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
-var _map__arr_17_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_23 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
-var _arr_24 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_25 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_26 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_24 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_25 } }; // TaskCard
-var _arr_27 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_26 } }; // TaskCard
-var _map__arr_28_4: [MAX_MAP_4][1]Node = undefined;
-var _map__arr_29_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_30_4: [MAX_MAP_4][5]Node = undefined;
-var _map__arr_31_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_38 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
-var _arr_46 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
-var _arr_34 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
-var _arr_35 = [_]Node{ .{ .text = "Cancel", .font_size = 10, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_36 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_34 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_35 } }; // TaskCard
-var _arr_37 = [_]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_arr_33 }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_36 } }; // TaskCard
-var _map__arr_39_4: [MAX_MAP_4][3]Node = undefined;
-var _arr_40 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
-var _map__arr_41_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_47 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
-var _arr_48 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_49 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_50 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_48 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_49 } }; // TaskCard
-var _arr_51 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_50 } }; // TaskCard
-var _map__arr_52_4: [MAX_MAP_4][1]Node = undefined;
-var _map__arr_53_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_54_4: [MAX_MAP_4][5]Node = undefined;
-var _map__arr_55_4: [MAX_MAP_4][2]Node = undefined;
 var _map__arr_57_4: [MAX_MAP_4][1]Node = undefined;
 var _map__arr_58_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_64 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
-var _arr_72 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
-var _map__arr_62_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_63_4: [MAX_MAP_4][4]Node = undefined;
-var _map__arr_65_4: [MAX_MAP_4][3]Node = undefined;
-var _arr_66 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
-var _map__arr_67_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_73 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
-var _arr_74 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_75 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_76 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_74 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_75 } }; // TaskCard
-var _arr_77 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_76 } }; // TaskCard
-var _map__arr_78_4: [MAX_MAP_4][1]Node = undefined;
-var _map__arr_79_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_80_4: [MAX_MAP_4][5]Node = undefined;
-var _map__arr_81_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_88 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
-var _arr_96 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
-var _arr_84 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
-var _arr_85 = [_]Node{ .{ .text = "Cancel", .font_size = 10, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _map__arr_86_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_87_4: [MAX_MAP_4][4]Node = undefined;
-var _map__arr_89_4: [MAX_MAP_4][3]Node = undefined;
-var _arr_90 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
-var _map__arr_91_4: [MAX_MAP_4][2]Node = undefined;
-var _arr_97 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
-var _arr_98 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _arr_99 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
-var _map__arr_100_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_101_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_102_4: [MAX_MAP_4][1]Node = undefined;
-var _map__arr_103_4: [MAX_MAP_4][2]Node = undefined;
-var _map__arr_104_4: [MAX_MAP_4][5]Node = undefined;
-var _map__arr_105_4: [MAX_MAP_4][2]Node = undefined;
 var _map__arr_107_4: [MAX_MAP_4][1]Node = undefined;
 var _map__arr_108_4: [MAX_MAP_4][2]Node = undefined;
 var _map__arr_109_4: [MAX_MAP_4][1]Node = undefined;
@@ -580,14 +506,87 @@ fn _initMapLuaPtrs4() void {
 const MAX_MAP_5: usize = 4096;
 var _map_pool_5: [MAX_MAP_5]Node = undefined;
 var _map_count_5: usize = 0;
+var _map__arr_6_5: [MAX_MAP_5][2]Node = undefined;
+var _arr_7 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) } };
+var _map__arr_8_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_9_5: [MAX_MAP_5][1]Node = undefined;
+var _arr_10 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
+var _arr_12 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_10 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_11 } }; // TaskCard
+var _map__arr_13_5: [MAX_MAP_5][4]Node = undefined;
+var _arr_14 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
+var _map__arr_15_5: [MAX_MAP_5][3]Node = undefined;
+var _arr_16 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
+var _map__arr_17_5: [MAX_MAP_5][2]Node = undefined;
+var _arr_22 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
+var _arr_23 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
+var _arr_24 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_25 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_26 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_24 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_25 } }; // TaskCard
+var _arr_27 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_26 } }; // TaskCard
+var _map__arr_28_5: [MAX_MAP_5][1]Node = undefined;
+var _map__arr_29_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_30_5: [MAX_MAP_5][5]Node = undefined;
+var _map__arr_31_5: [MAX_MAP_5][2]Node = undefined;
 var _map__arr_32_5: [MAX_MAP_5][1]Node = undefined;
 var _map__arr_33_5: [MAX_MAP_5][1]Node = undefined;
+var _arr_34 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
+var _arr_35 = [_]Node{ .{ .text = "Cancel", .font_size = 10, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_36 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_34 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_35 } }; // TaskCard
+var _map__arr_37_5: [MAX_MAP_5][4]Node = undefined;
+var _arr_38 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
+var _map__arr_39_5: [MAX_MAP_5][3]Node = undefined;
+var _arr_40 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
+var _map__arr_41_5: [MAX_MAP_5][2]Node = undefined;
+var _arr_46 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
+var _arr_47 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
+var _arr_48 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_49 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_50 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_48 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_49 } }; // TaskCard
+var _arr_51 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_50 } }; // TaskCard
+var _map__arr_52_5: [MAX_MAP_5][1]Node = undefined;
+var _map__arr_53_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_54_5: [MAX_MAP_5][5]Node = undefined;
+var _map__arr_55_5: [MAX_MAP_5][2]Node = undefined;
 var _map__arr_56_5: [MAX_MAP_5][1]Node = undefined;
 var _map__arr_59_5: [MAX_MAP_5][1]Node = undefined;
 var _arr_60 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
 var _arr_61 = [_]Node{ .{ .text = "Cancel", .font_size = 10, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _map__arr_62_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_63_5: [MAX_MAP_5][4]Node = undefined;
+var _arr_64 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
+var _map__arr_65_5: [MAX_MAP_5][3]Node = undefined;
+var _arr_66 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
+var _map__arr_67_5: [MAX_MAP_5][2]Node = undefined;
+var _arr_72 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
+var _arr_73 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
+var _arr_74 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_75 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_76 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_74 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_75 } }; // TaskCard
+var _arr_77 = [_]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_76 } }; // TaskCard
+var _map__arr_78_5: [MAX_MAP_5][1]Node = undefined;
+var _map__arr_79_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_80_5: [MAX_MAP_5][5]Node = undefined;
+var _map__arr_81_5: [MAX_MAP_5][2]Node = undefined;
 var _map__arr_82_5: [MAX_MAP_5][1]Node = undefined;
 var _map__arr_83_5: [MAX_MAP_5][1]Node = undefined;
+var _arr_84 = [_]Node{ .{ .text = "Save", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // TaskCard
+var _arr_85 = [_]Node{ .{ .text = "Cancel", .font_size = 10, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _map__arr_86_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_87_5: [MAX_MAP_5][4]Node = undefined;
+var _arr_88 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(107, 114, 128) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(245, 158, 11) } }, .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(239, 68, 68) } } }; // PriorityDot
+var _map__arr_89_5: [MAX_MAP_5][3]Node = undefined;
+var _arr_90 = [_]Node{ .{ .text = "...", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // TaskCard
+var _map__arr_91_5: [MAX_MAP_5][2]Node = undefined;
+var _arr_96 = [_]Node{ .{ .style = .{ .gap = 3 } } }; // TaskTags
+var _arr_97 = [_]Node{ .{ .style = .{ .width = 12, .height = 12, .border_radius = 2, .background_color = Color.rgb(34, 197, 94) } }, .{ .text = "Done", .font_size = 9, .text_color = Color.rgb(34, 197, 94) } }; // TaskCard
+var _arr_98 = [_]Node{ .{ .text = "Move", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _arr_99 = [_]Node{ .{ .text = "Collapse", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } }; // TaskCard
+var _map__arr_100_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_101_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_102_5: [MAX_MAP_5][1]Node = undefined;
+var _map__arr_103_5: [MAX_MAP_5][2]Node = undefined;
+var _map__arr_104_5: [MAX_MAP_5][5]Node = undefined;
+var _map__arr_105_5: [MAX_MAP_5][2]Node = undefined;
 var _map__arr_106_5: [MAX_MAP_5][1]Node = undefined;
 var _arr_112 = [_]Node{ .{ .style = .{ .gap = 6 } } };
 var _map_inner_5: [MAX_MAP_5][2]Node = undefined;
@@ -596,7 +595,7 @@ fn _rebuildMap0() void {
     for (0.._map_count_0) |_i| {
         _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "{s}", .{ _oa0_title[_i][0.._oa0_title_lens[_i]] }) catch "";
         _map_texts_0_1[_i] = std.fmt.bufPrint(&_map_text_bufs_0_1[_i], "wip:{d}", .{ _oa0_wip[_i] }) catch "";
-        _map_texts_0_2[_i] = std.fmt.bufPrint(&_map_text_bufs_0_2[_i], "{s}:{s} / task:{d} / pos:{d} / moves:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), @as(i64, @intCast(_i)), state.getSlot(4) }) catch "";
+        _map_texts_0_2[_i] = std.fmt.bufPrint(&_map_text_bufs_0_2[_i], "{s}:{s} / task:{s} / pos:{s} / moves:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "@as(i64, @intCast(_i))", state.getSlot(4) }) catch "";
         _map_texts_0_3[_i] = std.fmt.bufPrint(&_map_text_bufs_0_3[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map_texts_0_4[_i] = std.fmt.bufPrint(&_map_text_bufs_0_4[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map__arr_20_0[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(255, 255, 255), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_18 }, .{ .style = .{ .background_color = Color.rgb(@intCast((_oa2_tagColor[_i] >> 16) & 0xFF), @intCast((_oa2_tagColor[_i] >> 8) & 0xFF), @intCast(_oa2_tagColor[_i] & 0xFF)), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_19 } };
@@ -611,9 +610,9 @@ fn _rebuildMap0() void {
 fn _rebuildMap1() void {
     _map_count_1 = @min(_oa2_len, MAX_MAP_1);
     for (0.._map_count_1) |_i| {
-        _map_texts_1_5[_i] = std.fmt.bufPrint(&_map_text_bufs_1_5[_i], "{s}:{s} / task:{d} / effort:{d} / drag:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), _oa1_effort[_i], state.getSlot(3) }) catch "";
-        _map_texts_1_6[_i] = std.fmt.bufPrint(&_map_text_bufs_1_6[_i], "#{d}", .{ @as(i64, @intCast(_i)) }) catch "";
-        _map_texts_1_7[_i] = std.fmt.bufPrint(&_map_text_bufs_1_7[_i], "{s}:{s} / task:{d} / pos:{d} / moves:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), @as(i64, @intCast(_i)), state.getSlot(4) }) catch "";
+        _map_texts_1_5[_i] = std.fmt.bufPrint(&_map_text_bufs_1_5[_i], "{s}:{s} / task:{s} / effort:{s} / drag:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "_oa1_effort[_i]", state.getSlot(3) }) catch "";
+        _map_texts_1_6[_i] = std.fmt.bufPrint(&_map_text_bufs_1_6[_i], "#{s}", .{ "@as(i64, @intCast(_i))" }) catch "";
+        _map_texts_1_7[_i] = std.fmt.bufPrint(&_map_text_bufs_1_7[_i], "{s}:{s} / task:{s} / pos:{s} / moves:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "@as(i64, @intCast(_i))", state.getSlot(4) }) catch "";
         _map_texts_1_8[_i] = std.fmt.bufPrint(&_map_text_bufs_1_8[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map_texts_1_9[_i] = std.fmt.bufPrint(&_map_text_bufs_1_9[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map__arr_44_1[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(255, 255, 255), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_42 }, .{ .style = .{ .background_color = Color.rgb(@intCast((_oa2_tagColor[_i] >> 16) & 0xFF), @intCast((_oa2_tagColor[_i] >> 8) & 0xFF), @intCast(_oa2_tagColor[_i] & 0xFF)), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_43 } };
@@ -628,9 +627,9 @@ fn _rebuildMap1() void {
 fn _rebuildMap2() void {
     _map_count_2 = @min(_oa2_len, MAX_MAP_2);
     for (0.._map_count_2) |_i| {
-        _map_texts_2_10[_i] = std.fmt.bufPrint(&_map_text_bufs_2_10[_i], "{s}:{s} / task:{d} / effort:{d} / drag:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), _oa1_effort[_i], state.getSlot(3) }) catch "";
-        _map_texts_2_11[_i] = std.fmt.bufPrint(&_map_text_bufs_2_11[_i], "#{d}", .{ @as(i64, @intCast(_i)) }) catch "";
-        _map_texts_2_12[_i] = std.fmt.bufPrint(&_map_text_bufs_2_12[_i], "{s}:{s} / task:{d} / pos:{d} / moves:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), @as(i64, @intCast(_i)), state.getSlot(4) }) catch "";
+        _map_texts_2_10[_i] = std.fmt.bufPrint(&_map_text_bufs_2_10[_i], "{s}:{s} / task:{s} / effort:{s} / drag:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "_oa1_effort[_i]", state.getSlot(3) }) catch "";
+        _map_texts_2_11[_i] = std.fmt.bufPrint(&_map_text_bufs_2_11[_i], "#{s}", .{ "@as(i64, @intCast(_i))" }) catch "";
+        _map_texts_2_12[_i] = std.fmt.bufPrint(&_map_text_bufs_2_12[_i], "{s}:{s} / task:{s} / pos:{s} / moves:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "@as(i64, @intCast(_i))", state.getSlot(4) }) catch "";
         _map_texts_2_13[_i] = std.fmt.bufPrint(&_map_text_bufs_2_13[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map_texts_2_14[_i] = std.fmt.bufPrint(&_map_text_bufs_2_14[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map__arr_70_2[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(255, 255, 255), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_68 }, .{ .style = .{ .background_color = Color.rgb(@intCast((_oa2_tagColor[_i] >> 16) & 0xFF), @intCast((_oa2_tagColor[_i] >> 8) & 0xFF), @intCast(_oa2_tagColor[_i] & 0xFF)), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_69 } };
@@ -645,9 +644,9 @@ fn _rebuildMap2() void {
 fn _rebuildMap3() void {
     _map_count_3 = @min(_oa2_len, MAX_MAP_3);
     for (0.._map_count_3) |_i| {
-        _map_texts_3_15[_i] = std.fmt.bufPrint(&_map_text_bufs_3_15[_i], "{s}:{s} / task:{d} / effort:{d} / drag:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), _oa1_effort[_i], state.getSlot(3) }) catch "";
-        _map_texts_3_16[_i] = std.fmt.bufPrint(&_map_text_bufs_3_16[_i], "#{d}", .{ @as(i64, @intCast(_i)) }) catch "";
-        _map_texts_3_17[_i] = std.fmt.bufPrint(&_map_text_bufs_3_17[_i], "{s}:{s} / task:{d} / pos:{d} / moves:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), @as(i64, @intCast(_i)), state.getSlot(4) }) catch "";
+        _map_texts_3_15[_i] = std.fmt.bufPrint(&_map_text_bufs_3_15[_i], "{s}:{s} / task:{s} / effort:{s} / drag:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "_oa1_effort[_i]", state.getSlot(3) }) catch "";
+        _map_texts_3_16[_i] = std.fmt.bufPrint(&_map_text_bufs_3_16[_i], "#{s}", .{ "@as(i64, @intCast(_i))" }) catch "";
+        _map_texts_3_17[_i] = std.fmt.bufPrint(&_map_text_bufs_3_17[_i], "{s}:{s} / task:{s} / pos:{s} / moves:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "@as(i64, @intCast(_i))", state.getSlot(4) }) catch "";
         _map_texts_3_18[_i] = std.fmt.bufPrint(&_map_text_bufs_3_18[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map_texts_3_19[_i] = std.fmt.bufPrint(&_map_text_bufs_3_19[_i], "{s}", .{ _oa2_text[_i][0.._oa2_text_lens[_i]] }) catch "";
         _map__arr_94_3[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(255, 255, 255), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_92 }, .{ .style = .{ .background_color = Color.rgb(@intCast((_oa2_tagColor[_i] >> 16) & 0xFF), @intCast((_oa2_tagColor[_i] >> 8) & 0xFF), @intCast(_oa2_tagColor[_i] & 0xFF)), .border_radius = 3, .padding_left = 5, .padding_right = 5, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_93 } };
@@ -662,76 +661,18 @@ fn _rebuildMap3() void {
 fn _rebuildMap4() void {
     _map_count_4 = @min(_oa1_len, MAX_MAP_4);
     for (0.._map_count_4) |_i| {
-        _map_texts_4_20[_i] = std.fmt.bufPrint(&_map_text_bufs_4_20[_i], "{s}:{s} / task:{d} / effort:{d} / drag:{d}", .{ "col.title", "ci", @as(i64, @intCast(_i)), _oa1_effort[_i], state.getSlot(3) }) catch "";
-        _map_texts_4_21[_i] = std.fmt.bufPrint(&_map_text_bufs_4_21[_i], "#{d}", .{ @as(i64, @intCast(_i)) }) catch "";
-        _map__arr_6_4[_i] = [2]Node{ .{ .style = .{ .width = 10, .height = 10, .border_radius = 5, .background_color = Color.rgb(@intCast((_oa0_color[_i] >> 16) & 0xFF), @intCast((_oa0_color[_i] >> 8) & 0xFF), @intCast(_oa0_color[_i] & 0xFF)) } }, .{ .text = "", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
-        _map__arr_8_4[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_6_4[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding_left = 6, .padding_right = 6, .padding_top = 2, .padding_bottom = 2 }, .children = &_arr_7 } };
-        _map__arr_9_4[_i] = [1]Node{ .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
-        _map__arr_13_4[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_9_4[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_12 } };
-        _map__arr_15_4[_i] = [3]Node{ .{ .children = &_arr_14 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
-        _map__arr_17_4[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_15_4[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_16 } };
-        _map__arr_28_4[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
-        _map__arr_29_4[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_28_4[_i] } };
-        _map__arr_30_4[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_17_4[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_22 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_23 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_27 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_29_4[_i] } };
-        _map__arr_31_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_13_4[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_30_4[_i] } };
-        _map__arr_39_4[_i] = [3]Node{ .{ .children = &_arr_38 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
-        _map__arr_41_4[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_39_4[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_40 } };
-        _map__arr_52_4[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
-        _map__arr_53_4[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_52_4[_i] } };
-        _map__arr_54_4[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_41_4[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_46 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_47 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_51 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_53_4[_i] } };
-        _map__arr_55_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_arr_37 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_54_4[_i] } };
+        _map_texts_4_20[_i] = std.fmt.bufPrint(&_map_text_bufs_4_20[_i], "{s}:{s} / task:{s} / effort:{s} / drag:{d}", .{ "col.title", "ci", "@as(i64, @intCast(_i))", "_oa1_effort[_i]", state.getSlot(3) }) catch "";
+        _map_texts_4_21[_i] = std.fmt.bufPrint(&_map_text_bufs_4_21[_i], "#{s}", .{ "@as(i64, @intCast(_i))" }) catch "";
         _map__arr_57_4[_i] = [1]Node{ .{ .style = .{ .display = if (_oa1_done[_i] == 0) .flex else .none, .margin_bottom = 6, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 6 }, .children = &_map__arr_56_5[_i] } };
         _map__arr_58_4[_i] = [2]Node{ .{ .style = .{ .margin_bottom = 6, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 6 }, .children = &_map__arr_32_5[_i] }, .{ .children = &_map__arr_57_4[_i] } };
-        _map__arr_62_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_60 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_61 } };
-        _map__arr_63_4[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_59_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_map__arr_62_4[_i] } };
-        _map__arr_65_4[_i] = [3]Node{ .{ .children = &_arr_64 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
-        _map__arr_67_4[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_65_4[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_66 } };
-        _map__arr_78_4[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
-        _map__arr_79_4[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_78_4[_i] } };
-        _map__arr_80_4[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_67_4[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_72 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_73 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_77 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_79_4[_i] } };
-        _map__arr_81_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_63_4[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_80_4[_i] } };
-        _map__arr_86_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_84 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_85 } };
-        _map__arr_87_4[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_83_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_map__arr_86_4[_i] } };
-        _map__arr_89_4[_i] = [3]Node{ .{ .children = &_arr_88 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
-        _map__arr_91_4[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_89_4[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_90 } };
-        _map__arr_100_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_98 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_99 } };
-        _map__arr_101_4[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_map__arr_100_4[_i] } };
-        _map__arr_102_4[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
-        _map__arr_103_4[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_102_4[_i] } };
-        _map__arr_104_4[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_91_4[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_96 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_97 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_map__arr_101_4[_i] }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_103_4[_i] } };
-        _map__arr_105_4[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_87_4[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_104_4[_i] } };
         _map__arr_107_4[_i] = [1]Node{ .{ .style = .{ .display = if (_oa1_done[_i] == 0) .flex else .none, .margin_bottom = 6, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 6 }, .children = &_map__arr_106_5[_i] } };
         _map__arr_108_4[_i] = [2]Node{ .{ .style = .{ .margin_bottom = 6, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 6 }, .children = &_map__arr_82_5[_i] }, .{ .children = &_map__arr_107_4[_i] } };
         _map__arr_109_4[_i] = [1]Node{ .{ .children = &_map__arr_108_4[_i] } };
         _map__arr_110_4[_i] = [2]Node{ .{ .children = &_map__arr_58_4[_i] }, .{ .children = &_map__arr_109_4[_i] } };
-        _map__arr_31_4[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_15_4[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_15_4[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_30_4[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
-        _map__arr_30_4[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_31_4[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
         _map__arr_58_4[_i][0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
-        _map__arr_55_4[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_39_4[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_39_4[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_54_4[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
-        _map__arr_54_4[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_55_4[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
         _map__arr_58_4[_i][1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
         _map__arr_110_4[_i][0].style.display = if ((state.getSlot(5) ==  0)) .flex else .none;
-        _map__arr_81_4[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_65_4[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_65_4[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_80_4[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
-        _map__arr_80_4[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_81_4[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
         _map__arr_108_4[_i][0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
-        _map__arr_105_4[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_89_4[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_89_4[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_104_4[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
-        _map__arr_104_4[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
-        _map__arr_105_4[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
         _map__arr_108_4[_i][1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
         _map__arr_109_4[_i][0].style.display = if ((_oa1_priority[_i] >= state.getSlot(5))) .flex else .none;
         _map__arr_110_4[_i][1].style.display = if ((state.getSlot(5) !=  0)) .flex else .none;
@@ -743,14 +684,73 @@ fn _rebuildMap4() void {
 fn _rebuildMap5() void {
     _map_count_5 = @min(_oa0_len, MAX_MAP_5);
     for (0.._map_count_5) |_i| {
-        _map__arr_32_5[_i] = [1]Node{ .{ .children = &_map__arr_31_4[_i] } };
+        _map__arr_6_5[_i] = [2]Node{ .{ .style = .{ .width = 10, .height = 10, .border_radius = 5, .background_color = Color.rgb(@intCast((_oa0_color[_i] >> 16) & 0xFF), @intCast((_oa0_color[_i] >> 8) & 0xFF), @intCast(_oa0_color[_i] & 0xFF)) } }, .{ .text = "", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
+        _map__arr_8_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_6_5[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding_left = 6, .padding_right = 6, .padding_top = 2, .padding_bottom = 2 }, .children = &_arr_7 } };
+        _map__arr_9_5[_i] = [1]Node{ .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
+        _map__arr_13_5[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_9_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_12 } };
+        _map__arr_15_5[_i] = [3]Node{ .{ .children = &_arr_14 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
+        _map__arr_17_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_15_5[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_16 } };
+        _map__arr_28_5[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
+        _map__arr_29_5[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_28_5[_i] } };
+        _map__arr_30_5[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_17_5[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_22 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_23 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_27 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_29_5[_i] } };
+        _map__arr_31_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_13_5[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_30_5[_i] } };
+        _map__arr_32_5[_i] = [1]Node{ .{ .children = &_map__arr_31_5[_i] } };
         _map__arr_33_5[_i] = [1]Node{ .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
-        _map__arr_56_5[_i] = [1]Node{ .{ .children = &_map__arr_55_4[_i] } };
+        _map__arr_37_5[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_33_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_36 } };
+        _map__arr_39_5[_i] = [3]Node{ .{ .children = &_arr_38 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
+        _map__arr_41_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_39_5[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_40 } };
+        _map__arr_52_5[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
+        _map__arr_53_5[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_52_5[_i] } };
+        _map__arr_54_5[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_41_5[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_46 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_47 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_51 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_53_5[_i] } };
+        _map__arr_55_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_37_5[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_54_5[_i] } };
+        _map__arr_56_5[_i] = [1]Node{ .{ .children = &_map__arr_55_5[_i] } };
         _map__arr_59_5[_i] = [1]Node{ .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
-        _map__arr_82_5[_i] = [1]Node{ .{ .children = &_map__arr_81_4[_i] } };
+        _map__arr_62_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_60 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_61 } };
+        _map__arr_63_5[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_59_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_map__arr_62_5[_i] } };
+        _map__arr_65_5[_i] = [3]Node{ .{ .children = &_arr_64 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
+        _map__arr_67_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_65_5[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_66 } };
+        _map__arr_78_5[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
+        _map__arr_79_5[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_78_5[_i] } };
+        _map__arr_80_5[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_67_5[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_72 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_73 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_arr_77 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_79_5[_i] } };
+        _map__arr_81_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_63_5[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_80_5[_i] } };
+        _map__arr_82_5[_i] = [1]Node{ .{ .children = &_map__arr_81_5[_i] } };
         _map__arr_83_5[_i] = [1]Node{ .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
-        _map__arr_106_5[_i] = [1]Node{ .{ .children = &_map__arr_105_4[_i] } };
-        _map_inner_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .padding = 10, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 8 }, .children = &_map__arr_8_4[_i] }, .{ .style = .{ .flex_grow = 1, .padding = 6, .gap = 6 }, .children = &_arr_112 } };
+        _map__arr_86_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0); setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx)" }, .children = &_arr_84 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 4, .padding = 6, .flex_grow = 1, .align_items = .center }, .handlers = .{ .lua_on_press = "setEditingTask(0)" }, .children = &_arr_85 } };
+        _map__arr_87_5[_i] = [4]Node{ .{ .text = "Editing", .font_size = 11, .text_color = Color.rgb(147, 197, 253) }, .{ .style = .{ .background_color = Color.rgb(15, 23, 42), .border_radius = 4, .padding = 8, .height = 28, .justify_content = .center }, .children = &_map__arr_83_5[_i] }, .{ .text = "", .font_size = 8, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_map__arr_86_5[_i] } };
+        _map__arr_89_5[_i] = [3]Node{ .{ .children = &_arr_88 }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(241, 245, 249) }, .{ .text = "_oa1_title[_i][0.._oa1_title_lens[_i]]", .font_size = 12, .text_color = Color.rgb(203, 213, 225) } };
+        _map__arr_91_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6, .align_items = .center }, .children = &_map__arr_89_5[_i] }, .{ .style = .{ .padding = 2 }, .handlers = .{ .lua_on_press = "setEditingTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_90 } };
+        _map__arr_100_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setTotalMoves(totalMoves + 1); setDragSource(colIdx); setSelectedTask(taskIdx); setExpandedTask(taskIdx)" }, .children = &_arr_98 }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 3, .padding = 4 }, .handlers = .{ .lua_on_press = "setExpandedTask(0)" }, .children = &_arr_99 } };
+        _map__arr_101_5[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(100, 116, 139) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_map__arr_100_5[_i] } };
+        _map__arr_102_5[_i] = [1]Node{ .{ .text = "_oa1_assignee[_i][0.._oa1_assignee_lens[_i]]", .font_size = 8, .text_color = Color.rgb(148, 163, 184) } };
+        _map__arr_103_5[_i] = [2]Node{ .{ .text = "", .font_size = 9, .text_color = Color.rgb(71, 85, 105) }, .{ .style = .{ .width = 20, .height = 20, .border_radius = 10, .background_color = Color.rgb(51, 65, 85), .justify_content = .center, .align_items = .center }, .children = &_map__arr_102_5[_i] } };
+        _map__arr_104_5[_i] = [5]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_91_5[_i] }, .{ .style = .{ .flex_direction = .row, .flex_wrap = .wrap, .gap = 3 }, .children = &_arr_96 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_97 }, .{ .style = .{ .gap = 4, .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 4, .padding = 6 }, .children = &_map__arr_101_5[_i] }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_map__arr_103_5[_i] } };
+        _map__arr_105_5[_i] = [2]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6, .border_color = Color.rgb(59, 130, 246), .border_width = 2 }, .children = &_map__arr_87_5[_i] }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 10, .gap = 6 }, .handlers = .{ .lua_on_press = "setSelectedTask(taskIdx); setDragSource(colIdx); setTotalMoves(totalMoves + 1)" }, .children = &_map__arr_104_5[_i] } };
+        _map__arr_106_5[_i] = [1]Node{ .{ .children = &_map__arr_105_5[_i] } };
+        _map__arr_31_5[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_15_5[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_15_5[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_30_5[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
+        _map__arr_30_5[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_31_5[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_55_5[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_39_5[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_39_5[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_54_5[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
+        _map__arr_54_5[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_55_5[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_81_5[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_65_5[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_65_5[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_80_5[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
+        _map__arr_80_5[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_81_5[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_105_5[_i][0].style.display = if ((state.getSlot(2) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_89_5[_i][1].style.display = if ((state.getSlot(0) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_89_5[_i][2].style.display = if ((state.getSlot(0) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_104_5[_i][2].style.display = if ((_oa1_done[_i] ==  1)) .flex else .none;
+        _map__arr_104_5[_i][3].style.display = if ((state.getSlot(1) == @as(i64, @intCast(_i)))) .flex else .none;
+        _map__arr_105_5[_i][1].style.display = if ((state.getSlot(2) != @as(i64, @intCast(_i)))) .flex else .none;
+        _map_inner_5[_i] = [2]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .padding = 10, .border_color = Color.rgb(30, 41, 59), .border_width = 1, .border_radius = 8 }, .children = &_map__arr_8_5[_i] }, .{ .style = .{ .flex_grow = 1, .padding = 6, .gap = 6 }, .children = &_arr_112 } };
         _map_pool_5[_i] = .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(15, 23, 42), .border_radius = 8, .gap = 0 }, .children = &_map_inner_5[_i] };
     }
 }

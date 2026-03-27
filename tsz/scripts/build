@@ -1,0 +1,40 @@
+#!/bin/bash
+# Build a .tsz cart into a native binary.
+#
+# Usage:
+#   ./scripts/build carts/conformance/d01_nested_maps.tsz
+#   ./scripts/build carts/conformance/d01_nested_maps.tsz --debug
+#
+# Steps: forge (tsz→zig) → cp → zig build app (zig→binary)
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ -z "${1:-}" ]; then
+    echo "Usage: scripts/build <cart.tsz> [--debug]"
+    exit 1
+fi
+
+CART="$1"
+NAME=$(basename "$CART" .tsz)
+OPT="${2:---release}"
+
+# Pick optimize flag
+if [ "$OPT" = "--debug" ]; then
+    ZIG_OPT=""
+else
+    ZIG_OPT="-Doptimize=ReleaseFast"
+fi
+
+# Step 1: forge (smith compiler: tsz → zig)
+echo "[$NAME] forge..."
+./zig-out/bin/forge build "$CART" 2>&1
+
+# Step 2: cp generated file into place
+cp "generated_${NAME}.zig" generated_app.zig
+
+# Step 3: zig build (zig → native binary)
+echo "[$NAME] zig build..."
+zig build app -Dapp-name="$NAME" $ZIG_OPT 2>&1
+
+echo "[$NAME] done → zig-out/bin/$NAME"
