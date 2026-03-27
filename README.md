@@ -219,7 +219,11 @@ carts/
   supervisor-dashboard/ Task board, terminal, search, violations
   semantic-terminal/  Terminal with classifier overlay
   themes/             Theme showcase
-  conformance/        Compiler conformance suite (271 tests)
+  theme-creator/      Interactive theme builder
+  hackernews/         HackerNews client demo
+  remote-chat/        WebSocket chat demo
+  world3d-demo/       3D physics + world rendering demo
+  conformance/        Compiler conformance suite (283 tests)
   wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
   autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
   http-conformance/   HTTP conformance test harness
@@ -230,7 +234,7 @@ carts/
 
 ## Framework Modules
 
-71 modules in the framework runtime:
+77 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
@@ -252,7 +256,7 @@ carts/
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70/70 | W3C CSS flex spec |
-| Compiler death tests | 75/81 | Language features, script runtimes, integration |
+| Compiler conformance suite | 159/283 | Language features, script runtimes, maps, components, integration |
 | Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
