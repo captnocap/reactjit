@@ -98,7 +98,7 @@ fi
 
 # FATAL: Duplicate __mapPress function names in Lua logic
 if grep -q '__mapPress' "$GEN" 2>/dev/null; then
-    DUPES=$(grep -oP '(?<=function )__mapPress_\d+' "$GEN" 2>/dev/null | sort | uniq -d | head -5 || true)
+    DUPES=$(grep -oP '(?<=function )__mapPress_\d+_\d+' "$GEN" 2>/dev/null | sort | uniq -d | head -5 || true)
     if [ -n "$DUPES" ]; then
         echo "[$NAME] LINT FAIL: duplicate __mapPress functions — second overwrites first:"
         echo "$DUPES"

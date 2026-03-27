@@ -58,12 +58,14 @@ function emitOutput(rootExpr, file) {
     }
   }
 
-  // Handlers (non-map) — emit Zig fns for ALL non-map handlers (body may be empty)
-  const zigOnlyHandlers = ctx.handlers.filter(h => !h.inMap);
+  // Emit Zig fns for ALL handlers (body may be empty; lua-only map handlers emit empty fn)
+  const zigOnlyHandlers = ctx.handlers;
   if (zigOnlyHandlers.length > 0) {
     out += `\n// ── Event handlers ──────────────────────────────────────────────\n`;
     for (const h of zigOnlyHandlers) {
-      out += `fn ${h.name}() void {\n${h.body || ''}}\n\n`;
+      // Map handlers dispatch through QuickJS/Lua — emit empty Zig fn stub
+      const body = h.inMap ? '' : (h.body || '');
+      out += `fn ${h.name}() void {\n${body}}\n\n`;
     }
   }
 
@@ -433,23 +435,25 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `var _map_texts_${mi}_${dt.bufId}: [${texSizeConst}][]const u8 = undefined;\n`;
       }
 
-      // Lua map handlers — pre-allocated per-item expression strings
+      // Lua map handlers — pre-allocated per-item expression strings (one set per handler)
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
       if (mapHandlers.length > 0) {
         const luaSizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
-        out += `var _map_lua_bufs_${mi}: [${luaSizeConst}][48]u8 = undefined;\n`;
-        out += `var _map_lua_ptrs_${mi}: [${luaSizeConst}]?[*:0]const u8 = .{null} ** ${luaSizeConst};\n`;
-        if (!m.isNested) {
-          // Non-nested: pre-build ptrs at init (single index)
-          out += `fn _initMapLuaPtrs${mi}() void {\n`;
-          out += `    for (0..${luaSizeConst}) |_i| {\n`;
-          out += `        const n = std.fmt.bufPrint(_map_lua_bufs_${mi}[_i][0..47], "__mapPress_${mi}({d})", .{_i}) catch continue;\n`;
-          out += `        _map_lua_bufs_${mi}[_i][n.len] = 0;\n`;
-          out += `        _map_lua_ptrs_${mi}[_i] = @ptrCast(_map_lua_bufs_${mi}[_i][0..n.len :0]);\n`;
-          out += `    }\n`;
-          out += `}\n`;
+        for (let hi = 0; hi < mapHandlers.length; hi++) {
+          const hasFieldRefs = m._handlerFieldRefs && m._handlerFieldRefs.length > 0;
+          const bufSize = hasFieldRefs ? 128 : 48;
+          out += `var _map_lua_bufs_${mi}_${hi}: [${luaSizeConst}][${bufSize}]u8 = undefined;\n`;
+          out += `var _map_lua_ptrs_${mi}_${hi}: [${luaSizeConst}]?[*:0]const u8 = .{null} ** ${luaSizeConst};\n`;
+          if (!m.isNested && !hasFieldRefs) {
+            out += `fn _initMapLuaPtrs${mi}_${hi}() void {\n`;
+            out += `    for (0..${luaSizeConst}) |_i| {\n`;
+            out += `        const n = std.fmt.bufPrint(_map_lua_bufs_${mi}_${hi}[_i][0..${bufSize - 1}], "__mapPress_${mi}_${hi}({d})", .{_i}) catch continue;\n`;
+            out += `        _map_lua_bufs_${mi}_${hi}[_i][n.len] = 0;\n`;
+            out += `        _map_lua_ptrs_${mi}_${hi}[_i] = @ptrCast(_map_lua_bufs_${mi}_${hi}[_i][0..n.len :0]);\n`;
+            out += `    }\n`;
+            out += `}\n`;
+          }
         }
-        // Nested: ptrs built during rebuild with (parent_idx, item_idx)
       }
 
       // Store metadata for pass 2
@@ -601,16 +605,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         }
         // Replace handler refs + build per-item Lua ptrs with (parent_idx, item_idx)
         const nestedHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === nmi);
-        if (nestedHandlers.length > 0) {
+        for (let nhi = 0; nhi < nestedHandlers.length; nhi++) {
           out += `                {\n`;
-          out += `                    const _n = std.fmt.bufPrint(_map_lua_bufs_${nmi}[_flat_j][0..47], "__mapPress_${nmi}({d},{d})", .{_i, _jj}) catch "";\n`;
-          out += `                    _map_lua_bufs_${nmi}[_flat_j][_n.len] = 0;\n`;
-          out += `                    _map_lua_ptrs_${nmi}[_flat_j] = @ptrCast(_map_lua_bufs_${nmi}[_flat_j][0.._n.len :0]);\n`;
+          out += `                    const _n = std.fmt.bufPrint(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0..47], "__mapPress_${nmi}_${nhi}({d},{d})", .{_i, _jj}) catch "";\n`;
+          out += `                    _map_lua_bufs_${nmi}_${nhi}[_flat_j][_n.len] = 0;\n`;
+          out += `                    _map_lua_ptrs_${nmi}_${nhi}[_flat_j] = @ptrCast(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0.._n.len :0]);\n`;
           out += `                }\n`;
-        }
-        for (const mh of nestedHandlers) {
-          nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
-          nestedPoolNode = nestedPoolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
+          const mh = nestedHandlers[nhi];
+          nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`);
+          nestedPoolNode = nestedPoolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`);
         }
         out += `                _map_pool_${nmi}[_i][_jj] = ${nestedPoolNode};\n`;
         out += `                _map_count_${nmi}[_i] += 1;\n`;
@@ -686,15 +689,36 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         // Replace handler refs with per-item handler string pointers
         // Use js_on_press when there's a <script> block (QuickJS dispatch)
         const pressField = ctx.scriptBlock ? 'js_on_press' : 'lua_on_press';
-        for (const mh of mapHandlers) {
-          poolNode = poolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.${pressField} = _map_lua_ptrs_${mi}[_i]`);
-          poolNode = poolNode.replace(`.on_press = ${mh.name}`, `.${pressField} = _map_lua_ptrs_${mi}[_i]`);
+        for (let hi = 0; hi < mapHandlers.length; hi++) {
+          const mh = mapHandlers[hi];
+          poolNode = poolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.${pressField} = _map_lua_ptrs_${mi}_${hi}[_i]`);
+          poolNode = poolNode.replace(`.on_press = ${mh.name}`, `.${pressField} = _map_lua_ptrs_${mi}_${hi}[_i]`);
         }
         // Swap field order: .children before .handlers in map pool nodes (matches reference)
         const hm = poolNode.match(/\.handlers = \.{[^}]+\}/);
         const cm = poolNode.match(/\.children = &[\w\[\]_]+/);
         if (hm && cm) {
           poolNode = poolNode.replace(hm[0] + ', ' + cm[0], cm[0] + ', ' + hm[0]);
+        }
+        // Build handler ptrs at rebuild time if handlers use OA field refs
+        const fieldRefsMap = m._handlerFieldRefsMap || {};
+        for (let hi = 0; hi < mapHandlers.length; hi++) {
+          const refs = fieldRefsMap[hi] || [];
+          if (refs.length > 0) {
+            const oaIdx = m.oa.oaIdx;
+            const fmtParts = ['{d}'];
+            const argParts = ['_i'];
+            for (const f of refs) {
+              fmtParts.push('{d}');
+              argParts.push(`_oa${oaIdx}_${f.name}[_i]`);
+            }
+            const bufSize = 127;
+            out += `        {\n`;
+            out += `            const _n = std.fmt.bufPrint(_map_lua_bufs_${mi}_${hi}[_i][0..${bufSize}], "__mapPress_${mi}_${hi}(${fmtParts.join(',')})", .{${argParts.join(', ')}}) catch "";\n`;
+            out += `            _map_lua_bufs_${mi}_${hi}[_i][_n.len] = 0;\n`;
+            out += `            _map_lua_ptrs_${mi}_${hi}[_i] = @ptrCast(_map_lua_bufs_${mi}_${hi}[_i][0.._n.len :0]);\n`;
+            out += `        }\n`;
+          }
         }
         out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
       } else {
@@ -800,7 +824,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (let mi = 0; mi < ctx.maps.length; mi++) {
       const m = ctx.maps[mi];
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-      for (const mh of mapHandlers) {
+      for (let hi = 0; hi < mapHandlers.length; hi++) {
+        const mh = mapHandlers[hi];
         // Build JS handler body from luaBody or Zig body
         let jsHandlerBody = mh.luaBody || '';
         if (!jsHandlerBody) {
@@ -815,13 +840,22 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           }
         }
         if (jsHandlerBody) {
-          jsLines.push(`function __mapPress_${mi}(idx) {`);
+          jsLines.push(`function __mapPress_${mi}_${hi}(idx) {`);
           if (m.oa) {
             jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[idx];`);
             jsLines.push(`  var ${m.indexParam} = idx;`);
+            // Extract component props that map to item fields (e.g., label → item.label)
+            for (const f of m.oa.fields) {
+              if (f.type === 'nested_array') continue;
+              const pat = new RegExp(`\\b${f.name}\\b`);
+              if (pat.test(jsHandlerBody) && f.name !== m.itemParam && f.name !== m.indexParam) {
+                jsLines.push(`  var ${f.name} = ${m.itemParam}.${f.name};`);
+              }
+            }
           }
           jsLines.push(`  ${jsHandlerBody};`);
           jsLines.push(`}`);
+          mh._emittedInJS = true;
         }
       }
     }
@@ -865,23 +899,42 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // (script may call OA setters that fail in Lua, aborting the rest of the script)
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-    for (const mh of mapHandlers) {
-      if (mh.luaBody) {
+    for (let hi = 0; hi < mapHandlers.length; hi++) {
+      const mh = mapHandlers[hi];
+      if (mh.luaBody && !mh._emittedInJS) {
         const m = ctx.maps[mi];
         if (m.isNested && m.parentMap) {
           // Nested map handler receives (parent_idx, item_idx)
           const outerIdxParam = m.parentMap.indexParam || 'gi';
           const innerIdxParam = m.indexParam || 'ii';
-          luaLines.push(`function __mapPress_${mi}(${outerIdxParam}, ${innerIdxParam})`);
+          luaLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam})`);
           luaLines.push(`  ${mh.luaBody}`);
           luaLines.push(`end`);
         } else {
-          // Top-level map handler receives single index
-          luaLines.push(`function __mapPress_${mi}(idx)`);
-          luaLines.push(`  local ${m.itemParam} = ${m.oa ? m.oa.getter : 'nil'}[idx + 1]`);
+          // Top-level map handler — scan for item.field refs and pass as args
+          const oa = m.oa;
+          const ip = m.itemParam;
+          const fieldRefs = [];
+          if (oa) {
+            for (const f of oa.fields) {
+              if (f.type === 'nested_array') continue;
+              const pat = new RegExp(`\\b${ip}\\.${f.name}\\b`, 'g');
+              if (pat.test(mh.luaBody)) fieldRefs.push(f);
+            }
+          }
+          const params = ['idx', ...fieldRefs.map(f => `_f_${f.name}`)];
+          luaLines.push(`function __mapPress_${mi}_${hi}(${params.join(', ')})`);
           luaLines.push(`  local ${m.indexParam} = idx`);
-          luaLines.push(`  ${mh.luaBody}`);
+          let body = mh.luaBody;
+          for (const f of fieldRefs) {
+            body = body.replace(new RegExp(`\\b${ip}\\.${f.name}\\b`, 'g'), `_f_${f.name}`);
+          }
+          luaLines.push(`  ${body}`);
           luaLines.push(`end`);
+          // Store field refs for Zig ptr building (per-handler)
+          if (!m._handlerFieldRefsMap) m._handlerFieldRefsMap = {};
+          m._handlerFieldRefsMap[hi] = fieldRefs;
+          m._handlerFieldRefs = fieldRefs; // keep for backward compat
         }
         luaLines.push('');
       }
@@ -891,20 +944,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // QuickJS runs the script content via JS_LOGIC. Including it in Lua
   // causes syntax errors (JS for loops, .push(), etc.) that abort the
   // entire Lua chunk, killing setter/handler definitions above it.
-  // Inline script block — after handlers
-  if (ctx.scriptBlock) {
-    // Strip /* ... */ block comments before emitting as Lua (Lua doesn't support them)
-    let cleanedScript = ctx.scriptBlock.replace(/\/\*[\s\S]*?\*\//g, '');
-    let scriptLines = cleanedScript.split('\n');
-    for (const line of scriptLines) {
-      let luaLine = line;
-      luaLine = luaLine.replace(/\bvar\b/g, 'local');
-      luaLine = luaLine.replace(/\blet\b/g, 'local');
-      luaLine = luaLine.replace(/\bconst\b/g, 'local');
-      luaLines.push(luaLine);
-    }
-    luaLines.push('');
-  }
+  // Inline script block — NOT included in LUA_LOGIC.
+  // Script content goes into JS_LOGIC only. Including it in Lua causes syntax errors
+  // (JS arrays, for loops, ===, etc.) that abort the entire Lua chunk.
   // Emit Lua lines as Zig multiline string
   if (luaLines.length > 0) {
     for (const line of luaLines) {
@@ -954,6 +996,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   }
   if (ctx.dynStyles && ctx.dynStyles.length > 0) {
     for (const ds of ctx.dynStyles) {
+      // Skip dynStyles that reference _i (map loop var) — can't resolve in global update
+      if (ds.expression && (ds.expression.includes('_i)') || ds.expression.includes('_i]') || ds.expression.includes('(_i'))) continue;
       if (ds.arrName && ds.arrIndex >= 0) {
         const arrNum = parseInt(ds.arrName.replace('_arr_', ''));
         const nodeFields = ['text_color', 'font_size', 'text'];
@@ -1008,9 +1052,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   // Initialize Lua map handler string pointers before rebuilding maps
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].isNested) continue;
-    const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-    if (mapHandlers.length > 0) {
-      out += `    _initMapLuaPtrs${mi}();\n`;
+    const mapHandlers2 = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
+    const fieldRefsMap2 = ctx.maps[mi]._handlerFieldRefsMap || {};
+    for (let hi = 0; hi < mapHandlers2.length; hi++) {
+      const hasFieldRefs2 = fieldRefsMap2[hi] && fieldRefsMap2[hi].length > 0;
+      if (!hasFieldRefs2) {
+        out += `    _initMapLuaPtrs${mi}_${hi}();\n`;
+      }
     }
   }
   for (let mi = 0; mi < ctx.maps.length; mi++) {

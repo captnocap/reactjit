@@ -127,7 +127,14 @@ function parseStyleBlock(c) {
           const trueVal = parseTernaryBranch(c, key);
           if (c.kind() === TK.colon) c.advance();
           const falseVal = parseTernaryBranch(c, key);
-          const cond = `(${val.zigExpr} ${op} ${rhs})`;
+          // String comparison: use std.mem.eql instead of == / !=
+          let cond;
+          if (rhs.startsWith('"')) {
+            const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhs})`;
+            cond = op === '!=' ? `(!${eql})` : `(${eql})`;
+          } else {
+            cond = `(${val.zigExpr} ${op} ${rhs})`;
+          }
           // Resolve branch expressions: string→parseColor, zig_expr→zigExpr, number→value
           const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
           const resolveNumBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.value;
@@ -297,8 +304,16 @@ function parseHandler(c) {
         if (args.length === 0) {
           body += `    qjs_runtime.callGlobal("${fname}");\n`;
         } else {
-          const escaped = `${fname}(${args})`.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          body += `    qjs_runtime.evalExpr("${escaped}");\n`;
+          // Single string arg: 'value' → callGlobalStr (avoids single-quote lint)
+          const strMatch = args.match(/^['"](.*)['"]$/);
+          if (strMatch) {
+            body += `    qjs_runtime.callGlobalStr("${fname}", "${strMatch[1]}");\n`;
+          } else if (/^-?\d+$/.test(args)) {
+            body += `    qjs_runtime.callGlobalInt("${fname}", ${args});\n`;
+          } else {
+            const jsCall = `${fname}(${args.replace(/'/g, '\\"')})`;
+            body += `    qjs_runtime.evalExpr("${jsCall}");\n`;
+          }
         }
       }
       if (c.kind() === TK.semicolon) c.advance();
@@ -366,7 +381,12 @@ function luaParseValueExpr(c) {
       c.advance(); continue;
     }
     if (c.kind() === TK.number) { parts.push(c.text()); c.advance(); continue; }
-    if (c.kind() === TK.plus) { parts.push(' + '); c.advance(); continue; }
+    if (c.kind() === TK.plus) {
+      // Use Lua concat (..) if any part is a string literal
+      const hasStr = parts.some(p => (p.startsWith("'") || p.startsWith('"')) && p.length > 1);
+      parts.push(hasStr ? ' .. ' : ' + ');
+      c.advance(); continue;
+    }
     if (c.kind() === TK.minus) { parts.push(' - '); c.advance(); continue; }
     if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
     if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
@@ -460,8 +480,10 @@ function parseValueExpr(c) {
         parts.push(slotGet(name));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         parts.push('0'); // map index → 0 in handler context (reference behavior)
-      } else if (ctx.propStack && ctx.propStack[name] !== undefined && /^-?\d+(\.\d+)?$/.test(ctx.propStack[name])) {
-        parts.push(ctx.propStack[name]);
+      } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        const pv = ctx.propStack[name];
+        // Use numeric prop values directly; non-numeric (like _i map var) fall back to 0
+        parts.push(/^-?\d+(\.\d+)?$/.test(pv) ? pv : '0');
       } else {
         parts.push(name);
       }
@@ -494,7 +516,11 @@ function parseValueExpr(c) {
     }
     if (c.kind() === TK.colon) break; // stop for ternary false branch
     if (c.kind() === TK.string) {
-      const s = c.text(); c.advance();
+      let s = c.text(); c.advance();
+      // Convert single-quoted JS strings to double-quoted Zig strings
+      if (s.startsWith("'") && s.endsWith("'")) {
+        s = '"' + s.slice(1, -1).replace(/"/g, '\\"') + '"';
+      }
       parts.push(s); continue;
     }
     // Default: skip

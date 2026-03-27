@@ -172,12 +172,12 @@ function parseJSXElement(c) {
             if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
               const fname = c.text();
               c.advance();
-              // Script function — call via Lua
+              // Script function — call via QuickJS (not Lua, since <script> is JS)
               const handlerName = `_handler_press_${ctx.handlerCount}`;
-              const luaBody = isScriptFunc(fname) ? `${fname}()` : fname;
               if (isScriptFunc(fname)) {
-                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n`, luaBody });
+                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n` });
               } else {
+                const luaBody = fname;
                 ctx.handlers.push({ name: handlerName, body: `    // ${fname}\n`, luaBody });
               }
               handlerRef = handlerName;
@@ -225,7 +225,7 @@ function parseJSXElement(c) {
                 if (op === '==' && c.kind() === TK.equals) c.advance();
                 let rhs = '';
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
-                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
                 if (c.kind() === TK.question) {
                   c.advance();
                   const tv = parseTernaryBranch(c, 'color');
@@ -578,7 +578,7 @@ function parseTemplateLiteral(raw) {
       }
       i = j;
     } else {
-      fmt += raw[i];
+      fmt += raw[i] === '"' ? '\\"' : raw[i];
       i++;
     }
   }
@@ -681,6 +681,24 @@ function tryParseConditional(c, children) {
     } else if (c.kind() === TK.question) {
       // Ternary — not a conditional, bail
       break;
+    } else if (c.kind() === TK.string) {
+      // JS string in condition: convert to Zig string comparison
+      const sv = c.text().slice(1, -1); // strip quotes
+      const lastOp = condParts.length > 0 ? condParts[condParts.length - 1] : '';
+      if (sv === '' && (lastOp === ' == ' || lastOp === ' != ')) {
+        condParts.pop();
+        const lhs = condParts.join('');
+        condParts.length = 0;
+        condParts.push(lastOp === ' == ' ? `${lhs}.len == 0` : `${lhs}.len > 0`);
+      } else if (lastOp === ' == ' || lastOp === ' != ') {
+        condParts.pop();
+        const lhs = condParts.join('');
+        condParts.length = 0;
+        const eql = `std.mem.eql(u8, ${lhs}, "${sv}")`;
+        condParts.push(lastOp === ' == ' ? eql : `!${eql}`);
+      } else {
+        condParts.push(`"${sv}"`);
+      }
     } else {
       condParts.push(c.text());
     }
@@ -952,6 +970,9 @@ function parseChildren(c) {
         }
         if (c.kind() === TK.rbrace) c.advance();
       }
+    } else if (c.kind() === TK.comment) {
+      // Skip block comments in JSX children
+      c.advance();
     } else if (c.kind() !== TK.rbrace) {
       // Text content — use raw source between first and last token to preserve apostrophes etc
       const textStart = c.starts[c.pos];
@@ -961,7 +982,7 @@ function parseChildren(c) {
         c.advance();
       }
       const text = c._byteSlice(textStart, textEnd).trim();
-      if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim()}" }` });
+      if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim().replace(/"/g, '\\"')}" }` });
     } else { c.advance(); }
   }
   return children;
@@ -1018,7 +1039,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (handlerRef) {
     // Look up the handler's Lua body for lua_on_press
     const handler = ctx.handlers.find(h => h.name === handlerRef);
-    if (handler && handler.luaBody) {
+    if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock) {
       const escaped = handler.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
     } else {

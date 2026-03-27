@@ -89,6 +89,27 @@ os/web/tsz-runtime.wasm
 os/web/vmlinuz
 os/web/v86/
 
+# Rust build artifacts (deps)
+deps/vello_ffi/target/
+
+# Web-demo OS images (rebuilt by emscripten/tinyemu build)
+tsz/carts/web-demo/web-demo.app-web/alpine-virt.iso
+tsz/carts/web-demo/web-demo.app-web/initrd.cpio.gz
+tsz/carts/web-demo/web-demo.app-web/vmlinuz
+tsz/carts/web-demo/web-demo.app-web/kernel-x86.bin
+tsz/carts/web-demo/web-demo.app-web/tsz-kernel.bin
+
+# ML models
+experiments/llm/models/*.gguf
+
+# Compiled binaries (root-level test artifacts)
+test_and
+test_and2
+
+# Compiled runtime binaries (rebuilt from source)
+archive/tsz-v1/runtime/bin/
+tsz/runtime/bin/
+
 # Root-level build artifact
 generated_app.zig
 
