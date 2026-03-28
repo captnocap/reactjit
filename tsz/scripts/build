@@ -39,6 +39,7 @@ CART="${POSITIONAL[0]}"
 NAME=$(basename "$CART" .tsz)
 OPT="${POSITIONAL[1]:---release}"
 GEN="generated_${NAME}.zig"
+GEN_DIR="generated_${NAME}"
 
 # Pick optimize flag
 if [ "$OPT" = "--debug" ]; then
@@ -76,7 +77,15 @@ fi
 # Step 1 (normal): forge (smith compiler: tsz → zig)
 if [ "$FAST" -eq 0 ]; then
     echo "[$NAME] forge..."
-    ./zig-out/bin/forge build "$CART" 2>&1
+    ./zig-out/bin/forge build --single "$CART" 2>&1
+fi
+
+# If split output, concat all files for lint (grep needs a single target)
+SPLIT_LINT=0
+if [ -d "$GEN_DIR" ] && [ ! -f "$GEN" ]; then
+    GEN=$(mktemp /tmp/lint_XXXXXX.zig)
+    cat "$GEN_DIR"/*.zig > "$GEN"
+    SPLIT_LINT=1
 fi
 
 # ── Step 2: preflight lint — catch smith bugs before wasting a zig build ──
@@ -209,13 +218,23 @@ if [ "$LINT_WARN" -eq 1 ]; then
     echo "[$NAME] warnings above — building anyway but expect visual bugs"
 fi
 
+# Clean up temp lint file
+if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
+
+# Resolve source: prefer split directory (generated_X/app.zig) over monolith
+if [ -d "$GEN_DIR" ] && [ -f "$GEN_DIR/app.zig" ]; then
+    APP_SOURCE="$GEN_DIR/app.zig"
+else
+    APP_SOURCE="$GEN"
+fi
+
 # Step 3: zig build
 if [ "$FAST" -eq 1 ]; then
     echo "[$NAME] zig build (fast — cart-fast against cached engine)..."
-    zig build cart-fast -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
+    zig build cart-fast -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $ZIG_OPT 2>&1
 else
     echo "[$NAME] zig build..."
-    zig build app -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
+    zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $ZIG_OPT 2>&1
 fi
 
 echo "[$NAME] done → zig-out/bin/$NAME"

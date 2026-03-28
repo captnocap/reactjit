@@ -198,6 +198,8 @@ function findComponent(name) {
 function collectScript(c) {
   const saved = c.save();
   c.pos = 0;
+  // Collect ALL <script> blocks (merged source may have multiple from imported components)
+  const scriptParts = [];
   while (c.pos < c.count) {
     // <script> ... </script>
     if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'script') {
@@ -216,16 +218,20 @@ function collectScript(c) {
         c.advance();
       }
       // Use byte-based slice for the raw JS content
-      ctx.scriptBlock = c._byteSlice(startOff, endOff).trim();
-      // Scan for function names in the script
-      const funcRegex = /function\s+(\w+)/g;
-      let match;
-      while ((match = funcRegex.exec(ctx.scriptBlock)) !== null) {
-        ctx.scriptFuncs.push(match[1]);
-      }
-      break;
+      const block = c._byteSlice(startOff, endOff).trim();
+      if (block.length > 0) scriptParts.push(block);
     }
     c.advance();
+  }
+  // Concatenate all script blocks
+  if (scriptParts.length > 0) {
+    ctx.scriptBlock = scriptParts.join('\n\n');
+    // Scan for function names in the combined script
+    const funcRegex = /function\s+(\w+)/g;
+    let match;
+    while ((match = funcRegex.exec(ctx.scriptBlock)) !== null) {
+      ctx.scriptFuncs.push(match[1]);
+    }
   }
   c.restore(saved);
   // Also scan imported script content for function names
@@ -497,10 +503,10 @@ function collectClassifiers() {
   const clsText = globalThis.__clsContent;
   if (!clsText) return;
   try {
-    let captured = null;
-    const classifier = function(obj) { captured = obj; }; // eslint-disable-line no-unused-vars
+    let merged = {};
+    const classifier = function(obj) { for (const k in obj) merged[k] = obj[k]; };
     eval(clsText); // direct eval — sees local 'classifier' binding
-    if (captured) ctx.classifiers = captured;
+    ctx.classifiers = merged;
   } catch(e) {}
 }
 
@@ -519,7 +525,8 @@ function clsStyleFields(def) {
       if (mapped) fields.push(`.${em.field} = ${mapped}`);
     } else if (styleKeys[key]) {
       if (typeof val === 'string' && val.endsWith('%')) {
-        fields.push(`.${styleKeys[key]} = @as(f32, ${parseFloat(val)})`);
+        const pct = parseFloat(val);
+        fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
       } else {
         fields.push(`.${styleKeys[key]} = ${val}`);
       }
@@ -601,7 +608,25 @@ function compile() {
   // Parse JSX
   const root = parseJSXElement(c);
 
-  return stampIntegrity(emitOutput(root.nodeExpr, file));
+  // Preflight validation — catch Class A + B bugs before wasting Zig build time
+  const pf = preflight(ctx);
+  if (globalThis.__SMITH_DEBUG) {
+    for (let i = 0; i < pf.warnings.length; i++) print('[preflight] WARN: ' + pf.warnings[i]);
+    for (let i = 0; i < pf.errors.length; i++) print('[preflight] FATAL: ' + pf.errors[i]);
+    print('[preflight] lane=' + pf.lane + ' ok=' + pf.ok);
+  }
+  if (!pf.ok) {
+    return stampIntegrity(preflightErrorZig(pf, file));
+  }
+
+  // Store preflight result for emit to access (lane comment, warnings)
+  ctx._preflight = pf;
+
+  var zigOut = emitOutput(root.nodeExpr, file);
+  // Split mode returns its own encoding (no integrity stamp needed)
+  if (typeof zigOut === 'string' && zigOut.indexOf('__SPLIT_OUTPUT__') === 0)
+    return zigOut;
+  return stampIntegrity(zigOut);
 }
 
 // ── Module compilation: .mod.tsz → .zig ─────────────────────────────
