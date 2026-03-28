@@ -227,6 +227,27 @@ bin/rjit build --full carts/storybook/Storybook.tsz
 bin/rjit core
 ```
 
+### Engine Channels
+
+The engine ships as a shared library (`.so`). Three channels run side by side — carts pick which engine to load at launch:
+
+```bash
+./my_app                         # stable (default)
+./my_app --engine=nightly        # nightly (pre-stable, passing conformance)
+./my_app --engine=bleeding       # bleeding edge (latest experimental)
+RJIT_ENGINE=bleeding ./my_app    # env var also works
+```
+
+Promotion flow:
+
+```
+rjit core              → builds bleeding.so
+rjit promote nightly   → bleeding → nightly (after conformance passes)
+rjit promote stable    → nightly → stable (after soak period)
+```
+
+Cart binaries are 27MB (engine is shared, not embedded). Updating the engine doesn't require rebuilding any carts — the next launch picks up the new `.so` automatically.
+
 ## Primitives
 
 `Box` `Text` `Image` `Video` `Render` `Pressable` `ScrollView` `TextInput` `TextArea` `Glyph` `Cartridge`
