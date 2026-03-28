@@ -1,11 +1,41 @@
 // ── Color parser ──
 
+// theme-* → Catppuccin Mocha defaults (resolved at compile time)
+const themeColors = {
+  'theme-bg':             [30, 30, 46],
+  'theme-bgAlt':          [24, 24, 37],
+  'theme-bgElevated':     [49, 50, 68],
+  'theme-surface':        [49, 50, 68],
+  'theme-surfaceHover':   [69, 71, 90],
+  'theme-border':         [69, 71, 90],
+  'theme-borderFocus':    [137, 180, 250],
+  'theme-text':           [205, 214, 244],
+  'theme-textSecondary':  [186, 194, 222],
+  'theme-textDim':        [166, 173, 200],
+  'theme-primary':        [137, 180, 250],
+  'theme-primaryHover':   [116, 199, 236],
+  'theme-primaryPressed': [137, 220, 235],
+  'theme-accent':         [203, 166, 247],
+  'theme-error':          [243, 139, 168],
+  'theme-warning':        [250, 179, 135],
+  'theme-success':        [166, 227, 161],
+  'theme-info':           [137, 220, 235],
+};
+
 function parseColor(hex) {
+  if (hex === 'transparent') return 'Color.rgba(0, 0, 0, 0)';
+  if (themeColors[hex]) {
+    const [r,g,b] = themeColors[hex];
+    return `Color.rgb(${r}, ${g}, ${b})`;
+  }
   if (namedColors[hex]) {
     const [r,g,b] = namedColors[hex];
     return `Color.rgb(${r}, ${g}, ${b})`;
   }
   const h = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (h.length === 8) {
+    return `Color.rgba(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)}, ${parseInt(h.slice(6,8),16)})`;
+  }
   if (h.length === 6) {
     return `Color.rgb(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)})`;
   }
@@ -55,6 +85,11 @@ function parseStyleValue(c) {
       }
       return { type: 'unknown', value: '' };
     }
+    // Map index param (i, idx, etc.) — supports ternary/modulo in style blocks
+    if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+      c.advance();
+      return { type: 'map_index', value: name, zigExpr: `@as(i64, @intCast(_i))` };
+    }
     // Prop reference — detect type from prop value
     if (ctx.propStack[name] !== undefined) {
       c.advance();
@@ -82,7 +117,18 @@ function parseTernaryBranch(c, key) {
     let rhsIsString = false;
     if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
     else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-    else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
+    else if (c.kind() === TK.identifier) {
+      const n = c.text(); c.advance();
+      if (isGetter(n)) { rhs = slotGet(n); }
+      else if (ctx.currentMap && n === ctx.currentMap.indexParam) { rhs = '@as(i64, @intCast(_i))'; }
+      else if (ctx.currentMap && n === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+        c.advance(); if (c.kind() === TK.identifier) { const field = c.text(); c.advance(); const oa = ctx.currentMap.oa;
+          if (oa) { const fi = oa.fields.find(f => f.name === field); if (fi) { rhs = fi.type === 'string' ? `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]` : `_oa${oa.oaIdx}_${field}[_i]`; if (fi.type === 'string') rhsIsString = true; } else { rhs = n + '.' + field; } } else { rhs = n + '.' + field; }
+        }
+      }
+      else if (ctx.propStack && ctx.propStack[n] !== undefined) { rhs = ctx.propStack[n]; }
+      else { rhs = n; }
+    }
     if (c.kind() === TK.question) {
       c.advance();
       const tv = parseTernaryBranch(c, key);
@@ -91,7 +137,7 @@ function parseTernaryBranch(c, key) {
       if (hasParen && c.kind() === TK.rparen) c.advance();
       let cond;
       if (rhsIsString || val.fieldType === 'string') {
-        const eql = `std.mem.eql(u8, ${val.zigExpr}, "${rhs}")`;
+        const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhsIsString && !rhs.startsWith('"') ? rhs : '"' + rhs + '"'})`;
         cond = op === '!=' ? `(!${eql})` : `(${eql})`;
       } else {
         cond = `(${val.zigExpr} ${op} ${rhs})`;
@@ -120,6 +166,14 @@ function parseStyleBlock(c) {
       c.advance();
       if (c.kind() === TK.colon) c.advance();
       let val = parseStyleValue(c);
+      // Handle modulo before comparison: i % 2 == 0 — consume % N and fold into zigExpr
+      if (c.kind() === TK.mod && val.zigExpr) {
+        c.advance();
+        if (c.kind() === TK.number) {
+          val = { type: val.type, value: val.value, zigExpr: `(${val.zigExpr} % ${c.text()})` };
+          c.advance();
+        }
+      }
       // Ternary in style value: expr == N ? valA : valB
       if ((c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) && val.zigExpr) {
         const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
@@ -127,10 +181,39 @@ function parseStyleBlock(c) {
         // Handle === (eq_eq + eq) → ==
         if (op === '==' && c.kind() === TK.equals) c.advance();
         let rhs = '';
+        let rhsIsStringExpr = false;
         if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
         else if (c.kind() === TK.minus && c.pos+1 < c.count && c.kindAt(c.pos+1) === TK.number) { c.advance(); rhs = '-' + c.text(); c.advance(); }
         else if (c.kind() === TK.string) { rhs = `"${c.text().slice(1,-1)}"`; c.advance(); }
-        else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
+        else if (c.kind() === TK.identifier) {
+          const n = c.text(); c.advance();
+          if (isGetter(n)) {
+            rhs = slotGet(n);
+            // Check if this getter is a string state slot
+            const slot = ctx.stateSlots.find(s => s.getter === n);
+            if (slot && slot.type === 'string') rhsIsStringExpr = true;
+          }
+          else if (ctx.currentMap && n === ctx.currentMap.indexParam) { rhs = '@as(i64, @intCast(_i))'; }
+          else if (ctx.currentMap && n === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+            // Map item field access: opt.id → _oaN_field[_i]
+            c.advance(); // skip .
+            if (c.kind() === TK.identifier) {
+              const field = c.text(); c.advance();
+              const oa = ctx.currentMap.oa;
+              if (oa) {
+                const fi = oa.fields.find(f => f.name === field);
+                if (fi) {
+                  rhs = fi.type === 'string'
+                    ? `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`
+                    : `_oa${oa.oaIdx}_${field}[_i]`;
+                  if (fi.type === 'string') rhsIsStringExpr = true;
+                } else { rhs = n + '.' + field; }
+              } else { rhs = n + '.' + field; }
+            }
+          }
+          else if (ctx.propStack && ctx.propStack[n] !== undefined) { rhs = ctx.propStack[n]; }
+          else { rhs = n; }
+        }
         if (c.kind() === TK.question) {
           c.advance(); // skip ?
           const trueVal = parseTernaryBranch(c, key);
@@ -138,7 +221,8 @@ function parseStyleBlock(c) {
           const falseVal = parseTernaryBranch(c, key);
           // String comparison: use std.mem.eql instead of == / !=
           let cond;
-          if (rhs.startsWith('"')) {
+          const lhsIsString = val.fieldType === 'string' || (val.type === 'state' && ctx.stateSlots.find(s => s.getter === val.value)?.type === 'string');
+          if (rhs.startsWith('"') || rhsIsStringExpr || lhsIsString) {
             const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhs})`;
             cond = op === '!=' ? `(!${eql})` : `(${eql})`;
           } else {
@@ -148,14 +232,19 @@ function parseStyleBlock(c) {
           const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
           const resolveNumBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.value;
           if (colorKeys[key] && (trueVal.type === 'string' || trueVal.type === 'zig_expr' || trueVal.type === 'number') && (falseVal.type === 'string' || falseVal.type === 'zig_expr' || falseVal.type === 'number')) {
-            // Ternary color depends on runtime state — use placeholder + dynamic update
             const colorExpr = `if ${cond} ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
-            fields.push(`.${colorKeys[key]} = Color{}`);
-            if (!ctx.dynStyles) ctx.dynStyles = [];
-            const dsId = ctx.dynStyles.length;
-            ctx.dynStyles.push({ field: colorKeys[key], expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
-            if (!fields._dynStyleIds) fields._dynStyleIds = [];
-            fields._dynStyleIds.push(dsId);
+            if (ctx.currentMap) {
+              // Inside map: emit inline — _rebuildMap re-evaluates per item
+              fields.push(`.${colorKeys[key]} = ${colorExpr}`);
+            } else {
+              // Outside map: placeholder + dynStyle runtime update
+              fields.push(`.${colorKeys[key]} = Color{}`);
+              if (!ctx.dynStyles) ctx.dynStyles = [];
+              const dsId = ctx.dynStyles.length;
+              ctx.dynStyles.push({ field: colorKeys[key], expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+              if (!fields._dynStyleIds) fields._dynStyleIds = [];
+              fields._dynStyleIds.push(dsId);
+            }
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (styleKeys[key] && trueVal.type === 'number' && falseVal.type === 'number') {
@@ -386,11 +475,21 @@ function luaParseValueExpr(c) {
         parts.push(name); // raw index variable name
         c.advance(); continue;
       }
-      // Resolve props, then raw variable names
+      // Resolve props, then raw variable names (with instance name remap)
       if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        parts.push(ctx.propStack[name]);
+        const pv = ctx.propStack[name];
+        // Zig expressions (@as, @intCast, _i) must not leak into Lua/JS handler bodies
+        // Map index props → use raw index variable name; other Zig → use '0' fallback
+        if (pv.includes('@') || pv === '_i') {
+          parts.push(ctx.currentMap ? ctx.currentMap.indexParam : '0');
+        } else if (pv === 'ci' || pv === '_j' || (ctx.currentMap && ctx.currentMap.parentMap && pv === ctx.currentMap.parentMap.indexParam)) {
+          // Outer map index variable leaked as prop — keep raw name
+          parts.push(pv);
+        } else {
+          parts.push(pv);
+        }
       } else {
-        parts.push(name);
+        parts.push((ctx.nameRemap && ctx.nameRemap[name]) || name);
       }
       c.advance(); continue;
     }
@@ -448,7 +547,7 @@ function luaParseHandler(c) {
     c.advance();
     while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
       if (c.kind() === TK.identifier && (isSetter(c.text()) || isScriptFunc(c.text()))) {
-        const fname = c.text();
+        const fname = (ctx.nameRemap && ctx.nameRemap[c.text()]) || c.text();
         c.advance();
         if (c.kind() === TK.lparen) {
           c.advance();
@@ -470,7 +569,7 @@ function luaParseHandler(c) {
 
   // Single expression
   if (c.kind() === TK.identifier && isSetter(c.text())) {
-    const setter = c.text();
+    const setter = (ctx.nameRemap && ctx.nameRemap[c.text()]) || c.text();
     c.advance();
     if (c.kind() === TK.lparen) {
       c.advance();

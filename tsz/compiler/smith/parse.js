@@ -18,6 +18,21 @@ function parseJSXElement(c) {
   let rawTag = c.text();
   c.advance();
 
+  // Skip <script>...</script> blocks — already collected by collectScript
+  if (rawTag === 'script') {
+    // Skip to matching </script>
+    if (c.kind() === TK.gt) c.advance();
+    while (c.pos < c.count) {
+      if (c.kind() === TK.lt_slash && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'script') {
+        c.advance(); c.advance(); // skip </ script
+        if (c.kind() === TK.gt) c.advance(); // skip >
+        break;
+      }
+      c.advance();
+    }
+    return { nodeExpr: '.{}' }; // empty placeholder node
+  }
+
   // C.Name classifier resolution
   let clsDef = null;
   if (rawTag === 'C' && c.kind() === TK.dot) {
@@ -25,6 +40,29 @@ function parseJSXElement(c) {
     const clsName = c.text(); c.advance();
     clsDef = ctx.classifiers && ctx.classifiers[clsName];
     rawTag = clsDef ? clsDef.type : 'Box';
+  }
+  // Graph.Path / Graph.Node dot-name tags
+  if (rawTag === 'Graph' && c.kind() === TK.dot) {
+    c.advance(); // skip .
+    const subTag = c.text(); c.advance();
+    rawTag = 'Graph.' + subTag; // e.g. Graph.Path
+  }
+  // Canvas.Node / Canvas.Path / Canvas.Clamp dot-name tags
+  if (rawTag === 'Canvas' && c.kind() === TK.dot) {
+    c.advance(); // skip .
+    const subTag = c.text(); c.advance();
+    rawTag = 'Canvas.' + subTag; // e.g. Canvas.Node
+  }
+  // 3D.Camera / 3D.Light / 3D.Mesh / 3D.Group dot-name tags
+  if (rawTag === '3D' && c.kind() === TK.dot) {
+    c.advance();
+    const subTag = c.text(); c.advance();
+    rawTag = '3D.' + subTag;
+  }
+  // Scene3D as a tag
+  if (rawTag === 'Scene3D' && c.kind() === TK.dot) {
+    c.advance();
+    rawTag = '3D.' + c.text(); c.advance();
   }
 
   // Check if this is a component call
@@ -66,23 +104,36 @@ function parseJSXElement(c) {
           } else if (c.kind() === TK.lbrace) {
             // {expr} prop value — resolve map item access, state getters, etc.
             c.advance();
-            // Check for map item member access: item.field
-            if (ctx.currentMap && c.kind() === TK.identifier && c.text() === ctx.currentMap.itemParam) {
-              c.advance(); // skip item name
-              if (c.kind() === TK.dot) {
-                c.advance(); // skip .
-                if (c.kind() === TK.identifier) {
-                  const field = c.text();
-                  const oa = ctx.currentMap.oa;
-                  const fi = oa.fields.find(ff => ff.name === field);
-                  if (fi && fi.type === 'string') {
-                    propValues[attr] = `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
-                  } else {
-                    propValues[attr] = `_oa${oa.oaIdx}_${field}[_i]`;
+            // Check for map item member access: item.field (walk parent chain)
+            if (ctx.currentMap && c.kind() === TK.identifier) {
+              let matchMap = null;
+              let pm = ctx.currentMap;
+              while (pm) { if (c.text() === pm.itemParam) { matchMap = pm; break; } pm = pm.parentMap; }
+              if (matchMap) {
+                c.advance(); // skip item name
+                if (c.kind() === TK.dot) {
+                  c.advance(); // skip .
+                  if (c.kind() === TK.identifier) {
+                    const field = c.text();
+                    const oa = matchMap.oa;
+                    const fi = oa.fields.find(ff => ff.name === field);
+                    if (fi) {
+                      let idx = '_i';
+                      // Parent map: bridge through current OA's foreign key (e.g. colIdx)
+                      if (matchMap !== ctx.currentMap) {
+                        const bf = ctx.currentMap.oa.fields.find(ff => ff.name === matchMap.itemParam + 'Idx');
+                        if (bf) idx = `@intCast(_oa${ctx.currentMap.oa.oaIdx}_${bf.name}[_i])`;
+                      }
+                      if (fi.type === 'string') {
+                        propValues[attr] = `_oa${oa.oaIdx}_${field}[${idx}][0.._oa${oa.oaIdx}_${field}_lens[${idx}]]`;
+                      } else {
+                        propValues[attr] = `_oa${oa.oaIdx}_${field}[${idx}]`;
+                      }
+                      c.advance();
+                      if (c.kind() === TK.rbrace) c.advance();
+                      continue;
+                    }
                   }
-                  c.advance();
-                  if (c.kind() === TK.rbrace) c.advance();
-                  continue;
                 }
               }
             }
@@ -123,7 +174,21 @@ function parseJSXElement(c) {
                 }
               } else if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
               else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) val += '@as(i64, @intCast(_i))';
-              else val += c.text();
+              else {
+                // Check parent map index params with bridge resolution
+                let resolved = false;
+                if (c.kind() === TK.identifier && ctx.currentMap) {
+                  let pm = ctx.currentMap.parentMap;
+                  while (pm) {
+                    if (c.text() === pm.indexParam) {
+                      const bf = ctx.currentMap.oa.fields.find(ff => ff.name === pm.itemParam + 'Idx');
+                      if (bf) { val += `_oa${ctx.currentMap.oa.oaIdx}_${bf.name}[_i]`; resolved = true; break; }
+                    }
+                    pm = pm.parentMap;
+                  }
+                }
+                if (!resolved) val += c.text();
+              }
               c.advance();
             }
             if (c.kind() === TK.rbrace) c.advance();
@@ -143,7 +208,7 @@ function parseJSXElement(c) {
     }
 
     // Inline: save state, jump to component body, parse with prop substitution
-    // Component arrays always go to top-level (even inside map templates)
+    // Arrays stay in current map context so per-item dynText wiring works
     const savedPos = c.save();
     const savedProps = ctx.propStack;
     const savedInline = ctx.inlineComponent;
@@ -151,28 +216,29 @@ function parseJSXElement(c) {
     const savedMapCtx = ctx.currentMap;
     const savedArrayDecls = ctx.arrayDecls;
     const savedArrayComments = ctx.arrayComments;
-    // Track initial lengths to detect new arrays created during inlining
-    const savedArrayDeclsLen = savedArrayDecls.length;
-    const savedArrayCommentsLen = savedArrayComments.length;
-    if (ctx.currentMap) {
-      // Restore to top-level arrays during component inlining
-      // Keep currentMap active so item member access (n.title) resolves
-      ctx.arrayDecls = ctx.currentMap._topArrayDecls || ctx.arrayDecls;
-      ctx.arrayComments = ctx.currentMap._topArrayComments || ctx.arrayComments;
-    }
     ctx.propStack = propValues;
     ctx.inlineComponent = rawTag;
     ctx.componentChildren = compChildren;
     // Allocate fresh state slots for this component instance
+    // Each instance gets unique getter/setter names (suffixed with slot index)
+    // so that Lua/JS setter functions don't collide across instances.
     const savedSlotRemap = ctx.slotRemap || {};
+    const savedNameRemap = ctx.nameRemap || {};
     const instanceSlotRemap = {};
+    const instanceNameRemap = {};
     for (const cs of (comp.stateSlots || [])) {
       const newIdx = ctx.stateSlots.length;
-      ctx.stateSlots.push({ getter: cs.getter, setter: cs.setter, initial: cs.initial, type: cs.type });
+      const uniqueGetter = cs.getter + '_' + newIdx;
+      const uniqueSetter = cs.setter + '_' + newIdx;
+      ctx.stateSlots.push({ getter: uniqueGetter, setter: uniqueSetter, initial: cs.initial, type: cs.type });
       instanceSlotRemap[cs.getter] = newIdx;
       instanceSlotRemap[cs.setter] = newIdx;
+      // Map original names → unique names for Lua/JS handler string emission
+      instanceNameRemap[cs.getter] = uniqueGetter;
+      instanceNameRemap[cs.setter] = uniqueSetter;
     }
     ctx.slotRemap = Object.assign({}, savedSlotRemap, instanceSlotRemap);
+    ctx.nameRemap = Object.assign({}, savedNameRemap, instanceNameRemap);
     c.pos = comp.bodyPos;
     let result;
     // Check if component returns a map expression (not JSX)
@@ -188,16 +254,7 @@ function parseJSXElement(c) {
     } else {
       result = parseJSXElement(c);
     }
-    // Preserve arrays created during component inlining inside maps
-    // Component arrays created inside a map go to the parent (topArrayDecls)
-    // We need to append them to the map's own mapArrayDecls to keep them
-    if (ctx.currentMap && ctx.arrayDecls.length > savedArrayDeclsLen) {
-      const newArrayDecls = ctx.arrayDecls.slice(savedArrayDeclsLen);
-      const newArrayComments = ctx.arrayComments.slice(savedArrayCommentsLen);
-      // Append new arrays to the map's mapArrayDecls
-      ctx.currentMap.mapArrayDecls.push(...newArrayDecls);
-      ctx.currentMap.mapArrayComments.push(...newArrayComments);
-    }
+    // Arrays are already in the current map's mapArrayDecls (no redirect needed)
     ctx.propStack = savedProps;
     ctx.inlineComponent = savedInline;
     ctx.componentChildren = savedChildren;
@@ -205,6 +262,7 @@ function parseJSXElement(c) {
     ctx.arrayDecls = savedArrayDecls;
     ctx.arrayComments = savedArrayComments;
     ctx.slotRemap = savedSlotRemap;
+    ctx.nameRemap = savedNameRemap;
     c.restore(savedPos);
     return result;
   }
@@ -216,6 +274,35 @@ function parseJSXElement(c) {
   // Parse attributes
   let styleFields = [];
   let nodeFields = []; // direct node fields (font_size, text_color, etc.)
+  // Graph container flag (node-level, not style-level)
+  if (rawTag === 'Graph') nodeFields.push('.graph_container = true');
+  if (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path') nodeFields.push('.canvas_path = true');
+  // ScrollView → overflow: scroll
+  if (tag === 'ScrollView' || rawTag === 'ScrollView') styleFields.push('.overflow = .scroll');
+  // Canvas → graph_container + canvas_type (enables canvas layout mode)
+  if (rawTag === 'Canvas') { nodeFields.push('.graph_container = true'); nodeFields.push('.canvas_type = "canvas"'); }
+  // Canvas.Node → canvas_node with gx/gy/gw/gh parsed from attributes
+  if (rawTag === 'Canvas.Node') nodeFields.push('.canvas_node = true');
+  // Terminal → allocate terminal_id
+  if (rawTag === 'Terminal') {
+    if (!ctx.terminalCount) ctx.terminalCount = 0;
+    nodeFields.push(`.terminal_id = ${ctx.terminalCount}`);
+    ctx.terminalCount++;
+  }
+  // TextInput → allocate input_id
+  if (rawTag === 'TextInput') {
+    if (!ctx.inputCount) ctx.inputCount = 0;
+    nodeFields.push(`.input_id = ${ctx.inputCount}`);
+    ctx.inputCount++;
+  }
+  // Scene3D → scene3d container
+  if (rawTag === 'Scene3D') nodeFields.push('.scene3d = true');
+  // 3D.Mesh
+  if (rawTag === '3D.Mesh') nodeFields.push('.scene3d_mesh = true');
+  // 3D.Camera
+  if (rawTag === '3D.Camera') nodeFields.push('.scene3d_camera = true');
+  // 3D.Light
+  if (rawTag === '3D.Light') nodeFields.push('.scene3d_light = true');
   let handlerRef = null;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
@@ -313,7 +400,7 @@ function parseJSXElement(c) {
                 let rhsIsString = false;
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
                 else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
+                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.currentMap && n === ctx.currentMap.indexParam) ? '@as(i64, @intCast(_i))' : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
                 if (c.kind() === TK.question) {
                   c.advance();
                   const tv = parseTernaryBranch(c, 'color');
@@ -328,8 +415,11 @@ function parseJSXElement(c) {
                   }
                   const resolveC = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : 'Color{}';
                   const colorExpr = `if ${cond} ${resolveC(tv)} else ${resolveC(fv)}`;
-                  if (colorLhs && colorLhs.includes('_oa')) {
-                    // Map field ternary — emit inline (evaluated at rebuild time, not dynStyle)
+                  if (ctx.currentMap) {
+                    // Inside map — emit inline (evaluated at rebuild time per item)
+                    nodeFields.push(`.text_color = ${colorExpr}`);
+                  } else if (colorLhs && colorLhs.includes('_oa')) {
+                    // Map field ternary — emit inline
                     nodeFields.push(`.text_color = ${colorExpr}`);
                   } else {
                     nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
@@ -354,6 +444,184 @@ function parseJSXElement(c) {
             }
             if (c.kind() === TK.rbrace) c.advance();
           }
+        } else if (attr === 'textEffect') {
+          // textEffect="name" → .text_effect = "name"
+          if (c.kind() === TK.string) {
+            nodeFields.push(`.text_effect = "${c.text().slice(1, -1)}"`);
+            c.advance();
+          }
+        } else if (attr === 'name' && rawTag === 'Effect') {
+          // <Effect name="foo"> → .effect_name = "foo"
+          if (c.kind() === TK.string) {
+            nodeFields.push(`.effect_name = "${c.text().slice(1, -1)}"`);
+            c.advance();
+          }
+        } else if (attr === 'onRender') {
+          // <Effect onRender={(e) => { body }}> → capture and transpile to Zig render fn
+          if (c.kind() === TK.lbrace) {
+            c.advance(); // skip outer {
+            // Parse arrow: (e) => { body }
+            let effectParam = 'e';
+            if (c.kind() === TK.lparen) {
+              c.advance();
+              if (c.kind() === TK.identifier) { effectParam = c.text(); c.advance(); }
+              if (c.kind() === TK.rparen) c.advance();
+            }
+            if (c.kind() === TK.arrow) c.advance();
+            // Capture the body source from { to matching }
+            if (c.kind() === TK.lbrace) {
+              const bodyStart = c.starts[c.pos];
+              let depth = 1; c.advance();
+              while (depth > 0 && c.kind() !== TK.eof) {
+                if (c.kind() === TK.lbrace) depth++;
+                if (c.kind() === TK.rbrace) depth--;
+                if (depth > 0) c.advance();
+              }
+              const bodyEnd = c.starts[c.pos];
+              const bodySource = c._byteSlice(bodyStart + 1, bodyEnd).trim();
+              if (c.kind() === TK.rbrace) c.advance(); // skip body }
+              if (c.kind() === TK.rbrace) c.advance(); // skip outer }
+              // Register effect render
+              if (!ctx.effectRenders) ctx.effectRenders = [];
+              const effectId = ctx.effectRenders.length;
+              ctx.effectRenders.push({ id: effectId, param: effectParam, body: bodySource });
+              nodeFields.push(`.effect_render = _effect_render_${effectId}`);
+            } else {
+              skipBraces(c);
+            }
+          }
+        } else if (attr === 'd' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          // Graph.Path/Canvas.Path d="M..." → .canvas_path_d = "M..."
+          if (c.kind() === TK.string) { nodeFields.push(`.canvas_path_d = "${c.text().slice(1, -1)}"`); c.advance(); }
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'fill' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          // Graph.Path/Canvas.Path fill="#hex" → .canvas_fill_color (node field)
+          if (c.kind() === TK.string) {
+            nodeFields.push(`.canvas_fill_color = ${parseColor(c.text().slice(1, -1))}`);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'stroke' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          // Graph.Path/Canvas.Path stroke="#hex" → .text_color (used by paintCanvasPath for stroke)
+          if (c.kind() === TK.string) {
+            nodeFields.push(`.text_color = ${parseColor(c.text().slice(1, -1))}`);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'strokeWidth' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          // Graph.Path/Canvas.Path strokeWidth={N} → .canvas_stroke_width (node field, f32)
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_stroke_width = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_stroke_width = ${c.text()}`); c.advance(); }
+        } else if (attr === 'fillEffect' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          if (c.kind() === TK.string) { nodeFields.push(`.canvas_fill_effect = "${c.text().slice(1, -1)}"`); c.advance(); }
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'viewZoom') {
+          // Canvas/Graph viewZoom={N} → .canvas_view_zoom = N
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_zoom = ${c.text()}`); nodeFields.push('.canvas_view_set = true'); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_zoom = ${c.text()}`); nodeFields.push('.canvas_view_set = true'); c.advance(); }
+        } else if (attr === 'viewX') {
+          // Canvas/Graph viewX={N} → .canvas_view_x = N
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_x = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_x = ${c.text()}`); c.advance(); }
+        } else if (attr === 'viewY') {
+          // Canvas/Graph viewY={N} → .canvas_view_y = N
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_y = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_view_y = ${c.text()}`); c.advance(); }
+        } else if (attr === 'driftX' && rawTag === 'Canvas') {
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_x = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_x = ${c.text()}`); c.advance(); }
+        } else if (attr === 'driftY' && rawTag === 'Canvas') {
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${c.text()}`); c.advance(); }
+        } else if (attr === 'gx' && rawTag === 'Canvas.Node') {
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${c.text()}`); c.advance(); }
+        } else if (attr === 'gy' && rawTag === 'Canvas.Node') {
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${c.text()}`); c.advance(); }
+        } else if (attr === 'gw' && rawTag === 'Canvas.Node') {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gw = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gw = ${c.text()}`); c.advance(); }
+        } else if (attr === 'gh' && rawTag === 'Canvas.Node') {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); }
+        } else if (attr === 'placeholder' && rawTag === 'TextInput') {
+          if (c.kind() === TK.string) { nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`); c.advance(); }
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'position' && (rawTag.startsWith('3D.') || rawTag === 'Scene3D')) {
+          // position={[x, y, z]} → scene3d_pos_x/y/z
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_pos_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_pos_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_pos_z = ${vals[2]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'scale' && rawTag.startsWith('3D.')) {
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_scale_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_scale_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_scale_z = ${vals[2]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'lookAt' && rawTag === '3D.Camera') {
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_look_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_look_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_look_z = ${vals[2]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'fov' && rawTag === '3D.Camera') {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.scene3d_fov = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.scene3d_fov = ${c.text()}`); c.advance(); }
+        } else if (attr === 'color' && rawTag.startsWith('3D.')) {
+          if (c.kind() === TK.string) {
+            const hex = c.text().slice(1, -1).replace('#', '');
+            const r = parseInt(hex.slice(0, 2), 16) / 255;
+            const g = parseInt(hex.slice(2, 4), 16) / 255;
+            const b = parseInt(hex.slice(4, 6), 16) / 255;
+            nodeFields.push(`.scene3d_color_r = ${r.toFixed(3)}`);
+            nodeFields.push(`.scene3d_color_g = ${g.toFixed(3)}`);
+            nodeFields.push(`.scene3d_color_b = ${b.toFixed(3)}`);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'intensity' && rawTag === '3D.Light') {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.scene3d_intensity = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.scene3d_intensity = ${c.text()}`); c.advance(); }
+        } else if (attr === 'shape' && rawTag === '3D.Mesh') {
+          if (c.kind() === TK.string) { nodeFields.push(`.scene3d_geometry = "${c.text().slice(1, -1)}"`); c.advance(); }
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'bold') {
+          // bold attribute (no value) → .bold = true
+          nodeFields.push('.bold = true');
+          // Don't consume — no value after bare attribute
+          continue;
+        } else if (attr === 'd' || attr === 'fill' || attr === 'fillEffect' || attr === 'stroke' || attr === 'strokeWidth' || attr === 'scale') {
+          // Glyph attributes in inline context — handled by parseInlineGlyph, skip here
+          if (c.kind() === TK.string) c.advance();
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+          else if (c.kind() === TK.number) c.advance();
         } else {
           // Skip unknown attributes
           if (c.kind() === TK.string) c.advance();
@@ -389,6 +657,59 @@ function parseJSXElement(c) {
   return buildNode(tag, styleFields, children, handlerRef, nodeFields, tag, tagSrcOffset);
 }
 
+// ── OA inference fallback (Love2D-style robustness) ──
+// If collectState missed an array, re-scan source to find and register it.
+function inferOaFromSource(c, name) {
+  const saved = c.save();
+  c.pos = 0;
+  const setter = 'set' + name[0].toUpperCase() + name.slice(1);
+  while (c.pos < c.count) {
+    if (c.kind() === TK.identifier && c.text() === name) {
+      c.advance();
+      // Scan forward (max 20 tokens) looking for [{
+      let limit = 20;
+      while (limit-- > 0 && c.pos < c.count) {
+        if (c.kind() === TK.lbracket) {
+          c.advance();
+          if (c.kind() === TK.lbrace) {
+            c.advance(); // skip {
+            const fields = [];
+            while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+              if (c.kind() === TK.identifier) {
+                const fname = c.text(); c.advance();
+                if (c.kind() === TK.colon) c.advance();
+                let ftype = 'int';
+                if (c.kind() === TK.string) { ftype = 'string'; c.advance(); }
+                else if (c.kind() === TK.number) {
+                  const nv = c.text();
+                  ftype = nv.startsWith('0x') ? 'int' : (nv.includes('.') ? 'float' : 'int');
+                  c.advance();
+                }
+                else if (c.isIdent('true') || c.isIdent('false')) { ftype = 'boolean'; c.advance(); }
+                fields.push({ name: fname, type: ftype });
+              }
+              if (c.kind() === TK.comma) c.advance();
+              else if (c.kind() !== TK.rbrace) c.advance();
+            }
+            if (fields.length > 0) {
+              const oaIdx = ctx.objectArrays.length;
+              const oa = { fields, getter: name, setter, oaIdx };
+              ctx.objectArrays.push(oa);
+              c.restore(saved);
+              return oa;
+            }
+          }
+          break;
+        }
+        c.advance();
+      }
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return null;
+}
+
 // ── Map parser ──
 
 function tryParseMap(c, oa) {
@@ -417,11 +738,13 @@ function tryParseMap(c, oa) {
   // Reserve slot BEFORE parsing template so nested maps pushed during template
   // get higher indices, keeping this map's index stable.
   const mapIdx = ctx.maps.length;
+  const isInline = !!(savedMapCtx && savedMapCtx.oaIdx !== oa.oaIdx);
   const mapInfo = {
     oaIdx: oa.oaIdx, itemParam, indexParam,
     oa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
     mapArrayDecls: [], mapArrayComments: [],
     parentMap: savedMapCtx,  // track parent map for nested context
+    isInline,  // separate-OA map inside another map's template (love2d: inline loop)
   };
   ctx.maps.push(mapInfo); // reserve slot early
   ctx.currentMap = mapInfo;
@@ -591,6 +914,10 @@ function parseTemplateLiteral(raw) {
           const rhsVal = rhsSlot >= 0 ? slotGet(m[3].trim()) : m[3].trim();
           fmt += '{d}';
           args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
+        } else if (ctx.currentMap && m[1] === ctx.currentMap.indexParam) {
+          // Map index param in arithmetic: ${i + 1}, ${i - 1}, etc.
+          fmt += '{d}';
+          args.push(`@as(i64, @intCast(_i)) ${m[2]} ${m[3].trim()}`);
         } else {
           fmt += expr;
         }
@@ -737,7 +1064,7 @@ function tryParseConditional(c, children) {
         }
         // Register as conditional
         const condIdx = ctx.conditionals.length;
-        ctx.conditionals.push({ condExpr, kind: 'show_hide' });
+        ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
         children.push({ nodeExpr: jsxNode.nodeExpr, condIdx, dynBufId: jsxNode.dynBufId });
         return true;
       }
@@ -892,7 +1219,7 @@ function tryParseTernaryJSX(c, children) {
   if (c.kind() === TK.rbrace) c.advance();
   const condExpr = condParts.join('');
   const condIdx = ctx.conditionals.length;
-  ctx.conditionals.push({ condExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1 });
+  ctx.conditionals.push({ condExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1, inMap: !!ctx.currentMap });
   children.push({ nodeExpr: trueBranch.nodeExpr, ternaryCondIdx: condIdx, ternaryBranch: 'true', dynBufId: trueBranch.dynBufId });
   children.push({ nodeExpr: falseBranch.nodeExpr, ternaryCondIdx: condIdx, ternaryBranch: 'false', dynBufId: falseBranch.dynBufId });
   return true;
@@ -907,6 +1234,9 @@ function tryParseTernaryText(c, children) {
   let foundQuestion = false;
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
     if (c.kind() === TK.question) { foundQuestion = true; c.advance(); break; }
+    // Bail out if we hit parens, JSX, or arrows — this is not a simple ternary text
+    if (c.kind() === TK.lparen || c.kind() === TK.lt || c.kind() === TK.arrow ||
+        c.kind() === TK.lbrace) { c.restore(saved); return false; }
     if (c.kind() === TK.identifier) {
       const name = c.text();
       condParts.push(isGetter(name) ? slotGet(name) : name);
@@ -949,28 +1279,47 @@ function parseChildren(c) {
   const children = [];
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
     if (c.kind() === TK.lt) {
+      // Detect <Glyph .../> inside <Text> — emit as inline glyph marker
+      if (c.kind() === TK.lt && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'Glyph') {
+        const glyph = parseInlineGlyph(c);
+        if (glyph) { children.push(glyph); continue; }
+      }
       children.push(parseJSXElement(c));
     } else if (c.kind() === TK.lbrace) {
       c.advance();
+      if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
+        if (!globalThis.__dbg) globalThis.__dbg = [];
+        globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
+      }
       // Try conditional: {expr && <JSX>} or {expr != val && <JSX>}
       const condResult = tryParseConditional(c, children);
-      if (condResult) continue;
+      if (condResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseConditional`); continue; }
       // Try ternary JSX: {expr ? (<JSX>) : (<JSX>)}
       const ternJSXResult = tryParseTernaryJSX(c, children);
-      if (ternJSXResult) continue;
+      if (ternJSXResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseTernaryJSX`); continue; }
       // Try ternary text: {expr == val ? "str" : "str"}
       const ternTextResult = tryParseTernaryText(c, children);
-      if (ternTextResult) continue;
-      // Map: {items.map((item, i) => (...))}
+      if (ternTextResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseTernaryText`); continue; }
+      // Map: {items.map((item, i) => (...))} — syntactic detection (Love2D style)
       if (c.kind() === TK.identifier) {
         const maybeArr = c.text();
-        const oa = ctx.objectArrays.find(o => o.getter === maybeArr);
-        if (oa && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
-          const mapResult = tryParseMap(c, oa);
-          if (mapResult) {
-            children.push(mapResult);
-            if (c.kind() === TK.rbrace) c.advance();
-            continue;
+        // Detect .map( syntactically FIRST, then find/create OA
+        if (c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+          const savedPeek = c.save();
+          c.advance(); c.advance(); // skip identifier, skip .
+          const isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+          c.restore(savedPeek);
+          if (isMapCall) {
+            let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
+            if (!oa) oa = inferOaFromSource(c, maybeArr);
+            if (oa) {
+              const mapResult = tryParseMap(c, oa);
+              if (mapResult) {
+                children.push(mapResult);
+                if (c.kind() === TK.rbrace) c.advance();
+                continue;
+              }
+            }
           }
         }
         // Nested map: {group.items.map(...)} inside an outer .map()
@@ -1223,6 +1572,39 @@ function offsetToLine(source, offset) {
   return line;
 }
 
+// Parse <Glyph d="..." fill="#color" fillEffect="name" /> inside <Text>
+// Returns a glyph marker child node or null
+function parseInlineGlyph(c) {
+  if (c.kind() !== TK.lt) return null;
+  c.advance(); // skip <
+  if (c.text() !== 'Glyph') return null;
+  c.advance(); // skip Glyph
+  let d = '', fill = '#ffffff', fillEffect = '', stroke = '', strokeWidth = '0', scale = '1.0';
+  while (c.kind() === TK.identifier && c.kind() !== TK.eof) {
+    const aname = c.text(); c.advance();
+    if (c.kind() !== TK.equals) continue;
+    c.advance(); // skip =
+    let aval = '';
+    if (c.kind() === TK.string) { aval = c.text().slice(1, -1); c.advance(); }
+    else if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.identifier || c.kind() === TK.number) { aval = c.text(); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+    else { aval = c.text(); c.advance(); }
+    if (aname === 'd') d = aval;
+    else if (aname === 'fill') fill = aval;
+    else if (aname === 'fillEffect') fillEffect = aval;
+    else if (aname === 'stroke') stroke = aval;
+    else if (aname === 'strokeWidth') strokeWidth = aval;
+    else if (aname === 'scale') scale = aval;
+  }
+  // Skip /> or >
+  if (c.kind() === TK.slash_gt) c.advance();
+  else if (c.kind() === TK.gt) c.advance();
+  const fillColor = fill.startsWith('#') ? parseColor(fill) : 'Color.rgb(255, 255, 255)';
+  const strokeColor = stroke ? (stroke.startsWith('#') ? parseColor(stroke) : 'Color.rgba(0, 0, 0, 0)') : 'Color.rgba(0, 0, 0, 0)';
+  const fillEffectStr = fillEffect ? `, .fill_effect = "${fillEffect}"` : '';
+  const glyphExpr = `.{ .d = "${d}", .fill = ${fillColor}, .stroke = ${strokeColor}, .stroke_width = ${strokeWidth}, .scale = ${scale}${fillEffectStr} }`;
+  return { nodeExpr: '.{ .text = "\\x01" }', isGlyph: true, glyphExpr };
+}
+
 function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
   const parts = [];
   if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
@@ -1245,6 +1627,25 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
       const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
       if (m) { parts.push(`.text = "${m[1]}"`); children = []; }
+    }
+    // Inline glyphs: Text with mixed text + <Glyph> children
+    const hasGlyphs = children.some(ch => ch.isGlyph);
+    if (hasGlyphs && children.length > 0) {
+      // Build combined text with \x01 sentinels at glyph positions
+      let combinedText = '';
+      const glyphExprs = [];
+      for (const ch of children) {
+        if (ch.isGlyph) {
+          combinedText += '\\x01';
+          glyphExprs.push(ch.glyphExpr);
+        } else if (ch.nodeExpr) {
+          const m = ch.nodeExpr.match(/\.text = "(.*)"/);
+          if (m) combinedText += m[1];
+        }
+      }
+      parts.push(`.text = "${combinedText}"`);
+      parts.push(`.inline_glyphs = &[_]layout.InlineGlyph{ ${glyphExprs.join(', ')} }`);
+      children = [];
     }
   }
 
@@ -1274,11 +1675,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (children.length > 0) {
     const arrName = `_arr_${ctx.arrayCounter}`;
     ctx.arrayCounter++;
-    // Transfer parent gap style to map placeholder children
-    const gapField = styleFields.find(f => f.startsWith('.gap'));
+    // Transfer parent layout style fields to map placeholder children
+    const layoutFields = styleFields.filter(f =>
+      f.startsWith('.gap') || f.startsWith('.flex_direction') || f.startsWith('.flex_wrap') ||
+      f.startsWith('.align_items') || f.startsWith('.justify_content'));
     for (let ci = 0; ci < children.length; ci++) {
-      if (children[ci].mapIdx !== undefined && gapField && children[ci].nodeExpr === '.{}') {
-        children[ci].nodeExpr = `.{ .style = .{ ${gapField} } }`;
+      if (children[ci].mapIdx !== undefined && layoutFields.length > 0 && children[ci].nodeExpr === '.{}') {
+        children[ci].nodeExpr = `.{ .style = .{ ${layoutFields.join(', ')} } }`;
       }
     }
     const childExprs = children.map(ch => ch.nodeExpr || ch).join(', ');

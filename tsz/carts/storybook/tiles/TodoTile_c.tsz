@@ -5,30 +5,17 @@ const [t1, setT1] = useState(0);
 const [t2, setT2] = useState(1);
 const [t3, setT3] = useState(0);
 const [t4, setT4] = useState(0);
-
-<script>
-function doneCount() {
-  return t0 + t1 + t2 + t3 + t4;
-}
-
-function clearDone() {
-  setT0(0);
-  setT1(0);
-  setT2(0);
-  setT3(0);
-  setT4(0);
-}
-</script>
+const [hasDone, setHasDone] = useState(1);
 
 function TodoTile() {
   return (
     <C.TileFrame>
       <C.TileRowSpread>
         <C.TileTitle>Todo</C.TileTitle>
-        <C.TileCode>{`${doneCount()}/5 done`}</C.TileCode>
+        <C.TileLabel>5 tasks</C.TileLabel>
       </C.TileRowSpread>
       <C.TileBody>
-        <Pressable onPress={() => { setT0(t0 == 0 ? 1 : 0) }}>
+        <Pressable onPress={() => { setT0(t0 == 0 ? 1 : 0); setHasDone(1) }}>
           <C.TileRow>
             {t0 == 1 && <Box style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: 'theme-success', alignItems: 'center', justifyContent: 'center' }}><Text fontSize={9} color="theme-bg">✓</Text></Box>}
             {t0 == 0 && <Box style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: 'theme-border' }} />}
@@ -36,7 +23,7 @@ function TodoTile() {
             {t0 == 0 && <Text fontSize={10} color="theme-text">Build the compiler</Text>}
           </C.TileRow>
         </Pressable>
-        <Pressable onPress={() => { setT1(t1 == 0 ? 1 : 0) }}>
+        <Pressable onPress={() => { setT1(t1 == 0 ? 1 : 0); setHasDone(1) }}>
           <C.TileRow>
             {t1 == 1 && <Box style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: 'theme-success', alignItems: 'center', justifyContent: 'center' }}><Text fontSize={9} color="theme-bg">✓</Text></Box>}
             {t1 == 0 && <Box style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: 'theme-border' }} />}
@@ -44,7 +31,7 @@ function TodoTile() {
             {t1 == 0 && <Text fontSize={10} color="theme-text">Add layout engine</Text>}
           </C.TileRow>
         </Pressable>
-        <Pressable onPress={() => { setT2(t2 == 0 ? 1 : 0) }}>
+        <Pressable onPress={() => { setT2(t2 == 0 ? 1 : 0); setHasDone(1) }}>
           <C.TileRow>
             {t2 == 1 && <Box style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: 'theme-success', alignItems: 'center', justifyContent: 'center' }}><Text fontSize={9} color="theme-bg">✓</Text></Box>}
             {t2 == 0 && <Box style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: 'theme-border' }} />}
@@ -52,7 +39,7 @@ function TodoTile() {
             {t2 == 0 && <Text fontSize={10} color="theme-text">Wire GPU pipeline</Text>}
           </C.TileRow>
         </Pressable>
-        <Pressable onPress={() => { setT3(t3 == 0 ? 1 : 0) }}>
+        <Pressable onPress={() => { setT3(t3 == 0 ? 1 : 0); setHasDone(1) }}>
           <C.TileRow>
             {t3 == 1 && <Box style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: 'theme-success', alignItems: 'center', justifyContent: 'center' }}><Text fontSize={9} color="theme-bg">✓</Text></Box>}
             {t3 == 0 && <Box style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: 'theme-border' }} />}
@@ -60,7 +47,7 @@ function TodoTile() {
             {t3 == 0 && <Text fontSize={10} color="theme-text">Ship the storybook</Text>}
           </C.TileRow>
         </Pressable>
-        <Pressable onPress={() => { setT4(t4 == 0 ? 1 : 0) }}>
+        <Pressable onPress={() => { setT4(t4 == 0 ? 1 : 0); setHasDone(1) }}>
           <C.TileRow>
             {t4 == 1 && <Box style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: 'theme-success', alignItems: 'center', justifyContent: 'center' }}><Text fontSize={9} color="theme-bg">✓</Text></Box>}
             {t4 == 0 && <Box style={{ width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: 'theme-border' }} />}
@@ -70,7 +57,7 @@ function TodoTile() {
         </Pressable>
         <C.TileDivider />
         <C.TileRow>
-          {doneCount() > 0 && <C.TileButtonDanger onPress={() => { clearDone() }}><C.TileButtonDangerLabel>Clear all</C.TileButtonDangerLabel></C.TileButtonDanger>}
+          {hasDone == 1 && <C.TileButtonDanger onPress={() => { setT0(0); setT1(0); setT2(0); setT3(0); setT4(0); setHasDone(0) }}><C.TileButtonDangerLabel>Clear all</C.TileButtonDangerLabel></C.TileButtonDanger>}
         </C.TileRow>
       </C.TileBody>
     </C.TileFrame>
