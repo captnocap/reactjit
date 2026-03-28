@@ -1,14 +1,11 @@
 // tsz tools — Unified Dev Tooling App
-// Compile: zigos-compiler build carts/tools/Tools.app.tsz
+// Compile: rjit build carts/tools/Tools.app.tsz
 
 import { tools_init } from "./tools.script";
-import { telemetry } from "../inspector/telemetry.script";
-import { elements } from "../inspector/elements.script";
 import { Dashboard } from "./Dashboard_c";
 import { BsodViewer } from "./BsodViewer_c";
-import { Inspector } from "./Inspector_c";
 import { TestRunner } from "./TestRunner_c";
-import { Shell, TitleBar, TitleText, TitleDim, TabRow, Tab, TabActive, TabText, TabTextActive, StatusBar, StatusText, StatusAccent } from './tools_cls';
+import { Shell, TitleBar, TitleText, TitleDim, TabRow, Tab, TabActive, TabText, TabTextActive, StatusBar, StatusText, StatusAccent, Placeholder, PlaceholderText } from './tools_cls';
 
 const [activeTab, setActiveTab] = useState(0);
 const [projectCount, setProjectCount] = useState(4);
@@ -33,12 +30,13 @@ function App() {
 
         {activeTab == 3 && <C.TabActive onPress={() => { setActiveTab(3) }}><C.TabTextActive>Tests</C.TabTextActive></C.TabActive>}
         {activeTab != 3 && <C.Tab onPress={() => { setActiveTab(3) }}><C.TabText>Tests</C.TabText></C.Tab>}
-
       </C.TabRow>
 
       {activeTab == 0 && <Dashboard />}
 
-      {activeTab == 1 && <Inspector />}
+      {activeTab == 1 && <C.Placeholder>
+        <C.PlaceholderText>Inspector requires debug IPC — attach with TSZ_DEBUG=1</C.PlaceholderText>
+      </C.Placeholder>}
 
       {activeTab == 2 && <BsodViewer />}
 

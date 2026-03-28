@@ -76,7 +76,7 @@ case "$cmd" in
 
         # Step 1: forge (smith compiler: .tsz → .zig)
         echo "[$NAME] forge..."
-        ./zig-out/bin/forge build --fast "$CART" 2>&1
+        ./zig-out/bin/forge build --fast --single "$CART" 2>&1
 
         # Step 2: LuaJIT linker (compile .zig → .o, link → binary)
         luajit scripts/link.lua "$GEN" "$NAME"
