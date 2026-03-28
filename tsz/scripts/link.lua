@@ -166,10 +166,26 @@ local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
 -- ── Step 2: Link .o + engine → binary ───────────────────────────────
--- Prefer .so (small binary, shared engine) over .a (fat static binary)
-local use_so = file_exists(ENGINE_SO)
+-- Channel mode (default): launcher.c + dlopen — cart picks engine at runtime
+-- Fallback: direct link against .a (fat static binary)
+local LAUNCHER = TSZ_DIR .. "framework/launcher.c"
+local use_channels = file_exists(LAUNCHER) and file_exists(TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so")
 local link_cmd
-if use_so then
+if use_channels then
+    -- Channel mode: launcher provides main(), cart exports main_cart()
+    -- launcher.c dlopen's the right engine .so based on --engine= flag
+    -- Link against stable.so for symbol resolution; dlopen overrides at runtime
+    link_cmd = table.concat({
+        "zig cc",
+        "-o " .. binary,
+        LAUNCHER,
+        obj,
+        TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so",
+        "-Wl,-rpath,$ORIGIN/../lib",
+        "-ldl -lm -lpthread",
+    }, " ")
+elseif file_exists(ENGINE_SO) then
+    -- Direct .so link (no channel selector)
     link_cmd = table.concat({
         "zig cc",
         "-o " .. binary,
@@ -179,6 +195,7 @@ if use_so then
         "-lm -lpthread -ldl",
     }, " ")
 else
+    -- Static fallback
     link_cmd = table.concat({
         "zig cc",
         "-o " .. binary,

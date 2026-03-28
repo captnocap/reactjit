@@ -84,17 +84,57 @@ case "$cmd" in
         echo "[$NAME] done → zig-out/bin/$NAME"
         ;;
     core)
-        echo "[rjit] Building engine core .a..."
+        echo "[rjit] Building engine..."
         cd "$TSZ_DIR"
-        zig build core -Doptimize=ReleaseFast 2>&1
         CORE_DIR="zig-out/lib"
         mkdir -p "$CORE_DIR"
-        mv "$CORE_DIR/libreactjit-core.a" "$CORE_DIR/libreactjit-core.candidate.a"
-        if [ -f "$CORE_DIR/libreactjit-core.current.a" ]; then
-            mv "$CORE_DIR/libreactjit-core.current.a" "$CORE_DIR/libreactjit-core.lastgood.a"
+
+        # Build .a (static, for full builds)
+        zig build core -Doptimize=ReleaseFast 2>&1
+        mv "$CORE_DIR/libreactjit-core.a" "$CORE_DIR/libreactjit-core.current.a"
+
+        # Build .so (dynamic, for fast builds + channel system)
+        zig build core-so -Doptimize=ReleaseFast 2>&1
+        cp "$CORE_DIR/libreactjit-core.so" "$CORE_DIR/libreactjit-core.bleeding.so"
+
+        # If no stable exists yet, promote bleeding all the way
+        if [ ! -f "$CORE_DIR/libreactjit-core.stable.so" ]; then
+            cp "$CORE_DIR/libreactjit-core.bleeding.so" "$CORE_DIR/libreactjit-core.stable.so"
+            cp "$CORE_DIR/libreactjit-core.bleeding.so" "$CORE_DIR/libreactjit-core.nightly.so"
+            echo "[rjit] First build — all channels set to this version"
         fi
-        mv "$CORE_DIR/libreactjit-core.candidate.a" "$CORE_DIR/libreactjit-core.current.a"
-        echo "[rjit] Engine core ready → $CORE_DIR/libreactjit-core.current.a"
+
+        echo "[rjit] Engine ready → bleeding.so (promote with: rjit promote nightly)"
+        ;;
+    promote)
+        cd "$TSZ_DIR"
+        CORE_DIR="zig-out/lib"
+        TARGET="${1:-}"
+        case "$TARGET" in
+            nightly)
+                if [ ! -f "$CORE_DIR/libreactjit-core.bleeding.so" ]; then
+                    echo "[rjit] No bleeding.so — run 'rjit core' first"
+                    exit 1
+                fi
+                cp "$CORE_DIR/libreactjit-core.bleeding.so" "$CORE_DIR/libreactjit-core.nightly.so"
+                echo "[rjit] bleeding → nightly"
+                ;;
+            stable)
+                if [ ! -f "$CORE_DIR/libreactjit-core.nightly.so" ]; then
+                    echo "[rjit] No nightly.so — promote to nightly first"
+                    exit 1
+                fi
+                if [ -f "$CORE_DIR/libreactjit-core.stable.so" ]; then
+                    cp "$CORE_DIR/libreactjit-core.stable.so" "$CORE_DIR/libreactjit-core.stable.prev.so"
+                fi
+                cp "$CORE_DIR/libreactjit-core.nightly.so" "$CORE_DIR/libreactjit-core.stable.so"
+                echo "[rjit] nightly → stable (prev saved as stable.prev.so)"
+                ;;
+            *)
+                echo "Usage: rjit promote <nightly|stable>"
+                exit 1
+                ;;
+        esac
         ;;
     run)
         CART=""
@@ -128,14 +168,21 @@ rjit — ReactJIT CLI
 
   rjit build <cart.tsz>          build cart (~500ms, LuaJIT linker)
   rjit build --full <cart.tsz>   full rebuild (~20s, zig build system fallback)
-  rjit build --debug <cart.tsz>  debug build (unoptimized)
-  rjit core                      build/rebuild engine .a (once, or after framework changes)
+  rjit core                      build engine (bleeding.so + .a)
+  rjit promote nightly           bleeding → nightly (after conformance passes)
+  rjit promote stable            nightly → stable (after soak period)
   rjit run <cart.tsz>            build + run
   rjit dev <cart.tsz>            hot-reload dev mode (186ms reloads)
 
+Engine channels (carts pick at launch):
+  ./my_app                       loads stable (default)
+  ./my_app --engine=nightly      loads nightly
+  ./my_app --engine=bleeding     loads bleeding
+  RJIT_ENGINE=bleeding ./my_app  env var also works
+
 First time:
-  rjit core            # one-time ~24s engine build
-  rjit build cart.tsz  # ~500ms from here on (forge + luajit link)
+  rjit core            # builds engine (~24s), sets all channels
+  rjit build cart.tsz  # ~500ms from here on
 HELP
         ;;
     *)
