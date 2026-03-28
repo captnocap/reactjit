@@ -152,6 +152,46 @@ The supervisor's hypothesis: TCP in Zig, HTTP/JSON in QuickJS.
 
 5. **The "UI blowing up" test is still needed.** These benchmarks run in isolation. Under UI rendering load (60fps paint loop, layout recalc, GPU uploads), GC pauses from QuickJS/LuaJIT will show up as frame drops. That test requires the framework runtime, not this standalone experiment.
 
+---
+
+## Part 4: Data Path Optimization — Direct vs Double-Parse
+
+The love2d stack currently does: raw bytes → LuaJIT `json.decode` → Lua table → `json.encode` → JS string → `JSON.parse`. That's a double parse. The optimized path: raw bytes → `JS_NewStringLen` → `JSON.parse`. One copy, one parse.
+
+### Path descriptions
+
+| Path | What it does |
+|------|-------------|
+| A: double parse | `JSON.parse` → `JSON.stringify` → `JSON.parse` (simulates love2d encode/decode round-trip) |
+| B: direct parse | Raw bytes → `JSON.parse` (optimal path) |
+| C: parse + extract | `JSON.parse` → access fields → return result object |
+| D: full round-trip | `JSON.parse` → extract → `JSON.stringify` result → `JS_ToCString` back to C |
+| E: string copy only | `JS_NewStringLen` only — measures pure bridge-in memcpy cost |
+
+### Results
+
+| Payload | A: double parse | B: direct | C: extract | D: round-trip | E: copy only |
+|---------|----------------|-----------|------------|---------------|-------------|
+| 364B    | 19.0 μs        | 3.9 μs    | 4.2 μs     | 5.3 μs        | 0.02 μs     |
+| 10.7KB  | 355.6 μs       | 99.6 μs   | 107.7 μs   | 127.1 μs      | 0.4 μs      |
+| 825KB   | 12,896 μs      | 6,070 μs  | 4,867 μs   | 3,924 μs      | 24.5 μs     |
+
+### Analysis
+
+**Direct parse is 2-5× faster than double parse.** The love2d path wastes a full stringify+parse cycle. For small API responses (<1KB), that's 15μs of pure waste. For 10KB responses, it's 256μs. Free speedup by just passing raw bytes.
+
+**Bridge-in cost is noise.** `JS_NewStringLen` (the memcpy into JS heap) costs 0.02-24μs depending on size. Even for 825KB, it's 24μs out of a 6000μs parse — 0.4% of the total. The bridge-in is not the bottleneck. The parse is.
+
+**Field extraction is nearly free.** Path C (parse + extract) adds only 8% over Path B (parse only). Once `JSON.parse` has built the JS object tree, accessing `obj.user.name` and iterating `obj.items` is pointer chasing — microseconds.
+
+**For the tsz networking stack:** LuaJIT worker thread fetches bytes off the wire. Passes raw response string across the thread boundary (one memcpy). QuickJS main thread calls `JSON.parse(raw)`. React component gets the JS object. No intermediate Lua table, no encode/decode, no bridge tax on the parsed result. Data enters through LuaJIT, lands in QuickJS, stays there.
+
+### Comparison to 52M ops/sec QuickJS ceiling
+
+At 3.9μs per small JSON parse, that's ~256K parses/sec. The 52M ops/sec ceiling is for simple operations (arithmetic, property access). JSON parsing is ~200× heavier per op, which tracks — `JSON.parse` allocates objects, hashes property names, converts numbers. For networking, the parse rate matters more than raw ops/sec, and 256K small parses/sec is more than enough for any UI-driven HTTP client.
+
+---
+
 ### What's NOT answered yet
 
 - **Concurrent connections at scale** — single-threaded test can't measure GC pause impact under 1000+ connections
