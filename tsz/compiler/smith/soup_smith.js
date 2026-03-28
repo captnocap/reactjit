@@ -485,12 +485,14 @@ function soupHandleMap(expr, warns, inPressable) {
   var itemRe = new RegExp('\\{\\s*' + itemParam + '\\.(\\w+)\\s*\\}', 'g');
   jsxBody = jsxBody.replace(itemRe, '[$1]');
 
-  // Drop remaining complex expressions referencing the item param
-  var complexRe = new RegExp('\\{[^}]*' + itemParam + '[^}]*\\}', 'g');
-  jsxBody = jsxBody.replace(complexRe, '');
+  // Complex expressions like {item.field.includes(...)} are left for the
+  // tokenizer to handle via soupBalanced (which tracks nesting correctly).
+  // Do NOT use [^}]* regex here — it can't handle nested braces.
 
-  // Drop key={...} attributes
-  jsxBody = jsxBody.replace(/\s+key=\{[^}]*\}/g, '');
+  // Drop key={...} attributes (simple non-nested values only)
+  // soupBalanced in the tag parser handles nested key values correctly,
+  // so we only strip trivial key=... here for cleanliness.
+  jsxBody = jsxBody.replace(/\s+key=\{[^{}]*\}/g, '');
 
   // Parse the cleaned template through normal soup pipeline
   var tokens = soupTokenize(jsxBody.trim());
@@ -499,6 +501,9 @@ function soupHandleMap(expr, warns, inPressable) {
     warns.push('[W] .map() template parse failed for "' + arrayName + '" — skipped');
     return { str: '', dynBufId: -1 };
   }
+
+  // Extract inline handlers from the map template tree
+  soupExtractInlineHandlers(tree, warns);
 
   // Render the static template
   var result = soupToZig(tree, warns, inPressable);
