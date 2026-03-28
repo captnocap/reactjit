@@ -62,20 +62,25 @@ function preflight(ctx) {
   // F4: Color{} emitted without dynStyle/dynColor runtime fix
   // Scan arrayDecls + map arrayDecls for Color{} that have no corresponding dynStyle/dynColor
   var colorPlaceholderCount = 0;
+  var colorLocations = [];  // source locations for Color{} occurrences
   var allDecls = ctx.arrayDecls.slice();
+  var allComments = (ctx.arrayComments || []).slice();
   for (var mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].mapArrayDecls) {
       allDecls = allDecls.concat(ctx.maps[mi].mapArrayDecls);
+      allComments = allComments.concat(ctx.maps[mi].mapArrayComments || []);
     }
   }
   for (var di = 0; di < allDecls.length; di++) {
     var decl = allDecls[di];
+    var comment = allComments[di] || '';
     // Count Color{} occurrences in this decl
     var idx = 0;
     while (true) {
       var pos = decl.indexOf('Color{}', idx);
       if (pos < 0) break;
       colorPlaceholderCount++;
+      if (comment) colorLocations.push(comment.replace(/^\/\/\s*/, ''));
       idx = pos + 7;
     }
   }
@@ -91,10 +96,11 @@ function preflight(ctx) {
   for (var ci = 0; ci < ctx.components.length; ci++) {
     if (ctx.components[ci].propNames && ctx.components[ci].propNames.length > 0) { hasComponentsWithProps = true; break; }
   }
+  var colorLocStr = colorLocations.length > 0 ? ' at: ' + colorLocations.slice(0, 3).join(', ') : '';
   if (orphanColors > 0 && !hasComponentsWithProps) {
-    errors.push('F4: ' + orphanColors + ' Color{} placeholder(s) with no dynStyle/dynColor runtime fix');
+    errors.push('F4: ' + orphanColors + ' Color{} placeholder(s) with no dynStyle/dynColor runtime fix' + colorLocStr);
   } else if (orphanColors > 0 && hasComponentsWithProps) {
-    warnings.push('W1: ' + orphanColors + ' Color{} placeholder(s) — may be resolved by component prop inlining');
+    warnings.push('W1: ' + orphanColors + ' Color{} placeholder(s) — may be resolved by component prop inlining' + colorLocStr);
   }
 
   // F8: Map over non-OA identifier
