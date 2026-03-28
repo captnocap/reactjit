@@ -18,31 +18,10 @@ function isSoupSource(source, file) {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-var _STAG = {
-  div:'box', section:'box', article:'box', main:'box',
-  header:'box', footer:'box', nav:'box', aside:'box',
-  ul:'box', ol:'box', li:'box', form:'box', span:'box',
-  p:'text', h1:'text', h2:'text', h3:'text', h4:'text', h5:'text', h6:'text',
-  label:'text', strong:'text', em:'text', small:'text', code:'text',
-  button:'pressable',
-  input:'stub', canvas:'stub', img:'stub', select:'stub', textarea:'stub',
-  br:'void', hr:'void',
-};
-var _SFONT = { h1:28, h2:22, h3:18, h4:16, h5:14, h6:12, p:14 };
-
-// Default dark theme colors for soup output
-var _SC = {
-  rootBg:   '15, 23, 42',    // slate-900
-  cardBg:   '30, 41, 59',    // slate-800
-  textH:    '248, 250, 252',  // slate-50
-  textP:    '226, 232, 240',  // slate-200
-  textDim:  '148, 163, 184',  // slate-400
-  textWhite:'255, 255, 255',
-  btnBlue:  '59, 130, 246',   // blue-500
-  btnRed:   '220, 38, 38',    // red-600
-  btnGray:  '51, 65, 85',     // slate-700
-  stubBg:   '71, 85, 105',    // slate-600
-};
+// Tables defined in rules.js: soupTags, soupFonts, soupColors
+var _STAG = soupTags;
+var _SFONT = soupFonts;
+var _SC = soupColors;
 
 var _sShCtr = 0;
 var _sInlineHandlers = [];
@@ -370,7 +349,7 @@ function soupToZig(node, warns, inPressable) {
 
     var btnStyle = '.style = .{ .padding = 10, .background_color = Color.rgb(' + btnColor + '), .border_radius = 6 }';
     parts.push(btnStyle);
-    if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '" }');
+    if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
 
     if (childResults.length > 0) {
       var aname = '_arr_' + ctx.arrayCounter++;
@@ -406,7 +385,7 @@ function soupToZig(node, warns, inPressable) {
   }
 
   if (styleFields.length > 0) parts.push('.style = .{ ' + styleFields.join(', ') + ' }');
-  if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '" }');
+  if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
 
   if (childResults.length > 0) {
     var aname = '_arr_' + ctx.arrayCounter++;
