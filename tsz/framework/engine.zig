@@ -973,6 +973,19 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
     }
 
+    // Border without background — draw border-only rect with transparent fill
+    if (node.style.background_color == null and (node.style.brdTop() > 0 or node.style.border_width > 0)) {
+        if (node.style.border_color) |bc| {
+            gpu.drawRect(
+                r.x, r.y, r.w, r.h,
+                0, 0, 0, 0,
+                node.style.border_radius, node.style.brdTop(),
+                @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+            );
+        }
+    }
+
     // Video frame — draw after background, before text
     if (node.video_src) |src| {
         _ = videos.paintVideo(src, r.x, r.y, r.w, r.h, g_paint_opacity);
