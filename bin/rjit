@@ -2,12 +2,11 @@
 # rjit — ReactJIT CLI
 #
 # Usage:
-#   rjit build <cart.tsz>          # full build (~20s)
-#   rjit build --fast <cart.tsz>   # fast build against cached engine (~500ms)
+#   rjit build <cart.tsz>          # fast build (~500ms, LuaJIT linker)
+#   rjit build --full <cart.tsz>   # full build (~20s, zig build system)
 #   rjit build --debug <cart.tsz>  # debug build (unoptimized)
 #   rjit core                      # build/rebuild the cached engine .a
 #   rjit run <cart.tsz>            # build + run
-#   rjit run --fast <cart.tsz>     # fast build + run
 #   rjit dev <cart.tsz>            # hot-reload dev mode
 
 set -euo pipefail
@@ -16,33 +15,73 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/tsz/scripts"
 TSZ_DIR="$REPO_ROOT/tsz"
 
+# Resolve a .tsz path to absolute
+resolve_tsz() {
+    local p="$1"
+    if [[ -f "$p" ]]; then
+        realpath "$p"
+    elif [[ -f "$REPO_ROOT/$p" ]]; then
+        realpath "$REPO_ROOT/$p"
+    else
+        echo "$p"
+    fi
+}
+
 cmd="${1:-}"
 shift || true
 
 case "$cmd" in
     build)
-        # Always fast by default. --full overrides for framework-touching work.
         FULL=0
-        ARGS=(--fast)
+        CART=""
+        DEBUG=0
         for arg in "$@"; do
-            if [[ "$arg" == "--full" ]]; then
-                FULL=1
-            elif [[ "$arg" == *.tsz ]]; then
-                if [[ -f "$arg" ]]; then
-                    ARGS+=("$(realpath "$arg")")
-                elif [[ -f "$REPO_ROOT/$arg" ]]; then
-                    ARGS+=("$(realpath "$REPO_ROOT/$arg")")
-                else
-                    ARGS+=("$arg")
-                fi
-            else
-                ARGS+=("$arg")
-            fi
+            case "$arg" in
+                --full) FULL=1 ;;
+                --debug) DEBUG=1 ;;
+                *.tsz) CART="$(resolve_tsz "$arg")" ;;
+            esac
         done
-        if [[ "$FULL" -eq 1 ]]; then
-            ARGS=("${ARGS[@]/--fast}")
+
+        if [[ -z "$CART" ]]; then
+            echo "Usage: rjit build <cart.tsz> [--full] [--debug]"
+            exit 1
         fi
-        exec "$SCRIPTS/build" "${ARGS[@]}"
+
+        NAME=$(basename "$CART" .tsz)
+        GEN="generated_${NAME}.zig"
+
+        if [[ "$FULL" -eq 1 ]]; then
+            # Full build — goes through zig build system
+            exec "$SCRIPTS/build" "$CART" $([ "$DEBUG" -eq 1 ] && echo "--debug")
+        fi
+
+        # ── Fast path: forge + LuaJIT linker ──────────────────────────
+        cd "$TSZ_DIR"
+
+        # Ensure engine .a exists
+        if [[ ! -f "zig-out/lib/libreactjit-core.current.a" ]]; then
+            echo "[rjit] Engine .a not found — building (one-time, ~24s)..."
+            zig build core -Doptimize=ReleaseFast 2>&1
+            mkdir -p zig-out/lib
+            mv zig-out/lib/libreactjit-core.a zig-out/lib/libreactjit-core.current.a
+            echo "[rjit] Engine .a ready"
+        fi
+
+        # Ensure forge is built
+        if [[ ! -f "zig-out/bin/forge" ]]; then
+            echo "[rjit] Building forge..."
+            zig build forge 2>&1
+        fi
+
+        # Step 1: forge (smith compiler: .tsz → .zig)
+        echo "[$NAME] forge..."
+        ./zig-out/bin/forge build --fast "$CART" 2>&1
+
+        # Step 2: LuaJIT linker (compile .zig → .o, link → binary)
+        luajit scripts/link.lua "$GEN" "$NAME"
+
+        echo "[$NAME] done → zig-out/bin/$NAME"
         ;;
     core)
         echo "[rjit] Building engine core .a..."
@@ -58,30 +97,20 @@ case "$cmd" in
         echo "[rjit] Engine core ready → $CORE_DIR/libreactjit-core.current.a"
         ;;
     run)
-        # Parse flags to find the cart path
-        FAST_FLAG=""
         CART=""
         for arg in "$@"; do
             case "$arg" in
-                --fast) FAST_FLAG="--fast" ;;
-                --debug) ;;
-                *.tsz)
-                    if [[ -f "$arg" ]]; then
-                        CART="$(realpath "$arg")"
-                    elif [[ -f "$REPO_ROOT/$arg" ]]; then
-                        CART="$(realpath "$REPO_ROOT/$arg")"
-                    else
-                        CART="$arg"
-                    fi
-                    ;;
+                --*) ;;
+                *.tsz) CART="$(resolve_tsz "$arg")" ;;
             esac
         done
         if [ -z "$CART" ]; then
-            echo "Usage: rjit run [--fast] <cart.tsz>"
+            echo "Usage: rjit run <cart.tsz>"
             exit 1
         fi
         NAME=$(basename "$CART" .tsz)
-        "$SCRIPTS/build" --fast "$CART"
+        # Build via rjit build (fast path)
+        "$0" build "$CART"
         exec "$TSZ_DIR/zig-out/bin/$NAME"
         ;;
     dev)
@@ -97,16 +126,16 @@ case "$cmd" in
         cat <<'HELP'
 rjit — ReactJIT CLI
 
-  rjit build <cart.tsz>          build cart (~500ms, uses cached engine)
+  rjit build <cart.tsz>          build cart (~500ms, LuaJIT linker)
+  rjit build --full <cart.tsz>   full rebuild (~20s, zig build system fallback)
   rjit build --debug <cart.tsz>  debug build (unoptimized)
-  rjit build --full <cart.tsz>   full rebuild (links everything, ~20s fallback)
-  rjit core                      build/rebuild the cached engine .a (run once, or after framework changes)
+  rjit core                      build/rebuild engine .a (once, or after framework changes)
   rjit run <cart.tsz>            build + run
   rjit dev <cart.tsz>            hot-reload dev mode (186ms reloads)
 
-First time setup:
-  rjit core          # one-time ~24s engine build
-  rjit build cart.tsz  # ~500ms from here on
+First time:
+  rjit core            # one-time ~24s engine build
+  rjit build cart.tsz  # ~500ms from here on (forge + luajit link)
 HELP
         ;;
     *)

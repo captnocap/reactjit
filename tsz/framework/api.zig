@@ -319,22 +319,22 @@ pub const Node = struct {
 
 // ── State extern functions (resolved from engine .so at link time) ──
 pub const state = struct {
-    pub extern "reactjit-core" fn rjit_state_create_slot(initial: i64) usize;
-    pub extern "reactjit-core" fn rjit_state_create_slot_float(initial: f64) usize;
-    pub extern "reactjit-core" fn rjit_state_create_slot_bool(initial: bool) usize;
-    pub extern "reactjit-core" fn rjit_state_create_slot_string(ptr: [*]const u8, len: usize) usize;
-    pub extern "reactjit-core" fn rjit_state_get_slot(id: usize) i64;
-    pub extern "reactjit-core" fn rjit_state_set_slot(id: usize, val: i64) void;
-    pub extern "reactjit-core" fn rjit_state_get_slot_float(id: usize) f64;
-    pub extern "reactjit-core" fn rjit_state_set_slot_float(id: usize, val: f64) void;
-    pub extern "reactjit-core" fn rjit_state_get_slot_bool(id: usize) bool;
-    pub extern "reactjit-core" fn rjit_state_set_slot_bool(id: usize, val: bool) void;
-    pub extern "reactjit-core" fn rjit_state_get_slot_string_ptr(id: usize) [*]const u8;
-    pub extern "reactjit-core" fn rjit_state_get_slot_string_len(id: usize) usize;
-    pub extern "reactjit-core" fn rjit_state_set_slot_string(id: usize, ptr: [*]const u8, len: usize) void;
-    pub extern "reactjit-core" fn rjit_state_mark_dirty() void;
-    pub extern "reactjit-core" fn rjit_state_is_dirty() bool;
-    pub extern "reactjit-core" fn rjit_state_clear_dirty() void;
+    pub extern fn rjit_state_create_slot(initial: i64) usize;
+    pub extern fn rjit_state_create_slot_float(initial: f64) usize;
+    pub extern fn rjit_state_create_slot_bool(initial: bool) usize;
+    pub extern fn rjit_state_create_slot_string(ptr: [*]const u8, len: usize) usize;
+    pub extern fn rjit_state_get_slot(id: usize) i64;
+    pub extern fn rjit_state_set_slot(id: usize, val: i64) void;
+    pub extern fn rjit_state_get_slot_float(id: usize) f64;
+    pub extern fn rjit_state_set_slot_float(id: usize, val: f64) void;
+    pub extern fn rjit_state_get_slot_bool(id: usize) bool;
+    pub extern fn rjit_state_set_slot_bool(id: usize, val: bool) void;
+    pub extern fn rjit_state_get_slot_string_ptr(id: usize) [*]const u8;
+    pub extern fn rjit_state_get_slot_string_len(id: usize) usize;
+    pub extern fn rjit_state_set_slot_string(id: usize, ptr: [*]const u8, len: usize) void;
+    pub extern fn rjit_state_mark_dirty() void;
+    pub extern fn rjit_state_is_dirty() bool;
+    pub extern fn rjit_state_clear_dirty() void;
 
     // Convenience wrappers matching the current API
     pub fn createSlot(initial: i64) usize { return rjit_state_create_slot(initial); }
@@ -368,7 +368,7 @@ pub const EngineConfig = extern struct {
     tick: ?*const fn (u32) void,
 };
 
-pub extern "reactjit-core" fn rjit_engine_run(config: *const EngineConfig) c_int;
+pub extern fn rjit_engine_run(config: *const EngineConfig) c_int;
 
 pub const engine = struct {
     pub fn run(opts: anytype) !void {
@@ -389,11 +389,11 @@ pub const engine = struct {
 
 // ── QJS Runtime extern ──────────────────────────────────────────────
 pub const qjs_runtime = struct {
-    pub extern "reactjit-core" fn rjit_qjs_register_host_fn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void;
-    pub extern "reactjit-core" fn rjit_qjs_call_global(name: [*:0]const u8) void;
-    pub extern "reactjit-core" fn rjit_qjs_call_global_str(name: [*:0]const u8, arg: [*:0]const u8) void;
-    pub extern "reactjit-core" fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void;
-    pub extern "reactjit-core" fn rjit_qjs_eval_expr(expr: [*:0]const u8) void;
+    pub extern fn rjit_qjs_register_host_fn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void;
+    pub extern fn rjit_qjs_call_global(name: [*:0]const u8) void;
+    pub extern fn rjit_qjs_call_global_str(name: [*:0]const u8, arg: [*:0]const u8) void;
+    pub extern fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void;
+    pub extern fn rjit_qjs_eval_expr(expr: [*:0]const u8) void;
 
     pub fn registerHostFn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void {
         rjit_qjs_register_host_fn(name, fn_ptr, argc);
