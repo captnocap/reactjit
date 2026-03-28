@@ -16,11 +16,15 @@ const smith = @import("smith_bridge.zig");
 
 // Smith JS source — embedded at compile time, concatenated in load order
 const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
+    @embedFile("smith/logs.js") ++ "\n" ++
     @embedFile("smith/index.js") ++ "\n" ++
     @embedFile("smith/attrs.js") ++ "\n" ++
+    @embedFile("smith/parse_ext.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++
     @embedFile("smith/preflight.js") ++ "\n" ++
-    @embedFile("smith/emit.js");
+    @embedFile("smith/emit_ext.js") ++ "\n" ++
+    @embedFile("smith/emit.js") ++ "\n" ++
+    @embedFile("smith/soup_smith.js");
 
 const MAX_IMPORTS = 64;
 const Alloc = std.heap.page_allocator;
@@ -214,9 +218,12 @@ pub fn main() !void {
     // Parse optional flags before the file path
     var fast_build = false;
     var mod_build = false;
+    var mod_target: []const u8 = "zig"; // zig, lua, js
     var split_output = false;
     var single_output = false;
     var strict_mode = false;
+    var logs_enabled = false;
+    var logs_find: ?[]const u8 = null;
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
@@ -224,12 +231,18 @@ pub fn main() !void {
             fast_build = true;
         } else if (std.mem.eql(u8, arg, "--mod")) {
             mod_build = true;
+        } else if (std.mem.startsWith(u8, arg, "--target=")) {
+            mod_target = arg["--target=".len..];
         } else if (std.mem.eql(u8, arg, "--split")) {
             split_output = true;
         } else if (std.mem.eql(u8, arg, "--single")) {
             single_output = true;
         } else if (std.mem.eql(u8, arg, "--strict")) {
             strict_mode = true;
+        } else if (std.mem.eql(u8, arg, "--logs")) {
+            logs_enabled = true;
+        } else if (std.mem.startsWith(u8, arg, "--logs=find:")) {
+            logs_find = arg["--logs=find:".len..];
         } else {
             input_path = arg;
             got_path = true;
@@ -278,10 +291,13 @@ pub fn main() !void {
     if (cls_buf.items.len > 0) smith.setGlobalString("__clsContent", cls_buf.items);
     smith.setGlobalInt("__fastBuild", if (fast_build) 1 else 0);
     smith.setGlobalInt("__modBuild", if (mod_build) 1 else 0);
+    if (mod_build) smith.setGlobalString("__modTarget", mod_target);
     // Split output is default unless --single is passed
     if (!single_output and !mod_build) smith.setGlobalInt("__splitOutput", 1);
     if (split_output) smith.setGlobalInt("__splitOutput", 1);
     if (strict_mode) smith.setGlobalInt("__strict", 1);
+    if (logs_enabled) smith.setGlobalInt("__SMITH_LOGS", 1);
+    if (logs_find) |query| smith.setGlobalString("__SMITH_LOGS_FIND", query);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = Alloc.alloc(u8, lexer.count) catch return;
@@ -393,7 +409,8 @@ pub fn main() !void {
         }
         const final_output = std.mem.replaceOwned(u8, Alloc, zig_output, "BODYHASH", &hash_hex) catch zig_output;
 
-        const out_path = std.fmt.allocPrint(Alloc, "generated_{s}.zig", .{stem}) catch return;
+        const ext = if (mod_build and std.mem.eql(u8, mod_target, "lua")) ".lua" else if (mod_build and std.mem.eql(u8, mod_target, "js")) ".js" else ".zig";
+        const out_path = std.fmt.allocPrint(Alloc, "generated_{s}{s}", .{ stem, ext }) catch return;
         const out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("[forge] Cannot write '{s}': {}\n", .{ out_path, err });
             return;

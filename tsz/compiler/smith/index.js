@@ -575,8 +575,16 @@ function compile() {
   // Debug mode disabled — enable manually when debugging component inlining
   // if (file.includes('Tools.app')) globalThis.__SMITH_DEBUG_INLINE = 1;
 
-  // Module mode: transpile TS → Zig (no JSX, no app scaffolding)
+  // Soup lane: web React soup sources (s##a tier) — completely separate path
+  if (isSoupSource(source, file)) {
+    return compileSoup(source, file);
+  }
+
+  // Module mode: transpile TS → target lang (no JSX, no app scaffolding)
   if (globalThis.__modBuild === 1) {
+    const target = globalThis.__modTarget || 'zig';
+    if (target === 'lua') return compileModLua(source, file);
+    if (target === 'js') return compileModJS(source, file);
     return stampIntegrity(compileMod(source, file));
   }
 
@@ -617,8 +625,15 @@ function compile() {
     for (let di = 0; di < globalThis.__dbg.length; di++) ctx._debugLines.push(globalThis.__dbg[di]);
   }
 
+  // Log parse results
+  LOG_EMIT('L002', { count: ctx.components.length, maps: ctx.maps.length });
+
   // Preflight validation — catch Class A + B bugs before wasting Zig build time
   const pf = preflight(ctx);
+  LOG_EMIT('L092', { lane: pf.lane, summary: Object.keys(pf.intents).filter(function(k) { return pf.intents[k]; }).join(',') });
+  for (let i = 0; i < pf.warnings.length; i++) LOG_EMIT('L091', { id: 'WARN', msg: pf.warnings[i] });
+  for (let i = 0; i < pf.errors.length; i++) LOG_EMIT('L090', { id: 'FATAL', msg: pf.errors[i] });
+  // Legacy debug output (active when --logs or __SMITH_DEBUG set directly)
   if (globalThis.__SMITH_DEBUG) {
     for (let i = 0; i < pf.warnings.length; i++) print('[preflight] WARN: ' + pf.warnings[i]);
     for (let i = 0; i < pf.errors.length; i++) print('[preflight] FATAL: ' + pf.errors[i]);
@@ -632,6 +647,8 @@ function compile() {
   ctx._preflight = pf;
 
   var zigOut = emitOutput(root.nodeExpr, file);
+  LOG_EMIT('L003', { bytes: zigOut.length });
+  LOG_EMIT('L004', { file: file });
   // Split mode returns its own encoding (no integrity stamp needed)
   if (typeof zigOut === 'string' && zigOut.indexOf('__SPLIT_OUTPUT__') === 0)
     return zigOut;
@@ -658,6 +675,19 @@ function compileMod(source, file) {
     // Comments: // stays as //
     if (trimmed.startsWith('//')) { out += line + '\n'; continue; }
 
+    // import X from @c("h1.h", "h2.h") → const X = @cImport({ @cInclude("h1.h"); ... })
+    const cImportMatch = trimmed.match(/^import\s+(\w+)\s+from\s+@c\(([^)]+)\);?$/);
+    if (cImportMatch) {
+      const varName = cImportMatch[1];
+      const headers = cImportMatch[2].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+      out += 'const ' + varName + ' = @cImport({\n';
+      for (const h of headers) {
+        out += '    @cInclude("' + h + '");\n';
+      }
+      out += '});\n';
+      continue;
+    }
+
     // import X from "Y" → const X = @import("Y")
     const importMatch = trimmed.match(/^import\s+(\w+)\s+from\s+["']([^"']+)["'];?$/);
     if (importMatch) {
@@ -673,6 +703,17 @@ function compileMod(source, file) {
       for (const name of names) {
         out += 'const ' + name + ' = @import("' + namedImport[2] + '").' + name + ';\n';
       }
+      continue;
+    }
+
+    // extern("c") function name(args): RetType → fn name(args) callconv(.c) RetType
+    const externFn = trimmed.match(/^(?:(export)\s+)?extern\("(\w+)"\)\s+function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*(.+?))?\s*\{$/);
+    if (externFn) {
+      const [, exp, cc, name, params, ret] = externFn;
+      const zigParams = transpileParams(params);
+      const zigRet = ret ? transpileType(ret) : 'void';
+      const pub = exp ? 'pub ' : '';
+      out += pub + 'fn ' + name + '(' + zigParams + ') callconv(.' + cc + ') ' + zigRet + ' {\n';
       continue;
     }
 
@@ -696,15 +737,24 @@ function compileMod(source, file) {
       continue;
     }
 
+    // const X = enum/struct/union { → passthrough (Zig type definitions)
+    if (/^(const|pub const)\s+\w+\s*=\s*(enum|struct|union)\s*\{/.test(trimmed)) {
+      out += line + '\n';
+      continue;
+    }
+
+    // export let x: Type = expr → pub var x: Type = expr
+    // export const x: Type = expr → pub const x: Type = expr
     // const x: Type = expr → const x: Type = expr
     // let x: Type = expr → var x: Type = expr
-    const varMatch = trimmed.match(/^(const|let|var)\s+(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+);?$/);
-    if (varMatch) {
-      const [, kind, name, type, expr] = varMatch;
-      const zigKind = kind === 'let' ? 'var' : kind;
+    const varMatch = trimmed.match(/^(export\s+)?(const|let|var)\s+(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+);?$/);
+    if (varMatch && !varMatch[5].trimEnd().replace(/;$/, '').endsWith('{')) {
+      const [, exp, kind, name, type, expr] = varMatch;
+      const pub = exp ? 'pub ' : '';
+      const zigKind = (kind === 'let' || kind === 'var') ? 'var' : 'const';
       const typeAnnot = type ? ': ' + transpileType(type.trim()) : '';
       const indent = line.match(/^(\s*)/)[1];
-      out += indent + zigKind + ' ' + name + typeAnnot + ' = ' + transpileExpr(expr.replace(/;$/, '')) + ';\n';
+      out += indent + pub + zigKind + ' ' + name + typeAnnot + ' = ' + transpileExpr(expr.replace(/;$/, '')) + ';\n';
       continue;
     }
 
@@ -758,12 +808,156 @@ function transpileParams(params) {
   }).join(', ');
 }
 
-// Transpile expressions (minimal — expand as needed)
+// Transpile expressions (ported from love2d tsl.mjs patterns)
 function transpileExpr(expr) {
   let e = expr.trim();
-  // null → null (same)
-  // true/false → true/false (same)
-  // String literals: "x" → "x" (same)
-  // Template literals: `${x}` → std.fmt (not handled yet, passthrough)
+  // null/undefined → null
+  e = e.replace(/\bundefined\b/g, 'null');
+  // !== and != → != (Zig uses !=, same)
+  // === and == → == (Zig uses ==, same)
+  e = e.replace(/===/g, '==');
+  e = e.replace(/!==/g, '!=');
+  // || → or (Zig uses 'or' for optional/boolean)
+  e = e.replace(/\|\|/g, ' or ');
+  // && → and
+  e = e.replace(/&&/g, ' and ');
+  // !expr → !expr (same in Zig)
+  // x ?? y → x orelse y
+  e = e.replace(/\?\?/g, ' orelse ');
   return e;
+}
+
+// ── Module compilation: .mod.tsz → .lua ──────────────────────────────
+// Transpiles TypeScript-like imperative code to Lua.
+function compileModLua(source, file) {
+  const basename = file.split('/').pop();
+  let out = '-- Generated by Smith (mod mode, target=lua) — do not edit\n-- Source: ' + basename + '\n\n';
+
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = line.match(/^(\s*)/)[1];
+
+    if (trimmed === '') { out += '\n'; continue; }
+    if (trimmed.startsWith('//')) { out += indent + '--' + trimmed.slice(2) + '\n'; continue; }
+
+    // import X from "Y" → local X = require("Y")
+    const importMatch = trimmed.match(/^import\s+(\w+)\s+from\s+["']([^"']+)["'];?$/);
+    if (importMatch) {
+      out += indent + 'local ' + importMatch[1] + ' = require("' + importMatch[2] + '")\n';
+      continue;
+    }
+
+    // import { A, B } from "Y" → local A, B = require("Y").A, require("Y").B
+    const namedImport = trimmed.match(/^import\s*\{\s*([^}]+)\}\s*from\s+["']([^"']+)["'];?$/);
+    if (namedImport) {
+      const names = namedImport[1].split(',').map(n => n.trim());
+      for (const name of names) {
+        out += indent + 'local ' + name + ' = require("' + namedImport[2] + '").' + name + '\n';
+      }
+      continue;
+    }
+
+    // export function name(args): RetType → function name(args)
+    const exportFn = trimmed.match(/^export\s+function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*\S+)?\s*\{$/);
+    if (exportFn) {
+      const params = exportFn[2].split(',').map(p => p.trim().replace(/\s*:.*$/, '')).filter(Boolean).join(', ');
+      out += indent + 'function ' + exportFn[1] + '(' + params + ')\n';
+      continue;
+    }
+
+    // function name(args): RetType → local function name(args)
+    const fnMatch = trimmed.match(/^function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*\S+)?\s*\{$/);
+    if (fnMatch) {
+      const params = fnMatch[2].split(',').map(p => p.trim().replace(/\s*:.*$/, '')).filter(Boolean).join(', ');
+      out += indent + 'local function ' + fnMatch[1] + '(' + params + ')\n';
+      continue;
+    }
+
+    // const/let/var → local
+    const varMatch = trimmed.match(/^(const|let|var)\s+(\w+)\s*(?::\s*[^=]+?)?\s*=\s*(.+);?$/);
+    if (varMatch) {
+      out += indent + 'local ' + varMatch[2] + ' = ' + varMatch[3].replace(/;$/, '') + '\n';
+      continue;
+    }
+
+    // } → end
+    if (trimmed === '}') { out += indent + 'end\n'; continue; }
+
+    // if (cond) { → if cond then
+    const ifMatch = trimmed.match(/^if\s*\((.+)\)\s*\{$/);
+    if (ifMatch) { out += indent + 'if ' + ifMatch[1] + ' then\n'; continue; }
+
+    // } else if (cond) { → elseif cond then
+    const elseifMatch = trimmed.match(/^\}\s*else\s+if\s*\((.+)\)\s*\{$/);
+    if (elseifMatch) { out += indent + 'elseif ' + elseifMatch[1] + ' then\n'; continue; }
+
+    // } else { → else
+    if (trimmed === '} else {') { out += indent + 'else\n'; continue; }
+
+    // while (cond) { → while cond do
+    const whileMatch = trimmed.match(/^while\s*\((.+)\)\s*\{$/);
+    if (whileMatch) { out += indent + 'while ' + whileMatch[1] + ' do\n'; continue; }
+
+    // for (const x of arr) { → for _, x in ipairs(arr) do
+    const forOfMatch = trimmed.match(/^for\s*\(\s*(?:const|let|var)\s+(\w+)\s+of\s+(.+)\)\s*\{$/);
+    if (forOfMatch) { out += indent + 'for _, ' + forOfMatch[1] + ' in ipairs(' + forOfMatch[2] + ') do\n'; continue; }
+
+    // return expr; → return expr
+    if (trimmed.startsWith('return ')) { out += indent + trimmed.replace(/;$/, '') + '\n'; continue; }
+
+    // Bare statement — strip trailing semicolons
+    out += indent + trimmed.replace(/;$/, '') + '\n';
+  }
+
+  return out;
+}
+
+// ── Module compilation: .mod.tsz → .js ───────────────────────────────
+// Transpiles TypeScript-like code to JavaScript (strip type annotations).
+function compileModJS(source, file) {
+  const basename = file.split('/').pop();
+  let out = '// Generated by Smith (mod mode, target=js) — do not edit\n// Source: ' + basename + '\n\n';
+
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = line.match(/^(\s*)/)[1];
+
+    if (trimmed === '') { out += '\n'; continue; }
+    if (trimmed.startsWith('//')) { out += line + '\n'; continue; }
+
+    // import X from "Y" → stays as-is (JS module)
+    if (trimmed.startsWith('import ')) { out += line + '\n'; continue; }
+
+    // export function name(args): RetType → export function name(args) {
+    const exportFn = trimmed.match(/^export\s+function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*\S+)?\s*\{$/);
+    if (exportFn) {
+      const params = exportFn[2].split(',').map(p => p.trim().replace(/\s*:\s*\S+$/, '')).filter(Boolean).join(', ');
+      out += indent + 'export function ' + exportFn[1] + '(' + params + ') {\n';
+      continue;
+    }
+
+    // function name(args): RetType → function name(args) {
+    const fnMatch = trimmed.match(/^function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*\S+)?\s*\{$/);
+    if (fnMatch) {
+      const params = fnMatch[2].split(',').map(p => p.trim().replace(/\s*:\s*\S+$/, '')).filter(Boolean).join(', ');
+      out += indent + 'function ' + fnMatch[1] + '(' + params + ') {\n';
+      continue;
+    }
+
+    // const/let/var with type annotations → strip type
+    const varMatch = trimmed.match(/^(const|let|var)\s+(\w+)\s*:\s*[^=]+?=\s*(.+)$/);
+    if (varMatch) {
+      out += indent + varMatch[1] + ' ' + varMatch[2] + ' = ' + varMatch[3] + '\n';
+      continue;
+    }
+
+    // Everything else passes through (JS is close to TS without types)
+    out += line + '\n';
+  }
+
+  return out;
 }
