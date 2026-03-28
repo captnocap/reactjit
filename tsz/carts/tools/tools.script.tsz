@@ -48,6 +48,7 @@ function refreshProjectList() {
     list.push({ name: p.name, path: p.path, status: s, statusText: st, lastBuild: p.lastBuild || '', errorCount: p.errorCount || 0 });
   }
   setProjects(list);
+  setProjectCount(list.length);
 }
 
 // ── Log ─────────────────────────────────────────────────────────

@@ -67,6 +67,16 @@ function parseJSXElement(c) {
 
   // Check if this is a component call
   const comp = findComponent(rawTag);
+  if (globalThis.__SMITH_DEBUG_INLINE && comp) {
+    globalThis.__dbg = globalThis.__dbg || [];
+    globalThis.__dbg.push('[INLINE] component=' + rawTag + ' bodyPos=' + comp.bodyPos + ' cursorPos=' + c.pos);
+    if (rawTag === 'SourcePage' && !globalThis.__sourcePageDumped) {
+      globalThis.__sourcePageDumped = true;
+      for (let di = comp.bodyPos; di < Math.min(comp.bodyPos + 15, c.count); di++) {
+        globalThis.__dbg.push('[SP_TOK@' + di + '] kind=' + c.kindAt(di) + ' text="' + c.textAt(di).substring(0, 40) + '"');
+      }
+    }
+  }
   if (comp) {
     // Collect prop values from call site attributes
     const propValues = {};
@@ -192,6 +202,17 @@ function parseJSXElement(c) {
               c.advance();
             }
             if (c.kind() === TK.rbrace) c.advance();
+            // Convert JS ternary (a == b ? c : d) to Zig if expression
+            if (val.indexOf('?') >= 0 && val.indexOf(':') >= 0) {
+              const qIdx = val.indexOf('?');
+              const cIdx = val.indexOf(':', qIdx);
+              if (qIdx > 0 && cIdx > qIdx) {
+                const cond = val.substring(0, qIdx).trim();
+                const then = val.substring(qIdx + 1, cIdx).trim();
+                const els = val.substring(cIdx + 1).trim();
+                val = 'if (' + cond + ') ' + then + ' else ' + els;
+              }
+            }
             propValues[attr] = val;
           }
         }
@@ -649,9 +670,22 @@ function parseJSXElement(c) {
   // </Tag> or </C.Name>
   if (c.kind() === TK.lt_slash) {
     c.advance();
+    const closingTag = c.kind() === TK.identifier ? c.text() : '?';
     if (c.kind() === TK.identifier) c.advance(); // skip tag name (or "C")
-    if (c.kind() === TK.dot) { c.advance(); if (c.kind() === TK.identifier) c.advance(); } // skip .Name
+    let closingFull = closingTag;
+    if (c.kind() === TK.dot) { c.advance(); if (c.kind() === TK.identifier) { closingFull += '.' + c.text(); c.advance(); } } // skip .Name
     if (c.kind() === TK.gt) c.advance();
+    // Debug: detect tag mismatch during SourcePage parse
+    if (globalThis.__SMITH_DEBUG_INLINE && ctx.inlineComponent === 'SourcePage') {
+      const openTag = clsDef ? ('C.' + (rawTag === 'Box' ? 'SourceSurface' : rawTag)) : rawTag;
+      if (closingFull !== openTag && closingFull !== 'C.' + rawTag) {
+        globalThis.__dbg = globalThis.__dbg || [];
+        globalThis.__dbg.push('[TAG_MISMATCH] open=' + rawTag + ' close=' + closingFull + ' pos=' + c.pos + ' children=' + children.length);
+      }
+    }
+  } else if (globalThis.__SMITH_DEBUG_INLINE && ctx.inlineComponent === 'SourcePage') {
+    globalThis.__dbg = globalThis.__dbg || [];
+    globalThis.__dbg.push('[NO_CLOSE] tag=' + rawTag + ' pos=' + c.pos + ' kind=' + c.kind() + ' text=' + (c.pos < c.count ? c.text().substring(0, 30) : 'EOF') + ' children=' + children.length);
   }
 
   return buildNode(tag, styleFields, children, handlerRef, nodeFields, tag, tagSrcOffset);
@@ -1080,22 +1114,30 @@ function tryParseConditional(c, children) {
     // Build condition expression with Zig-compatible ops
     if (c.kind() === TK.identifier) {
       const name = c.text();
+      if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp')) {
+        globalThis.__dbg = globalThis.__dbg || [];
+        globalThis.__dbg.push('[COND] name=' + name + ' isGetter=' + isGetter(name) + ' inline=' + (ctx.inlineComponent || 'App') + ' pos=' + c.pos);
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        // Prop from component — if we're in a map and prop name matches an OA field, use OA access
+        // Prop from component — resolve value for conditional use
+        const pv = ctx.propStack[name];
         if (ctx.currentMap && ctx.currentMap.oa) {
           const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
           if (fi) {
             condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
           } else {
-            condParts.push(ctx.propStack[name]);
+            condParts.push(_condPropValue(pv));
           }
         } else {
-          condParts.push(ctx.propStack[name]);
+          condParts.push(_condPropValue(pv));
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
+      } else if (ctx.inlineComponent) {
+        // Inside inlined component: unresolved identifier is an unprovided prop → falsy (0)
+        condParts.push('0');
       } else {
         condParts.push(name);
       }
@@ -1171,18 +1213,21 @@ function tryParseTernaryJSX(c, children) {
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        const pv2 = ctx.propStack[name];
         if (ctx.currentMap && ctx.currentMap.oa) {
           const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
           if (fi) {
             condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
           } else {
-            condParts.push(ctx.propStack[name]);
+            condParts.push(_condPropValue(pv2));
           }
         } else {
-          condParts.push(ctx.propStack[name]);
+          condParts.push(_condPropValue(pv2));
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
+      } else if (ctx.inlineComponent) {
+        condParts.push('0');
       } else {
         condParts.push(name);
       }
@@ -1548,7 +1593,23 @@ function parseChildren(c) {
         c.advance();
       }
       const text = c._byteSlice(textStart, textEnd).trim();
-      if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim().replace(/"/g, '\\"')}" }` });
+      if (text.trim()) {
+        if (globalThis.__SMITH_DEBUG_INLINE && (text.includes('import') || text.includes('function ') || text.includes('setMyPid'))) {
+          globalThis.__dbg = globalThis.__dbg || [];
+          globalThis.__dbg.push('[TEXT_LEAK] text="' + text.substring(0, 80) + '" pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'none'));
+          // Dump surrounding tokens for diagnostics
+          for (let di = Math.max(0, c.pos - 5); di < Math.min(c.count, c.pos + 5); di++) {
+            globalThis.__dbg.push('[TOK@' + di + '] kind=' + c.kindAt(di) + ' text="' + c.textAt(di).substring(0, 40) + '"');
+          }
+          // Only dump first leak
+          if (!globalThis.__firstLeakDumped) {
+            globalThis.__firstLeakDumped = true;
+            // Dump what happened around SourcePage bodyPos
+            globalThis.__dbg.push('[CONTEXT] SourcePage bodyPos check: components=' + ctx.components.map(function(cc) { return cc.name + '@' + cc.bodyPos; }).join(', '));
+          }
+        }
+        children.push({ nodeExpr: `.{ .text = "${text.trim().replace(/"/g, '\\"')}" }` });
+      }
     } else { c.advance(); }
   }
   return children;

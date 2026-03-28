@@ -570,6 +570,8 @@ function compile() {
   const source = globalThis.__source;
   const tokens = globalThis.__tokens;
   const file = globalThis.__file || 'unknown.tsz';
+  // Debug mode disabled — enable manually when debugging component inlining
+  // if (file.includes('Tools.app')) globalThis.__SMITH_DEBUG_INLINE = 1;
 
   // Module mode: transpile TS → Zig (no JSX, no app scaffolding)
   if (globalThis.__modBuild === 1) {
@@ -607,6 +609,11 @@ function compile() {
 
   // Parse JSX
   const root = parseJSXElement(c);
+
+  // Dump inline debug log into _debugLines (emitted as Zig comments)
+  if (globalThis.__SMITH_DEBUG_INLINE && globalThis.__dbg && globalThis.__dbg.length > 0) {
+    for (let di = 0; di < globalThis.__dbg.length; di++) ctx._debugLines.push(globalThis.__dbg[di]);
+  }
 
   // Preflight validation — catch Class A + B bugs before wasting Zig build time
   const pf = preflight(ctx);
