@@ -68,3 +68,44 @@ const namedColors = {
   gray: [128,128,128], grey: [128,128,128], silver: [192,192,192],
   orange: [255,165,0], transparent: [0,0,0],
 };
+
+// ── Event handler attributes ──
+// Attributes that trigger handler extraction in the parser.
+const eventAttrs = { onPress: true, onTap: true, onToggle: true, onSelect: true, onChange: true };
+function isEventAttr(name) { return eventAttrs[name] === true; }
+
+// ── Node-level fields (not under .style) ──
+// Fields that live directly on the node struct, not under node.style.
+const nodeFieldSet = { text_color: true, font_size: true, text: true };
+function isNodeField(name) { return nodeFieldSet[name] === true; }
+
+// ── Soup-tier constants ──
+// HTML tag → Zig primitive mapping for soup sources (lowercase output)
+const soupTags = {
+  div:'box', section:'box', article:'box', main:'box',
+  header:'box', footer:'box', nav:'box', aside:'box',
+  ul:'box', ol:'box', li:'box', form:'box', span:'box',
+  table:'box', thead:'box', tbody:'box', tr:'box', td:'box', th:'text',
+  p:'text', h1:'text', h2:'text', h3:'text', h4:'text', h5:'text', h6:'text',
+  label:'text', strong:'text', em:'text', small:'text', code:'text',
+  button:'pressable',
+  input:'stub', canvas:'stub', img:'stub', select:'stub', textarea:'stub',
+  br:'void', hr:'void',
+};
+
+// Default font sizes for heading/paragraph tags in soup mode
+const soupFonts = { h1:28, h2:22, h3:18, h4:16, h5:14, h6:12, p:14 };
+
+// Default dark theme colors for soup output (Tailwind-ish)
+const soupColors = {
+  rootBg:   '15, 23, 42',    // slate-900
+  cardBg:   '30, 41, 59',    // slate-800
+  textH:    '248, 250, 252',  // slate-50
+  textP:    '226, 232, 240',  // slate-200
+  textDim:  '148, 163, 184',  // slate-400
+  textWhite:'255, 255, 255',
+  btnBlue:  '59, 130, 246',   // blue-500
+  btnRed:   '220, 38, 38',    // red-600
+  btnGray:  '51, 65, 85',     // slate-700
+  stubBg:   '71, 85, 105',    // slate-600
+};
