@@ -27,8 +27,11 @@ for f in carts/conformance/*.tsz; do
     TOTAL=$((TOTAL+1))
     GEN="generated_${NAME}.zig"
 
-    # Step 1: forge (smith compile: .tsz → .zig)
-    OUT=$(./zig-out/bin/forge build "$f" 2>&1)
+    # Clean stale output
+    rm -f "$GEN"
+
+    # Step 1: forge (smith compile: .tsz → .zig) — use --single for monolithic output
+    OUT=$(./zig-out/bin/forge build --single "$f" 2>&1)
     if [ $? -ne 0 ]; then
         FORGE_FAIL=$((FORGE_FAIL+1))
         FORGE_LOG="${FORGE_LOG}  ${NAME}\n"

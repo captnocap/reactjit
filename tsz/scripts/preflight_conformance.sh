@@ -41,8 +41,11 @@ for f in carts/conformance/*.tsz; do
         s*a_*)    CART_TYPE="surface-a" ;;
     esac
 
-    # Step 1: Forge (smith compile)
-    FORGE_OUT=$(./zig-out/bin/forge build "$f" 2>&1)
+    # Clean stale output to avoid false reads
+    rm -f "$GEN"
+
+    # Step 1: Forge (smith compile) — use --single for monolithic output
+    FORGE_OUT=$(./zig-out/bin/forge build --single "$f" 2>&1)
     FORGE_RC=$?
     if [ $FORGE_RC -ne 0 ]; then
         echo "| $NAME | FORGE FAIL | - | forge exit $FORGE_RC |" >> "$OUTFILE"
