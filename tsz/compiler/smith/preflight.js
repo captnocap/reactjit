@@ -149,6 +149,62 @@ function preflight(ctx) {
     }
   }
 
+  // F2: Handler referenced in .on_press but missing from ctx.handlers
+  // Scan arrayDecls for .on_press = NAME and verify the handler exists
+  var handlerNameSet = {};
+  for (var hi = 0; hi < ctx.handlers.length; hi++) {
+    handlerNameSet[ctx.handlers[hi].name] = true;
+  }
+  for (var di = 0; di < allDecls.length; di++) {
+    var onPressMatch = allDecls[di].match(/\.on_press = (\w+)/g);
+    if (onPressMatch) {
+      for (var pi = 0; pi < onPressMatch.length; pi++) {
+        var ref = onPressMatch[pi].replace('.on_press = ', '');
+        if (ref !== 'null' && !handlerNameSet[ref]) {
+          errors.push('F2: .on_press references handler "' + ref + '" but no such handler exists');
+        }
+      }
+    }
+  }
+
+  // F5: OA field accessed but missing from schema
+  // Scan arrayDecls + dynTexts for _oaN_FIELD patterns and verify field exists in that OA
+  for (var di = 0; di < allDecls.length; di++) {
+    var oaRefs = allDecls[di].match(/_oa(\d+)_(\w+)/g);
+    if (oaRefs) {
+      for (var ri = 0; ri < oaRefs.length; ri++) {
+        var refMatch = oaRefs[ri].match(/_oa(\d+)_(\w+)/);
+        if (refMatch) {
+          var oaIdx = parseInt(refMatch[1]);
+          var fieldName = refMatch[2];
+          // Skip _lens suffix (string length arrays) and known non-field patterns
+          if (fieldName === 'len' || fieldName.endsWith('_lens')) continue;
+          var oa = null;
+          for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
+            if (ctx.objectArrays[oi].oaIdx === oaIdx) { oa = ctx.objectArrays[oi]; break; }
+          }
+          if (oa && !oa.fields.some(function(f) { return f.name === fieldName; })) {
+            errors.push('F5: _oa' + oaIdx + '_' + fieldName + ' accesses field "' + fieldName + '" but OA[' + oaIdx + '] has no such field (schema: [' + oa.fields.map(function(f) { return f.name; }).join(', ') + '])');
+          }
+        }
+      }
+    }
+  }
+
+  // F6: Template literal expression failed to resolve
+  // dynTexts with raw ${expr} in fmtString means resolution failed.
+  // BUT: "$" + "{d}" / "{s}" / "{e}" is valid (literal $ + Zig format spec).
+  // Only flag ${WORD} where WORD is a JS identifier (2+ chars), not a format char.
+  for (var di = 0; di < ctx.dynTexts.length; di++) {
+    var dt = ctx.dynTexts[di];
+    if (!dt.fmtString) continue;
+    // Match ${...} but exclude ${ followed by a single Zig format char + }
+    var unresolvedMatch = dt.fmtString.match(/\$\{[a-zA-Z_]\w+\}/);
+    if (unresolvedMatch) {
+      errors.push('F6: dynText buf ' + dt.bufId + ' has unresolved template literal: "' + dt.fmtString.substring(0, 60) + '"');
+    }
+  }
+
   // ── WARN checks ──
 
   // W1: Color{} placeholders that ARE resolved (have dynStyle backing) but worth flagging
@@ -156,19 +212,25 @@ function preflight(ctx) {
     warnings.push('W1: ' + colorPlaceholderCount + ' Color{} placeholder(s) (all resolved via dynStyle/dynColor)');
   }
 
-  // W2: _map_lua_ptrs allocated but check if maps have handlers
+  // W2: Map has handlers but they have empty luaBody — lua_ptrs will be allocated but useless
   for (var mi = 0; mi < ctx.maps.length; mi++) {
-    var mapHandlers = [];
+    var emptyMapHandlers = 0;
+    var totalMapHandlers = 0;
     for (var hi = 0; hi < ctx.handlers.length; hi++) {
       if (ctx.handlers[hi].inMap && ctx.handlers[hi].mapIdx === mi) {
-        mapHandlers.push(ctx.handlers[hi]);
+        totalMapHandlers++;
+        if (!ctx.handlers[hi].luaBody || ctx.handlers[hi].luaBody.trim() === '') emptyMapHandlers++;
       }
     }
-    if (mapHandlers.length === 0 && ctx.maps[mi].textsInMap && ctx.maps[mi].textsInMap.length === 0) {
-      // Map with no handlers and no dynamic text — purely static render
-      // Not a warning per se, just informational
+    if (totalMapHandlers > 0 && emptyMapHandlers === totalMapHandlers) {
+      warnings.push('W2: map ' + mi + ' has ' + totalMapHandlers + ' handler(s) but all have empty luaBody — lua_ptrs will be unused');
     }
   }
+
+  // W4: Prop passed to component but never consumed in its body
+  // Check each component call site's prop values against what the component body uses
+  // This is approximated by checking if component propNames appear in arrayDecls
+  // (a more precise check would require tracking prop usage during parse)
 
   // W3: State slot declared but never read
   // A state slot that has a setter but whose getter never appears in handlers,
