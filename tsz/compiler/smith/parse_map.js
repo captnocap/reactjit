@@ -426,6 +426,15 @@ function tryParseConditional(c, children) {
         globalThis.__dbg = globalThis.__dbg || [];
         globalThis.__dbg.push('[COND] name=' + name + ' isGetter=' + isGetter(name) + ' slot=' + findSlot(name) + ' inline=' + (ctx.inlineComponent || 'App') + ' pos=' + c.pos);
       }
+      // Check for OA getter followed by .length BEFORE isGetter (OA names aren't in stateSlots)
+      const _oa = ctx.objectArrays.find(o => o.getter === name);
+      if (_oa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
+        condParts.push(`_oa${_oa.oaIdx}_len`);
+        c.advance(); // skip name
+        c.advance(); // skip .
+        c.advance(); // skip length
+        continue;
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
@@ -615,6 +624,15 @@ function tryParseTernaryText(c, children) {
         c.kind() === TK.lbrace) { c.restore(saved); return false; }
     if (c.kind() === TK.identifier) {
       const name = c.text();
+      // Check for OA getter followed by .length BEFORE isGetter (OA names aren't in stateSlots)
+      const _oa2 = ctx.objectArrays.find(o => o.getter === name);
+      if (_oa2 && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
+        condParts.push(`_oa${_oa2.oaIdx}_len`);
+        c.advance(); // skip name
+        c.advance(); // skip .
+        c.advance(); // skip length
+        continue;
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
