@@ -72,8 +72,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~300 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
-- **Smith** — JS compiler intelligence (~4,700 lines across 5 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~430 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
+- **Smith** — JS compiler intelligence (~8,900 lines across 12 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -83,7 +83,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 6 Zig modules + 5 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT
+- **Compiler** — 8 Zig modules + 12 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -296,7 +296,7 @@ carts/
 
 ## Framework Modules
 
-79 modules in the framework runtime:
+80 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
@@ -382,9 +382,9 @@ app.effects.tsz   — named effect sources (GPU pixel shaders)
 app.glyphs.tsz    — named inline assets (vector shapes, compositions)
 ```
 
-### Intent Syntax (Future)
+### Intent Syntax (Implemented)
 
-The chad tier is evolving toward an intent-driven syntax where file structure dictates compiler behavior:
+The chad tier uses an intent-driven syntax where file structure dictates compiler behavior. The `<page>` block compiler (`smith/page.js`) handles `<var>`, `<state>`, `<functions>`, and `<timer>` blocks, with support for guards (`? stop : go`), composition (`submit = save + clear`), ambient namespace reads (`sys.*`, `device.*`), and the `exact` keyword:
 
 ```
 <page route=notes>
