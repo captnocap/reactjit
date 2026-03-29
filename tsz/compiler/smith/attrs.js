@@ -434,7 +434,7 @@ function parseHandler(c) {
           body += `    qjs_runtime.callGlobal("${fname}");\n`;
         } else {
           // Single string arg: 'value' → callGlobalStr (avoids single-quote lint)
-          const strMatch = args.match(/^['"](.*)['"]$/);
+          const strMatch = args.match(/^'([^']*)'$/) || args.match(/^"([^"]*)"$/);
           if (strMatch) {
             body += `    qjs_runtime.callGlobalStr("${fname}", "${strMatch[1]}");\n`;
           } else if (/^-?\d+$/.test(args)) {
