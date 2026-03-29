@@ -571,6 +571,23 @@ function luaTransform(code) {
   s = s.replace(/&&/g, ' and ');
   // !expr → not expr (but not != which is already handled)
   s = s.replace(/!(?!=|=)/g, 'not ');
+  // Control flow: if/else/elseif/while/for → Lua equivalents
+  // } else if (cond) { → elseif cond then (must come before } else {)
+  s = s.replace(/\}\s*else\s+if\s*\(([^)]+)\)\s*\{/g, ' elseif $1 then ');
+  // } else { → else
+  s = s.replace(/\}\s*else\s*\{/g, ' else ');
+  // if (cond) { → if cond then
+  s = s.replace(/\bif\s*\(([^)]+)\)\s*\{/g, 'if $1 then ');
+  // while (cond) { → while cond do
+  s = s.replace(/\bwhile\s*\(([^)]+)\)\s*\{/g, 'while $1 do ');
+  // for (const/let x of arr) { → for _, x in ipairs(arr) do
+  s = s.replace(/\bfor\s*\(\s*(?:const|let|var)\s+(\w+)\s+of\s+(\w+)\)\s*\{/g, 'for _, $1 in ipairs($2) do ');
+  // for (const/let x in obj) { → for x, _ in pairs(obj) do
+  s = s.replace(/\bfor\s*\(\s*(?:const|let|var)\s+(\w+)\s+in\s+(\w+)\)\s*\{/g, 'for $1, _ in pairs($2) do ');
+  // Standalone } → end (block closers)
+  s = s.replace(/;\s*\}/g, '; end ');
+  s = s.replace(/\}\s*$/g, ' end');
+  s = s.replace(/\bthen\s+end\b/g, 'then'); // undo false "end" after empty then
   // const/let/var → local
   s = s.replace(/\b(const|let|var)\s+/g, 'local ');
   // null/undefined → nil

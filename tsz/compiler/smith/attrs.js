@@ -570,39 +570,79 @@ function luaParseHandler(c) {
   if (c.kind() === TK.rparen) c.advance();
   if (c.kind() === TK.arrow) c.advance();
 
-  let stmts = [];
   if (c.kind() === TK.lbrace) {
+    // Block body: capture all tokens with spacing, resolve names, let luaTransform fix syntax
     c.advance();
-    while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
-      if (c.kind() === TK.identifier && (isSetter(c.text()) || isScriptFunc(c.text()))) {
-        const fname = (ctx.nameRemap && ctx.nameRemap[c.text()]) || c.text();
-        c.advance();
-        if (c.kind() === TK.lparen) {
-          c.advance();
-          if (c.kind() === TK.rparen) {
-            stmts.push(`${fname}()`);
-          } else {
-            const valExpr = luaParseValueExpr(c);
-            stmts.push(`${fname}(${valExpr})`);
-          }
-          if (c.kind() === TK.rparen) c.advance();
+    let parts = [];
+    let depth = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && depth === 0) { c.advance(); break; }
+      if (c.kind() === TK.lbrace) depth++;
+      if (c.kind() === TK.rbrace) depth--;
+      // Resolve state getter/setter names through instance remap
+      if (c.kind() === TK.identifier) {
+        const name = c.text();
+        const remapped = (ctx.nameRemap && ctx.nameRemap[name]) || name;
+        if (isGetter(name)) {
+          parts.push(remapped);
+        } else if (isSetter(name)) {
+          parts.push(remapped);
+        } else if (isScriptFunc(name)) {
+          parts.push(name);
+        } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+          parts.push(name);
+        } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+          parts.push(name);
+        } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+          parts.push(ctx.propStack[name]);
+        } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+          parts.push(ctx.renderLocals[name]);
+        } else {
+          parts.push(remapped);
         }
+      } else if (c.kind() === TK.semicolon) {
+        parts.push('; ');
+      } else if (c.kind() === TK.eq_eq) {
+        parts.push(' == ');
+        c.advance();
+        if (c.kind() === TK.equals) c.advance(); // === → ==
+        continue;
+      } else if (c.kind() === TK.not_eq) {
+        parts.push(' ~= ');
+        c.advance();
+        if (c.kind() === TK.equals) c.advance(); // !== → ~=
+        continue;
+      } else if (c.kind() === TK.amp_amp) {
+        parts.push(' and ');
+      } else if (c.kind() === TK.pipe_pipe) {
+        parts.push(' or ');
+      } else if (c.kind() === TK.bang) {
+        parts.push('not ');
+      } else if (c.kind() === TK.plus || c.kind() === TK.minus || c.kind() === TK.star || c.kind() === TK.slash || c.kind() === TK.percent) {
+        parts.push(' ' + c.text() + ' ');
+      } else if (c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
+        parts.push(' ' + c.text() + ' ');
+      } else {
+        parts.push(c.text());
       }
-      if (c.kind() === TK.semicolon) c.advance();
-      else if (c.kind() !== TK.rbrace) c.advance();
+      c.advance();
     }
-    if (c.kind() === TK.rbrace) c.advance();
-    return stmts.join('; ');
+    return luaTransform(parts.join(''));
   }
 
-  // Single expression
-  if (c.kind() === TK.identifier && isSetter(c.text())) {
-    const setter = (ctx.nameRemap && ctx.nameRemap[c.text()]) || c.text();
+  // Single expression: setter(expr) or scriptFunc()
+  let stmts = [];
+  if (c.kind() === TK.identifier && (isSetter(c.text()) || isScriptFunc(c.text()))) {
+    const fname = (ctx.nameRemap && ctx.nameRemap[c.text()]) || c.text();
     c.advance();
     if (c.kind() === TK.lparen) {
       c.advance();
-      const valExpr = luaParseValueExpr(c);
-      stmts.push(`${setter}(${valExpr})`);
+      if (c.kind() === TK.rparen) {
+        stmts.push(`${fname}()`);
+      } else {
+        const valExpr = luaParseValueExpr(c);
+        stmts.push(`${fname}(${valExpr})`);
+      }
       if (c.kind() === TK.rparen) c.advance();
     }
   }
