@@ -30,6 +30,6 @@ pub fn match(url: []const u8) i32 {
 }
 
 pub fn has_route(url: []const u8) bool {
-    var result: i32 = match(url);
+    const result = match(url);
     return result >= 0;
 }

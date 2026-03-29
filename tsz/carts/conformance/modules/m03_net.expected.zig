@@ -98,7 +98,7 @@ pub fn disconnect(fd: i32) void {
 
 pub fn get(url: []const u8) Response {
     active_response = .{ .state = .connecting };
-    fd = acquire(parseHost(url), parsePort(url));
+    const fd = acquire(parseHost(url), parsePort(url));
     var request_line: []const u8 = std.fmt.bufPrint(&buf, "GET {s} HTTP/1.1\r\nHost: {s}\r\n\r\n", .{ parsePath(url), parseHost(url) }) catch "";
     posix.send(fd, request_line);
     active_response.body_len = posix.recv(fd, active_response.body_buf);
@@ -110,7 +110,7 @@ pub fn get(url: []const u8) Response {
 
 pub fn post(url: []const u8, body: []const u8) Response {
     active_response = .{ .state = .connecting };
-    fd = acquire(parseHost(url), parsePort(url));
+    const fd = acquire(parseHost(url), parsePort(url));
     var request_line: []const u8 = std.fmt.bufPrint(&buf, "POST {s} HTTP/1.1\r\nHost: {s}\r\nContent-Length: {d}\r\n\r\n{s}", .{ parsePath(url), parseHost(url), body.len, body }) catch "";
     posix.send(fd, request_line);
     active_response.body_len = posix.recv(fd, active_response.body_buf);
@@ -121,27 +121,27 @@ pub fn post(url: []const u8, body: []const u8) Response {
 }
 
 pub fn parseHost(url: []const u8) []const u8 {
-    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
-    end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    const start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    const end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
     end == -1 ? end = url.len : go;
-    colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
+    const colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
     colon > 0 and colon < end ? return url[start..colon] : return url[start..end];
 }
 
 pub fn parsePort(url: []const u8) u16 {
-    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
-    end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    const start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    const end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
     end == -1 ? end = url.len : go;
-    colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
-    colon > 0 and colon < end ? return parseInt(url[colon+1..end]) : return 80;
+    const colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
+    colon > 0 and colon < end ? return std.fmt.parseInt(i32, url[colon+1..end], 10) catch 0 : return 80;
 }
 
 pub fn parsePath(url: []const u8) []const u8 {
-    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
-    slash = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    const start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    const slash = std.mem.indexOf(u8, url, "/", start) orelse url.len;
     slash == -1 ? return '/' : return url[slash..url.len];
 }
 
 pub fn parseStatus(raw: []u8) u16 {
-    return parseInt(raw[9..12]);
+    return std.fmt.parseInt(i32, raw[9..12], 10) catch 0;
 }

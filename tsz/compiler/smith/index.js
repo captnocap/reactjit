@@ -1510,6 +1510,10 @@ function modTranspileExpr(expr) {
   e = e.replace(/([\w\[\]_.]+)\.eql\(([^)]+)\)/g, function(_, obj, arg) {
     return 'std.mem.eql(u8, ' + obj + ', ' + arg.trim() + ')';
   });
+  // parseInt(str) → std.fmt.parseInt(i32, str, 10) catch 0
+  e = e.replace(/parseInt\(([^)]+)\)/g, function(_, arg) {
+    return 'std.fmt.parseInt(i32, ' + arg.trim() + ', 10) catch 0';
+  });
   // ── FFI call prefixing ──
   if (_modFfiSymbols) {
     for (var sym in _modFfiSymbols) {
@@ -1621,9 +1625,9 @@ function emitModBody(lines, startIdx, typeNames, depth) {
         if (inferredType) {
           out += ind + 'var ' + target + ': ' + inferredType + ' = ' + val + ';\n'; i++; continue;
         }
-        // Function call: result = fn(args) — emit var with i32 default type
-        if (/^\w+\([^)]*\)$/.test(assignMatch[2].trim())) {
-          out += ind + 'var ' + target + ': i32 = ' + val + ';\n'; i++; continue;
+        // Function call: result = fn(...) — emit var (Zig infers type)
+        if (/\w+\(/.test(assignMatch[2].trim())) {
+          out += ind + 'const ' + target + ' = ' + val + ';\n'; i++; continue;
         }
       }
       const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
