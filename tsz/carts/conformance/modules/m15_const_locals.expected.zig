@@ -13,7 +13,7 @@ var routes: [16]Route = [_]Route{.{}} ** 16;
 var count: u8 = 0;
 
 pub fn register(path: []const u8) u8 {
-    if (count >= 16) return count;
+    if (count >= 16) return 0;
     routes[count] = .{ .path = path, .handler_id = count };
     count += 1;
     return count - 1;

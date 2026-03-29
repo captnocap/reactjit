@@ -20,7 +20,7 @@ var slots: [8]Slot = [_]Slot{.{}} ** 8;
 var count: u8 = 0;
 
 pub fn add(val: i32) u8 {
-    if (count >= 8) return count;
+    if (count >= 8) return 0;
     slots[count] = .{ .id = count, .status = .busy, .value = val };
     count += 1;
     return count - 1;

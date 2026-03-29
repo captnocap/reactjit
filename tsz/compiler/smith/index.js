@@ -1211,7 +1211,7 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
     return emitMapFunction(fname, zigParams, zigRet, bodyLines[0].text, typeNames);
   }
   let out = 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n';
-  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants);
+  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet);
   out += '}\n\n';
   return out;
 }
@@ -1572,15 +1572,24 @@ function transpileStringConcat(expr) {
   return 'std.fmt.bufPrint(&buf, "' + fmt + '", .{' + argStr + '}) catch ""';
 }
 
-function emitModBody(lines, startIdx, typeNames, depth) {
+function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
   let out = '';
   const ind = '    '.repeat(depth);
+  var guardRetVal = 'return';
+  if (retType && retType !== 'void') {
+    if (retType === 'bool') guardRetVal = 'return false';
+    else if (retType === 'i32' || retType === 'i64') guardRetVal = 'return -1';
+    else if (retType === 'u8' || retType === 'u16' || retType === 'u32' || retType === 'usize') guardRetVal = 'return 0';
+    else if (retType === 'f32' || retType === 'f64') guardRetVal = 'return 0.0';
+    else if (retType.startsWith('[]') || retType.startsWith('?') || retType.startsWith('*')) guardRetVal = 'return null';
+    else guardRetVal = 'return undefined';
+  }
   let i = startIdx;
   while (i < lines.length) {
     const L = lines[i]; const text = L.text;
     // Guard: cond ? stop : go
     const guardMatch = text.match(/^(.+?)\s+\?\s+stop\s*:\s*go$/);
-    if (guardMatch) { out += ind + 'if (' + modTranspileExpr(guardMatch[1]) + ') return count;\n'; i++; continue; }
+    if (guardMatch) { out += ind + 'if (' + modTranspileExpr(guardMatch[1]) + ') ' + guardRetVal + ';\n'; i++; continue; }
     // Return
     if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileExpr(text.slice(7)) + ';\n'; i++; continue; }
     // Switch

@@ -15,7 +15,7 @@ var entries: [16]Entry = [_]Entry{.{}} ** 16;
 var count: u8 = 0;
 
 pub fn put(key: []const u8, value: i32, ttl: u32) void {
-    if (count >= 16) return count;
+    if (count >= 16) return;
     entries[count] = .{ .key = key, .value = value, .ttl = ttl, .alive = true };
     count += 1;
 }

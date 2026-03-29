@@ -21,7 +21,7 @@ var conns: [4]Conn = [_]Conn{.{}} ** 4;
 var count: u8 = 0;
 
 pub fn open() i32 {
-    if (count >= 4) return count;
+    if (count >= 4) return -1;
     conns[count] = .{ .fd = 42, .state = .connecting };
     conns[count].state = .connected;
     count += 1;

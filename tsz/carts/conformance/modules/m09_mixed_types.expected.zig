@@ -33,7 +33,7 @@ var bounds: Bounds = .{};
 var gravity: f32 = -9.8;
 
 pub fn emit(px: f32, py: f32, vx: f32, vy: f32) u16 {
-    if (count >= 64) return count;
+    if (count >= 64) return 0;
     particles[count] = .{ .x = px, .y = py, .vx = vx, .vy = vy, .active = true, .life = 60 };
     count += 1;
     return count - 1;

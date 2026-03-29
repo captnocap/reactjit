@@ -14,7 +14,7 @@ var entries: [16]Entry = [_]Entry{.{}} ** 16;
 var count: u8 = 0;
 
 pub fn add(name: []const u8, value: i32) u8 {
-    if (count >= 16) return count;
+    if (count >= 16) return 0;
     entries[count] = .{ .name = name, .value = value, .active = true };
     count += 1;
     return count - 1;

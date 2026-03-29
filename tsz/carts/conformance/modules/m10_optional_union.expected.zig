@@ -28,14 +28,14 @@ var records: [32]Record = [_]Record{.{}} ** 32;
 var count: u8 = 0;
 
 pub fn put_int(key: []const u8, v: i64) u8 {
-    if (count >= 32) return count;
+    if (count >= 32) return 0;
     records[count] = .{ .key = key, .kind = .int, .dirty = true };
     count += 1;
     return count - 1;
 }
 
 pub fn put_float(key: []const u8, v: f64) u8 {
-    if (count >= 32) return count;
+    if (count >= 32) return 0;
     records[count] = .{ .key = key, .kind = .float, .dirty = true };
     count += 1;
     return count - 1;

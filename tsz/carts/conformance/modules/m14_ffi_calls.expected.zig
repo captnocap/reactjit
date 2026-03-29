@@ -19,12 +19,12 @@ pub fn open_file(path: []const u8) i32 {
 }
 
 pub fn read_bytes(buf: []const u8, len: usize) usize {
-    if (current.open == false) return count;
+    if (current.open == false) return 0;
     return posix.read(current.fd, buf, len);
 }
 
 pub fn close_file() void {
-    if (current.open == false) return count;
+    if (current.open == false) return;
     posix.close(current.fd);
     current.fd = -1;
     current.open = false;

@@ -64,7 +64,7 @@ pub fn acquire(host: []const u8, port: u16) i32 {
             return pool[_i].fd;
         }
     }
-    if (pool_count >= 8) return count;
+    if (pool_count >= 8) return -1;
     pool[pool_count] = .{ .host = host, .port = port, .state = .connecting };
     pool[pool_count].fd = posix.socket(AF_INET, SOCK_STREAM, 0);
     posix.connect(pool[pool_count].fd, host, port);

@@ -22,7 +22,7 @@ var counters: [8]Counter = [_]Counter{.{}} ** 8;
 var count: u8 = 0;
 
 pub fn create(initial: i64, max: i64) u8 {
-    if (count >= 8) return count;
+    if (count >= 8) return 0;
     counters[count] = .{ .value = initial, .max = max };
     count += 1;
     return count - 1;

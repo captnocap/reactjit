@@ -32,7 +32,7 @@ var entities: [32]Entity = [_]Entity{.{}} ** 32;
 var count: u8 = 0;
 
 pub fn spawn(x: f32, y: f32) u8 {
-    if (count >= 32) return count;
+    if (count >= 32) return 0;
     entities[count] = .{ .id = count, .alive = true, .pos = .{ .x = x, .y = y } };
     count += 1;
     return count - 1;
@@ -45,7 +45,7 @@ pub fn kill(id: u8) void {
 
 pub fn damage(id: u8, amount: i32) void {
     entities[id].hp.current -= amount;
-    if (entities[id].hp.current <= 0) return count;
+    if (entities[id].hp.current <= 0) return;
     entities[id].alive = false;
 }
 
