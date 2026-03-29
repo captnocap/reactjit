@@ -766,7 +766,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         }
         const isComparison = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
           resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
-          resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ');
+          resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ') ||
+          resolvedExpr.includes('std.mem.eql');
         const wrapped = isComparison ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
         if (cond.kind === 'show_hide') {
           out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
@@ -1413,7 +1414,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       const isComparison = cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
         cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
         cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
-        cond.condExpr.includes('getBool');
+        cond.condExpr.includes('getBool') || cond.condExpr.includes('std.mem.eql');
       const wrapped = isComparison ? `((${cond.condExpr}))` : `((${cond.condExpr}) != 0)`;
       if (cond.kind === 'show_hide') {
         out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
