@@ -382,6 +382,8 @@ function parseJSXElement(c) {
   if (rawTag === 'Canvas') { nodeFields.push('.graph_container = true'); nodeFields.push('.canvas_type = "canvas"'); }
   // Canvas.Node → canvas_node with gx/gy/gw/gh parsed from attributes
   if (rawTag === 'Canvas.Node') nodeFields.push('.canvas_node = true');
+  // Canvas.Overlay → viewport-pinned HUD layer (position: absolute, covers parent)
+  if (rawTag === 'Canvas.Overlay') { styleFields.push('.position = .absolute'); styleFields.push('.top = 0'); styleFields.push('.left = 0'); styleFields.push('.right = 0'); styleFields.push('.bottom = 0'); }
   // Terminal → allocate terminal_id
   if (rawTag === 'Terminal') {
     if (!ctx.terminalCount) ctx.terminalCount = 0;
