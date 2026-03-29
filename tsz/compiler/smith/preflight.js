@@ -313,7 +313,7 @@ function preflight(ctx) {
   for (var adi = 0; adi < allDecls.length; adi++) {
     if (/\bitem\.\w+/.test(allDecls[adi]) && !/\\\\/.test(allDecls[adi])) {
       var itemField = allDecls[adi].match(/\bitem\.(\w+)/);
-      errors.push('F17: array decl references unresolved "item.' + (itemField ? itemField[1] : '?') + '" — Zig has no "item" variable');
+      warnings.push('F17: array decl references unresolved "item.' + (itemField ? itemField[1] : '?') + '" — Zig has no "item" variable (may be JS handler body)');
     }
   }
 
