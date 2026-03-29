@@ -638,6 +638,14 @@ function tryParseTernaryText(c, children) {
         c.advance(); // skip length
         continue;
       }
+      // exact keyword → == comparison
+      if (name === 'exact') {
+        condParts.push(' == ');
+        c.advance();
+        // Skip trailing = for exact== (triple equals style)
+        if (c.kind() === TK.equals) c.advance();
+        continue;
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
@@ -688,10 +696,26 @@ function tryParseTernaryText(c, children) {
   else { c.restore(saved); return false; }
   if (c.kind() === TK.rbrace) c.advance();
   // Ternary text: create dynamic text with conditional format
-  const condExpr = condParts.join('');
+  var condExpr = condParts.join('');
+  // String comparison: lhs == 'str' or lhs == "str" → std.mem.eql(u8, lhs, "str")
+  var strEqlMatch = condExpr.match(/^(.+?)\s*==\s*['"]([^'"]+)['"]$/);
+  if (strEqlMatch) {
+    var lhs = strEqlMatch[1].trim();
+    var rhs = strEqlMatch[2];
+    // OA string fields need length slicing: field[_i][0..field_lens[_i]]
+    if (lhs.includes('[_i]') && lhs.includes('_oa')) {
+      var lenField = lhs.replace(/\[_i\]$/, '_lens[_i]');
+      condExpr = `std.mem.eql(u8, ${lhs}[0..${lenField}], "${rhs}")`;
+    } else if (lhs.includes('getSlotString')) {
+      condExpr = `std.mem.eql(u8, ${lhs}, "${rhs}")`;
+    } else {
+      condExpr = `std.mem.eql(u8, ${lhs}, "${rhs}")`;
+    }
+  }
   const isComparison = condExpr.includes('==') || condExpr.includes('!=') ||
     condExpr.includes('>=') || condExpr.includes('<=') ||
-    condExpr.includes(' > ') || condExpr.includes(' < ');
+    condExpr.includes(' > ') || condExpr.includes(' < ') ||
+    condExpr.includes('std.mem.eql');
   const isBool = condExpr.includes('getSlotBool');
   const zigCond = (isComparison || isBool) ? `(${condExpr})` : `((${condExpr}) != 0)`;
   const bufId = ctx.dynCount;
