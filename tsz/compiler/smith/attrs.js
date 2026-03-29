@@ -32,7 +32,7 @@ function parseColor(hex) {
     const [r,g,b] = namedColors[hex];
     return `Color.rgb(${r}, ${g}, ${b})`;
   }
-  const h = hex.startsWith('#') ? hex.slice(1) : hex;
+  const h = hex.startsWith('#') ? hex.slice(1) : hex.startsWith('0x') ? hex.slice(2) : hex;
   if (h.length === 8) {
     return `Color.rgba(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)}, ${parseInt(h.slice(6,8),16)})`;
   }
