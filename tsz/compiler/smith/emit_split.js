@@ -19,6 +19,21 @@ function transpileEffectBody(jsBody, param) {
     if (line === '{') { depth++; continue; }
     if (line === '}') { depth--; out += indent(depth) + '}\n'; continue; }
     if (line === '};') { depth--; out += indent(depth) + '}\n'; continue; }
+    // } else if (...) { — handle BEFORE generic } stripping
+    const bElseIf = line.match(/^}\s*else\s+if\s*\((.+)\)\s*\{?\s*$/);
+    if (bElseIf) {
+      depth--;
+      out += indent(depth) + `} else if (${transpileExpr(bElseIf[1], p)}) {\n`;
+      depth++;
+      continue;
+    }
+    // } else { — handle BEFORE generic } stripping
+    if (/^}\s*else\s*\{?\s*$/.test(line)) {
+      depth--;
+      out += indent(depth) + '} else {\n';
+      depth++;
+      continue;
+    }
     // Close brace with content after
     if (line.startsWith('}')) { depth--; out += indent(depth) + '}\n'; line = line.slice(1).trim(); if (!line) continue; }
 
@@ -41,7 +56,19 @@ function transpileEffectBody(jsBody, param) {
     if (declMatch) {
       const [, vname, expr] = declMatch;
       const zigExpr = transpileExpr(expr, p);
-      out += indent(depth) + `const ${vname}: f32 = ${zigExpr};\n`;
+      // Detect hsv/hsl return type → [3]f32 instead of f32
+      const isColorArray = new RegExp(`\\b${p}\\.(hsv|hsl)\\(`).test(expr);
+      const zigType = isColorArray ? '[3]f32' : 'f32';
+      out += indent(depth) + `const ${vname}: ${zigType} = ${zigExpr};\n`;
+      continue;
+    }
+
+    // if statement (standalone — } else if/else handled above before } stripping)
+    const ifMatch = line.match(/^if\s*\((.+)\)\s*\{?\s*$/);
+    if (ifMatch) {
+      const zigCond = transpileExpr(ifMatch[1], p);
+      out += indent(depth) + `if (${zigCond}) {\n`;
+      depth++;
       continue;
     }
 
@@ -80,10 +107,15 @@ function transpileExpr(expr, p) {
   // e.width / e.height → ctx_e.width / ctx_e.height (as f32)
   e = e.replace(new RegExp(`\\b${p}\\.width\\b`, 'g'), '@as(f32, @floatFromInt(ctx_e.width))');
   e = e.replace(new RegExp(`\\b${p}\\.height\\b`, 'g'), '@as(f32, @floatFromInt(ctx_e.height))');
+  // e.hsv(h, s, v) → effect_ctx.EffectContext.hsvToRgb(h, s, v) — returns [3]f32
+  e = e.replace(new RegExp(`\\b${p}\\.hsv\\(`, 'g'), 'effect_ctx.EffectContext.hsvToRgb(');
+  // e.hsl(h, s, l) → effect_ctx.EffectContext.hslToRgb(h, s, l) — returns [3]f32
+  e = e.replace(new RegExp(`\\b${p}\\.hsl\\(`, 'g'), 'effect_ctx.EffectContext.hslToRgb(');
   // e.sin(x) → @sin(x), e.sqrt(x) → @sqrt(x) — Zig builtins, not methods
   e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil)\\(`, 'g'), '@$1(');
   e = e.replace(new RegExp(`\\b${p}\\.pow\\(`, 'g'), 'std.math.pow(f32, ');
   e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), '@mod(');
+  // array[0] → array[0] (already valid Zig for [3]f32)
   // No automatic int-to-float conversion — loop vars are f32 (see for loop transpilation)
   return e;
 }

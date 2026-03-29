@@ -92,7 +92,13 @@ function parseJSXElement(c) {
             // Handler prop — parse as a real handler and store handler name
             c.advance();
             const handlerName = `_handler_press_${ctx.handlerCount}`;
-            if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
+            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && ctx.propStack[c.text()].startsWith('_handler_press_')) {
+              // Prop-forwarded handler: onTap={onOpen} where onOpen resolves to _handler_press_N
+              propValues[attr] = ctx.propStack[c.text()];
+              c.advance();
+              if (c.kind() === TK.rbrace) c.advance();
+              continue;
+            } else if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
               const fname = c.text(); c.advance();
               if (isScriptFunc(fname)) {
                 ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n`, luaBody: `${fname}()` });
@@ -114,6 +120,33 @@ function parseJSXElement(c) {
           } else if (c.kind() === TK.lbrace) {
             // {expr} prop value — resolve map item access, state getters, etc.
             c.advance();
+            // Detect closure prop: {() => { ... }} or {(args) => { ... }}
+            // These are callback props like onOpen={() => { openTicket(i) }}
+            if (c.kind() === TK.lparen) {
+              // Look ahead: skip parens, check for =>
+              let lk = c.pos;
+              let pd = 1;
+              lk++;
+              while (lk < c.count && pd > 0) {
+                if (c.kindAt(lk) === TK.lparen) pd++;
+                if (c.kindAt(lk) === TK.rparen) pd--;
+                lk++;
+              }
+              if (lk < c.count && c.kindAt(lk) === TK.arrow) {
+                // It's a closure — parse as handler
+                const handlerName = `_handler_press_${ctx.handlerCount}`;
+                const saved = c.save();
+                const luaBody = luaParseHandler(c);
+                c.restore(saved);
+                const body = parseHandler(c);
+                const isMapHandler = !!ctx.currentMap;
+                ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+                ctx.handlerCount++;
+                if (c.kind() === TK.rbrace) c.advance();
+                propValues[attr] = handlerName;
+                continue;
+              }
+            }
             // Check for map item member access: item.field (walk parent chain)
             if (ctx.currentMap && c.kind() === TK.identifier) {
               let matchMap = null;
