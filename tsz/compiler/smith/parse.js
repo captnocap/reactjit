@@ -898,13 +898,6 @@ function tryParseNestedMap(c, nestedOa, fieldName) {
   return { nodeExpr: `.{}`, mapIdx };
 }
 
-// Check if an identifier is a map item member access (item.field)
-function isMapItemAccess(name) {
-  if (!ctx.currentMap) return null;
-  if (name === ctx.currentMap.itemParam) return ctx.currentMap;
-  return null;
-}
-
 // ── Template literal parser ──
 
 // Left-fold arithmetic: "A+B+C+D" → "(((A + B) + C) + D)"

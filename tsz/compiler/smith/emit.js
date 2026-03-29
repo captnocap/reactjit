@@ -88,17 +88,6 @@ function transpileExpr(expr, p) {
   return e;
 }
 
-// Transpile expression for integer context (loop bounds) — keep width/height as int
-function transpileExprInt(expr, p) {
-  if (!expr) return '0';
-  let e = expr.trim();
-  e = e.replace(new RegExp(`\\b${p}\\.time\\b`, 'g'), 'ctx_e.time');
-  e = e.replace(new RegExp(`\\b${p}\\.width\\b`, 'g'), '@as(i32, @intCast(ctx_e.width))');
-  e = e.replace(new RegExp(`\\b${p}\\.height\\b`, 'g'), '@as(i32, @intCast(ctx_e.height))');
-  // Plain numbers stay as-is for int context
-  return e;
-}
-
 // Split function arguments respecting nested parens
 function splitArgs(s) {
   const args = [];
@@ -111,9 +100,6 @@ function splitArgs(s) {
   args.push(s.slice(start));
   return args;
 }
-
-// Zero-init instead of undefined — puts arrays in .bss (0 bytes on disk) instead of .data
-function zeroed(type) { return `std.mem.zeroes(${type})`; }
 
 function emitOutput(rootExpr, file) {
   const basename = file.split('/').pop();
@@ -1341,7 +1327,6 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             out += `            const _n = std.fmt.bufPrint(_map_lua_bufs_${mi}_${hi}[_i][0..${bufSize}], "__mapPress_${mi}_${hi}(${fmtParts.join(',')})", .{${argParts.join(', ')}}) catch "";\n`;
             out += `            _map_lua_bufs_${mi}_${hi}[_i][_n.len] = 0;\n`;
             out += `            _map_lua_ptrs_${mi}_${hi}[_i] = @ptrCast(_map_lua_bufs_${mi}_${hi}[_i][0.._n.len :0]);\n`;
-            out += `            if (_i < 3) std.debug.print("[MAP_PTR_DEBUG] map=${mi} handler=${hi} i={d} ptr=\\"{s}\\"\\n", .{_i, _map_lua_bufs_${mi}_${hi}[_i][0.._n.len]});\n`;
             out += `        }\n`;
           }
         }

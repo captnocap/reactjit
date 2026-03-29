@@ -824,7 +824,7 @@ function compileMod(source, file) {
       const zigKind = (kind === 'let' || kind === 'var') ? 'var' : 'const';
       const typeAnnot = type ? ': ' + transpileType(type.trim()) : '';
       const indent = line.match(/^(\s*)/)[1];
-      out += indent + pub + zigKind + ' ' + name + typeAnnot + ' = ' + transpileExpr(expr.replace(/;$/, '')) + ';\n';
+      out += indent + pub + zigKind + ' ' + name + typeAnnot + ' = ' + transpileModExpr(expr.replace(/;$/, '')) + ';\n';
       continue;
     }
 
@@ -878,8 +878,8 @@ function transpileParams(params) {
   }).join(', ');
 }
 
-// Transpile expressions (ported from love2d tsl.mjs patterns)
-function transpileExpr(expr) {
+// Transpile expressions for --mod mode (ported from love2d tsl.mjs patterns)
+function transpileModExpr(expr) {
   let e = expr.trim();
   // null/undefined → null
   e = e.replace(/\bundefined\b/g, 'null');

@@ -69,15 +69,6 @@ const namedColors = {
   orange: [255,165,0], transparent: [0,0,0],
 };
 
-// ── Event handler attributes ──
-// Attributes that trigger handler extraction in the parser.
-const eventAttrs = { onPress: true, onTap: true, onToggle: true, onSelect: true, onChange: true };
-function isEventAttr(name) { return eventAttrs[name] === true; }
-
-// ── Node-level fields (not under .style) ──
-// Fields that live directly on the node struct, not under node.style.
-const nodeFieldSet = { text_color: true, font_size: true, text: true };
-function isNodeField(name) { return nodeFieldSet[name] === true; }
 
 // ── Soup-tier constants ──
 // HTML tag → Zig primitive mapping for soup sources (lowercase output)

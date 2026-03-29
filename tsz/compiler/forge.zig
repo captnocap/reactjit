@@ -21,7 +21,6 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/attrs.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++
     @embedFile("smith/preflight.js") ++ "\n" ++
-    @embedFile("smith/emit_ext.js") ++ "\n" ++
     @embedFile("smith/emit.js") ++ "\n" ++
     @embedFile("smith/soup_smith.js");
 
