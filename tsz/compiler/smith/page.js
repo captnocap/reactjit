@@ -330,6 +330,44 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
     }
   }
 
+  // ── JS_LOGIC validation: duplicate vars ──
+  var seenVars = {};
+  for (var vi2 = 0; vi2 < jsLines.length; vi2++) {
+    var varMatch2 = jsLines[vi2].match(/^var\s+(\w+)\s*=/);
+    if (varMatch2) {
+      var vname = varMatch2[1];
+      if (seenVars[vname]) {
+        ctx._duplicateJSVars.push({ name: vname });
+      }
+      seenVars[vname] = true;
+    }
+  }
+
+  // ── JS_LOGIC validation: undefined function calls ──
+  // All funcNames + setter names that were emitted
+  var definedFuncs = {};
+  for (var df = 0; df < funcNames.length; df++) definedFuncs[funcNames[df]] = true;
+  // Also count functions parsed from <functions> block
+  var parsedFuncs = parsePageFunctionsBlock(functionsBlock);
+  for (var pf2 = 0; pf2 < parsedFuncs.length; pf2++) definedFuncs[parsedFuncs[pf2].name] = true;
+  // Scan JS lines for function calls: word( pattern
+  var allJS = jsLines.join('\n');
+  var callRe = /\b(\w+)\s*\(/g;
+  var callMatch;
+  // Built-in JS / runtime functions to ignore
+  var jsBuiltins = { 'function': 1, 'if': 1, 'for': 1, 'while': 1, 'return': 1, 'setInterval': 1, 'setTimeout': 1, 'Math': 1, 'parseInt': 1, 'parseFloat': 1, 'String': 1, 'Number': 1, 'Array': 1, 'Object': 1, 'JSON': 1, 'console': 1, '__ambient': 1, '__setStateString': 1, '__setState': 1, '__setObjArr0': 1, '__setObjArr1': 1, '__setObjArr2': 1, '__setObjArr3': 1 };
+  while ((callMatch = callRe.exec(allJS)) !== null) {
+    var callee = callMatch[1];
+    if (!jsBuiltins[callee] && !definedFuncs[callee] && !seenVars[callee]) {
+      // Skip module-namespaced calls (db.init, net.get, etc.) — those are tracked as ignored modules
+      // Also skip concat, map, find, filter, slice, push, etc.
+      var jsArrayMethods = { 'concat': 1, 'map': 1, 'find': 1, 'filter': 1, 'slice': 1, 'push': 1, 'pop': 1, 'shift': 1, 'join': 1, 'indexOf': 1, 'includes': 1, 'toString': 1, 'trim': 1, 'reduce': 1, 'from': 1, 'floor': 1, 'ceil': 1, 'round': 1, 'abs': 1, 'min': 1, 'max': 1, 'sqrt': 1, 'pow': 1, 'random': 1, 'toLowerCase': 1, 'toUpperCase': 1, 'split': 1, 'replace': 1, 'match': 1, 'startsWith': 1, 'endsWith': 1, 'charAt': 1, 'substring': 1, 'splice': 1, 'sort': 1, 'reverse': 1, 'forEach': 1, 'some': 1, 'every': 1, 'keys': 1, 'values': 1, 'entries': 1, 'assign': 1, 'stringify': 1, 'parse': 1, 'log': 1, 'warn': 1, 'error': 1, 'clamp': 1 };
+      if (!jsArrayMethods[callee]) {
+        ctx._undefinedJSCalls.push({ caller: 'JS_LOGIC', callee: callee });
+      }
+    }
+  }
+
   return { scriptBlock: jsLines.join('\n'), funcNames: funcNames };
 }
 
@@ -342,6 +380,15 @@ function compilePage(source, c, file) {
   // Extract route name
   var pageMatch = source.match(/<page\s+route=(\w+)\s*>/);
   var routeName = pageMatch ? pageMatch[1] : 'Page';
+
+  // Detect <module> blocks — not yet compiled, track as ignored
+  var moduleMatches = source.match(/<module\s+(\w+)\s*>/g);
+  if (moduleMatches) {
+    for (var mi = 0; mi < moduleMatches.length; mi++) {
+      var modName = moduleMatches[mi].match(/<module\s+(\w+)/);
+      if (modName) ctx._ignoredModuleBlocks.push({ name: modName[1] });
+    }
+  }
 
   // Extract declarative blocks from source text
   var varBlock = extractPageBlock(source, 'var');
@@ -415,6 +462,20 @@ function compilePage(source, c, file) {
 
   // Parse JSX tree
   var root = parseJSXElement(c);
+
+  // ── Append __evalDynTexts to JS_LOGIC for JS-evaluated expressions ──
+  if (ctx._jsDynTexts.length > 0) {
+    var evalLines = ['function __evalDynTexts() {'];
+    for (var jdi = 0; jdi < ctx._jsDynTexts.length; jdi++) {
+      var jdt = ctx._jsDynTexts[jdi];
+      evalLines.push('  try { __setStateString(' + jdt.slotIdx + ', String(' + jdt.jsExpr + ')); } catch(e) {}');
+    }
+    evalLines.push('}');
+    // Call once at init, then on a 16ms interval for live updates
+    evalLines.push('__evalDynTexts();');
+    evalLines.push('setInterval(__evalDynTexts, 16);');
+    ctx.scriptBlock += '\n' + evalLines.join('\n');
+  }
 
   // Preflight validation
   var pf = preflight(ctx);

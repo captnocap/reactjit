@@ -44,6 +44,9 @@ function parseJSXElement(c) {
     c.advance(); // skip .
     const clsName = c.text(); c.advance();
     clsDef = ctx.classifiers && ctx.classifiers[clsName];
+    if (!clsDef) {
+      ctx._unresolvedClassifiers.push({ name: clsName, line: c.starts[c.pos > 0 ? c.pos - 1 : 0] });
+    }
     rawTag = clsDef ? clsDef.type : 'Box';
   }
   // Graph.Path / Graph.Node dot-name tags
@@ -74,6 +77,11 @@ function parseJSXElement(c) {
     c.advance();
     const subTag = c.text(); c.advance();
     rawTag = 'Physics.' + subTag;
+  }
+
+  // Track unsupported subsystem tags — these parse but produce empty boxes
+  if (rawTag.startsWith('Physics.') || rawTag.startsWith('3D.') || rawTag === 'Scene3D' || rawTag === 'Effect') {
+    ctx._unknownSubsystemTags.push({ tag: rawTag, line: c.starts[c.pos > 0 ? c.pos - 1 : 0] });
   }
 
   // Check if this is a component call
@@ -382,6 +390,8 @@ function parseJSXElement(c) {
   if (rawTag === 'Canvas') { nodeFields.push('.graph_container = true'); nodeFields.push('.canvas_type = "canvas"'); }
   // Canvas.Node → canvas_node with gx/gy/gw/gh parsed from attributes
   if (rawTag === 'Canvas.Node') nodeFields.push('.canvas_node = true');
+  // Canvas.Clamp → viewport-pinned overlay inside Canvas (not transformed by camera)
+  if (rawTag === 'Canvas.Clamp') nodeFields.push('.canvas_clamp = true');
   // Canvas.Overlay → viewport-pinned HUD layer (position: absolute, covers parent)
   if (rawTag === 'Canvas.Overlay') { styleFields.push('.position = .absolute'); styleFields.push('.top = 0'); styleFields.push('.left = 0'); styleFields.push('.right = 0'); styleFields.push('.bottom = 0'); }
   // Terminal → allocate terminal_id
@@ -432,7 +442,17 @@ function parseJSXElement(c) {
         if (attr === 'style') {
           styleFields = parseStyleBlock(c);
         } else if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
-          if (c.kind() === TK.lbrace) {
+          // Bare handler reference: onPress=functionName (no braces) — common in page mode
+          if (c.kind() === TK.identifier && c.kindAt(c.pos + 1) !== TK.dot) {
+            const fname = c.text();
+            c.advance();
+            if (isScriptFunc(fname) || isSetter(fname)) {
+              const handlerName = `_handler_press_${ctx.handlerCount}`;
+              ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n`, luaBody: `${fname}()` });
+              handlerRef = handlerName;
+              ctx.handlerCount++;
+            }
+          } else if (c.kind() === TK.lbrace) {
             c.advance(); // {
             // Prop-passed handler: onPress={onToggle} where onToggle is a component prop
             if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && ctx.propStack[c.text()].startsWith('_handler_press_')) {
@@ -963,6 +983,12 @@ function parseChildren(c) {
       children.push(parseJSXElement(c));
     } else if (c.kind() === TK.lbrace) {
       c.advance();
+      // Skip JSX comments: {/* ... */}
+      if (c.kind() === TK.comment) {
+        c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        continue;
+      }
       if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
         if (!globalThis.__dbg) globalThis.__dbg = [];
         globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
@@ -1229,26 +1255,77 @@ function parseChildren(c) {
           const args = slotGet(getter);
           ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
           ctx.dynCount++;
-          // Consume remaining expression tokens until closing brace
+          // Consume remaining expression tokens until closing brace — track if tail is dropped
+          const _tailTokens = [];
           let _bd = 0;
           while (c.kind() !== TK.eof) {
             if (c.kind() === TK.lbrace) _bd++;
             if (c.kind() === TK.rbrace) { if (_bd === 0) break; _bd--; }
+            _tailTokens.push(c.text());
             c.advance();
           }
           if (c.kind() === TK.rbrace) c.advance();
-          // Placeholder node — text will be set by _updateDynamicTexts
-          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+          // If there were tokens after the getter, the full expression needs JS evaluation
+          if (_tailTokens.length > 0 && ctx.scriptBlock) {
+            // The simple getter dynText is wrong — remove it and use JS-eval instead
+            ctx.dynTexts.pop();
+            ctx.dynCount--;
+            const fullExpr = (getter + ' ' + _tailTokens.join(' ')).replace(/\bexact\b/g, '===');
+            const jSlotIdx = ctx.stateSlots.length;
+            ctx.stateSlots.push({ getter: '__jsExpr_' + jSlotIdx, setter: '__setJsExpr_' + jSlotIdx, initial: '', type: 'string' });
+            const jBufId = ctx.dynCount;
+            ctx.dynTexts.push({ bufId: jBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
+            ctx.dynCount++;
+            ctx._jsDynTexts.push({ slotIdx: jSlotIdx, jsExpr: fullExpr });
+            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: jBufId });
+          } else if (_tailTokens.length > 0) {
+            ctx._droppedExpressions.push({ expr: getter + ' ' + _tailTokens.join(' '), line: 0 });
+            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+          } else {
+            // Placeholder node — text will be set by _updateDynamicTexts
+            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+          }
         }
       } else {
-        // Skip unknown expression
+        // Collect the full expression tokens
+        const _dropStart = c.pos;
+        const _dropTokens = [];
         let depth = 1;
         while (depth > 0 && c.kind() !== TK.eof) {
           if (c.kind() === TK.lbrace) depth++;
           if (c.kind() === TK.rbrace) depth--;
-          if (depth > 0) c.advance();
+          if (depth > 0) { _dropTokens.push(c.text()); c.advance(); }
         }
         if (c.kind() === TK.rbrace) c.advance();
+        const exprText = _dropTokens.join(' ');
+
+        // Page mode with scriptBlock: route unknown expressions through JS-evaluated state slots
+        if (ctx.scriptBlock && exprText.length > 0) {
+          // Build the JS expression: reconstruct from tokens
+          // Replace 'exact' with '===' for JS evaluation
+          let jsExpr = exprText.replace(/\bexact\b/g, '===');
+          // If it's a bare identifier (function name), call it
+          if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
+            jsExpr = jsExpr + '()';
+          }
+
+          // Allocate a string state slot for this JS expression
+          const slotIdx = ctx.stateSlots.length;
+          ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
+
+          // Create dynText that reads from this slot
+          const bufId = ctx.dynCount;
+          ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
+          ctx.dynCount++;
+
+          // Track for JS_LOGIC generation
+          ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: jsExpr });
+
+          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+        } else if (exprText.length > 0) {
+          // No scriptBlock — genuinely dropped expression
+          ctx._droppedExpressions.push({ expr: exprText, line: c.starts[_dropStart] || 0 });
+        }
       }
     } else if (c.kind() === TK.comment) {
       // Skip block comments in JSX children

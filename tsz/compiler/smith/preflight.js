@@ -258,6 +258,110 @@ function preflight(ctx) {
     }
   }
 
+  // ── F18: JS syntax leaked into Zig node declarations ──
+  // Single-quoted multi-char strings, 'exact', ternary operators in text nodes = broken parse
+  for (var di3 = 0; di3 < allDecls.length; di3++) {
+    var decl = allDecls[di3];
+    // Check for single-quoted multi-char strings (JS strings leaked into Zig)
+    if (/'\w{2,}'/.test(decl) && decl.indexOf('.text =') >= 0) {
+      var leaked = decl.match(/\.text = "([^"]*'[^"]*)"/) || decl.match(/\.text = "([^"]*exact[^"]*)"/);
+      if (leaked) {
+        errors.push('F18: JS syntax leaked into Zig text node: "' + leaked[1].substring(0, 60) + '"');
+      }
+    }
+    // Check for 'exact' keyword in Zig declarations (should have been resolved)
+    if (/\bexact\b/.test(decl) && decl.indexOf('Node{') >= 0) {
+      errors.push('F18: unresolved "exact" keyword in Zig declaration (JS ternary not fully parsed)');
+    }
+  }
+
+  // ── F17: item.* references in non-map dynTexts ──
+  // item.field references only make sense inside map pools. If they appear in
+  // global _updateDynamicTexts, they reference an undeclared Zig variable.
+  for (var dti = 0; dti < ctx.dynTexts.length; dti++) {
+    var dt = ctx.dynTexts[dti];
+    if (dt.inMap) continue; // map-internal texts are fine
+    var args = dt.fmtArgs || '';
+    if (args.indexOf('item.') >= 0 || args.indexOf('item)') >= 0) {
+      errors.push('F17: dynText buf ' + dt.bufId + ' references "item" outside of a map — will fail with undeclared identifier');
+    }
+  }
+  // Also check conditionals for item references (both in and out of maps — item.X must be resolved to OA field)
+  for (var ci2 = 0; ci2 < ctx.conditionals.length; ci2++) {
+    var cond = ctx.conditionals[ci2];
+    if (cond.condExpr && cond.condExpr.indexOf('item.') >= 0) {
+      errors.push('F17: conditional references unresolved "item.' + (cond.condExpr.match(/item\.(\w+)/) || ['','?'])[1] + '" — should be OA field accessor');
+    }
+  }
+  // Check all arrayDecls for raw 'item.' references
+  for (var adi = 0; adi < allDecls.length; adi++) {
+    if (/\bitem\.\w+/.test(allDecls[adi])) {
+      var itemField = allDecls[adi].match(/\bitem\.(\w+)/);
+      errors.push('F17: array decl references unresolved "item.' + (itemField ? itemField[1] : '?') + '" — Zig has no "item" variable');
+    }
+  }
+
+  // ── F11: Unresolved classifier components ──
+  // C.Name used in JSX but no classifier definition exists — all styling is lost
+  if (ctx._unresolvedClassifiers && ctx._unresolvedClassifiers.length > 0) {
+    var clsNames = {};
+    for (var ci = 0; ci < ctx._unresolvedClassifiers.length; ci++) {
+      clsNames[ctx._unresolvedClassifiers[ci].name] = true;
+    }
+    var uniqueNames = Object.keys(clsNames);
+    errors.push('F11: ' + ctx._unresolvedClassifiers.length + ' unresolved classifier component(s): C.' + uniqueNames.join(', C.') + ' — all styling dropped (check .cls.tsz import)');
+  }
+
+  // ── F12: Dropped expressions ──
+  // {expr} in JSX that didn't match any known pattern — silently produces nothing
+  if (ctx._droppedExpressions && ctx._droppedExpressions.length > 0) {
+    for (var dei = 0; dei < ctx._droppedExpressions.length; dei++) {
+      var de = ctx._droppedExpressions[dei];
+      var snippet = de.expr.length > 60 ? de.expr.substring(0, 60) + '...' : de.expr;
+      errors.push('F12: dropped expression {' + snippet + '} — not a getter, prop, template, map, or conditional');
+    }
+  }
+
+  // ── F13: Unknown subsystem tags ──
+  // Physics.*, 3D.*, Scene3D, Effect parsed but have no runtime support — produce empty boxes
+  if (ctx._unknownSubsystemTags && ctx._unknownSubsystemTags.length > 0) {
+    var tagNames = {};
+    for (var sti = 0; sti < ctx._unknownSubsystemTags.length; sti++) {
+      tagNames[ctx._unknownSubsystemTags[sti].tag] = true;
+    }
+    var uniqueTags = Object.keys(tagNames);
+    errors.push('F13: ' + ctx._unknownSubsystemTags.length + ' unsupported subsystem tag(s): <' + uniqueTags.join('>, <') + '> — no runtime support, rendered as empty boxes');
+  }
+
+  // ── F14: Ignored <module> blocks ──
+  // <module name> declared in source but not compiled — all FFI/function bindings are dead
+  if (ctx._ignoredModuleBlocks && ctx._ignoredModuleBlocks.length > 0) {
+    var modNames = ctx._ignoredModuleBlocks.map(function(m) { return m.name; });
+    errors.push('F14: ' + modNames.length + ' <module> block(s) ignored: ' + modNames.join(', ') + ' — FFI bindings and namespace functions are dead code');
+  }
+
+  // ── F15: Undefined JS function calls ──
+  // Functions called in JS_LOGIC but never defined
+  if (ctx._undefinedJSCalls && ctx._undefinedJSCalls.length > 0) {
+    var seen = {};
+    for (var uci = 0; uci < ctx._undefinedJSCalls.length; uci++) {
+      var uc = ctx._undefinedJSCalls[uci];
+      if (!seen[uc.callee]) {
+        errors.push('F15: JS_LOGIC calls undefined function "' + uc.callee + '"');
+        seen[uc.callee] = true;
+      }
+    }
+  }
+
+  // ── F16: Duplicate JS variable declarations ──
+  if (ctx._duplicateJSVars && ctx._duplicateJSVars.length > 0) {
+    var dups = {};
+    for (var dvi = 0; dvi < ctx._duplicateJSVars.length; dvi++) {
+      dups[ctx._duplicateJSVars[dvi].name] = true;
+    }
+    errors.push('F16: duplicate var declaration(s) in JS_LOGIC: ' + Object.keys(dups).join(', '));
+  }
+
   // --strict: promote all warnings to errors
   if (globalThis.__strict === 1 && warnings.length > 0) {
     for (var wi = 0; wi < warnings.length; wi++) {

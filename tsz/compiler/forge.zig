@@ -35,7 +35,11 @@ const FileClass = enum { component, classifier, script, unknown };
 
 fn classifyFile(path: []const u8) FileClass {
     if (std.mem.endsWith(u8, path, "_cls.tsz") or std.mem.endsWith(u8, path, ".cls.tsz") or
-        std.mem.endsWith(u8, path, "_clsmod.tsz") or std.mem.endsWith(u8, path, ".clsmod.tsz"))
+        std.mem.endsWith(u8, path, "_clsmod.tsz") or std.mem.endsWith(u8, path, ".clsmod.tsz") or
+        std.mem.endsWith(u8, path, ".effects.tsz") or std.mem.endsWith(u8, path, "_effects.tsz") or
+        std.mem.endsWith(u8, path, ".glyphs.tsz") or std.mem.endsWith(u8, path, "_glyphs.tsz") or
+        std.mem.endsWith(u8, path, ".tcls.tsz") or std.mem.endsWith(u8, path, "_tcls.tsz") or
+        std.mem.endsWith(u8, path, ".vcls.tsz") or std.mem.endsWith(u8, path, "_vcls.tsz"))
         return .classifier;
     if (std.mem.endsWith(u8, path, ".script.tsz") or std.mem.endsWith(u8, path, "_script.tsz"))
         return .script;
@@ -55,15 +59,33 @@ fn resolveImportPath(importer: []const u8, raw_import: []const u8) ?[]const u8 {
         raw_import;
 
     // Suffix map — explicit suffix in import path → resolve directly
+    // Cross-convention: _cls imports also try .cls.tsz files (and vice versa)
     const suffix_map = [_]struct { suffix: []const u8, ext: []const u8 }{
         .{ .suffix = "_cls", .ext = "_cls.tsz" },
+        .{ .suffix = "_cls", .ext = ".cls.tsz" },
         .{ .suffix = "_clsmod", .ext = "_clsmod.tsz" },
+        .{ .suffix = "_clsmod", .ext = ".clsmod.tsz" },
         .{ .suffix = "_c", .ext = "_c.tsz" },
+        .{ .suffix = "_c", .ext = ".c.tsz" },
         .{ .suffix = "_cmod", .ext = "_cmod.tsz" },
+        .{ .suffix = "_cmod", .ext = ".cmod.tsz" },
         .{ .suffix = "_script", .ext = "_script.tsz" },
+        .{ .suffix = "_script", .ext = ".script.tsz" },
+        .{ .suffix = "_effects", .ext = "_effects.tsz" },
+        .{ .suffix = "_effects", .ext = ".effects.tsz" },
+        .{ .suffix = "_glyphs", .ext = "_glyphs.tsz" },
+        .{ .suffix = "_glyphs", .ext = ".glyphs.tsz" },
+        .{ .suffix = "_tcls", .ext = "_tcls.tsz" },
+        .{ .suffix = "_tcls", .ext = ".tcls.tsz" },
+        .{ .suffix = "_vcls", .ext = "_vcls.tsz" },
+        .{ .suffix = "_vcls", .ext = ".vcls.tsz" },
         .{ .suffix = ".cls", .ext = ".cls.tsz" },
         .{ .suffix = ".c", .ext = ".c.tsz" },
         .{ .suffix = ".script", .ext = ".script.tsz" },
+        .{ .suffix = ".effects", .ext = ".effects.tsz" },
+        .{ .suffix = ".glyphs", .ext = ".glyphs.tsz" },
+        .{ .suffix = ".tcls", .ext = ".tcls.tsz" },
+        .{ .suffix = ".vcls", .ext = ".vcls.tsz" },
     };
     for (suffix_map) |m| {
         if (std.mem.endsWith(u8, raw, m.suffix)) {
@@ -173,6 +195,8 @@ fn mergeImports(
 
         switch (class) {
             .classifier => {
+                // Recursively resolve imports from classifier files (e.g. .cls imports .tcls)
+                mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
                 cls_buf.appendSlice(Alloc, imp_source) catch {};
                 cls_buf.append(Alloc, '\n') catch {};
             },

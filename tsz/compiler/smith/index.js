@@ -86,6 +86,14 @@ function resetCtx() {
     classifiers: {},       // {Name: {type, style, fontSize, color, ...}} from .cls imports
     renderLocals: {},      // {varName: resolvedValue} — variables between function App() and return
     _debugLines: [],       // debug output lines (emitted as Zig comments)
+    // ── Drop tracking (preflight screams about these) ──
+    _unresolvedClassifiers: [], // [{name, line}] — C.Name used but no classifier definition
+    _droppedExpressions: [],    // [{expr, line}] — {expr} silently skipped in parseChildren
+    _unknownSubsystemTags: [],  // [{tag, line}] — Physics.*/3D.*/Effect/Scene3D with no runtime
+    _ignoredModuleBlocks: [],   // [{name}] — <module name> blocks in source, not processed
+    _undefinedJSCalls: [],      // [{caller, callee}] — JS function calls to undefined functions
+    _duplicateJSVars: [],       // [{name}] — var declared more than once in JS_LOGIC
+    _jsDynTexts: [],            // [{slotIdx, jsExpr}] — JS-evaluated dynamic text expressions
   };
 }
 
@@ -532,16 +540,41 @@ function collectConstArrays(c) {
 
 // ── Classifier support ──
 
+var _activeTheme = {};  // resolved theme tokens (from first theme() call = default)
+
 function collectClassifiers() {
   ctx.classifiers = {};
   const clsText = globalThis.__clsContent;
   if (!clsText) return;
   try {
     let merged = {};
+    let themeCollected = false;
     const classifier = function(obj) { for (const k in obj) merged[k] = obj[k]; };
-    eval(clsText); // direct eval — sees local 'classifier' binding
+    // effects/glyphs defined as no-ops so eval doesn't throw
+    const effects = function() {};
+    const glyphs = function() {};
+    // theme() collects the first (default) theme for token resolution
+    const theme = function(name, obj) {
+      if (!themeCollected) { _activeTheme = obj; themeCollected = true; }
+    };
+    const variants = function() {};
+    // Strip 'from' import lines — they're not valid JS (already resolved by forge)
+    const cleanText = clsText.split('\n').filter(function(l) { return !l.trim().match(/^from\s+['"]/); }).join('\n');
+    eval(cleanText); // direct eval — sees local bindings
     ctx.classifiers = merged;
-  } catch(e) {}
+  } catch(e) {
+    if (!ctx._debugLines) ctx._debugLines = [];
+    ctx._debugLines.push('collectClassifiers eval failed: ' + String(e));
+  }
+}
+
+// Resolve 'theme-*' string to its value from the active theme
+function resolveThemeToken(val) {
+  if (typeof val !== 'string') return val;
+  if (!val.startsWith('theme-')) return val;
+  const token = val.slice(6); // strip 'theme-'
+  if (_activeTheme[token] !== undefined) return _activeTheme[token];
+  return val; // unresolved — pass through
 }
 
 // Convert a classifier definition's style object → Zig styleFields array
@@ -550,7 +583,8 @@ function clsStyleFields(def) {
   const fields = [];
   const style = def.style;
   for (const key of Object.keys(style)) {
-    const val = style[key];
+    const raw = style[key];
+    const val = resolveThemeToken(raw);
     if (colorKeys[key]) {
       fields.push(`.${colorKeys[key]} = ${parseColor(String(val))}`);
     } else if (enumKeys[key]) {
@@ -575,8 +609,8 @@ function clsStyleFields(def) {
 function clsNodeFields(def) {
   if (!def) return [];
   const fields = [];
-  if (def.fontSize !== undefined) fields.push(`.font_size = ${def.fontSize}`);
-  if (def.color !== undefined) fields.push(`.text_color = ${parseColor(String(def.color))}`);
+  if (def.fontSize !== undefined) fields.push(`.font_size = ${resolveThemeToken(def.fontSize)}`);
+  if (def.color !== undefined) fields.push(`.text_color = ${parseColor(String(resolveThemeToken(def.color)))}`);
   return fields;
 }
 

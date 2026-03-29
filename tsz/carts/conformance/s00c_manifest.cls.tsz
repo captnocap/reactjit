@@ -3,6 +3,8 @@
 // Variants live in .vcls.tsz. Themes live in .tcls.tsz.
 // This file is the skeleton. Theme + variants dress it.
 
+from './s00c_manifest_tcls'
+
 classifier({
   // ── Layout shells ──
   Page: { type: 'Box', style: { width: '100%', height: '100%', backgroundColor: 'theme-bg', padding: 'theme-spaceXl', gap: 'theme-spaceLg' } },

@@ -577,6 +577,32 @@ function tryParseTernaryJSX(c, children) {
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
+      } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+        // Map item parameter: resolve item.field to OA field accessor
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          if (c.kind() === TK.identifier) {
+            let field = c.text(); c.advance();
+            while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+              c.advance(); field += '_' + c.text(); c.advance();
+            }
+            const oa = ctx.currentMap.oa;
+            if (oa) {
+              const fi = oa.fields.find(f => f.name === field);
+              if (fi && fi.type === 'string') {
+                condParts.push(`_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`);
+              } else {
+                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+              }
+            } else {
+              condParts.push('0');
+            }
+            continue;
+          }
+        }
+        condParts.push('@as(i64, @intCast(_i))');
+        continue;
       } else if (ctx.inlineComponent) {
         condParts.push('0');
       } else {

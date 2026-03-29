@@ -1,3 +1,5 @@
+from './s00c_manifest_cls'
+
 <page route=notes>
   <var>
     input is ''
@@ -32,7 +34,7 @@
         <C.InputWrap style={{ flexGrow: 1 }}>
           <TextInput value={input} onChange=set_input placeholder='Write something...' />
         </C.InputWrap>
-        <C.BtnPrimary onPress=addNote><C.BtnLabel>Add</C.BtnLabel></C.BtnPrimary>
+        <C.Btn onPress=addNote><C.BtnLabel>Add</C.BtnLabel></C.Btn>
       </C.Row>
 
       <For each=notes>
