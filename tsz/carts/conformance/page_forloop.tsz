@@ -1,0 +1,22 @@
+// Conformance test: <For each=X> declarative loop
+// Tests: For loop with object array iteration
+
+const [items, setItems] = useState([
+  { label: 'Alpha', value: 10 },
+  { label: 'Beta', value: 20 },
+  { label: 'Gamma', value: 30 }
+])
+
+function App() {
+  return (
+    <Box style={{ flexDirection: 'column', padding: 16, backgroundColor: '#0f172a', width: '100%', height: '100%' }}>
+      <Text style={{ fontSize: 22, color: '#f8fafc' }}>For Loop Test</Text>
+      <For each=items>
+        <Box style={{ flexDirection: 'row', gap: 8, padding: 4 }}>
+          <Text style={{ color: '#94a3b8' }}>{item.label}</Text>
+          <Text style={{ color: '#3b82f6' }}>{item.value}</Text>
+        </Box>
+      </For>
+    </Box>
+  )
+}

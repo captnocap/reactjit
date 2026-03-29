@@ -950,6 +950,11 @@ function parseChildren(c) {
   const children = [];
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
     if (c.kind() === TK.lt) {
+      // Detect <For each=X> declarative loop
+      if (c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'For') {
+        const forResult = parseForLoop(c);
+        if (forResult) { children.push(forResult); continue; }
+      }
       // Detect <Glyph .../> inside <Text> — emit as inline glyph marker
       if (c.kind() === TK.lt && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'Glyph') {
         const glyph = parseInlineGlyph(c);

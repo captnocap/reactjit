@@ -703,6 +703,89 @@ function tryParseTernaryText(c, children) {
   return true;
 }
 
+// ── <For each=X> declarative loop ──
+// Syntactic sugar for .map() — parses children as map template.
+// <For each=arrayName> ... </For>
+// Equivalent to {arrayName.map((item, index) => (...))}
+
+function parseForLoop(c) {
+  // Cursor is on 'For' (after '<' was consumed by parseJSXElement caller)
+  // Actually, we're called from parseChildren — cursor is on '<' with next = 'For'
+  c.advance(); // skip <
+  c.advance(); // skip 'For'
+
+  // Parse each=arrayName attribute
+  var arrayName = '';
+  while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
+    if (c.kind() === TK.identifier && c.text() === 'each') {
+      c.advance(); // skip 'each'
+      if (c.kind() === TK.equals) c.advance(); // skip '='
+      if (c.kind() === TK.identifier) { arrayName = c.text(); c.advance(); }
+      else if (c.kind() === TK.string) { arrayName = c.text().slice(1, -1); c.advance(); }
+    } else {
+      c.advance();
+    }
+  }
+  if (c.kind() === TK.gt) c.advance(); // skip >
+
+  if (!arrayName) return null;
+
+  // Find or infer OA for this array
+  var oa = ctx.objectArrays.find(function(o) { return o.getter === arrayName; });
+  if (!oa) oa = inferOaFromSource(c, arrayName);
+  if (!oa) {
+    // No OA found — skip the For body and return empty
+    while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) c.advance();
+    if (c.kind() === TK.lt_slash) {
+      c.advance(); // </
+      if (c.kind() === TK.identifier && c.text() === 'For') c.advance();
+      if (c.kind() === TK.gt) c.advance();
+    }
+    return { nodeExpr: '.{}' };
+  }
+
+  // Set up map context (same as tryParseMap)
+  var savedMapCtx = ctx.currentMap;
+  var mapIdx = ctx.maps.length;
+  var isInline = !!(savedMapCtx && savedMapCtx.oaIdx !== oa.oaIdx);
+  var mapInfo = {
+    oaIdx: oa.oaIdx, itemParam: 'item', indexParam: 'index',
+    oa: oa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
+    mapArrayDecls: [], mapArrayComments: [],
+    parentMap: savedMapCtx,
+    isInline: isInline,
+  };
+  ctx.maps.push(mapInfo);
+  ctx.currentMap = mapInfo;
+
+  var savedArrayDecls = ctx.arrayDecls;
+  var savedArrayComments = ctx.arrayComments;
+  mapInfo._topArrayDecls = savedArrayDecls;
+  mapInfo._topArrayComments = savedArrayComments;
+  ctx.arrayDecls = mapInfo.mapArrayDecls;
+  ctx.arrayComments = mapInfo.mapArrayComments;
+
+  // Parse template — single child element or wrap multiple in container
+  var templateNode = parseJSXElement(c);
+
+  // Restore array context
+  ctx.arrayDecls = savedArrayDecls;
+  ctx.arrayComments = savedArrayComments;
+  ctx.currentMap = savedMapCtx;
+
+  // Consume </For>
+  if (c.kind() === TK.lt_slash) {
+    c.advance(); // </
+    if (c.kind() === TK.identifier && c.text() === 'For') c.advance();
+    if (c.kind() === TK.gt) c.advance();
+  }
+
+  // Finalize map info
+  mapInfo.templateExpr = templateNode.nodeExpr;
+
+  return { nodeExpr: '.{}', mapIdx: mapIdx };
+}
+
 // ── Utility functions ──
 
 function skipBraces(c) {
