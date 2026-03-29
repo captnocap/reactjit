@@ -626,6 +626,11 @@ function compile() {
 
   resetCtx();
 
+  // Page mode: <page route=name> declarative syntax
+  if (source.indexOf('<page') !== -1 && source.match(/<page\s+route=/)) {
+    return compilePage(source, c, file);
+  }
+
   // Phase 1: Collect script, components, state, and classifiers
   collectScript(c);
   collectComponents(c);

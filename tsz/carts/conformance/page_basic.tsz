@@ -1,0 +1,47 @@
+// Conformance test: basic <page> block syntax
+// Tests: <var>, <state>, <functions>, <timer>, return()
+
+<page route=PageBasic>
+  <var>
+    count is 0
+    label is 'Hello'
+    active is true
+  </var>
+
+  <state>
+    set_count
+    set_label
+    set_active
+  </state>
+
+  <functions>
+    increment:
+      set_count to count + 1
+
+    reset:
+      set_count to 0
+      set_label to 'Hello'
+
+    toggleActive:
+      set_active to !active
+
+    statusText:
+      active ? 'ON' : 'OFF'
+  </functions>
+
+  return(
+    <Box style={{ flexDirection: 'column', padding: 16, backgroundColor: '#0f172a', width: '100%', height: '100%' }}>
+      <Text style={{ fontSize: 22, color: '#f8fafc' }}>{label}</Text>
+      <Text style={{ color: '#94a3b8' }}>{'Count: ' + count}</Text>
+      <Pressable onPress={increment}>
+        <Text style={{ color: '#3b82f6' }}>Increment</Text>
+      </Pressable>
+      <Pressable onPress={reset}>
+        <Text style={{ color: '#ef4444' }}>Reset</Text>
+      </Pressable>
+      <Pressable onPress={toggleActive}>
+        <Text style={{ color: '#22c55e' }}>Toggle</Text>
+      </Pressable>
+    </Box>
+  )
+</page>

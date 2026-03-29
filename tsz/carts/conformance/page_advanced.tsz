@@ -1,0 +1,74 @@
+// Conformance test: advanced <page> block syntax
+// Tests: composition, guards, timers, ambients, exact, non-primitive state
+
+<page route=PageAdvanced>
+  <var>
+    // Ambient reads
+    user is sys.user
+    mouseX is input.mouse.x
+
+    // Primitive state
+    count is 0
+    input is ''
+    active is false
+    frame is 0
+
+    // Non-primitive state (JS-managed)
+    logs
+  </var>
+
+  <state>
+    set_count
+    set_input
+    set_active
+    set_frame
+    set_logs
+  </state>
+
+  <functions>
+    // ── Guards ──
+    addLog:
+      input exact '' ? stop : go
+      set_logs to logs.concat([input])
+      set_count to count + 1
+      set_input to ''
+
+    clearLogs:
+      set_logs to []
+      set_count to 0
+
+    // ── Computed ──
+    statusText:
+      count > 0 ? 'active' : 'empty'
+
+    // ── Composition ──
+    submit:
+      addLog + clearLogs
+
+    // ── Toggle ──
+    toggle:
+      set_active to !active
+
+    // ── Physics tick ──
+    tick:
+      active exact false ? stop : go
+      set_frame to frame + 1
+  </functions>
+
+  <timer interval=33>
+    tick
+  </timer>
+
+  return(
+    <Box style={{ flexDirection: 'column', padding: 16, backgroundColor: '#0f172a', width: '100%', height: '100%' }}>
+      <Text style={{ fontSize: 22, color: '#f8fafc' }}>Page Advanced Test</Text>
+      <Text style={{ color: '#94a3b8' }}>{'Count: ' + count + ' | Frame: ' + frame}</Text>
+      <Pressable onPress={toggle}>
+        <Text style={{ color: '#3b82f6' }}>Toggle</Text>
+      </Pressable>
+      <Pressable onPress={submit}>
+        <Text style={{ color: '#22c55e' }}>Submit</Text>
+      </Pressable>
+    </Box>
+  )
+</page>
