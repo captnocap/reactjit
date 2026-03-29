@@ -645,7 +645,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (mapHandlers.length > 0) {
         const luaSizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
         for (let hi = 0; hi < mapHandlers.length; hi++) {
-          const hasFieldRefs = m._handlerFieldRefs && m._handlerFieldRefs.length > 0;
+          const refsMap = m._handlerFieldRefsMap || {};
+          const hasFieldRefs = refsMap[hi] && refsMap[hi].length > 0;
           const bufSize = hasFieldRefs ? 128 : 48;
           if (m.isInline) {
             out += `var _map_lua_bufs_${mi}_${hi}: [MAX_INLINE_OUTER_${mi}][MAX_MAP_${mi}][${bufSize}]u8 = undefined;\n`;
