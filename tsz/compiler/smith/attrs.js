@@ -363,7 +363,8 @@ function isSetter(name) {
 // since a provided string prop is always non-zero in a truthiness check.
 function _condPropValue(pv) {
   if (/^-?\d+(\.\d+)?$/.test(pv)) return pv; // numeric literal
-  if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('if (') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression
+  if (pv.startsWith('if (')) return '(' + pv + ')'; // Zig if-else needs parens for correct precedence
+  if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression
   if (pv.startsWith('_handler_press_')) return '1'; // handler ref = truthy
   // String literal — non-empty means truthy (1), empty means falsy (0)
   return pv.length > 0 ? '1' : '0';

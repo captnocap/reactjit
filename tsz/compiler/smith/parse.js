@@ -221,7 +221,10 @@ function parseJSXElement(c) {
                 const cond = val.substring(0, qIdx).trim();
                 const then = val.substring(qIdx + 1, cIdx).trim();
                 const els = val.substring(cIdx + 1).trim();
-                val = 'if (' + cond + ') ' + then + ' else ' + els;
+                // Cast integer literals to i64 so they work in runtime if-else (avoids comptime_int error)
+                const thenVal = /^-?\d+$/.test(then) ? '@as(i64, ' + then + ')' : then;
+                const elsVal = /^-?\d+$/.test(els) ? '@as(i64, ' + els + ')' : els;
+                val = 'if (' + cond + ') ' + thenVal + ' else ' + elsVal;
               }
             }
             propValues[attr] = val;
