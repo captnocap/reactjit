@@ -770,8 +770,6 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         const wrapped = isComparison ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
         if (cond.kind === 'show_hide') {
           out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
-          // Hoist display to pool node so hidden items don't occupy gap space
-          out += `        _map_pool_${mi}[_i].style.display = if ${wrapped} .flex else .none;\n`;
         } else if (cond.kind === 'ternary_jsx') {
           out += `        ${poolArr}[${cond.trueIdx}].style.display = if (${cond.condExpr}) .flex else .none;\n`;
           out += `        ${poolArr}[${cond.falseIdx}].style.display = if (${cond.condExpr}) .none else .flex;\n`;
@@ -1136,6 +1134,33 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
               inner = inner.replace(new RegExp(`\\b${innerIdxParam}\\b`, 'g'), '@as(i64, @intCast(_i))');
             }
             out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
+          }
+        }
+
+        // Inner array conditionals (display toggling for conditionals on inner array children)
+        // These are conditionals like {filter == 0 && <Box>...} inside a map template,
+        // where the conditional target is a child of the inner array, not a per-item sub-array.
+        if (innerArr) {
+          for (const cond of ctx.conditionals) {
+            if (!cond.arrName || cond.arrName !== innerArr) continue;
+            let resolvedExpr = cond.condExpr;
+            // Resolve any remaining item.field references to OA field access
+            if (m.oa) {
+              const itemParam = m.itemParam || 'item';
+              for (const f of m.oa.fields) {
+                resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
+              }
+            }
+            const isComp = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
+              resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
+              resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ');
+            if (cond.kind === 'show_hide') {
+              const wrapped = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
+              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+            } else if (cond.kind === 'ternary_jsx') {
+              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
+              out += `        _map_inner_${mi}[_i][${cond.falseIdx}].style.display = if ((${resolvedExpr})) .none else .flex;\n`;
+            }
           }
         }
 
