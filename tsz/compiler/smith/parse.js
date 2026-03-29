@@ -81,6 +81,26 @@ function parseJSXElement(c) {
     // Collect prop values from call site attributes
     const propValues = {};
     while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
+      // JSX prop spread: {...item} — expand all OA fields as individual props
+      if (c.kind() === TK.lbrace && c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.spread && c.kindAt(c.pos + 2) === TK.identifier) {
+        c.advance(); // skip {
+        c.advance(); // skip ...
+        const spreadName = c.text(); c.advance(); // skip identifier
+        if (c.kind() === TK.rbrace) c.advance(); // skip }
+        // Resolve spread source: map item → expand all OA fields
+        if (ctx.currentMap && spreadName === ctx.currentMap.itemParam) {
+          const oa = ctx.currentMap.oa;
+          for (const f of oa.fields) {
+            if (f.type === 'nested_array') continue;
+            if (f.type === 'string') {
+              propValues[f.name] = `_oa${oa.oaIdx}_${f.name}[_i][0.._oa${oa.oaIdx}_${f.name}_lens[_i]]`;
+            } else {
+              propValues[f.name] = `_oa${oa.oaIdx}_${f.name}[_i]`;
+            }
+          }
+        }
+        continue;
+      }
       if (c.kind() === TK.identifier) {
         const attr = c.text(); c.advance();
         if (c.kind() === TK.equals) {
