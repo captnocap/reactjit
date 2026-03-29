@@ -438,6 +438,39 @@ function compilePage(source, c, file) {
     }
   }
 
+  // ── Register OAs for object_array state vars ──
+  // Page mode doesn't call collectState(), so we register OAs here by parsing initial values
+  for (var oai = 0; oai < stateVars.length; oai++) {
+    var oav = stateVars[oai];
+    if (oav.type !== 'object_array' || !oav.initial) continue;
+    // Parse first element to discover fields: [{id: 1, text: 'foo', done: true}, ...]
+    var oaFieldMatch = oav.initial.match(/\[\s*\{([^}]+)\}/);
+    if (!oaFieldMatch) continue;
+    var oaFieldPairs = oaFieldMatch[1].split(',');
+    var oaFields = [];
+    for (var ofi = 0; ofi < oaFieldPairs.length; ofi++) {
+      var pair = oaFieldPairs[ofi].trim();
+      var colonIdx = pair.indexOf(':');
+      if (colonIdx < 0) continue;
+      var fname = pair.slice(0, colonIdx).trim();
+      var fval = pair.slice(colonIdx + 1).trim();
+      var ftype = 'int';
+      if (fval[0] === "'" || fval[0] === '"') ftype = 'string';
+      else if (fval === 'true' || fval === 'false') ftype = 'boolean';
+      else if (fval.indexOf('.') >= 0) ftype = 'float';
+      oaFields.push({ name: fname, type: ftype });
+    }
+    if (oaFields.length > 0) {
+      var oaIdx = ctx.objectArrays.length;
+      ctx.objectArrays.push({
+        fields: oaFields,
+        getter: oav.name,
+        setter: 'set_' + oav.name,
+        oaIdx: oaIdx,
+      });
+    }
+  }
+
   // ── Collect components and classifiers (needed for C.* and imported components) ──
   collectComponents(c);
   collectConstArrays(c);

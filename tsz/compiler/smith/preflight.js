@@ -309,8 +309,9 @@ function preflight(ctx) {
     }
   }
   // Check all arrayDecls for raw 'item.' references
+  // Exclude JS handler bodies (item.field in JS is valid — it's a JS variable)
   for (var adi = 0; adi < allDecls.length; adi++) {
-    if (/\bitem\.\w+/.test(allDecls[adi])) {
+    if (/\bitem\.\w+/.test(allDecls[adi]) && !/\\\\/.test(allDecls[adi])) {
       var itemField = allDecls[adi].match(/\bitem\.(\w+)/);
       errors.push('F17: array decl references unresolved "item.' + (itemField ? itemField[1] : '?') + '" — Zig has no "item" variable');
     }

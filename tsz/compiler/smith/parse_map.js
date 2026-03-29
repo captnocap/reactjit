@@ -933,6 +933,18 @@ function parseForLoop(c) {
       if (c.kind() === TK.equals) c.advance(); // skip '='
       if (c.kind() === TK.identifier) { arrayName = c.text(); c.advance(); }
       else if (c.kind() === TK.string) { arrayName = c.text().slice(1, -1); c.advance(); }
+      else if (c.kind() === TK.lbrace) {
+        c.advance(); // skip {
+        if (c.kind() === TK.identifier) { arrayName = c.text(); c.advance(); }
+        // Skip remaining expression tokens until matching }
+        var _bd = 1;
+        while (_bd > 0 && c.kind() !== TK.eof) {
+          if (c.kind() === TK.lbrace) _bd++;
+          if (c.kind() === TK.rbrace) { _bd--; if (_bd === 0) break; }
+          c.advance();
+        }
+        if (c.kind() === TK.rbrace) c.advance(); // skip }
+      }
     } else {
       c.advance();
     }
@@ -944,6 +956,22 @@ function parseForLoop(c) {
   // Find or infer OA for this array
   var oa = ctx.objectArrays.find(function(o) { return o.getter === arrayName; });
   if (!oa) oa = inferOaFromSource(c, arrayName);
+  if (!oa) {
+    // Try to find OA via computed function body — e.g., visible() returns items.filter(...)
+    // Search scriptBlock for the function and see if it references a known OA getter
+    if (ctx.scriptBlock) {
+      for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
+        var _coa = ctx.objectArrays[_oi];
+        if (_coa.isNested || _coa.isConst) continue;
+        // Check if arrayName's function body references this OA's getter
+        var _fnRe = new RegExp('function\\s+' + arrayName + '\\b[^}]*\\b' + _coa.getter + '\\b');
+        if (_fnRe.test(ctx.scriptBlock)) {
+          oa = _coa; // use the same OA (same fields, same unpack)
+          break;
+        }
+      }
+    }
+  }
   if (!oa) {
     // Simple (non-object) array — e.g., ['a', 'b', 'c'] or bare name (initially empty)
     // Create synthetic OA with single _v field so the map infrastructure works
