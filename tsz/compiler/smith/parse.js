@@ -432,6 +432,11 @@ function parseJSXElement(c) {
   if (rawTag === 'Physics.Ball') { nodeFields.push('.physics_body = true'); nodeFields.push('.physics_body_type = 2'); nodeFields.push('.physics_collider = true'); nodeFields.push('.physics_shape = 1'); }
   // Physics.Box → dynamic rect body + collider (shorthand)
   if (rawTag === 'Physics.Box') { nodeFields.push('.physics_body = true'); nodeFields.push('.physics_body_type = 2'); nodeFields.push('.physics_collider = true'); nodeFields.push('.physics_shape = 0'); }
+  // ascript → Pressable that runs AppleScript on press
+  let ascriptScript = null;
+  let ascriptOnResult = null;
+  const effectiveTag = (rawTag === 'ascript') ? 'Pressable' : tag;
+
   let handlerRef = null;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
@@ -494,6 +499,25 @@ function parseJSXElement(c) {
               ctx.handlerCount++;
               if (c.kind() === TK.rbrace) c.advance(); // }
             }
+          }
+        } else if (rawTag === 'ascript' && attr === 'run') {
+          // <ascript run="tell app ..." /> — capture the script string
+          if (c.kind() === TK.string) {
+            ascriptScript = c.text().slice(1, -1);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) {
+            c.advance();
+            if (c.kind() === TK.string) { ascriptScript = c.text().slice(1, -1); c.advance(); }
+            if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (rawTag === 'ascript' && attr === 'onResult') {
+          // <ascript onResult={setMyState} /> — capture the setter
+          if (c.kind() === TK.lbrace) {
+            c.advance();
+            if (c.kind() === TK.identifier) { ascriptOnResult = c.text(); c.advance(); }
+            if (c.kind() === TK.rbrace) c.advance();
+          } else if (c.kind() === TK.identifier) {
+            ascriptOnResult = c.text(); c.advance();
           }
         } else if (attr === 'fontSize') {
           // fontSize={N} or fontSize="N" → .font_size = N
@@ -1010,10 +1034,28 @@ function parseJSXElement(c) {
     nodeFields = mergeFields(clsNodeFields(clsDef), nodeFields);
   }
 
+  // <ascript> auto-handler: generates a press handler that runs AppleScript
+  if (rawTag === 'ascript' && ascriptScript && !handlerRef) {
+    const handlerName = `_handler_press_${ctx.handlerCount}`;
+    const escaped = ascriptScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    let targetSlot = 0;
+    if (ascriptOnResult) {
+      const si = findSlot(ascriptOnResult);
+      if (si >= 0) targetSlot = si;
+    }
+    // Async: spawns background thread, result delivered via pollResult() in tick
+    const body = `    @import("framework/applescript.zig").run("${escaped}", ${targetSlot});\n`;
+    ctx.handlers.push({ name: handlerName, body, luaBody: `__applescript("${escaped}")` });
+    handlerRef = handlerName;
+    ctx.handlerCount++;
+    // Mark that this app uses applescript (for tick polling)
+    if (!ctx.usesApplescript) ctx.usesApplescript = true;
+  }
+
   // Self-closing: />
   if (c.kind() === TK.slash_gt) {
     c.advance();
-    return buildNode(tag, styleFields, [], handlerRef, nodeFields, tag, tagSrcOffset);
+    return buildNode(effectiveTag, styleFields, [], handlerRef, nodeFields, effectiveTag, tagSrcOffset);
   }
   if (c.kind() === TK.gt) c.advance();
 
@@ -1044,7 +1086,7 @@ function parseJSXElement(c) {
     globalThis.__dbg.push('[NO_CLOSE] tag=' + rawTag + ' pos=' + c.pos + ' kind=' + c.kind() + ' text=' + (c.pos < c.count ? c.text().substring(0, 30) : 'EOF') + ' children=' + children.length);
   }
 
-  return buildNode(tag, styleFields, children, handlerRef, nodeFields, tag, tagSrcOffset);
+  return buildNode(effectiveTag, styleFields, children, handlerRef, nodeFields, effectiveTag, tagSrcOffset);
 }
 
 function parseChildren(c) {

@@ -1587,6 +1587,7 @@ pub fn run(config_in: AppConfig) !void {
     defer luajit_runtime.deinit();
     @import("audio.zig").registerQjsHostFunctions();
     @import("pty_client.zig").registerQjsHostFunctions();
+    @import("applescript.zig").registerQjsHostFunctions();
 
     // Register window-open bridge so JS can call __openWindow
     qjs_runtime.setOpenWindowFn(struct {

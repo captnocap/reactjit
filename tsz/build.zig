@@ -662,6 +662,8 @@ fn addCoreLib(
         lib.linkFramework("Cocoa");
         lib.linkFramework("IOKit");
         lib.linkFramework("CoreVideo");
+        // AppleScript bridge (NSAppleScript via ObjC FFI)
+        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths ──────────────────────────────────────────
@@ -803,6 +805,7 @@ fn addAppExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths needed by framework headers (even in lean — for @cImport) ──
@@ -981,6 +984,7 @@ fn addDevShellExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     exe.root_module.addIncludePath(b.path("."));

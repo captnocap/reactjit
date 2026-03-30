@@ -1562,6 +1562,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
   // _appTick
   out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
+  // Poll for async AppleScript results (no-op if no script is pending)
+  if (ctx.usesApplescript) {
+    out += `    @import("framework/applescript.zig").pollResult();\n`;
+  }
   const hasDynStyles = ctx.dynStyles && ctx.dynStyles.length > 0;
   if (hasState || ctx.objectArrays.length > 0) {
     if (hasDynStyles) {

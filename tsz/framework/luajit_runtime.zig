@@ -193,6 +193,25 @@ fn hostGetTickUs(L: ?*lua.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+// ── AppleScript bridge (macOS only, no-op on Linux) ─────────────────────
+const applescript = @import("applescript.zig");
+
+fn hostApplescript(L: ?*lua.lua_State) callconv(.c) c_int {
+    const script_ptr = lua.lua_tolstring(L, 1, null);
+    if (script_ptr == null) {
+        lua.lua_pushstring(L, "ERROR: missing script argument");
+        return 1;
+    }
+    const script = std.mem.span(script_ptr.?);
+    applescript.run(script, 0); // async, result delivered via pollResult
+    lua.lua_pushstring(L, "Running...");
+    return 1;
+}
+
+fn hostApplescriptFile(_: ?*lua.lua_State) callconv(.c) c_int {
+    return 0;
+}
+
 // ── TSL stdlib (embedded) ───────────────────────────────────────────────
 
 const TSL_STDLIB =
@@ -322,6 +341,8 @@ pub fn initVM() void {
         .{ .name = "getLayoutUs", .func = &hostGetLayoutUs },
         .{ .name = "getPaintUs", .func = &hostGetPaintUs },
         .{ .name = "getTickUs", .func = &hostGetTickUs },
+        .{ .name = "__applescript", .func = &hostApplescript },
+        .{ .name = "__applescript_file", .func = &hostApplescriptFile },
     };
 
     for (funcs) |f| {
