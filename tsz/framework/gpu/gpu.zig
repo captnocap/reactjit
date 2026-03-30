@@ -264,11 +264,17 @@ var g_scissor_stack: [MAX_SCISSOR_STACK]ScissorSegment = undefined;
 var g_scissor_depth: usize = 0;
 
 pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
-    // Clamp to positive values and convert to u32
-    var sx: u32 = if (x > 0) @intFromFloat(x) else 0;
-    var sy: u32 = if (y > 0) @intFromFloat(y) else 0;
-    var sw: u32 = if (w > 0) @intFromFloat(@ceil(w)) else 0;
-    var sh: u32 = if (h > 0) @intFromFloat(@ceil(h)) else 0;
+    // Floor position, ceil the far edge, so the scissor fully contains the
+    // fractional rect.  Without this, canvas zoom scales produce fractional
+    // coordinates where truncating y can place the scissor 1px below the
+    // first glyph scanline — clipping the top or bottom of text depending
+    // on which direction the rounding error falls.
+    const fx = if (x > 0) @floor(x) else 0;
+    const fy = if (y > 0) @floor(y) else 0;
+    var sx: u32 = @intFromFloat(fx);
+    var sy: u32 = @intFromFloat(fy);
+    var sw: u32 = if (w > 0) @intFromFloat(@ceil(x - fx + w)) else 0;
+    var sh: u32 = if (h > 0) @intFromFloat(@ceil(y - fy + h)) else 0;
 
     // Intersect with parent scissor
     if (g_scissor_depth > 0) {

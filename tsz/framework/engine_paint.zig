@@ -144,7 +144,17 @@ pub fn paintNode(node: *Node) void {
         const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
         const cx = r.x + r.w / 2;
         const cy = r.y + r.h / 2;
-        gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz);
+        const g_tx = cx - vx * vz;
+        const g_ty = cy - vy * vz;
+        // DEBUG: subpixel offset diagnosis
+        {
+            const S = struct { var logged: bool = false; };
+            if (!S.logged) {
+                S.logged = true;
+                std.debug.print("[graph-debug] rect=({d:.1},{d:.1},{d:.1},{d:.1}) cx={d:.2} cy={d:.2} tx={d:.2} ty={d:.2} vz={d:.3} vx={d:.2} vy={d:.2}\n", .{ r.x, r.y, r.w, r.h, cx, cy, g_tx, g_ty, vz, vx, vy });
+            }
+        }
+        gpu.setTransform(0, 0, g_tx, g_ty, vz);
         for (node.children) |*child| paintNode(child);
         gpu.resetTransform();
         gpu.popScissor();
@@ -685,7 +695,17 @@ noinline fn paintCanvasContainer(node: *Node) void {
     const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
     const vp_cx = r.x + r.w / 2;
     const vp_cy = r.y + r.h / 2;
-    gpu.setTransform(0, 0, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, cam.scale);
+    const tx = vp_cx - cam.cx * cam.scale;
+    const ty = vp_cy - cam.cy * cam.scale;
+    // DEBUG: prove subpixel offset theory — remove after diagnosis
+    {
+        const S = struct { var logged: bool = false; };
+        if (!S.logged) {
+            S.logged = true;
+            std.debug.print("[canvas-debug] w={d:.1} h={d:.1} vp_cx={d:.2} vp_cy={d:.2} tx={d:.2} ty={d:.2} scale={d:.3}\n", .{ r.w, r.h, vp_cx, vp_cy, tx, ty, cam.scale });
+        }
+    }
+    gpu.setTransform(0, 0, tx, ty, cam.scale);
     {
         const hovered = canvas.getHoveredNode();
         const selected = canvas.getSelectedNode();

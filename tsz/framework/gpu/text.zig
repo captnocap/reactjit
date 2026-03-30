@@ -219,9 +219,13 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     const face = g_ft_face;
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
 
-    // Pen position: transform the starting point, then advance in screen space
-    var pen_x: f32 = if (has_transform) (x - transform.ox) * s + transform.ox + transform.tx else x;
-    const start_y: f32 = if (has_transform) (y - transform.oy) * s + transform.oy + transform.ty else y;
+    // Pen position: transform the starting point, then advance in screen space.
+    // Round to integer pixels so glyph quads align to texel boundaries —
+    // fractional canvas translation (e.g. 0.5px from odd-dimension center)
+    // causes linear atlas sampling to blend edge rows with transparent
+    // background, visually clipping the top/bottom 1px of text.
+    var pen_x: f32 = if (has_transform) @round((x - transform.ox) * s + transform.ox + transform.tx) else x;
+    const start_y: f32 = if (has_transform) @round((y - transform.oy) * s + transform.oy + transform.ty) else y;
     const baseline_y = start_y + ascent;
 
     var i: usize = 0;
@@ -529,9 +533,11 @@ pub fn getLineHeight(size_px: u16) f32 {
         _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
         g_ft_current_size = size_px;
     }
-    const ascender: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
-    const descender: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.descender)) / 64.0;
-    return ascender - descender + 2.0; // +2 for line spacing
+    // Use FreeType's metrics.height (ascent + descent + line gap) to match
+    // TextEngine.lineMetrics(). The old formula (ascender - descender + 2.0)
+    // diverged at certain zoom-scaled font sizes where the real line gap != 2px,
+    // causing 1-2px descender clipping at specific canvas zoom levels.
+    return @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
 }
 
 /// Get the advance width of 'M' (monospace cell width) for a given font size.
