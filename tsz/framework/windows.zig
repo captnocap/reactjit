@@ -25,6 +25,7 @@
 //!   windows.routeEvent(&event);
 
 const std = @import("std");
+const builtin = @import("builtin");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
@@ -546,7 +547,9 @@ fn tickNotification(idx: usize, now: u32) bool {
 
 /// Set X11 _NET_WM_WINDOW_TYPE to _NET_WM_WINDOW_TYPE_NOTIFICATION.
 /// This tells the WM: no taskbar entry, no focus steal, float above other windows.
+/// Linux only — no-op on macOS.
 fn setX11NotificationType(window: *c.SDL_Window) void {
+    if (comptime builtin.os.tag != .linux) return;
     const props = c.SDL_GetWindowProperties(window);
 
     // Only on X11 — check if X11 display property exists
@@ -567,16 +570,18 @@ fn setX11NotificationType(window: *c.SDL_Window) void {
     _ = x11ChangeProperty(display, x11_window, wm_type, XA_ATOM, 32, PropModeReplace, @ptrCast(&val), 1);
 }
 
-// X11 FFI helpers — SDL2 exposes the display/window but not Xlib functions directly.
-// We call through the C imports since SDL2 pulls in X11 headers on Linux.
+// X11 FFI helpers — Linux only (SDL exposes the display/window but not Xlib functions directly)
+const x11_available = builtin.os.tag == .linux;
 extern fn XInternAtom(display: ?*anyopaque, name: [*:0]const u8, only_if_exists: c_int) c_ulong;
 extern fn XChangeProperty(display: ?*anyopaque, window: c_ulong, property: c_ulong, prop_type: c_ulong, format: c_int, mode: c_int, data: ?*const anyopaque, nelements: c_int) c_int;
 
 fn x11Atom(display: ?*anyopaque, name: [*:0]const u8) c_ulong {
+    if (comptime !x11_available) return 0;
     return XInternAtom(display, name, 0);
 }
 
 fn x11ChangeProperty(display: ?*anyopaque, window: c_ulong, property: c_ulong, prop_type: c_ulong, format: c_int, mode: c_int, data: ?*const anyopaque, nelements: c_int) c_int {
+    if (comptime !x11_available) return 0;
     return XChangeProperty(display, window, property, prop_type, format, mode, data, nelements);
 }
 

@@ -336,7 +336,7 @@ fn createPrivateFBO(w: u32, h: u32) struct { fbo: c_uint, tex: c_uint } {
 
 fn lookupFn(comptime T: type, handle: *anyopaque, name: [*:0]const u8) ?T {
     const sym = dlsym(handle, name) orelse return null;
-    return @ptrCast(sym);
+    return @ptrCast(@alignCast(sym));
 }
 
 /// Load libmpv on demand. Safe to call multiple times.

@@ -463,9 +463,10 @@ fn createCanvasSurface(instance: *wgpu.Instance) ?*wgpu.Surface {
 pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
     if (is_web) @compileError("Use initWeb() on wasm32 targets");
 
-    // Create wgpu instance with Vulkan backend only
+    // Create wgpu instance — Metal on macOS, Vulkan on Linux
+    const backend = if (comptime @import("builtin").os.tag == .macos) wgpu.InstanceBackends.metal else wgpu.InstanceBackends.vulkan;
     var extras = wgpu.InstanceExtras{
-        .backends = wgpu.InstanceBackends.vulkan,
+        .backends = backend,
         .flags = wgpu.InstanceFlags.default,
         .dx12_shader_compiler = .@"undefined",
         .gles3_minor_version = .automatic,
@@ -868,6 +869,17 @@ fn createSurfaceFromSDL(instance: *wgpu.Instance, window: *c.SDL_Window) ?*wgpu.
         return instance.createSurface(&d);
     }
 
-    std.debug.print("No supported windowing subsystem found (tried X11, Wayland)\n", .{});
+    // Try Metal (macOS / iOS)
+    const metal_view = c.SDL_Metal_CreateView(window);
+    if (metal_view) |view| {
+        if (c.SDL_Metal_GetLayer(view)) |layer| {
+            const d = wgpu.surfaceDescriptorFromMetalLayer(.{
+                .layer = layer,
+            });
+            return instance.createSurface(&d);
+        }
+    }
+
+    std.debug.print("No supported windowing subsystem found (tried X11, Wayland, Metal)\n", .{});
     return null;
 }

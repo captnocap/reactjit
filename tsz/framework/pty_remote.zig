@@ -46,6 +46,9 @@ var g_sock_path_len: usize = 0;
 pub fn init() void {
     if (g_initialized) return;
 
+    // Linux-only: PTY remote control socket lives in /run/user/<uid>/
+    if (comptime @import("builtin").os.tag != .linux) return;
+
     // Build socket path
     const uid = std.os.linux.getuid();
     g_sock_path_len = (std.fmt.bufPrint(&g_sock_path_buf, "/run/user/{d}/claude-sessions/supervisor.sock", .{uid}) catch return).len;

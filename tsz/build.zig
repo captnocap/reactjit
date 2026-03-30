@@ -96,27 +96,39 @@ pub fn build(b: *std.Build) void {
         cart_fast_exe.linkSystemLibrary("SDL3");
         cart_fast_exe.linkSystemLibrary("freetype");
         cart_fast_exe.linkSystemLibrary("luajit-5.1");
-        cart_fast_exe.linkSystemLibrary("X11");
         cart_fast_exe.linkSystemLibrary("box2d");
         cart_fast_exe.linkSystemLibrary("sqlite3");
         cart_fast_exe.linkSystemLibrary("vterm");
         cart_fast_exe.linkSystemLibrary("curl");
         cart_fast_exe.linkSystemLibrary("archive");
         if (target.result.os.tag == .linux) {
+            cart_fast_exe.linkSystemLibrary("X11");
             cart_fast_exe.linkSystemLibrary("m");
             cart_fast_exe.linkSystemLibrary("pthread");
             cart_fast_exe.linkSystemLibrary("dl");
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             if (sysroot) |sr| {
                 cart_fast_exe.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
             }
         } else if (target.result.os.tag == .macos) {
             cart_fast_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+            cart_fast_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+            cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+            cart_fast_exe.linkFramework("Foundation");
+            cart_fast_exe.linkFramework("QuartzCore");
+            cart_fast_exe.linkFramework("Metal");
+            cart_fast_exe.linkFramework("Cocoa");
+            cart_fast_exe.linkFramework("IOKit");
+            cart_fast_exe.linkFramework("CoreVideo");
         }
-        cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
-        cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
 
         // Blend2D and Vello (pre-built static libs)
         cart_fast_exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         cart_fast_exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
         // wgpu-native
@@ -617,14 +629,14 @@ fn addCoreLib(
     });
 
     // ── Always linked ──────────────────────────────────────────
+    // NOTE: luajit-5.1 is linked by zluajit dependency (system=true) — do not add again
     lib.linkLibC();
     lib.linkSystemLibrary("SDL3");
     lib.linkSystemLibrary("freetype");
-    lib.linkSystemLibrary("luajit-5.1");
-    lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
-    lib.linkSystemLibrary("X11");
 
     if (os == .linux) {
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        lib.linkSystemLibrary("X11");
         lib.linkSystemLibrary("m");
         lib.linkSystemLibrary("pthread");
         lib.linkSystemLibrary("dl");
@@ -637,9 +649,19 @@ fn addCoreLib(
             lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os == .macos) {
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
         lib.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
         lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        // keg-only homebrew packages
+        lib.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        lib.linkFramework("Foundation");
+        lib.linkFramework("QuartzCore");
+        lib.linkFramework("Metal");
+        lib.linkFramework("Cocoa");
+        lib.linkFramework("IOKit");
+        lib.linkFramework("CoreVideo");
     }
 
     // ── Include paths ──────────────────────────────────────────
@@ -669,6 +691,7 @@ fn addCoreLib(
     if (linkage == .static) {
         lib.root_module.addIncludePath(b.path("../blend2d"));
         lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         lib.linkLibCpp();
     }
 
@@ -749,10 +772,10 @@ fn addAppExe(
     exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
     exe.linkSystemLibrary("luajit-5.1");
-    exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
-    exe.linkSystemLibrary("X11");
 
     if (os == .linux) {
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        exe.linkSystemLibrary("X11");
         exe.linkSystemLibrary("m");
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
@@ -768,9 +791,18 @@ fn addAppExe(
             exe.root_module.addCSourceFile(.{ .file = b.path("ffi/musl_compat.c"), .flags = &.{"-O2"} });
         }
     } else if (os == .macos) {
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
         exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        exe.linkFramework("Foundation");
+        exe.linkFramework("QuartzCore");
+        exe.linkFramework("Metal");
+        exe.linkFramework("Cocoa");
+        exe.linkFramework("IOKit");
+        exe.linkFramework("CoreVideo");
     }
 
     // ── Include paths needed by framework headers (even in lean — for @cImport) ──
@@ -804,6 +836,7 @@ fn addAppExe(
         // ── Blend2D (2D vector graphics engine) ──
         exe.root_module.addIncludePath(b.path("../blend2d"));
         exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         exe.linkLibCpp();
 
         // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
@@ -920,9 +953,10 @@ fn addDevShellExe(
     exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
     exe.linkSystemLibrary("luajit-5.1");
-    exe.linkSystemLibrary("X11");
 
     if (os == .linux) {
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        exe.linkSystemLibrary("X11");
         exe.linkSystemLibrary("m");
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
@@ -935,9 +969,18 @@ fn addDevShellExe(
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os == .macos) {
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
         exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        exe.linkFramework("Foundation");
+        exe.linkFramework("QuartzCore");
+        exe.linkFramework("Metal");
+        exe.linkFramework("Cocoa");
+        exe.linkFramework("IOKit");
+        exe.linkFramework("CoreVideo");
     }
 
     exe.root_module.addIncludePath(b.path("."));
@@ -960,8 +1003,6 @@ fn addDevShellExe(
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addIncludePath(b.path("ffi"));
-    exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
-    exe.linkSystemLibrary("luajit-5.1");
     exe.linkSystemLibrary("box2d");
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("vterm");
@@ -971,6 +1012,7 @@ fn addDevShellExe(
     // ── Blend2D (2D vector graphics engine) ──
     exe.root_module.addIncludePath(b.path("../blend2d"));
     exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
     exe.linkLibCpp();
 
     // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──

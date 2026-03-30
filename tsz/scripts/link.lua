@@ -13,7 +13,10 @@ local SCRIPT_DIR = arg[0]:match("(.*/)") or "./"
 local TSZ_DIR = SCRIPT_DIR:match("(.-)scripts/") or "./"
 local REPO_ROOT = TSZ_DIR .. "../"
 
-local ENGINE_SO = TSZ_DIR .. "zig-out/lib/libreactjit-core.so"
+-- Detect platform
+local is_macos = io.popen("uname -s"):read("*l") == "Darwin"
+local ENGINE_EXT = is_macos and ".dylib" or ".so"
+local ENGINE_SO = TSZ_DIR .. "zig-out/lib/libreactjit-core" .. ENGINE_EXT
 local QJS_INCLUDE = REPO_ROOT .. "love2d/quickjs"
 local FFI_INCLUDE = TSZ_DIR .. "ffi"
 
@@ -48,10 +51,18 @@ local function file_exists(path)
 end
 
 local function now_ms()
-    local f = io.popen("date +%s%3N")
-    local t = tonumber(f:read("*l"))
-    f:close()
-    return t
+    if is_macos then
+        -- macOS date doesn't support %N; use python or perl for ms precision
+        local f = io.popen("perl -MTime::HiRes=time -e 'printf \"%d\", time()*1000'")
+        local t = tonumber(f:read("*l"))
+        f:close()
+        return t or 0
+    else
+        local f = io.popen("date +%s%3N")
+        local t = tonumber(f:read("*l"))
+        f:close()
+        return t or 0
+    end
 end
 
 -- ── Preflight ───────────────────────────────────────────────────────
@@ -66,15 +77,23 @@ os.execute("mkdir -p " .. outdir)
 -- ── Step 1: Compile cart .zig → .o ──────────────────────────────────
 local t0 = now_ms()
 
-local compile_cmd = table.concat({
+local include_flags = {
     "zig build-obj",
     source,
     "-I " .. QJS_INCLUDE,
     "-I " .. FFI_INCLUDE,
-    "-I /usr/include/x86_64-linux-gnu",
-    "-lc",
-    "-ODebug", "-fstrip",
-}, " ")
+}
+if is_macos then
+    table.insert(include_flags, "-I /opt/homebrew/include")
+    table.insert(include_flags, "-I /opt/homebrew/include/luajit-2.1")
+    table.insert(include_flags, "-I /opt/homebrew/include/freetype2")
+else
+    table.insert(include_flags, "-I /usr/include/x86_64-linux-gnu")
+end
+table.insert(include_flags, "-lc")
+table.insert(include_flags, "-ODebug")
+table.insert(include_flags, "-fstrip")
+local compile_cmd = table.concat(include_flags, " ")
 
 io.write("[link] compile " .. source .. "... ")
 io.flush()
@@ -86,16 +105,30 @@ local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
 -- ── Step 2: Link .o + engine .so → binary ───────────────────────────
--- $ORIGIN/lib lets the self-extracting package find the bundled .so
--- Single-quote the -Wl arg so the shell doesn't expand $ORIGIN
-local link_cmd = table.concat({
-    "zig cc",
-    "-o " .. binary,
-    obj_name,
-    ENGINE_SO,
-    "'-Wl,-rpath,$ORIGIN/lib'",
-    "-lm -lpthread -ldl",
-}, " ")
+local link_cmd
+if is_macos then
+    link_cmd = table.concat({
+        "zig cc",
+        "-o " .. binary,
+        obj_name,
+        ENGINE_SO,
+        "-L/opt/homebrew/lib",
+        "-L/opt/homebrew/opt/libarchive/lib",
+        "'-Wl,-rpath,@executable_path/../Frameworks'",
+        "'-Wl,-headerpad_max_install_names'",
+    }, " ")
+else
+    -- $ORIGIN/lib lets the self-extracting package find the bundled .so
+    -- Single-quote the -Wl arg so the shell doesn't expand $ORIGIN
+    link_cmd = table.concat({
+        "zig cc",
+        "-o " .. binary,
+        obj_name,
+        ENGINE_SO,
+        "'-Wl,-rpath,$ORIGIN/lib'",
+        "-lm -lpthread -ldl",
+    }, " ")
+end
 
 io.write("[link] link → " .. binary .. "... ")
 io.flush()

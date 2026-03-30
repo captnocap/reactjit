@@ -85,7 +85,7 @@ if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
     fi
 fi
 
-for MI in $(grep -oP '_map_inner_\d+' "$GEN" 2>/dev/null | sort -u || true); do
+for MI in $(grep -oE '_map_inner_[0-9]+' "$GEN" 2>/dev/null | sort -u || true); do
     MAP_NUM=${MI#_map_inner_}
     SHARED=$(grep "$MI\[_i\].*&_arr_" "$GEN" 2>/dev/null | head -3 || true)
     if [ -n "$SHARED" ]; then
@@ -123,6 +123,8 @@ luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1
 
 # ── Step 4: Package as self-extracting binary ────────────────────────
 RAW_BIN="zig-out/bin/$NAME"
+OS="$(uname -s)"
+
 if [ -f "$RAW_BIN" ] && [ "$OPT" != "--debug" ]; then
     echo "[$NAME] packaging..."
     TMP_DIR="/tmp/tsz-dist-$NAME"
@@ -131,44 +133,136 @@ if [ -f "$RAW_BIN" ] && [ "$OPT" != "--debug" ]; then
     mkdir -p "$LIB_DIR"
     cp "$RAW_BIN" "$TMP_DIR/app.bin"
 
-    # Always bundle the engine .so
-    ENGINE_SO="zig-out/lib/libreactjit-core.so"
-    [ -f "$ENGINE_SO" ] && cp "$(readlink -f "$ENGINE_SO")" "$LIB_DIR/libreactjit-core.so"
-
-    # Collect libs from the cart binary AND the engine .so (transitive deps)
     LIB_COUNT=0
-    LDD_TMP=$(mktemp)
-    ldd "$RAW_BIN" >> "$LDD_TMP" 2>/dev/null
-    ENGINE_SO="zig-out/lib/libreactjit-core.so"
-    [ -f "$ENGINE_SO" ] && ldd "$ENGINE_SO" >> "$LDD_TMP" 2>/dev/null
-    while IFS= read -r line; do
-        case "$line" in *linux-vdso*) continue ;; esac
-        lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
-        [ -z "$lib_path" ] && continue
-        [ ! -f "$lib_path" ] && continue
-        real_path=$(readlink -f "$lib_path")
-        soname=$(echo "$line" | sed 's/^ *//;s/ *=>.*//')
-        [ -f "$LIB_DIR/$soname" ] && continue
-        cp "$real_path" "$LIB_DIR/$soname"
-        LIB_COUNT=$((LIB_COUNT + 1))
-    done < "$LDD_TMP"
-    rm -f "$LDD_TMP"
 
-    LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null)
-    if [ -n "$LD_LINUX" ] && [ -f "$LD_LINUX" ]; then
-        cp "$LD_LINUX" "$LIB_DIR/ld-linux-x86-64.so.2"
+    if [ "$OS" = "Darwin" ]; then
+        # ── macOS: package as .app bundle ────────────────────────────
+        APP_BUNDLE="zig-out/bin/${NAME}.app"
+        CONTENTS="$APP_BUNDLE/Contents"
+        MACOS_DIR="$CONTENTS/MacOS"
+        FW_DIR="$CONTENTS/Frameworks"
+        rm -rf "$APP_BUNDLE"
+        mkdir -p "$MACOS_DIR" "$FW_DIR"
 
-        cat > "$TMP_DIR/run" << 'LAUNCHER'
+        cp "$RAW_BIN" "$MACOS_DIR/$NAME"
+
+        # Info.plist
+        cat > "$CONTENTS/Info.plist" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>$NAME</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.reactjit.$NAME</string>
+    <key>CFBundleName</key>
+    <string>$NAME</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+</dict>
+</plist>
+PLIST
+
+        # Bundle engine dylib
+        ENGINE_DYLIB="zig-out/lib/libreactjit-core.dylib"
+        [ -f "$ENGINE_DYLIB" ] && cp "$ENGINE_DYLIB" "$FW_DIR/libreactjit-core.dylib"
+
+        # Recursively collect non-system dylibs
+        collect_dylibs() {
+            for bin in "$@"; do
+                otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r lib_path; do
+                    case "$lib_path" in
+                        /usr/lib/*|/System/*|@rpath/*|@executable_path/*) continue ;;
+                    esac
+                    [ ! -f "$lib_path" ] && continue
+                    lib_name=$(basename "$lib_path")
+                    [ -f "$FW_DIR/$lib_name" ] && continue
+                    cp "$lib_path" "$FW_DIR/$lib_name"
+                    echo "$lib_name"
+                done
+            done
+        }
+        collect_dylibs "$MACOS_DIR/$NAME"
+        [ -f "$ENGINE_DYLIB" ] && collect_dylibs "$FW_DIR/libreactjit-core.dylib"
+        # Transitive deps from all bundled dylibs
+        collect_dylibs "$FW_DIR"/*.dylib
+
+        # Rewrite dylib references to @executable_path/../Frameworks/
+        rewrite_dylib_paths() {
+            local bin="$1"
+            otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r lib_path; do
+                case "$lib_path" in
+                    /usr/lib/*|/System/*|@rpath/*|@executable_path/*) continue ;;
+                esac
+                lib_name=$(basename "$lib_path")
+                install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$lib_name" "$bin" 2>/dev/null || true
+            done
+        }
+
+        # Fix the main binary
+        rewrite_dylib_paths "$MACOS_DIR/$NAME"
+        # Also rewrite @rpath references (engine .dylib is linked via @rpath by link.lua)
+        install_name_tool -change "@rpath/libreactjit-core.dylib" "@executable_path/../Frameworks/libreactjit-core.dylib" "$MACOS_DIR/$NAME" 2>/dev/null || true
+        install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/$NAME" 2>/dev/null || true
+
+        # Fix each bundled dylib
+        for dylib in "$FW_DIR"/*.dylib; do
+            [ -f "$dylib" ] || continue
+            lib_name=$(basename "$dylib")
+            install_name_tool -id "@executable_path/../Frameworks/$lib_name" "$dylib" 2>/dev/null || true
+            rewrite_dylib_paths "$dylib"
+        done
+
+        # Ad-hoc sign everything (Sequoia requires valid signatures)
+        codesign --force --sign - --deep "$APP_BUNDLE" 2>/dev/null || true
+
+        LIB_COUNT=$(find "$FW_DIR" -name '*.dylib' | wc -l | tr -d ' ')
+        SIZE_MB=$(du -sm "$APP_BUNDLE" | cut -f1)
+        echo "[$NAME] packaged ${SIZE_MB}MB .app bundle ($LIB_COUNT libs)"
+        rm -rf "$TMP_DIR"
+    else
+        # ── Linux: collect shared libs via ldd ───────────────────────
+        ENGINE_SO="zig-out/lib/libreactjit-core.so"
+        [ -f "$ENGINE_SO" ] && cp "$(readlink -f "$ENGINE_SO")" "$LIB_DIR/libreactjit-core.so"
+
+        LDD_TMP=$(mktemp)
+        ldd "$RAW_BIN" >> "$LDD_TMP" 2>/dev/null
+        [ -f "$ENGINE_SO" ] && ldd "$ENGINE_SO" >> "$LDD_TMP" 2>/dev/null
+        while IFS= read -r line; do
+            case "$line" in *linux-vdso*) continue ;; esac
+            lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
+            [ -z "$lib_path" ] && continue
+            [ ! -f "$lib_path" ] && continue
+            real_path=$(readlink -f "$lib_path")
+            soname=$(echo "$line" | sed 's/^ *//;s/ *=>.*//')
+            [ -f "$LIB_DIR/$soname" ] && continue
+            cp "$real_path" "$LIB_DIR/$soname"
+            LIB_COUNT=$((LIB_COUNT + 1))
+        done < "$LDD_TMP"
+        rm -f "$LDD_TMP"
+
+        LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null)
+        if [ -n "$LD_LINUX" ] && [ -f "$LD_LINUX" ]; then
+            cp "$LD_LINUX" "$LIB_DIR/ld-linux-x86-64.so.2"
+
+            cat > "$TMP_DIR/run" << 'LAUNCHER'
 #!/bin/sh
 DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$DIR/lib" "$DIR/app.bin" "$@"
 LAUNCHER
-        chmod +x "$TMP_DIR/run"
+            chmod +x "$TMP_DIR/run"
 
-        TARBALL="/tmp/tsz-${NAME}-payload.tar.gz"
-        (cd "$TMP_DIR" && tar czf "$TARBALL" .)
+            TARBALL="/tmp/tsz-${NAME}-payload.tar.gz"
+            (cd "$TMP_DIR" && tar czf "$TARBALL" .)
 
-        cat > "$RAW_BIN" << HEADER
+            cat > "$RAW_BIN" << HEADER
 #!/bin/sh
 set -e
 APP_DIR=\${XDG_CACHE_HOME:-\$HOME/.cache}/tsz-$NAME
@@ -184,15 +278,16 @@ fi
 exec "\$CACHE/run" "\$@"
 __ARCHIVE__
 HEADER
-        cat "$TARBALL" >> "$RAW_BIN"
-        chmod +x "$RAW_BIN"
+            cat "$TARBALL" >> "$RAW_BIN"
+            chmod +x "$RAW_BIN"
 
-        SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
-        echo "[$NAME] packaged ${SIZE_MB}MB self-extracting ($LIB_COUNT libs)"
-        rm -rf "$TMP_DIR" "$TARBALL"
-    else
-        echo "[$NAME] WARNING: ld-linux not found, skipping packaging"
-        rm -rf "$TMP_DIR"
+            SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
+            echo "[$NAME] packaged ${SIZE_MB}MB self-extracting ($LIB_COUNT libs)"
+            rm -rf "$TMP_DIR" "$TARBALL"
+        else
+            echo "[$NAME] WARNING: ld-linux not found, skipping packaging"
+            rm -rf "$TMP_DIR"
+        fi
     fi
 fi
 

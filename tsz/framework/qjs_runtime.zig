@@ -1937,7 +1937,7 @@ pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) 
         defer qjs.JS_FreeValue(ctx, global);
         // JSCFunction is ?*const fn(...) — cast raw pointer through the inner type
         const FnType = @typeInfo(@TypeOf(qjs.JS_NewCFunction)).@"fn".params[1].type.?;
-        const qjs_fn: FnType = @ptrCast(func);
+        const qjs_fn: FnType = @ptrCast(@alignCast(func));
         _ = qjs.JS_SetPropertyStr(ctx, global, name, qjs.JS_NewCFunction(ctx, qjs_fn, name, argc));
     }
 }

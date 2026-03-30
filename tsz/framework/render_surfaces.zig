@@ -419,7 +419,7 @@ const RTLD_LAZY: c_int = 0x00001;
 
 fn loadSym(comptime T: type, handle: *anyopaque, name: [*:0]const u8) ?T {
     const ptr = dlsym(handle, name) orelse return null;
-    return @ptrCast(ptr);
+    return @ptrCast(@alignCast(ptr));
 }
 
 fn initXShm() bool {

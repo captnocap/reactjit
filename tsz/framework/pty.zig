@@ -63,7 +63,9 @@ extern fn kill(pid: c_int, sig: c_int) c_int;
 extern fn chdir(path: [*:0]const u8) c_int;
 extern fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 extern fn _exit(status: c_int) noreturn;
+// errno access — Linux uses __errno_location, macOS uses __error
 extern fn __errno_location() *c_int;
+extern fn __error() *c_int;
 
 const WinSize = extern struct {
     ws_row: u16,
@@ -73,6 +75,9 @@ const WinSize = extern struct {
 };
 
 fn getErrno() c_int {
+    if (comptime @import("builtin").os.tag == .macos) {
+        return __error().*;
+    }
     return __errno_location().*;
 }
 

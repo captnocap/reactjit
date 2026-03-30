@@ -78,6 +78,9 @@ const FC_BUF_SIZE = 512;
 var fc_buf: [FC_BUF_SIZE]u8 = undefined;
 
 fn fcMatch(pattern: [*:0]const u8) ?[*:0]u8 {
+    // Skip fc-match on macOS — it deadlocks when spawned before the Cocoa event loop.
+    // Fallback fonts are handled via HARDCODED_FALLBACK_PATHS below.
+    if (comptime @import("builtin").os.tag == .macos) return null;
     const result = std.process.Child.run(.{
         .allocator = std.heap.page_allocator,
         .argv = &[_][]const u8{ "fc-match", std.mem.span(pattern), "-f", "%{file}" },
@@ -109,7 +112,11 @@ const FC_FALLBACK_PATTERNS = [_][*:0]const u8{
 };
 
 /// Hardcoded fallback paths in case fc-match is not available.
-const HARDCODED_FALLBACK_PATHS = [_][*:0]const u8{
+const HARDCODED_FALLBACK_PATHS = if (@import("builtin").os.tag == .macos) [_][*:0]const u8{
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/System/Library/Fonts/Apple Color Emoji.ttc",
+    "/System/Library/Fonts/Supplemental/Courier New.ttf",
+} else [_][*:0]const u8{
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",

@@ -41,6 +41,8 @@ fn installCrashHandlers() void {
     var sa: c.struct_sigaction = std.mem.zeroes(c.struct_sigaction);
     if (@hasField(c.struct_sigaction, "__sigaction_handler")) {
         sa.__sigaction_handler = .{ .sa_handler = crashHandler }; // glibc
+    } else if (@hasField(c.struct_sigaction, "__sigaction_u")) {
+        sa.__sigaction_u = .{ .__sa_handler = crashHandler }; // macOS
     } else {
         sa.__sa_handler = .{ .sa_handler = crashHandler }; // musl
     }

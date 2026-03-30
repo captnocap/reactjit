@@ -1524,10 +1524,12 @@ pub fn run(config_in: AppConfig) !void {
         log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
     }
 
+    const builtin_os = @import("builtin").os.tag;
+    const window_flags: u64 = c.SDL_WINDOW_RESIZABLE | (if (comptime builtin_os == .macos) c.SDL_WINDOW_METAL else 0);
     const window = c.SDL_CreateWindow(
         config.title,
         init_w, init_h,
-        c.SDL_WINDOW_RESIZABLE,
+        window_flags,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
     defer windows.deinitAll(); // close all secondary windows before SDL_Quit
