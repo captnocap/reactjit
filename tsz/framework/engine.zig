@@ -2064,11 +2064,14 @@ pub fn run(config_in: AppConfig) !void {
                         canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
                         if (event.wheel.y != 0) {
-                            scroll_node.scroll_y -= event.wheel.y * 30.0;
+                            // macOS trackpad: SDL3 gives pixel-precise fractional deltas
+                            // Mouse wheel: SDL3 gives ±1.0 per notch
+                            const scale: f32 = if (comptime @import("builtin").os.tag == .macos) 10.0 else 30.0;
+                            scroll_node.scroll_y -= event.wheel.y * scale;
                         }
                         if (event.wheel.x != 0) {
-                            const page = @max(scroll_node.computed.h * 0.8, 60.0);
-                            scroll_node.scroll_y -= event.wheel.x * page;
+                            const scale_x: f32 = if (comptime @import("builtin").os.tag == .macos) 10.0 else @max(scroll_node.computed.h * 0.8, 60.0);
+                            scroll_node.scroll_y -= event.wheel.x * scale_x;
                         }
                         const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));

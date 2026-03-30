@@ -410,15 +410,28 @@ fn isWordBreak(ch: u8) bool {
 }
 
 /// Hit test for text nodes — returns deepest node with text under (mx, my).
+/// Scroll-aware: converts screen coords to content coords when entering scroll containers.
 fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) return null;
+
+    // Scroll container: clip to visible bounds and adjust coords for children
+    const ov = node.style.overflow;
+    const r = node.computed;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    var child_mx = mx;
+    var child_my = my;
+    if (is_scroll) {
+        if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+        child_my = my + node.scroll_y;
+        child_mx = mx + node.scroll_x;
+    }
+
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        if (hitTestText(&node.children[i], mx, my)) |hit| return hit;
+        if (hitTestText(&node.children[i], child_mx, child_my)) |hit| return hit;
     }
     if (node.text != null) {
-        const r = node.computed;
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
         }
