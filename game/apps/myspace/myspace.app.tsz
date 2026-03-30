@@ -1,0 +1,214 @@
+import { viewProfile } from "./myspace.script";
+import { Nav, NavBrand, NavSep, NavLink, NavLinkText, NavRight, NavSearchBox, NavSearchText, ProfileColumns, LeftCol, RightCol, Section, SectionHead, SectionHeadText, SectionBody, SectionBodyTight, NetworkBanner, NetworkBannerText, Avatar, AvatarLetter, OnlineRow, OnlineDot, MusicBar, ViewMyRow, DataRow, DataLabel, DataValue, FriendGrid, FriendCell, CommentRow, CommentAuthor, CommentBody, TitleText, SubTitle, BodyText, LinkText, LabelText, DimText, SmallLink, SmallText, WhiteText28, WhiteText20, Footer, FooterText } from "./myspace.cls";
+
+// === Profile state ===
+const [pName, setPName] = useState('');
+const [pAge, setPAge] = useState(0);
+const [pLoc, setPLoc] = useState('');
+const [pMood, setPMood] = useState('');
+const [pAbout, setPAbout] = useState('');
+const [pMeet, setPMeet] = useState('');
+const [pSong, setPSong] = useState('');
+const [pArtist, setPArtist] = useState('');
+const [pOnline, setPOnline] = useState(0);
+const [pLogin, setPLogin] = useState('');
+const [pAvLetter, setPAvLetter] = useState('');
+const [pAvBg, setPAvBg] = useState(0x003399);
+
+// === Theme state (reserved for per-profile theming when dynStyle lands) ===
+const [tBg, setTBg] = useState(0xffffff);
+const [tText, setTText] = useState(0x333333);
+const [tLink, setTLink] = useState(0x003399);
+const [tHdrBg, setTHdrBg] = useState(0x003399);
+const [tHdrText, setTHdrText] = useState(0xffffff);
+const [tBorder, setTBorder] = useState(0xb0b0b0);
+const [tSecBg, setTSecBg] = useState(0xffffff);
+
+// === Array state ===
+const [interests, setInterests] = useState([{ label: '', value: '' }]);
+const [details, setDetails] = useState([{ label: '', value: '' }]);
+const [topFriends, setTopFriends] = useState([{ id: '', name: '', avatarLetter: '', avatarBg: 0x000000 }]);
+const [comments, setComments] = useState([{ authorName: '', avatarLetter: '', avatarBg: 0x000000, text: '', time: '', authorId: '' }]);
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+
+      {/* === NAV BAR === */}
+      <C.Nav>
+        <C.NavBrand>MySpace.com</C.NavBrand>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink onPress={() => { viewProfile('tom') }}><C.NavLinkText>Home</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Browse</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Search</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Invite</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Mail</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Blog</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Favorites</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Forum</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Groups</C.NavLinkText></C.NavLink>
+        <C.NavSep>|</C.NavSep>
+        <C.NavLink><C.NavLinkText>Music</C.NavLinkText></C.NavLink>
+        <C.NavRight>
+          <C.NavSearchBox><C.NavSearchText>Search MySpace</C.NavSearchText></C.NavSearchBox>
+        </C.NavRight>
+      </C.Nav>
+
+      {/* === PROFILE === */}
+      <ScrollView style={{ flexGrow: 1, backgroundColor: '#ffffff' }}>
+        <Box style={{ padding: 8, gap: 8 }}>
+
+          <C.NetworkBanner>
+            <C.NetworkBannerText>{`${pName} is in your extended network`}</C.NetworkBannerText>
+          </C.NetworkBanner>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <C.TitleText>{pName}</C.TitleText>
+            <C.SubTitle>{pAge}</C.SubTitle>
+            <C.SubTitle>{pLoc}</C.SubTitle>
+          </Box>
+          <C.LabelText>{`Last Login: ${pLogin}`}</C.LabelText>
+
+          {/* === TWO COLUMNS === */}
+          <C.ProfileColumns>
+
+            {/* === LEFT === */}
+            <C.LeftCol>
+              <C.Avatar><C.AvatarLetter>{pAvLetter}</C.AvatarLetter></C.Avatar>
+
+              {pOnline == 1 && <C.OnlineRow>
+                <C.OnlineDot />
+                <C.LinkText>Online Now!</C.LinkText>
+              </C.OnlineRow>}
+
+              <C.BodyText>{`Mood: ${pMood}`}</C.BodyText>
+
+              <C.MusicBar>
+                <Text fontSize={10} color="#00cc00">NOW PLAYING</Text>
+                <Box style={{ flexDirection: 'column', gap: 1 }}>
+                  <Text fontSize={9} color="#cccccc">{pSong}</Text>
+                  <Text fontSize={8} color="#888888">{pArtist}</Text>
+                </Box>
+              </C.MusicBar>
+
+              <C.ViewMyRow>
+                <C.LabelText>View My:</C.LabelText>
+                <Pressable><C.LinkText>Pics</C.LinkText></Pressable>
+                <C.LabelText>|</C.LabelText>
+                <Pressable><C.LinkText>Videos</C.LinkText></Pressable>
+                <C.LabelText>|</C.LabelText>
+                <Pressable><C.LinkText>Blog</C.LinkText></Pressable>
+              </C.ViewMyRow>
+
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`Contacting ${pName}`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBody>
+                  <Box style={{ gap: 4 }}>
+                    <Pressable><C.LinkText>Send Message</C.LinkText></Pressable>
+                    <Pressable><C.LinkText>Add to Friends</C.LinkText></Pressable>
+                    <Pressable><C.LinkText>Add to Favorites</C.LinkText></Pressable>
+                    <Pressable><C.LinkText>Block User</C.LinkText></Pressable>
+                    <Pressable><C.LinkText>Rank User</C.LinkText></Pressable>
+                  </Box>
+                </C.SectionBody>
+              </C.Section>
+
+              <C.DimText>{`myspace.com/${pName}`}</C.DimText>
+
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`${pName}'s Details`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBodyTight>
+                  {details.map((d) => (
+                    <C.DataRow>
+                      <C.DataLabel><C.LabelText>{d.label}</C.LabelText></C.DataLabel>
+                      <C.DataValue><C.BodyText>{d.value}</C.BodyText></C.DataValue>
+                    </C.DataRow>
+                  ))}
+                </C.SectionBodyTight>
+              </C.Section>
+            </C.LeftCol>
+
+            {/* === RIGHT === */}
+            <C.RightCol>
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`${pName}'s Blurbs`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBody>
+                  <Box style={{ gap: 10 }}>
+                    <Box style={{ gap: 4 }}>
+                      <C.LinkText>About Me:</C.LinkText>
+                      <C.BodyText>{pAbout}</C.BodyText>
+                    </Box>
+                    <Box style={{ gap: 4 }}>
+                      <C.LinkText>Who I'd Like to Meet:</C.LinkText>
+                      <C.BodyText>{pMeet}</C.BodyText>
+                    </Box>
+                  </Box>
+                </C.SectionBody>
+              </C.Section>
+
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`${pName}'s Interests`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBodyTight>
+                  {interests.map((item) => (
+                    <C.DataRow>
+                      <C.DataLabel><C.LinkText>{item.label}</C.LinkText></C.DataLabel>
+                      <C.DataValue><C.BodyText>{item.value}</C.BodyText></C.DataValue>
+                    </C.DataRow>
+                  ))}
+                </C.SectionBodyTight>
+              </C.Section>
+
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`${pName}'s Friend Space`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBody>
+                  <C.FriendGrid>
+                    {topFriends.map((f) => (
+                      <C.FriendCell onPress={() => { viewProfile(f.id) }}>
+                        <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
+                          <C.WhiteText28>{f.avatarLetter}</C.WhiteText28>
+                        </Box>
+                        <C.SmallLink>{f.name}</C.SmallLink>
+                      </C.FriendCell>
+                    ))}
+                  </C.FriendGrid>
+                </C.SectionBody>
+              </C.Section>
+
+              <C.Section>
+                <C.SectionHead><C.SectionHeadText>{`${pName}'s Comments`}</C.SectionHeadText></C.SectionHead>
+                <C.SectionBodyTight>
+                  {comments.map((c) => (
+                    <C.CommentRow>
+                      <C.CommentAuthor onPress={() => { viewProfile(c.authorId) }}>
+                        <Box style={{ width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
+                          <C.WhiteText20>{c.avatarLetter}</C.WhiteText20>
+                        </Box>
+                        <C.SmallText>{c.authorName}</C.SmallText>
+                      </C.CommentAuthor>
+                      <C.CommentBody>
+                        <C.DimText>{c.time}</C.DimText>
+                        <C.BodyText>{c.text}</C.BodyText>
+                      </C.CommentBody>
+                    </C.CommentRow>
+                  ))}
+                </C.SectionBodyTight>
+              </C.Section>
+            </C.RightCol>
+          </C.ProfileColumns>
+
+          <C.Footer>
+            <C.FooterText>2003-2006 MySpace.com. All Rights Reserved.</C.FooterText>
+          </C.Footer>
+        </Box>
+      </ScrollView>
+    </Box>
+  );
+}

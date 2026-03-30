@@ -655,24 +655,6 @@ fn positionOneCanvasNode(child: *Node) void {
 ///   - Uniform CANVAS_NODE_GAP (30px) between all tiles
 ///   - Re-stacks every time the canvas becomes visible (generative layout)
 fn positionCanvasNodes(parent: *Node) void {
-    // Generative auto-stack: re-run each time canvas becomes visible
-    if (parent.canvas_drift_active and !parent.canvas_auto_stacked) {
-        parent.canvas_auto_stacked = true;
-        autoDistributeAndStack(parent);
-        // Dump immediately after stacking if CANVAS_DUMP is set
-        if (std.posix.getenv("CANVAS_DUMP")) |_| {
-            for (parent.children) |*child| {
-                if (child.canvas_node) {
-                    positionOneCanvasNode(child);
-                } else if (!child.canvas_path and !child.canvas_clamp) {
-                    for (child.children) |*gc| {
-                        if (gc.canvas_node) positionOneCanvasNode(gc);
-                    }
-                }
-            }
-            dumpCanvasNodes(parent);
-        }
-    }
     for (parent.children) |*child| {
         if (child.canvas_node) {
             positionOneCanvasNode(child);
@@ -683,123 +665,6 @@ fn positionCanvasNodes(parent: *Node) void {
             }
         }
     }
-}
-
-const CANVAS_NODE_GAP: f32 = 30.0;
-const COLUMN_SPACING: f32 = 300.0;
-const NUM_COLUMNS: usize = 8;
-var canvas_dump_frame: u8 = 0;
-
-/// Generative canvas layout: shuffle tiles, distribute across columns, stack with stagger.
-/// Produces a different layout every time the canvas appears.
-fn autoDistributeAndStack(parent: *Node) void {
-    var seed: u32 = @as(u32, @truncate(c.SDL_GetTicks())) *% 2654435761;
-
-    // Collect all canvas node pointers (flatten through containers), max 128 tiles
-    var tiles: [128]*Node = undefined;
-    var tile_count: usize = 0;
-    for (parent.children) |*child| {
-        if (child.canvas_node) {
-            if (tile_count < 128) {
-                tiles[tile_count] = child;
-                tile_count += 1;
-            }
-        } else if (!child.canvas_path and !child.canvas_clamp) {
-            for (child.children) |*gc| {
-                if (gc.canvas_node) {
-                    if (tile_count < 128) {
-                        tiles[tile_count] = gc;
-                        tile_count += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    if (tile_count == 0) return;
-
-    // Fisher-Yates shuffle
-    var i: usize = tile_count;
-    while (i > 1) {
-        i -= 1;
-        seed = seed *% 2246822519 +% 1;
-        const j = seed % @as(u32, @intCast(i + 1));
-        const tmp = tiles[j];
-        tiles[j] = tiles[i];
-        tiles[i] = tmp;
-    }
-
-    // Assign columns: round-robin, centered around origin
-    // Columns at: -(N/2 - 0.5)*SPACING, ..., +(N/2 - 0.5)*SPACING
-    var col_gx: [NUM_COLUMNS]f32 = undefined;
-    for (0..NUM_COLUMNS) |c_idx| {
-        const offset: f32 = @as(f32, @floatFromInt(c_idx)) - @as(f32, @floatFromInt(NUM_COLUMNS)) / 2.0 + 0.5;
-        col_gx[c_idx] = offset * COLUMN_SPACING;
-    }
-
-    // Assign each tile to a column round-robin
-    for (tiles[0..tile_count], 0..) |tile, idx| {
-        tile.canvas_gx = col_gx[idx % NUM_COLUMNS];
-    }
-
-    // Stack each column: outward from randomized stagger anchor
-    for (0..NUM_COLUMNS) |c_idx| {
-        seed = seed *% 2246822519 +% 1;
-        const stagger: f32 = @as(f32, @floatFromInt(seed % 500)) - 250.0;
-
-        var down_cursor: f32 = 0;
-        var up_cursor: f32 = 0;
-        var tile_idx: usize = 0;
-
-        for (tiles[0..tile_count]) |tile| {
-            if (tile.canvas_gx == col_gx[c_idx]) {
-                stackCanvasTile(tile, &down_cursor, &up_cursor, &tile_idx, stagger);
-            }
-        }
-    }
-}
-
-fn stackCanvasTile(child: *Node, down_cursor: *f32, up_cursor: *f32, tile_idx: *usize, stagger: f32) void {
-    const h = child.canvas_gh;
-    if (tile_idx.* == 0) {
-        child.canvas_gy = stagger;
-        down_cursor.* = stagger + h / 2;
-        up_cursor.* = stagger - h / 2;
-    } else if (tile_idx.* % 2 == 1) {
-        child.canvas_gy = down_cursor.* + CANVAS_NODE_GAP + h / 2;
-        down_cursor.* = child.canvas_gy + h / 2;
-    } else {
-        child.canvas_gy = up_cursor.* - CANVAS_NODE_GAP - h / 2;
-        up_cursor.* = child.canvas_gy - h / 2;
-    }
-    tile_idx.* += 1;
-}
-
-fn dumpCanvasNodes(parent: *Node) void {
-    std.debug.print("CANVAS_DUMP_START\n", .{});
-    var idx: u16 = 0;
-    for (parent.children) |*child| {
-        if (child.canvas_node) {
-            dumpOneCanvasNode(child, idx);
-            idx += 1;
-        } else if (!child.canvas_path and !child.canvas_clamp) {
-            for (child.children) |*gc| {
-                if (gc.canvas_node) {
-                    dumpOneCanvasNode(gc, idx);
-                    idx += 1;
-                }
-            }
-        }
-    }
-    std.debug.print("CANVAS_DUMP_END\n", .{});
-    std.posix.exit(0);
-}
-
-fn dumpOneCanvasNode(child: *const Node, idx: u16) void {
-    std.debug.print("NODE {d} gx={d:.0} gy={d:.0} gw={d:.0} gh={d:.0} computed_w={d:.0} computed_h={d:.0}\n", .{
-        idx, child.canvas_gx, child.canvas_gy, child.canvas_gw, child.canvas_gh,
-        child.computed.w, child.computed.h,
-    });
 }
 
 var g_paint_count: u32 = 0;
@@ -2290,6 +2155,9 @@ pub fn run(config_in: AppConfig) !void {
             const hpf = g_hidden_count / @max(fps_frames, 1);
             const zpf = g_zero_count / @max(fps_frames, 1);
             std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
+                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
+            });
+            log.writeLine("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s", .{
                 fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
             qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;

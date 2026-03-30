@@ -1,0 +1,228 @@
+// MySpace classifier atoms with per-profile theme variants + responsive breakpoints
+//
+// Variants (switched via setVariant(N) in viewProfile):
+//   0 = default (Tom — classic MySpace blue)
+//   1 = emo     (xX_RavenWing_Xx — dark/crimson)
+//   2 = pink    (~*BrItTnEy*~ — hot pink/pastel)
+//   3 = neon    (DJ PhreshBeatz — dark/cyan)
+//
+// Breakpoints:
+//   sm = narrow window (browser resized small in-game)
+//
+// NOTE: Smith currently only reads default style. Variants + bp activate
+// once Smith gets variant emit support ported from the reference compiler.
+
+classifier({
+  // === Nav Bar — always blue, not themed ===
+  Nav: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#003366', paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, gap: 2, flexWrap: 'wrap' } },
+  NavBrand: { type: 'Text', fontSize: 14, color: '#ffffff' },
+  NavSep: { type: 'Text', fontSize: 10, color: '#336699' },
+  NavLink: { type: 'Pressable', style: { paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 } },
+  NavLinkText: { type: 'Text', fontSize: 10, color: '#99ccff' },
+  NavRight: { type: 'Box', style: { flexGrow: 1, flexDirection: 'row', justifyContent: 'flexEnd', alignItems: 'center', gap: 4 } },
+  NavSearchBox: { type: 'Box', style: { backgroundColor: '#ffffff', borderRadius: 2, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 } },
+  NavSearchText: { type: 'Text', fontSize: 9, color: '#999999' },
+
+  // === Layout ===
+  ProfileColumns: {
+    type: 'Box',
+    style: { flexDirection: 'row', gap: 8 },
+    bp: {
+      sm: { style: { flexDirection: 'column', gap: 8 } },
+    }
+  },
+  LeftCol: {
+    type: 'Box',
+    style: { flexDirection: 'column', width: 280, gap: 8 },
+    bp: {
+      sm: { style: { flexDirection: 'column', width: '100%', gap: 8 } },
+    }
+  },
+  RightCol: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 8 } },
+
+  // === Section panel ===
+  Section: {
+    type: 'Box',
+    style: { borderWidth: 1, borderColor: '#b0b0b0', flexDirection: 'column' },
+    variants: {
+      emo:  { style: { borderWidth: 1, borderColor: '#330000', flexDirection: 'column' } },
+      pink: { style: { borderWidth: 1, borderColor: '#ffaacc', flexDirection: 'column' } },
+      neon: { style: { borderWidth: 1, borderColor: '#1a1a44', flexDirection: 'column' } },
+    }
+  },
+  SectionHead: {
+    type: 'Box',
+    style: { backgroundColor: '#003399', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 },
+    variants: {
+      emo:  { style: { backgroundColor: '#1a0000', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
+      pink: { style: { backgroundColor: '#ff69b4', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
+      neon: { style: { backgroundColor: '#0d0d2b', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
+    }
+  },
+  SectionHeadText: {
+    type: 'Text', fontSize: 10, color: '#ffffff',
+    variants: {
+      emo:  { color: '#ff6666' },
+      pink: { color: '#ffffff' },
+      neon: { color: '#00ccff' },
+    }
+  },
+  SectionBody: {
+    type: 'Box',
+    style: { padding: 8, backgroundColor: '#ffffff' },
+    variants: {
+      emo:  { style: { padding: 8, backgroundColor: '#0f0000' } },
+      pink: { style: { padding: 8, backgroundColor: '#fff0f5' } },
+      neon: { style: { padding: 8, backgroundColor: '#0f0f1e' } },
+    }
+  },
+  SectionBodyTight: {
+    type: 'Box',
+    style: { padding: 6, backgroundColor: '#ffffff' },
+    variants: {
+      emo:  { style: { padding: 6, backgroundColor: '#0f0000' } },
+      pink: { style: { padding: 6, backgroundColor: '#fff0f5' } },
+      neon: { style: { padding: 6, backgroundColor: '#0f0f1e' } },
+    }
+  },
+
+  // === Network banner ===
+  NetworkBanner: { type: 'Box', style: { backgroundColor: '#eeeeff', paddingLeft: 10, paddingRight: 10, paddingTop: 3, paddingBottom: 3, borderWidth: 1, borderColor: '#ccccdd' } },
+  NetworkBannerText: { type: 'Text', fontSize: 11, color: '#336699' },
+
+  // === Profile avatar ===
+  Avatar: {
+    type: 'Box',
+    style: { width: 200, height: 200, borderWidth: 2, borderColor: '#b0b0b0', backgroundColor: '#003399', alignItems: 'center', justifyContent: 'center' },
+    bp: {
+      sm: { style: { width: 120, height: 120, borderWidth: 2, borderColor: '#b0b0b0', backgroundColor: '#003399', alignItems: 'center', justifyContent: 'center' } },
+    }
+  },
+  AvatarLetter: {
+    type: 'Text', fontSize: 72, color: '#ffffff',
+    bp: {
+      sm: { fontSize: 40, color: '#ffffff' },
+    }
+  },
+  OnlineRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
+  OnlineDot: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00cc00' } },
+
+  // === Music player ===
+  MusicBar: { type: 'Box', style: { backgroundColor: '#1a1a1a', borderRadius: 3, paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, flexDirection: 'row', alignItems: 'center', gap: 6 } },
+
+  // === View My row ===
+  ViewMyRow: { type: 'Box', style: { flexDirection: 'row', gap: 6 } },
+
+  // === Data table (interests + details) ===
+  DataRow: {
+    type: 'Box',
+    style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#e0e0e0' },
+    variants: {
+      emo:  { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#330000' } },
+      pink: { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#ffaacc' } },
+      neon: { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#1a1a44' } },
+    }
+  },
+  DataLabel: { type: 'Box', style: { width: 80 } },
+  DataValue: { type: 'Box', style: { flexGrow: 1 } },
+
+  // === Friend grid ===
+  FriendGrid: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } },
+  FriendCell: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', width: 72, gap: 2 } },
+
+  // === Comment wall ===
+  CommentRow: {
+    type: 'Box',
+    style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#e0e0e0' },
+    variants: {
+      emo:  { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#330000' } },
+      pink: { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#ffaacc' } },
+      neon: { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#1a1a44' } },
+    }
+  },
+  CommentAuthor: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', width: 52 } },
+  CommentBody: { type: 'Box', style: { flexGrow: 1, gap: 2 } },
+
+  // === Typography — themed per profile ===
+  TitleText: {
+    type: 'Text', fontSize: 18, color: '#333333',
+    variants: {
+      emo:  { color: '#cc3333' },
+      pink: { color: '#cc0066' },
+      neon: { color: '#ccccee' },
+    }
+  },
+  SubTitle: {
+    type: 'Text', fontSize: 14, color: '#333333',
+    variants: {
+      emo:  { color: '#cc3333' },
+      pink: { color: '#cc0066' },
+      neon: { color: '#ccccee' },
+    }
+  },
+  BodyText: {
+    type: 'Text', fontSize: 11, color: '#333333',
+    variants: {
+      emo:  { color: '#cc3333' },
+      pink: { color: '#cc0066' },
+      neon: { color: '#ccccee' },
+    }
+  },
+  LinkText: {
+    type: 'Text', fontSize: 10, color: '#003399',
+    variants: {
+      emo:  { color: '#ff4444' },
+      pink: { color: '#ff3399' },
+      neon: { color: '#00ccff' },
+    }
+  },
+  LabelText: {
+    type: 'Text', fontSize: 10, color: '#666666',
+    variants: {
+      emo:  { color: '#993333' },
+      pink: { color: '#cc6699' },
+      neon: { color: '#8888aa' },
+    }
+  },
+  DimText: {
+    type: 'Text', fontSize: 9, color: '#999999',
+    variants: {
+      emo:  { color: '#663333' },
+      pink: { color: '#cc99aa' },
+      neon: { color: '#666688' },
+    }
+  },
+  SmallLink: {
+    type: 'Text', fontSize: 9, color: '#003399',
+    variants: {
+      emo:  { color: '#ff4444' },
+      pink: { color: '#ff3399' },
+      neon: { color: '#00ccff' },
+    }
+  },
+  SmallText: {
+    type: 'Text', fontSize: 8, color: '#003399',
+    variants: {
+      emo:  { color: '#ff4444' },
+      pink: { color: '#ff3399' },
+      neon: { color: '#00ccff' },
+    }
+  },
+  WhiteText28: { type: 'Text', fontSize: 28, color: '#ffffff' },
+  WhiteText20: { type: 'Text', fontSize: 20, color: '#ffffff' },
+
+  // === Page background (wraps the ScrollView content) ===
+  ProfileBg: {
+    type: 'ScrollView',
+    style: { flexGrow: 1, backgroundColor: '#ffffff' },
+    variants: {
+      emo:  { style: { flexGrow: 1, backgroundColor: '#0a0000' } },
+      pink: { style: { flexGrow: 1, backgroundColor: '#ffe0f0' } },
+      neon: { style: { flexGrow: 1, backgroundColor: '#0a0a14' } },
+    }
+  },
+
+  // === Footer ===
+  Footer: { type: 'Box', style: { flexDirection: 'row', justifyContent: 'center', paddingTop: 12, paddingBottom: 16, gap: 8 } },
+  FooterText: { type: 'Text', fontSize: 8, color: '#999999' },
+})

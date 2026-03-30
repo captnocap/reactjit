@@ -67,10 +67,11 @@ love2d/bin/
 # ── Zigos stack (tsz/) ─────────────────────────────────
 # Generated Zig output from .tsz compiler
 tsz/_gen_*.zig
+tsz/generated_*
 tsz/Inspector.gen.zig
 tsz/generated_app.zig.bak
 tsz/.tsz-preflight/
-tsz/root.o
+tsz/*.o
 tsz/recording.mp4
 tsz/screenshot.png
 tsz/screenshots/
@@ -192,3 +193,11 @@ love2d/experiments/llm/models/*.gguf
 love2d/storybook/love/fonts/cjk/
 love2d/storybook/fonts/cjk/
 love2d/data/*.db
+
+# Experimental networking and test binaries
+*_bin
+*bench
+tsz/experiments/bleeding/networking/test_api*
+tsz/experiments/bleeding/networking/test_io*
+tsz/experiments/bleeding/networking/quickjs/qjs_*_server
+tsz/test_cart_linked

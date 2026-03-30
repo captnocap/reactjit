@@ -1,0 +1,194 @@
+// MySpace Profile Database — document store pattern
+// Each profile is a JSON blob keyed by ID
+// Theme colors use hex numbers (0xRRGGBB) for dynamic style binding
+
+var profiles = {};
+
+profiles.tom = {
+  name: 'Tom', age: 32, loc: 'Los Angeles, California',
+  lastLogin: '3/28/2006', online: 1, mood: 'chipper',
+  about: "Hey, I am Tom! Founder of MySpace. Thanks for joining. Let me know if you need anything!",
+  meet: 'Anyone and everyone! I love meeting new people. Just say hi, I always respond.',
+  intGeneral: 'The internet, coding, meeting new people, photography',
+  intMusic: 'Incubus, Foo Fighters, Coldplay, The Shins, Postal Service',
+  intMovies: 'The Matrix, Garden State, Napoleon Dynamite, Eternal Sunshine',
+  intTv: 'The OC, Lost, Arrested Development',
+  intBooks: 'The Catcher in the Rye, 1984, Freakonomics',
+  intHeroes: 'The users who make MySpace great',
+  detStatus: 'Single', detHereFor: 'Networking, Friends',
+  detHometown: 'Escondido, CA', detBody: '6\' 0" / Athletic',
+  detZodiac: 'Cancer', detSmoke: 'No / Sometimes',
+  detEdu: 'Grad / professional school', detOccupation: 'Internet Entrepreneur',
+  song: 'The Reason', artist: 'Hoobastank',
+  friends: ['xravenwing', 'brittney', 'djphresh'],
+  bgColor: 0xffffff, textColor: 0x333333, linkColor: 0x003399,
+  hdrBg: 0x003399, hdrText: 0xffffff, borderColor: 0xb0b0b0, secBg: 0xffffff,
+  avLetter: 'T', avBg: 0x003399,
+  comments: [
+    { from: 'brittney', text: 'Thanks for the add Tom!! Love ur profile!! xoxo', time: '3/27 11:42pm' },
+    { from: 'djphresh', text: 'yo tom check out my new beats bro, link on my page', time: '3/27 8:15pm' },
+    { from: 'xravenwing', text: '...thanks i guess', time: '3/26 6:33pm' }
+  ]
+};
+
+profiles.xravenwing = {
+  name: 'xX_RavenWing_Xx', age: 19, loc: 'Portland, Oregon',
+  lastLogin: '3/28/2006', online: 1, mood: 'contemplative',
+  about: "I walk alone through the corridors of my mind. Currently listening to MCR on repeat. Dont talk to me unless youre real.",
+  meet: 'People who understand the darkness. Gerard Way. Tim Burton. Someone who actually reads.',
+  intGeneral: 'Writing poetry, drawing, going to shows, thrifting, hot topic',
+  intMusic: 'My Chemical Romance, Evanescence, AFI, The Used, Saosin, Hawthorne Heights, Taking Back Sunday',
+  intMovies: 'Donnie Darko, The Crow, Edward Scissorhands, Corpse Bride, Nightmare Before Christmas',
+  intTv: 'Invader Zim, Death Note, Fuse',
+  intBooks: 'The Perks of Being a Wallflower, A Clockwork Orange, anything by Sylvia Plath',
+  intHeroes: 'Gerard Way, Edgar Allan Poe, Tim Burton, Hayley Williams',
+  detStatus: 'Single', detHereFor: 'Friends',
+  detHometown: 'Portland, OR', detBody: '5\' 4" / Slim',
+  detZodiac: 'Scorpio', detSmoke: 'Sometimes / No',
+  detEdu: 'Some college', detOccupation: 'Barista / Artist',
+  song: 'Helena', artist: 'My Chemical Romance',
+  friends: ['tom', 'brittney', 'djphresh'],
+  bgColor: 0x0a0000, textColor: 0xcc3333, linkColor: 0xff4444,
+  hdrBg: 0x1a0000, hdrText: 0xff6666, borderColor: 0x330000, secBg: 0x0f0000,
+  avLetter: 'R', avBg: 0x990000,
+  comments: [
+    { from: 'brittney', text: 'ur profile is SO cool omg i love the dark colors!! rawr XD', time: '3/28 1:20am' },
+    { from: 'tom', text: 'Welcome to MySpace! Love the profile customization. Rock on!', time: '3/25 4:00pm' }
+  ]
+};
+
+profiles.brittney = {
+  name: '~*BrItTnEy*~', age: 17, loc: 'Tampa, Florida',
+  lastLogin: '3/28/2006', online: 0, mood: 'excited!!',
+  about: "hiii!! im brittney!! i love my friends SO much!! PC4PC?? add me i add back!! rawr XD!! LYLAS",
+  meet: "MORE FRIENDS!! anyone whos fun and not boring lol. pete wentz CALL ME haha jk",
+  intGeneral: 'Shopping, texting, sleepovers, taking pics, MySpace, the mall',
+  intMusic: 'Hellogoodbye, Metro Station, Paramore, Fall Out Boy, Panic! At The Disco, All Time Low',
+  intMovies: 'Mean Girls, A Walk to Remember, The Notebook, 13 Going On 30',
+  intTv: 'Laguna Beach, The Hills, Degrassi, One Tree Hill',
+  intBooks: 'lol does Cosmo count?? Twilight!! A Walk to Remember',
+  intHeroes: 'My mom, my besties, Paris Hilton, Hayley Williams',
+  detStatus: 'Single', detHereFor: 'Dating, Friends',
+  detHometown: 'Tampa, FL', detBody: '5\' 2" / Petite',
+  detZodiac: 'Leo', detSmoke: 'No / No',
+  detEdu: 'High school', detOccupation: 'Student',
+  song: 'Here (In Your Arms)', artist: 'Hellogoodbye',
+  friends: ['tom', 'xravenwing', 'djphresh'],
+  bgColor: 0xffe0f0, textColor: 0xcc0066, linkColor: 0xff3399,
+  hdrBg: 0xff69b4, hdrText: 0xffffff, borderColor: 0xffaacc, secBg: 0xfff0f5,
+  avLetter: 'B', avBg: 0xff69b4,
+  comments: [
+    { from: 'xravenwing', text: 'your profile is aggressively pink', time: '3/27 9:45pm' },
+    { from: 'tom', text: 'Thanks for being on MySpace, Brittney! Have fun!', time: '3/24 2:30pm' },
+    { from: 'djphresh', text: 'heyyy check out my music page, new beats up', time: '3/26 5:12pm' }
+  ]
+};
+
+profiles.djphresh = {
+  name: 'DJ PhreshBeatz', age: 22, loc: 'Miami, Florida',
+  lastLogin: '3/28/2006', online: 1, mood: 'productive',
+  about: "OFFICIAL DJ PhreshBeatz. New mixtape FRIDAY. 50k plays. South Beach every Saturday. VIP - hit me up.",
+  meet: 'Club promoters, DJs, A+R reps. Timbaland, Pharrell. SERIOUS INQUIRIES ONLY.',
+  intGeneral: 'Music production, DJing, vinyl collecting, studio sessions, cars',
+  intMusic: 'Kanye West, Daft Punk, Justice, Tiesto, DJ Shadow, J Dilla, Pharrell',
+  intMovies: 'Scratch, Juice, 8 Mile, Wild Style, Belly',
+  intTv: 'Pimp My Ride, Cribs, Making the Band',
+  intBooks: 'The 48 Laws of Power, How To Make It In The New Music Business',
+  intHeroes: 'J Dilla, Timbaland, Pharrell, DJ Premier, Pete Rock',
+  detStatus: 'Single', detHereFor: 'Networking',
+  detHometown: 'Miami, FL', detBody: '5\' 11" / Average',
+  detZodiac: 'Aquarius', detSmoke: 'No / Social',
+  detEdu: 'Some college', detOccupation: 'DJ / Producer',
+  song: 'Stronger', artist: 'Kanye West',
+  friends: ['tom', 'brittney', 'xravenwing'],
+  bgColor: 0x0a0a14, textColor: 0xccccee, linkColor: 0x00ccff,
+  hdrBg: 0x0d0d2b, hdrText: 0x00ccff, borderColor: 0x1a1a44, secBg: 0x0f0f1e,
+  avLetter: 'D', avBg: 0x0066cc,
+  comments: [
+    { from: 'brittney', text: 'omg ur music is SO good!! play at my bday party??', time: '3/28 2:00am' },
+    { from: 'tom', text: 'Keep making great music, man! MySpace loves DJs.', time: '3/26 11:00am' }
+  ]
+};
+
+// === Navigation ===
+
+function viewProfile(id) {
+  var p = profiles[id];
+  if (!p) return;
+
+  setPName(p.name);
+  setPAge(p.age);
+  setPLoc(p.loc);
+  setPMood(p.mood);
+  setPAbout(p.about);
+  setPMeet(p.meet);
+  setPSong(p.song);
+  setPArtist(p.artist);
+  setPOnline(p.online);
+  setPLogin(p.lastLogin);
+  setPAvLetter(p.avLetter);
+  setPAvBg(p.avBg);
+
+  setTBg(p.bgColor);
+  setTText(p.textColor);
+  setTLink(p.linkColor);
+  setTHdrBg(p.hdrBg);
+  setTHdrText(p.hdrText);
+  setTBorder(p.borderColor);
+  setTSecBg(p.secBg);
+
+  setInterests([
+    { label: 'General', value: p.intGeneral },
+    { label: 'Music', value: p.intMusic },
+    { label: 'Movies', value: p.intMovies },
+    { label: 'Television', value: p.intTv },
+    { label: 'Books', value: p.intBooks },
+    { label: 'Heroes', value: p.intHeroes }
+  ]);
+
+  setDetails([
+    { label: 'Status', value: p.detStatus },
+    { label: 'Here For', value: p.detHereFor },
+    { label: 'Hometown', value: p.detHometown },
+    { label: 'Body Type', value: p.detBody },
+    { label: 'Zodiac Sign', value: p.detZodiac },
+    { label: 'Smoke / Drink', value: p.detSmoke },
+    { label: 'Education', value: p.detEdu },
+    { label: 'Occupation', value: p.detOccupation }
+  ]);
+
+  // Build top friends array from IDs
+  var fr = [];
+  var i = 0;
+  while (p.friends.length > i) {
+    var fid = p.friends[i];
+    var fp = profiles[fid];
+    if (fp) {
+      fr.push({ id: fid, name: fp.name, avatarLetter: fp.avLetter, avatarBg: fp.avBg });
+    }
+    i = i + 1;
+  }
+  setTopFriends(fr);
+
+  // Build comments array with resolved author info
+  var cm = [];
+  var j = 0;
+  while (p.comments.length > j) {
+    var c = p.comments[j];
+    var ap = profiles[c.from];
+    var aName = 'Unknown';
+    var aLetter = '?';
+    var aBg = 0x999999;
+    if (ap) {
+      aName = ap.name;
+      aLetter = ap.avLetter;
+      aBg = ap.avBg;
+    }
+    cm.push({ authorName: aName, avatarLetter: aLetter, avatarBg: aBg, text: c.text, time: c.time, authorId: c.from });
+    j = j + 1;
+  }
+  setComments(cm);
+}
+
+// Load Tom's profile on startup — everyone's first friend
+viewProfile('tom');

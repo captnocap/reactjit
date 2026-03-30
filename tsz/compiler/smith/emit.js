@@ -1466,9 +1466,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         const prefix = nodeFields.includes(ds.field) ? '' : 'style.';
         dynUpdates.push({ arrNum, arrIndex: ds.arrIndex, line: `    ${ds.arrName}[${ds.arrIndex}].${prefix}${ds.field} = ${ds.expression};\n` });
       } else {
-        const nodeFields2 = ['text_color', 'font_size', 'text'];
-        const prefix2 = nodeFields2.includes(ds.field) ? '' : 'style.';
-        dynUpdates.push({ arrNum: 99999, arrIndex: 0, line: `    _root.${prefix2}${ds.field} = ${ds.expression};\n` });
+        // UNRESOLVED: dynStyle has no arrName — component inlining lost the binding.
+        // Do NOT fall back to _root — that corrupts the root node's layout.
+        // These need to be fixed in parse.js component inlining.
+        dynUpdates.push({ arrNum: 99999, arrIndex: 0, line: `    // WARN: unresolved dynStyle field=${ds.field} — skipped (_root fallback removed)\n` });
       }
     }
   }

@@ -35,10 +35,10 @@ const [hpTogB, setHpTogB] = useState(0);
 
 function HomePage() {
   return (
-      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={1.0} driftX={0} driftY={0}>
+      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={1.0}>
 
         {/* STATIC — should work as canvas_node */}
-        <Canvas.Node gx={-200} gy={-100} gw={260} gh={0}>
+        <Canvas.Node gx={-200} gy={-100} gw={260} gh={200}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#bd93f9">Static Tile (no state)</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
@@ -49,24 +49,32 @@ function HomePage() {
         </Canvas.Node>
 
         {/* DYNAMIC — has state-driven styles, suspect canvas_node breaks */}
-        <Canvas.Node gx={200} gy={-100} gw={260} gh={0}>
+        <Canvas.Node gx={200} gy={-100} gw={260} gh={200}>
           <ChartsTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={0} gy={200} gw={260} gh={0}>
+        <Canvas.Node gx={0} gy={200} gw={260} gh={200}>
           <ThreeDScene />
         </Canvas.Node>
 
-        <Canvas.Node gx={-400} gy={200} gw={260} gh={0}>
+        <Canvas.Node gx={-400} gy={200} gw={260} gh={200}>
           <ScrollDemo />
         </Canvas.Node>
 
-        <Canvas.Node gx={400} gy={200} gw={260} gh={0}>
+        <Canvas.Node gx={400} gy={200} gw={260} gh={200}>
           <Hyperlinks />
         </Canvas.Node>
 
-        <Canvas.Node gx={-200} gy={400} gw={260} gh={0}>
+        <Canvas.Node gx={-200} gy={400} gw={260} gh={200}>
           <OpacityDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={200} gy={400} gw={260} gh={200}>
+          <TextAreaDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-400} gy={400} gw={260} gh={200}>
+          <AnimationTile />
         </Canvas.Node>
 
       </Canvas>

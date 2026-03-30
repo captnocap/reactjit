@@ -1,5 +1,6 @@
 # ReactJIT
-
+its react! (kinda) its fast! (really fast) its highly experimental currently. the following is ai generated while the development speed is pushing 30+ commits a day. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
+---
 Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler, no garbage collector. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
 
 ```

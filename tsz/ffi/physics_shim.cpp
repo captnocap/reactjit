@@ -5,8 +5,8 @@
 
 #include "physics_shim.h"
 
-// Detect Box2D version: v3 has box2d/box2d.h with b2WorldId, v2 has box2d/b2_world.h
-#if __has_include(<box2d/box2d.h>)
+// Detect Box2D version: v3 has box2d/math_functions.h, v2 does not
+#if __has_include(<box2d/math_functions.h>)
 #define BOX2D_V3 1
 #else
 #define BOX2D_V3 0
@@ -149,8 +149,8 @@ extern "C" PhysFixture phys_collider_box(PhysBody body, float half_w, float half
                                           float density, float friction, float restitution) {
     b2ShapeDef def = b2DefaultShapeDef();
     def.density = density;
-    def.material.friction = friction;
-    def.material.restitution = restitution;
+    def.friction = friction;
+    def.restitution = restitution;
     b2Polygon box = b2MakeBox(half_w, half_h);
     return packShape(b2CreatePolygonShape(unpackBody(body), &def, &box));
 }
@@ -159,8 +159,8 @@ extern "C" PhysFixture phys_collider_circle(PhysBody body, float radius,
                                              float density, float friction, float restitution) {
     b2ShapeDef def = b2DefaultShapeDef();
     def.density = density;
-    def.material.friction = friction;
-    def.material.restitution = restitution;
+    def.friction = friction;
+    def.restitution = restitution;
     b2Circle circle = {{0.0f, 0.0f}, radius};
     return packShape(b2CreateCircleShape(unpackBody(body), &def, &circle));
 }
@@ -372,8 +372,8 @@ extern "C" PhysFixture phys_collider_box(PhysBody body, float half_w, float half
     b2FixtureDef def;
     def.shape = &shape;
     def.density = density;
-    def.material.friction = friction;
-    def.material.restitution = restitution;
+    def.friction = friction;
+    def.restitution = restitution;
     return static_cast<void*>(static_cast<b2Body*>(body)->CreateFixture(&def));
 }
 
@@ -384,8 +384,8 @@ extern "C" PhysFixture phys_collider_circle(PhysBody body, float radius,
     b2FixtureDef def;
     def.shape = &shape;
     def.density = density;
-    def.material.friction = friction;
-    def.material.restitution = restitution;
+    def.friction = friction;
+    def.restitution = restitution;
     return static_cast<void*>(static_cast<b2Body*>(body)->CreateFixture(&def));
 }
 
