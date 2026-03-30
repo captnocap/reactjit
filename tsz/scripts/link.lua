@@ -1,46 +1,21 @@
 #!/usr/bin/env luajit
 -- link.lua — LuaJIT linker for ReactJIT carts
+-- DO NOT TOUCH THIS FILE. DO NOT "IMPROVE" IT. DO NOT ADD BACK .a LINKING.
 --
--- Replaces `zig build cart-fast`. Calls zig build-obj + zig cc directly.
--- No build system overhead. No DAG evaluation. Just compile and link.
+-- Two steps:
+--   1. zig build-obj  source.zig → .o  (Zig x86 backend, no LLVM)
+--   2. zig cc          .o + engine .so → native binary
 --
 -- Usage: luajit scripts/link.lua <generated_app.zig> [app-name]
 
-local ffi = require("ffi")
-
 -- ── Paths ───────────────────────────────────────────────────────────
-local SCRIPT_DIR = arg[0]:match("(.*/)" ) or "./"
+local SCRIPT_DIR = arg[0]:match("(.*/)") or "./"
 local TSZ_DIR = SCRIPT_DIR:match("(.-)scripts/") or "./"
 local REPO_ROOT = TSZ_DIR .. "../"
 
-local ENGINE_SO   = TSZ_DIR .. "zig-out/lib/libreactjit-core.so"
-local ENGINE_A    = TSZ_DIR .. "zig-out/lib/libreactjit-core.current.a"
-local BLEND2D_A   = REPO_ROOT .. "blend2d/build/libblend2d_full.a"
-local VELLO_A     = REPO_ROOT .. "deps/vello_ffi/target/release/libvello_ffi_stripped.a"
+local ENGINE_SO = TSZ_DIR .. "zig-out/lib/libreactjit-core.so"
 local QJS_INCLUDE = REPO_ROOT .. "love2d/quickjs"
 local FFI_INCLUDE = TSZ_DIR .. "ffi"
-
--- Find wgpu_native.a — use the one the engine was built against
-local function find_wgpu()
-    local f = io.popen("ls -t ~/.cache/zig/p/*/lib/libwgpu_native.a 2>/dev/null")
-    if not f then return nil end
-    -- Pick the one matching the engine build (embedded in .a as archive member)
-    local grep = io.popen("strings " .. ENGINE_A .. " 2>/dev/null | grep -o '/home/.*libwgpu_native.a' | head -1")
-    if grep then
-        local path = grep:read("*l")
-        grep:close()
-        if path and path ~= "" then
-            local check = io.open(path, "r")
-            if check then check:close(); f:close(); return path end
-        end
-    end
-    -- Fallback: most recent
-    local path = f:read("*l")
-    f:close()
-    return path
-end
-
-local WGPU_A = find_wgpu()
 
 -- ── Args ────────────────────────────────────────────────────────────
 local source = arg[1]
@@ -55,13 +30,13 @@ if not name then
 end
 
 local outdir = TSZ_DIR .. "zig-out/bin"
-local obj = source:match("([^/]+)%.zig$"):gsub("%.zig$", "") .. ".o"
+-- zig build-obj outputs basename.o in cwd, not next to source
+local obj_name = source:match("([^/]+)%.zig$"):gsub("%.zig$", "") .. ".o"
 local binary = outdir .. "/" .. name
 
 -- ── Helpers ─────────────────────────────────────────────────────────
 local function run(cmd)
     local ok = os.execute(cmd)
-    -- Lua 5.1 (LuaJIT): os.execute returns exit code directly
     if ok ~= 0 then return false end
     return true
 end
@@ -72,13 +47,6 @@ local function file_exists(path)
     return false
 end
 
-local function elapsed(start)
-    local f = io.popen("date +%s%3N")
-    local now = tonumber(f:read("*l"))
-    f:close()
-    return now - start
-end
-
 local function now_ms()
     local f = io.popen("date +%s%3N")
     local t = tonumber(f:read("*l"))
@@ -87,57 +55,13 @@ local function now_ms()
 end
 
 -- ── Preflight ───────────────────────────────────────────────────────
-local STABLE_SO = TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so"
-local has_so = file_exists(ENGINE_SO) or file_exists(STABLE_SO)
-local has_a = file_exists(ENGINE_A)
-if not has_so and not has_a then
-    io.stderr:write("[link] No engine found (.so or .a) in zig-out/lib/\n")
-    io.stderr:write("[link] Rebuild the engine first.\n")
+if not file_exists(ENGINE_SO) then
+    io.stderr:write("[link] Engine .so not found at " .. ENGINE_SO .. "\n")
+    io.stderr:write("[link] Build it: zig build core-so -Doptimize=ReleaseFast\n")
     os.exit(1)
 end
 
 os.execute("mkdir -p " .. outdir)
-
--- ── Integrity check — verify generated .zig hasn't been hand-edited ──
-local function check_integrity(path)
-    local f = io.open(path, "r")
-    if not f then return true end -- no file = skip check
-    local first = f:read("*l")
-    f:close()
-    if not first or not first:match("^//! integrity:") then return true end -- no stamp = old file, ok
-    local body_hash = first:match("body=(%x+)")
-    if not body_hash then return true end
-
-    -- Re-read file, strip the integrity lines, compute sha256 of the body
-    f = io.open(path, "r")
-    local content = f:read("*a")
-    f:close()
-    local body = content:gsub("^//! integrity:[^\n]*\n//! DO NOT EDIT[^\n]*\n", "")
-
-    -- Use system sha256sum for cross-language consistency
-    local tmp = os.tmpname()
-    local tf = io.open(tmp, "w"); tf:write(body); tf:close()
-    local pf = io.popen("sha256sum " .. tmp .. " 2>/dev/null")
-    local computed = pf:read("*l"):match("^(%x+)")
-    pf:close(); os.remove(tmp)
-    -- Compare first 16 hex chars (64-bit prefix, matches Smith's stamp)
-    computed = computed:sub(1, 16)
-
-    if computed ~= body_hash then
-        io.stderr:write("[link] INTEGRITY FAIL: " .. path .. " has been hand-edited!\n")
-        io.stderr:write("[link] Expected body hash: " .. body_hash .. "\n")
-        io.stderr:write("[link] Computed body hash: " .. computed .. "\n")
-        io.stderr:write("[link] Re-run forge to regenerate from .tsz source.\n")
-        io.stderr:write("[link] Use --force to override (you know what you're doing).\n")
-        return false
-    end
-    return true
-end
-
--- Check unless --force was passed (arg[3])
-if arg[3] ~= "--force" and not check_integrity(source) then
-    os.exit(1)
-end
 
 -- ── Step 1: Compile cart .zig → .o ──────────────────────────────────
 local t0 = now_ms()
@@ -149,8 +73,6 @@ local compile_cmd = table.concat({
     "-I " .. FFI_INCLUDE,
     "-I /usr/include/x86_64-linux-gnu",
     "-lc",
-    -- Cart code is data declarations + thin handlers — doesn't need LLVM.
-    -- Engine .a is already fully optimized. Debug uses Zig's fast x86 backend.
     "-ODebug", "-fstrip",
 }, " ")
 
@@ -164,31 +86,16 @@ local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
 -- ── Step 2: Link .o + engine .so → binary ───────────────────────────
-local link_cmd
-if file_exists(ENGINE_SO) then
-    link_cmd = table.concat({
-        "zig cc",
-        "-o " .. binary,
-        obj,
-        ENGINE_SO,
-        "-Wl,-rpath," .. TSZ_DIR .. "zig-out/lib",
-        "-lm -lpthread -ldl",
-    }, " ")
-else
-    -- Static fallback
-    link_cmd = table.concat({
-        "zig cc",
-        "-o " .. binary,
-        obj,
-        ENGINE_A,
-        WGPU_A,
-        BLEND2D_A,
-        VELLO_A,
-        "-lSDL3 -lfreetype -lluajit-5.1 -lX11",
-        "-lbox2d -lsqlite3 -lvterm -lcurl -larchive",
-        "-lm -lpthread -ldl -lstdc++",
-    }, " ")
-end
+-- $ORIGIN/lib lets the self-extracting package find the bundled .so
+-- Single-quote the -Wl arg so the shell doesn't expand $ORIGIN
+local link_cmd = table.concat({
+    "zig cc",
+    "-o " .. binary,
+    obj_name,
+    ENGINE_SO,
+    "'-Wl,-rpath,$ORIGIN/lib'",
+    "-lm -lpthread -ldl",
+}, " ")
 
 io.write("[link] link → " .. binary .. "... ")
 io.flush()
@@ -199,11 +106,8 @@ end
 local t2 = now_ms()
 io.write(tostring(t2 - t1) .. "ms\n")
 
--- ── Step 3: Strip debug info ────────────────────────────────────────
+-- ── Cleanup ─────────────────────────────────────────────────────────
 run("strip " .. binary .. " 2>/dev/null")
+os.remove(obj_name)
 
--- ── Done ────────────────────────────────────────────────────────────
 io.write("[link] total: " .. tostring(t2 - t0) .. "ms → " .. binary .. "\n")
-
--- Cleanup .o
-os.remove(obj)

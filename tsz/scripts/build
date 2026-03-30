@@ -131,7 +131,16 @@ if [ -f "$RAW_BIN" ] && [ "$OPT" != "--debug" ]; then
     mkdir -p "$LIB_DIR"
     cp "$RAW_BIN" "$TMP_DIR/app.bin"
 
+    # Always bundle the engine .so
+    ENGINE_SO="zig-out/lib/libreactjit-core.so"
+    [ -f "$ENGINE_SO" ] && cp "$(readlink -f "$ENGINE_SO")" "$LIB_DIR/libreactjit-core.so"
+
+    # Collect libs from the cart binary AND the engine .so (transitive deps)
     LIB_COUNT=0
+    LDD_TMP=$(mktemp)
+    ldd "$RAW_BIN" >> "$LDD_TMP" 2>/dev/null
+    ENGINE_SO="zig-out/lib/libreactjit-core.so"
+    [ -f "$ENGINE_SO" ] && ldd "$ENGINE_SO" >> "$LDD_TMP" 2>/dev/null
     while IFS= read -r line; do
         case "$line" in *linux-vdso*) continue ;; esac
         lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
@@ -139,9 +148,11 @@ if [ -f "$RAW_BIN" ] && [ "$OPT" != "--debug" ]; then
         [ ! -f "$lib_path" ] && continue
         real_path=$(readlink -f "$lib_path")
         soname=$(echo "$line" | sed 's/^ *//;s/ *=>.*//')
+        [ -f "$LIB_DIR/$soname" ] && continue
         cp "$real_path" "$LIB_DIR/$soname"
         LIB_COUNT=$((LIB_COUNT + 1))
-    done < <(ldd "$RAW_BIN" 2>/dev/null)
+    done < "$LDD_TMP"
+    rm -f "$LDD_TMP"
 
     LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null)
     if [ -n "$LD_LINUX" ] && [ -f "$LD_LINUX" ]; then
