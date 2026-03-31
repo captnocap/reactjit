@@ -123,6 +123,16 @@ function parseStyleValue(c) {
         const fieldType = fi ? fi.type : 'int';
         return { type: 'map_field', value: pv, zigExpr: pv, fieldType };
       }
+      // Check for arithmetic after prop: prop * N, prop / N
+      if (/^-?\d+(\.\d+)?$/.test(pv) && (c.kind() === TK.star || c.kind() === TK.slash || c.kind() === TK.plus || c.kind() === TK.minus)) {
+        const op = c.kind(); c.advance();
+        if (c.kind() === TK.number) {
+          const rhs = parseFloat(c.text()); c.advance();
+          const lhs = parseFloat(pv);
+          const result = op === TK.star ? lhs * rhs : op === TK.slash ? lhs / rhs : op === TK.plus ? lhs + rhs : lhs - rhs;
+          return { type: 'number', value: String(Math.round(result)) };
+        }
+      }
       return { type: 'number', value: pv };
     }
   }
@@ -280,13 +290,19 @@ function parseStyleBlock(c) {
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (styleKeys[key] && trueVal.type === 'number' && falseVal.type === 'number') {
-            // Ternary numeric style — also needs runtime
-            fields.push(`.${styleKeys[key]} = 0`);
-            if (!ctx.dynStyles) ctx.dynStyles = [];
-            const dsId2 = ctx.dynStyles.length;
-            ctx.dynStyles.push({ field: styleKeys[key], expression: `if ${cond} @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`, arrName: '', arrIndex: -1 });
-            if (!fields._dynStyleIds) fields._dynStyleIds = [];
-            fields._dynStyleIds.push(dsId2);
+            const numExpr = `if ${cond} @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`;
+            if (ctx.currentMap) {
+              // Inside map: emit inline — _rebuildMap re-evaluates per item
+              fields.push(`.${styleKeys[key]} = ${numExpr}`);
+            } else {
+              // Outside map: placeholder + dynStyle runtime update
+              fields.push(`.${styleKeys[key]} = 0`);
+              if (!ctx.dynStyles) ctx.dynStyles = [];
+              const dsId2 = ctx.dynStyles.length;
+              ctx.dynStyles.push({ field: styleKeys[key], expression: numExpr, arrName: '', arrIndex: -1 });
+              if (!fields._dynStyleIds) fields._dynStyleIds = [];
+              fields._dynStyleIds.push(dsId2);
+            }
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (enumKeys[key]) {
@@ -338,6 +354,9 @@ function parseStyleBlock(c) {
             if (c.kind() === TK.number) { expr = `(${expr} ${op} ${c.text()})`; c.advance(); }
           }
           fields.push(`.${styleKeys[key]} = @as(f32, @floatFromInt(${expr}))`);
+        } else if (val.type === 'string' && val.value.startsWith('theme-')) {
+          const resolved = resolveThemeToken(val.value);
+          if (typeof resolved === 'number') fields.push(`.${styleKeys[key]} = ${resolved}`);
         } else if (val.type === 'string' && val.value.endsWith('%')) {
           const pct = parseFloat(val.value);
           fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
@@ -440,6 +459,16 @@ function parseHandler(c) {
           body += `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
           if (c.kind() === TK.rparen) c.advance();
         }
+      } else if (c.kind() === TK.identifier && c.text() === 'setVariant') {
+        c.advance();
+        if (c.kind() === TK.lparen) {
+          c.advance();
+          const val = c.text(); c.advance();
+          if (c.kind() === TK.rparen) c.advance();
+          body += globalThis.__fastBuild === 1
+            ? `    api.theme.rjit_theme_set_variant(${val});\n`
+            : `    @import("framework/theme.zig").setVariant(${val});\n`;
+        }
       } else if (c.kind() === TK.identifier && isScriptFunc(c.text())) {
         const fname = c.text();
         c.advance();
@@ -477,6 +506,17 @@ function parseHandler(c) {
     return body;
   }
 
+  // Single expression: setVariant(N)
+  if (c.kind() === TK.identifier && c.text() === 'setVariant') {
+    c.advance();
+    if (c.kind() === TK.lparen) {
+      c.advance();
+      const val = c.text(); c.advance();
+      if (c.kind() === TK.rparen) c.advance();
+      body = `    @import("framework/theme.zig").setVariant(${val});\n`;
+    }
+    return body;
+  }
   // Single expression: setCount(expr)
   if (c.kind() === TK.identifier && isSetter(c.text())) {
     const setter = c.text();

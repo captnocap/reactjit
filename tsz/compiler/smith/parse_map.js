@@ -86,6 +86,7 @@ function tryParseMap(c, oa) {
     mapArrayDecls: [], mapArrayComments: [],
     parentMap: savedMapCtx,  // track parent map for nested context
     isInline,  // separate-OA map inside another map's template (love2d: inline loop)
+    iterVar: isInline ? '_j' : '_i',
   };
   ctx.maps.push(mapInfo); // reserve slot early
   ctx.currentMap = mapInfo;
@@ -239,6 +240,16 @@ function parseTemplateLiteral(raw) {
         const slot = ctx.stateSlots[slotIdx];
         fmt += slot.type === 'string' ? '{s}' : '{d}';
         args.push(slotGet(expr));
+      } else if (expr.endsWith('.length')) {
+        // Array .length → OA _len variable
+        const arrName = expr.slice(0, -7);
+        const oa = ctx.objectArrays.find(function(o) { return o.getter === arrName; });
+        if (oa) {
+          fmt += '{d}';
+          args.push(`@as(i64, @intCast(_oa${oa.oaIdx}_len))`);
+        } else {
+          fmt += expr;
+        }
       } else if (/^(\w+)\s*([+\-*\/])\s*(.+)$/.test(expr)) {
         // Arithmetic expression: getter + N, getter - 1, etc.
         const m = expr.match(/^(\w+)\s*([+\-*\/])\s*(.+)$/);
@@ -451,7 +462,7 @@ function tryParseConditional(c, children) {
         const pv = ctx.propStack[name];
         condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-        condParts.push('@as(i64, @intCast(_i))');
+        condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
         // Map item parameter: check for .field access (supports multi-level: item.config.theme.bg)
         c.advance();
@@ -466,14 +477,14 @@ function tryParseConditional(c, children) {
             }
             const oa = ctx.currentMap.oa;
             if (oa) {
-              condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+              condParts.push(`_oa${oa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}]`);
             } else {
               condParts.push('0');
             }
             continue; // already advanced past field
           }
         } else {
-          condParts.push('@as(i64, @intCast(_i))');
+          condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
         }
         // c.advance() handled below
       } else if (ctx.inlineComponent) {
@@ -628,7 +639,7 @@ function _parseTernaryCondParts(c) {
         var pv = ctx.propStack[name];
         condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-        condParts.push('@as(i64, @intCast(_i))');
+        condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
         c.advance();
         if (c.kind() === TK.dot) {
@@ -641,10 +652,11 @@ function _parseTernaryCondParts(c) {
             var oa = ctx.currentMap.oa;
             if (oa) {
               var fi2 = oa.fields.find(function(f) { return f.name === field; });
+              var iv = ctx.currentMap.iterVar || '_i';
               if (fi2 && fi2.type === 'string') {
-                condParts.push('_oa' + oa.oaIdx + '_' + field + '[_i][0.._oa' + oa.oaIdx + '_' + field + '_lens[_i]]');
+                condParts.push('_oa' + oa.oaIdx + '_' + field + '[' + iv + '][0.._oa' + oa.oaIdx + '_' + field + '_lens[' + iv + ']]');
               } else {
-                condParts.push('_oa' + oa.oaIdx + '_' + field + '[_i]');
+                condParts.push('_oa' + oa.oaIdx + '_' + field + '[' + iv + ']');
               }
             } else {
               condParts.push('0');
@@ -654,9 +666,10 @@ function _parseTernaryCondParts(c) {
         } else if (ctx.currentMap.isSimpleArray) {
           // Simple array: bare item → string value from _v field
           var oa3 = ctx.currentMap.oa;
-          condParts.push('_oa' + oa3.oaIdx + '__v[_i][0.._oa' + oa3.oaIdx + '__v_lens[_i]]');
+          var iv3 = ctx.currentMap.iterVar || '_i';
+          condParts.push('_oa' + oa3.oaIdx + '__v[' + iv3 + '][0.._oa' + oa3.oaIdx + '__v_lens[' + iv3 + ']]');
         } else {
-          condParts.push('@as(i64, @intCast(_i))');
+          condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
         }
         continue;
       } else if (ctx.inlineComponent) {
@@ -832,17 +845,17 @@ function tryParseTernaryText(c, children) {
             }
             const oa = ctx.currentMap.oa;
             if (oa) {
-              condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+              condParts.push(`_oa${oa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}]`);
             } else {
               condParts.push('0');
             }
             continue;
           }
         } else {
-          condParts.push('@as(i64, @intCast(_i))');
+          condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-        condParts.push('@as(i64, @intCast(_i))');
+        condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
       } else {
         condParts.push(name);
       }
@@ -980,6 +993,7 @@ function parseForLoop(c) {
     mapArrayDecls: [], mapArrayComments: [],
     parentMap: savedMapCtx,
     isInline: isInline,
+    iterVar: isInline ? '_j' : '_i',
     isSimpleArray: !!oa.isSimpleArray,
   };
   ctx.maps.push(mapInfo);

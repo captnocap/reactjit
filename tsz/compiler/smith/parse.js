@@ -40,9 +40,10 @@ function parseJSXElement(c) {
 
   // C.Name classifier resolution
   let clsDef = null;
+  let clsName = null;
   if (rawTag === 'C' && c.kind() === TK.dot) {
     c.advance(); // skip .
-    const clsName = c.text(); c.advance();
+    clsName = c.text(); c.advance();
     clsDef = ctx.classifiers && ctx.classifiers[clsName];
     if (!clsDef) {
       ctx._unresolvedClassifiers.push({ name: clsName, line: c.starts[c.pos > 0 ? c.pos - 1 : 0] });
@@ -562,10 +563,23 @@ function parseJSXElement(c) {
             ascriptOnResult = c.text(); c.advance();
           }
         } else if (attr === 'fontSize') {
-          // fontSize={N} or fontSize="N" → .font_size = N
+          // fontSize={N}, fontSize={prop / N}, fontSize="N" → .font_size = N
           if (c.kind() === TK.lbrace) {
             c.advance();
-            if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
+            // Resolve first operand: number literal or prop reference
+            let fsVal = null;
+            if (c.kind() === TK.number) { fsVal = parseFloat(c.text()); c.advance(); }
+            else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && /^\d+(\.\d+)?$/.test(ctx.propStack[c.text()])) {
+              fsVal = parseFloat(ctx.propStack[c.text()]); c.advance();
+            }
+            if (fsVal !== null) {
+              // Check for arithmetic: val * N, val / N
+              if (c.kind() === TK.star && c.pos + 1 < c.count) { c.advance(); if (c.kind() === TK.number) { fsVal = Math.floor(fsVal * parseFloat(c.text())); c.advance(); } }
+              else if (c.kind() === TK.slash && c.pos + 1 < c.count) { c.advance(); if (c.kind() === TK.number) { fsVal = Math.floor(fsVal / parseFloat(c.text())); c.advance(); } }
+              nodeFields.push(`.font_size = ${fsVal}`);
+            }
+            // Consume remaining tokens until }
+            while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
             if (c.kind() === TK.rbrace) c.advance();
           } else if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
           else if (c.kind() === TK.string) { nodeFields.push(`.font_size = ${c.text().slice(1,-1)}`); c.advance(); }
@@ -1105,6 +1119,59 @@ function parseJSXElement(c) {
     nodeFields = mergeFields(clsNodeFields(clsDef), nodeFields);
   }
 
+  // Variant/bp binding — track nodes that need runtime style switching
+  if (clsDef && (clsDef.variants || clsDef.bp)) {
+    // Build style arrays for each variant: [base, variant1, variant2, ...]
+    // Base style is what's already merged into styleFields (cls defaults + inline overrides)
+    var vStyles = [styleFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
+    var vNodeFields = [nodeFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
+    for (var vi = 0; vi < ctx.variantNames.length; vi++) {
+      var vname = ctx.variantNames[vi];
+      var vdef = clsDef.variants && clsDef.variants[vname];
+      if (vdef) {
+        // Merge: variant style base + inline overrides (inline still wins)
+        var vFields = mergeFields(clsStyleFields(vdef), styleFields.filter(function(f) {
+          // only keep truly inline fields (not from base classifier)
+          return !clsStyleFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
+        }));
+        vStyles.push(vFields.filter(function(f) { return !f.startsWith('._'); }).join(', '));
+        var vnf = mergeFields(clsNodeFields(vdef), nodeFields.filter(function(f) {
+          return !clsNodeFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
+        }));
+        vNodeFields.push(vnf.filter(function(f) { return !f.startsWith('._'); }).join(', '));
+      } else {
+        // This classifier entry doesn't define this variant — use base
+        vStyles.push(vStyles[0]);
+        vNodeFields.push(vNodeFields[0]);
+      }
+    }
+    // Breakpoint overrides: {sm: styleStr, md: styleStr}
+    var bpStyles = null;
+    if (clsDef.bp) {
+      bpStyles = {};
+      var bpTiers = ['sm', 'md'];
+      for (var bi = 0; bi < bpTiers.length; bi++) {
+        var bpDef = clsDef.bp[bpTiers[bi]];
+        if (bpDef) {
+          var bpFields = mergeFields(clsStyleFields(bpDef), []);
+          bpStyles[bpTiers[bi]] = bpFields.filter(function(f) { return !f.startsWith('._'); }).join(', ');
+        }
+      }
+    }
+    var vbId = ctx.variantBindings.length;
+    ctx.variantBindings.push({
+      id: vbId, clsName: clsName || '',
+      styles: vStyles,         // [baseStr, v1Str, v2Str, ...]
+      nodeFieldStrs: vNodeFields,
+      bpStyles: bpStyles,      // {sm: str, md: str} or null
+      arrName: '', arrIndex: -1,
+      inMap: !!ctx.currentMap,
+      inComponent: !!ctx.inlineComponent,
+    });
+    // Attach binding ID to styleFields so it propagates to node result
+    styleFields._variantBindingId = vbId;
+  }
+
   // <ascript> auto-handler: generates a press handler that runs AppleScript
   if (rawTag === 'ascript' && ascriptScript && !handlerRef) {
     const handlerName = `_handler_press_${ctx.handlerCount}`;
@@ -1258,7 +1325,7 @@ function parseChildren(c) {
             const mapBufId = ctx.mapDynCount || 0;
             ctx.mapDynCount = mapBufId + 1;
             ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
+            children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
           } else {
             const bufId = ctx.dynCount;
             // Buffer size: for bare `${expr}` use 64, otherwise formula
@@ -1299,7 +1366,7 @@ function parseChildren(c) {
               args = `_oa${oaIdx}_${field}[_i]`;
             }
             ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
+            children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
             continue;
           }
         } else if (ctx.currentMap.isSimpleArray && c.kind() === TK.rbrace) {
@@ -1311,7 +1378,7 @@ function parseChildren(c) {
           ctx.mapDynCount = mapBufId + 1;
           const args = `_oa${oaIdx}__v[_i][0.._oa${oaIdx}__v_lens[_i]]`;
           ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-          children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
+          children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
           continue;
         }
       }
@@ -1418,31 +1485,34 @@ function parseChildren(c) {
             let trueText = '';
             if (c.kind() === TK.string) { trueText = c.text().slice(1, -1); c.advance(); }
             if (c.kind() === TK.colon) c.advance();
-            // Parse false branch — could be another ternary or a string
-            let falseExpr = '';
-            if (c.kind() === TK.string) {
-              falseExpr = `"${c.text().slice(1, -1)}"`;
-              c.advance();
-            } else if (c.kind() === TK.identifier && isGetter(c.text())) {
-              // Nested ternary: getter == M ? "C" : "D"
-              const g2 = c.text(); c.advance();
-              if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
-                const op2 = c.kind() === TK.eq_eq ? '==' : '!='; c.advance();
-                if (c.kind() === TK.equals) c.advance();
-                let rhs2 = '';
-                if (c.kind() === TK.number) { rhs2 = c.text(); c.advance(); }
-                else if (c.kind() === TK.string) { rhs2 = c.text().slice(1, -1); c.advance(); }
-                if (c.kind() === TK.question) {
-                  c.advance();
-                  let t2 = ''; if (c.kind() === TK.string) { t2 = c.text().slice(1, -1); c.advance(); }
-                  if (c.kind() === TK.colon) c.advance();
-                  let f2 = ''; if (c.kind() === TK.string) { f2 = c.text().slice(1, -1); c.advance(); }
-                  const cond2 = `(${slotGet(g2)} ${op2} ${rhs2})`;
-                  falseExpr = `if ${cond2} @as([]const u8, "${t2}") else @as([]const u8, "${f2}")`;
+            // Parse false branch — recursively handles chained ternaries of any depth
+            function _parseTernaryFalse() {
+              if (c.kind() === TK.string) {
+                const s = c.text().slice(1, -1); c.advance();
+                return `"${s}"`;
+              }
+              if (c.kind() === TK.identifier && isGetter(c.text())) {
+                const gN = c.text(); c.advance();
+                if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
+                  const opN = c.kind() === TK.eq_eq ? '==' : '!='; c.advance();
+                  if (c.kind() === TK.equals) c.advance();
+                  let rhsN = '';
+                  if (c.kind() === TK.number) { rhsN = c.text(); c.advance(); }
+                  else if (c.kind() === TK.string) { rhsN = c.text().slice(1, -1); c.advance(); }
+                  if (c.kind() === TK.question) {
+                    c.advance();
+                    let tN = ''; if (c.kind() === TK.string) { tN = c.text().slice(1, -1); c.advance(); }
+                    if (c.kind() === TK.colon) c.advance();
+                    const fN = _parseTernaryFalse();
+                    const condN = `(${slotGet(gN)} ${opN} ${rhsN})`;
+                    return `if ${condN} @as([]const u8, "${tN}") else @as([]const u8, ${fN})`;
+                  }
                 }
               }
+              return '""';
             }
-            if (!falseExpr) falseExpr = '@as([]const u8, "")';
+            let falseExpr = _parseTernaryFalse();
+            if (!falseExpr) falseExpr = '""';
             // Build condition
             let cond;
             if (rhsIsString || slot.type === 'string') {
@@ -1625,8 +1695,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   // Auto-overflow: any Box with constrained height gets overflow:auto (clips + scrolls when content exceeds)
   // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
   // This makes <ScrollView> unnecessary at the authoring level — constrained containers just work.
+  // Exception: full-window containers (width:100% + height:100%) are app frames, not scroll containers.
   const _hasConstrainedH = styleFields.some(f => f.startsWith('.height') || f.startsWith('.flex_grow'));
-  if (tag === 'Box' && children.length > 0 && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
+  const _isFullWindow = styleFields.some(f => f === '.height = -1') && styleFields.some(f => f === '.width = -1');
+  if (tag === 'Box' && children.length > 0 && !_isFullWindow && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
     styleFields.push('.overflow = .auto');
   }
   const parts = [];
@@ -1637,7 +1709,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (tag === 'Text') {
     const dynChild = children.find(ch => ch.dynBufId !== undefined);
     if (dynChild) {
-      parts.push(`.text = ""`);
+      parts.push(dynChild.inMap ? `.text = "__mt${dynChild.dynBufId}__"` : `.text = ""`);
       if (nodeFields) for (const nf of nodeFields) parts.push(nf);
       children = [];
       const expr = `.{ ${parts.join(', ')} }`;
@@ -1763,6 +1835,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           else tc.falseIdx = i;
         }
       }
+      if (children[i].variantBindingId !== undefined) {
+        const vb = ctx.variantBindings[children[i].variantBindingId];
+        if (vb && !vb.arrName) { vb.arrName = arrName; vb.arrIndex = i; }
+      }
     }
     parts.push(`.children = &${arrName}`);
   }
@@ -1773,6 +1849,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   // Merge dynStyleIds from both style block and node field ternaries
   const allDynIds = [...(styleFields._dynStyleIds || []), ...((nodeFields && nodeFields._dynStyleIds) || [])];
   if (allDynIds.length > 0) nodeResult.dynStyleIds = allDynIds;
+  if (styleFields._variantBindingId !== undefined) nodeResult.variantBindingId = styleFields._variantBindingId;
   return nodeResult;
 }
 

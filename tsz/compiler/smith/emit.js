@@ -117,7 +117,8 @@ function emitOutput(rootExpr, file) {
     const nm = ctx.arrayDecls[i].match(/^var (_arr_\d+)/);
     if (nm && _promotedToPerItem.has(nm[1])) continue; // emitted as per-item in map pool
     if (ctx.arrayComments[i]) out += ctx.arrayComments[i] + '\n';
-    out += ctx.arrayDecls[i] + '\n';
+    // Strip __mt tags from static declarations — actual text is set at runtime in map rebuild
+    out += ctx.arrayDecls[i].replace(/"__mt\d+__"/g, '""') + '\n';
   }
   const nodeInit = rootExpr.startsWith('.') ? rootExpr.slice(1) : rootExpr;
   out += `var _root = Node${nodeInit};\n`;
@@ -133,14 +134,12 @@ function emitOutput(rootExpr, file) {
     }
   }
 
-  // Emit Zig fns for ALL handlers (body may be empty; lua-only map handlers emit empty fn)
-  const zigOnlyHandlers = ctx.handlers;
-  if (zigOnlyHandlers.length > 0) {
+  // Emit Zig fns for non-map handlers (map handlers dispatch through QuickJS/Lua, no Zig stub needed)
+  const nonMapHandlers = ctx.handlers.filter(h => !h.inMap);
+  if (nonMapHandlers.length > 0) {
     out += `\n// ── Event handlers ──────────────────────────────────────────────\n`;
-    for (const h of zigOnlyHandlers) {
-      // Map handlers dispatch through QuickJS/Lua — emit empty Zig fn stub
-      const body = h.inMap ? '' : (h.body || '');
-      out += `fn ${h.name}() void {\n${body}}\n\n`;
+    for (const h of nonMapHandlers) {
+      out += `fn ${h.name}() void {\n${h.body || ''}}\n\n`;
     }
   }
 
@@ -552,8 +551,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           if (decl.includes('[_i]') || decl.includes('_i)') || decl.includes('(_i')) {
             needsPerItem.add(name);
           }
-          // Arrays with .text = "" placeholders when map dynTexts exist → per-item
-          if (pendingMapDynTexts.length > 0 && decl.includes('.text = ""')) {
+          // Arrays with .text = "" or tagged __mt__ placeholders when map dynTexts exist → per-item
+          if (pendingMapDynTexts.length > 0 && (decl.includes('.text = ""') || /__mt\d+__/.test(decl))) {
             needsPerItem.add(name);
           }
         }
@@ -745,11 +744,14 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             }
           }
         }
-        // Replace dynamic text refs in this per-item array (skip inner array's texts)
-        if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
-          ctx._debugLines.push('[MAP_TEXT_WIRE] perItem=' + pid.name + ' dtSkippedForInner=' + dtSkippedForInner + ' dtConsumed=' + dtConsumed + ' textSlots=' + (fixedContent.match(/\.text = ""/g) || []).length);
+        // Replace tagged map text refs in this per-item array
+        // Tags are "__mtN__" where N is the specific text buffer index
+        for (const dt of mapDynTexts) {
+          const ti = dt._mapTextIdx;
+          fixedContent = fixedContent.replace(`"__mt${ti}__"`, `_map_texts_${mi}_${ti}[_i]`);
         }
-        let pidDtIdx = dtSkippedForInner + dtConsumed;
+        // Legacy fallback: replace any remaining untagged .text = "" sequentially
+        let pidDtIdx = dtConsumed;
         while (pidDtIdx < mapDynTexts.length) {
           const dt = mapDynTexts[pidDtIdx];
           const ti = dt._mapTextIdx;
@@ -885,7 +887,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
                              ctx.arrayDecls.find(d => d.startsWith(`var ${nestedMeta.innerArr}`));
           if (sharedDecl) {
             let innerContent = sharedDecl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-            // Replace .text = "" with dynamic text refs, in order
+            // Replace tagged map text refs, then fallback to sequential for untagged
+            for (const dt of nestedMapDynTexts) {
+              const ti = dt._mapTextIdx;
+              innerContent = innerContent.replace(`"__mt${ti}__"`, `_map_texts_${nmi}_${ti}[_flat_j]`);
+            }
             for (const dt of nestedMapDynTexts) {
               const ti = dt._mapTextIdx;
               innerContent = innerContent.replace('.text = ""', `.text = _map_texts_${nmi}_${ti}[_flat_j]`);
@@ -970,7 +976,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           for (const pid2 of imMeta.mapPerItemDecls) {
             content = content.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${imi}[_i][_j]`);
           }
-          // 4. Wire .text = "" with dynamic text refs [_i][_j]
+          // 4. Wire tagged map text refs [_i][_j], then fallback sequential
+          for (const dt of imMeta.mapDynTexts) {
+            const ti = dt._mapTextIdx;
+            content = content.replace(`"__mt${ti}__"`, `_map_texts_${imi}_${ti}[_i][_j]`);
+          }
           while (imDtConsumed < imMeta.mapDynTexts.length) {
             const dt = imMeta.mapDynTexts[imDtConsumed];
             const ti = dt._mapTextIdx;
@@ -1009,6 +1019,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             }
             for (const dt of imMeta.mapDynTexts) {
               const ti = dt._mapTextIdx;
+              ic = ic.replace(`"__mt${ti}__"`, `_map_texts_${imi}_${ti}[_i][_j]`);
               ic = ic.replace('.text = ""', `.text = _map_texts_${imi}_${ti}[_i][_j]`);
             }
             for (let hi = 0; hi < imMeta.mapHandlers.length; hi++) {
@@ -1130,12 +1141,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           const decl = (m.mapArrayDecls || []).find(d => d.startsWith(`var ${innerArr}`)) ||
                        ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
           if (decl) {
-            // Replace _dyn_text references with _map_texts — inner array texts come AFTER per-item texts in JSX order
+            // Replace tagged map text refs in inner array — tags "__mtN__" wire precisely
             let inner = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-            if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
-              ctx._debugLines.push('[MAP_TEXT_WIRE] innerArr=' + innerArr + ' innerTextSlots=' + innerTextSlots + ' dtConsumed=' + dtConsumed + ' textSlots=' + (inner.match(/\.text = ""/g) || []).length);
-              ctx._debugLines.push('[MAP_TEXT_WIRE]   inner decl snippet: ' + inner.substring(0, 300));
+            for (const dt of mapDynTexts) {
+              const ti = dt._mapTextIdx;
+              inner = inner.replace(`"__mt${ti}__"`, `_map_texts_${mi}_${ti}[_i]`);
             }
+            // Legacy fallback: replace any remaining untagged .text = "" sequentially
             for (let dti = dtConsumed; dti < dtConsumed + innerTextSlots && dti < mapDynTexts.length; dti++) {
               const dt = mapDynTexts[dti];
               const ti = dt._mapTextIdx;
@@ -1325,11 +1337,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         }
       } else {
         // Single-node map template (no inner array) — wire dynamic text refs
-        // into the templateExpr before emitting. Without this, .text = "" stays empty.
         let tExpr = m.templateExpr;
         for (let dti = 0; dti < mapDynTexts.length; dti++) {
           const dt = mapDynTexts[dti];
           const ti = dt._mapTextIdx;
+          tExpr = tExpr.replace(`"__mt${ti}__"`, `_map_texts_${mi}_${ti}[_i]`);
           tExpr = tExpr.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
         }
         out += `        _map_pool_${mi}[_i] = ${tExpr};\n`;
@@ -1408,7 +1420,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
   }
 
-  if (zigOnlyHandlers.length > 0 && !out.endsWith('\n\n')) out += '\n';
+  if (nonMapHandlers.length > 0 && !out.endsWith('\n\n')) out += '\n';
 
 
   out += emitLogicBlocks(ctx);
@@ -1465,10 +1477,14 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         const prefix = nodeFields.includes(ds.field) ? '' : 'style.';
         dynUpdates.push({ arrNum, arrIndex: ds.arrIndex, line: `    ${ds.arrName}[${ds.arrIndex}].${prefix}${ds.field} = ${ds.expression};\n` });
       } else {
-        // UNRESOLVED: dynStyle has no arrName — component inlining lost the binding.
-        // Do NOT fall back to _root — that corrupts the root node's layout.
-        // These need to be fixed in parse.js component inlining.
-        dynUpdates.push({ arrNum: 99999, arrIndex: 0, line: `    // WARN: unresolved dynStyle field=${ds.field} — skipped (_root fallback removed)\n` });
+        // No arrName — only target _root if the root node actually has this field
+        const zigField = ds.field.replace(/([A-Z])/g, '_$1').toLowerCase();
+        if (rootExpr.includes(zigField) || rootExpr.includes(ds.field)) {
+          const nodeFields = ['text_color', 'font_size', 'text'];
+          const prefix = nodeFields.includes(ds.field) ? '' : 'style.';
+          dynUpdates.push({ arrNum: 99998, arrIndex: 0, line: `    _root.${prefix}${ds.field} = ${ds.expression};\n` });
+        }
+        // else: lost binding from map/component inlining — skip silently
       }
     }
   }
@@ -1504,6 +1520,90 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   }
 
   out += `\n`;
+
+  // _updateVariants — runtime variant/bp style switching
+  const hasVariants = ctx.variantBindings && ctx.variantBindings.length > 0;
+  if (hasVariants) {
+    const variantCount = ctx.variantNames.length + 1; // +1 for base
+    out += `fn _updateVariants() void {\n`;
+    const hasBp = ctx.variantBindings.some(vb => vb.bpStyles);
+    if (fastBuild) {
+      // Fast build: use api extern functions (shared state across .so boundary)
+      if (hasBp) {
+        out += `    const _bp_tier = @as(u8, api.breakpoint.rjit_breakpoint_current());\n`;
+      }
+      out += `    const _v = @as(usize, api.theme.rjit_theme_active_variant());\n`;
+    } else {
+      out += `    const _theme = @import("${prefix}theme.zig");\n`;
+      if (hasBp) {
+        out += `    const _bp = @import("${prefix}breakpoint.zig");\n`;
+        out += `    const _bp_tier = @intFromEnum(_bp.current());\n`;
+      }
+      out += `    const _v = @as(usize, _theme.activeVariant());\n`;
+    }
+    for (const vb of ctx.variantBindings) {
+      // Skip map-internal bindings (handled per-item in map rebuild — future)
+      if (vb.inMap) continue;
+      // Skip bindings targeting promoted per-item arrays (inside map pools)
+      if (vb.arrName && _promotedToPerItem.has(vb.arrName)) continue;
+      // Skip unbound bindings inside inlined components (they don't have static addresses)
+      if (!vb.arrName && vb.inComponent) continue;
+      // Determine target: arrName[arrIndex] or _root for root node
+      const target = vb.arrName ? `${vb.arrName}[${vb.arrIndex}]` : '_root';
+      // Emit variant style selection
+      if (vb.bpStyles) {
+        // BP + variants: bp overrides take priority
+        let bpBlock = '';
+        if (vb.bpStyles.sm) {
+          bpBlock += `    if (_bp_tier == 0) { ${target}.style = .{ ${vb.bpStyles.sm} }; }\n`;
+        }
+        if (vb.bpStyles.md) {
+          const prefix2 = vb.bpStyles.sm ? '    else ' : '    ';
+          bpBlock += `${prefix2}if (_bp_tier == 1) { ${target}.style = .{ ${vb.bpStyles.md} }; }\n`;
+        }
+        // Else: use variant-based style
+        const elsePrefix = (vb.bpStyles.sm || vb.bpStyles.md) ? '    else ' : '    ';
+        bpBlock += `${elsePrefix}{\n`;
+        for (let vi = 0; vi < vb.styles.length; vi++) {
+          if (vi === 0) {
+            bpBlock += `        if (_v == 0) { ${target}.style = .{ ${vb.styles[0]} }; }\n`;
+          } else {
+            bpBlock += `        else if (_v == ${vi}) { ${target}.style = .{ ${vb.styles[vi]} }; }\n`;
+          }
+        }
+        bpBlock += `    }\n`;
+        out += bpBlock;
+      } else {
+        // Variants only (no bp)
+        for (let vi = 0; vi < vb.styles.length; vi++) {
+          if (vi === 0) {
+            out += `    if (_v == 0) { ${target}.style = .{ ${vb.styles[0]} }; }\n`;
+          } else {
+            out += `    else if (_v == ${vi}) { ${target}.style = .{ ${vb.styles[vi]} }; }\n`;
+          }
+        }
+      }
+      // Node fields (fontSize, textColor) per variant
+      if (vb.nodeFieldStrs && vb.nodeFieldStrs.some(nf => nf.length > 0)) {
+        for (let vi = 0; vi < vb.nodeFieldStrs.length; vi++) {
+          if (!vb.nodeFieldStrs[vi]) continue;
+          const nfParts = vb.nodeFieldStrs[vi].split(', ').filter(p => p.length > 0);
+          for (const nf of nfParts) {
+            const eqIdx = nf.indexOf('=');
+            if (eqIdx < 0) continue;
+            const field = nf.slice(1, eqIdx).trim(); // strip leading .
+            const value = nf.slice(eqIdx + 1).trim();
+            if (vi === 0) {
+              out += `    if (_v == 0) { ${target}.${field} = ${value}; }\n`;
+            } else {
+              out += `    else if (_v == ${vi}) { ${target}.${field} = ${value}; }\n`;
+            }
+          }
+        }
+      }
+    }
+    out += `}\n\n`;
+  }
 
   // Input submit/change handler functions (onSubmit, onChangeText on TextInput)
   if (ctx._inputSubmitHandlers) {
@@ -1541,6 +1641,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   }
   if (hasDynText) out += `    _updateDynamicTexts();\n`;
   if (hasConds) out += `    _updateConditionals();\n`;
+  if (hasVariants) out += `    _updateVariants();\n`;
   // Initialize Lua map handler string pointers before rebuilding maps
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue; // inline handlers built per-parent in rebuild
@@ -1569,20 +1670,16 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   const hasDynStyles = ctx.dynStyles && ctx.dynStyles.length > 0;
   if (hasState || ctx.objectArrays.length > 0) {
     if (hasDynStyles) {
-      // Dynamic styles need per-tick update — call unconditionally
-      out += `    _updateDynamicTexts();\n`;
-      if (ctx.maps.length > 0 || hasConds) {
-        out += `    if (state.isDirty()) {\n`;
-        if (hasConds) out += `        _updateConditionals();\n`;
-        if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
-        for (let mi = 0; mi < ctx.maps.length; mi++) {
-          if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
-          out += `        _rebuildMap${mi}();\n`;
-        }
-        out += `        state.clearDirty();\n    }\n`;
-      } else {
-        out += `    if (state.isDirty()) state.clearDirty();\n`;
+      // Dynamic styles update inside dirty check — they depend on state
+      out += `    if (state.isDirty()) { _updateDynamicTexts();`;
+      if (hasConds) out += ` _updateConditionals();`;
+      out += `\n`;
+      if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
+      for (let mi = 0; mi < ctx.maps.length; mi++) {
+        if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+        out += `        _rebuildMap${mi}();\n`;
       }
+      out += ` state.clearDirty(); }\n`;
     } else if (ctx.maps.length > 0) {
       out += `    if (state.isDirty()) { _updateDynamicTexts();`;
       if (hasConds) out += ` _updateConditionals();`;
@@ -1599,6 +1696,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (hasConds) out += ` _updateConditionals();`;
       out += ` state.clearDirty(); }\n`;
     }
+  }
+  // Variant/bp style switching runs every tick (theme changes don't use state dirty)
+  if (hasVariants) {
+    out += `    _updateVariants();\n`;
   }
   out += `}\n\n`;
 
