@@ -20,6 +20,7 @@ Current constraint:
 - [ ] Before each refactor slice, compare the live Smith files against the refactor lane for any newly added logic from parallel work.
 - [ ] Carry forward new legacy Smith behavior into the refactor files before marking a seam complete.
 - [ ] Re-run targeted sync scans on active legacy files (`index.js`, `parse.js`, `parse_map.js`, `attrs.js`, `preflight.js`, `emit.js`) as the refactor continues.
+- [ ] Update the compiler dictionary so its terms and descriptions stay relevant to the live compiler behavior and the new refactor structure.
 
 ## Phase 0: Scaffolding
 
