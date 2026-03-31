@@ -824,6 +824,8 @@ fn addAppExe(
     exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
     exe.root_module.addIncludePath(b.path("ffi"));
 
+    // (core exports linked via comptime import in generated preamble)
+
     // ── stb_image (lean keeps image loading for textures) ───────
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
 

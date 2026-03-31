@@ -28,6 +28,10 @@ function emitPreamble(meta) {
       out += `} else @import("${meta.prefix}qjs_runtime.zig");\n`;
     }
   }
+  // Ensure core.zig export symbols (rjit_state_*) are in the link unit for monolithic builds
+  if (!meta.fastBuild) {
+    out += `comptime { _ = @import("${meta.prefix}core.zig"); }\n`;
+  }
   out += `\n`;
   return out;
 }

@@ -309,6 +309,8 @@ function splitOutput(monolith, file) {
         h += 'const engine = api.engine;\n';
       } else {
         h += 'const engine = if (IS_LIB) struct {} else @import("' + fwPrefix + 'engine.zig");\n';
+        // Ensure core.zig export symbols are in the link unit for monolithic builds
+        h += 'comptime { if (!IS_LIB) _ = @import("' + fwPrefix + 'core.zig"); }\n';
       }
     }
 
@@ -727,6 +729,14 @@ function emitLogicBlocks(ctx) {
           luaLines.push('');
         }
       }
+    }
+    // Inline <lscript> block content — emitted raw as Lua
+    if (ctx.luaBlock) {
+      luaLines.push('-- <lscript> block');
+      for (const line of ctx.luaBlock.split('\n')) {
+        luaLines.push(line);
+      }
+      luaLines.push('');
     }
     // Script file imports — NOT included in LUA_LOGIC.
     // QuickJS runs the script content via JS_LOGIC. Including it in Lua
