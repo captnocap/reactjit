@@ -1,0 +1,92 @@
+// CONFORMANCE TEST: Filesystem workspace module
+//
+// Intent-shaped file workspace with verbs like mount, save, load, and prune.
+//
+// Features exercised:
+// - single-library ffi bindings for filesystem verbs
+// - path concatenation helpers
+// - looped metadata search and cleanup
+// - string equality via .eql in workspace records
+
+<module workspace>
+  <ffi>
+    fs_read    @("libc.so")
+    fs_write   @("libc.so")
+    fs_list    @("libc.so")
+    fs_stat    @("libc.so")
+    fs_mkdir   @("libc.so")
+    fs_remove  @("libc.so")
+  </ffi>
+
+  <types>
+    EntryKind: file | directory | missing
+
+    Entry: {
+      path: string,
+      kind: EntryKind = file,
+      size: int = 0,
+      dirty: bool = false
+    }
+  </types>
+
+  <state>
+    root: string = ''
+    entries: Entry[64]
+    entry_count: u8 = 0
+    selected: string = ''
+    trash_count: u8 = 0
+    last_scan: string = ''
+    scratch_path: string = ''
+    buf: u8[512]
+  </state>
+
+  <functions>
+    // ── Workspace ──
+
+    mount(path: string): void
+      root = path
+      fs_mkdir(path)
+      last_scan = fs_list(path)
+
+    select(path: string): void
+      selected = path
+
+    // ── Files ──
+
+    save(name: string, body: string): string
+      scratch_path = root + '/' + name
+      fs_write(scratch_path, body)
+      entries[entry_count] = { path: scratch_path, kind: file, size: body.len, dirty: true }
+      entry_count = entry_count + 1
+      return scratch_path
+
+    load(name: string): string
+      scratch_path = root + '/' + name
+      return fs_read(scratch_path)
+
+    remove(name: string): void
+      scratch_path = root + '/' + name
+      fs_remove(scratch_path)
+      trash_count = trash_count + 1
+      for entries[0..entry_count] as entry:
+        entry.path.eql(scratch_path)
+          ? entry.kind = missing; entry.dirty = false
+          : continue
+
+    // ── Queries ──
+
+    find(name: string): int
+      scratch_path = root + '/' + name
+      for entries[0..entry_count] as entry:
+        entry.path.eql(scratch_path)
+          ? return 1
+          : continue
+      return -1
+
+    sync_metadata(): void
+      for entries[0..entry_count] as entry:
+        entry.kind == file and entry.dirty == true
+          ? fs_stat(entry.path); entry.dirty = false
+          : continue
+  </functions>
+</module>

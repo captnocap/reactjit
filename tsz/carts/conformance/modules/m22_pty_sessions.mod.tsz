@@ -1,0 +1,82 @@
+// CONFORMANCE TEST: PTY session module
+//
+// Intent-shaped pseudo-terminal management for tabs, focus, resize, and writes.
+//
+// Features exercised:
+// - single-library ffi bindings for PTY verbs
+// - session arrays with focus tracking
+// - resize and input functions over typed session state
+// - wraparound focus movement
+
+<module pty>
+  <ffi>
+    pty_open    @("libutil.so")
+    pty_write   @("libutil.so")
+    pty_resize  @("libutil.so")
+    pty_read    @("libutil.so")
+    pty_close   @("libutil.so")
+  </ffi>
+
+  <types>
+    SessionState: idle | open | closed | error
+
+    Session: {
+      title: string,
+      master: i32 = -1,
+      rows: int = 24,
+      cols: int = 80,
+      state: SessionState = idle,
+      scrollback: int = 0
+    }
+  </types>
+
+  <state>
+    sessions: Session[8]
+    session_count: u8 = 0
+    focused: u8 = 0
+    total_bytes: int = 0
+    last_read: string = ''
+  </state>
+
+  <functions>
+    // ── Tabs ──
+
+    open_tab(title: string): u8
+      session_count >= 8 ? stop : go
+      sessions[session_count] = { title: title, state: open }
+      sessions[session_count].master = pty_open(title)
+      focused = session_count
+      session_count = session_count + 1
+      return session_count - 1
+
+    close_tab(id: u8): void
+      sessions[id].state == closed ? stop : go
+      pty_close(sessions[id].master)
+      sessions[id].master = -1
+      sessions[id].state = closed
+
+    // ── IO ──
+
+    send(id: u8, text: string): void
+      sessions[id].state == closed or sessions[id].state == error ? stop : go
+      pty_write(sessions[id].master, text)
+      total_bytes = total_bytes + text.len
+
+    read_once(id: u8): string
+      sessions[id].state == closed or sessions[id].state == error ? stop : go
+      last_read = pty_read(sessions[id].master)
+      return last_read
+
+    // ── Layout ──
+
+    resize(id: u8, rows: int, cols: int): void
+      sessions[id].rows = rows
+      sessions[id].cols = cols
+      pty_resize(sessions[id].master, rows, cols)
+
+    focus_next(): u8
+      focused = focused + 1
+      focused >= session_count ? focused = 0 : go
+      return focused
+  </functions>
+</module>

@@ -1,0 +1,99 @@
+// CONFORMANCE TEST: VTerm screen module
+//
+// Intent-shaped terminal screen model with attach, resize, write, and clear verbs.
+//
+// Features exercised:
+// - single-library ffi bindings for vterm-style operations
+// - flat cell storage with cursor metadata
+// - loop-based screen clearing
+// - status formatting from terminal dimensions
+
+<module screen>
+  <ffi>
+    vterm_new       @("libvterm.so")
+    vterm_free      @("libvterm.so")
+    vterm_write     @("libvterm.so")
+    vterm_set_size  @("libvterm.so")
+    vterm_reset     @("libvterm.so")
+  </ffi>
+
+  <types>
+    ScreenState: idle | attached | dirty | closed
+    CellKind: text | cursor | wide
+
+    Cursor: {
+      row: int = 0,
+      col: int = 0,
+      visible: bool = true
+    }
+
+    Cell: {
+      text: string,
+      fg: int = 7,
+      bg: int = 0,
+      kind: CellKind = text,
+      dirty: bool = false
+    }
+  </types>
+
+  <state>
+    term: i32 = -1
+    state: ScreenState = idle
+    rows: int = 24
+    cols: int = 80
+    cursor: Cursor
+    cells: Cell[256]
+    dirty_count: int = 0
+    title: string = ''
+    buf: u8[256]
+  </state>
+
+  <functions>
+    // ── Lifecycle ──
+
+    attach(name: string, screen_rows: int, screen_cols: int): i32
+      term = vterm_new(screen_rows, screen_cols)
+      rows = screen_rows
+      cols = screen_cols
+      title = name
+      state = attached
+      return term
+
+    detach(): void
+      state == closed ? stop : go
+      vterm_free(term)
+      term = -1
+      state = closed
+
+    // ── Screen updates ──
+
+    resize(screen_rows: int, screen_cols: int): void
+      rows = screen_rows
+      cols = screen_cols
+      vterm_set_size(term, screen_rows, screen_cols)
+
+    write(content: string): void
+      state == idle or state == closed ? stop : go
+      vterm_write(term, content)
+      dirty_count = dirty_count + content.len
+      state = dirty
+
+    move_cursor(row: int, col: int): void
+      cursor.row = row
+      cursor.col = col
+      cursor.visible = true
+
+    clear(): void
+      for cells[0..256] as cell:
+        cell.dirty == true
+          ? cell.dirty = false
+          : continue
+      dirty_count = 0
+      vterm_reset(term)
+
+    // ── Queries ──
+
+    status_line(): string
+      return title + ' ' + rows + 'x' + cols + ' dirty=' + dirty_count
+  </functions>
+</module>

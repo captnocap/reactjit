@@ -1,0 +1,93 @@
+// CONFORMANCE TEST: Process supervisor module
+//
+// Intent-shaped process management with launch, stop, restart, and reap verbs.
+//
+// Features exercised:
+// - single-library ffi bindings for process lifecycle
+// - typed job arrays with restart counters
+// - string lookup over job names
+// - summary formatting from process state
+
+<module supervisor>
+  <ffi>
+    proc_spawn   @("libc.so")
+    proc_kill    @("libc.so")
+    proc_wait    @("libc.so")
+    proc_stdout  @("libc.so")
+    proc_stderr  @("libc.so")
+  </ffi>
+
+  <types>
+    JobState: idle | starting | running | stopped | failed
+
+    Job: {
+      name: string,
+      cmd: string,
+      pid: i32 = -1,
+      state: JobState = idle,
+      restarts: u8 = 0,
+      exit_code: int = 0,
+      daemon: bool = false
+    }
+  </types>
+
+  <state>
+    jobs: Job[32]
+    job_count: u8 = 0
+    active_count: u8 = 0
+    selected: string = ''
+    event_count: u16 = 0
+    buf: u8[256]
+  </state>
+
+  <functions>
+    // ── Lifecycle ──
+
+    launch(name: string, cmd: string, daemon: bool): u8
+      job_count >= 32 ? stop : go
+      jobs[job_count] = { name: name, cmd: cmd, state: starting, daemon: daemon }
+      jobs[job_count].pid = proc_spawn(cmd)
+      jobs[job_count].state = running
+      active_count = active_count + 1
+      job_count = job_count + 1
+      return job_count - 1
+
+    stop(id: u8): void
+      jobs[id].state == idle or jobs[id].state == stopped or jobs[id].state == failed ? stop : go
+      proc_kill(jobs[id].pid)
+      jobs[id].state = stopped
+      jobs[id].pid = -1
+      active_count = active_count - 1
+
+    restart(id: u8): i32
+      jobs[id].restarts = jobs[id].restarts + 1
+      jobs[id].pid = proc_spawn(jobs[id].cmd)
+      jobs[id].state = running
+      return jobs[id].pid
+
+    // ── Polling ──
+
+    reap(id: u8, code: int): void
+      jobs[id].exit_code = code
+      jobs[id].state = stopped
+      active_count = active_count - 1
+      event_count = event_count + 1
+      jobs[id].daemon == false ? stop : go
+      restart(id)
+
+    // ── Queries ──
+
+    select(name: string): void
+      selected = name
+
+    find(name: string): int
+      for jobs[0..job_count] as job:
+        job.name.eql(name)
+          ? return job.pid
+          : continue
+      return -1
+
+    summary(): string
+      return 'jobs=' + job_count + ' active=' + active_count + ' events=' + event_count
+  </functions>
+</module>

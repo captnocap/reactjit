@@ -1,0 +1,104 @@
+// CONFORMANCE TEST: SQLite session module
+//
+// Intent-shaped database module with high-level verbs over a single native binding.
+//
+// Features exercised:
+// - single-library ffi bindings
+// - typed records and state machines
+// - guard-style transaction lifecycle
+// - in-memory cache lookup before native query calls
+
+<module sqlite>
+  <ffi>
+    sqlite_open        @("libsqlite3.so")
+    sqlite_exec        @("libsqlite3.so")
+    sqlite_query       @("libsqlite3.so")
+    sqlite_close       @("libsqlite3.so")
+    sqlite_checkpoint  @("libsqlite3.so")
+  </ffi>
+
+  <types>
+    DbState: closed | open | busy | error
+
+    Row: {
+      key: string,
+      value: string,
+      dirty: bool = false
+    }
+  </types>
+
+  <state>
+    handle: i32 = -1
+    state: DbState = closed
+    path: string = ''
+    rows: Row[64]
+    row_count: u8 = 0
+    tx_depth: u8 = 0
+    last_sql: string = ''
+    buf: u8[512]
+  </state>
+
+  <functions>
+    // ── Lifecycle ──
+
+    connect(db_path: string): i32
+      handle = sqlite_open(db_path)
+      path = db_path
+      state = open
+      last_sql = 'open ' + db_path
+      return handle
+
+    disconnect(): void
+      state == closed ? stop : go
+      sqlite_close(handle)
+      handle = -1
+      state = closed
+      tx_depth = 0
+
+    // ── Transactions ──
+
+    begin(): void
+      state == closed or state == error ? stop : go
+      tx_depth = tx_depth + 1
+      state = busy
+      last_sql = "begin immediate"
+      sqlite_exec(handle, last_sql)
+
+    commit(): void
+      tx_depth == 0 ? stop : go
+      tx_depth = tx_depth - 1
+      last_sql = "commit"
+      sqlite_exec(handle, last_sql)
+      tx_depth > 0 ? stop : go
+      state = open
+
+    checkpoint(): void
+      state == closed ? stop : go
+      sqlite_checkpoint(handle)
+
+    // ── Records ──
+
+    put(key: string, value: string): void
+      state == closed or state == error ? stop : go
+      last_sql = "insert or replace into kv (key, value) values ({key}, {value})"
+      sqlite_exec(handle, last_sql)
+      row_count >= 64 ? stop : go
+      rows[row_count] = { key: key, value: value, dirty: true }
+      row_count = row_count + 1
+
+    get(key: string): string
+      for rows[0..row_count] as row:
+        row.key.eql(key)
+          ? return row.value
+          : continue
+      last_sql = "select value from kv where key = {key} limit 1"
+      sqlite_query(handle, last_sql)
+      return ""
+
+    flush_dirty(): void
+      for rows[0..row_count] as row:
+        row.dirty == true
+          ? row.dirty = false
+          : continue
+  </functions>
+</module>
