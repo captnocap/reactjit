@@ -54,6 +54,7 @@ Current constraint:
 - [x] Extract tag normalization and classifier/dot-tag rewriting from `parseJSXElement`.
 - [x] Extract tag-based default node/style setup from `parseJSXElement`.
 - [x] Extract component prop collection from `parseJSXElement`.
+- [x] Extract component prop spread and brace-value helpers.
 - [x] Extract component inlining flow from `parseJSXElement`.
 - [x] Split `parseChildren` into child-type dispatchers.
 - [x] Extract element and brace child handlers from `parseChildren`.

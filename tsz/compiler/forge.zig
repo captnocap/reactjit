@@ -44,6 +44,8 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_basic.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_text_color.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_handlers.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/component_spread.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/component_brace_values.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_props.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_inline.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_handlers.js") ++ "\n" ++
