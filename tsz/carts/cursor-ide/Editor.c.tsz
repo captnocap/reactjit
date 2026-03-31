@@ -1,0 +1,50 @@
+// Editor Component
+
+function EditorLine(props) {
+  return (
+    <C.EditorLine>
+      <C.LineNumber>
+        {props.isActive == 1 && <C.LineNumberActive>{'' + props.num}</C.LineNumberActive>}
+        {props.isActive == 0 && <C.LineNumberText>{'' + props.num}</C.LineNumberText>}
+      </C.LineNumber>
+      <C.LineContent>
+        <C.TokenText>{props.text}</C.TokenText>
+      </C.LineContent>
+    </C.EditorLine>
+  );
+}
+
+function Editor(props) {
+  return (
+    <C.Editor>
+      <C.EditorContent>
+        <C.EditorLines>
+          {props.lines.map(function(line, idx) {
+            return (
+              <EditorLine
+                num={line.num}
+                text={line.text}
+                isActive={line.num == props.cursorLine ? 1 : 0}
+              />
+            );
+          })}
+        </C.EditorLines>
+      </C.EditorContent>
+    </C.Editor>
+  );
+}
+
+function Minimap(props) {
+  return (
+    <C.Minimap>
+      <C.MinimapContent>
+        {props.lines.slice(0, 40).map(function(line, idx) {
+          var width = Math.min(72, Math.max(16, line.text.length * 2));
+          return <C.MinimapLine style={{ width: width, backgroundColor: '#3d3d3d' }} />;
+        })}
+      </C.MinimapContent>
+    </C.Minimap>
+  );
+}
+
+export { Editor, Minimap };

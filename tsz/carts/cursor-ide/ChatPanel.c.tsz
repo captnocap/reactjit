@@ -1,0 +1,96 @@
+// ChatPanel Component
+
+function Message(props) {
+  var msg = props.msg;
+  var isUser = msg.role == 'user';
+
+  return (
+    <C.Message>
+      <C.MessageHeader>
+        <C.MessageAvatar>
+          <C.MessageAvatarText>{isUser ? 'You' : 'AI'}</C.MessageAvatarText>
+        </C.MessageAvatar>
+        <C.MessageAuthor>{isUser ? 'You' : 'Cursor Agent'}</C.MessageAuthor>
+        <C.MessageTime>{msg.time}</C.MessageTime>
+      </C.MessageHeader>
+      <C.MessageBody>
+        <C.MessageText>{msg.text}</C.MessageText>
+      </C.MessageBody>
+    </C.Message>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <C.ThinkingIndicator>
+      <C.ThinkingDot />
+      <C.ThinkingText>Agent is thinking...</C.ThinkingText>
+    </C.ThinkingIndicator>
+  );
+}
+
+function ChatInput() {
+  var hasInput = currentInput.length > 0;
+
+  return (
+    <C.ChatInputArea>
+      <C.ChatInputBox>
+        <C.ChatInput value={currentInput} onChange={function(v) { setCurrentInput(v); }} />
+        <C.ChatInputToolbar>
+          <C.ChatInputTools>
+            <C.ChatToolBtn>
+              <C.ChatToolIcon>@</C.ChatToolIcon>
+            </C.ChatToolBtn>
+            <C.ChatToolBtn>
+              <C.ChatToolIcon>#</C.ChatToolIcon>
+            </C.ChatToolBtn>
+          </C.ChatInputTools>
+          {hasInput && (
+            <C.ChatSendBtn onPress={function() { sendMessage(); }}>
+              <C.ChatSendLabel>Send</C.ChatSendLabel>
+            </C.ChatSendBtn>
+          )}
+          {!hasInput && (
+            <C.ChatSendBtnDisabled>
+              <C.ChatSendLabelDisabled>Send</C.ChatSendLabelDisabled>
+            </C.ChatSendBtnDisabled>
+          )}
+        </C.ChatInputToolbar>
+      </C.ChatInputBox>
+    </C.ChatInputArea>
+  );
+}
+
+function ChatPanel(props) {
+  return (
+    <C.ChatPanel>
+      <C.ChatHeader>
+        <C.ChatHeaderTitle>
+          <C.ChatTitle>Agent</C.ChatTitle>
+          <C.ChatSubtitle>GPT-4</C.ChatSubtitle>
+        </C.ChatHeaderTitle>
+        <C.ChatActions>
+          <C.ChatActionBtn>
+            <C.ChatActionLabel>+</C.ChatActionLabel>
+          </C.ChatActionBtn>
+          <C.ChatActionBtn>
+            <C.ChatActionLabel>...</C.ChatActionLabel>
+          </C.ChatActionBtn>
+        </C.ChatActions>
+      </C.ChatHeader>
+
+      <C.ChatMessages>
+        <C.ChatStack>
+          {props.messages.map(function(msg, idx) {
+            return <Message msg={msg} />;
+          })}
+          {props.isGenerating == 1 && <ThinkingIndicator />}
+        </C.ChatStack>
+      </C.ChatMessages>
+
+      <ChatInput />
+    </C.ChatPanel>
+  );
+}
+
+export { ChatPanel };

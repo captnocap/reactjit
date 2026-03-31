@@ -1,0 +1,141 @@
+// Cursor IDE — Agentic coding environment (Cursor clone)
+// Built with ReactJIT tsz stack
+
+import { Sidebar } from './Sidebar.c';
+import { Editor, Minimap } from './Editor.c';
+import { ChatPanel } from './ChatPanel.c';
+import { StatusBar } from './StatusBar.c';
+import { TopBar, Breadcrumbs } from './TopBar.c';
+import { TabBar } from './TabBar.c';
+import { initData, selectFile, activateTab, closeTab, setCurrentInput, sendMessage } from './cursor.script';
+
+import {
+  Shell, Workspace, Editor as EditorShell, Sidebar as SidebarShell, ChatPanel as ChatPanelShell,
+  TopBar as TopBarShell, TabBar as TabBarShell, Breadcrumbs as BreadcrumbsShell, StatusBar as StatusBarShell
+} from './cursor_cls';
+
+// === STATE ===
+const [activeTabId, setActiveTabId] = useState('1');
+const [currentInput, setCurrentInputState] = useState('');
+const [isGenerating, setIsGenerating] = useState(0);
+const [cursorPosition, setCursorPosition] = useState({ line: 10, column: 24 });
+const [ready, setReady] = useState(0);
+
+// File tree state
+const [files, setFiles] = useState([
+  { name: 'cursor-ide', indent: 0, icon: 'folderOpen', selected: 0 },
+  { name: 'src', indent: 1, icon: 'folder', selected: 0 },
+  { name: 'components', indent: 2, icon: 'folderOpen', selected: 0 },
+  { name: 'Sidebar.tsx', indent: 3, icon: 'tsx', selected: 1 },
+  { name: 'Editor.tsx', indent: 3, icon: 'tsx', selected: 0 },
+  { name: 'ChatPanel.tsx', indent: 3, icon: 'tsx', selected: 0 },
+  { name: 'StatusBar.tsx', indent: 3, icon: 'tsx', selected: 0 },
+  { name: 'hooks', indent: 2, icon: 'folder', selected: 0 },
+  { name: 'useAgent.ts', indent: 3, icon: 'ts', selected: 0 },
+  { name: 'utils', indent: 1, icon: 'folder', selected: 0 },
+  { name: 'index.ts', indent: 2, icon: 'ts', selected: 0 },
+  { name: 'package.json', indent: 1, icon: 'json', selected: 0 },
+]);
+
+const [recentFiles, setRecentFiles] = useState([
+  { name: 'cursor_cls.tsz', indent: 0, icon: 'file' },
+  { name: 'cursor.script.tsz', indent: 0, icon: 'file' },
+]);
+
+const [outline, setOutline] = useState([
+  { name: 'imports', indent: 0, icon: ' ' },
+  { name: 'SidebarSection', indent: 0, icon: 'f' },
+  { name: 'Sidebar', indent: 0, icon: 'f' },
+]);
+
+// Tabs
+const [openTabs, setOpenTabs] = useState([
+  { id: '1', name: 'Sidebar.c.tsz', modified: 0 },
+  { id: '2', name: 'cursor_cls.tsz', modified: 1 },
+  { id: '3', name: 'cursor.script.tsz', modified: 0 },
+]);
+
+// Editor content
+const [editorLines, setEditorLines] = useState([
+  { num: 1, text: '// Cursor IDE - Agentic Coding Environment' },
+  { num: 2, text: '' },
+  { num: 3, text: 'import { useState } from "react";' },
+  { num: 4, text: '' },
+  { num: 5, text: 'function Sidebar() {' },
+  { num: 6, text: '  const [expanded, setExpanded] = useState(true);' },
+  { num: 7, text: '' },
+  { num: 8, text: '  return (' },
+  { num: 9, text: '    <Box style={{ width: 260 }}>' },
+  { num: 10, text: '      <FileTree />' },
+  { num: 11, text: '    </Box>' },
+  { num: 12, text: '  );' },
+  { num: 13, text: '}' },
+  { num: 14, text: '' },
+  { num: 15, text: 'export { Sidebar };' },
+]);
+
+// Chat
+const [chatMessages, setChatMessages] = useState([
+  { role: 'assistant', time: '2:34 PM', text: 'I\'ve analyzed the codebase. The Sidebar component uses a recursive FileRow structure. Would you like me to refactor it?' },
+  { role: 'user', time: '2:36 PM', text: 'Yes, and add file icons based on extension' },
+  { role: 'assistant', time: '2:36 PM', text: 'Done. I\'ve refactored the file tree and added icon mapping for all file types.' },
+]);
+
+// Status bar
+const [gitBranch, setGitBranch] = useState('main');
+const [gitStatus, setGitStatus] = useState('*2');
+const [errors, setErrors] = useState(0);
+const [warnings, setWarnings] = useState(3);
+const [windowTitle, setWindowTitle] = useState('cursor-ide — cursor_cls.tsz');
+const [languageMode, setLanguageMode] = useState('TypeScript TSX');
+
+// Breadcrumbs
+const [breadcrumbs, setBreadcrumbs] = useState([
+  { label: 'cursor-ide' },
+  { label: 'src' },
+  { label: 'components' },
+]);
+
+// Initialize data on first render
+if (ready == 0) {
+  initData();
+  setReady(1);
+}
+
+// Cursor position simulation
+setInterval(function() {
+  setCursorPosition({ line: 10 + Math.floor(Math.random() * 5), column: 20 + Math.floor(Math.random() * 10) });
+}, 5000);
+
+function App() {
+  return (
+    <C.Shell>
+      <TopBar title={windowTitle} />
+
+      <C.Workspace>
+        <Sidebar files={files} recentFiles={recentFiles} outline={outline} />
+
+        <C.Editor>
+          <TabBar tabs={openTabs} activeId={activeTabId} />
+          <Breadcrumbs items={breadcrumbs} />
+
+          <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row' }}>
+            <Editor lines={editorLines} cursorLine={cursorPosition.line} />
+          </Box>
+        </C.Editor>
+
+        <ChatPanel messages={chatMessages} isGenerating={isGenerating} />
+      </C.Workspace>
+
+      <StatusBar
+        gitBranch={gitBranch}
+        gitStatus={gitStatus}
+        cursorLine={cursorPosition.line}
+        cursorColumn={cursorPosition.column}
+        languageMode={languageMode}
+        errors={errors}
+        warnings={warnings}
+      />
+    </C.Shell>
+  );
+}

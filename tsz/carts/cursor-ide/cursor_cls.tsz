@@ -1,0 +1,190 @@
+// Cursor IDE — Classifier System
+// Theme-aware component library for agentic coding IDE
+
+classifier({
+  // === SHELL ===
+  Shell: { type: 'Box', style: { flexDirection: 'column', width: '100%', height: '100%', backgroundColor: '#0d0d0d' } },
+  Workspace: { type: 'Box', style: { flexDirection: 'row', flexGrow: 1, flexBasis: 0, overflow: 'hidden' } },
+
+  // === SIDEBAR ===
+  Sidebar: { type: 'Box', style: { width: 260, flexDirection: 'column', backgroundColor: '#131313', borderRightWidth: 1, borderColor: '#1f1f1f' } },
+  SidebarHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, paddingBottom: 8 } },
+  SidebarTitle: { type: 'Text', fontSize: 11, color: '#6e6e6e', letterSpacing: 0.5 },
+  SidebarActions: { type: 'Box', style: { flexDirection: 'row', gap: 4 } },
+  SidebarActionBtn: { type: 'Pressable', style: { width: 22, height: 22, borderRadius: 4, alignItems: 'center', justifyContent: 'center' } },
+  SidebarActionBtnHover: { type: 'Pressable', style: { width: 22, height: 22, borderRadius: 4, backgroundColor: '#1f1f1f', alignItems: 'center', justifyContent: 'center' } },
+  SidebarActionIcon: { type: 'Text', fontSize: 14, color: '#6e6e6e' },
+
+  // File tree
+  FileTree: { type: 'ScrollView', style: { flexGrow: 1, flexBasis: 0 } },
+  FileTreeStack: { type: 'Box', style: { flexDirection: 'column', paddingTop: 4, paddingBottom: 8 } },
+  FileRow: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3 } },
+  FileRowHover: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1a1a1a' } },
+  FileRowSelected: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1f1f1f' } },
+  FileIcon: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
+  FileIconSelected: { type: 'Text', fontSize: 12, color: '#e0e0e0' },
+  FileName: { type: 'Text', fontSize: 12, color: '#b0b0b0' },
+  FileNameSelected: { type: 'Text', fontSize: 12, color: '#ffffff' },
+  FileIndent: { type: 'Box', style: { width: 12 } },
+
+  // Section headers in sidebar
+  SidebarSection: { type: 'Box', style: { flexDirection: 'column', marginTop: 8 } },
+  SidebarSectionHeader: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6 } },
+  SidebarSectionTitle: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  SidebarChevron: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+
+  // === TABS ===
+  TabBar: { type: 'Box', style: { flexDirection: 'row', backgroundColor: '#0d0d0d', borderBottomWidth: 1, borderColor: '#1f1f1f', height: 35 } },
+  Tab: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRightWidth: 1, borderColor: '#1f1f1f' } },
+  TabActive: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 10, paddingTop: 8, paddingBottom: 8, backgroundColor: '#1a1a1a', borderRightWidth: 1, borderColor: '#1f1f1f' } },
+  TabModified: { type: 'Box', style: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#e6b450' } },
+  TabName: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
+  TabNameActive: { type: 'Text', fontSize: 12, color: '#e0e0e0' },
+  TabClose: { type: 'Pressable', style: { width: 16, height: 16, borderRadius: 3, alignItems: 'center', justifyContent: 'center' } },
+  TabCloseHover: { type: 'Pressable', style: { width: 16, height: 16, borderRadius: 3, backgroundColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' } },
+  TabCloseIcon: { type: 'Text', fontSize: 14, color: '#6e6e6e' },
+
+  // === EDITOR ===
+  Editor: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, flexDirection: 'column', backgroundColor: '#0d0d0d' } },
+  EditorContent: { type: 'ScrollView', style: { flexGrow: 1, flexBasis: 0 } },
+  EditorLines: { type: 'Box', style: { flexDirection: 'column', paddingTop: 8 } },
+  EditorLine: { type: 'Box', style: { flexDirection: 'row', minHeight: 20 } },
+  LineNumber: { type: 'Box', style: { width: 60, alignItems: 'flex-end', paddingRight: 16 } },
+  LineNumberText: { type: 'Text', fontSize: 12, color: '#3d3d3d' },
+  LineNumberActive: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
+  LineContent: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, flexDirection: 'row', flexWrap: 'wrap' } },
+
+  // Syntax highlighting (dark theme)
+  TokenText: { type: 'Text', fontSize: 13, color: '#b0b0b0' },
+  TokenKeyword: { type: 'Text', fontSize: 13, color: '#ff7b72' },
+  TokenString: { type: 'Text', fontSize: 13, color: '#a5d6ff' },
+  TokenComment: { type: 'Text', fontSize: 13, color: '#5c5c5c' },
+  TokenFunction: { type: 'Text', fontSize: 13, color: '#d2a8ff' },
+  TokenNumber: { type: 'Text', fontSize: 13, color: '#79c0ff' },
+  TokenType: { type: 'Text', fontSize: 13, color: '#ffa657' },
+  TokenVariable: { type: 'Text', fontSize: 13, color: '#e0e0e0' },
+  TokenOperator: { type: 'Text', fontSize: 13, color: '#ff7b72' },
+  TokenTag: { type: 'Text', fontSize: 13, color: '#7ee787' },
+  TokenAttr: { type: 'Text', fontSize: 13, color: '#79c0ff' },
+
+  // === AI CHAT PANEL ===
+  ChatPanel: { type: 'Box', style: { width: 380, flexDirection: 'column', backgroundColor: '#131313', borderLeftWidth: 1, borderColor: '#1f1f1f' } },
+  ChatHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderColor: '#1f1f1f' } },
+  ChatHeaderTitle: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+  ChatTitle: { type: 'Text', fontSize: 12, color: '#e0e0e0', bold: true },
+  ChatSubtitle: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  ChatActions: { type: 'Box', style: { flexDirection: 'row', gap: 6 } },
+  ChatActionBtn: { type: 'Pressable', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4 } },
+  ChatActionBtnHover: { type: 'Pressable', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4, backgroundColor: '#1f1f1f' } },
+  ChatActionLabel: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+
+  ChatMessages: { type: 'ScrollView', style: { flexGrow: 1, flexBasis: 0 } },
+  ChatStack: { type: 'Box', style: { flexDirection: 'column', padding: 12, gap: 16 } },
+
+  // Message bubbles
+  Message: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  MessageHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+  MessageAvatar: { type: 'Box', style: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#1f1f1f', alignItems: 'center', justifyContent: 'center' } },
+  MessageAvatarText: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+  MessageAuthor: { type: 'Text', fontSize: 11, color: '#e0e0e0', bold: true },
+  MessageTime: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+  MessageBody: { type: 'Box', style: { paddingLeft: 32, flexDirection: 'column', gap: 4 } },
+  MessageText: { type: 'Text', fontSize: 12, color: '#b0b0b0', lineHeight: 18 },
+  MessageCode: { type: 'Box', style: { backgroundColor: '#0d0d0d', borderRadius: 6, padding: 10, marginTop: 4, marginBottom: 4 } },
+  MessageCodeLang: { type: 'Text', fontSize: 10, color: '#6e6e6e', marginBottom: 6 },
+  MessageCodeText: { type: 'Text', fontSize: 12, color: '#e0e0e0', family: 'monospace' },
+
+  // Context chips
+  ContextBar: { type: 'Box', style: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingTop: 4 } },
+  ContextChip: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: '#1a1a1a', borderRadius: 4 } },
+  ContextChipFile: { type: 'Text', fontSize: 10, color: '#79c0ff' },
+  ContextChipSymbol: { type: 'Text', fontSize: 10, color: '#d2a8ff' },
+
+  // Chat input
+  ChatInputArea: { type: 'Box', style: { padding: 12, borderTopWidth: 1, borderColor: '#1f1f1f' } },
+  ChatInputBox: { type: 'Box', style: { flexDirection: 'column', backgroundColor: '#0d0d0d', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', padding: 10 } },
+  ChatInput: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 40 }, placeholder: 'Ask anything, @ to mention...', placeholderColor: '#4a4a4a' },
+  ChatInputToolbar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: '#1f1f1f' } },
+  ChatInputTools: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
+  ChatToolBtn: { type: 'Pressable', style: { width: 26, height: 26, borderRadius: 4, alignItems: 'center', justifyContent: 'center' } },
+  ChatToolBtnHover: { type: 'Pressable', style: { width: 26, height: 26, borderRadius: 4, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' } },
+  ChatToolIcon: { type: 'Text', fontSize: 14, color: '#6e6e6e' },
+  ChatSendBtn: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#2d62ff', borderRadius: 6 } },
+  ChatSendBtnDisabled: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#1a1a1a', borderRadius: 6 } },
+  ChatSendLabel: { type: 'Text', fontSize: 11, color: '#ffffff', bold: true },
+  ChatSendLabelDisabled: { type: 'Text', fontSize: 11, color: '#4a4a4a' },
+
+  // Agent thinking indicator
+  ThinkingIndicator: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8 } },
+  ThinkingDot: { type: 'Box', style: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#2d62ff' } },
+  ThinkingText: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+
+  // === STATUS BAR ===
+  StatusBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', height: 24, backgroundColor: '#0d0d0d', borderTopWidth: 1, borderColor: '#1f1f1f' } },
+  StatusLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingLeft: 12 } },
+  StatusRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingRight: 12, marginLeft: 'auto' } },
+  StatusItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6 } },
+  StatusIcon: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  StatusText: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  StatusTextHighlight: { type: 'Text', fontSize: 11, color: '#e0e0e0' },
+  StatusBranch: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
+  StatusSeparator: { type: 'Box', style: { width: 1, height: 14, backgroundColor: '#1f1f1f' } },
+
+  // === TOOLBARS ===
+  TopBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', height: 40, backgroundColor: '#131313', borderBottomWidth: 1, borderColor: '#1f1f1f', paddingLeft: 12, paddingRight: 12 } },
+  TopBarLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 12 } },
+  TopBarRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' } },
+  WindowTitle: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
+  ToolbarBtn: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 } },
+  ToolbarBtnHover: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4, backgroundColor: '#1f1f1f' } },
+  ToolbarBtnLabel: { type: 'Text', fontSize: 11, color: '#b0b0b0' },
+  ToolbarBtnLabelActive: { type: 'Text', fontSize: 11, color: '#ffffff' },
+  ToolbarDivider: { type: 'Box', style: { width: 1, height: 16, backgroundColor: '#1f1f1f', marginLeft: 4, marginRight: 4 } },
+
+  // === COMMAND PALETTE (overlay) ===
+  CommandOverlay: { type: 'Box', style: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000080', alignItems: 'center', justifyContent: 'center' } },
+  CommandPalette: { type: 'Box', style: { width: 600, flexDirection: 'column', backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', shadow: { color: '#000000', blur: 20, offset: [0, 10] } } },
+  CommandInput: { type: 'TextInput', fontSize: 16, color: '#e0e0e0', style: { padding: 16 }, placeholder: 'Type a command or search...', placeholderColor: '#6e6e6e' },
+  CommandResults: { type: 'Box', style: { flexDirection: 'column', maxHeight: 300 } },
+  CommandSection: { type: 'Box', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 4 } },
+  CommandSectionTitle: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+  CommandItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8 } },
+  CommandItemHover: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, backgroundColor: '#2d62ff' } },
+  CommandItemIcon: { type: 'Text', fontSize: 14, color: '#6e6e6e' },
+  CommandItemIconHover: { type: 'Text', fontSize: 14, color: '#ffffff' },
+  CommandItemText: { type: 'Text', fontSize: 13, color: '#e0e0e0' },
+  CommandItemTextHover: { type: 'Text', fontSize: 13, color: '#ffffff' },
+  CommandShortcut: { type: 'Box', style: { marginLeft: 'auto', paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: '#2a2a2a', borderRadius: 3 } },
+  CommandShortcutHover: { type: 'Box', style: { marginLeft: 'auto', paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: '#1a4fd9', borderRadius: 3 } },
+  CommandShortcutText: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+  CommandShortcutTextHover: { type: 'Text', fontSize: 10, color: '#ffffff' },
+
+  // === BREADCRUMBS ===
+  Breadcrumbs: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, backgroundColor: '#0d0d0d' } },
+  BreadcrumbItem: { type: 'Pressable', style: { paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 3 } },
+  BreadcrumbItemHover: { type: 'Pressable', style: { paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 3, backgroundColor: '#1a1a1a' } },
+  BreadcrumbText: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  BreadcrumbTextActive: { type: 'Text', fontSize: 11, color: '#b0b0b0' },
+  BreadcrumbSep: { type: 'Text', fontSize: 11, color: '#3d3d3d' },
+
+  // === MINIMAP ===
+  Minimap: { type: 'Box', style: { width: 80, backgroundColor: '#0d0d0d', borderLeftWidth: 1, borderColor: '#1f1f1f' } },
+  MinimapContent: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, padding: 4, gap: 1 } },
+  MinimapLine: { type: 'Box', style: { height: 2, borderRadius: 1 } },
+
+  // === AGENT PANEL ===
+  AgentPanel: { type: 'Box', style: { height: 200, backgroundColor: '#131313', borderTopWidth: 1, borderColor: '#1f1f1f', flexDirection: 'column' } },
+  AgentPanelHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderBottomWidth: 1, borderColor: '#1f1f1f' } },
+  AgentPanelTitle: { type: 'Text', fontSize: 11, color: '#e0e0e0', bold: true },
+  AgentTabs: { type: 'Box', style: { flexDirection: 'row', gap: 4 } },
+  AgentTab: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, borderRadius: 4 } },
+  AgentTabActive: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, borderRadius: 4, backgroundColor: '#1f1f1f' } },
+  AgentTabLabel: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+  AgentTabLabelActive: { type: 'Text', fontSize: 10, color: '#e0e0e0' },
+  AgentContent: { type: 'ScrollView', style: { flexGrow: 1, flexBasis: 0, padding: 10 } },
+  AgentLog: { type: 'Box', style: { flexDirection: 'column', gap: 6 } },
+  AgentLogEntry: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
+  AgentLogTime: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+  AgentLogLevel: { type: 'Text', fontSize: 10, color: '#79c0ff' },
+  AgentLogMessage: { type: 'Text', fontSize: 10, color: '#b0b0b0' },
+})

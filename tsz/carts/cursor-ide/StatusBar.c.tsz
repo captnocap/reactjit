@@ -1,0 +1,60 @@
+// StatusBar Component
+
+function StatusBar(props) {
+  return (
+    <C.StatusBar>
+      <C.StatusLeft>
+        <C.StatusBranch>
+          <C.StatusIcon>git</C.StatusIcon>
+          <C.StatusTextHighlight>{props.gitBranch}</C.StatusTextHighlight>
+          {props.gitStatus.length > 0 && <C.StatusText>{'(' + props.gitStatus + ')'}</C.StatusText>}
+        </C.StatusBranch>
+
+        <C.StatusSeparator />
+
+        {props.errors > 0 && (
+          <C.StatusItem>
+            <C.StatusIcon>x</C.StatusIcon>
+            <C.StatusText>{'' + props.errors}</C.StatusText>
+          </C.StatusItem>
+        )}
+        {props.warnings > 0 && (
+          <C.StatusItem>
+            <C.StatusIcon>!</C.StatusIcon>
+            <C.StatusText>{'' + props.warnings}</C.StatusText>
+          </C.StatusItem>
+        )}
+        {props.errors == 0 && props.warnings == 0 && (
+          <C.StatusItem>
+            <C.StatusIcon>v</C.StatusIcon>
+            <C.StatusText>No problems</C.StatusText>
+          </C.StatusItem>
+        )}
+
+        <C.StatusSeparator />
+
+        <C.StatusItem>
+          <C.StatusText>{'Ln ' + props.cursorLine + ', Col ' + props.cursorColumn}</C.StatusText>
+        </C.StatusItem>
+      </C.StatusLeft>
+
+      <C.StatusRight>
+        <C.StatusItem>
+          <C.StatusText>{props.languageMode}</C.StatusText>
+        </C.StatusItem>
+
+        <C.StatusSeparator />
+
+        <C.StatusItem>
+          <C.StatusText>UTF-8</C.StatusText>
+        </C.StatusItem>
+
+        <C.StatusItem>
+          <C.StatusText>LF</C.StatusText>
+        </C.StatusItem>
+      </C.StatusRight>
+    </C.StatusBar>
+  );
+}
+
+export { StatusBar };

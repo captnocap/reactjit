@@ -1,0 +1,64 @@
+// Cursor IDE — Script logic
+
+declare function setFiles(v: any): void;
+declare function setRecentFiles(v: any): void;
+declare function setOpenTabs(v: any): void;
+declare function setActiveTabId(v: string): void;
+declare function setCurrentInputState(v: string): void;
+declare function setIsGenerating(v: number): void;
+declare function setChatMessages(v: any): void;
+declare function setErrors(v: number): void;
+declare function setWarnings(v: number): void;
+declare var files: any;
+declare var openTabs: any;
+declare var chatMessages: any;
+declare var currentInput: string;
+
+function initData() {
+  // Data is initialized in the main app useState calls
+}
+
+function selectFile(idx: number) {
+  var f = files;
+  f[idx].selected = 1 - f[idx].selected;
+  setFiles(f);
+}
+
+function activateTab(id: string) {
+  setActiveTabId(id);
+}
+
+function closeTab(id: string) {
+  var tabs = [];
+  for (var i = 0; i < openTabs.length; i++) {
+    if (openTabs[i].id != id) {
+      tabs.push(openTabs[i]);
+    }
+  }
+  setOpenTabs(tabs);
+}
+
+function setCurrentInput(v: string) {
+  setCurrentInputState(v);
+}
+
+function sendMessage() {
+  if (currentInput.length == 0) return;
+
+  var msgs = chatMessages;
+  msgs.push({ role: 'user', time: '2:37 PM', text: currentInput });
+  setChatMessages(msgs);
+  setCurrentInputState('');
+  setIsGenerating(1);
+
+  setTimeout(function() {
+    var m = chatMessages;
+    m.push({ role: 'assistant', time: '2:37 PM', text: 'I understand. Let me make those changes for you.' });
+    setChatMessages(m);
+    setIsGenerating(0);
+  }, 1500);
+}
+
+function updateCursorPosition() {
+  // Handled by interval in main app
+}

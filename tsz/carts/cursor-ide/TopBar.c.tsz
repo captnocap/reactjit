@@ -1,0 +1,38 @@
+// TopBar Component
+
+function TopBar(props) {
+  return (
+    <C.TopBar>
+      <C.TopBarLeft>
+        <C.WindowTitle>{props.title}</C.WindowTitle>
+      </C.TopBarLeft>
+      <C.TopBarRight>
+        <C.ToolbarBtn>
+          <C.ToolbarBtnLabel>-</C.ToolbarBtnLabel>
+        </C.ToolbarBtn>
+        <C.ToolbarBtn>
+          <C.ToolbarBtnLabel>□</C.ToolbarBtnLabel>
+        </C.ToolbarBtn>
+        <C.ToolbarBtn>
+          <C.ToolbarBtnLabel>x</C.ToolbarBtnLabel>
+        </C.ToolbarBtn>
+      </C.TopBarRight>
+    </C.TopBar>
+  );
+}
+
+function Breadcrumbs(props) {
+  return (
+    <C.Breadcrumbs>
+      {props.items.map(function(crumb, idx) {
+        return (
+          <C.BreadcrumbItem>
+            <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>
+          </C.BreadcrumbItem>
+        );
+      })}
+    </C.Breadcrumbs>
+  );
+}
+
+export { TopBar, Breadcrumbs };

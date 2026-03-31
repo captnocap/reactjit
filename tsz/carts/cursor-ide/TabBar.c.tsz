@@ -1,0 +1,42 @@
+// TabBar Component
+
+function Tab(props) {
+  var tab = props.tab;
+  var isActive = props.isActive;
+
+  if (isActive == 1) {
+    return (
+      <C.TabActive onPress={function() { activateTab(tab.id); }}>
+        <C.TabNameActive>{tab.name}</C.TabNameActive>
+        {tab.modified == 1 && <C.TabModified />}
+        <C.TabClose onPress={function() { closeTab(tab.id); }}>
+          <C.TabCloseIcon>x</C.TabCloseIcon>
+        </C.TabClose>
+      </C.TabActive>
+    );
+  }
+
+  return (
+    <C.Tab onPress={function() { activateTab(tab.id); }}>
+      <C.TabName>{tab.name}</C.TabName>
+      {tab.modified == 1 && <C.TabModified />}
+      <C.TabClose onPress={function() { closeTab(tab.id); }}>
+        <C.TabCloseIcon>x</C.TabCloseIcon>
+      </C.TabClose>
+    </C.Tab>
+  );
+}
+
+function TabBar(props) {
+  return (
+    <C.TabBar>
+      {props.tabs.map(function(tab, idx) {
+        return (
+          <Tab tab={tab} isActive={tab.id == props.activeId ? 1 : 0} />
+        );
+      })}
+    </C.TabBar>
+  );
+}
+
+export { TabBar };

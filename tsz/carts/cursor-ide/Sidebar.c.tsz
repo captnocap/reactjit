@@ -1,0 +1,98 @@
+// Sidebar Component — File explorer
+
+function SidebarSection(props) {
+  return (
+    <C.SidebarSection>
+      <C.SidebarSectionHeader>
+        <C.SidebarChevron>{props.expanded ? 'v' : '>'}</C.SidebarChevron>
+        <C.SidebarSectionTitle>{props.title}</C.SidebarSectionTitle>
+      </C.SidebarSectionHeader>
+      {props.expanded == 1 && props.children}
+    </C.SidebarSection>
+  );
+}
+
+function FileRow(props) {
+  var indent = props.file.indent || 0;
+  var icons = { folder: '>', folderOpen: 'v', file: ' ', ts: 'T', tsx: 'R', js: 'J', jsx: 'X', css: 'C', json: '{', md: 'M' };
+  var icon = icons[props.file.icon] || icons.file;
+
+  return (
+    <Pressable onPress={props.onPress}>
+      {props.selected == 1 && (
+        <C.FileRowSelected>
+          <C.FileIndent repeat={indent} />
+          <C.FileIconSelected>{icon}</C.FileIconSelected>
+          <C.FileNameSelected>{props.file.name}</C.FileNameSelected>
+        </C.FileRowSelected>
+      )}
+      {props.selected == 0 && (
+        <C.FileRow>
+          <C.FileIndent repeat={indent} />
+          <C.FileIcon>{icon}</C.FileIcon>
+          <C.FileName>{props.file.name}</C.FileName>
+        </C.FileRow>
+      )}
+    </Pressable>
+  );
+}
+
+function Sidebar(props) {
+  return (
+    <C.Sidebar>
+      <C.SidebarHeader>
+        <C.SidebarTitle>EXPLORER</C.SidebarTitle>
+        <C.SidebarActions>
+          <C.SidebarActionBtn>
+            <C.SidebarActionIcon>+</C.SidebarActionIcon>
+          </C.SidebarActionBtn>
+          <C.SidebarActionBtn>
+            <C.SidebarActionIcon>...</C.SidebarActionIcon>
+          </C.SidebarActionBtn>
+        </C.SidebarActions>
+      </C.SidebarHeader>
+
+      <C.FileTree>
+        <C.FileTreeStack>
+          <SidebarSection title="PROJECT" expanded={1}>
+            {props.files.map(function(file, idx) {
+              return (
+                <FileRow
+                  file={file}
+                  selected={file.selected}
+                  onPress={function() { selectFile(idx); }}
+                />
+              );
+            })}
+          </SidebarSection>
+
+          <SidebarSection title="RECENT" expanded={0}>
+            {props.recentFiles.map(function(file, idx) {
+              return (
+                <FileRow
+                  file={file}
+                  selected={0}
+                  onPress={function() { }}
+                />
+              );
+            })}
+          </SidebarSection>
+
+          <SidebarSection title="OUTLINE" expanded={0}>
+            {props.outline.map(function(item, idx) {
+              return (
+                <C.FileRow>
+                  <C.FileIndent repeat={item.indent} />
+                  <C.FileIcon>{item.icon}</C.FileIcon>
+                  <C.FileName>{item.name}</C.FileName>
+                </C.FileRow>
+              );
+            })}
+          </SidebarSection>
+        </C.FileTreeStack>
+      </C.FileTree>
+    </C.Sidebar>
+  );
+}
+
+export { Sidebar };
