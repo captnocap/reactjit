@@ -97,8 +97,38 @@ function collectRenderLocals(c, appStart) {
   c.pos = appStart;
   while (c.pos < c.count && c.kind() !== TK.lbrace) c.advance();
   if (c.kind() === TK.lbrace) c.advance();
+  if (!ctx._useEffectBodies) ctx._useEffectBodies = [];
   while (c.pos < c.count) {
     if (c.isIdent('return')) break;
+    // useEffect(() => { ... }) — collect body as init-time JS
+    if (c.isIdent('useEffect')) {
+      c.advance();
+      if (c.kind() === TK.lparen) {
+        c.advance();
+        // Skip () =>
+        if (c.kind() === TK.lparen) { c.advance(); if (c.kind() === TK.rparen) c.advance(); }
+        if (c.kind() === TK.arrow) c.advance();
+        if (c.kind() === TK.lbrace) {
+          c.advance();
+          var parts = [];
+          var depth = 0;
+          while (c.kind() !== TK.eof) {
+            if (c.kind() === TK.rbrace && depth === 0) { c.advance(); break; }
+            if (c.kind() === TK.lbrace) depth++;
+            if (c.kind() === TK.rbrace) depth--;
+            parts.push(c.text());
+            if (c.kind() === TK.semicolon) parts.push(' ');
+            c.advance();
+          }
+          if (parts.length > 0) ctx._useEffectBodies.push(parts.join(''));
+        }
+        // Skip closing )
+        if (c.kind() === TK.rparen) c.advance();
+        // Skip optional ;
+        if (c.kind() === TK.semicolon) c.advance();
+      }
+      continue;
+    }
     if (c.isIdent('const') || c.isIdent('let')) {
       c.advance();
       if (c.kind() === TK.lbracket) {

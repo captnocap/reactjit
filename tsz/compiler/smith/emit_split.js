@@ -482,6 +482,12 @@ function emitLogicBlocks(ctx) {
         if (oa.isNested || oa.isConst) continue;
         jsLines.push(`if (${oa.getter} && ${oa.getter}.length > 0) ${oa.setter}(${oa.getter});`);
       }
+      // useEffect bodies — mount-time init code from App body
+      if (ctx._useEffectBodies && ctx._useEffectBodies.length > 0) {
+        for (const body of ctx._useEffectBodies) {
+          jsLines.push(body);
+        }
+      }
       // setVariant JS wrapper — bridges JS handler calls to Zig theme.setVariant
       if (ctx.variantBindings && ctx.variantBindings.length > 0) {
         jsLines.push(`function setVariant(v) { __setVariant(v); }`);

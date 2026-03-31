@@ -513,11 +513,23 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         // Propagate: if an array references a per-item array, it's also per-item
         // BUT: arrays ONLY in the static tree (ctx.arrayDecls but NOT in mapArrayDecls)
         // stay static — they are wrapper anchors (like Love2D's wrapper View).
+        // Also: any map-local leaf array (e.g., static text children) that's referenced
+        // by the inner template needs per-item too — shared nodes get layout values
+        // overwritten by each item, so only the last item renders correctly.
         const mapArrayNames = new Set(Object.keys(declMap));
         const staticOnlyNames = new Set();
         for (const d of ctx.arrayDecls) {
           const sm = d.match(/^var (_arr_\d+)/);
           if (sm && !mapArrayNames.has(sm[1])) staticOnlyNames.add(sm[1]);
+        }
+        // Seed: all map-local arrays referenced by the inner template are per-item
+        for (const [name, decl] of Object.entries(declMap)) {
+          if (staticOnlyNames.has(name)) continue;
+          // Check if any other map array or the inner template references this array
+          for (const [otherName, otherDecl] of Object.entries(declMap)) {
+            if (otherName === name) continue;
+            if (otherDecl.includes(`&${name}`)) { needsPerItem.add(name); break; }
+          }
         }
         let changed = true;
         while (changed) {
@@ -1502,6 +1514,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         return `${indent}${target}.style.${field} = ${value};\n`;
       }).join('');
     }
+    function nodeFieldAssignments(target, nfStr, indent) {
+      if (!nfStr) return '';
+      return nfStr.split(/,\s*(?=\.)/).map(function(f) {
+        f = f.trim();
+        if (!f.startsWith('.')) return '';
+        var eqIdx = f.indexOf('=');
+        if (eqIdx < 0) return '';
+        var field = f.slice(1, eqIdx).trim();
+        var value = f.slice(eqIdx + 1).trim();
+        return `${indent}${target}.${field} = ${value};\n`;
+      }).join('');
+    }
     for (const vb of ctx.variantBindings) {
       // Skip map-internal bindings (handled per-item in map rebuild — future)
       if (vb.inMap) continue;
@@ -1535,7 +1559,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         bpBlock += `    }\n`;
         out += bpBlock;
       } else {
-        // Variants only (no bp)
+        // Variants only (no bp): emit style fields
         for (let vi = 0; vi < vb.styles.length; vi++) {
           if (vi === 0) {
             out += `    if (_v == 0) {\n${styleAssignments(target, vb.styles[0], '        ')}    }\n`;
@@ -1592,7 +1616,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (vb.nodeFieldStrs && vb.nodeFieldStrs.some(nf => nf.length > 0)) {
         for (let vi = 0; vi < vb.nodeFieldStrs.length; vi++) {
           if (!vb.nodeFieldStrs[vi]) continue;
-          const nfParts = vb.nodeFieldStrs[vi].split(', ').filter(p => p.length > 0);
+          const nfParts = vb.nodeFieldStrs[vi].split(/,\s*(?=\.)/).filter(p => p.trim().startsWith('.'));
           for (const nf of nfParts) {
             const eqIdx = nf.indexOf('=');
             if (eqIdx < 0) continue;
@@ -1613,6 +1637,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       // Find which map this binding belongs to
       const mapIdx = ctx.maps.findIndex(m => !m.isNested && !m.isInline);
       if (mapIdx < 0) continue;
+      // Skip if no variant has any style fields to patch (avoids empty loop with unused capture)
+      const hasAnyStyleFields = vb.styles.some(function(s) {
+        return s && s.split(/,\s*(?=\.)/).some(function(f) { return f.trim().startsWith('.'); });
+      });
+      if (!hasAnyStyleFields) continue;
       out += `    // Map variant patch: ${vb.clsName}\n`;
       out += `    for (0.._map_count_${mapIdx}) |_mi| {\n`;
       for (let vi = 0; vi < vb.styles.length; vi++) {

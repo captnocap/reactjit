@@ -4,8 +4,6 @@ function tryParseBraceChild(c, children) {
   if (c.kind() !== TK.lbrace) return false;
 
   c.advance();
-  // DEBUG: trace every brace entry
-  ctx._droppedExpressions.push({ expr: 'DBG_BRACE_ENTRY: kind=' + c.kind() + ' text=' + c.text() + ' pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'App'), line: 0 });
   if (c.kind() === TK.comment) {
     c.advance();
     if (c.kind() === TK.rbrace) c.advance();
