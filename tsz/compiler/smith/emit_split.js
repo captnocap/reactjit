@@ -566,6 +566,17 @@ function emitLogicBlocks(ctx) {
         }
       }
     }
+    // Append __evalDynTexts for JS-evaluated dynamic text expressions (e.g., {fmtTime()})
+    if (ctx._jsDynTexts && ctx._jsDynTexts.length > 0) {
+      jsLines.push('function __evalDynTexts() {');
+      for (var jdi = 0; jdi < ctx._jsDynTexts.length; jdi++) {
+        var jdt = ctx._jsDynTexts[jdi];
+        jsLines.push('  try { __setStateString(' + jdt.slotIdx + ', String(' + jdt.jsExpr + ')); } catch(e) {}');
+      }
+      jsLines.push('}');
+      jsLines.push('__evalDynTexts();');
+      jsLines.push('setInterval(__evalDynTexts, 16);');
+    }
     for (const line of jsLines) {
       out += `    \\\\${line}\n`;
     }

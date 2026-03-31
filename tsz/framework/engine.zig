@@ -1111,11 +1111,14 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const cursor_pos = input.getCursorPos(id);
         const pl = node.style.padLeft();
         const pt = node.style.padTop();
-        const pb = node.style.padBottom();
-        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
+        const max_w = r.w - pl - node.style.padRight();
+        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, max_w, 0, 0, 0, false);
         const cx = r.x + pl + metrics.width;
-        const ch = r.h - pt - pb;
-        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
+        // Cursor height = one line of text, not the full input height.
+        // For multi-line inputs, position cursor at the baseline of the current line.
+        const line_h: f32 = @as(f32, @floatFromInt(node.font_size)) * 1.3;
+        const cy = r.y + pt + metrics.height - line_h;
+        gpu.drawRect(cx, @max(cy, r.y + pt), 2, @max(line_h, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
     }
 }
 
@@ -1933,10 +1936,34 @@ pub fn run(config_in: AppConfig) !void {
                         }
                         if (scroll_handled) continue;
                     }
-                    // Canvas zoom — built-in
+                    // Canvas: check for scroll containers inside tiles before zooming
                     if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                        const delta: f32 = event.wheel.y;
-                        canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
+                        // Transform mouse to graph space, then search each canvas tile for ScrollViews
+                        const vp_cx = cn.computed.x + cn.computed.w / 2;
+                        const vp_cy = cn.computed.y + cn.computed.h / 2;
+                        const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                        var scroll_hit: ?*Node = null;
+                        for (cn.children) |*tile| {
+                            if (!tile.canvas_node) continue;
+                            // Each canvas tile's children have graph-space computed rects
+                            for (tile.children) |*tile_child| {
+                                if (events.findScrollContainer(tile_child, gpos[0], gpos[1])) |s| {
+                                    scroll_hit = s;
+                                    break;
+                                }
+                            }
+                            if (scroll_hit != null) break;
+                        }
+                        if (scroll_hit) |scroll_node| {
+                            const sc: f32 = if (comptime @import("builtin").os.tag == .macos) 10.0 else 30.0;
+                            if (event.wheel.y != 0) scroll_node.scroll_y -= event.wheel.y * sc;
+                            if (event.wheel.x != 0) scroll_node.scroll_y -= event.wheel.x * sc;
+                            const max_s = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
+                            scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_s));
+                        } else {
+                            const delta: f32 = event.wheel.y;
+                            canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
+                        }
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
                         if (event.wheel.y != 0) {
                             // macOS trackpad: SDL3 gives pixel-precise fractional deltas

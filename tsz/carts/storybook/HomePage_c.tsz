@@ -77,6 +77,30 @@ function HomePage() {
           <AnimationTile />
         </Canvas.Node>
 
+        <Canvas.Node gx={0} gy={-100} gw={260} gh={200}>
+          <CounterTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-400} gy={-100} gw={260} gh={200}>
+          <ClockTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={400} gy={-100} gw={260} gh={200}>
+          <TypographyTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={0} gy={400} gw={260} gh={200}>
+          <ColorPaletteTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-200} gy={200} gw={260} gh={200}>
+          <StopwatchTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={200} gy={200} gw={260} gh={200}>
+          <StateTile />
+        </Canvas.Node>
+
       </Canvas>
   );
 }
