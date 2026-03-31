@@ -27,6 +27,7 @@ inline fn asF32(val: anytype) f32 {
 }
 
 // ── Imports ────────────────────────────────────────
+const log = @import("log.zig");
 const events = @import("events.zig");
 const EventHandler = events.EventHandler;
 const effect_ctx = @import("effect_ctx.zig");
@@ -1587,6 +1588,15 @@ pub fn layout(root: *Node, x: f32, y: f32, w: f32, h: f32) void {
     root._flex_w = w;
     root._stretch_h = h;
     layoutNode(root, x, y, w, h);
+    if (log.isEnabled(.layout)) logTree(root, 0);
+}
+
+fn logTree(node: *Node, depth: u32) void {
+    const name = node.debug_name orelse "?";
+    const r = node.computed;
+    const zero: []const u8 = if (r.w <= 0 or r.h <= 0) " <<ZERO>>" else "";
+    log.info(.layout, "d={d} node={s} x={d:.0} y={d:.0} w={d:.0} h={d:.0}{s}", .{ depth, name, r.x, r.y, r.w, r.h, zero });
+    for (node.children) |*child| logTree(child, depth + 1);
 }
 
 fn invalidateCaches(node: *Node) void {

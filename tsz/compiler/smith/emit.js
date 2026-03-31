@@ -1071,10 +1071,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           // Use placeholder to prevent overwrite: outer→__OUTER__, then inner→_j, then __OUTER__→_i
           r = r.replace(new RegExp(`\\b${outerIdx}\\b`, 'g'), '@as(i64, @intCast(__OUTER_IDX__))');
           r = r.replace(new RegExp(`\\b${innerIdx}\\b`, 'g'), '@as(i64, @intCast(_j))');
-          // Fix any _i refs from OA that should be _j (inner OA already handled above)
-          r = r.replace(/@as\(i64, @intCast\(_i\)\)/g, '@as(i64, @intCast(_j))');
-          r = r.replace(/@intCast\(_i\)/g, '@intCast(_j)');
-          // Restore outer index
+          // Inner OA _i refs already handled above (lines 1054-1059).
+          // Any remaining @intCast(_i) are outer-scope references — leave as _i.
+          // Restore outer index placeholder
           r = r.replace(/__OUTER_IDX__/g, '_i');
           return r;
         }

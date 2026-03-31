@@ -112,6 +112,17 @@ function parseStyleValue(c) {
       c.advance();
       const pv = ctx.propStack[name];
       if (pv.startsWith('#') || namedColors[pv]) return { type: 'string', value: pv };
+      // Detect OA field references passed through props (e.g., proj.color → _oa0_color[_i])
+      const oaMatch = pv.match(/^_oa(\d+)_(\w+)\[/);
+      if (oaMatch) {
+        // Determine field type from the OA schema
+        const oaIdx = parseInt(oaMatch[1]);
+        const fieldName = oaMatch[2];
+        const srcOa = ctx.objectArrays ? ctx.objectArrays.find(o => o.oaIdx === oaIdx) : null;
+        const fi = srcOa ? srcOa.fields.find(f => f.name === fieldName) : null;
+        const fieldType = fi ? fi.type : 'int';
+        return { type: 'map_field', value: pv, zigExpr: pv, fieldType };
+      }
       return { type: 'number', value: pv };
     }
   }
@@ -373,6 +384,7 @@ function isSetter(name) {
 // String literals (multi-word text from prop="value") resolve to a truthy constant
 // since a provided string prop is always non-zero in a truthiness check.
 function _condPropValue(pv) {
+  if (typeof pv !== 'string') return '1'; // JSX slot objects are always truthy
   if (/^-?\d+(\.\d+)?$/.test(pv)) return pv; // numeric literal
   if (pv.startsWith('if (')) return '(' + pv + ')'; // Zig if-else needs parens for correct precedence
   if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression
@@ -606,7 +618,15 @@ function luaParseHandler(c) {
         } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
           parts.push(name);
         } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-          parts.push(ctx.propStack[name]);
+          // In Lua/JS handler context, emit the prop NAME (not the Zig value).
+          // The __mapPress function preamble will declare these as JS variables.
+          const pv = ctx.propStack[name];
+          const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
+          if (isZigExpr) {
+            parts.push(name);
+          } else {
+            parts.push(pv);
+          }
         } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
           parts.push(ctx.renderLocals[name]);
         } else {

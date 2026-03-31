@@ -445,18 +445,11 @@ function tryParseConditional(c, children) {
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        // Prop from component — resolve value for conditional use
+        // Prop from component — always use the prop value from the call site.
+        // The prop value already contains the correct Zig expression for the
+        // scope where the component was invoked (outer map index, OA field, etc).
         const pv = ctx.propStack[name];
-        if (ctx.currentMap && ctx.currentMap.oa) {
-          const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
-          if (fi) {
-            condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
-          } else {
-            condParts.push(_condPropValue(pv));
-          }
-        } else {
-          condParts.push(_condPropValue(pv));
-        }
+        condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
@@ -633,16 +626,7 @@ function _parseTernaryCondParts(c) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         var pv = ctx.propStack[name];
-        if (ctx.currentMap && ctx.currentMap.oa) {
-          var fi = ctx.currentMap.oa.fields.find(function(f) { return f.name === name; });
-          if (fi) {
-            condParts.push('_oa' + ctx.currentMap.oa.oaIdx + '_' + name + '[_i]');
-          } else {
-            condParts.push(_condPropValue(pv));
-          }
-        } else {
-          condParts.push(_condPropValue(pv));
-        }
+        condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {

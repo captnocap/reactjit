@@ -35,9 +35,14 @@ var log_file: ?std.fs.File = null;
 fn ensureInit() void {
     if (initialized) return;
     initialized = true;
+    std.debug.print("[log] ensureInit called\n", .{});
 
     if (std.posix.getenv("ZIGOS_LOG_FILE")) |path| {
-        log_file = std.fs.createFileAbsolute(path, .{ .truncate = true }) catch null;
+        log_file = std.fs.createFileAbsolute(path, .{ .truncate = true }) catch |e| blk: {
+            std.debug.print("ZIGOS_LOG_FILE open failed: {}\n", .{e});
+            break :blk null;
+        };
+        if (log_file != null) std.debug.print("ZIGOS_LOG_FILE: {s}\n", .{path});
     }
 
     const env = std.posix.getenv("ZIGOS_LOG") orelse return;

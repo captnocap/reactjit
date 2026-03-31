@@ -51,6 +51,7 @@ const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else @import("vterm.zig
 
 const engine = @import("engine.zig");
 const crashlog = @import("crashlog.zig");
+const log = @import("log.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;
@@ -87,14 +88,14 @@ pub var input_drag_node_pl: f32 = 0; // node padding-left
 pub var input_drag_font_size: u16 = 0;
 
 pub fn paintNode(node: *Node) void {
-    if (node.style.display == .none) { g_hidden_count += 1; return; }
+    if (node.style.display == .none) { g_hidden_count += 1; log.info(.render, "hidden {s}", .{node.debug_name orelse "?"}); return; }
     g_paint_count += 1;
 
     // Canvas.Path: draw before size check
     if (node.canvas_path or node.canvas_path_d != null) { paintCanvasPath(node); return; }
 
     const r = node.computed;
-    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
+    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; log.info(.render, "zero-size {s} w={d:.0} h={d:.0}", .{node.debug_name orelse "?", r.w, r.h}); return; }
 
     // Apply node opacity (cascades to children via g_paint_opacity)
     const saved_opacity = g_paint_opacity;

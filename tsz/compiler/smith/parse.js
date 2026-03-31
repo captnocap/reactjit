@@ -131,7 +131,7 @@ function parseJSXElement(c) {
             // Handler prop — parse as a real handler and store handler name
             c.advance();
             const handlerName = `_handler_press_${ctx.handlerCount}`;
-            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && ctx.propStack[c.text()].startsWith('_handler_press_')) {
+            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string' && ctx.propStack[c.text()].startsWith('_handler_press_')) {
               // Prop-forwarded handler: onTap={onOpen} where onOpen resolves to _handler_press_N
               propValues[attr] = ctx.propStack[c.text()];
               c.advance();
@@ -151,7 +151,18 @@ function parseJSXElement(c) {
               c.restore(saved);
               const body = parseHandler(c);
               const isMapHandler = !!ctx.currentMap;
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+              // Capture props that contain Zig expressions — emitter needs these
+              // to declare JS variables in __mapPress preamble
+              const zigProps = {};
+              if (ctx.propStack) {
+                for (const [pn, pv] of Object.entries(ctx.propStack)) {
+                  if (typeof pv !== 'string') continue;
+                  if (pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot')) {
+                    zigProps[pn] = pv;
+                  }
+                }
+              }
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps });
             }
             ctx.handlerCount++;
             if (c.kind() === TK.rbrace) c.advance();
@@ -159,6 +170,13 @@ function parseJSXElement(c) {
           } else if (c.kind() === TK.lbrace) {
             // {expr} prop value — resolve map item access, state getters, etc.
             c.advance();
+            // JSX-valued prop (named slot): header={<Component .../>}
+            if (c.kind() === TK.lt) {
+              const jsxResult = parseJSXElement(c);
+              if (c.kind() === TK.rbrace) c.advance();
+              propValues[attr] = { __jsxSlot: true, result: jsxResult };
+              continue;
+            }
             // Detect closure prop: {() => { ... }} or {(args) => { ... }}
             // These are callback props like onOpen={() => { openTicket(i) }}
             if (c.kind() === TK.lparen) {
@@ -179,7 +197,16 @@ function parseJSXElement(c) {
                 c.restore(saved);
                 const body = parseHandler(c);
                 const isMapHandler = !!ctx.currentMap;
-                ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+                const zigProps2 = {};
+                if (ctx.propStack) {
+                  for (const [pn, pv] of Object.entries(ctx.propStack)) {
+                    if (typeof pv !== 'string') continue;
+                    if (pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot')) {
+                      zigProps2[pn] = pv;
+                    }
+                  }
+                }
+                ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps2 });
                 ctx.handlerCount++;
                 if (c.kind() === TK.rbrace) c.advance();
                 propValues[attr] = handlerName;
@@ -275,7 +302,7 @@ function parseJSXElement(c) {
                   // Check render locals, then propStack for component prop references
                   if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
                     val += ctx.renderLocals[c.text()];
-                  } else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+                  } else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string') {
                     val += ctx.propStack[c.text()];
                   } else {
                     val += c.text();
@@ -450,6 +477,9 @@ function parseJSXElement(c) {
           // Merge: inline styles win over pre-injected (e.g. ScrollView overflow)
           const preInjected = styleFields.filter(f => !inlineStyles.some(s => s.split(' = ')[0] === f.split(' = ')[0]));
           styleFields = preInjected.concat(inlineStyles);
+          // Transfer custom properties lost by Array.concat (dynStyle bindings)
+          if (inlineStyles._dynStyleIds) styleFields._dynStyleIds = inlineStyles._dynStyleIds;
+          if (inlineStyles._dynStyleId !== undefined) styleFields._dynStyleId = inlineStyles._dynStyleId;
         } else if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
           // Bare handler reference: onPress=functionName (no braces) — common in page mode
           if (c.kind() === TK.identifier && c.kindAt(c.pos + 1) !== TK.dot) {
@@ -464,7 +494,7 @@ function parseJSXElement(c) {
           } else if (c.kind() === TK.lbrace) {
             c.advance(); // {
             // Prop-passed handler: onPress={onToggle} where onToggle is a component prop
-            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && ctx.propStack[c.text()].startsWith('_handler_press_')) {
+            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string' && ctx.propStack[c.text()].startsWith('_handler_press_')) {
               handlerRef = ctx.propStack[c.text()];
               c.advance();
               if (c.kind() === TK.rbrace) c.advance();
@@ -494,7 +524,16 @@ function parseJSXElement(c) {
               c.restore(saved);
               const body = parseHandler(c);
               const isMapHandler = !!ctx.currentMap;
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+              const zigProps3 = {};
+              if (ctx.propStack) {
+                for (const [pn, pv] of Object.entries(ctx.propStack)) {
+                  if (typeof pv !== 'string') continue;
+                  if (pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot')) {
+                    zigProps3[pn] = pv;
+                  }
+                }
+              }
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps3 });
               handlerRef = handlerName;
               ctx.handlerCount++;
               if (c.kind() === TK.rbrace) c.advance(); // }
@@ -566,7 +605,7 @@ function parseJSXElement(c) {
                 let rhsIsString = false;
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
                 else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.currentMap && n === ctx.currentMap.indexParam) ? '@as(i64, @intCast(_i))' : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
+                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.currentMap && n === ctx.currentMap.indexParam) ? '@as(i64, @intCast(_i))' : (ctx.propStack && ctx.propStack[n] !== undefined && typeof ctx.propStack[n] === 'string' ? ctx.propStack[n] : n); }
                 if (c.kind() === TK.question) {
                   c.advance();
                   const tv = parseTernaryBranch(c, 'color');
@@ -1271,22 +1310,42 @@ function parseChildren(c) {
       // {expr} — check props first, then state getters
       if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
         const propVal = ctx.propStack[c.text()];
-        c.advance();
-        if (c.kind() === TK.rbrace) c.advance();
-        // OA field refs or Zig expressions inside maps → per-item dynamic text
-        const isMapExpr = propVal.includes('_oa') || propVal.includes('[_i]') || propVal.includes('state.get');
-        if (ctx.currentMap && isMapExpr) {
-          const mapBufId = ctx.dynCount;
-          const isStr = propVal.includes('..');
-          const fmt = isStr ? '{s}' : '{d}';
-          const args = isStr ? propVal : leftFoldExpr(propVal);
-          ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-          ctx.dynCount++;
-          children.push({ nodeExpr: `.{ .text = "" }` });
-        } else {
-          children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+        // JSX slot prop — splice as child node (named slots: header={<Component/>})
+        if (propVal && typeof propVal === 'object' && propVal.__jsxSlot) {
+          c.advance();
+          if (c.kind() === TK.rbrace) c.advance();
+          children.push(propVal.result);
+          continue;
         }
-      } else if (c.kind() === TK.identifier && isGetter(c.text())) {
+        // Check if this is a bare {propName} or part of a larger expression {propName == ...}
+        if (c.kindAt(c.pos + 1) !== TK.rbrace) {
+          // Part of a larger expression — don't consume, let it fall through to expression collector
+          // (the identifier will be collected by the generic fallback path below)
+        } else {
+          c.advance();
+          if (c.kind() === TK.rbrace) c.advance();
+          // Zig runtime expression → dynamic text buffer
+          const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
+          if (isZigExpr) {
+            const bufId = ctx.dynCount;
+            const isStr = propVal.includes('getSlotString') || propVal.includes('..');
+            const fmt = isStr ? '{s}' : '{d}';
+            const args = isStr ? propVal : leftFoldExpr(propVal);
+            const bufSize = isStr ? 128 : 64;
+            if (ctx.currentMap) {
+              ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+            } else {
+              ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
+            }
+            ctx.dynCount++;
+            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+          } else {
+            children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+          }
+          continue;
+        }
+      }
+      if (c.kind() === TK.identifier && isGetter(c.text())) {
         const getter = c.text();
         const slotIdx = findSlot(getter);
         const slot = ctx.stateSlots[slotIdx];

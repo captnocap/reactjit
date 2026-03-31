@@ -416,7 +416,7 @@ function emitLogicBlocks(ctx) {
     for (const oa of ctx.objectArrays) {
       if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
       jsLines.push(`var ${oa.getter} = [];`);
-      if (!ctx.scriptBlock) {
+      if (!ctx.scriptBlock && !globalThis.__scriptContent) {
         jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
       }
     }
@@ -430,7 +430,9 @@ function emitLogicBlocks(ctx) {
         jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
       }
       // No setter rewriting needed — declared setter functions handle state updates
-      const scriptLines = globalThis.__scriptContent.split('\n');
+      // Strip <script>/<\/script> tags — file imports include them raw
+      const scriptLines = globalThis.__scriptContent.split('\n')
+        .filter(l => !/^\s*<\/?script>\s*$/.test(l));
       for (const line of scriptLines) jsLines.push(line);
       jsLines.push('');  // trailing blank line
     }
@@ -490,6 +492,55 @@ function emitLogicBlocks(ctx) {
                 if (pat.test(jsHandlerBody) && f.name !== m.itemParam && f.name !== m.indexParam) {
                   jsLines.push(`  var ${f.name} = ${m.itemParam}.${f.name};`);
                 }
+              }
+            }
+            // Declare JS variables for component props that were Zig expressions
+            // (luaParseHandler emitted the prop name; now we need to bind it to a JS value)
+            if (mh.zigProps) {
+              for (const [propName, zigVal] of Object.entries(mh.zigProps)) {
+                const propPat = new RegExp(`\\b${propName}\\b`);
+                if (!propPat.test(jsHandlerBody)) continue;
+                // Already declared as OA field or map param — skip
+                if (m.oa && m.oa.fields.some(f => f.name === propName)) continue;
+                if (propName === (m && m.itemParam) || propName === (m && m.indexParam)) continue;
+                // Convert Zig expression to JS equivalent
+                let jsVal = zigVal;
+                // @as(i64, @intCast(_i)) or @as(i64, @intCast(_j)) → idx (map index)
+                if (/^@as\(i64,\s*@intCast\(_[ij]\)\)$/.test(zigVal)) {
+                  jsVal = 'idx';
+                }
+                // _oaN_field[_i] → item.field (OA field access from current or parent map)
+                else if (/^_oa(\d+)_(\w+)\[_i\]$/.test(zigVal)) {
+                  const oaMatch = zigVal.match(/^_oa(\d+)_(\w+)\[_i\]$/);
+                  if (oaMatch) {
+                    const oaIdx = parseInt(oaMatch[1]);
+                    const field = oaMatch[2];
+                    // Find which OA this belongs to and use its getter
+                    const srcOa = ctx.objectArrays.find(o => o.oaIdx === oaIdx);
+                    if (srcOa) jsVal = `${srcOa.getter}[idx].${field}`;
+                    else jsVal = `idx`;
+                  }
+                }
+                // _oaN_field[_i][0.._oaN_field_lens[_i]] → item.field (string OA field)
+                else if (/^_oa(\d+)_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]$/.test(zigVal)) {
+                  const oaMatch = zigVal.match(/^_oa(\d+)_(\w+)\[_i\]/);
+                  if (oaMatch) {
+                    const oaIdx = parseInt(oaMatch[1]);
+                    const field = oaMatch[2];
+                    const srcOa = ctx.objectArrays.find(o => o.oaIdx === oaIdx);
+                    if (srcOa) jsVal = `${srcOa.getter}[idx].${field}`;
+                    else jsVal = `idx`;
+                  }
+                }
+                // state.getSlot(N) → getter name
+                else if (/^state\.getSlot\((\d+)\)$/.test(zigVal)) {
+                  const slotMatch = zigVal.match(/^state\.getSlot\((\d+)\)$/);
+                  if (slotMatch) {
+                    const ss = ctx.stateSlots[parseInt(slotMatch[1])];
+                    jsVal = ss ? ss.getter : zigVal;
+                  }
+                }
+                jsLines.push(`  var ${propName} = ${jsVal};`);
               }
             }
             jsLines.push(`  ${jsHandlerBody};`);

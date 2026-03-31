@@ -8,6 +8,7 @@
 //! No fixed element ceilings — arrays grow as needed.
 
 const std = @import("std");
+const log = @import("log.zig");
 
 pub const MAX_SLOTS = 512;
 
@@ -205,6 +206,7 @@ pub fn getSlotKind(id: usize) SlotKind {
 pub fn setSlotString(id: usize, val: []const u8) void {
     const current = getSlotString(id);
     if (!std.mem.eql(u8, current, val)) {
+        log.info(.state, "slot[{d}] string \"{s}\" -> \"{s}\"", .{ id, current, val });
         releaseValue(&slots[id].value);
         slots[id].value = .{ .string = .{ .buf = dupString(val) } };
         slots[id].dirty = true;
@@ -246,6 +248,7 @@ pub fn getSlotBool(id: usize) bool {
 pub fn setSlot(id: usize, val: i64) void {
     const current = getSlot(id);
     if (current != val) {
+        log.info(.state, "slot[{d}] int {d} -> {d}", .{ id, current, val });
         releaseValue(&slots[id].value);
         slots[id].value = .{ .int = val };
         slots[id].dirty = true;
@@ -257,6 +260,7 @@ pub fn setSlot(id: usize, val: i64) void {
 pub fn setSlotFloat(id: usize, val: f64) void {
     const current = getSlotFloat(id);
     if (current != val) {
+        log.info(.state, "slot[{d}] float {d:.4} -> {d:.4}", .{ id, current, val });
         releaseValue(&slots[id].value);
         slots[id].value = .{ .float = val };
         slots[id].dirty = true;
@@ -268,6 +272,7 @@ pub fn setSlotFloat(id: usize, val: f64) void {
 pub fn setSlotBool(id: usize, val: bool) void {
     const current = getSlotBool(id);
     if (current != val) {
+        log.info(.state, "slot[{d}] bool {any} -> {any}", .{ id, current, val });
         releaseValue(&slots[id].value);
         slots[id].value = .{ .boolean = val };
         slots[id].dirty = true;
@@ -367,6 +372,7 @@ pub fn getArraySlot(id: usize) []const i64 {
 
 /// Replace entire array contents.
 pub fn setArraySlot(id: usize, values: []const i64) void {
+    log.info(.state, "arr[{d}] set count={d}", .{ id, values.len });
     array_slots[id].ensureCapacity(values.len);
     const new_count = values.len;
     @memcpy(array_slots[id].values[0..new_count], values[0..new_count]);
@@ -377,6 +383,7 @@ pub fn setArraySlot(id: usize, values: []const i64) void {
 
 /// Append a value to an array slot.
 pub fn pushArraySlot(id: usize, value: i64) void {
+    log.info(.state, "arr[{d}] push {d} (count={d})", .{ id, value, array_slots[id].count + 1 });
     const new_count = array_slots[id].count + 1;
     array_slots[id].ensureCapacity(new_count);
     array_slots[id].values[array_slots[id].count] = value;
@@ -390,6 +397,7 @@ pub fn popArraySlot(id: usize) i64 {
     if (array_slots[id].count > 0) {
         array_slots[id].count -= 1;
         const val = array_slots[id].values[array_slots[id].count];
+        log.info(.state, "arr[{d}] pop {d} (count={d})", .{ id, val, array_slots[id].count });
         array_slots[id].dirty = true;
         _dirty = true;
         return val;
@@ -411,6 +419,7 @@ pub fn getArrayElement(id: usize, index: usize) i64 {
 /// Set a single element in an array slot by index.
 pub fn setArrayElement(id: usize, index: usize, value: i64) void {
     if (index >= array_slots[id].count) return;
+    log.info(.state, "arr[{d}][{d}] = {d}", .{ id, index, value });
     array_slots[id].values[index] = value;
     array_slots[id].dirty = true;
     _dirty = true;
