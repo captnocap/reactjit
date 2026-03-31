@@ -1652,131 +1652,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
   }
 
-  // _appInit
-  out += `fn _appInit() void {\n    _initState();\n`;
-  for (const oa of ctx.objectArrays) {
-    if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
-    out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
-  }
-  // Register setVariant host function for JS handler bridge
-  if (hasVariants) {
-    out += `    qjs_runtime.registerHostFn("__setVariant", @ptrCast(&_setVariantHost), 1);\n`;
-  }
-  // Register input submit/change callbacks
-  const input_mod = `@import("${prefix}input.zig")`;
-  if (ctx._inputSubmitHandlers) {
-    for (const h of ctx._inputSubmitHandlers) {
-      out += `    ${input_mod}.setOnSubmit(${h.inputId}, &_inputSubmit${h.inputId});\n`;
-    }
-  }
-  if (ctx._inputChangeHandlers) {
-    for (const h of ctx._inputChangeHandlers) {
-      out += `    ${input_mod}.setOnChange(${h.inputId}, &_inputChange${h.inputId});\n`;
-    }
-  }
-  if (hasDynText) out += `    _updateDynamicTexts();\n`;
-  if (hasConds) out += `    _updateConditionals();\n`;
-  if (hasVariants) out += `    _updateVariants();\n`;
-  // Initialize Lua map handler string pointers before rebuilding maps
-  for (let mi = 0; mi < ctx.maps.length; mi++) {
-    if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue; // inline handlers built per-parent in rebuild
-    const mapHandlers2 = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-    const fieldRefsMap2 = ctx.maps[mi]._handlerFieldRefsMap || {};
-    for (let hi = 0; hi < mapHandlers2.length; hi++) {
-      const hasFieldRefs2 = fieldRefsMap2[hi] && fieldRefsMap2[hi].length > 0;
-      if (!hasFieldRefs2) {
-        out += `    _initMapLuaPtrs${mi}_${hi}();\n`;
-      }
-    }
-  }
-  if (_hasFlatMaps) out += `    _ = _pool_arena.reset(.retain_capacity);\n`;
-  for (let mi = 0; mi < ctx.maps.length; mi++) {
-    if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue; // nested/inline rebuilds inlined into parent
-    out += `    _rebuildMap${mi}();\n`;
-  }
-  out += `}\n\n`;
-
-  // _appTick
-  out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
-  // Poll for async AppleScript results (no-op if no script is pending)
-  if (ctx.usesApplescript) {
-    out += `    @import("framework/applescript.zig").pollResult();\n`;
-  }
   const hasDynStyles = ctx.dynStyles && ctx.dynStyles.length > 0;
-  if (hasState || ctx.objectArrays.length > 0) {
-    if (hasDynStyles) {
-      // Dynamic styles update inside dirty check — they depend on state
-      out += `    if (state.isDirty()) { _updateDynamicTexts();`;
-      if (hasConds) out += ` _updateConditionals();`;
-      out += `\n`;
-      if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
-      for (let mi = 0; mi < ctx.maps.length; mi++) {
-        if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
-        out += `        _rebuildMap${mi}();\n`;
-      }
-      out += ` state.clearDirty(); }\n`;
-    } else if (ctx.maps.length > 0) {
-      out += `    if (state.isDirty()) { _updateDynamicTexts();`;
-      if (hasConds) out += ` _updateConditionals();`;
-      out += `\n`;
-      if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
-      for (let mi = 0; mi < ctx.maps.length; mi++) {
-        if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
-        out += `        _rebuildMap${mi}();\n`;
-      }
-      out += ` state.clearDirty(); }\n`;
-    } else {
-      out += `    if (state.isDirty()) {`;
-      out += ` _updateDynamicTexts();`;
-      if (hasConds) out += ` _updateConditionals();`;
-      out += ` state.clearDirty(); }\n`;
-    }
-  }
-  // Variant/bp style switching runs every tick (theme changes don't use state dirty)
-  if (hasVariants) {
-    out += `    _updateVariants();\n`;
-  }
-  out += `}\n\n`;
-
-  // Exports
-  out += `export fn app_get_root() *Node { return &_root; }\n`;
-  out += `export fn app_get_init() ?*const fn () void { return _appInit; }\n`;
-  out += `export fn app_get_tick() ?*const fn (u32) void { return _appTick; }\n`;
-  out += `export fn app_get_js_logic() [*]const u8 { return JS_LOGIC.ptr; }\n`;
-  out += `export fn app_get_js_logic_len() usize { return JS_LOGIC.len; }\n`;
-  out += `export fn app_get_lua_logic() [*]const u8 { return LUA_LOGIC.ptr; }\n`;
-  out += `export fn app_get_lua_logic_len() usize { return LUA_LOGIC.len; }\n`;
-  out += `export fn app_get_title() [*:0]const u8 { return "${appName}"; }\n\n`;
-
-  // State exports
-  out += `export fn app_state_count() usize { return ${ctx.stateSlots.length}; }\n`;
-  if (hasState) {
-    const types = ctx.stateSlots.map(s => ({ int: 0, float: 1, boolean: 2, string: 3 }[s.type] || 0));
-    out += `const _slot_types = [_]u8{ ${types.join(', ')} };\n`;
-    out += `export fn app_state_slot_type(id: usize) u8 { if (id < _slot_types.len) return _slot_types[id]; return 0; }\n`;
-    out += `export fn app_state_get_int(id: usize) i64 { return state.getSlot(id); }\n`;
-    out += `export fn app_state_set_int(id: usize, val: i64) void { state.setSlot(id, val); }\n`;
-    out += `export fn app_state_get_float(id: usize) f64 { return state.getSlotFloat(id); }\n`;
-    out += `export fn app_state_set_float(id: usize, val: f64) void { state.setSlotFloat(id, val); }\n`;
-    out += `export fn app_state_get_bool(id: usize) u8 { return if (state.getSlotBool(id)) 1 else 0; }\n`;
-    out += `export fn app_state_set_bool(id: usize, val: u8) void { state.setSlotBool(id, val != 0); }\n`;
-    out += `export fn app_state_get_string_ptr(id: usize) [*]const u8 { return state.getSlotString(id).ptr; }\n`;
-    out += `export fn app_state_get_string_len(id: usize) usize { return state.getSlotString(id).len; }\n`;
-    out += `export fn app_state_set_string(id: usize, ptr: [*]const u8, len: usize) void { state.setSlotString(id, ptr[0..len]); }\n`;
-    out += `export fn app_state_mark_dirty() void { state.markDirty(); }\n`;
-  }
-
-  // Main — both fast and normal builds emit pub fn main for standalone exe
-  out += `\npub fn main() !void {\n`;
-  if (!fastBuild) out += `    if (IS_LIB) return;\n`;
-  out += `    try engine.run(.{\n`;
-  out += `        .title = "${appName}",\n`;
-  out += `        .root = &_root,\n`;
-  out += `        .js_logic = JS_LOGIC,\n`;
-  out += `        .lua_logic = LUA_LOGIC,\n`;
-  out += `        .init = _appInit,\n`;
-  out += `        .tick = _appTick,\n`;
-  out += `    });\n}\n`;
+  out += emitRuntimeEntrypoints(ctx, {
+    appName: appName,
+    prefix: prefix,
+    fastBuild: fastBuild,
+    hasState: hasState,
+    hasDynText: hasDynText,
+    hasConds: hasConds,
+    hasVariants: hasVariants,
+    hasDynStyles: hasDynStyles,
+    hasFlatMaps: _hasFlatMaps,
+  });
 
   return finalizeEmitOutput(out, file);
 }

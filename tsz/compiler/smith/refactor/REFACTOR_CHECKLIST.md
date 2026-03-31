@@ -105,7 +105,7 @@ Current constraint:
 - [x] Extract effect render emission.
 - [ ] Extract object-array emission.
 - [ ] Extract map-pool emission.
-- [ ] Extract update/entrypoint emission.
+- [x] Extract update/entrypoint emission.
 - [x] Extract final cleanup/post-processing.
 - [ ] Reduce `emit.js` to a top-level emit coordinator.
 
