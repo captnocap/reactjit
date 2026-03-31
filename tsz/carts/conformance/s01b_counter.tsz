@@ -7,31 +7,28 @@ function decrement() { setCount(count - 1); }
 function reset() { setCount(0); }
 function increment() { setCount(count + 1); }
 function hint() {
-  if (count > 0) return 'positive';
-  if (count === 0) return 'zero';
-  return 'negative';
+  if (count > 0) return 'Positive';
+  if (count === 0) return 'Zero';
+  return 'Negative';
 }
 </script>
 
 function App() {
   return (
-    <Box style={{ backgroundColor: "#0f172a", width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
-      <Box style={{ backgroundColor: "#1e293b", borderRadius: 12, padding: 24, gap: 16, alignItems: "center" }}>
-        <Text fontSize={18} color="#e2e8f0">Counter</Text>
-        <Text fontSize={11} color="#64748b">{hint()}</Text>
-        <Text fontSize={48} color="#f8fafc">{count}</Text>
-        <Box style={{ flexDirection: "row", gap: 8 }}>
-          <Pressable onPress={decrement} style={{ padding: 12, backgroundColor: "#dc2626", borderRadius: 8, minWidth: 44, alignItems: "center" }}>
-            <Text fontSize={18} color="#ffffff">-</Text>
-          </Pressable>
-          <Pressable onPress={reset} style={{ padding: 12, backgroundColor: "#334155", borderRadius: 8, minWidth: 44, alignItems: "center" }}>
-            <Text fontSize={12} color="#94a3b8">Reset</Text>
-          </Pressable>
-          <Pressable onPress={increment} style={{ padding: 12, backgroundColor: "#3b82f6", borderRadius: 8, minWidth: 44, alignItems: "center" }}>
-            <Text fontSize={18} color="#ffffff">+</Text>
-          </Pressable>
-        </Box>
-      </Box>
+    <Box style={{ backgroundColor: "#0f172a", width: "100%", height: "100%", padding: 16, gap: 8 }}>
+      <Text fontSize={22} color="#f8fafc">Counter</Text>
+      <Text fontSize={14} color="#e2e8f0">{hint()}</Text>
+      <Text fontSize={14} color="#e2e8f0">{count}</Text>
+
+      <Pressable onPress={decrement} style={{ padding: 10, backgroundColor: "#dc2626", borderRadius: 6 }}>
+        <Text fontSize={14} color="#ffffff">Red Minus</Text>
+      </Pressable>
+      <Pressable onPress={reset} style={{ padding: 10, backgroundColor: "#334155", borderRadius: 6 }}>
+        <Text fontSize={14} color="#ffffff">Gray Reset</Text>
+      </Pressable>
+      <Pressable onPress={increment} style={{ padding: 10, backgroundColor: "#3b82f6", borderRadius: 6 }}>
+        <Text fontSize={14} color="#ffffff">Blue Plus</Text>
+      </Pressable>
     </Box>
   );
 }

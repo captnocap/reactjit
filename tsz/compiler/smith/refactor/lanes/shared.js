@@ -1,3 +1,27 @@
+function detectSurfaceTier(source, file) {
+  if (!source) return 'mixed';
+  if (typeof isSoupSource === 'function' && isSoupSource(source, file)) return 'soup';
+
+  const hasIntentBlocks = /<(page|widget|var|state|functions|timer)\b/.test(source);
+  const hasClassifierTags = /<C\.[A-Za-z]/.test(source);
+  const hasClassifierImport = /(?:^|\n)\s*from\s+['"][^'"]*(?:manifest|_cls|\.cls(?:\.tsz)?|\.tcls(?:\.tsz)?|\.vcls(?:\.tsz)?|\.effects(?:\.tsz)?|\.glyphs(?:\.tsz)?)[^'"]*['"]/.test(source);
+  if (hasIntentBlocks || hasClassifierTags || hasClassifierImport) return 'chad';
+
+  const hasPrimitiveTags = /<(Box|Text|Image|Video|Render|Pressable|ScrollView|TextInput|TextArea|Glyph|Cartridge|ascript|Canvas|Graph|Physics|Scene3d|Scene3D|ThreeD|Effect|Terminal|Audio)\b/.test(source);
+  const hasInlineStyles = source.indexOf('style={{') !== -1;
+  const hasStateHooks = /\b(?:React\.)?useState\s*\(/.test(source);
+  const hasAppShell = /\bfunction\s+App\s*\(/.test(source);
+  if (hasPrimitiveTags || hasInlineStyles || hasStateHooks || hasAppShell) return 'mixed';
+
+  return 'mixed';
+}
+
+function assignSurfaceTier(source, file) {
+  const tier = detectSurfaceTier(source, file);
+  ctx._sourceTier = tier;
+  return tier;
+}
+
 function finishParsedLane(nodeExpr, file, opts) {
   opts = opts || {};
 

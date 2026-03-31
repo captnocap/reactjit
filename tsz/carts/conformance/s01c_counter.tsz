@@ -22,25 +22,24 @@ from './s00c_manifest_cls'
       set_count to count + 1
 
     hint:
-      count > 0 ? 'positive' : count exact 0 ? 'zero' : 'negative'
+      count > 0 ? 'Positive' : count exact 0 ? 'Zero' : 'Negative'
   </functions>
 
   return(
-    <C.Page>
-      <C.Card>
-        <C.CardHeader>
-          <C.Label>Counter</C.Label>
-          <C.Hint>{hint}</C.Hint>
-        </C.CardHeader>
-        <C.CardCenter>
-          <C.Value>{count}</C.Value>
-        </C.CardCenter>
-        <C.Row>
-          <C.BtnDanger onPress=decrement><C.BtnLabel>-</C.BtnLabel></C.BtnDanger>
-          <C.BtnMuted onPress=reset><C.BtnLabelMuted>Reset</C.BtnLabelMuted></C.BtnMuted>
-          <C.Btn onPress=increment><C.BtnLabel>+</C.BtnLabel></C.Btn>
-        </C.Row>
-      </C.Card>
+    <C.Page style={{ backgroundColor: '#0f172a', padding: 16, gap: 8 }}>
+      <C.Title style={{ fontSize: 22, color: '#f8fafc' }}>Counter</C.Title>
+      <C.Body style={{ fontSize: 14, color: '#e2e8f0' }}>{hint}</C.Body>
+      <C.Body style={{ fontSize: 14, color: '#e2e8f0' }}>{count}</C.Body>
+
+      <C.BtnDanger style={{ padding: 10, borderRadius: 6 }} onPress=decrement>
+        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Red Minus</C.Body>
+      </C.BtnDanger>
+      <C.BtnMuted style={{ padding: 10, borderRadius: 6, backgroundColor: '#334155' }} onPress=reset>
+        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Gray Reset</C.Body>
+      </C.BtnMuted>
+      <C.Btn style={{ padding: 10, borderRadius: 6, backgroundColor: '#3b82f6' }} onPress=increment>
+        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Blue Plus</C.Body>
+      </C.Btn>
     </C.Page>
   )
 </page>

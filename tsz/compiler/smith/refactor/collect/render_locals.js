@@ -129,7 +129,7 @@ function collectRenderLocals(c, appStart) {
       }
       continue;
     }
-    if (c.isIdent('const') || c.isIdent('let')) {
+    if (c.isIdent('const') || c.isIdent('let') || c.isIdent('var')) {
       c.advance();
       if (c.kind() === TK.lbracket) {
         skipRenderLocalDestructure(c);
@@ -140,8 +140,15 @@ function collectRenderLocals(c, appStart) {
         c.advance();
         if (c.kind() === TK.equals) {
           c.advance();
-          const valStr = readRenderLocalValue(c);
-          if (!valStr.includes('useState')) ctx.renderLocals[varName] = valStr;
+          // Skip if this is a registered const OA (handled by object array system)
+          var _isConstOa = false;
+          for (var _coi = 0; _coi < ctx.objectArrays.length; _coi++) {
+            if (ctx.objectArrays[_coi].getter === varName && ctx.objectArrays[_coi].isConst) { _isConstOa = true; break; }
+          }
+          if (!_isConstOa) {
+            const valStr = readRenderLocalValue(c);
+            if (!valStr.includes('useState')) ctx.renderLocals[varName] = valStr;
+          }
         }
       }
       continue;

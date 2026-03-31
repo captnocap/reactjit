@@ -5,5 +5,6 @@ function isPageLaneSource(source) {
 function compilePageLane(source, tokens, file) {
   var c = mkCursor(tokens, source);
   resetCtx();
+  assignSurfaceTier(source, file);
   return compilePage(source, c, file);
 }

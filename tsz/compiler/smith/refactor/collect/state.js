@@ -233,7 +233,7 @@ function collectConstArrays(c) {
   const saved = c.save();
   c.pos = 0;
   while (c.pos < c.count) {
-    if (c.isIdent('const') && c.pos + 3 < c.count) {
+    if ((c.isIdent('const') || c.isIdent('var')) && c.pos + 3 < c.count) {
       c.advance();
       if (c.kind() === TK.identifier) {
         const name = c.text();

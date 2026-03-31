@@ -17,6 +17,7 @@ function emitOutput(rootExpr, file) {
     prefix: prefix,
     hasState: hasState,
     hasDynamicOA: hasDynamicOA,
+    hasRuntimeLog: ctx._needsRuntimeLog === true,
     fastBuild: fastBuild,
     hasScriptRuntime: hasScriptRuntime,
   });

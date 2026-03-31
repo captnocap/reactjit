@@ -33,6 +33,7 @@ function compileAppLane(source, tokens, file) {
   var c = mkCursor(tokens, source);
 
   resetCtx();
+  assignSurfaceTier(source, file);
   collectCompilerInputs(c);
 
   var appStart = findAppStart(c);

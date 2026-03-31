@@ -96,10 +96,28 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 skipPropsAccess(c);
                 continue;
               }
+              // Const OA bracket access: nodes[0] or nodes[0].field
+              var _coaResult = resolveConstOaAccess(c);
+              if (_coaResult) {
+                valParts.push(_coaResult.value);
+                for (var _csk = 1; _csk < _coaResult.skip; _csk++) c.advance();
+                c.advance();
+                continue;
+              }
               if (c.kind() === TK.identifier && ctx.renderLocals[c.text()] !== undefined) {
                 const rlv = ctx.renderLocals[c.text()];
+                // Const OA row ref with .field access
+                if (typeof rlv === 'string' && rlv.charCodeAt(0) === 1 &&
+                    c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+                  var _fv = resolveConstOaFieldFromRef(rlv, c.textAt(c.pos + 2));
+                  if (_fv !== null) {
+                    valParts.push(_fv);
+                    c.advance(); c.advance(); // skip name and dot; field advanced by loop
+                  } else {
+                    valParts.push(rlv);
+                  }
                 // If renderLocal resolves to map itemParam and next is .field, resolve to OA field
-                if (ctx.currentMap && rlv === ctx.currentMap.itemParam &&
+                } else if (ctx.currentMap && rlv === ctx.currentMap.itemParam &&
                     c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
                   c.advance(); // skip name
                   c.advance(); // skip .
@@ -144,7 +162,14 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
             }
             const valStr = valParts.join('');
             if (!valStr.includes('useState')) {
-              ctx.renderLocals[varName] = valStr;
+              // Skip if this variable is a registered const OA
+              var _isConstOa2 = false;
+              for (var _coi2 = 0; _coi2 < ctx.objectArrays.length; _coi2++) {
+                if (ctx.objectArrays[_coi2].getter === varName && ctx.objectArrays[_coi2].isConst) { _isConstOa2 = true; break; }
+              }
+              if (!_isConstOa2) {
+                ctx.renderLocals[varName] = valStr;
+              }
             }
           }
         }

@@ -210,17 +210,28 @@ function tryParseBraceChild(c, children) {
   }
 
   if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-    const rlVal = ctx.renderLocals[c.text()];
+    var _brRlVal = ctx.renderLocals[c.text()];
     c.advance();
+    // Const OA row ref: resolve .field access before closing brace
+    if (typeof _brRlVal === 'string' && _brRlVal.charCodeAt(0) === 1 &&
+        c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+      var _brField = c.textAt(c.pos + 1);
+      var _brResolved = resolveConstOaFieldFromRef(_brRlVal, _brField);
+      if (_brResolved !== null) {
+        _brRlVal = _brResolved;
+        c.advance(); // skip .
+        c.advance(); // skip field
+      }
+    }
     if (c.kind() === TK.rbrace) c.advance();
-    const isZigExpr = rlVal.includes('state.get') || rlVal.includes('getSlot') || rlVal.includes('_oa') || rlVal.includes('@as');
+    const isZigExpr = typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as'));
     if (isZigExpr) {
       const bufId = ctx.dynCount;
-      ctx.dynTexts.push({ bufId, fmtString: '{d}', fmtArgs: leftFoldExpr(rlVal), arrName: '', arrIndex: 0, bufSize: 64 });
+      ctx.dynTexts.push({ bufId, fmtString: '{d}', fmtArgs: leftFoldExpr(_brRlVal), arrName: '', arrIndex: 0, bufSize: 64 });
       ctx.dynCount++;
       children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
     } else {
-      children.push({ nodeExpr: `.{ .text = "${rlVal}" }` });
+      children.push({ nodeExpr: `.{ .text = "${_brRlVal}" }` });
     }
     return true;
   }

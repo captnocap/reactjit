@@ -179,11 +179,32 @@ function parseCanvasNodeAxisAttr(c, nodeFields, zigField) {
     if (numberValue !== null) {
       nodeFields.push(`.${zigField} = ${numberValue}`);
     } else if (c.kind() === TK.identifier) {
-      const valueName = c.text();
-      c.advance();
-      const slotIdx = ctx.stateSlots.findIndex(function(s) { return s.getter === valueName; });
-      if (slotIdx >= 0) {
-        ctx._dynStyles.push({ arrIdx: -1, childIdx: -1, field: zigField, slotIdx, isTernary: false });
+      // Const OA bracket access: nodes[0].field
+      var _canvOa = resolveConstOaAccess(c);
+      if (_canvOa) {
+        nodeFields.push('.' + zigField + ' = ' + _canvOa.value);
+        for (var _cski = 1; _cski < _canvOa.skip; _cski++) c.advance();
+      } else {
+        const valueName = c.text();
+        // Render local with .field (const OA row ref)
+        if (ctx.renderLocals && ctx.renderLocals[valueName] !== undefined &&
+            typeof ctx.renderLocals[valueName] === 'string' && ctx.renderLocals[valueName].charCodeAt(0) === 1 &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          var _cvFld = resolveConstOaFieldFromRef(ctx.renderLocals[valueName], c.textAt(c.pos + 2));
+          if (_cvFld !== null) {
+            nodeFields.push('.' + zigField + ' = ' + _cvFld);
+            c.advance(); c.advance(); // skip name and dot
+          }
+        } else {
+          c.advance();
+          const slotIdx = ctx.stateSlots.findIndex(function(s) { return s.getter === valueName; });
+          if (slotIdx >= 0) {
+            ctx._dynStyles.push({ arrIdx: -1, childIdx: -1, field: zigField, slotIdx, isTernary: false });
+          } else if (ctx.renderLocals && ctx.renderLocals[valueName] !== undefined) {
+            // Plain render local (numeric value)
+            nodeFields.push('.' + zigField + ' = ' + ctx.renderLocals[valueName]);
+          }
+        }
       }
     }
     if (c.kind() === TK.rbrace) c.advance();

@@ -48,6 +48,14 @@ fi
 echo "[$NAME] forge..."
 ./zig-out/bin/forge build --fast "$CART" 2>&1
 
+# Some soup carts currently return split-output markers in a monolith payload
+# instead of a generated directory. Fall back to a single-file forge build so
+# the standard native build path can still link the cart.
+if [ -f "$GEN" ] && grep -q '^__SPLIT_OUTPUT__$' "$GEN" 2>/dev/null; then
+    echo "[$NAME] forge returned split markers in monolith output — retrying with --single..."
+    ./zig-out/bin/forge build --fast --single "$CART" 2>&1
+fi
+
 # If split output, concat all files for lint (grep needs a single target)
 SPLIT_LINT=0
 if [ -d "$GEN_DIR" ] && [ ! -f "$GEN" ]; then

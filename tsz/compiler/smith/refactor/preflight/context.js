@@ -15,7 +15,8 @@ function derivePreflightIntents(ctx) {
   };
 }
 
-function detectPreflightLane(intents) {
+function detectPreflightLane(ctx, intents) {
+  if (ctx && ctx._sourceTier) return ctx._sourceTier;
   var lane = 'chad';
   if (intents.has_script_block) lane = 'soup';
   else if (intents.has_dynTexts || intents.has_dynColors || intents.has_dynStyles) lane = 'mixed';
@@ -43,7 +44,7 @@ function buildPreflightScanState(ctx, intents) {
 
   return {
     intents: intents,
-    lane: detectPreflightLane(intents),
+    lane: detectPreflightLane(ctx, intents),
     allDecls: allDecls,
     allComments: allComments,
     handlerNameSet: handlerNameSet,

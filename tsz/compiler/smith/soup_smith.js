@@ -550,6 +550,25 @@ function soupFindTopLevelChar(expr, target) {
   return -1;
 }
 
+function soupPushJsDynText(jsExpr, inPressable) {
+  var slotIdx = ctx.stateSlots.length;
+  ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
+
+  var bufId = ctx.dynCount++;
+  ctx.dynTexts.push({
+    bufId: bufId,
+    fmtString: '{s}',
+    fmtArgs: 'state.getSlotString(' + slotIdx + ')',
+    arrName: '',
+    arrIndex: 0,
+    bufSize: 256,
+  });
+  ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: jsExpr.replace(/\bexact\b/g, '===') });
+
+  var tc = inPressable ? _SC.textWhite : _SC.textP;
+  return { str: '.{ .text = "", .text_color = Color.rgb(' + tc + ') }', dynBufId: bufId };
+}
+
 // ── Expression → Zig ──────────────────────────────────────────────────────────
 
 function soupExprToZig(expr, warns, inPressable) {
@@ -648,13 +667,18 @@ function soupExprToZig(expr, warns, inPressable) {
       // String ternary: {cond ? "text" : "other"} → static text
       var strMatch = afterQ.match(/^["']([^"']*)["']/);
       if (strMatch) {
-        var esc = strMatch[1].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        var tc = inPressable ? _SC.textWhite : _SC.textP;
-        return { str: '.{ .text = "' + esc + '", .text_color = Color.rgb(' + tc + ') }', dynBufId: -1 };
+        return soupPushJsDynText(expr, inPressable);
       }
     }
     // No top-level ? found — the ? is nested (e.g. inside className={}).
     // Fall through to other checks (.map(), etc.)
+  }
+
+  if (expr.indexOf('&&') >= 0 || expr.indexOf('||') >= 0 ||
+      expr.indexOf('===') >= 0 || expr.indexOf('!==') >= 0 ||
+      expr.indexOf('==') >= 0 || expr.indexOf('!=') >= 0 ||
+      expr.indexOf('>') >= 0 || expr.indexOf('<') >= 0) {
+    return soupPushJsDynText(expr, inPressable);
   }
 
   // .map() — checked AFTER && and ? so conditional wrappers are handled first
@@ -709,6 +733,7 @@ function compileSoup(source, file) {
   _sInlineHandlers = [];
 
   resetCtx();
+  assignSurfaceTier(source, file);
 
   // Phase 1: State
   soupParseState(source, warns);
@@ -760,7 +785,7 @@ function compileSoup(source, file) {
 
   // Phase 8: Preflight bypass
   ctx._preflight = {
-    ok: true, lane: 'soup_web', warnings: warns, errors: [],
+    ok: true, lane: ctx._sourceTier || 'soup', warnings: warns, errors: [],
     intents: {
       has_state: ctx.stateSlots.length > 0,
       has_script_block: !!ctx.scriptBlock,

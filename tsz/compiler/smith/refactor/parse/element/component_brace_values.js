@@ -90,6 +90,15 @@ function parseComponentBraceValue(c) {
       continue;
     }
 
+    // Const OA bracket access: nodes[0] or nodes[0].field
+    var _coaR = (c.kind() === TK.identifier) ? resolveConstOaAccess(c) : null;
+    if (_coaR) {
+      val += _coaR.value;
+      for (var _ski = 1; _ski < _coaR.skip; _ski++) c.advance();
+      c.advance();
+      continue;
+    }
+
     if (c.kind() === TK.template_literal) {
       const resolvedTemplate = resolveComponentTemplateLiteralValue(c);
       if (resolvedTemplate !== null) {
@@ -100,7 +109,20 @@ function parseComponentBraceValue(c) {
     } else if (c.kind() === TK.identifier && isGetter(c.text())) {
       val += slotGet(c.text());
     } else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-      val += ctx.renderLocals[c.text()];
+      var _rlv = ctx.renderLocals[c.text()];
+      // Const OA row ref with .field access
+      if (typeof _rlv === 'string' && _rlv.charCodeAt(0) === 1 &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        var _fld = resolveConstOaFieldFromRef(_rlv, c.textAt(c.pos + 2));
+        if (_fld !== null) {
+          val += _fld;
+          c.advance(); c.advance(); // skip name and dot; field advanced below
+        } else {
+          val += _rlv;
+        }
+      } else {
+        val += _rlv;
+      }
     } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) {
       val += '@as(i64, @intCast(_i))';
     } else {
