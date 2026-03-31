@@ -5,6 +5,7 @@
 var profiles = {};
 
 profiles.tom = {
+  id: 'tom',
   name: 'Tom', age: 32, loc: 'Los Angeles, California',
   lastLogin: '3/28/2006', online: 1, mood: 'chipper',
   about: "Hey, I am Tom! Founder of MySpace. Thanks for joining. Let me know if you need anything!",
@@ -28,10 +29,15 @@ profiles.tom = {
     { from: 'brittney', text: 'Thanks for the add Tom!! Love ur profile!! xoxo', time: '3/27 11:42pm' },
     { from: 'djphresh', text: 'yo tom check out my new beats bro, link on my page', time: '3/27 8:15pm' },
     { from: 'xravenwing', text: '...thanks i guess', time: '3/26 6:33pm' }
+  ],
+  blogPosts: [
+    { title: 'Welcome to MySpace!', date: '3/15/2006', excerpt: 'Just wanted to say thanks to everyone...' },
+    { title: 'New Features Coming Soon', date: '3/10/2006', excerpt: 'We are working on some amazing new stuff...' }
   ]
 };
 
 profiles.xravenwing = {
+  id: 'xravenwing',
   name: 'xX_RavenWing_Xx', age: 19, loc: 'Portland, Oregon',
   lastLogin: '3/28/2006', online: 1, mood: 'contemplative',
   about: "I walk alone through the corridors of my mind. Currently listening to MCR on repeat. Dont talk to me unless youre real.",
@@ -54,10 +60,14 @@ profiles.xravenwing = {
   comments: [
     { from: 'brittney', text: 'ur profile is SO cool omg i love the dark colors!! rawr XD', time: '3/28 1:20am' },
     { from: 'tom', text: 'Welcome to MySpace! Love the profile customization. Rock on!', time: '3/25 4:00pm' }
+  ],
+  blogPosts: [
+    { title: 'My Dark Soul', date: '3/20/2006', excerpt: 'Another poem about the void...' }
   ]
 };
 
 profiles.brittney = {
+  id: 'brittney',
   name: '~*BrItTnEy*~', age: 17, loc: 'Tampa, Florida',
   lastLogin: '3/28/2006', online: 0, mood: 'excited!!',
   about: "hiii!! im brittney!! i love my friends SO much!! PC4PC?? add me i add back!! rawr XD!! LYLAS",
@@ -81,10 +91,15 @@ profiles.brittney = {
     { from: 'xravenwing', text: 'your profile is aggressively pink', time: '3/27 9:45pm' },
     { from: 'tom', text: 'Thanks for being on MySpace, Brittney! Have fun!', time: '3/24 2:30pm' },
     { from: 'djphresh', text: 'heyyy check out my music page, new beats up', time: '3/26 5:12pm' }
+  ],
+  blogPosts: [
+    { title: 'OMG Weekend!!!', date: '3/25/2006', excerpt: 'So much fun at the mall with my girls!!!' },
+    { title: 'New Pics Up!!', date: '3/22/2006', excerpt: 'PC4PC everyone!! Comment my pics!!' }
   ]
 };
 
 profiles.djphresh = {
+  id: 'djphresh',
   name: 'DJ PhreshBeatz', age: 22, loc: 'Miami, Florida',
   lastLogin: '3/28/2006', online: 1, mood: 'productive',
   about: "OFFICIAL DJ PhreshBeatz. New mixtape FRIDAY. 50k plays. South Beach every Saturday. VIP - hit me up.",
@@ -107,14 +122,83 @@ profiles.djphresh = {
   comments: [
     { from: 'brittney', text: 'omg ur music is SO good!! play at my bday party??', time: '3/28 2:00am' },
     { from: 'tom', text: 'Keep making great music, man! MySpace loves DJs.', time: '3/26 11:00am' }
+  ],
+  blogPosts: [
+    { title: 'New Mixtape Dropping Friday', date: '3/27/2006', excerpt: '50k plays already! Get ready...' }
   ]
 };
+
+// === Router ===
+
+var routes = {
+  HOME: 'home',
+  BROWSE: 'browse',
+  SEARCH: 'search',
+  INVITE: 'invite',
+  MAIL: 'mail',
+  BLOG: 'blog',
+  FAVORITES: 'favorites',
+  FORUM: 'forum',
+  GROUPS: 'groups',
+  MUSIC: 'music',
+  PROFILE: 'profile'
+};
+
+function navigateTo(route, params) {
+  setCurrentRoute(route);
+  if (params && params.userId) {
+    viewProfile(params.userId);
+  }
+}
+
+function goHome() {
+  navigateTo(routes.HOME);
+}
+
+function goBrowse() {
+  navigateTo(routes.BROWSE);
+}
+
+function goSearch() {
+  navigateTo(routes.SEARCH);
+}
+
+function goInvite() {
+  navigateTo(routes.INVITE);
+}
+
+function goMail() {
+  navigateTo(routes.MAIL);
+}
+
+function goBlog() {
+  navigateTo(routes.BLOG);
+}
+
+function goFavorites() {
+  navigateTo(routes.FAVORITES);
+}
+
+function goForum() {
+  navigateTo(routes.FORUM);
+}
+
+function goGroups() {
+  navigateTo(routes.GROUPS);
+}
+
+function goMusic() {
+  navigateTo(routes.MUSIC);
+}
 
 // === Navigation ===
 
 function viewProfile(id) {
   var p = profiles[id];
   if (!p) return;
+
+  setCurrentRoute(routes.PROFILE);
+  setCurrentUserId(id);
 
   setPName(p.name);
   setPAge(p.age);
@@ -188,6 +272,106 @@ function viewProfile(id) {
     j = j + 1;
   }
   setComments(cm);
+
+  // Build blog posts
+  var bp = [];
+  var k = 0;
+  while (p.blogPosts.length > k) {
+    var post = p.blogPosts[k];
+    bp.push({ title: post.title, date: post.date, excerpt: post.excerpt, author: p.name });
+    k = k + 1;
+  }
+  setUserBlogPosts(bp);
+}
+
+// === Mock Data for Pages ===
+
+function getAllUsers() {
+  var all = [];
+  var keys = Object.keys(profiles);
+  var i = 0;
+  while (keys.length > i) {
+    var k = keys[i];
+    var p = profiles[k];
+    all.push({
+      id: k,
+      name: p.name,
+      age: p.age,
+      loc: p.loc,
+      avLetter: p.avLetter,
+      avBg: p.avBg,
+      online: p.online,
+      mood: p.mood
+    });
+    i = i + 1;
+  }
+  return all;
+}
+
+function getAllBlogPosts() {
+  var all = [];
+  var keys = Object.keys(profiles);
+  var i = 0;
+  while (keys.length > i) {
+    var k = keys[i];
+    var p = profiles[k];
+    var j = 0;
+    while (p.blogPosts.length > j) {
+      var post = p.blogPosts[j];
+      all.push({
+        title: post.title,
+        date: post.date,
+        excerpt: post.excerpt,
+        author: p.name,
+        authorId: k,
+        avLetter: p.avLetter,
+        avBg: p.avBg
+      });
+      j = j + 1;
+    }
+    i = i + 1;
+  }
+  return all;
+}
+
+function getMockGroups() {
+  return [
+    { name: 'Music Lovers', members: 15420, category: 'Music' },
+    { name: 'Photography', members: 8932, category: 'Hobbies' },
+    { name: 'Los Angeles', members: 42153, category: 'Regional' },
+    { name: 'Single & Looking', members: 67891, category: 'Dating' },
+    { name: 'Gaming', members: 34521, category: 'Entertainment' },
+    { name: 'Film Buffs', members: 12340, category: 'Movies' }
+  ];
+}
+
+function getMockForums() {
+  return [
+    { name: 'General Discussion', topics: 4521, posts: 89234 },
+    { name: 'Music Talk', topics: 8921, posts: 156789 },
+    { name: 'Dating & Relationships', topics: 12345, posts: 234567 },
+    { name: 'Tech Support', topics: 3210, posts: 45678 },
+    { name: 'Creative Corner', topics: 5678, posts: 89012 }
+  ];
+}
+
+function getMockSongs() {
+  return [
+    { title: 'The Reason', artist: 'Hoobastank', plays: 1234567 },
+    { title: 'Helena', artist: 'My Chemical Romance', plays: 2345678 },
+    { title: 'Here (In Your Arms)', artist: 'Hellogoodbye', plays: 987654 },
+    { title: 'Stronger', artist: 'Kanye West', plays: 3456789 },
+    { title: 'Sugar We\'re Goin Down', artist: 'Fall Out Boy', plays: 4567890 },
+    { title: 'I Write Sins Not Tragedies', artist: 'Panic! At The Disco', plays: 5678901 }
+  ];
+}
+
+function getMockMail() {
+  return [
+    { from: 'brittney', subject: 'RE: PC4PC??', preview: 'omg yes!! lets do pic comments!!', time: '2:30pm', unread: 1 },
+    { from: 'djphresh', subject: 'New beats', preview: 'Check out my new mixtape bro', time: 'Yesterday', unread: 1 },
+    { from: 'MySpace Team', subject: 'Welcome to MySpace!', preview: 'Thanks for joining the largest...', time: '3/25', unread: 0 }
+  ];
 }
 
 // Load Tom's profile on startup — everyone's first friend

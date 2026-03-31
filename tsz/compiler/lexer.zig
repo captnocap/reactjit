@@ -350,12 +350,9 @@ pub const Lexer = struct {
                 self.emit(.caret_eq, start, start + 2);
                 continue;
             }
-            // >> (must check before >=)
-            if (ch == '>' and self.peekAt(1) == '>') {
-                self.pos += 2;
-                self.emit(.shift_right, start, start + 2);
-                continue;
-            }
+            // >> — do NOT emit shift_right; in JSX, >></ is tag-close + text-content + close-tag.
+            // Emitting two separate .gt tokens lets the parser handle >></Text> correctly.
+            // (shift_right token kind kept in enum for compatibility but never emitted)
             // >= (must check before single >)
             if (ch == '>' and self.peekAt(1) == '=') {
                 self.pos += 2;

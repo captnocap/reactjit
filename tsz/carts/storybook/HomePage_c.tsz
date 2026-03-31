@@ -22,6 +22,8 @@ import { TabsTile } from './tiles/TabsTile_c';
 import { StateTile } from './tiles/StateTile_c';
 import { GameTile } from './tiles/GameTile_c';
 import { ColorMixTile } from './tiles/ColorMixTile_c';
+import { DataTableTile } from './tiles/DataTableTile_c';
+import { SplitPaneTile } from './tiles/SplitPaneTile_c';
 
 <script>
 function hopToTile(idx) {
@@ -35,10 +37,39 @@ const [hpTogB, setHpTogB] = useState(0);
 
 function HomePage() {
   return (
-      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={1.0}>
+      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={150} viewZoom={0.55}>
 
-        {/* STATIC — should work as canvas_node */}
-        <Canvas.Node gx={-200} gy={-100} gw={260} gh={200}>
+        {/* Row 1: gy=-440 */}
+        <Canvas.Node gx={-560} gy={-440} gw={260} gh={200}>
+          <TerminalTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-840} gy={-440} gw={260} gh={200}>
+          <DataTableTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-280} gy={-440} gw={260} gh={200}>
+          <CanvasTile />
+        </Canvas.Node>
+        <Canvas.Node gx={0} gy={-440} gw={260} gh={200}>
+          <Transitions />
+        </Canvas.Node>
+        <Canvas.Node gx={280} gy={-440} gw={260} gh={200}>
+          <PhysicsTile />
+        </Canvas.Node>
+        <Canvas.Node gx={560} gy={-440} gw={260} gh={200}>
+          <ThreeDTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-280} gy={-440} gw={260} gh={200}>
+          <SplitPaneTile />
+        </Canvas.Node>
+
+        {/* Row 2: gy=-220 */}
+        <Canvas.Node gx={-840} gy={-220} gw={260} gh={200}>
+          <TodoTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-560} gy={-220} gw={260} gh={200}>
+          <ClockTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-280} gy={-220} gw={260} gh={200}>
           <Box style={{ backgroundColor: '#282a36', borderWidth: 1, borderColor: '#44475a', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
             <Text fontSize={11} color="#bd93f9">Static Tile (no state)</Text>
             <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
@@ -47,85 +78,62 @@ function HomePage() {
             </Box>
           </Box>
         </Canvas.Node>
-
-        {/* DYNAMIC — has state-driven styles, suspect canvas_node breaks */}
-        <Canvas.Node gx={200} gy={-100} gw={260} gh={200}>
-          <ChartsTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={0} gy={200} gw={260} gh={200}>
-          <ThreeDScene />
-        </Canvas.Node>
-
-        <Canvas.Node gx={-400} gy={200} gw={260} gh={200}>
-          <ScrollDemo />
-        </Canvas.Node>
-
-        <Canvas.Node gx={400} gy={200} gw={260} gh={200}>
-          <Hyperlinks />
-        </Canvas.Node>
-
-        <Canvas.Node gx={-200} gy={400} gw={260} gh={200}>
-          <OpacityDemo />
-        </Canvas.Node>
-
-        <Canvas.Node gx={200} gy={400} gw={260} gh={200}>
-          <TextAreaDemo />
-        </Canvas.Node>
-
-        <Canvas.Node gx={-400} gy={400} gw={260} gh={200}>
-          <AnimationTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={0} gy={-100} gw={260} gh={200}>
+        <Canvas.Node gx={0} gy={-220} gw={260} gh={200}>
           <CounterTile />
         </Canvas.Node>
-
-        <Canvas.Node gx={-400} gy={-100} gw={260} gh={200}>
-          <ClockTile />
+        <Canvas.Node gx={280} gy={-220} gw={260} gh={200}>
+          <ChartsTile />
         </Canvas.Node>
-
-        <Canvas.Node gx={400} gy={-100} gw={260} gh={200}>
+        <Canvas.Node gx={560} gy={-220} gw={260} gh={200}>
           <TypographyTile />
         </Canvas.Node>
-
-        <Canvas.Node gx={0} gy={400} gw={260} gh={200}>
-          <ColorPaletteTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={-200} gy={200} gw={260} gh={200}>
-          <StopwatchTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={200} gy={200} gw={260} gh={200}>
-          <StateTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={-600} gy={-100} gw={260} gh={200}>
-          <TodoTile />
-        </Canvas.Node>
-
-        <Canvas.Node gx={600} gy={-100} gw={260} gh={200}>
+        <Canvas.Node gx={840} gy={-220} gw={260} gh={200}>
           <TabsTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-600} gy={200} gw={260} gh={200}>
+        {/* Row 3: gy=0 */}
+        <Canvas.Node gx={-840} gy={0} gw={260} gh={200}>
           <GameTile />
         </Canvas.Node>
-
-        <Canvas.Node gx={600} gy={200} gw={260} gh={200}>
+        <Canvas.Node gx={-560} gy={0} gw={260} gh={200}>
+          <ScrollDemo />
+        </Canvas.Node>
+        <Canvas.Node gx={-280} gy={0} gw={260} gh={200}>
+          <StopwatchTile />
+        </Canvas.Node>
+        <Canvas.Node gx={0} gy={0} gw={260} gh={200}>
+          <ThreeDScene />
+        </Canvas.Node>
+        <Canvas.Node gx={280} gy={0} gw={260} gh={200}>
+          <StateTile />
+        </Canvas.Node>
+        <Canvas.Node gx={560} gy={0} gw={260} gh={200}>
+          <Hyperlinks />
+        </Canvas.Node>
+        <Canvas.Node gx={840} gy={0} gw={260} gh={200}>
           <ColorMixTile />
         </Canvas.Node>
 
-        <Canvas.Node gx={-600} gy={400} gw={260} gh={200}>
+        {/* Row 4: gy=220 */}
+        <Canvas.Node gx={-560} gy={220} gw={260} gh={200}>
+          <AnimationTile />
+        </Canvas.Node>
+        <Canvas.Node gx={-280} gy={220} gw={260} gh={200}>
+          <OpacityDemo />
+        </Canvas.Node>
+        <Canvas.Node gx={0} gy={220} gw={260} gh={200}>
+          <ColorPaletteTile />
+        </Canvas.Node>
+        <Canvas.Node gx={280} gy={220} gw={260} gh={200}>
+          <TextAreaDemo />
+        </Canvas.Node>
+        <Canvas.Node gx={560} gy={220} gw={260} gh={200}>
           <FormTile />
         </Canvas.Node>
-
-        <Canvas.Node gx={600} gy={400} gw={260} gh={200}>
+        <Canvas.Node gx={-840} gy={220} gw={260} gh={200}>
           <NetworkTile />
         </Canvas.Node>
 
       </Canvas>
   );
 }
-

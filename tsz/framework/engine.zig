@@ -727,9 +727,14 @@ fn paintNode(node: *Node) void {
         const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
         const cx = r.x + r.w / 2;
         const cy = r.y + r.h / 2;
+        const saved_tf = gpu.getTransform();
         gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz);
         for (node.children) |*child| paintNode(child);
-        gpu.resetTransform();
+        if (saved_tf.active) {
+            gpu.setTransform(saved_tf.ox, saved_tf.oy, saved_tf.tx, saved_tf.ty, saved_tf.scale);
+        } else {
+            gpu.resetTransform();
+        }
         gpu.popScissor();
         return;
     }

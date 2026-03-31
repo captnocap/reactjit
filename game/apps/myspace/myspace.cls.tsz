@@ -19,6 +19,7 @@ classifier({
   NavSep: { type: 'Text', fontSize: 10, color: '#336699' },
   NavLink: { type: 'Pressable', style: { paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 } },
   NavLinkText: { type: 'Text', fontSize: 10, color: '#99ccff' },
+  NavLinkActive: { type: 'Text', fontSize: 10, color: '#ffffff', fontWeight: 'bold' },
   NavRight: { type: 'Box', style: { flexGrow: 1, flexDirection: 'row', justifyContent: 'flexEnd', alignItems: 'center', gap: 4 } },
   NavSearchBox: { type: 'Box', style: { backgroundColor: '#ffffff', borderRadius: 2, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 } },
   NavSearchText: { type: 'Text', fontSize: 9, color: '#999999' },
@@ -39,6 +40,12 @@ classifier({
     }
   },
   RightCol: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 8 } },
+
+  // === Page Container ===
+  PageContainer: { type: 'Box', style: { flexGrow: 1, flexDirection: 'column', backgroundColor: '#ffffff' } },
+  PageContent: { type: 'Box', style: { padding: 16, gap: 12, flexDirection: 'column' } },
+  PageTitle: { type: 'Text', fontSize: 20, color: '#003399', fontWeight: 'bold' },
+  PageSubtitle: { type: 'Text', fontSize: 12, color: '#666666' },
 
   // === Section panel ===
   Section: {
@@ -225,4 +232,71 @@ classifier({
   // === Footer ===
   Footer: { type: 'Box', style: { flexDirection: 'row', justifyContent: 'center', paddingTop: 12, paddingBottom: 16, gap: 8 } },
   FooterText: { type: 'Text', fontSize: 8, color: '#999999' },
+
+  // === Browse Page Components ===
+  UserList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  UserListItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8, borderBottomWidth: 1, borderColor: '#e0e0e0' } },
+  UserListAvatar: { type: 'Box', style: { width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', alignItems: 'center', justifyContent: 'center' } },
+  UserListInfo: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 2 } },
+  UserListName: { type: 'Text', fontSize: 12, color: '#003399' },
+  UserListMeta: { type: 'Text', fontSize: 10, color: '#666666' },
+  UserStatus: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
+
+  // === Search Page Components ===
+  SearchBox: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 4 } },
+  SearchInput: { type: 'Box', style: { flexGrow: 1, height: 32, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8 } },
+  SearchButton: { type: 'Pressable', style: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#003399', borderRadius: 4 } },
+  SearchButtonText: { type: 'Text', fontSize: 11, color: '#ffffff' },
+
+  // === Mail Page Components ===
+  MailList: { type: 'Box', style: { flexDirection: 'column' } },
+  MailItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderBottomWidth: 1, borderColor: '#e0e0e0' } },
+  MailUnread: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff0000' } },
+  MailRead: { type: 'Box', style: { width: 8, height: 8 } },
+  MailSender: { type: 'Text', fontSize: 11, color: '#003399', fontWeight: 'bold' },
+  MailSubject: { type: 'Text', fontSize: 11, color: '#333333' },
+  MailPreview: { type: 'Text', fontSize: 10, color: '#666666' },
+  MailTime: { type: 'Text', fontSize: 9, color: '#999999' },
+
+  // === Blog Page Components ===
+  BlogList: { type: 'Box', style: { flexDirection: 'column', gap: 12 } },
+  BlogPost: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 12, backgroundColor: '#f8f8f8', borderRadius: 4 } },
+  BlogPostTitle: { type: 'Text', fontSize: 14, color: '#003399', fontWeight: 'bold' } },
+  BlogPostMeta: { type: 'Text', fontSize: 9, color: '#666666' } },
+  BlogPostExcerpt: { type: 'Text', fontSize: 11, color: '#333333' } },
+
+  // === Groups/Forum Components ===
+  CategoryList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  CategoryItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'spaceBetween', padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 } },
+  CategoryName: { type: 'Text', fontSize: 12, color: '#003399' },
+  CategoryStats: { type: 'Text', fontSize: 10, color: '#666666' },
+
+  // === Music Page Components ===
+  SongList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  SongItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: '#f5f5f5', borderRadius: 4 } },
+  SongNumber: { type: 'Text', fontSize: 11, color: '#999999', width: 24 } },
+  SongInfo: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 2 } },
+  SongTitle: { type: 'Text', fontSize: 12, color: '#333333' } },
+  SongArtist: { type: 'Text', fontSize: 10, color: '#666666' } },
+  SongPlays: { type: 'Text', fontSize: 10, color: '#999999' } },
+  PlayButton: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#00cc00', borderRadius: 4 } },
+  PlayButtonText: { type: 'Text', fontSize: 10, color: '#ffffff' } },
+
+  // === Favorites Page Components ===
+  FavGrid: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 } },
+  FavItem: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', gap: 4, width: 80 } },
+  FavAvatar: { type: 'Box', style: { width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', alignItems: 'center', justifyContent: 'center' } },
+  FavName: { type: 'Text', fontSize: 10, color: '#003399' } },
+
+  // === Invite Page Components ===
+  InviteForm: { type: 'Box', style: { flexDirection: 'column', gap: 12, maxWidth: 400 } },
+  InviteInput: { type: 'Box', style: { height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8 } },
+  InviteTextArea: { type: 'Box', style: { height: 80, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8, paddingTop: 8 } },
+  InviteLabel: { type: 'Text', fontSize: 11, color: '#333333', fontWeight: 'bold' } },
+  InviteButton: { type: 'Pressable', style: { paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, backgroundColor: '#003399', borderRadius: 4, alignSelf: 'flexStart' } },
+  InviteButtonText: { type: 'Text', fontSize: 12, color: '#ffffff' } },
+
+  // === Empty State ===
+  EmptyState: { type: 'Box', style: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 } },
+  EmptyStateText: { type: 'Text', fontSize: 14, color: '#999999' } },
 })

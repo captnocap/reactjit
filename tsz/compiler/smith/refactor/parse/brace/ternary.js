@@ -75,10 +75,19 @@ function _parseTernaryCondParts(c) {
       c.advance();
       continue;
     }
+    // props.X dot-access in ternary condition
+    var pa = peekPropsAccess(c);
+    if (pa) {
+      skipPropsAccess(c);
+      condParts.push(_condPropValue(pa.value));
+      continue;
+    }
     if (c.kind() === TK.identifier) {
       var name = c.text();
       if (isGetter(name)) {
         condParts.push(slotGet(name));
+      } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+        condParts.push(ctx.renderLocals[name]);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         var pv = ctx.propStack[name];
         condParts.push(_condPropValue(pv));

@@ -112,6 +112,60 @@ pub fn drawRect(
     g_rect_count += 1;
 }
 
+/// Queue a rectangle with per-corner border radii.
+pub fn drawRectCorners(
+    x: f32, y: f32, w: f32, h: f32,
+    r: f32, g: f32, b: f32, a: f32,
+    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    border_width: f32,
+    br: f32, bg: f32, bb: f32, ba: f32,
+) void {
+    if (g_rect_count >= MAX_RECTS) return;
+    const transform = core.getTransform();
+    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
+    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
+    const tw = if (transform.active) w * transform.scale else w;
+    const th = if (transform.active) h * transform.scale else h;
+    g_rects[g_rect_count] = .{
+        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
+        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
+        .radius_tl = rtl, .radius_tr = rtr,
+        .radius_br = rbr, .radius_bl = rbl,
+        .border_width = border_width,
+    };
+    g_rect_count += 1;
+}
+
+/// Queue a rectangle with per-corner radii and per-node transform (rotation/scale).
+pub fn drawRectCornersTransformed(
+    x: f32, y: f32, w: f32, h: f32,
+    r: f32, g: f32, b: f32, a: f32,
+    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    border_width: f32,
+    br: f32, bg: f32, bb: f32, ba: f32,
+    rotation_deg: f32, sx: f32, sy: f32,
+) void {
+    if (g_rect_count >= MAX_RECTS) return;
+    const transform = core.getTransform();
+    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
+    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
+    const tw = if (transform.active) w * transform.scale else w;
+    const th = if (transform.active) h * transform.scale else h;
+    g_rects[g_rect_count] = .{
+        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
+        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
+        .radius_tl = rtl, .radius_tr = rtr,
+        .radius_br = rbr, .radius_bl = rbl,
+        .border_width = border_width,
+        .rotation = rotation_deg,
+        .scale_x = sx,
+        .scale_y = sy,
+    };
+    g_rect_count += 1;
+}
+
 /// Queue a rectangle with per-node transform (rotation/scale).
 pub fn drawRectTransformed(
     x: f32, y: f32, w: f32, h: f32,

@@ -15,7 +15,7 @@ Reference for understanding the Smith compiler. Read this before touching any `.
      6. Call compile(), get back complete .zig source string
      7. Write output file(s)
 
-  -> Smith (8076 lines JS across 11 files, embedded in forge at compile time)
+  -> Smith (~9600 lines JS across 12 files, embedded in forge at compile time)
      Runs inside QuickJS. No print() -- debug via globalThis.__dbg.
      Token data arrives as parallel kind/start/end arrays matching lexer.zig's TokenKind enum.
 ```
@@ -27,7 +27,7 @@ Reference for understanding the Smith compiler. Read this before touching any `.
 Forge concatenates JS files in this order (forge.zig:18-28):
 
 ```
-rules.js -> logs.js -> index.js -> mod.js -> attrs.js -> parse_map.js -> parse.js -> preflight.js -> emit_split.js -> emit.js -> soup_smith.js
+rules.js -> logs.js -> index.js -> mod.js -> page.js -> attrs.js -> parse_map.js -> parse.js -> preflight.js -> emit_split.js -> emit.js -> soup_smith.js
 ```
 
 All functions are in global scope (no modules). Later files call functions from earlier files freely.
@@ -38,27 +38,29 @@ All functions are in global scope (no modules). Later files call functions from 
 |------|-------|---------|
 | rules.js | 102 | Constants: TK enum, style/color/enum key maps, HTML tag map, soup constants |
 | logs.js | 116 | LOG dictionary (63 entries), LOG_EMIT(), print() shim |
-| index.js | ~1071 | Core: token cursor, ctx state, collection phases, compile() entry, --mod transpilers |
-| mod.js | ~932 | Block-based module compiler: `<module>` with `<types>/<ffi>/<state>/<functions>` |
-| attrs.js | ~730 | Color/style/handler parsing, slot get/set helpers |
-| parse_map.js | ~724 | .map() parser, nested maps, template literals, conditionals |
-| parse.js | 1207 | JSX parser: elements, components, children, text nodes, buildNode |
-| preflight.js | 288 | Post-parse validation: 10 fatal checks, 4 warnings, lane detection |
-| emit_split.js | 669 | Effect transpiler, split output, JS_LOGIC/LUA_LOGIC generation, luaTransform/jsTransform |
-| emit.js | ~1588 | Zig code emitter: imports, nodes, OA infra, map pools, lifecycle, exports, main |
-| soup_smith.js | 775 | Separate compiler lane for web React "soup" sources (own tokenizer + tree builder) |
+| index.js | ~1111 | Core: token cursor, ctx state, collection phases, compile() entry, --mod transpilers |
+| mod.js | ~933 | Block-based module compiler: `<module>` with `<types>/<ffi>/<state>/<functions>` |
+| page.js | ~527 | Page block compiler: `<page route=name>` with `<var>/<state>/<functions>/<timer>` blocks |
+| attrs.js | ~762 | Color/style/handler parsing, slot get/set helpers |
+| parse_map.js | ~820 | .map() parser, nested maps, template literals, conditionals |
+| parse.js | ~1440 | JSX parser: elements, components, children, text nodes, buildNode |
+| preflight.js | ~420 | Post-parse validation: 11+ fatal checks, 4 warnings, lane detection |
+| emit_split.js | ~710 | Effect transpiler, split output, JS_LOGIC/LUA_LOGIC generation, luaTransform/jsTransform |
+| emit.js | ~1670 | Zig code emitter: imports, nodes, OA infra, map pools, lifecycle, exports, main |
+| soup_smith.js | ~776 | Separate compiler lane for web React "soup" sources (own tokenizer + tree builder) |
 
 ---
 
 ## Compilation Pipeline
 
-### Entry: `compile()` (index.js:605)
+### Entry: `compile()` (index.js:639)
 
 ```
 1. Detect soup source -> compileSoup() [separate lane, exits early]
 2. Detect --mod build -> compileMod() / compileModBlock() [separate lane, exits early]
 3. Build token cursor: mkCursor()
 4. Reset ctx: resetCtx()
+4b. Detect <page route=...> -> compilePage() [separate lane, exits early]
 5. COLLECT phase:
    a. collectScript(c)       -- extract <script> blocks, record function names
    b. collectComponents(c)   -- find function Name({props}), record bodyPos + per-component useState
@@ -268,6 +270,27 @@ ctx._preflight: {ok, errors, warnings, lane, intents}
 
 ctx._debugLines: [string]
   Debug output emitted as Zig comments at end of generated file.
+
+ctx._unresolvedClassifiers: [{name, line}]
+  C.Name used in JSX but no classifier definition found. Preflight F11 check.
+
+ctx._droppedExpressions: [{expr, line}]
+  {expr} in parseChildren that didn't match any handler. Silent skip tracked here.
+
+ctx._unknownSubsystemTags: [{tag, line}]
+  Physics.*/3D.*/Effect/Scene3D tags with no runtime support.
+
+ctx._ignoredModuleBlocks: [{name}]
+  <module name> blocks in page source. page.js tracks these; not processed by page compiler.
+
+ctx._undefinedJSCalls: [{caller, callee}]
+  JS function calls in JS_LOGIC to functions not defined anywhere. Validated by page.js buildPageJSLogic().
+
+ctx._duplicateJSVars: [{name}]
+  var declared more than once in JS_LOGIC. Validated by page.js buildPageJSLogic().
+
+ctx._jsDynTexts: [{slotIdx, jsExpr}]
+  JS-evaluated dynamic text expressions. page.js appends __evalDynTexts() + setInterval(16ms) to scriptBlock.
 ```
 
 ---
@@ -328,6 +351,17 @@ No functions. Constants only: `TK`, `styleKeys`, `colorKeys`, `enumKeys`, `htmlT
 - `inferTypeFromValue(val)` -- Infer Zig type from value literal.
 - `transpileStructLiteral(inner)` -- `{field: val}` -> `.{.field = val}`.
 - `emitMapFunction(fname, zigParams, zigRet, bodyText, typeNames)` -- `return arr.map(...)` -> Zig for loop with result array.
+
+### page.js -- Page Block Compiler
+- `extractPageBlock(source, tag)` -- Extract content of a single `<tag>...</tag>` block (source-level regex). Returns empty string if absent.
+- `extractPageBlocks(source, tag)` -- Extract all blocks of a given tag. Returns `[{attrs, body}]`.
+- `parsePageVarBlock(block)` -- Parse `<var>` block. Each line: `name is value` or bare `name`. Classifies types: ambient reads (`sys.*`, `time.*`, `device.*`, `locale.*`, `privacy.*`, `input.*`), string literals, booleans, int/float, object_array (starts with `[`), expression (fallback). Multi-line values tracked via bracket depth. Returns `[{name, type, initial?, ambient?, namespace?, field?}]`.
+- `parsePageStateBlock(block)` -- Parse `<state>` block. Returns list of setter names for validation.
+- `parsePageFunctionsBlock(block)` -- Parse `<functions>` block. `name:` or `name(params):` headers collect indented body lines. Returns `[{name, params, bodyLines}]`.
+- `transpilePageExpr(expr)` -- Page expression transpiler: `exact` → `===`.
+- `transpilePageLine(line, setterNames)` -- Single page function body line transpiler. Guards: `expr ? stop : go` → `if (...) return;`, `expr ? go : stop` → `if (!(...)) return;`. Setters: `set_X to expr` → `set_X(expr);`. Passthrough for everything else.
+- `buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks)` -- Assemble JS_LOGIC from page blocks. Primitives (int/float/bool/string) are emitted by emit_split — skipped here. Non-primitives get `var + setter`. Ambients get `__ambient(ns, field)`. Functions: composition (`f + g` → `f(); g();`), computed (single expression → `return expr`), regular (multi-line). Timer blocks → `setInterval(...)`. Runs duplicate-var and undefined-call validation, populating `ctx._duplicateJSVars` and `ctx._undefinedJSCalls`.
+- `compilePage(source, c, file)` -- **Page mode entry point.** Extracts `<var>/<state>/<functions>/<timer>` blocks, parses vars/ambients, populates `ctx.stateSlots` (primitives only), sets `ctx.scriptBlock` + `ctx.scriptFuncs`, registers OAs for object_array vars, runs `collectComponents`/`collectConstArrays`/`collectClassifiers`, seeks `return(` in tokens, calls `parseJSXElement`, appends `__evalDynTexts` if `ctx._jsDynTexts` non-empty, runs preflight, calls `emitOutput`.
 
 ### attrs.js -- Style/Color/Handler Parsing
 - `parseColor(hex)` -- Parse color value -> `Color.rgb(R, G, B)` or `Color.rgba(...)`. Handles: #hex (3/6/8 digit), named colors, theme-* tokens (Catppuccin Mocha).
@@ -402,6 +436,8 @@ No functions. Constants only: `TK`, `styleKeys`, `colorKeys`, `enumKeys`, `htmlT
     - F8: Map over nonexistent OA
     - F9: Script function called but not defined
     - F10: JS syntax leaked into luaBody (const/let/===/ etc)
+    - F11: C.Name used but no classifier definition found (ctx._unresolvedClassifiers)
+    - F17: Array decl references unresolved `item.field` (may be leaked JS handler body)
   - **Warnings (W1-W4)**:
     - W1: Color{} backed by dynStyle (informational)
     - W2: Map handlers with all empty luaBody
@@ -514,10 +550,14 @@ After all map emission, emit.js scans the generated output for `&_arr_N` referen
 ### Promoted Arrays
 During map emission, arrays that reference `_i` (the map iterator) get "promoted" from the static tree to per-item pools. The pre-scan in emitOutput identifies these transitively -- if array A references promoted array B, A is also promoted. This prevents stale references when map items are rebuilt.
 
-### Three Compilation Lanes
+### JSX-Valued Props (Named Slots)
+When a prop is passed as JSX (`header={<Component/>}`), the JSX is parsed at call-site and stored in `propStack` as `{__jsxSlot: true, result: parsedNode}`. When the component body renders `{header}`, `parseChildren` detects `propVal.__jsxSlot` and splices the pre-parsed node directly into children. This allows passing JSX fragments as named slots to components without additional compiler lanes.
+
+### Four Compilation Lanes
 1. **App mode** (default): .tsz -> .zig with full UI scaffolding
-2. **Mod mode** (--mod): .mod.tsz -> .zig/.lua/.js (imperative code, no JSX)
-3. **Soup mode** (auto-detected): web React -> .zig via QJS script lane
+2. **Page mode** (`<page route=name>` in source): declarative `<var>/<state>/<functions>/<timer>` blocks + JSX return. Delegates JSX parsing to existing machinery. Entry: `compilePage()`.
+3. **Mod mode** (--mod): .mod.tsz -> .zig/.lua/.js (imperative code, no JSX)
+4. **Soup mode** (auto-detected): web React -> .zig via QJS script lane
 
 ---
 

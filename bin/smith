@@ -40,12 +40,11 @@ case "$cmd" in
             exit 1
         fi
 
-        # Strip tsz/ prefix to get path relative to tsz dir
+        # Prefer tsz-relative path if under tsz/, otherwise pass absolute
         CART_REL="${RESOLVED#$TSZ_DIR/}"
-
         if [[ "$CART_REL" == /* ]]; then
-            echo "Error: $RESOLVED is not under $TSZ_DIR"
-            exit 1
+            # Outside tsz/ — pass absolute path
+            CART_REL="$RESOLVED"
         fi
 
         exec "$TSZ_DIR/scripts/build" "$CART_REL" "$@"

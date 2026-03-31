@@ -159,6 +159,7 @@ function splitOutput(monolith, file) {
     ['initstate',      /^fn _initState\(/m],
     ['updatedyn',      /^fn _updateDynamicTexts\(/m],
     ['updatecond',     /^fn _updateConditionals\(/m],
+    ['updatevariants', /^fn _updateVariants\(/m],
     ['appinit',        /^fn _appInit\(/m],
     ['apptick',        /^fn _appTick\(/m],
     ['exports',        /^export fn app_get_root\(/m],
@@ -189,6 +190,7 @@ function splitOutput(monolith, file) {
   F['maps.zig']     = sec.maps || '';
   F['logic.zig']    = (sec.jslogic || '') + (sec.lualogic || '');
   F['app.zig']      = (sec.updatedyn || '') + (sec.updatecond || '') +
+                      (sec.updatevariants || '') +
                       (sec.appinit || '') + (sec.apptick || '') +
                       (sec.exports || '') + (sec.stateexports || '') +
                       (sec.mainfn || '') + (sec.debug || '');
@@ -253,9 +255,12 @@ function splitOutput(monolith, file) {
     ac = ac.replace(/\b(_root)\b/g, 'nodes.$1');
     ac = ac.replace(/\b(_dyn_(?:buf|text)_\d+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_oa\d+_\w+)\b/g, 'st.$1');
+    ac = ac.replace(/\b(_setVariantHost)\b/g, 'st.$1');
     ac = ac.replace(/\b_initState\b/g, 'st._initState');
     ac = ac.replace(/\b(_pool_arena)\b/g, 'maps.$1');
     ac = ac.replace(/\b(_rebuildMap\d+)\b/g, 'maps.$1');
+    ac = ac.replace(/\b(_map_count_\d+)\b/g, 'maps.$1');
+    ac = ac.replace(/\b(_map_pool_\d+)\b/g, 'maps.$1');
     ac = ac.replace(/\b(_initMapLuaPtrs\d+_\d+)\b/g, 'maps.$1');
     ac = ac.replace(/\bJS_LOGIC\b/g, 'logic.JS_LOGIC');
     ac = ac.replace(/\bLUA_LOGIC\b/g, 'logic.LUA_LOGIC');
@@ -430,9 +435,11 @@ function emitLogicBlocks(ctx) {
         jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
       }
       // No setter rewriting needed — declared setter functions handle state updates
-      // Strip <script>/<\/script> tags — file imports include them raw
+      // Strip <script>/<\/script> tags and 'export' keywords — file imports include them raw
+      // QuickJS eval doesn't support ES module syntax, so 'export' must be removed
       const scriptLines = globalThis.__scriptContent.split('\n')
-        .filter(l => !/^\s*<\/?script>\s*$/.test(l));
+        .filter(l => !/^\s*<\/?script>\s*$/.test(l))
+        .map(l => l.replace(/^export\s+/, ''));
       for (const line of scriptLines) jsLines.push(line);
       jsLines.push('');  // trailing blank line
     }
@@ -452,12 +459,32 @@ function emitLogicBlocks(ctx) {
         if (oa.isNested || oa.isConst) continue;
         jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
       }
+      // Auto-call init(stateProxy) if script exports an init function
+      // Convention: export function init(state) { state.arrayName = [...]; state.slotName = val; }
+      // The proxy routes state.X = val to setX(val) for both OA setters and state setters.
+      if (globalThis.__scriptContent && globalThis.__scriptContent.indexOf('function init(') >= 0) {
+        var proxyProps = [];
+        for (const oa of ctx.objectArrays) {
+          if (oa.isNested || oa.isConst) continue;
+          proxyProps.push(`set ${oa.getter}(v) { ${oa.setter}(v); }`);
+        }
+        for (const s of ctx.stateSlots) {
+          proxyProps.push(`set ${s.getter}(v) { ${s.setter}(v); }`);
+        }
+        if (proxyProps.length > 0) {
+          jsLines.push(`if (typeof init === 'function') init({ ${proxyProps.join(', ')} });`);
+        }
+      }
       // Auto-push initial OA data to Zig side — script block may have set initial values
       // that need to flow through __setObjArr to be visible in the node tree.
       // Without this, data defined in <script> stays in JS-land and maps render empty.
       for (const oa of ctx.objectArrays) {
         if (oa.isNested || oa.isConst) continue;
         jsLines.push(`if (${oa.getter} && ${oa.getter}.length > 0) ${oa.setter}(${oa.getter});`);
+      }
+      // setVariant JS wrapper — bridges JS handler calls to Zig theme.setVariant
+      if (ctx.variantBindings && ctx.variantBindings.length > 0) {
+        jsLines.push(`function setVariant(v) { __setVariant(v); }`);
       }
       // Emit JS wrapper functions for prop-forwarded handler closures
       // These are handlers created from closure props (e.g., onSelect={(next) => { selectTab(next) }})

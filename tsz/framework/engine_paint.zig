@@ -288,7 +288,9 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
-        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
+        gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6,
+            node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+            0, 0, 0, 0, 0);
     }
 
     if (node.style.background_color) |bg_raw| {
@@ -297,21 +299,23 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
             const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
             if (has_transform) {
-                gpu.drawRectTransformed(
+                gpu.drawRectCornersTransformed(
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.brdTop(),
+                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     node.style.rotation, node.style.scale_x, node.style.scale_y,
                 );
             } else {
-                gpu.drawRect(
+                gpu.drawRectCorners(
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.brdTop(),
+                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                 );
@@ -322,10 +326,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
     // Border without background — draw border-only rect with transparent fill
     if (node.style.background_color == null and (node.style.brdTop() > 0 or node.style.border_width > 0)) {
         if (node.style.border_color) |bc| {
-            gpu.drawRect(
+            gpu.drawRectCorners(
                 r.x, r.y, r.w, r.h,
                 0, 0, 0, 0,
-                node.style.border_radius, node.style.brdTop(),
+                node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                node.style.brdTop(),
                 @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                 @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
             );

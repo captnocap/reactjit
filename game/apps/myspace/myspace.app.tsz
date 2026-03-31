@@ -1,5 +1,5 @@
-import { viewProfile } from "./myspace.script";
-import { Nav, NavBrand, NavSep, NavLink, NavLinkText, NavRight, NavSearchBox, NavSearchText, ProfileColumns, LeftCol, RightCol, Section, SectionHead, SectionHeadText, SectionBody, SectionBodyTight, NetworkBanner, NetworkBannerText, Avatar, AvatarLetter, OnlineRow, OnlineDot, MusicBar, ViewMyRow, DataRow, DataLabel, DataValue, FriendGrid, FriendCell, CommentRow, CommentAuthor, CommentBody, TitleText, SubTitle, BodyText, LinkText, LabelText, DimText, SmallLink, SmallText, WhiteText28, WhiteText20, Footer, FooterText } from "./myspace.cls";
+import { viewProfile, goHome, goBrowse, goSearch, goInvite, goMail, goBlog, goFavorites, goForum, goGroups, goMusic, getAllUsers, getAllBlogPosts, getMockGroups, getMockForums, getMockSongs, getMockMail } from "./myspace.script";
+import { Nav, NavBrand, NavSep, NavLink, NavLinkText, NavLinkActive, NavRight, NavSearchBox, NavSearchText, ProfileColumns, LeftCol, RightCol, Section, SectionHead, SectionHeadText, SectionBody, SectionBodyTight, NetworkBanner, NetworkBannerText, Avatar, AvatarLetter, OnlineRow, OnlineDot, MusicBar, ViewMyRow, DataRow, DataLabel, DataValue, FriendGrid, FriendCell, CommentRow, CommentAuthor, CommentBody, TitleText, SubTitle, BodyText, LinkText, LabelText, DimText, SmallLink, SmallText, WhiteText28, WhiteText20, Footer, FooterText, PageContainer, PageContent, PageTitle, PageSubtitle, UserList, UserListItem, UserListAvatar, UserListInfo, UserListName, UserListMeta, UserStatus, SearchBox, SearchInput, SearchButton, SearchButtonText, MailList, MailItem, MailUnread, MailRead, MailSender, MailSubject, MailPreview, MailTime, BlogList, BlogPost, BlogPostTitle, BlogPostMeta, BlogPostExcerpt, CategoryList, CategoryItem, CategoryName, CategoryStats, SongList, SongItem, SongNumber, SongInfo, SongTitle, SongArtist, SongPlays, PlayButton, PlayButtonText, FavGrid, FavItem, FavAvatar, FavName, InviteForm, InviteInput, InviteTextArea, InviteLabel, InviteButton, InviteButtonText, EmptyState, EmptyStateText } from "./myspace.cls";
 
 // === Profile state ===
 const [pName, setPName] = useState('');
@@ -15,7 +15,7 @@ const [pLogin, setPLogin] = useState('');
 const [pAvLetter, setPAvLetter] = useState('');
 const [pAvBg, setPAvBg] = useState(0x003399);
 
-// === Theme state (reserved for per-profile theming when dynStyle lands) ===
+// === Theme state ===
 const [tBg, setTBg] = useState(0xffffff);
 const [tText, setTText] = useState(0x333333);
 const [tLink, setTLink] = useState(0x003399);
@@ -29,186 +29,535 @@ const [interests, setInterests] = useState([{ label: '', value: '' }]);
 const [details, setDetails] = useState([{ label: '', value: '' }]);
 const [topFriends, setTopFriends] = useState([{ id: '', name: '', avatarLetter: '', avatarBg: 0x000000 }]);
 const [comments, setComments] = useState([{ authorName: '', avatarLetter: '', avatarBg: 0x000000, text: '', time: '', authorId: '' }]);
+const [userBlogPosts, setUserBlogPosts] = useState([{ title: '', date: '', excerpt: '', author: '' }]);
+
+// === Router state ===
+const [currentRoute, setCurrentRoute] = useState('profile');
+const [currentUserId, setCurrentUserId] = useState('tom');
+
+// === Data for pages ===
+const [allUsers, setAllUsers] = useState([{ id: '', name: '', age: 0, loc: '', avLetter: '', avBg: 0, online: 0, mood: '' }]);
+const [allBlogPosts, setAllBlogPosts] = useState([{ title: '', date: '', excerpt: '', author: '', authorId: '', avLetter: '', avBg: 0 }]);
+const [groups, setGroups] = useState([{ name: '', members: 0, category: '' }]);
+const [forums, setForums] = useState([{ name: '', topics: 0, posts: 0 }]);
+const [songs, setSongs] = useState([{ title: '', artist: '', plays: 0 }]);
+const [mails, setMails] = useState([{ from: '', subject: '', preview: '', time: '', unread: 0 }]);
+
+function NavItem(props) {
+  const isActive = props.active === 1;
+  return (
+    <NavLink onPress={props.onPress}>
+      {isActive ? <NavLinkActive>{props.label}</NavLinkActive> : <NavLinkText>{props.label}</NavLinkText>}
+    </NavLink>
+  );
+}
+
+function HomePage() {
+  return (
+    <PageContent>
+      <PageTitle>Home</PageTitle>
+      <PageSubtitle>Welcome back, {pName}! Here is what is happening on MySpace.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Recent Updates</SectionHeadText></SectionHead>
+        <SectionBody>
+          <BodyText>Your friends have been busy! Check out their new blog posts and photos.</BodyText>
+          <Box style={{ marginTop: 12, gap: 8 }}>
+            {topFriends.map((f) => (
+              <Pressable onPress={() => { viewProfile(f.id) }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Box style={{ width: 32, height: 32, backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text fontSize={14} color="#ffffff">{f.avatarLetter}</Text>
+                </Box>
+                <LinkText>{f.name}</LinkText>
+                <DimText>posted a new blog entry</DimText>
+              </Pressable>
+            ))}
+          </Box>
+        </SectionBody>
+      </Section>
+      <Section>
+        <SectionHead><SectionHeadText>New People</SectionHeadText></SectionHead>
+        <SectionBody>
+          <BodyText>Meet new friends on MySpace!</BodyText>
+          <Box style={{ marginTop: 12 }}>
+            <FriendGrid>
+              {allUsers.slice(0, 4).map((u) => (
+                <FriendCell onPress={() => { viewProfile(u.id) }}>
+                  <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: u.avBg, alignItems: 'center', justifyContent: 'center' }}>
+                    <WhiteText28>{u.avLetter}</WhiteText28>
+                  </Box>
+                  <SmallLink>{u.name}</SmallLink>
+                </FriendCell>
+              ))}
+            </FriendGrid>
+          </Box>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function BrowsePage() {
+  return (
+    <PageContent>
+      <PageTitle>Browse</PageTitle>
+      <PageSubtitle>Find friends and interesting people on MySpace.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>All Users</SectionHeadText></SectionHead>
+        <SectionBody>
+          <UserList>
+            {allUsers.map((u) => (
+              <UserListItem onPress={() => { viewProfile(u.id) }}>
+                <UserListAvatar style={{ backgroundColor: u.avBg }}>
+                  <Text fontSize={20} color="#ffffff">{u.avLetter}</Text>
+                </UserListAvatar>
+                <UserListInfo>
+                  <UserListName>{u.name}</UserListName>
+                  <UserListMeta>{`${u.age} · ${u.loc}`}</UserListMeta>
+                </UserListInfo>
+                <UserStatus>
+                  {u.online === 1 && <OnlineDot />}
+                  {u.online === 1 && <LinkText>Online</LinkText>}
+                </UserStatus>
+              </UserListItem>
+            ))}
+          </UserList>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function SearchPage() {
+  return (
+    <PageContent>
+      <PageTitle>Search</PageTitle>
+      <PageSubtitle>Find people, groups, and content on MySpace.</PageSubtitle>
+      <SearchBox>
+        <SearchInput>
+          <Text fontSize={12} color="#999999">Search by name, email, or interest...</Text>
+        </SearchInput>
+        <SearchButton onPress={() => {}}>
+          <SearchButtonText>Search</SearchButtonText>
+        </SearchButton>
+      </SearchBox>
+      <Section>
+        <SectionHead><SectionHeadText>Search Tips</SectionHeadText></SectionHead>
+        <SectionBody>
+          <Box style={{ gap: 8 }}>
+            <BodyText>• Search by name to find specific people</BodyText>
+            <BodyText>• Search by location to find friends in your area</BodyText>
+            <BodyText>• Search by interest to meet people who like the same things</BodyText>
+          </Box>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function InvitePage() {
+  return (
+    <PageContent>
+      <PageTitle>Invite</PageTitle>
+      <PageSubtitle>Invite your friends to join MySpace!</PageSubtitle>
+      <InviteForm>
+        <Box style={{ gap: 4 }}>
+          <InviteLabel>Friend's Email Address:</InviteLabel>
+          <InviteInput>
+            <Text fontSize={12} color="#999999">enter email address...</Text>
+          </InviteInput>
+        </Box>
+        <Box style={{ gap: 4 }}>
+          <InviteLabel>Your Message:</InviteLabel>
+          <InviteTextArea>
+            <Text fontSize={12} color="#999999">Check out my profile on MySpace!</Text>
+          </InviteTextArea>
+        </Box>
+        <InviteButton onPress={() => {}}>
+          <InviteButtonText>Send Invite</InviteButtonText>
+        </InviteButton>
+      </InviteForm>
+      <Section>
+        <SectionHead><SectionHeadText>Your Invite Stats</SectionHeadText></SectionHead>
+        <SectionBody>
+          <DataRow>
+            <DataLabel><LabelText>Invites Sent:</LabelText></DataLabel>
+            <DataValue><BodyText>0</BodyText></DataValue>
+          </DataRow>
+          <DataRow>
+            <DataLabel><LabelText>Friends Joined:</LabelText></DataLabel>
+            <DataValue><BodyText>0</BodyText></DataValue>
+          </DataRow>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function MailPage() {
+  return (
+    <PageContent>
+      <PageTitle>Mail</PageTitle>
+      <PageSubtitle>Your MySpace messages.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Inbox</SectionHeadText></SectionHead>
+        <SectionBodyTight>
+          <MailList>
+            {mails.map((m) => (
+              <MailItem onPress={() => {}}>
+                {m.unread === 1 ? <MailUnread /> : <MailRead />}
+                <Box style={{ flexDirection: 'column', flexGrow: 1, gap: 2 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8 }}>
+                    <MailSender>{m.from}</MailSender>
+                    <MailSubject>- {m.subject}</MailSubject>
+                  </Box>
+                  <MailPreview>{m.preview}</MailPreview>
+                </Box>
+                <MailTime>{m.time}</MailTime>
+              </MailItem>
+            ))}
+          </MailList>
+        </SectionBodyTight>
+      </Section>
+    </PageContent>
+  );
+}
+
+function BlogPage() {
+  return (
+    <PageContent>
+      <PageTitle>Blog</PageTitle>
+      <PageSubtitle>Latest posts from the MySpace community.</PageSubtitle>
+      <BlogList>
+        {allBlogPosts.map((post) => (
+          <BlogPost>
+            <Pressable onPress={() => { viewProfile(post.authorId) }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Box style={{ width: 24, height: 24, backgroundColor: post.avBg, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={12} color="#ffffff">{post.avLetter}</Text>
+              </Box>
+              <BlogPostMeta>by {post.author} on {post.date}</BlogPostMeta>
+            </Pressable>
+            <BlogPostTitle>{post.title}</BlogPostTitle>
+            <BlogPostExcerpt>{post.excerpt}</BlogPostExcerpt>
+          </BlogPost>
+        ))}
+      </BlogList>
+    </PageContent>
+  );
+}
+
+function FavoritesPage() {
+  return (
+    <PageContent>
+      <PageTitle>Favorites</PageTitle>
+      <PageSubtitle>Your favorite profiles and content.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Favorite People</SectionHeadText></SectionHead>
+        <SectionBody>
+          <FavGrid>
+            {topFriends.map((f) => (
+              <FavItem onPress={() => { viewProfile(f.id) }}>
+                <FavAvatar style={{ backgroundColor: f.avatarBg }}>
+                  <Text fontSize={24} color="#ffffff">{f.avatarLetter}</Text>
+                </FavAvatar>
+                <FavName>{f.name}</FavName>
+              </FavItem>
+            ))}
+          </FavGrid>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function ForumPage() {
+  return (
+    <PageContent>
+      <PageTitle>Forum</PageTitle>
+      <PageSubtitle>Discuss topics with the MySpace community.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Discussion Boards</SectionHeadText></SectionHead>
+        <SectionBodyTight>
+          <CategoryList>
+            {forums.map((f) => (
+              <CategoryItem onPress={() => {}}>
+                <CategoryName>{f.name}</CategoryName>
+                <CategoryStats>{`${f.topics} topics · ${f.posts} posts`}</CategoryStats>
+              </CategoryItem>
+            ))}
+          </CategoryList>
+        </SectionBodyTight>
+      </Section>
+    </PageContent>
+  );
+}
+
+function GroupsPage() {
+  return (
+    <PageContent>
+      <PageTitle>Groups</PageTitle>
+      <PageSubtitle>Join groups of people who share your interests.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Popular Groups</SectionHeadText></SectionHead>
+        <SectionBodyTight>
+          <CategoryList>
+            {groups.map((g) => (
+              <CategoryItem onPress={() => {}}>
+                <Box style={{ flexDirection: 'column' }}>
+                  <CategoryName>{g.name}</CategoryName>
+                  <DimText>{g.category}</DimText>
+                </Box>
+                <CategoryStats>{`${g.members} members`}</CategoryStats>
+              </CategoryItem>
+            ))}
+          </CategoryList>
+        </SectionBodyTight>
+      </Section>
+    </PageContent>
+  );
+}
+
+function MusicPage() {
+  return (
+    <PageContent>
+      <PageTitle>Music</PageTitle>
+      <PageSubtitle>Discover and share music on MySpace.</PageSubtitle>
+      <Section>
+        <SectionHead><SectionHeadText>Top Songs</SectionHeadText></SectionHead>
+        <SectionBody>
+          <SongList>
+            {songs.map((s, idx) => (
+              <SongItem>
+                <SongNumber>{`${idx + 1}.`}</SongNumber>
+                <SongInfo>
+                  <SongTitle>{s.title}</SongTitle>
+                  <SongArtist>{s.artist}</SongArtist>
+                </SongInfo>
+                <SongPlays>{`${s.plays} plays`}</SongPlays>
+                <PlayButton onPress={() => {}}>
+                  <PlayButtonText>Play</PlayButtonText>
+                </PlayButton>
+              </SongItem>
+            ))}
+          </SongList>
+        </SectionBody>
+      </Section>
+    </PageContent>
+  );
+}
+
+function ProfilePage() {
+  return (
+    <Box style={{ padding: 8, gap: 8 }}>
+      <NetworkBanner>
+        <NetworkBannerText>{`${pName} is in your extended network`}</NetworkBannerText>
+      </NetworkBanner>
+
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TitleText>{pName}</TitleText>
+        <SubTitle>{pAge}</SubTitle>
+        <SubTitle>{pLoc}</SubTitle>
+      </Box>
+      <LabelText>{`Last Login: ${pLogin}`}</LabelText>
+
+      <ProfileColumns>
+        <LeftCol>
+          <Avatar style={{ backgroundColor: pAvBg }}>
+            <AvatarLetter>{pAvLetter}</AvatarLetter>
+          </Avatar>
+
+          {pOnline == 1 && <OnlineRow>
+            <OnlineDot />
+            <LinkText>Online Now!</LinkText>
+          </OnlineRow>}
+
+          <BodyText>{`Mood: ${pMood}`}</BodyText>
+
+          <MusicBar>
+            <Text fontSize={10} color="#00cc00">NOW PLAYING</Text>
+            <Box style={{ flexDirection: 'column', gap: 1 }}>
+              <Text fontSize={9} color="#cccccc">{pSong}</Text>
+              <Text fontSize={8} color="#888888">{pArtist}</Text>
+            </Box>
+          </MusicBar>
+
+          <ViewMyRow>
+            <LabelText>View My:</LabelText>
+            <Pressable><LinkText>Pics</LinkText></Pressable>
+            <LabelText>|</LabelText>
+            <Pressable><LinkText>Videos</LinkText></Pressable>
+            <LabelText>|</LabelText>
+            <Pressable><LinkText>Blog</LinkText></Pressable>
+          </ViewMyRow>
+
+          <Section>
+            <SectionHead><SectionHeadText>{`Contacting ${pName}`}</SectionHeadText></SectionHead>
+            <SectionBody>
+              <Box style={{ gap: 4 }}>
+                <Pressable><LinkText>Send Message</LinkText></Pressable>
+                <Pressable><LinkText>Add to Friends</LinkText></Pressable>
+                <Pressable><LinkText>Add to Favorites</LinkText></Pressable>
+                <Pressable><LinkText>Block User</LinkText></Pressable>
+                <Pressable><LinkText>Rank User</LinkText></Pressable>
+              </Box>
+            </SectionBody>
+          </Section>
+
+          <DimText>{`myspace.com/${pName}`}</DimText>
+
+          <Section>
+            <SectionHead><SectionHeadText>{`${pName}'s Details`}</SectionHeadText></SectionHead>
+            <SectionBodyTight>
+              {details.map((d) => (
+                <DataRow>
+                  <DataLabel><LabelText>{d.label}</LabelText></DataLabel>
+                  <DataValue><BodyText>{d.value}</BodyText></DataValue>
+                </DataRow>
+              ))}
+            </SectionBodyTight>
+          </Section>
+        </LeftCol>
+
+        <RightCol>
+          <Section>
+            <SectionHead><SectionHeadText>{`${pName}'s Blurbs`}</SectionHeadText></SectionHead>
+            <SectionBody>
+              <Box style={{ gap: 10 }}>
+                <Box style={{ gap: 4 }}>
+                  <LinkText>About Me:</LinkText>
+                  <BodyText>{pAbout}</BodyText>
+                </Box>
+                <Box style={{ gap: 4 }}>
+                  <LinkText>Who I'd Like to Meet:</LinkText>
+                  <BodyText>{pMeet}</BodyText>
+                </Box>
+              </Box>
+            </SectionBody>
+          </Section>
+
+          <Section>
+            <SectionHead><SectionHeadText>{`${pName}'s Interests`}</SectionHeadText></SectionHead>
+            <SectionBodyTight>
+              {interests.map((item) => (
+                <DataRow>
+                  <DataLabel><LinkText>{item.label}</LinkText></DataLabel>
+                  <DataValue><BodyText>{item.value}</BodyText></DataValue>
+                </DataRow>
+              ))}
+            </SectionBodyTight>
+          </Section>
+
+          <Section>
+            <SectionHead><SectionHeadText>{`${pName}'s Friend Space`}</SectionHeadText></SectionHead>
+            <SectionBody>
+              <FriendGrid>
+                {topFriends.map((f) => (
+                  <FriendCell onPress={() => { viewProfile(f.id) }}>
+                    <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
+                      <WhiteText28>{f.avatarLetter}</WhiteText28>
+                    </Box>
+                    <SmallLink>{f.name}</SmallLink>
+                  </FriendCell>
+                ))}
+              </FriendGrid>
+            </SectionBody>
+          </Section>
+
+          <Section>
+            <SectionHead><SectionHeadText>{`${pName}'s Comments`}</SectionHeadText></SectionHead>
+            <SectionBodyTight>
+              {comments.map((c) => (
+                <CommentRow>
+                  <CommentAuthor onPress={() => { viewProfile(c.authorId) }}>
+                    <Box style={{ width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
+                      <WhiteText20>{c.avatarLetter}</WhiteText20>
+                    </Box>
+                    <SmallText>{c.authorName}</SmallText>
+                  </CommentAuthor>
+                  <CommentBody>
+                    <DimText>{c.time}</DimText>
+                    <BodyText>{c.text}</BodyText>
+                  </CommentBody>
+                </CommentRow>
+              ))}
+            </SectionBodyTight>
+          </Section>
+        </RightCol>
+      </ProfileColumns>
+
+      <Footer>
+        <FooterText>2003-2006 MySpace.com. All Rights Reserved.</FooterText>
+      </Footer>
+    </Box>
+  );
+}
 
 function App() {
+  // Load data for pages on mount
+  useEffect(() => {
+    setAllUsers(getAllUsers());
+    setAllBlogPosts(getAllBlogPosts());
+    setGroups(getMockGroups());
+    setForums(getMockForums());
+    setSongs(getMockSongs());
+    setMails(getMockMail());
+  });
+
+  const isHome = currentRoute === 'home';
+  const isBrowse = currentRoute === 'browse';
+  const isSearch = currentRoute === 'search';
+  const isInvite = currentRoute === 'invite';
+  const isMail = currentRoute === 'mail';
+  const isBlog = currentRoute === 'blog';
+  const isFavorites = currentRoute === 'favorites';
+  const isForum = currentRoute === 'forum';
+  const isGroups = currentRoute === 'groups';
+  const isMusic = currentRoute === 'music';
+  const isProfile = currentRoute === 'profile';
+
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+      <Nav>
+        <NavBrand>MySpace.com</NavBrand>
+        <NavSep>|</NavSep>
+        <NavItem label="Home" onPress={goHome} active={isHome ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Browse" onPress={goBrowse} active={isBrowse ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Search" onPress={goSearch} active={isSearch ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Invite" onPress={goInvite} active={isInvite ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Mail" onPress={goMail} active={isMail ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Blog" onPress={goBlog} active={isBlog ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Favorites" onPress={goFavorites} active={isFavorites ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Forum" onPress={goForum} active={isForum ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Groups" onPress={goGroups} active={isGroups ? 1 : 0} />
+        <NavSep>|</NavSep>
+        <NavItem label="Music" onPress={goMusic} active={isMusic ? 1 : 0} />
+        <NavRight>
+          <NavSearchBox><NavSearchText>Search MySpace</NavSearchText></NavSearchBox>
+        </NavRight>
+      </Nav>
 
-      {/* === NAV BAR === */}
-      <C.Nav>
-        <C.NavBrand>MySpace.com</C.NavBrand>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink onPress={() => { viewProfile('tom') }}><C.NavLinkText>Home</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Browse</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Search</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Invite</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Mail</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Blog</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Favorites</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Forum</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Groups</C.NavLinkText></C.NavLink>
-        <C.NavSep>|</C.NavSep>
-        <C.NavLink><C.NavLinkText>Music</C.NavLinkText></C.NavLink>
-        <C.NavRight>
-          <C.NavSearchBox><C.NavSearchText>Search MySpace</C.NavSearchText></C.NavSearchBox>
-        </C.NavRight>
-      </C.Nav>
-
-      {/* === PROFILE === */}
-      <ScrollView style={{ flexGrow: 1, backgroundColor: '#ffffff' }}>
-        <Box style={{ padding: 8, gap: 8 }}>
-
-          <C.NetworkBanner>
-            <C.NetworkBannerText>{`${pName} is in your extended network`}</C.NetworkBannerText>
-          </C.NetworkBanner>
-
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <C.TitleText>{pName}</C.TitleText>
-            <C.SubTitle>{pAge}</C.SubTitle>
-            <C.SubTitle>{pLoc}</C.SubTitle>
-          </Box>
-          <C.LabelText>{`Last Login: ${pLogin}`}</C.LabelText>
-
-          {/* === TWO COLUMNS === */}
-          <C.ProfileColumns>
-
-            {/* === LEFT === */}
-            <C.LeftCol>
-              <C.Avatar><C.AvatarLetter>{pAvLetter}</C.AvatarLetter></C.Avatar>
-
-              {pOnline == 1 && <C.OnlineRow>
-                <C.OnlineDot />
-                <C.LinkText>Online Now!</C.LinkText>
-              </C.OnlineRow>}
-
-              <C.BodyText>{`Mood: ${pMood}`}</C.BodyText>
-
-              <C.MusicBar>
-                <Text fontSize={10} color="#00cc00">NOW PLAYING</Text>
-                <Box style={{ flexDirection: 'column', gap: 1 }}>
-                  <Text fontSize={9} color="#cccccc">{pSong}</Text>
-                  <Text fontSize={8} color="#888888">{pArtist}</Text>
-                </Box>
-              </C.MusicBar>
-
-              <C.ViewMyRow>
-                <C.LabelText>View My:</C.LabelText>
-                <Pressable><C.LinkText>Pics</C.LinkText></Pressable>
-                <C.LabelText>|</C.LabelText>
-                <Pressable><C.LinkText>Videos</C.LinkText></Pressable>
-                <C.LabelText>|</C.LabelText>
-                <Pressable><C.LinkText>Blog</C.LinkText></Pressable>
-              </C.ViewMyRow>
-
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`Contacting ${pName}`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBody>
-                  <Box style={{ gap: 4 }}>
-                    <Pressable><C.LinkText>Send Message</C.LinkText></Pressable>
-                    <Pressable><C.LinkText>Add to Friends</C.LinkText></Pressable>
-                    <Pressable><C.LinkText>Add to Favorites</C.LinkText></Pressable>
-                    <Pressable><C.LinkText>Block User</C.LinkText></Pressable>
-                    <Pressable><C.LinkText>Rank User</C.LinkText></Pressable>
-                  </Box>
-                </C.SectionBody>
-              </C.Section>
-
-              <C.DimText>{`myspace.com/${pName}`}</C.DimText>
-
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`${pName}'s Details`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBodyTight>
-                  {details.map((d) => (
-                    <C.DataRow>
-                      <C.DataLabel><C.LabelText>{d.label}</C.LabelText></C.DataLabel>
-                      <C.DataValue><C.BodyText>{d.value}</C.BodyText></C.DataValue>
-                    </C.DataRow>
-                  ))}
-                </C.SectionBodyTight>
-              </C.Section>
-            </C.LeftCol>
-
-            {/* === RIGHT === */}
-            <C.RightCol>
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`${pName}'s Blurbs`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBody>
-                  <Box style={{ gap: 10 }}>
-                    <Box style={{ gap: 4 }}>
-                      <C.LinkText>About Me:</C.LinkText>
-                      <C.BodyText>{pAbout}</C.BodyText>
-                    </Box>
-                    <Box style={{ gap: 4 }}>
-                      <C.LinkText>Who I'd Like to Meet:</C.LinkText>
-                      <C.BodyText>{pMeet}</C.BodyText>
-                    </Box>
-                  </Box>
-                </C.SectionBody>
-              </C.Section>
-
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`${pName}'s Interests`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBodyTight>
-                  {interests.map((item) => (
-                    <C.DataRow>
-                      <C.DataLabel><C.LinkText>{item.label}</C.LinkText></C.DataLabel>
-                      <C.DataValue><C.BodyText>{item.value}</C.BodyText></C.DataValue>
-                    </C.DataRow>
-                  ))}
-                </C.SectionBodyTight>
-              </C.Section>
-
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`${pName}'s Friend Space`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBody>
-                  <C.FriendGrid>
-                    {topFriends.map((f) => (
-                      <C.FriendCell onPress={() => { viewProfile(f.id) }}>
-                        <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
-                          <C.WhiteText28>{f.avatarLetter}</C.WhiteText28>
-                        </Box>
-                        <C.SmallLink>{f.name}</C.SmallLink>
-                      </C.FriendCell>
-                    ))}
-                  </C.FriendGrid>
-                </C.SectionBody>
-              </C.Section>
-
-              <C.Section>
-                <C.SectionHead><C.SectionHeadText>{`${pName}'s Comments`}</C.SectionHeadText></C.SectionHead>
-                <C.SectionBodyTight>
-                  {comments.map((c) => (
-                    <C.CommentRow>
-                      <C.CommentAuthor onPress={() => { viewProfile(c.authorId) }}>
-                        <Box style={{ width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
-                          <C.WhiteText20>{c.avatarLetter}</C.WhiteText20>
-                        </Box>
-                        <C.SmallText>{c.authorName}</C.SmallText>
-                      </C.CommentAuthor>
-                      <C.CommentBody>
-                        <C.DimText>{c.time}</C.DimText>
-                        <C.BodyText>{c.text}</C.BodyText>
-                      </C.CommentBody>
-                    </C.CommentRow>
-                  ))}
-                </C.SectionBodyTight>
-              </C.Section>
-            </C.RightCol>
-          </C.ProfileColumns>
-
-          <C.Footer>
-            <C.FooterText>2003-2006 MySpace.com. All Rights Reserved.</C.FooterText>
-          </C.Footer>
-        </Box>
-      </ScrollView>
+      <PageContainer>
+        <ScrollView style={{ flexGrow: 1 }}>
+          {isHome && <HomePage />}
+          {isBrowse && <BrowsePage />}
+          {isSearch && <SearchPage />}
+          {isInvite && <InvitePage />}
+          {isMail && <MailPage />}
+          {isBlog && <BlogPage />}
+          {isFavorites && <FavoritesPage />}
+          {isForum && <ForumPage />}
+          {isGroups && <GroupsPage />}
+          {isMusic && <MusicPage />}
+          {isProfile && <ProfilePage />}
+        </ScrollView>
+      </PageContainer>
     </Box>
   );
 }

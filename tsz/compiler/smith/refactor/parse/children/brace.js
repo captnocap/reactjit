@@ -39,7 +39,23 @@ function tryParseBraceChild(c, children) {
       const savedPeek = c.save();
       c.advance();
       c.advance();
-      const isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+      let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+      // Handle .slice(...).map() and .filter(...).map() chaining
+      if (!isMapCall && (c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+        // Skip over .slice/filter(...) to check for .map() after
+        c.advance(); c.advance(); // skip 'slice' '('
+        let pd = 1;
+        while (c.pos < c.count && pd > 0) {
+          if (c.kind() === TK.lparen) pd++;
+          if (c.kind() === TK.rparen) pd--;
+          if (pd > 0) c.advance();
+        }
+        if (c.kind() === TK.rparen) c.advance(); // skip closing )
+        if (c.kind() === TK.dot) {
+          c.advance();
+          isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+        }
+      }
       c.restore(savedPeek);
       if (isMapCall) {
         let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
@@ -200,6 +216,65 @@ function tryParseBraceChild(c, children) {
         }
       } else {
         children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+      }
+      return true;
+    }
+  }
+
+  // props.X dot-access: {props.label} when component uses bare params
+  {
+    const pa = peekPropsAccess(c);
+    if (pa) {
+      skipPropsAccess(c);
+      const propVal = pa.value;
+      if (c.kind() === TK.rbrace) {
+        c.advance();
+        if (propVal && typeof propVal === 'object' && propVal.__jsxSlot) {
+          children.push(propVal.result);
+          return true;
+        }
+        const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
+        if (isZigExpr) {
+          const isStr = typeof propVal === 'string' && (propVal.includes('getSlotString') || propVal.includes('..'));
+          const fmt = isStr ? '{s}' : '{d}';
+          const args = isStr ? propVal : leftFoldExpr(propVal);
+          if (ctx.currentMap) {
+            const mapBufId = ctx.mapDynCount || 0;
+            ctx.mapDynCount = mapBufId + 1;
+            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+            children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+          } else {
+            const bufId = ctx.dynCount;
+            ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: isStr ? 128 : 64 });
+            ctx.dynCount++;
+            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+          }
+        } else {
+          children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+        }
+        return true;
+      }
+      // props.X followed by more tokens (e.g., props.active === 1) — handle via scriptBlock or drop
+      const dropTokens2 = [String(propVal)];
+      let depth2 = 1;
+      while (depth2 > 0 && c.kind() !== TK.eof) {
+        if (c.kind() === TK.lbrace) depth2++;
+        if (c.kind() === TK.rbrace) depth2--;
+        if (depth2 > 0) { dropTokens2.push(c.text()); c.advance(); }
+      }
+      if (c.kind() === TK.rbrace) c.advance();
+      const exprText2 = dropTokens2.join(' ');
+      if (ctx.scriptBlock && exprText2.length > 0) {
+        const jsExpr2 = exprText2.replace(/\bexact\b/g, '===');
+        const slotIdx2 = ctx.stateSlots.length;
+        ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx2, setter: '__setJsExpr_' + slotIdx2, initial: '', type: 'string' });
+        const bufId2 = ctx.dynCount;
+        ctx.dynTexts.push({ bufId: bufId2, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx2 + ')', arrName: '', arrIndex: 0, bufSize: 256 });
+        ctx.dynCount++;
+        ctx._jsDynTexts.push({ slotIdx: slotIdx2, jsExpr: jsExpr2 });
+        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId2 });
+      } else if (exprText2.length > 0) {
+        ctx._droppedExpressions.push({ expr: exprText2, line: 0 });
       }
       return true;
     }

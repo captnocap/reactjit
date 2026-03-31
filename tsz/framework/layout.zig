@@ -35,16 +35,16 @@ const effect_shader = @import("effect_shader.zig");
 const context_menu = @import("context_menu.zig");
 
 // ── Type definitions ────────────────────────────────
-pub const FlexDirection = enum { row, column };
+pub const FlexDirection = enum { row, column, row_reverse, column_reverse };
 pub const JustifyContent = enum { start, center, end, space_between, space_around, space_evenly };
-pub const AlignItems = enum { start, center, end, stretch };
-pub const AlignSelf = enum { auto, start, center, end, stretch };
+pub const AlignItems = enum { start, center, end, stretch, baseline };
+pub const AlignSelf = enum { auto, start, center, end, stretch, baseline };
 pub const AlignContent = enum { start, center, end, stretch, space_between, space_around, space_evenly };
 pub const FlexWrap = enum { no_wrap, wrap, wrap_reverse };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
 pub const Overflow = enum { visible, hidden, scroll, auto };
-pub const TextAlign = enum { left, center, right };
+pub const TextAlign = enum { left, center, right, justify };
 pub const CodeLanguage = enum { none, zig, type_script, json, bash, markdown, plain };
 pub const GradientDirection = enum { none, vertical, horizontal };
 pub const DevtoolsViz = enum { none, sparkline, wireframe, node_tree, inspector_overlay };
@@ -135,6 +135,8 @@ pub const Style = struct {
     align_content: AlignContent = .stretch,
     align_self: AlignSelf = .auto,
     gap: f32 = 0,
+    row_gap: ?f32 = null,
+    column_gap: ?f32 = null,
     order: i32 = 0,
     position: Position = .relative,
     top: ?f32 = null,
@@ -157,6 +159,10 @@ pub const Style = struct {
     text_align: TextAlign = .left,
     background_color: ?Color = null,
     border_radius: f32 = 0,
+    border_top_left_radius: ?f32 = null,
+    border_top_right_radius: ?f32 = null,
+    border_bottom_right_radius: ?f32 = null,
+    border_bottom_left_radius: ?f32 = null,
     opacity: f32 = 1.0,
     rotation: f32 = 0,
     scale_x: f32 = 1.0,
@@ -226,6 +232,26 @@ pub const Style = struct {
     }
     pub fn isMarginAutoBottom(self: Style) bool {
         return if (self.margin_bottom) |v| std.math.isInf(v) else false;
+    }
+    pub fn radiusTL(self: Style) f32 {
+        return self.border_top_left_radius orelse self.border_radius;
+    }
+    pub fn radiusTR(self: Style) f32 {
+        return self.border_top_right_radius orelse self.border_radius;
+    }
+    pub fn radiusBR(self: Style) f32 {
+        return self.border_bottom_right_radius orelse self.border_radius;
+    }
+    pub fn radiusBL(self: Style) f32 {
+        return self.border_bottom_left_radius orelse self.border_radius;
+    }
+    pub fn mainGap(self: Style) f32 {
+        const isRow = self.flex_direction == .row or self.flex_direction == .row_reverse;
+        return if (isRow) (self.column_gap orelse self.gap) else (self.row_gap orelse self.gap);
+    }
+    pub fn crossGap(self: Style) f32 {
+        const isRow = self.flex_direction == .row or self.flex_direction == .row_reverse;
+        return if (isRow) (self.row_gap orelse self.gap) else (self.column_gap orelse self.gap);
     }
 };
 pub const Node = struct {
@@ -621,7 +647,7 @@ fn estimateIntrinsicWidthUncached(node: *Node) f32 {
     const pl = padLeft(s);
     const pr = padRight(s);
     const g = s.gap;
-    const isRow = s.flex_direction == .row;
+    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
     if (node.text != null) {
         const m = measureNodeText(node);
         return m.width + pl + pr;
@@ -681,7 +707,7 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     const pl = padLeft(s);
     const pr = padRight(s);
     const g = s.gap;
-    const isRow = s.flex_direction == .row;
+    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
     const innerW = if (s.width != null) s.width.? - pl - pr else if (availableWidth > 0) availableWidth - pl - pr else 0;
     if (node.text != null) {
         const m = measureNodeTextW(node, innerW);
@@ -721,7 +747,7 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
         const gaps = if (visibleCount > 1) g * @as(f32, @floatFromInt((visibleCount - 1))) else 0;
         return total + gaps + pt + pb;
     }
-    if (s.flex_wrap == .wrap and innerW > 0) {
+    if ((s.flex_wrap == .wrap or s.flex_wrap == .wrap_reverse) and innerW > 0) {
         var lineMain: f32 = 0;
         var lineCrossMax: f32 = 0;
         var totalCross: f32 = 0;
@@ -792,7 +818,7 @@ fn computeMinContentW(node: *Node) f32 {
     if (node.children.len == 0) {
         return pl + pr;
     }
-    const isRow = s.flex_direction == .row;
+    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
     const g = s.gap;
     var minW: f32 = 0;
     var visCount: usize = 0;
@@ -927,8 +953,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     // - innerH: the REAL container height (for flex distribution — children share this space)
     // - childLayoutH: unlimited (so children can overflow and be scrolled to)
     const innerH = if (h != null) h.? - pt - pb else @as(f32, 9999);
-    const isRow = s.flex_direction == .row;
-    const gap = s.gap;
+    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
+    const isReverse = s.flex_direction == .row_reverse or s.flex_direction == .column_reverse;
+    const gap = s.mainGap();
+    const crossGapVal = s.crossGap();
     const justify = s.justify_content;
     const @"align" = s.align_items;
     const mainSize = if (isRow) innerW else innerH;
@@ -1125,7 +1153,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     }
     // align-content: distribute free cross space between wrapped lines
     const crossSize = if (isRow) (if (h != null) h.? - pt - pb else totalLineCross) else innerW;
-    const crossGaps = if (numLines > 1) gap * @as(f32, @floatFromInt(numLines - 1)) else 0;
+    const crossGaps = if (numLines > 1) crossGapVal * @as(f32, @floatFromInt(numLines - 1)) else 0;
     const freeCross = crossSize - totalLineCross - crossGaps;
     var crossOffset: f32 = 0;
     var extraCrossGap: f32 = 0;
@@ -1388,7 +1416,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     .start => {},
                 }
             }
-            var cursor = mainOffset;
+            var cursor = if (isReverse) mainSize - mainOffset else mainOffset;
             {
                 var i = ls;
                 while (i < ls + lc) : (i += 1) {
@@ -1400,8 +1428,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     var chFinal: f32 = undefined;
                     const effAlign = resolveAlign(child.style.align_self, @"align");
                     if (isRow) {
-                        cx = x + pl + cursor;
                         cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
+                        if (isReverse) {
+                            cursor -= childMainMarginEnd[@intCast(i)] + cwFinal;
+                        }
+                        cx = x + pl + cursor;
                         chFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
                         switch (effAlign) {
@@ -1417,13 +1448,24 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                                     chFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                                 }
                             },
+                            .baseline => {
+                                // Baseline alignment: offset by ascent difference
+                                // Ascent ≈ font_size * 0.8; align first text baselines
+                                const childBaseline = padTop(child.style) + @as(f32, @floatFromInt(child.font_size)) * 0.8;
+                                const lineBaseline = @as(f32, @floatFromInt(node.font_size)) * 0.8;
+                                const maxBaseline = @max(childBaseline, lineBaseline);
+                                cy = y + pt + crossCursor + (maxBaseline - childBaseline);
+                            },
                             .start => {
                                 cy = y + pt + crossCursor;
                             },
                         }
                     } else {
-                        cy = y + pt + cursor;
                         chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                        if (isReverse) {
+                            cursor -= childMainMarginEnd[@intCast(i)] + chFinal;
+                        }
+                        cy = y + pt + cursor;
                         cwFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
                         switch (effAlign) {
@@ -1438,6 +1480,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                                 if (child.style.width == null) {
                                     cwFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                                 }
+                            },
+                            .baseline => {
+                                // Baseline on cross=horizontal doesn't apply; treat as start
+                                cx = x + pl + crossCursor;
                             },
                             .start => {
                                 cx = x + pl + crossCursor;
@@ -1469,7 +1515,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     child._parent_inner_h = innerH;
                     layoutNode(child, cx, cy, cwFinal, chFinal);
                     const actualMain = if (isRow) child.computed.w else child.computed.h;
-                    cursor += childMainMarginStart[@intCast(i)] + actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
+                    if (isReverse) {
+                        cursor -= childMainMarginStart[@intCast(i)] + gap + extraGap;
+                    } else {
+                        cursor += childMainMarginStart[@intCast(i)] + actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
+                    }
                     if (isRow) {
                         const me = (child.computed.x - x) + child.computed.w + childMainMarginEnd[@intCast(i)];
                         const ce = (child.computed.y - y) + child.computed.h + childCrossMarginEnd[@intCast(i)];
@@ -1491,7 +1541,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
-            crossCursor += lineCross + (if (lineIdx + 1 < numLines) gap + extraCrossGap else 0);
+            crossCursor += lineCross + (if (lineIdx + 1 < numLines) crossGapVal + extraCrossGap else 0);
         }
     }
     if (h == null) {
@@ -1577,6 +1627,9 @@ fn resolveAlign(self: AlignSelf, parent: AlignItems) AlignItems {
         },
         .stretch => {
             return .stretch;
+        },
+        .baseline => {
+            return .baseline;
         },
     }
 }

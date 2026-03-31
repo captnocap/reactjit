@@ -9,16 +9,16 @@
 const std = @import("std");
 
 // ── Enums ──────────────────────────────────────────────────────────
-pub const FlexDirection = enum { row, column };
+pub const FlexDirection = enum { row, column, row_reverse, column_reverse };
 pub const JustifyContent = enum { start, center, end, space_between, space_around, space_evenly };
-pub const AlignItems = enum { start, center, end, stretch };
-pub const AlignSelf = enum { auto, start, center, end, stretch };
+pub const AlignItems = enum { start, center, end, stretch, baseline };
+pub const AlignSelf = enum { auto, start, center, end, stretch, baseline };
 pub const AlignContent = enum { start, center, end, stretch, space_between, space_around, space_evenly };
 pub const FlexWrap = enum { no_wrap, wrap, wrap_reverse };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
 pub const Overflow = enum { visible, hidden, scroll, auto };
-pub const TextAlign = enum { left, center, right };
+pub const TextAlign = enum { left, center, right, justify };
 pub const CodeLanguage = enum { none, zig, type_script, json, bash, markdown, plain };
 pub const GradientDirection = enum { none, vertical, horizontal };
 pub const DevtoolsViz = enum { none, sparkline, wireframe, node_tree, inspector_overlay };
@@ -110,6 +110,8 @@ pub const Style = struct {
     align_content: AlignContent = .stretch,
     align_self: AlignSelf = .auto,
     gap: f32 = 0,
+    row_gap: ?f32 = null,
+    column_gap: ?f32 = null,
     order: i32 = 0,
     position: Position = .relative,
     top: ?f32 = null,
@@ -132,6 +134,10 @@ pub const Style = struct {
     text_align: TextAlign = .left,
     background_color: ?Color = null,
     border_radius: f32 = 0,
+    border_top_left_radius: ?f32 = null,
+    border_top_right_radius: ?f32 = null,
+    border_bottom_right_radius: ?f32 = null,
+    border_bottom_left_radius: ?f32 = null,
     opacity: f32 = 1.0,
     rotation: f32 = 0,
     scale_x: f32 = 1.0,
@@ -355,6 +361,22 @@ pub const state = struct {
     pub fn markDirty() void { rjit_state_mark_dirty(); }
     pub fn isDirty() bool { return rjit_state_is_dirty(); }
     pub fn clearDirty() void { rjit_state_clear_dirty(); }
+};
+
+// ── Theme extern functions ──────────────────────────────────────────
+pub const theme = struct {
+    pub extern fn rjit_theme_active_variant() u8;
+    pub extern fn rjit_theme_set_variant(v: u8) void;
+
+    pub fn activeVariant() u8 { return rjit_theme_active_variant(); }
+    pub fn setVariant(v: u8) void { rjit_theme_set_variant(v); }
+};
+
+// ── Breakpoint extern functions ────────────────────────────────────
+pub const breakpoint = struct {
+    pub extern fn rjit_breakpoint_current() u8;
+
+    pub fn current() @import("breakpoint.zig").Breakpoint { return @enumFromInt(rjit_breakpoint_current()); }
 };
 
 // ── Engine extern (main loop entry point) ───────────────────────────

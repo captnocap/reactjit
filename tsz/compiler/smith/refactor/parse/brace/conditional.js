@@ -54,6 +54,15 @@ function tryParseConditional(c, children) {
       if (c.kind() === TK.equals) c.advance();
       continue;
     }
+    // props.X dot-access in conditional condition
+    {
+      const pa = peekPropsAccess(c);
+      if (pa) {
+        skipPropsAccess(c);
+        condParts.push(_condPropValue(pa.value));
+        continue;
+      }
+    }
     if (c.kind() === TK.identifier) {
       const name = c.text();
       if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp' || name === 'selectedIdx' || name === 'crashCount' || name === 'copied')) {
@@ -71,6 +80,8 @@ function tryParseConditional(c, children) {
       }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
+      } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+        condParts.push(ctx.renderLocals[name]);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
         condParts.push(_condPropValue(pv));

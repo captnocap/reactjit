@@ -626,6 +626,21 @@ function luaParseHandler(c) {
       if (c.kind() === TK.rbrace && depth === 0) { c.advance(); break; }
       if (c.kind() === TK.lbrace) depth++;
       if (c.kind() === TK.rbrace) depth--;
+      // Resolve props.X dot-access in handler body
+      {
+        const pa = peekPropsAccess(c);
+        if (pa) {
+          skipPropsAccess(c);
+          const pv = pa.value;
+          if (typeof pv === 'string') {
+            const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
+            parts.push(isZigExpr ? pa.field : pv);
+          } else {
+            parts.push(String(pv));
+          }
+          continue;
+        }
+      }
       // Resolve state getter/setter names through instance remap
       if (c.kind() === TK.identifier) {
         const name = c.text();
@@ -682,7 +697,14 @@ function luaParseHandler(c) {
       }
       c.advance();
     }
-    return luaTransform(parts.join(''));
+    const joined = parts.join('');
+    // Empty handler body () => {} — return a no-op so map handlers have a valid luaBody
+    if (joined.trim() === '') {
+      globalThis.__dbg = globalThis.__dbg || [];
+      globalThis.__dbg.push('NOOP_HIT: empty handler body → returning --noop');
+      return '-- noop';
+    }
+    return luaTransform(joined);
   }
 
   // Single expression: setter(expr) or scriptFunc()

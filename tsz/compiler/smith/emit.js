@@ -462,6 +462,23 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
   }
 
+  // setVariant host callback — called from JS via __setVariant(v)
+  // Placed in OA section so qjs/QJS_UNDEFINED are in scope (state.zig in split output)
+  if (ctx.variantBindings && ctx.variantBindings.length > 0) {
+    out += `fn _setVariantHost(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n`;
+    out += `    if (argc >= 1) {\n`;
+    out += `        var v: i64 = 0;\n`;
+    out += `        _ = qjs.JS_ToInt64(null, &v, argv[0]);\n`;
+    if (fastBuild) {
+      out += `        @import("${prefix}api.zig").theme.rjit_theme_set_variant(@intCast(@max(0, v)));\n`;
+    } else {
+      out += `        @import("${prefix}theme.zig").setVariant(@intCast(@max(0, v)));\n`;
+    }
+    out += `    }\n`;
+    out += `    return QJS_UNDEFINED;\n`;
+    out += `}\n\n`;
+  }
+
   // Map pools — two passes: (1) all declarations, (2) all rebuild functions
   const _emittedMapArrays = new Set();
   // Pre-compute per-map metadata (innerCount, innerArr, mapDynTexts, etc.) for both passes
@@ -830,7 +847,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         const pid = m._mapPerItemDecls.find(p => p.name === dt.arrName);
         if (!pid) continue;
         const poolArr = `_pi_${dt.arrName}_${mi}`;
-        out += `        ${poolArr}[${dt.arrIndex}].text = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+        const dtF = dt.targetField || 'text';
+        out += `        ${poolArr}[${dt.arrIndex}].${dtF} = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
       }
 
       // Inline nested map rebuilds — for each nested map that belongs to this parent
@@ -1450,10 +1468,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     // Skip if this dynText targets a map-scoped per-item array
     if (dt.arrName && _mapPoolArrayNames.has(dt.arrName)) continue;
     out += `    _dyn_text_${dt.bufId} = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+    const dtField = dt.targetField || 'text';
     if (dt.arrName) {
-      out += `    ${dt.arrName}[${dt.arrIndex}].text = _dyn_text_${dt.bufId};\n`;
+      out += `    ${dt.arrName}[${dt.arrIndex}].${dtField} = _dyn_text_${dt.bufId};\n`;
     } else {
-      out += `    _root.text = _dyn_text_${dt.bufId};\n`;
+      out += `    _root.${dtField} = _dyn_text_${dt.bufId};\n`;
     }
   }
   // Color prop + dynamic style runtime assignments — merged and sorted by array index
@@ -1541,6 +1560,19 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
       out += `    const _v = @as(usize, _theme.activeVariant());\n`;
     }
+    // Helper: convert ".field = value, .field2 = value2" to individual assignments
+    function styleAssignments(target, styleStr, indent) {
+      if (!styleStr) return '';
+      return styleStr.split(/,\s*(?=\.)/).map(function(f) {
+        f = f.trim();
+        if (!f.startsWith('.')) return '';
+        var eqIdx = f.indexOf('=');
+        if (eqIdx < 0) return '';
+        var field = f.slice(1, eqIdx).trim();
+        var value = f.slice(eqIdx + 1).trim();
+        return `${indent}${target}.style.${field} = ${value};\n`;
+      }).join('');
+    }
     for (const vb of ctx.variantBindings) {
       // Skip map-internal bindings (handled per-item in map rebuild — future)
       if (vb.inMap) continue;
@@ -1550,25 +1582,25 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (!vb.arrName && vb.inComponent) continue;
       // Determine target: arrName[arrIndex] or _root for root node
       const target = vb.arrName ? `${vb.arrName}[${vb.arrIndex}]` : '_root';
-      // Emit variant style selection
+      // Emit variant style selection — set individual fields to preserve parser-added fields
       if (vb.bpStyles) {
         // BP + variants: bp overrides take priority
         let bpBlock = '';
         if (vb.bpStyles.sm) {
-          bpBlock += `    if (_bp_tier == 0) { ${target}.style = .{ ${vb.bpStyles.sm} }; }\n`;
+          bpBlock += `    if (_bp_tier == 0) {\n${styleAssignments(target, vb.bpStyles.sm, '        ')}    }\n`;
         }
         if (vb.bpStyles.md) {
           const prefix2 = vb.bpStyles.sm ? '    else ' : '    ';
-          bpBlock += `${prefix2}if (_bp_tier == 1) { ${target}.style = .{ ${vb.bpStyles.md} }; }\n`;
+          bpBlock += `${prefix2}if (_bp_tier == 1) {\n${styleAssignments(target, vb.bpStyles.md, '        ')}    }\n`;
         }
         // Else: use variant-based style
         const elsePrefix = (vb.bpStyles.sm || vb.bpStyles.md) ? '    else ' : '    ';
         bpBlock += `${elsePrefix}{\n`;
         for (let vi = 0; vi < vb.styles.length; vi++) {
           if (vi === 0) {
-            bpBlock += `        if (_v == 0) { ${target}.style = .{ ${vb.styles[0]} }; }\n`;
+            bpBlock += `        if (_v == 0) {\n${styleAssignments(target, vb.styles[0], '            ')}        }\n`;
           } else {
-            bpBlock += `        else if (_v == ${vi}) { ${target}.style = .{ ${vb.styles[vi]} }; }\n`;
+            bpBlock += `        else if (_v == ${vi}) {\n${styleAssignments(target, vb.styles[vi], '            ')}        }\n`;
           }
         }
         bpBlock += `    }\n`;
@@ -1577,9 +1609,53 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         // Variants only (no bp)
         for (let vi = 0; vi < vb.styles.length; vi++) {
           if (vi === 0) {
-            out += `    if (_v == 0) { ${target}.style = .{ ${vb.styles[0]} }; }\n`;
+            out += `    if (_v == 0) {\n${styleAssignments(target, vb.styles[0], '        ')}    }\n`;
           } else {
-            out += `    else if (_v == ${vi}) { ${target}.style = .{ ${vb.styles[vi]} }; }\n`;
+            out += `    else if (_v == ${vi}) {\n${styleAssignments(target, vb.styles[vi], '        ')}    }\n`;
+          }
+        }
+      }
+      // Spacer fix: when a bp switches flex_direction to column, zero flex_grow on
+      // pure-spacer children (empty Box with only flex_grow=1). Restore on row.
+      if (vb.bpStyles) {
+        const smIsCol = vb.bpStyles.sm && vb.bpStyles.sm.includes('.column');
+        if (smIsCol) {
+          // Find the children array for this node: look for .children = &_arr_N in the parent decl
+          const parentDecl = ctx.arrayDecls.find(d => d.includes(`var ${vb.arrName} =`));
+          if (parentDecl) {
+            // Extract the node at vb.arrIndex — find its .children = &_arr_N
+            const childArrMatch = parentDecl.match(new RegExp(`\\.children\\s*=\\s*&(_arr_\\d+)`));
+            // Need to find the Nth node's children ref — simpler: scan all children refs
+            const allChildRefs = [];
+            const re = /\.children\s*=\s*&(_arr_\d+)/g;
+            let m;
+            while ((m = re.exec(parentDecl)) !== null) allChildRefs.push(m[1]);
+            const childArr = allChildRefs[vb.arrIndex];
+            if (childArr) {
+              // Find spacers in that children array
+              const childDecl = ctx.arrayDecls.find(d => d.includes(`var ${childArr} =`));
+              if (childDecl) {
+                // Find spacer-only nodes: .{ .style = .{ .flex_grow = 1 } }
+                const nodeStr = childDecl.slice(childDecl.indexOf('[_]Node{') + 8);
+                let idx = 0, bd = 0, ns = 0;
+                for (let ci = 0; ci < nodeStr.length; ci++) {
+                  if (nodeStr[ci] === '{') bd++;
+                  if (nodeStr[ci] === '}') {
+                    bd--;
+                    if (bd === 0) {
+                      const nc = nodeStr.slice(ns, ci + 1).trim();
+                      if (/^\.{\s*\.style\s*=\s*\.{\s*\.flex_grow\s*=\s*1\s*}\s*}$/.test(nc)) {
+                        out += `    if (_bp_tier == 0) { ${childArr}[${idx}].style.flex_grow = 0; }\n`;
+                        out += `    else { ${childArr}[${idx}].style.flex_grow = 1; }\n`;
+                      }
+                      idx++;
+                      ns = ci + 1;
+                      while (ns < nodeStr.length && (nodeStr[ns] === ',' || nodeStr[ns] === ' ')) ns++;
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1601,6 +1677,32 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           }
         }
       }
+    }
+    // Map-internal variant patching: loop over pool nodes and set variant styles
+    for (const vb of ctx.variantBindings) {
+      if (!vb.inMap) continue;
+      // Find which map this binding belongs to
+      const mapIdx = ctx.maps.findIndex(m => !m.isNested && !m.isInline);
+      if (mapIdx < 0) continue;
+      out += `    // Map variant patch: ${vb.clsName}\n`;
+      out += `    for (0.._map_count_${mapIdx}) |_mi| {\n`;
+      for (let vi = 0; vi < vb.styles.length; vi++) {
+        if (!vb.styles[vi]) continue;
+        const fields = vb.styles[vi].split(/,\s*(?=\.)/).filter(f => f.trim().startsWith('.'));
+        const assignments = fields.map(function(f) {
+          const eqIdx = f.indexOf('=');
+          if (eqIdx < 0) return '';
+          const field = f.trim().slice(1, eqIdx).trim();
+          const value = f.slice(eqIdx + 1).trim();
+          return `            _map_pool_${mapIdx}[_mi].style.${field} = ${value};\n`;
+        }).join('');
+        if (vi === 0) {
+          out += `        if (_v == 0) {\n${assignments}        }\n`;
+        } else {
+          out += `        else if (_v == ${vi}) {\n${assignments}        }\n`;
+        }
+      }
+      out += `    }\n`;
     }
     out += `}\n\n`;
   }
@@ -1626,6 +1728,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   for (const oa of ctx.objectArrays) {
     if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
     out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
+  }
+  // Register setVariant host function for JS handler bridge
+  if (hasVariants) {
+    out += `    qjs_runtime.registerHostFn("__setVariant", @ptrCast(&_setVariantHost), 1);\n`;
   }
   // Register input submit/change callbacks
   const input_mod = `@import("${prefix}input.zig")`;

@@ -60,6 +60,25 @@ export fn rjit_state_clear_dirty() void {
     state_mod.clearDirty();
 }
 
+// ── Theme C-ABI exports ────────────────────────────────────────────
+
+const theme_mod = @import("theme.zig");
+
+export fn rjit_theme_active_variant() u8 {
+    return theme_mod.activeVariant();
+}
+export fn rjit_theme_set_variant(v: u8) void {
+    theme_mod.setVariant(v);
+}
+
+// ── Breakpoint C-ABI exports ───────────────────────────────────────
+
+const bp_mod = @import("breakpoint.zig");
+
+export fn rjit_breakpoint_current() u8 {
+    return @intFromEnum(bp_mod.current());
+}
+
 // ── QJS Runtime C-ABI exports ───────────────────────────────────────
 
 const std = @import("std");

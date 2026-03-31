@@ -123,6 +123,7 @@ function resetCtx() {
     variantNames: [],
     variantBindings: [],
     renderLocals: {},
+    propsObjectName: null,
     _debugLines: [],
     _unresolvedClassifiers: [],
     _droppedExpressions: [],
