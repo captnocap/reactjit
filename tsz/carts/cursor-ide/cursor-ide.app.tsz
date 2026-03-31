@@ -24,23 +24,23 @@ const [ready, setReady] = useState(0);
 
 // File tree state
 const [files, setFiles] = useState([
-  { name: 'cursor-ide', indent: 0, icon: 'folderOpen', selected: 0 },
-  { name: 'src', indent: 1, icon: 'folder', selected: 0 },
-  { name: 'components', indent: 2, icon: 'folderOpen', selected: 0 },
-  { name: 'Sidebar.tsx', indent: 3, icon: 'tsx', selected: 1 },
-  { name: 'Editor.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'ChatPanel.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'StatusBar.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'hooks', indent: 2, icon: 'folder', selected: 0 },
-  { name: 'useAgent.ts', indent: 3, icon: 'ts', selected: 0 },
-  { name: 'utils', indent: 1, icon: 'folder', selected: 0 },
-  { name: 'index.ts', indent: 2, icon: 'ts', selected: 0 },
-  { name: 'package.json', indent: 1, icon: 'json', selected: 0 },
+  { name: 'cursor-ide', indent: 0, icon: 'v', selected: 0 },
+  { name: 'src', indent: 1, icon: '>', selected: 0 },
+  { name: 'components', indent: 2, icon: 'v', selected: 0 },
+  { name: 'Sidebar.tsx', indent: 3, icon: 'R', selected: 1 },
+  { name: 'Editor.tsx', indent: 3, icon: 'R', selected: 0 },
+  { name: 'ChatPanel.tsx', indent: 3, icon: 'R', selected: 0 },
+  { name: 'StatusBar.tsx', indent: 3, icon: 'R', selected: 0 },
+  { name: 'hooks', indent: 2, icon: '>', selected: 0 },
+  { name: 'useAgent.ts', indent: 3, icon: 'T', selected: 0 },
+  { name: 'utils', indent: 1, icon: '>', selected: 0 },
+  { name: 'index.ts', indent: 2, icon: 'T', selected: 0 },
+  { name: 'package.json', indent: 1, icon: '{', selected: 0 },
 ]);
 
 const [recentFiles, setRecentFiles] = useState([
-  { name: 'cursor_cls.tsz', indent: 0, icon: 'file' },
-  { name: 'cursor.script.tsz', indent: 0, icon: 'file' },
+  { name: 'cursor_cls.tsz', indent: 0, icon: ' ' },
+  { name: 'cursor.script.tsz', indent: 0, icon: ' ' },
 ]);
 
 const [outline, setOutline] = useState([

@@ -554,12 +554,35 @@ function tryParseBraceChild(c, children) {
             }
           } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
             const pv = ctx.propStack[name];
-            const isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot'));
+            const isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot') || pv.includes('_oa'));
             if (isZig) {
               const isStr = pv.includes('getSlotString') || pv.includes('..');
               fmtParts.push(isStr ? '{s}' : '{d}');
               fmtArgs.push(isStr ? pv : leftFoldExpr(pv));
               allStatic = false;
+            } else if (ctx.currentMap && typeof pv === 'string' && pv === ctx.currentMap.itemParam) {
+              // prop resolves to map item — check for .field after
+              c.advance(); // skip name
+              if (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+                c.advance(); // skip .
+                const fld = c.text();
+                c.advance(); // skip field
+                const mapOa = ctx.currentMap.oa;
+                const fldInfo = mapOa ? mapOa.fields.find(function(f) { return f.name === fld; }) : null;
+                if (mapOa && fldInfo && fldInfo.type === 'string') {
+                  fmtParts.push('{s}');
+                  fmtArgs.push(`_oa${mapOa.oaIdx}_${fld}[_i][0.._oa${mapOa.oaIdx}_${fld}_lens[_i]]`);
+                } else if (mapOa) {
+                  fmtParts.push('{d}');
+                  fmtArgs.push(`_oa${mapOa.oaIdx}_${fld}[_i]`);
+                } else {
+                  fmtParts.push('0');
+                }
+                allStatic = false;
+              } else {
+                fmtParts.push(String(pv));
+              }
+              continue; // already advanced
             } else {
               fmtParts.push(String(pv));
             }
@@ -593,11 +616,19 @@ function tryParseBraceChild(c, children) {
     if (allStatic || fmtArgs.length === 0) {
       children.push({ nodeExpr: `.{ .text = "${fmtString}" }` });
     } else {
-      const bufId = ctx.dynCount;
-      const bufSize = Math.max(64, fmtString.length + 20 * fmtArgs.length + 64);
-      ctx.dynTexts.push({ bufId, fmtString: fmtString, fmtArgs: fmtArgs.join(', '), arrName: '', arrIndex: 0, bufSize });
-      ctx.dynCount++;
-      children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+      const isMapConcat = ctx.currentMap && fmtArgs.join(', ').includes('_oa');
+      if (isMapConcat) {
+        const mapBufId = ctx.mapDynCount || 0;
+        ctx.mapDynCount = mapBufId + 1;
+        ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmtString, fmtArgs: fmtArgs.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+      } else {
+        const bufId = ctx.dynCount;
+        const bufSize = Math.max(64, fmtString.length + 20 * fmtArgs.length + 64);
+        ctx.dynTexts.push({ bufId, fmtString: fmtString, fmtArgs: fmtArgs.join(', '), arrName: '', arrIndex: 0, bufSize });
+        ctx.dynCount++;
+        children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+      }
     }
     return true;
   }

@@ -13,23 +13,17 @@ function SidebarSection(props) {
 }
 
 function FileRow(props) {
-  var indent = props.file.indent || 0;
-  var icons = { folder: '>', folderOpen: 'v', file: ' ', ts: 'T', tsx: 'R', js: 'J', jsx: 'X', css: 'C', json: '{', md: 'M' };
-  var icon = icons[props.file.icon] || icons.file;
-
   return (
     <Pressable onPress={props.onPress}>
       {props.selected == 1 && (
         <C.FileRowSelected>
-          <C.FileIndent repeat={indent} />
-          <C.FileIconSelected>{icon}</C.FileIconSelected>
+          <C.FileIconSelected>{props.file.icon}</C.FileIconSelected>
           <C.FileNameSelected>{props.file.name}</C.FileNameSelected>
         </C.FileRowSelected>
       )}
       {props.selected == 0 && (
         <C.FileRow>
-          <C.FileIndent repeat={indent} />
-          <C.FileIcon>{icon}</C.FileIcon>
+          <C.FileIcon>{props.file.icon}</C.FileIcon>
           <C.FileName>{props.file.name}</C.FileName>
         </C.FileRow>
       )}

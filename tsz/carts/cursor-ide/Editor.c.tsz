@@ -4,8 +4,8 @@ function EditorLine(props) {
   return (
     <C.EditorLine>
       <C.LineNumber>
-        {props.isActive == 1 && <C.LineNumberActive>{'' + props.num}</C.LineNumberActive>}
-        {props.isActive == 0 && <C.LineNumberText>{'' + props.num}</C.LineNumberText>}
+        {props.isActive == 1 && <C.LineNumberActive>{props.num}</C.LineNumberActive>}
+        {props.isActive == 0 && <C.LineNumberText>{props.num}</C.LineNumberText>}
       </C.LineNumber>
       <C.LineContent>
         <C.TokenText>{props.text}</C.TokenText>
