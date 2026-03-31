@@ -45,6 +45,7 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_inline.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_handlers.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_spatial.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/attrs_canvas.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/build_node.js") ++ "\n" ++
     @embedFile("smith/parse_map.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++

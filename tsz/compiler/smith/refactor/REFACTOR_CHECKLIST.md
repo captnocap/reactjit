@@ -60,6 +60,7 @@ Current constraint:
 - [x] Move `buildNode` into its own file.
 - [x] Extract plain element callback attribute parsing from `parseJSXElement`.
 - [x] Extract 3D/Physics spatial attribute parsing from `parseJSXElement`.
+- [x] Extract canvas/graph attribute parsing from `parseJSXElement`.
 - [ ] Split tag normalization from attribute parsing.
 - [ ] Split handler parsing from non-handler prop parsing.
 
