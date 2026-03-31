@@ -169,6 +169,11 @@ pub fn build(b: *std.Build) void {
 
     // ── Forge (compiler kernel + QuickJS → runs Smith JS codegen) ──
     {
+        const smith_bundle = b.addSystemCommand(&.{"node"});
+        smith_bundle.addFileArg(b.path("compiler/smith/refactor/build_bundle.mjs"));
+        const smith_bundle_step = b.step("smith-bundle", "Generate smith/dist/smith.bundle.js");
+        smith_bundle_step.dependOn(&smith_bundle.step);
+
         const forge_mod = b.createModule(.{
             .root_source_file = b.path("compiler/forge.zig"),
             .target = target,
@@ -189,6 +194,7 @@ pub fn build(b: *std.Build) void {
             forge_exe.linkSystemLibrary("m");
             forge_exe.linkSystemLibrary("pthread");
         }
+        forge_exe.step.dependOn(&smith_bundle.step);
         const forge_install = b.addInstallArtifact(forge_exe, .{});
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
         forge_step.dependOn(&forge_install.step);

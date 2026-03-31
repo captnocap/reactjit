@@ -15,74 +15,77 @@ Reference for understanding the Smith compiler. Read this before touching any `.
      6. Call compile(), get back complete .zig source string
      7. Write output file(s)
 
-  -> Smith (~9600 lines JS across 12 files, embedded in forge at compile time)
+  -> Smith (legacy coordinators + refactor helpers, bundled at build time)
      Runs inside QuickJS. No print() -- debug via globalThis.__dbg.
      Token data arrives as parallel kind/start/end arrays matching lexer.zig's TokenKind enum.
+     Authoring source lives under smith/*.js and smith/refactor/**/*.js.
 ```
 
-**Forge embeds JS at build time.** After editing smith/*.js, you MUST `zig build forge` before changes take effect.
+**Forge embeds a generated Smith bundle at build time.** The bundle is written to `compiler/smith/dist/smith.bundle.js` from `compiler/smith/refactor/LOAD_ORDER.txt`. After editing `smith/*.js` or `smith/refactor/**/*.js`, run `zig build forge` or `zig build smith-bundle`.
 
 ## Load Order
 
-Forge concatenates JS files in this order (forge.zig:18-28):
+The authoritative Smith load order lives in:
 
-```
-rules.js -> logs.js -> index.js -> mod.js -> page.js -> attrs.js -> parse_map.js -> parse.js -> preflight.js -> emit_split.js -> emit.js -> soup_smith.js
-```
+- `compiler/smith/refactor/LOAD_ORDER.txt`
 
-All functions are in global scope (no modules). Later files call functions from earlier files freely.
+Forge now embeds one generated file:
+
+- `compiler/smith/dist/smith.bundle.js`
+
+The bundle is produced by:
+
+- `compiler/smith/refactor/build_bundle.mjs`
+
+All functions are still in global scope. The bundle is concatenation only; QuickJS does not resolve runtime imports.
 
 ## File Inventory
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| rules.js | 102 | Constants: TK enum, style/color/enum key maps, HTML tag map, soup constants |
-| logs.js | 116 | LOG dictionary (63 entries), LOG_EMIT(), print() shim |
-| index.js | ~1111 | Core: token cursor, ctx state, collection phases, compile() entry, --mod transpilers |
-| mod.js | ~933 | Block-based module compiler: `<module>` with `<types>/<ffi>/<state>/<functions>` |
-| page.js | ~527 | Page block compiler: `<page route=name>` with `<var>/<state>/<functions>/<timer>` blocks |
-| attrs.js | ~762 | Color/style/handler parsing, slot get/set helpers |
-| parse_map.js | ~820 | .map() parser, nested maps, template literals, conditionals |
-| parse.js | ~1440 | JSX parser: elements, components, children, text nodes, buildNode |
-| preflight.js | ~420 | Post-parse validation: 11+ fatal checks, 4 warnings, lane detection |
-| emit_split.js | ~710 | Effect transpiler, split output, JS_LOGIC/LUA_LOGIC generation, luaTransform/jsTransform |
-| emit.js | ~1670 | Zig code emitter: imports, nodes, OA infra, map pools, lifecycle, exports, main |
-| soup_smith.js | ~776 | Separate compiler lane for web React "soup" sources (own tokenizer + tree builder) |
+| Path | Purpose |
+|------|---------|
+| rules.js | Constants: TK enum, style/color/enum key maps, HTML tag map, soup constants |
+| logs.js | LOG dictionary, `LOG_EMIT()`, print shim |
+| refactor/core.js | Shared low-level helpers, cursor, compiler context, slot helpers |
+| refactor/collect/* | Collection pass helpers for components, script, state, classifiers, render locals |
+| refactor/lanes/* | Lane dispatch and shared app/page finishing |
+| index.js | Top-level `compile()` entry and module transpilers |
+| mod.js | Block-based module compiler: `<module>` with `<types>/<ffi>/<state>/<functions>` |
+| page.js | Page block compiler: `<page route=name>` with `<var>/<state>/<functions>/<timer>` blocks |
+| attrs.js | Shared attribute helpers still used by parse coordinators |
+| refactor/parse/* | Purpose-scoped parser helpers for maps, brace expressions, children, and element attrs |
+| parse_map.js | Compatibility coordinator for legacy map entrypoints |
+| parse.js | JSX parser coordinator |
+| refactor/preflight/* | Rule-group helpers for preflight validation |
+| preflight.js | Preflight rule runner |
+| refactor/emit/* | Purpose-scoped emit helpers |
+| emit_split.js | Split-output and JS/Lua logic emission helpers |
+| emit.js | Top-level emit coordinator |
+| soup_smith.js | Separate compiler lane for web React "soup" sources |
+| refactor/REFACTOR_CHECKLIST.md | Active migration checklist and sequencing |
 
 ---
 
 ## Compilation Pipeline
 
-### Entry: `compile()` (index.js:639)
+### Entry: `compile()` (index.js)
 
 ```
-1. Detect soup source -> compileSoup() [separate lane, exits early]
-2. Detect --mod build -> compileMod() / compileModBlock() [separate lane, exits early]
-3. Build token cursor: mkCursor()
-4. Reset ctx: resetCtx()
-4b. Detect <page route=...> -> compilePage() [separate lane, exits early]
-5. COLLECT phase:
-   a. collectScript(c)       -- extract <script> blocks, record function names
-   b. collectComponents(c)   -- find function Name({props}), record bodyPos + per-component useState
-   c. collectState(c)        -- find useState() calls, build stateSlots[] + objectArrays[]
-   d. collectConstArrays(c)  -- find const name = [{...}] read-only data
-   e. collectClassifiers()   -- eval() .cls.tsz content into ctx.classifiers
-   f. Render locals scan     -- collect const x = expr between function App() { and return
-6. Find App function (last uppercase-named function)
-7. PARSE phase:
-   parseJSXElement(c) from App's return position
-   -> recursively parses JSX tree, populating ctx with handlers, maps, dynTexts, etc.
-8. VALIDATE phase:
-   preflight(ctx) -> fatal errors block compilation with @compileError
-9. EMIT phase:
-   emitOutput(rootExpr, file) -> complete .zig source string
-   -> if --split (default): splitOutput() -> multi-file encoding
-10. stampIntegrity() wraps output with body hash placeholder
+1. `compileLane(source, tokens, file)` chooses the lane.
+2. Soup lane -> `compileSoupLane()` -> `compileSoup()`
+3. Module lane -> `compileModuleLane()` -> `compileMod*()`
+4. Page lane -> `compilePageLane()` -> `compilePage()`
+5. App lane:
+   a. `mkCursor()` + `resetCtx()`
+   b. `collectCompilerInputs(c)`
+   c. find App start + collect render locals
+   d. move to App return and `parseJSXElement(c)`
+   e. `finishParsedLane()` runs preflight + emit + integrity stamping
+6. Split-output payloads still bypass integrity wrapping the same way they did before.
 ```
 
 ---
 
-## ctx — The Compiler State (index.js:66-90)
+## ctx — The Compiler State (`refactor/core.js` via `resetCtx()`)
 
 This is the central data structure. Every phase reads and writes to it.
 

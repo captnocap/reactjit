@@ -20,14 +20,14 @@ Current constraint:
 - [ ] Before each refactor slice, compare the live Smith files against the refactor lane for any newly added logic from parallel work.
 - [ ] Carry forward new legacy Smith behavior into the refactor files before marking a seam complete.
 - [ ] Re-run targeted sync scans on active legacy files (`index.js`, `parse.js`, `parse_map.js`, `attrs.js`, `preflight.js`, `emit.js`) as the refactor continues.
-- [ ] Update the compiler dictionary so its terms and descriptions stay relevant to the live compiler behavior and the new refactor structure.
+- [x] Update the compiler dictionary so its terms and descriptions stay relevant to the live compiler behavior and the new refactor structure.
 
 ## Phase 0: Scaffolding
 
 - [x] Add this checklist.
 - [x] Add a first shared Smith support file for primitive helpers.
 - [ ] Decide long-term authored layout (`smith/src/**`) versus current flat bundle inputs.
-- [ ] Add a bundle step so Forge embeds one built Smith artifact instead of a manual concat list.
+- [x] Add a bundle step so Forge embeds one built Smith artifact instead of a manual concat list.
 
 ## Phase 1: Core Primitives
 
@@ -122,9 +122,9 @@ Current constraint:
 
 ## Phase 8: Build Integration
 
-- [ ] Replace manual Forge concat list with one generated Smith bundle.
-- [ ] Keep flat load order documented until bundle step lands.
-- [ ] Verify new authored structure does not require runtime import resolution in QuickJS.
+- [x] Replace manual Forge concat list with one generated Smith bundle.
+- [x] Keep flat load order documented in one manifest.
+- [x] Verify new authored structure does not require runtime import resolution in QuickJS.
 
 ## Immediate Next Targets
 

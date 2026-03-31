@@ -14,83 +14,8 @@ const lexer_mod = @import("lexer.zig");
 const Lexer = lexer_mod.Lexer;
 const smith = @import("smith_bridge.zig");
 
-// Smith JS source — embedded at compile time, concatenated in load order
-const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
-    @embedFile("smith/logs.js") ++ "\n" ++
-    @embedFile("smith/refactor/core.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/components.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/script.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/state.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/classifiers.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/render_locals.js") ++ "\n" ++
-    @embedFile("smith/refactor/collect/pipeline.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/shared.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/app.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/page.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/module.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/soup.js") ++ "\n" ++
-    @embedFile("smith/refactor/lanes/dispatcher.js") ++ "\n" ++
-    @embedFile("smith/index.js") ++ "\n" ++
-    @embedFile("smith/mod.js") ++ "\n" ++
-    @embedFile("smith/page.js") ++ "\n" ++
-    @embedFile("smith/attrs.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/handlers/press.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/utils.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/template_literal.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/infer_oa.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/brace/conditional.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/brace/ternary.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/header.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/info.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/context.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/plain.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/for_loop.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/map/nested.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/children/inline_glyph.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/children/elements.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/children/brace.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/children/text.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/flow.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/tags.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/defaults.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/value_readers.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_basic.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_text_color.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/component_handlers.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/component_spread.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/component_brace_values.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/component_props.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/component_inline.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_handlers.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_spatial.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_canvas.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/attrs_dispatch.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/element/postprocess.js") ++ "\n" ++
-    @embedFile("smith/refactor/parse/build_node.js") ++ "\n" ++
-    @embedFile("smith/parse_map.js") ++ "\n" ++
-    @embedFile("smith/parse.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/context.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/handlers.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/maps.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/dyn.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/state.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/classifiers.js") ++ "\n" ++
-    @embedFile("smith/refactor/preflight/rules/js_logic.js") ++ "\n" ++
-    @embedFile("smith/preflight.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/preamble.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/state_manifest.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/node_tree.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/dyn_text.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/handlers.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/effects.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/object_arrays.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/map_pools.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/runtime_updates.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/entrypoints.js") ++ "\n" ++
-    @embedFile("smith/refactor/emit/finalize.js") ++ "\n" ++
-    @embedFile("smith/emit_split.js") ++ "\n" ++
-    @embedFile("smith/emit.js") ++ "\n" ++
-    @embedFile("smith/soup_smith.js");
+// Smith JS source — generated bundle from compiler/smith/refactor/LOAD_ORDER.txt
+const SMITH_JS = @embedFile("smith/dist/smith.bundle.js");
 
 const MAX_IMPORTS = 64;
 const Alloc = std.heap.page_allocator;
@@ -402,7 +327,7 @@ pub fn main() !void {
     smith.setTokenData(kinds, starts, ends, lexer.count);
 
     // 5. Load Smith JS
-    if (!smith.loadModule(SMITH_JS, "smith/index.js")) {
+    if (!smith.loadModule(SMITH_JS, "smith/dist/smith.bundle.js")) {
         std.debug.print("[forge] Failed to load Smith\n", .{});
         return;
     }
