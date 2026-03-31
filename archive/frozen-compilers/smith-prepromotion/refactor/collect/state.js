@@ -60,8 +60,10 @@ function collectState(c) {
                 c.advance();
               } else if (c.kind() === TK.lbracket) {
                 type = collectObjectArrayState(c, getter, setter);
+              } else if (c.kind() === TK.lbrace) {
+                type = collectObjectState(c, getter, setter);
               }
-              if (type !== 'object_array') ctx.stateSlots.push({ getter, setter, initial, type });
+              if (type !== 'object_array' && type !== 'object_flat') ctx.stateSlots.push({ getter, setter, initial, type });
             }
           }
         }
@@ -70,6 +72,54 @@ function collectState(c) {
     c.advance();
   }
   c.restore(saved);
+}
+
+// Flatten useState({ field: val, ... }) into per-field state slots
+function collectObjectState(c, getter, setter) {
+  c.advance(); // skip {
+  var fields = [];
+  while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+    if (c.kind() === TK.identifier) {
+      var fieldName = c.text();
+      c.advance();
+      if (c.kind() === TK.colon) c.advance();
+      var fieldInitial = 0;
+      var fieldType = 'int';
+      if (c.kind() === TK.number) {
+        var num = c.text();
+        fieldInitial = num.includes('.') ? parseFloat(num) : parseInt(num);
+        fieldType = num.includes('.') ? 'float' : 'int';
+        c.advance();
+      } else if (c.kind() === TK.minus) {
+        c.advance();
+        if (c.kind() === TK.number) { fieldInitial = -parseInt(c.text()); c.advance(); }
+      } else if (c.kind() === TK.string) {
+        fieldInitial = c.text().slice(1, -1);
+        fieldType = 'string';
+        c.advance();
+      } else if (c.isIdent('true')) { fieldInitial = true; fieldType = 'boolean'; c.advance(); }
+      else if (c.isIdent('false')) { fieldInitial = false; fieldType = 'boolean'; c.advance(); }
+      fields.push({ name: fieldName, initial: fieldInitial, type: fieldType });
+    }
+    if (c.kind() === TK.comma) c.advance();
+    else if (c.kind() !== TK.rbrace) c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance(); // skip }
+  // Skip closing ) of useState(...)
+  if (c.kind() === TK.rparen) c.advance();
+
+  // Create a state slot per field: getter_field / setter
+  for (var fi = 0; fi < fields.length; fi++) {
+    var f = fields[fi];
+    var flatGetter = getter + '_' + f.name;
+    var flatSetter = setter + '_' + f.name;
+    ctx.stateSlots.push({ getter: flatGetter, setter: flatSetter, initial: f.initial, type: f.type });
+  }
+  // Record the object shape so getter.field and setter({...}) can be resolved
+  if (!ctx._objectStateShapes) ctx._objectStateShapes = {};
+  ctx._objectStateShapes[getter] = { fields: fields, setter: setter };
+
+  return 'object_flat';
 }
 
 function collectObjectArrayState(c, getter, setter) {

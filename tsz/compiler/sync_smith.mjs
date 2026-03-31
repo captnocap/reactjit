@@ -3,45 +3,42 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const smithRoot = path.dirname(fileURLToPath(import.meta.url));
-const compilerRoot = path.resolve(smithRoot, '..');
+const compilerRoot = path.dirname(fileURLToPath(import.meta.url));
 const tszRoot = path.resolve(compilerRoot, '..');
 const repoRoot = path.resolve(tszRoot, '..');
 
-const manifestPath = path.resolve(smithRoot, 'LOAD_ORDER.txt');
-const bundlePath = path.resolve(smithRoot, 'dist', 'smith.bundle.js');
+const manifestPath = path.resolve(compilerRoot, 'smith_LOAD_ORDER.txt');
+const bundlePath = path.resolve(compilerRoot, 'dist', 'smith.bundle.js');
 
 const activeFiles = new Set([
-  'tsz/compiler/smith/LOAD_ORDER.txt',
-  'tsz/compiler/smith/build_bundle.mjs',
-  'tsz/compiler/smith/sync_scan.mjs',
-  'tsz/compiler/smith/rules.js',
-  'tsz/compiler/smith/logs.js',
-  'tsz/compiler/smith/core.js',
-  'tsz/compiler/smith/index.js',
-  'tsz/compiler/smith/parse.js',
-  'tsz/compiler/smith/parse_map.js',
-  'tsz/compiler/smith/attrs.js',
-  'tsz/compiler/smith/preflight.js',
-  'tsz/compiler/smith/emit.js',
-  'tsz/compiler/smith/emit_split.js',
-  'tsz/compiler/smith/page.js',
-  'tsz/compiler/smith/mod.js',
-  'tsz/compiler/smith/soup_smith.js',
+  'tsz/compiler/smith_LOAD_ORDER.txt',
+  'tsz/compiler/build_smith_bundle.mjs',
+  'tsz/compiler/sync_smith.mjs',
+  'tsz/compiler/smith_rules.js',
+  'tsz/compiler/smith_logs.js',
+  'tsz/compiler/smith_core.js',
+  'tsz/compiler/smith_index.js',
+  'tsz/compiler/smith_parse.js',
+  'tsz/compiler/smith_parse_map.js',
+  'tsz/compiler/smith_attrs.js',
+  'tsz/compiler/smith_preflight.js',
+  'tsz/compiler/smith_emit.js',
+  'tsz/compiler/smith_emit_split.js',
+  'tsz/compiler/smith_page.js',
+  'tsz/compiler/smith_mod.js',
+  'tsz/compiler/smith_soup.js',
+  'tsz/compiler/smith_DICTIONARY.md',
   'tsz/compiler/forge.zig',
   'tsz/build.zig',
+  'tsz/CLAUDE.md',
 ]);
 
 const activeDirs = [
-  'tsz/compiler/smith/collect/',
-  'tsz/compiler/smith/lanes/',
-  'tsz/compiler/smith/parse/',
-  'tsz/compiler/smith/preflight/',
-  'tsz/compiler/smith/emit/',
-];
-
-const frozenDirs = [
-  'tsz/compiler/smith/refactor/',
+  'tsz/compiler/smith_collect/',
+  'tsz/compiler/smith_lanes/',
+  'tsz/compiler/smith_parse/',
+  'tsz/compiler/smith_preflight/',
+  'tsz/compiler/smith_emit/',
 ];
 
 function parseManifest(text) {
@@ -102,19 +99,40 @@ function isActivePath(relPath) {
   return activeDirs.some((prefix) => relPath.startsWith(prefix));
 }
 
-function isFrozenPath(relPath) {
-  return frozenDirs.some((prefix) => relPath.startsWith(prefix));
+function isLegacyCompilerPath(relPath) {
+  return relPath.startsWith('tsz/compiler/smith/');
+}
+
+function isSmithSource(relPath) {
+  return relPath === 'smith_rules.js' ||
+    relPath === 'smith_logs.js' ||
+    relPath === 'smith_core.js' ||
+    relPath === 'smith_index.js' ||
+    relPath === 'smith_parse.js' ||
+    relPath === 'smith_parse_map.js' ||
+    relPath === 'smith_attrs.js' ||
+    relPath === 'smith_preflight.js' ||
+    relPath === 'smith_emit.js' ||
+    relPath === 'smith_emit_split.js' ||
+    relPath === 'smith_page.js' ||
+    relPath === 'smith_mod.js' ||
+    relPath === 'smith_soup.js' ||
+    relPath.startsWith('smith_collect/') ||
+    relPath.startsWith('smith_lanes/') ||
+    relPath.startsWith('smith_parse/') ||
+    relPath.startsWith('smith_preflight/') ||
+    relPath.startsWith('smith_emit/');
 }
 
 const manifestText = await readFile(manifestPath, 'utf8');
 const manifestEntries = parseManifest(manifestText);
 const manifestSet = new Set(manifestEntries);
-const frozenManifestEntries = manifestEntries.filter((entry) => entry.startsWith('smith/refactor/'));
+const legacyManifestEntries = manifestEntries.filter((entry) => entry.startsWith('smith/'));
 
-const statusEntries = parseStatus(runGit(['status', '--short', '--', 'tsz/compiler/smith', 'tsz/compiler/forge.zig', 'tsz/build.zig']));
+const statusEntries = parseStatus(runGit(['status', '--short', '--', 'tsz/compiler', 'tsz/build.zig']));
 const dirtyActive = statusEntries.filter((entry) => isActivePath(entry.path));
-const dirtyFrozen = statusEntries.filter((entry) => isFrozenPath(entry.path));
-const dirtyOther = statusEntries.filter((entry) => !isActivePath(entry.path) && !isFrozenPath(entry.path));
+const dirtyLegacy = statusEntries.filter((entry) => isLegacyCompilerPath(entry.path));
+const dirtyOther = statusEntries.filter((entry) => !isActivePath(entry.path) && !isLegacyCompilerPath(entry.path));
 
 const manifestMissing = [];
 for (const relPath of manifestEntries) {
@@ -125,11 +143,11 @@ for (const relPath of manifestEntries) {
   }
 }
 
-const smithJsFiles = await walkJsFiles(smithRoot);
+const smithJsFiles = await walkJsFiles(compilerRoot);
 const authoredJs = smithJsFiles
   .map((absPath) => relFromCompiler(absPath))
-  .filter((relPath) => relPath !== 'smith/dist/smith.bundle.js')
-  .filter((relPath) => !relPath.startsWith('smith/refactor/'));
+  .filter((relPath) => relPath !== 'dist/smith.bundle.js')
+  .filter((relPath) => isSmithSource(relPath));
 const missingFromManifest = authoredJs.filter((relPath) => !manifestSet.has(relPath)).sort();
 
 let bundleState = 'missing';
@@ -165,14 +183,14 @@ console.log('- bundle: ' + relFromRepo(bundlePath) + ' [' + bundleState + ']');
 
 printGroup('Missing manifest sources', manifestMissing, (entry) => entry);
 printGroup('Authored JS missing from manifest', missingFromManifest, (entry) => entry);
-printGroup('Manifest entries still pointing at frozen refactor snapshot', frozenManifestEntries, (entry) => entry);
+printGroup('Manifest entries still pointing at legacy smith/ paths', legacyManifestEntries, (entry) => entry);
 printGroup('Bundle stale against', staleBundleSources, (entry) => entry);
 
 console.log('');
 printGroup('Dirty active Smith files', dirtyActive, (entry) => entry.code + ' ' + entry.path);
-printGroup('Dirty frozen reference files', dirtyFrozen, (entry) => entry.code + ' ' + entry.path);
+printGroup('Dirty legacy smith/ files', dirtyLegacy, (entry) => entry.code + ' ' + entry.path);
 printGroup('Other dirty compiler files', dirtyOther, (entry) => entry.code + ' ' + entry.path);
 
-if (manifestMissing.length > 0 || missingFromManifest.length > 0 || frozenManifestEntries.length > 0) {
+if (manifestMissing.length > 0 || missingFromManifest.length > 0 || legacyManifestEntries.length > 0) {
   process.exitCode = 1;
 }

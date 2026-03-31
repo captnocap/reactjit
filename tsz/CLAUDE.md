@@ -18,17 +18,17 @@ This is the active engine. When the user says "the compiler", "the runtime", "la
 
 ```
 compiler/
-  smith/            — Smith: JS-based compiler brain (.tsz → .zig codegen)
-    rules.js        — Token enum + lookup tables (style keys, colors, enums, HTML tags)
-    index.js        — Token cursor, state, collection phases, compile() entry point
-    attrs.js        — Style/color/handler parsing
-    parse.js        — JSX parser (maps, components, conditionals, template literals)
-    emit.js         — Zig code emitter (assembles complete .zig source)
+  smith_*.js        — Smith root JS compiler files (.tsz → .zig codegen)
+  smith_collect/    — Collection pass
+  smith_lanes/      — Entry lanes + surface tiering
+  smith_parse/      — JSX/map/element parsing
+  smith_preflight/  — Validation rules
+  smith_emit/       — Emit helpers
+  smith_DICTIONARY.md — Live map of the active Smith layout
   forge.zig         — Forge: Zig binary that hosts Smith via QuickJS
   smith_bridge.zig  — QuickJS bridge (init, eval, pass tokens, get result)
   lexer.zig         — Tokenizer (shared, stays in Zig for speed)
   cli.zig           — CLI interface (used by bin/tsz, will be replaced by forge CLI)
-  reference/        — FROZEN old compiler (25k lines Zig) — DO NOT EDIT
 framework/          — Engine core: layout, GPU, events, state, text, windows, canvas
 carts/              — Apps built with the framework
   conformance/      — Conformance test carts (d01-d104, verify against bin/tsz)
@@ -62,7 +62,7 @@ tsz-build carts/conformance/d01_nested_maps.tsz
 ### Manual steps (if you need them individually)
 
 ```bash
-# Step 1: Build forge (only needed after editing smith/ JS files)
+# Step 1: Build forge (only needed after editing Smith JS files)
 zig build forge
 
 # Step 2: Run forge to compile a .tsz → .zig
@@ -78,7 +78,7 @@ zig build app -Dapp-name=d01_nested_maps -Doptimize=ReleaseFast
 
 ### IMPORTANT: Forge embeds JS at build time
 
-When you edit files in `compiler/smith/`, you MUST rebuild forge (`zig build forge`) before those changes take effect. Forge embeds the JS files. If you skip this step, forge runs the OLD smith code and your changes do nothing.
+When you edit Smith files in `compiler/` (`smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, `smith_emit/`), you MUST rebuild forge (`zig build forge`) before those changes take effect. Forge embeds the JS bundle. If you skip this step, forge runs the old Smith code and your changes do nothing.
 
 ### IMPORTANT: Zig build caching
 
@@ -90,7 +90,7 @@ Zig aggressively caches. If the binary timestamp doesn't update after `zig build
 
 **DO NOT rebuild `bin/tsz`. DO NOT use `zig-out/bin/tsz` as reference.** The `zig-out/bin/tsz` binary was rebuilt by other sessions and produces DIFFERENT output. Always verify Smith against `bin/tsz`.
 
-The old compiler SOURCE is in `compiler/reference/` — DO NOT EDIT those files.
+The old compiler source is archived under `../archive/frozen-compilers/` — do not edit frozen snapshots unless you are explicitly preserving history.
 
 ## Reference Implementation (Love2D)
 

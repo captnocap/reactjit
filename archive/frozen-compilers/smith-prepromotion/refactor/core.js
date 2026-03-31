@@ -171,6 +171,24 @@ function isGetter(name) {
   return ctx.stateSlots.some(s => s.getter === name);
 }
 
+// Resolve object state field access: cursorPosition.line → state.getSlot(N)
+// Returns resolved Zig expr or null if not an object state access.
+// Advances cursor past name.field if matched.
+function tryResolveObjectStateAccess(c) {
+  if (c.kind() !== TK.identifier) return null;
+  if (!ctx._objectStateShapes) return null;
+  var name = c.text();
+  var shape = ctx._objectStateShapes[name];
+  if (!shape) return null;
+  if (c.pos + 2 >= c.count || c.kindAt(c.pos + 1) !== TK.dot || c.kindAt(c.pos + 2) !== TK.identifier) return null;
+  var field = c.textAt(c.pos + 2);
+  var flatGetter = name + '_' + field;
+  var slotIdx = findSlot(flatGetter);
+  if (slotIdx < 0) return null;
+  c.advance(); c.advance(); c.advance(); // skip name . field
+  return slotGet(flatGetter);
+}
+
 function isSetter(name) {
   if (ctx.slotRemap && name in ctx.slotRemap) return true;
   return ctx.stateSlots.some(s => s.setter === name);

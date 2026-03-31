@@ -47,9 +47,30 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
 
   if (c.kind() === TK.rparen) c.advance(); // skip )
   if (c.kind() === TK.arrow) c.advance(); // skip =>
-  // Handle function body: { return ( <JSX> ) }
+  // Handle function body: { var x = ...; return ( <JSX> ) }
   if (c.kind() === TK.lbrace) {
     c.advance(); // skip {
+    // Skip var/const/let declarations before return
+    // Consume them so they don't leak as text, but only collect simple
+    // render locals (JS-only constructs like Math.* are skipped)
+    while (c.kind() !== TK.eof && (c.isIdent('var') || c.isIdent('const') || c.isIdent('let'))) {
+      c.advance(); // skip var/const/let
+      if (c.kind() === TK.identifier) {
+        var _mapVarName = c.text();
+        c.advance(); // skip name
+        if (c.kind() === TK.equals) {
+          c.advance(); // skip =
+          // Consume value tokens up to semicolon
+          var _mvDepth = 0;
+          while (c.pos < c.count) {
+            if (c.kind() === TK.semicolon && _mvDepth === 0) { c.advance(); break; }
+            if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) _mvDepth++;
+            if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) { _mvDepth--; if (_mvDepth < 0) break; }
+            c.advance();
+          }
+        }
+      }
+    }
     if (c.isIdent('return')) c.advance(); // skip return
   }
   if (c.kind() === TK.lparen) c.advance(); // skip ( before JSX

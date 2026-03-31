@@ -218,7 +218,12 @@ function tryParseBraceChild(c, children) {
       var _brField = c.textAt(c.pos + 1);
       var _brResolved = resolveConstOaFieldFromRef(_brRlVal, _brField);
       if (_brResolved !== null) {
-        _brRlVal = _brResolved;
+        // Strip outer quotes from string-type values (they'll be re-quoted in .text = "...")
+        if (_brResolved.charAt(0) === '"' && _brResolved.charAt(_brResolved.length - 1) === '"') {
+          _brRlVal = _brResolved.slice(1, -1);
+        } else {
+          _brRlVal = _brResolved;
+        }
         c.advance(); // skip .
         c.advance(); // skip field
       }

@@ -4,7 +4,7 @@
 # original 25,000-line Zig compiler for the death test suite.
 #
 # OG = bin/tsz (frozen reference, all [P] in RESULTS.md)
-# Smith = zig-out/bin/forge + compiler/smith/*.js
+# Smith = zig-out/bin/forge + compiler/smith_*.js + compiler/smith_{collect,lanes,parse,preflight,emit}/
 #
 # Status codes:
 #   [P] = Pass — compiles, runs, renders correctly

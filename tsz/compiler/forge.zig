@@ -14,8 +14,8 @@ const lexer_mod = @import("lexer.zig");
 const Lexer = lexer_mod.Lexer;
 const smith = @import("smith_bridge.zig");
 
-// Smith JS source — generated bundle from compiler/smith/LOAD_ORDER.txt
-const SMITH_JS = @embedFile("smith/dist/smith.bundle.js");
+// Smith JS source — generated bundle from compiler/smith_LOAD_ORDER.txt
+const SMITH_JS = @embedFile("dist/smith.bundle.js");
 
 const MAX_IMPORTS = 64;
 const Alloc = std.heap.page_allocator;
@@ -327,7 +327,7 @@ pub fn main() !void {
     smith.setTokenData(kinds, starts, ends, lexer.count);
 
     // 5. Load Smith JS
-    if (!smith.loadModule(SMITH_JS, "smith/dist/smith.bundle.js")) {
+    if (!smith.loadModule(SMITH_JS, "compiler/dist/smith.bundle.js")) {
         std.debug.print("[forge] Failed to load Smith\n", .{});
         return;
     }

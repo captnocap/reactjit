@@ -99,6 +99,13 @@ function parseComponentBraceValue(c) {
       continue;
     }
 
+    // Object state field access: cursorPosition.line → state.getSlot(N)
+    var _osResult = tryResolveObjectStateAccess(c);
+    if (_osResult) {
+      val += _osResult;
+      continue;
+    }
+
     if (c.kind() === TK.template_literal) {
       const resolvedTemplate = resolveComponentTemplateLiteralValue(c);
       if (resolvedTemplate !== null) {

@@ -20,7 +20,7 @@ function checkJSSyntaxLeaks(scan, errors) {
     if (/'\w{2,}'/.test(decl) && decl.indexOf('.text =') >= 0) {
       var leaked = decl.match(/\.text = "([^"]*'[^"]*)"/) || decl.match(/\.text = "([^"]*exact[^"]*)"/);
       if (leaked) {
-        errors.push('F18: JS syntax leaked into Zig text node: "' + leaked[1].substring(0, 60) + '" [decl#' + di + '/' + scan.allDecls.length + ' len=' + decl.length + ' start=' + decl.substring(0, 80) + ']');
+        errors.push('F18: JS syntax leaked into Zig text node: "' + leaked[1].substring(0, 60) + '"');
       }
     }
     if (/\bexact\b/.test(decl) && decl.indexOf('Node{') >= 0) {
