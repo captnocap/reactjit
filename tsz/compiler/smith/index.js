@@ -6,97 +6,6 @@
 //   __file    — input file path
 
 
-// ── Token cursor ──
-
-function mkCursor(raw, source) {
-  const lines = raw.trim().split('\n');
-  const count = lines.length;
-  const kinds = new Array(count);
-  const starts = new Array(count);
-  const ends = new Array(count);
-  for (let i = 0; i < count; i++) {
-    const p = lines[i].split(' ');
-    kinds[i] = parseInt(p[0]); starts[i] = parseInt(p[1]); ends[i] = parseInt(p[2]);
-  }
-  return {
-    kinds, starts, ends, count, source, pos: 0,
-    kind()      { return this.kinds[this.pos]; },
-    text()      { return this._byteSlice(this.starts[this.pos], this.ends[this.pos]); },
-    textAt(i)   { return this._byteSlice(this.starts[i], this.ends[i]); },
-    // Byte-based text access — Zig lexer uses byte offsets, but JS strings
-    // index by char. For ASCII-only sources they match; for multi-byte we map.
-    _byteSlice(start, end) {
-      if (this._isAscii === undefined) {
-        this._isAscii = true;
-        for (let i = 0; i < this.source.length; i++) {
-          if (this.source.charCodeAt(i) > 127) { this._isAscii = false; break; }
-        }
-        if (!this._isAscii) {
-          // Build byte→char offset map
-          this._b2c = [];
-          let byteIdx = 0;
-          for (let ci = 0; ci < this.source.length; ci++) {
-            this._b2c[byteIdx] = ci;
-            const code = this.source.charCodeAt(ci);
-            if (code < 0x80) byteIdx += 1;
-            else if (code < 0x800) byteIdx += 2;
-            else if (code >= 0xD800 && code <= 0xDBFF) { byteIdx += 4; ci++; }
-            else byteIdx += 3;
-          }
-          this._b2c[byteIdx] = this.source.length;
-        }
-      }
-      if (this._isAscii) return this.source.slice(start, end);
-      const cs = this._b2c[start] !== undefined ? this._b2c[start] : start;
-      const ce = this._b2c[end] !== undefined ? this._b2c[end] : end;
-      return this.source.slice(cs, ce);
-    },
-    kindAt(i)   { return this.kinds[i]; },
-    advance()   { if (this.pos < this.count) this.pos++; },
-    isIdent(n)  { return this.kind() === TK.identifier && this.text() === n; },
-    save()      { return this.pos; },
-    restore(p)  { this.pos = p; },
-  };
-}
-
-// ── Compiler state ──
-
-let ctx = {};
-function resetCtx() {
-  ctx = {
-    stateSlots: [],       // [{getter, setter, initial, type}]
-    components: [],       // [{name, propNames, bodyPos}]
-    propStack: {},        // {propName: value} — active during component inlining
-    inlineComponent: null, // name of component being inlined (for array comments)
-    componentChildren: null, // children nodes passed to current inlined component
-    handlers: [],         // [{name, body}]  body = zig source
-    handlerCount: 0,
-    conditionals: [],     // [{condExpr, kind, arrName, arrIndex, trueIdx, falseIdx}]
-    dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex, bufSize}]
-    dynColors: [],        // [{dcId, arrName, arrIndex, colorExpr}] — color prop runtime assignments
-    arrayComments: [],    // ["// tsz:file:line — <Tag>"] per array decl
-    dynCount: 0,
-    arrayCounter: 0,
-    arrayDecls: [],       // ["var _arr_N = [_]Node{ ... };"]
-    slotRemap: {},        // {getter/setter name → slot index} — active during component inlining
-    objectArrays: [],     // [{fields: [{name, type}], getter, setter}]
-    maps: [],             // [{arrayName, itemParam, indexParam, innerNodes, parentArr, childIdx, textsInMap}]
-    scriptBlock: null,     // raw JS from <script>...</script>
-    scriptFuncs: [],       // function names defined in <script>
-    classifiers: {},       // {Name: {type, style, fontSize, color, ...}} from .cls imports
-    renderLocals: {},      // {varName: resolvedValue} — variables between function App() and return
-    _debugLines: [],       // debug output lines (emitted as Zig comments)
-    // ── Drop tracking (preflight screams about these) ──
-    _unresolvedClassifiers: [], // [{name, line}] — C.Name used but no classifier definition
-    _droppedExpressions: [],    // [{expr, line}] — {expr} silently skipped in parseChildren
-    _unknownSubsystemTags: [],  // [{tag, line}] — Physics.*/3D.*/Effect/Scene3D with no runtime
-    _ignoredModuleBlocks: [],   // [{name}] — <module name> blocks in source, not processed
-    _undefinedJSCalls: [],      // [{caller, callee}] — JS function calls to undefined functions
-    _duplicateJSVars: [],       // [{name}] — var declared more than once in JS_LOGIC
-    _jsDynTexts: [],            // [{slotIdx, jsExpr}] — JS-evaluated dynamic text expressions
-  };
-}
-
 // ── Collection: components ──
 
 function collectComponents(c) {
@@ -568,12 +477,21 @@ function collectClassifiers() {
   }
 }
 
+// Default style token values (matches theme.zig rounded_airy preset)
+var _defaultStyleTokens = {
+  radiusSm: 4, radiusMd: 8, radiusLg: 16,
+  spacingSm: 8, spacingMd: 16, spacingLg: 24,
+  borderThin: 1, borderMedium: 2,
+  fontSm: 10, fontMd: 13, fontLg: 18,
+};
+
 // Resolve 'theme-*' string to its value from the active theme
 function resolveThemeToken(val) {
   if (typeof val !== 'string') return val;
   if (!val.startsWith('theme-')) return val;
   const token = val.slice(6); // strip 'theme-'
   if (_activeTheme[token] !== undefined) return _activeTheme[token];
+  if (_defaultStyleTokens[token] !== undefined) return _defaultStyleTokens[token];
   return val; // unresolved — pass through
 }
 
@@ -671,6 +589,16 @@ function compile() {
   collectState(c);
   collectConstArrays(c);
   collectClassifiers();
+
+  // Extract variant names from classifiers (ordered, deduplicated)
+  for (var clsKey in ctx.classifiers) {
+    var def = ctx.classifiers[clsKey];
+    if (def.variants) {
+      for (var vn of Object.keys(def.variants)) {
+        if (ctx.variantNames.indexOf(vn) === -1) ctx.variantNames.push(vn);
+      }
+    }
+  }
 
   // Find App function
   let appStart = -1;

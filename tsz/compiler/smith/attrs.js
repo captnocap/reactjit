@@ -379,25 +379,6 @@ function parseStyleBlock(c) {
 
 // ── Handler parser ──
 
-function findSlot(name) {
-  // Check instance remap first (per-component-inline override)
-  if (ctx.slotRemap && name in ctx.slotRemap) return ctx.slotRemap[name];
-  for (let i = 0; i < ctx.stateSlots.length; i++) {
-    if (ctx.stateSlots[i].getter === name || ctx.stateSlots[i].setter === name) return i;
-  }
-  return -1;
-}
-
-function isGetter(name) {
-  if (ctx.slotRemap && name in ctx.slotRemap) return true;
-  return ctx.stateSlots.some(s => s.getter === name);
-}
-
-function isSetter(name) {
-  if (ctx.slotRemap && name in ctx.slotRemap) return true;
-  return ctx.stateSlots.some(s => s.setter === name);
-}
-
 // Resolve a prop value for use in a conditional expression.
 // Zig expressions (state.getSlot, numbers, if-expressions) pass through.
 // String literals (multi-word text from prop="value") resolve to a truthy constant
@@ -410,16 +391,6 @@ function _condPropValue(pv) {
   if (pv.startsWith('_handler_press_')) return '1'; // handler ref = truthy
   // String literal — non-empty means truthy (1), empty means falsy (0)
   return pv.length > 0 ? '1' : '0';
-}
-
-function slotGet(name) {
-  const i = findSlot(name);
-  if (i < 0) return name;
-  const s = ctx.stateSlots[i];
-  if (s.type === 'string') return `state.getSlotString(${i})`;
-  if (s.type === 'float') return `state.getSlotFloat(${i})`;
-  if (s.type === 'boolean') return `state.getSlotBool(${i})`;
-  return `state.getSlot(${i})`;
 }
 
 function slotSet(slotIdx) {
@@ -798,4 +769,3 @@ function parseValueExpr(c) {
   }
   return parts.join('');
 }
-

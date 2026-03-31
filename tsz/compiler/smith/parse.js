@@ -6,14 +6,8 @@ function parseJSXElement(c) {
   if (c.kind() !== TK.lt) return { nodeExpr: '.{}' };
   c.advance(); // <
 
-  // Fragment: <>
-  if (c.kind() === TK.gt) {
-    const fragOffset = c.starts[c.pos > 0 ? c.pos - 1 : 0];
-    c.advance();
-    const children = parseChildren(c);
-    if (c.kind() === TK.lt_slash) { c.advance(); if (c.kind() === TK.gt) c.advance(); }
-    return buildNode('Box', [], children, null, null, '>', fragOffset);
-  }
+  const fragmentNode = tryParseFragmentElement(c);
+  if (fragmentNode) return fragmentNode;
 
   let rawTag = c.text();
   c.advance();
@@ -23,67 +17,12 @@ function parseJSXElement(c) {
     c.advance();
   }
 
-  // Skip <script>...</script> blocks — already collected by collectScript
-  if (rawTag === 'script') {
-    // Skip to matching </script>
-    if (c.kind() === TK.gt) c.advance();
-    while (c.pos < c.count) {
-      if (c.kind() === TK.lt_slash && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'script') {
-        c.advance(); c.advance(); // skip </ script
-        if (c.kind() === TK.gt) c.advance(); // skip >
-        break;
-      }
-      c.advance();
-    }
-    return { nodeExpr: '.{}' }; // empty placeholder node
-  }
+  if (rawTag === 'script') return skipScriptElement(c);
 
-  // C.Name classifier resolution
-  let clsDef = null;
-  let clsName = null;
-  if (rawTag === 'C' && c.kind() === TK.dot) {
-    c.advance(); // skip .
-    clsName = c.text(); c.advance();
-    clsDef = ctx.classifiers && ctx.classifiers[clsName];
-    if (!clsDef) {
-      ctx._unresolvedClassifiers.push({ name: clsName, line: c.starts[c.pos > 0 ? c.pos - 1 : 0] });
-    }
-    rawTag = clsDef ? clsDef.type : 'Box';
-  }
-  // Graph.Path / Graph.Node dot-name tags
-  if (rawTag === 'Graph' && c.kind() === TK.dot) {
-    c.advance(); // skip .
-    const subTag = c.text(); c.advance();
-    rawTag = 'Graph.' + subTag; // e.g. Graph.Path
-  }
-  // Canvas.Node / Canvas.Path / Canvas.Clamp dot-name tags
-  if (rawTag === 'Canvas' && c.kind() === TK.dot) {
-    c.advance(); // skip .
-    const subTag = c.text(); c.advance();
-    rawTag = 'Canvas.' + subTag; // e.g. Canvas.Node
-  }
-  // 3D.Camera / 3D.Light / 3D.Mesh / 3D.Group dot-name tags
-  if (rawTag === '3D' && c.kind() === TK.dot) {
-    c.advance();
-    const subTag = c.text(); c.advance();
-    rawTag = '3D.' + subTag;
-  }
-  // Scene3D as a tag
-  if (rawTag === 'Scene3D' && c.kind() === TK.dot) {
-    c.advance();
-    rawTag = '3D.' + c.text(); c.advance();
-  }
-  // Physics.World / Physics.Wall / Physics.Ball / Physics.Box dot-name tags
-  if (rawTag === 'Physics' && c.kind() === TK.dot) {
-    c.advance();
-    const subTag = c.text(); c.advance();
-    rawTag = 'Physics.' + subTag;
-  }
-
-  // Track unsupported subsystem tags — these parse but produce empty boxes
-  if (rawTag.startsWith('Physics.') || rawTag.startsWith('3D.') || rawTag === 'Scene3D' || rawTag === 'Effect') {
-    ctx._unknownSubsystemTags.push({ tag: rawTag, line: c.starts[c.pos > 0 ? c.pos - 1 : 0] });
-  }
+  const normalizedTag = normalizeRawTag(c, rawTag);
+  rawTag = normalizedTag.rawTag;
+  let clsDef = normalizedTag.clsDef;
+  let clsName = normalizedTag.clsName;
 
   // Check if this is a component call
   const comp = findComponent(rawTag);
@@ -418,8 +357,10 @@ function parseJSXElement(c) {
   if (tag === 'ScrollView' || rawTag === 'ScrollView') styleFields.push('.overflow = .scroll');
   // Canvas → graph_container + canvas_type (enables canvas layout mode)
   if (rawTag === 'Canvas') { nodeFields.push('.graph_container = true'); nodeFields.push('.canvas_type = "canvas"'); }
-  // Canvas.Node → canvas_node with gx/gy/gw/gh parsed from attributes
-  if (rawTag === 'Canvas.Node') nodeFields.push('.canvas_node = true');
+  // Canvas.Node / Graph.Node → canvas_node with gx/gy/gw/gh parsed from attributes
+  if (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node') {
+    nodeFields.push('.canvas_node = true');
+  }
   // Canvas.Clamp → viewport-pinned overlay inside Canvas (not transformed by camera)
   if (rawTag === 'Canvas.Clamp') nodeFields.push('.canvas_clamp = true');
   // Canvas.Overlay → viewport-pinned HUD layer (already handled above)
@@ -749,7 +690,28 @@ function parseJSXElement(c) {
             if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
               c.advance(); // skip item name
               if (c.kind() === TK.dot) { c.advance(); const fn2 = c.text(); c.advance(); if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = []; ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_path_d', oaField: fn2, type: 'string' }); }
-            } else { while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance(); }
+            } else {
+              // Dynamic d attribute — template literal or expression → jsExpr slot
+              var dTokens = [];
+              var dDepth = 0;
+              while (c.kind() !== TK.eof) {
+                if (c.kind() === TK.lbrace) dDepth++;
+                if (c.kind() === TK.rbrace) { if (dDepth === 0) break; dDepth--; }
+                dTokens.push(c.text());
+                c.advance();
+              }
+              if (dTokens.length > 0) {
+                var jsExpr = dTokens.join(' ').replace(/\bexact\b/g, '===');
+                // Convert template literal backtick syntax to JS string concat
+                // The lexer may have tokenized `M ${x}` as backtick + tokens
+                var jSlotIdx = ctx.stateSlots.length;
+                ctx.stateSlots.push({ getter: '__jsExpr_' + jSlotIdx, setter: '__setJsExpr_' + jSlotIdx, initial: '', type: 'string' });
+                var jBufId = ctx.dynCount;
+                ctx.dynTexts.push({ bufId: jBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, targetField: 'canvas_path_d' });
+                ctx.dynCount++;
+                ctx._jsDynTexts.push({ slotIdx: jSlotIdx, jsExpr: jsExpr });
+              }
+            }
             if (c.kind() === TK.rbrace) c.advance();
           }
         } else if (attr === 'fill' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
@@ -793,7 +755,21 @@ function parseJSXElement(c) {
         } else if (attr === 'driftY' && rawTag === 'Canvas') {
           if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${c.text()}`); c.advance(); }
+        } else if ((attr === 'x' || attr === 'gx') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
+          // Graph.Node x={stateVar} → dynamic canvas_gx (via state slot lookup)
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${neg}${c.text()}`); c.advance(); } else if (c.kind() === TK.identifier) { const vn = c.text(); c.advance(); const si = ctx.stateSlots.findIndex(function(s) { return s.getter === vn; }); if (si >= 0) { ctx._dynStyles.push({ arrIdx: -1, childIdx: -1, field: 'canvas_gx', slotIdx: si, isTernary: false }); } } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${c.text()}`); c.advance(); }
+        } else if ((attr === 'y' || attr === 'gy') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${neg}${c.text()}`); c.advance(); } else if (c.kind() === TK.identifier) { const vn = c.text(); c.advance(); const si = ctx.stateSlots.findIndex(function(s) { return s.getter === vn; }); if (si >= 0) { ctx._dynStyles.push({ arrIdx: -1, childIdx: -1, field: 'canvas_gy', slotIdx: si, isTernary: false }); } } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${c.text()}`); c.advance(); }
+        } else if ((attr === 'w' || attr === 'gw') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gw = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gw = ${c.text()}`); c.advance(); }
+        } else if ((attr === 'h' || attr === 'gh') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); }
         } else if (attr === 'gx' && rawTag === 'Canvas.Node') {
+          // Legacy: Canvas.Node gx/gy/gw/gh (keep for backwards compat)
           if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${neg}${c.text()}`); c.advance(); } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) { c.advance(); if (c.kind() === TK.dot) { c.advance(); const fn2 = c.text(); c.advance(); if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = []; ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_gx', oaField: fn2 }); } } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${c.text()}`); c.advance(); }
         } else if (attr === 'gy' && rawTag === 'Canvas.Node') {
@@ -1190,468 +1166,15 @@ function parseJSXElement(c) {
     if (!ctx.usesApplescript) ctx.usesApplescript = true;
   }
 
-  // Self-closing: />
-  if (c.kind() === TK.slash_gt) {
-    c.advance();
-    return buildNode(effectiveTag, styleFields, [], handlerRef, nodeFields, effectiveTag, tagSrcOffset);
-  }
-  if (c.kind() === TK.gt) c.advance();
-
-  const children = parseChildren(c);
-
-  // </Tag> or </C.Name>
-  if (c.kind() === TK.lt_slash) {
-    c.advance();
-    let closingTag = c.kind() === TK.identifier ? c.text() : '?';
-    if (c.kind() === TK.identifier) c.advance(); // skip tag name (or "C")
-    // Handle </3D...> — number "3" + identifier "D"
-    if (closingTag === '?' && c.kind() === TK.number && c.text() === '3') {
-      c.advance(); if (c.kind() === TK.identifier && c.text() === 'D') { closingTag = '3D'; c.advance(); }
-    }
-    let closingFull = closingTag;
-    if (c.kind() === TK.dot) { c.advance(); if (c.kind() === TK.identifier) { closingFull += '.' + c.text(); c.advance(); } } // skip .Name
-    if (c.kind() === TK.gt) c.advance();
-    // Debug: detect tag mismatch during SourcePage parse
-    if (globalThis.__SMITH_DEBUG_INLINE && ctx.inlineComponent === 'SourcePage') {
-      const openTag = clsDef ? ('C.' + (rawTag === 'Box' ? 'SourceSurface' : rawTag)) : rawTag;
-      if (closingFull !== openTag && closingFull !== 'C.' + rawTag) {
-        globalThis.__dbg = globalThis.__dbg || [];
-        globalThis.__dbg.push('[TAG_MISMATCH] open=' + rawTag + ' close=' + closingFull + ' pos=' + c.pos + ' children=' + children.length);
-      }
-    }
-  } else if (globalThis.__SMITH_DEBUG_INLINE && ctx.inlineComponent === 'SourcePage') {
-    globalThis.__dbg = globalThis.__dbg || [];
-    globalThis.__dbg.push('[NO_CLOSE] tag=' + rawTag + ' pos=' + c.pos + ' kind=' + c.kind() + ' text=' + (c.pos < c.count ? c.text().substring(0, 30) : 'EOF') + ' children=' + children.length);
-  }
-
-  return buildNode(effectiveTag, styleFields, children, handlerRef, nodeFields, effectiveTag, tagSrcOffset);
+  return finishParsedElement(c, rawTag, effectiveTag, styleFields, null, handlerRef, nodeFields, clsDef, tagSrcOffset);
 }
 
 function parseChildren(c) {
   const children = [];
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
-    if (c.kind() === TK.lt) {
-      // Detect <For each=X> declarative loop
-      if (c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'For') {
-        const forResult = parseForLoop(c);
-        if (forResult) { children.push(forResult); continue; }
-      }
-      // Detect <Glyph .../> inside <Text> — emit as inline glyph marker
-      if (c.kind() === TK.lt && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'Glyph') {
-        const glyph = parseInlineGlyph(c);
-        if (glyph) { children.push(glyph); continue; }
-      }
-      children.push(parseJSXElement(c));
-    } else if (c.kind() === TK.lbrace) {
-      c.advance();
-      // Skip JSX comments: {/* ... */}
-      if (c.kind() === TK.comment) {
-        c.advance();
-        if (c.kind() === TK.rbrace) c.advance();
-        continue;
-      }
-      if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
-        if (!globalThis.__dbg) globalThis.__dbg = [];
-        globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
-      }
-      // Try conditional: {expr && <JSX>} or {expr != val && <JSX>}
-      const condResult = tryParseConditional(c, children);
-      if (condResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseConditional`); continue; }
-      // Try ternary JSX: {expr ? (<JSX>) : (<JSX>)}
-      const ternJSXResult = tryParseTernaryJSX(c, children);
-      if (ternJSXResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseTernaryJSX`); continue; }
-      // Try ternary text: {expr == val ? "str" : "str"}
-      const ternTextResult = tryParseTernaryText(c, children);
-      if (ternTextResult) { if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push(`-> consumed by tryParseTernaryText`); continue; }
-      // Map: {items.map((item, i) => (...))} — syntactic detection (Love2D style)
-      if (c.kind() === TK.identifier) {
-        const maybeArr = c.text();
-        // Detect .map( syntactically FIRST, then find/create OA
-        if (c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
-          const savedPeek = c.save();
-          c.advance(); c.advance(); // skip identifier, skip .
-          const isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-          c.restore(savedPeek);
-          if (isMapCall) {
-            let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
-            if (!oa) oa = inferOaFromSource(c, maybeArr);
-            if (oa) {
-              const mapResult = tryParseMap(c, oa);
-              if (mapResult) {
-                children.push(mapResult);
-                if (c.kind() === TK.rbrace) c.advance();
-                continue;
-              }
-            }
-          }
-        }
-        // Nested map: {group.items.map(...)} inside an outer .map()
-        if (ctx.currentMap && maybeArr === ctx.currentMap.itemParam &&
-            c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
-          const saved2 = c.save();
-          c.advance(); // skip item param
-          c.advance(); // skip .
-          if (c.kind() === TK.identifier) {
-            const nestedField = c.text();
-            // Find nested OA for this field
-            const parentOa = ctx.currentMap.oa;
-            const nestedFieldInfo = parentOa.fields.find(f => f.type === 'nested_array' && f.name === nestedField);
-            if (nestedFieldInfo && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
-              const nestedOa = ctx.objectArrays.find(o => o.oaIdx === nestedFieldInfo.nestedOaIdx);
-              if (nestedOa) {
-                const mapResult = tryParseNestedMap(c, nestedOa, nestedField);
-                if (mapResult) {
-                  children.push(mapResult);
-                  if (c.kind() === TK.rbrace) c.advance();
-                  continue;
-                }
-              }
-            }
-          }
-          c.restore(saved2);
-        }
-      }
-      // Template literal: {`text ${expr}`}
-      if (c.kind() === TK.template_literal) {
-        const raw = c.text().slice(1, -1); // strip backticks
-        c.advance();
-        if (c.kind() === TK.rbrace) c.advance();
-        // Parse template: split on ${...} and build fmt string + args
-        const { fmt, args } = parseTemplateLiteral(raw);
-        if (args.length > 0) {
-          // Check if this template references map data (inside a .map() template)
-          const isMapTemplate = ctx.currentMap && args.some(a => a.includes('_oa') || a.includes('_i'));
-          if (isMapTemplate) {
-            const mapBufId = ctx.mapDynCount || 0;
-            ctx.mapDynCount = mapBufId + 1;
-            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-            children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
-          } else {
-            const bufId = ctx.dynCount;
-            // Buffer size: for bare `${expr}` use 64, otherwise formula
-            const staticText = fmt.replace(/\{[ds](?::\.?\d+)?\}/g, '');
-            const strArgCount = args.filter(a => a.includes('getSlotString')).length;
-            const intArgCount = args.length - strArgCount;
-            const staticLen = utf8ByteLen(staticText);
-            const bufSize = staticText.length === 0 ? 64 : Math.max(64, staticLen + 20 * intArgCount + 128 * strArgCount);
-            ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize });
-            ctx.dynCount++;
-            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
-          }
-        } else {
-          children.push({ nodeExpr: `.{ .text = "${fmt}" }` });
-        }
-        continue;
-      }
-      // Map item access: {item.field} inside a .map()
-      if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
-        c.advance();
-        if (c.kind() === TK.dot) {
-          c.advance();
-          if (c.kind() === TK.identifier) {
-            const field = c.text();
-            const oa = ctx.currentMap.oa;
-            const oaIdx = oa.oaIdx;
-            const fieldInfo = oa.fields.find(f => f.name === field);
-            c.advance();
-            if (c.kind() === TK.rbrace) c.advance();
-            // Create dynamic text for this map item field
-            const mapBufId = ctx.mapDynCount || 0;
-            ctx.mapDynCount = mapBufId + 1;
-            const fmt = fieldInfo && fieldInfo.type === 'string' ? '{s}' : '{d}';
-            let args;
-            if (fieldInfo && fieldInfo.type === 'string') {
-              args = `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`;
-            } else {
-              args = `_oa${oaIdx}_${field}[_i]`;
-            }
-            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-            children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
-            continue;
-          }
-        } else if (ctx.currentMap.isSimpleArray && c.kind() === TK.rbrace) {
-          // Bare {item} in simple-array For loop → resolve to _v field
-          c.advance(); // skip }
-          const oa = ctx.currentMap.oa;
-          const oaIdx = oa.oaIdx;
-          const mapBufId = ctx.mapDynCount || 0;
-          ctx.mapDynCount = mapBufId + 1;
-          const args = `_oa${oaIdx}__v[_i][0.._oa${oaIdx}__v_lens[_i]]`;
-          ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-          children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
-          continue;
-        }
-      }
-      // {children} splice — insert component children
-      if (c.kind() === TK.identifier && c.text() === 'children' && ctx.componentChildren) {
-        c.advance();
-        if (c.kind() === TK.rbrace) c.advance();
-        for (const ch of ctx.componentChildren) children.push(ch);
-        continue;
-      }
-      // {renderLocal} — substitute render-local variables (Love2D: renderLocals)
-      if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-        const rlVal = ctx.renderLocals[c.text()];
-        c.advance();
-        if (c.kind() === TK.rbrace) c.advance();
-        // Zig runtime expressions → dynamic text buffer
-        const isZigExpr = rlVal.includes('state.get') || rlVal.includes('getSlot') || rlVal.includes('_oa') || rlVal.includes('@as');
-        if (isZigExpr) {
-          const bufId = ctx.dynCount;
-          ctx.dynTexts.push({ bufId, fmtString: '{d}', fmtArgs: leftFoldExpr(rlVal), arrName: '', arrIndex: 0, bufSize: 64 });
-          ctx.dynCount++;
-          children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
-        } else {
-          children.push({ nodeExpr: `.{ .text = "${rlVal}" }` });
-        }
-        continue;
-      }
-      // {expr} — check props first, then state getters
-      if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
-        const propVal = ctx.propStack[c.text()];
-        // JSX slot prop — splice as child node (named slots: header={<Component/>})
-        if (propVal && typeof propVal === 'object' && propVal.__jsxSlot) {
-          c.advance();
-          if (c.kind() === TK.rbrace) c.advance();
-          children.push(propVal.result);
-          continue;
-        }
-        // Check if this is a bare {propName} or part of a larger expression {propName == ...}
-        if (c.kindAt(c.pos + 1) !== TK.rbrace) {
-          // Part of a larger expression — don't consume, let it fall through to expression collector
-          // (the identifier will be collected by the generic fallback path below)
-        } else {
-          c.advance();
-          if (c.kind() === TK.rbrace) c.advance();
-          // Zig runtime expression → dynamic text buffer
-          const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
-          if (isZigExpr) {
-            const bufId = ctx.dynCount;
-            const isStr = propVal.includes('getSlotString') || propVal.includes('..');
-            const fmt = isStr ? '{s}' : '{d}';
-            const args = isStr ? propVal : leftFoldExpr(propVal);
-            const bufSize = isStr ? 128 : 64;
-            if (ctx.currentMap) {
-              ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-            } else {
-              ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
-            }
-            ctx.dynCount++;
-            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
-          } else {
-            children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
-          }
-          continue;
-        }
-      }
-      if (c.kind() === TK.identifier && isGetter(c.text())) {
-        const getter = c.text();
-        const slotIdx = findSlot(getter);
-        const slot = ctx.stateSlots[slotIdx];
-        c.advance();
-        // Bare boolean ternary: getter ? "A" : "B" (no comparison operator)
-        if (c.kind() === TK.question && slot && slot.type === 'boolean') {
-          c.advance(); // skip ?
-          let trueText = '';
-          if (c.kind() === TK.string) { trueText = c.text().slice(1, -1); c.advance(); }
-          if (c.kind() === TK.colon) c.advance();
-          let falseText = '';
-          if (c.kind() === TK.string) { falseText = c.text().slice(1, -1); c.advance(); }
-          const ternaryExpr = `if (${slotGet(getter)}) @as([]const u8, "${trueText}") else @as([]const u8, "${falseText}")`;
-          const bufId = ctx.dynCount;
-          const bufSize = Math.max(64, trueText.length + falseText.length + 16);
-          ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: ternaryExpr, arrName: '', arrIndex: 0, bufSize });
-          ctx.dynCount++;
-          let _bd3 = 0;
-          while (c.kind() !== TK.eof) {
-            if (c.kind() === TK.lbrace) _bd3++;
-            if (c.kind() === TK.rbrace) { if (_bd3 === 0) break; _bd3--; }
-            c.advance();
-          }
-          if (c.kind() === TK.rbrace) c.advance();
-          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
-        // Check for ternary text: getter == N ? "A" : "B"
-        } else if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
-          const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
-          c.advance();
-          if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance(); // === / !==
-          let rhs = '';
-          let rhsIsString = false;
-          if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
-          else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-          if (c.kind() === TK.question) {
-            c.advance(); // skip ?
-            // Parse true branch string
-            let trueText = '';
-            if (c.kind() === TK.string) { trueText = c.text().slice(1, -1); c.advance(); }
-            if (c.kind() === TK.colon) c.advance();
-            // Parse false branch — recursively handles chained ternaries of any depth
-            function _parseTernaryFalse() {
-              if (c.kind() === TK.string) {
-                const s = c.text().slice(1, -1); c.advance();
-                return `"${s}"`;
-              }
-              if (c.kind() === TK.identifier && isGetter(c.text())) {
-                const gN = c.text(); c.advance();
-                if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
-                  const opN = c.kind() === TK.eq_eq ? '==' : '!='; c.advance();
-                  if (c.kind() === TK.equals) c.advance();
-                  let rhsN = '';
-                  if (c.kind() === TK.number) { rhsN = c.text(); c.advance(); }
-                  else if (c.kind() === TK.string) { rhsN = c.text().slice(1, -1); c.advance(); }
-                  if (c.kind() === TK.question) {
-                    c.advance();
-                    let tN = ''; if (c.kind() === TK.string) { tN = c.text().slice(1, -1); c.advance(); }
-                    if (c.kind() === TK.colon) c.advance();
-                    const fN = _parseTernaryFalse();
-                    const condN = `(${slotGet(gN)} ${opN} ${rhsN})`;
-                    return `if ${condN} @as([]const u8, "${tN}") else @as([]const u8, ${fN})`;
-                  }
-                }
-              }
-              return '""';
-            }
-            let falseExpr = _parseTernaryFalse();
-            if (!falseExpr) falseExpr = '""';
-            // Build condition
-            let cond;
-            if (rhsIsString || slot.type === 'string') {
-              const eql = `std.mem.eql(u8, ${slotGet(getter)}, "${rhs}")`;
-              cond = op === '!=' ? `(!${eql})` : `(${eql})`;
-            } else {
-              cond = `(${slotGet(getter)} ${op} ${rhs})`;
-            }
-            const ternaryExpr = `if ${cond} @as([]const u8, "${trueText}") else @as([]const u8, ${falseExpr})`;
-            // Use dynTexts — same as state getters, just with if/else as the format arg
-            const bufId = ctx.dynCount;
-            const bufSize = Math.max(64, trueText.length + 32);
-            ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: ternaryExpr, arrName: '', arrIndex: 0, bufSize });
-            ctx.dynCount++;
-            // Consume remaining tokens until }
-            let _bd2 = 0;
-            while (c.kind() !== TK.eof) {
-              if (c.kind() === TK.lbrace) _bd2++;
-              if (c.kind() === TK.rbrace) { if (_bd2 === 0) break; _bd2--; }
-              c.advance();
-            }
-            if (c.kind() === TK.rbrace) c.advance();
-            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
-          } else {
-            // Not a ternary — consume rest and skip
-            while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
-            if (c.kind() === TK.rbrace) c.advance();
-            children.push({ nodeExpr: '.{ .text = "" }' });
-          }
-        } else {
-          // Simple getter display
-          const bufId = ctx.dynCount;
-          const fmt = slot.type === 'string' ? '{s}' : slot.type === 'float' ? '{d:.2}' : '{d}';
-          const bufSize = slot.type === 'string' ? 128 : 64;
-          const args = slotGet(getter);
-          ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
-          ctx.dynCount++;
-          // Consume remaining expression tokens until closing brace — track if tail is dropped
-          const _tailTokens = [];
-          let _bd = 0;
-          while (c.kind() !== TK.eof) {
-            if (c.kind() === TK.lbrace) _bd++;
-            if (c.kind() === TK.rbrace) { if (_bd === 0) break; _bd--; }
-            _tailTokens.push(c.text());
-            c.advance();
-          }
-          if (c.kind() === TK.rbrace) c.advance();
-          // If there were tokens after the getter, the full expression needs JS evaluation
-          if (_tailTokens.length > 0 && ctx.scriptBlock) {
-            // The simple getter dynText is wrong — remove it and use JS-eval instead
-            ctx.dynTexts.pop();
-            ctx.dynCount--;
-            const fullExpr = (getter + ' ' + _tailTokens.join(' ')).replace(/\bexact\b/g, '===');
-            const jSlotIdx = ctx.stateSlots.length;
-            ctx.stateSlots.push({ getter: '__jsExpr_' + jSlotIdx, setter: '__setJsExpr_' + jSlotIdx, initial: '', type: 'string' });
-            const jBufId = ctx.dynCount;
-            ctx.dynTexts.push({ bufId: jBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
-            ctx.dynCount++;
-            ctx._jsDynTexts.push({ slotIdx: jSlotIdx, jsExpr: fullExpr });
-            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: jBufId });
-          } else if (_tailTokens.length > 0) {
-            ctx._droppedExpressions.push({ expr: getter + ' ' + _tailTokens.join(' '), line: 0 });
-            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
-          } else {
-            // Placeholder node — text will be set by _updateDynamicTexts
-            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
-          }
-        }
-      } else {
-        // Collect the full expression tokens
-        const _dropStart = c.pos;
-        const _dropTokens = [];
-        let depth = 1;
-        while (depth > 0 && c.kind() !== TK.eof) {
-          if (c.kind() === TK.lbrace) depth++;
-          if (c.kind() === TK.rbrace) depth--;
-          if (depth > 0) { _dropTokens.push(c.text()); c.advance(); }
-        }
-        if (c.kind() === TK.rbrace) c.advance();
-        const exprText = _dropTokens.join(' ');
-
-        // Page mode with scriptBlock: route unknown expressions through JS-evaluated state slots
-        if (ctx.scriptBlock && exprText.length > 0) {
-          // Build the JS expression: reconstruct from tokens
-          // Replace 'exact' with '===' for JS evaluation
-          let jsExpr = exprText.replace(/\bexact\b/g, '===');
-          // If it's a bare identifier (function name), call it
-          if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
-            jsExpr = jsExpr + '()';
-          }
-
-          // Allocate a string state slot for this JS expression
-          const slotIdx = ctx.stateSlots.length;
-          ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
-
-          // Create dynText that reads from this slot
-          const bufId = ctx.dynCount;
-          ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
-          ctx.dynCount++;
-
-          // Track for JS_LOGIC generation
-          ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: jsExpr });
-
-          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
-        } else if (exprText.length > 0) {
-          // No scriptBlock — genuinely dropped expression
-          ctx._droppedExpressions.push({ expr: exprText, line: c.starts[_dropStart] || 0 });
-        }
-      }
-    } else if (c.kind() === TK.comment) {
-      // Skip block comments in JSX children
-      c.advance();
-    } else if (c.kind() !== TK.rbrace) {
-      // Text content — use raw source between first and last token to preserve apostrophes etc
-      const textStart = c.starts[c.pos];
-      let textEnd = textStart;
-      while (c.kind() !== TK.lt && c.kind() !== TK.lt_slash && c.kind() !== TK.lbrace && c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
-        textEnd = c.ends[c.pos];
-        c.advance();
-      }
-      const text = c._byteSlice(textStart, textEnd).trim();
-      if (text.trim()) {
-        if (globalThis.__SMITH_DEBUG_INLINE && (text.includes('import') || text.includes('function ') || text.includes('setMyPid'))) {
-          globalThis.__dbg = globalThis.__dbg || [];
-          globalThis.__dbg.push('[TEXT_LEAK] text="' + text.substring(0, 80) + '" pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'none'));
-          // Dump surrounding tokens for diagnostics
-          for (let di = Math.max(0, c.pos - 5); di < Math.min(c.count, c.pos + 5); di++) {
-            globalThis.__dbg.push('[TOK@' + di + '] kind=' + c.kindAt(di) + ' text="' + c.textAt(di).substring(0, 40) + '"');
-          }
-          // Only dump first leak
-          if (!globalThis.__firstLeakDumped) {
-            globalThis.__firstLeakDumped = true;
-            // Dump what happened around SourcePage bodyPos
-            globalThis.__dbg.push('[CONTEXT] SourcePage bodyPos check: components=' + ctx.components.map(function(cc) { return cc.name + '@' + cc.bodyPos; }).join(', '));
-          }
-        }
-        children.push({ nodeExpr: `.{ .text = "${text.trim().replace(/"/g, '\\"')}" }` });
-      }
-    } else { c.advance(); }
+    if (tryParseElementChild(c, children)) continue;
+    if (tryParseBraceChild(c, children)) continue;
+    if (tryParseTextChild(c, children)) continue;
   }
   return children;
 }
@@ -1690,166 +1213,3 @@ function parseInlineGlyph(c) {
   const glyphExpr = `.{ .d = "${d}", .fill = ${fillColor}, .stroke = ${strokeColor}, .stroke_width = ${strokeWidth}, .scale = ${scale}${fillEffectStr} }`;
   return { nodeExpr: '.{ .text = "\\x01" }', isGlyph: true, glyphExpr };
 }
-
-function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
-  // Auto-overflow: any Box with constrained height gets overflow:auto (clips + scrolls when content exceeds)
-  // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
-  // This makes <ScrollView> unnecessary at the authoring level — constrained containers just work.
-  // Exception: full-window containers (width:100% + height:100%) are app frames, not scroll containers.
-  const _hasConstrainedH = styleFields.some(f => f.startsWith('.height') || f.startsWith('.flex_grow'));
-  const _isFullWindow = styleFields.some(f => f === '.height = -1') && styleFields.some(f => f === '.width = -1');
-  if (tag === 'Box' && children.length > 0 && !_isFullWindow && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
-    styleFields.push('.overflow = .auto');
-  }
-  const parts = [];
-  if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
-
-  // For Text nodes: if ANY child has a dynamic text, hoist it to the Text node
-  // and drop all static text siblings (matches reference compiler behavior)
-  if (tag === 'Text') {
-    const dynChild = children.find(ch => ch.dynBufId !== undefined);
-    if (dynChild) {
-      parts.push(dynChild.inMap ? `.text = "__mt${dynChild.dynBufId}__"` : `.text = ""`);
-      if (nodeFields) for (const nf of nodeFields) parts.push(nf);
-      children = [];
-      const expr = `.{ ${parts.join(', ')} }`;
-      const result = { nodeExpr: expr, dynBufId: dynChild.dynBufId };
-      if (dynChild.inMap) result.inMap = true;
-      if (nodeFields && nodeFields._dynColorId !== undefined) result.dynColorId = nodeFields._dynColorId;
-      if (nodeFields && nodeFields._dynStyleIds) result.dynStyleIds = nodeFields._dynStyleIds;
-      if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
-      if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
-      if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
-      return result;
-    }
-    // Single static text child — hoist to .text field
-    if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
-      const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
-      if (m) { parts.push(`.text = "${m[1]}"`); children = []; }
-    }
-    // Inline glyphs: Text with mixed text + <Glyph> children
-    const hasGlyphs = children.some(ch => ch.isGlyph);
-    if (hasGlyphs && children.length > 0) {
-      // Build combined text with \x01 sentinels at glyph positions
-      let combinedText = '';
-      const glyphExprs = [];
-      for (const ch of children) {
-        if (ch.isGlyph) {
-          combinedText += '\\x01';
-          glyphExprs.push(ch.glyphExpr);
-        } else if (ch.nodeExpr) {
-          const m = ch.nodeExpr.match(/\.text = "(.*)"/);
-          if (m) combinedText += m[1];
-        }
-      }
-      parts.push(`.text = "${combinedText}"`);
-      parts.push(`.inline_glyphs = &[_]layout.InlineGlyph{ ${glyphExprs.join(', ')} }`);
-      children = [];
-    }
-  }
-
-  // Node-level fields (font_size, text_color) — after text for correct field order
-  if (nodeFields && nodeFields.length > 0) {
-    for (const nf of nodeFields) parts.push(nf);
-  }
-
-  if (handlerRef) {
-    // Look up the handler's Lua body for lua_on_press
-    const handler = ctx.handlers.find(h => h.name === handlerRef);
-    if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock && !globalThis.__scriptContent) {
-      const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
-    } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
-      // Script block apps: use js_on_press for QuickJS dispatch
-      const jsBody = jsTransform(handler.luaBody);
-      const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
-    } else {
-      parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
-    }
-  }
-
-  if (children.length > 0) {
-    const arrName = `_arr_${ctx.arrayCounter}`;
-    ctx.arrayCounter++;
-    // Transfer parent layout style fields to map placeholder children
-    const layoutFields = styleFields.filter(f =>
-      f.startsWith('.gap') || f.startsWith('.flex_direction') || f.startsWith('.flex_wrap') ||
-      f.startsWith('.align_items') || f.startsWith('.justify_content'));
-    for (let ci = 0; ci < children.length; ci++) {
-      if (children[ci].mapIdx !== undefined && layoutFields.length > 0 && children[ci].nodeExpr === '.{}') {
-        children[ci].nodeExpr = `.{ .style = .{ ${layoutFields.join(', ')} } }`;
-      }
-    }
-    const childExprs = children.map(ch => ch.nodeExpr || ch).join(', ');
-    // Source breadcrumb comment
-    if (srcTag && srcOffset !== undefined) {
-      const line = offsetToLine(globalThis.__source, srcOffset);
-      const fname = (globalThis.__file || '').split('/').pop();
-      const tagDisplay = srcTag === '>' ? '<>' : `<${srcTag}>`;
-      ctx.arrayComments.push(`// tsz:${fname}:${line} \u2014 ${tagDisplay}`);
-    } else {
-      ctx.arrayComments.push('');
-    }
-    // Component name comment — on ALL arrays created during inlining
-    let compSuffix = '';
-    if (ctx.inlineComponent) {
-      compSuffix = ` // ${ctx.inlineComponent}`;
-    }
-    ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };${compSuffix}`);
-    // Bind dynamic texts and conditionals to this array
-    for (let i = 0; i < children.length; i++) {
-      if (children[i].dynBufId !== undefined) {
-        const dt = ctx.dynTexts.find(d => d.bufId === children[i].dynBufId && !!d.inMap === !!children[i].inMap);
-        if (dt && !dt.arrName) {
-          dt.arrName = arrName; dt.arrIndex = i;
-        }
-      }
-      if (children[i].mapIdx !== undefined) {
-        const m = ctx.maps[children[i].mapIdx];
-        if (m) { m.parentArr = arrName; m.childIdx = i; }
-      }
-      if (children[i].condIdx !== undefined) {
-        const cond = ctx.conditionals[children[i].condIdx];
-        if (cond) { cond.arrName = arrName; cond.trueIdx = i; }
-      }
-      if (children[i].dynColorId !== undefined) {
-        const dc = ctx.dynColors[children[i].dynColorId];
-        if (dc && !dc.arrName) { dc.arrName = arrName; dc.arrIndex = i; }
-      }
-      if (children[i].dynStyleId !== undefined) {
-        const ds = ctx.dynStyles[children[i].dynStyleId];
-        if (ds && !ds.arrName) { ds.arrName = arrName; ds.arrIndex = i; }
-      }
-      if (children[i].dynStyleIds) {
-        for (const dsId of children[i].dynStyleIds) {
-          const ds = ctx.dynStyles[dsId];
-          if (ds && !ds.arrName) { ds.arrName = arrName; ds.arrIndex = i; }
-        }
-      }
-      if (children[i].ternaryCondIdx !== undefined) {
-        const tc = ctx.conditionals[children[i].ternaryCondIdx];
-        if (tc) {
-          tc.arrName = arrName;
-          if (children[i].ternaryBranch === 'true') tc.trueIdx = i;
-          else tc.falseIdx = i;
-        }
-      }
-      if (children[i].variantBindingId !== undefined) {
-        const vb = ctx.variantBindings[children[i].variantBindingId];
-        if (vb && !vb.arrName) { vb.arrName = arrName; vb.arrIndex = i; }
-      }
-    }
-    parts.push(`.children = &${arrName}`);
-  }
-
-  const nodeResult = { nodeExpr: `.{ ${parts.join(', ')} }` };
-  if (nodeFields && nodeFields._dynColorId !== undefined) nodeResult.dynColorId = nodeFields._dynColorId;
-  if (styleFields._dynStyleId !== undefined) nodeResult.dynStyleId = styleFields._dynStyleId;
-  // Merge dynStyleIds from both style block and node field ternaries
-  const allDynIds = [...(styleFields._dynStyleIds || []), ...((nodeFields && nodeFields._dynStyleIds) || [])];
-  if (allDynIds.length > 0) nodeResult.dynStyleIds = allDynIds;
-  if (styleFields._variantBindingId !== undefined) nodeResult.variantBindingId = styleFields._variantBindingId;
-  return nodeResult;
-}
-

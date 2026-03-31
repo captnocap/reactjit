@@ -7,13 +7,6 @@ var _modEnumVariants = [];
 var _modFfiSymbols = {}; // symbol → prefix (e.g. 'socket' → 'posix')
 var _modStateVars = []; // state variable names — don't redeclare as locals
 
-const ZIG_KEYWORDS = ['error', 'type', 'test', 'return', 'break', 'continue', 'resume', 'cancel', 'suspend', 'align', 'async', 'await', 'catch', 'try', 'undefined', 'null', 'inline', 'comptime', 'volatile', 'extern', 'export', 'pub', 'fn', 'var', 'const', 'struct', 'enum', 'union', 'opaque', 'unreachable'];
-
-function zigEscape(name) {
-  if (ZIG_KEYWORDS.indexOf(name) !== -1) return '@"' + name + '"';
-  return name;
-}
-
 function modTranspileType(ts) {
   const t = ts.trim();
   if (t === 'int') return 'i64';
@@ -929,4 +922,3 @@ function modTranspileForExprV2(expr, baseArr, itemVar) {
   e = e.replace(new RegExp('\\b' + itemVar + '\\b', 'g'), baseArr + '[_i]');
   return modTranspileExpr(e);
 }
-

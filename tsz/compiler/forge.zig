@@ -17,10 +17,28 @@ const smith = @import("smith_bridge.zig");
 // Smith JS source — embedded at compile time, concatenated in load order
 const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/logs.js") ++ "\n" ++
+    @embedFile("smith/refactor/core.js") ++ "\n" ++
     @embedFile("smith/index.js") ++ "\n" ++
     @embedFile("smith/mod.js") ++ "\n" ++
     @embedFile("smith/page.js") ++ "\n" ++
     @embedFile("smith/attrs.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/utils.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/template_literal.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/infer_oa.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/brace/conditional.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/brace/ternary.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/header.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/info.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/context.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/plain.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/for_loop.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/map/nested.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/children/elements.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/children/brace.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/children/text.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/flow.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/tags.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/build_node.js") ++ "\n" ++
     @embedFile("smith/parse_map.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++
     @embedFile("smith/preflight.js") ++ "\n" ++
