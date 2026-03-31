@@ -21,6 +21,7 @@ Current constraint:
 - [ ] Carry forward new legacy Smith behavior into the refactor files before marking a seam complete.
 - [ ] Re-run targeted sync scans on active legacy files (`index.js`, `parse.js`, `parse_map.js`, `attrs.js`, `preflight.js`, `emit.js`) as the refactor continues.
 - [x] Update the compiler dictionary so its terms and descriptions stay relevant to the live compiler behavior and the new refactor structure.
+- [x] Add a `smith-sync` scan that reports dirty legacy files, stale bundle state, and authored `.js` files missing from `LOAD_ORDER.txt`.
 
 ## Phase 0: Scaffolding
 

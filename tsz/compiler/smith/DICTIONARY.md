@@ -23,6 +23,12 @@ Reference for understanding the Smith compiler. Read this before touching any `.
 
 **Forge embeds a generated Smith bundle at build time.** The bundle is written to `compiler/smith/dist/smith.bundle.js` from `compiler/smith/refactor/LOAD_ORDER.txt`. After editing `smith/*.js` or `smith/refactor/**/*.js`, run `zig build forge` or `zig build smith-bundle`.
 
+Use `zig build smith-sync` to report:
+
+- dirty active legacy/refactor files
+- bundle staleness versus manifest sources
+- authored `.js` files that are not in `LOAD_ORDER.txt`
+
 ## Load Order
 
 The authoritative Smith load order lives in:

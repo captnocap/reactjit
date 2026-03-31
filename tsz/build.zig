@@ -174,6 +174,11 @@ pub fn build(b: *std.Build) void {
         const smith_bundle_step = b.step("smith-bundle", "Generate smith/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
 
+        const smith_sync = b.addSystemCommand(&.{"node"});
+        smith_sync.addFileArg(b.path("compiler/smith/refactor/sync_scan.mjs"));
+        const smith_sync_step = b.step("smith-sync", "Report Smith sync drift and manifest coverage");
+        smith_sync_step.dependOn(&smith_sync.step);
+
         const forge_mod = b.createModule(.{
             .root_source_file = b.path("compiler/forge.zig"),
             .target = target,
