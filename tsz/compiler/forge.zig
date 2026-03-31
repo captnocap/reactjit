@@ -40,9 +40,11 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/flow.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/tags.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/defaults.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/value_readers.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_props.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/component_inline.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/element/attrs_handlers.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/element/attrs_spatial.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/build_node.js") ++ "\n" ++
     @embedFile("smith/parse_map.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++

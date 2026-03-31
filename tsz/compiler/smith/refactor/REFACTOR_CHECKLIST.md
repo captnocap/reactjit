@@ -36,6 +36,7 @@ Current constraint:
 - [x] Slot/state helper home: `findSlot`, `isGetter`, `isSetter`, `slotGet`.
 - [x] Shared brace/offset parse helpers: `skipBraces`, `offsetToLine`.
 - [x] Shared press-handler capture helpers: forwarded refs, named handlers, inline closures.
+- [x] Shared attr value readers: signed numbers, vectors, repeated field emit helpers.
 - [ ] Shared parse utility home for byte/offset/tag helpers.
 
 ## Phase 2: Collection Pass
@@ -58,6 +59,7 @@ Current constraint:
 - [x] Extract element and brace child handlers from `parseChildren`.
 - [x] Move `buildNode` into its own file.
 - [x] Extract plain element callback attribute parsing from `parseJSXElement`.
+- [x] Extract 3D/Physics spatial attribute parsing from `parseJSXElement`.
 - [ ] Split tag normalization from attribute parsing.
 - [ ] Split handler parsing from non-handler prop parsing.
 
