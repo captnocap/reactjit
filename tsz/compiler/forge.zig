@@ -18,6 +18,11 @@ const smith = @import("smith_bridge.zig");
 const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/logs.js") ++ "\n" ++
     @embedFile("smith/refactor/core.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/components.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/script.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/state.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/classifiers.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/pipeline.js") ++ "\n" ++
     @embedFile("smith/index.js") ++ "\n" ++
     @embedFile("smith/mod.js") ++ "\n" ++
     @embedFile("smith/page.js") ++ "\n" ++

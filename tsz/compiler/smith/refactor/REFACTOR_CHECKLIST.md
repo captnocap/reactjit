@@ -41,11 +41,11 @@ Current constraint:
 
 ## Phase 2: Collection Pass
 
-- [ ] Extract component collection into its own unit.
-- [ ] Extract script block collection into its own unit.
-- [ ] Extract state/object-array collection into its own unit.
-- [ ] Extract classifier collection into its own unit.
-- [ ] Reduce `index.js` collection work to composition only.
+- [x] Extract component collection into its own unit.
+- [x] Extract script block collection into its own unit.
+- [x] Extract state/object-array collection into its own unit.
+- [x] Extract classifier collection into its own unit.
+- [x] Reduce `index.js` collection work to composition only.
 
 ## Phase 3: Parse Dispatch
 
