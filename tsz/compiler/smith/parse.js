@@ -67,99 +67,19 @@ function parseJSXElement(c) {
     } else { c.advance(); }
   }
 
-  let styleFields = attrState.styleFields;
-  let nodeFields = attrState.nodeFields;
-  let ascriptScript = attrState.ascriptScript;
-  let ascriptOnResult = attrState.ascriptOnResult;
-  let handlerRef = attrState.handlerRef;
+  finalizeElementAttrState(rawTag, clsDef, clsName, attrState);
 
-  // Canvas: set drift_active when drift attrs present (enables auto-stacker + drift animation)
-  if (rawTag === 'Canvas') {
-    const hasDrift = nodeFields.some(f => f.includes('canvas_drift_x') || f.includes('canvas_drift_y'));
-    if (hasDrift) nodeFields.push('.canvas_drift_active = true');
-    // view_set is already emitted by viewZoom handler — only add if missing
-    const hasView = nodeFields.some(f => f.includes('canvas_view_x') || f.includes('canvas_view_y') || f.includes('canvas_view_zoom'));
-    if (hasView && !nodeFields.some(f => f.includes('canvas_view_set'))) nodeFields.push('.canvas_view_set = true');
-  }
-
-  // Merge classifier defaults (inline attrs win)
-  if (clsDef) {
-    styleFields = mergeFields(clsStyleFields(clsDef), styleFields);
-    nodeFields = mergeFields(clsNodeFields(clsDef), nodeFields);
-  }
-
-  // Variant/bp binding — track nodes that need runtime style switching
-  if (clsDef && (clsDef.variants || clsDef.bp)) {
-    // Build style arrays for each variant: [base, variant1, variant2, ...]
-    // Base style is what's already merged into styleFields (cls defaults + inline overrides)
-    var vStyles = [styleFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
-    var vNodeFields = [nodeFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
-    for (var vi = 0; vi < ctx.variantNames.length; vi++) {
-      var vname = ctx.variantNames[vi];
-      var vdef = clsDef.variants && clsDef.variants[vname];
-      if (vdef) {
-        // Merge: variant style base + inline overrides (inline still wins)
-        var vFields = mergeFields(clsStyleFields(vdef), styleFields.filter(function(f) {
-          // only keep truly inline fields (not from base classifier)
-          return !clsStyleFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
-        }));
-        vStyles.push(vFields.filter(function(f) { return !f.startsWith('._'); }).join(', '));
-        var vnf = mergeFields(clsNodeFields(vdef), nodeFields.filter(function(f) {
-          return !clsNodeFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
-        }));
-        vNodeFields.push(vnf.filter(function(f) { return !f.startsWith('._'); }).join(', '));
-      } else {
-        // This classifier entry doesn't define this variant — use base
-        vStyles.push(vStyles[0]);
-        vNodeFields.push(vNodeFields[0]);
-      }
-    }
-    // Breakpoint overrides: {sm: styleStr, md: styleStr}
-    var bpStyles = null;
-    if (clsDef.bp) {
-      bpStyles = {};
-      var bpTiers = ['sm', 'md'];
-      for (var bi = 0; bi < bpTiers.length; bi++) {
-        var bpDef = clsDef.bp[bpTiers[bi]];
-        if (bpDef) {
-          var bpFields = mergeFields(clsStyleFields(bpDef), []);
-          bpStyles[bpTiers[bi]] = bpFields.filter(function(f) { return !f.startsWith('._'); }).join(', ');
-        }
-      }
-    }
-    var vbId = ctx.variantBindings.length;
-    ctx.variantBindings.push({
-      id: vbId, clsName: clsName || '',
-      styles: vStyles,         // [baseStr, v1Str, v2Str, ...]
-      nodeFieldStrs: vNodeFields,
-      bpStyles: bpStyles,      // {sm: str, md: str} or null
-      arrName: '', arrIndex: -1,
-      inMap: !!ctx.currentMap,
-      inComponent: !!ctx.inlineComponent,
-    });
-    // Attach binding ID to styleFields so it propagates to node result
-    styleFields._variantBindingId = vbId;
-  }
-
-  // <ascript> auto-handler: generates a press handler that runs AppleScript
-  if (rawTag === 'ascript' && ascriptScript && !handlerRef) {
-    const handlerName = `_handler_press_${ctx.handlerCount}`;
-    const escaped = ascriptScript.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    let targetSlot = 0;
-    if (ascriptOnResult) {
-      const si = findSlot(ascriptOnResult);
-      if (si >= 0) targetSlot = si;
-    }
-    // Async: spawns background thread, result delivered via pollResult() in tick
-    const body = `    @import("framework/applescript.zig").run("${escaped}", ${targetSlot});\n`;
-    ctx.handlers.push({ name: handlerName, body, luaBody: `__applescript("${escaped}")` });
-    handlerRef = handlerName;
-    ctx.handlerCount++;
-    // Mark that this app uses applescript (for tick polling)
-    if (!ctx.usesApplescript) ctx.usesApplescript = true;
-  }
-
-  return finishParsedElement(c, rawTag, effectiveTag, styleFields, null, handlerRef, nodeFields, clsDef, tagSrcOffset);
+  return finishParsedElement(
+    c,
+    rawTag,
+    effectiveTag,
+    attrState.styleFields,
+    null,
+    attrState.handlerRef,
+    attrState.nodeFields,
+    clsDef,
+    tagSrcOffset
+  );
 }
 
 function parseChildren(c) {

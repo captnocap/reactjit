@@ -49,7 +49,7 @@ Current constraint:
 
 ## Phase 3: Parse Dispatch
 
-- [ ] Split `parseJSXElement` into dispatcher + helpers.
+- [x] Split `parseJSXElement` into dispatcher + helpers.
 - [x] Extract fragment/script/finish flow from `parseJSXElement`.
 - [x] Extract tag normalization and classifier/dot-tag rewriting from `parseJSXElement`.
 - [x] Extract tag-based default node/style setup from `parseJSXElement`.
@@ -64,6 +64,7 @@ Current constraint:
 - [x] Extract 3D/Physics spatial attribute parsing from `parseJSXElement`.
 - [x] Extract canvas/graph attribute parsing from `parseJSXElement`.
 - [x] Extract element attribute dispatch order from `parseJSXElement`.
+- [x] Extract post-attr element finalization from `parseJSXElement`.
 - [x] Split tag normalization from attribute parsing.
 - [ ] Split handler parsing from non-handler prop parsing.
 
@@ -122,4 +123,4 @@ Current constraint:
 
 - [x] Extract slot/state helper ownership from `attrs.js`.
 - [x] Start splitting `parse_map.js` by responsibility, beginning with map header/context/finalize seams.
-- [ ] After map seams exist, reduce `parse.js` to dispatcher-style composition.
+- [x] After map seams exist, reduce `parse.js` to dispatcher-style composition.
