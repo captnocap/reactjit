@@ -66,7 +66,7 @@ Current constraint:
 - [x] Extract element attribute dispatch order from `parseJSXElement`.
 - [x] Extract post-attr element finalization from `parseJSXElement`.
 - [x] Split tag normalization from attribute parsing.
-- [ ] Split handler parsing from non-handler prop parsing.
+- [x] Split handler parsing from non-handler prop parsing.
 
 ## Phase 4: `.map()` and Brace Expressions
 

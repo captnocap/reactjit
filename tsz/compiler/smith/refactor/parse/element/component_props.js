@@ -31,12 +31,8 @@ function collectComponentPropValues(c) {
         if (c.kind() === TK.string) {
           propValues[attr] = c.text().slice(1, -1);
           c.advance();
-        } else if ((attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') && c.kind() === TK.lbrace) {
-          c.advance();
-          const handlerName = `_handler_press_${ctx.handlerCount}`;
-          const boundHandlerRef = bindPressHandlerExpression(c, handlerName);
-          if (boundHandlerRef === handlerName) ctx.handlerCount++;
-          propValues[attr] = boundHandlerRef;
+        } else if (tryParseComponentHandlerProp(c, attr, propValues)) {
+          continue;
         } else if (c.kind() === TK.lbrace) {
           c.advance();
           if (c.kind() === TK.lt) {
@@ -44,39 +40,6 @@ function collectComponentPropValues(c) {
             if (c.kind() === TK.rbrace) c.advance();
             propValues[attr] = { __jsxSlot: true, result: jsxResult };
             continue;
-          }
-          if (c.kind() === TK.lparen) {
-            let lk = c.pos;
-            let pd = 1;
-            lk++;
-            while (lk < c.count && pd > 0) {
-              if (c.kindAt(lk) === TK.lparen) pd++;
-              if (c.kindAt(lk) === TK.rparen) pd--;
-              lk++;
-            }
-            if (lk < c.count && c.kindAt(lk) === TK.arrow) {
-              const handlerName = `_handler_press_${ctx.handlerCount}`;
-              const saved = c.save();
-              const luaBody = luaParseHandler(c);
-              c.restore(saved);
-              const body = parseHandler(c);
-              const isMapHandler = !!ctx.currentMap;
-              const zigProps2 = {};
-              if (ctx.propStack) {
-                for (const [pn, pv] of Object.entries(ctx.propStack)) {
-                  if (typeof pv !== 'string') continue;
-                  if (pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot')) {
-                    zigProps2[pn] = pv;
-                  }
-                }
-              }
-              const closureParams = ctx._lastClosureParams || [];
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps2, closureParams });
-              ctx.handlerCount++;
-              if (c.kind() === TK.rbrace) c.advance();
-              propValues[attr] = handlerName;
-              continue;
-            }
           }
           if (ctx.currentMap && c.kind() === TK.identifier) {
             let matchMap = null;
