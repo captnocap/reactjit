@@ -110,7 +110,7 @@ Current constraint:
 - [x] Extract orphaned map-array reconciliation.
 - [x] Extract update/entrypoint emission.
 - [x] Extract final cleanup/post-processing.
-- [ ] Reduce `emit.js` to a top-level emit coordinator.
+- [x] Reduce `emit.js` to a top-level emit coordinator.
 
 ## Phase 7: Lane Compilers
 

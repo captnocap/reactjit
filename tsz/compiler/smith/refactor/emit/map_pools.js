@@ -53,6 +53,71 @@ function countTopLevelNodeDeclEntries(decl) {
   return count;
 }
 
+function computePromotedMapArrays(ctx) {
+  const mapParentArrs = new Set();
+  for (const map of ctx.maps) {
+    if (map.parentArr && !map.isInline) mapParentArrs.add(map.parentArr);
+  }
+
+  const promotedToPerItem = new Set();
+  for (const map of ctx.maps) {
+    if (!map.mapArrayDecls) continue;
+    const pendingDynTexts = ctx.dynTexts.filter(function(dt) {
+      return dt.inMap && dt.mapIdx === ctx.maps.indexOf(map);
+    });
+    if (pendingDynTexts.length === 0) continue;
+    for (const decl of map.mapArrayDecls) {
+      if (!decl.includes('.text = ""')) continue;
+      const match = decl.match(/^var (_arr_\d+)/);
+      if (match) promotedToPerItem.add(match[1]);
+    }
+
+    const allDecls = [].concat(map.mapArrayDecls, ctx.arrayDecls);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const decl of map.mapArrayDecls) {
+        const match = decl.match(/^var (_arr_\d+)/);
+        if (!match || promotedToPerItem.has(match[1])) continue;
+        for (const promotedName of promotedToPerItem) {
+          if (decl.includes(`&${promotedName}`)) {
+            promotedToPerItem.add(match[1]);
+            changed = true;
+            break;
+          }
+        }
+      }
+      for (const promotedName of promotedToPerItem) {
+        const parentDecl = allDecls.find(function(decl) {
+          return decl.startsWith(`var ${promotedName} `);
+        });
+        if (!parentDecl) continue;
+        const childRefs = parentDecl.match(/&(_arr_\d+)/g);
+        if (!childRefs) continue;
+        for (const ref of childRefs) {
+          const childName = ref.slice(1);
+          if (!promotedToPerItem.has(childName) && !mapParentArrs.has(childName)) {
+            promotedToPerItem.add(childName);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const decl of ctx.arrayDecls) {
+      const match = decl.match(/^var (_arr_\d+)/);
+      if (!match || !promotedToPerItem.has(match[1])) continue;
+      if (!map.mapArrayDecls.some(function(mapDecl) {
+        return mapDecl.startsWith(`var ${match[1]}`);
+      })) {
+        map.mapArrayDecls.push(decl);
+      }
+    }
+  }
+
+  return promotedToPerItem;
+}
+
 function emitMapPoolDeclarations(ctx, promotedToPerItem) {
   const mapMeta = [];
   const mapOrder = buildMapEmitOrder(ctx);
