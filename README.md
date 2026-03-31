@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~430 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
-- **Smith** — JS compiler intelligence (~8,900 lines across 12 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~440 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
+- **Smith** — JS compiler intelligence (~25,400 lines across ~77 files) running inside Forge via QuickJS. Modular structure: `smith_parse/` (element/brace/map/template parsing), `smith_emit/` (Zig codegen), `smith_collect/` (preflight collection passes), `smith_preflight/` (tier detection), `smith_lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -84,7 +84,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 8 Zig modules + 12 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 7 Zig modules + ~77 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -320,6 +320,10 @@ carts/
   hackernews/         HackerNews client demo
   remote-chat/        WebSocket chat demo
   world3d-demo/       3D physics + world rendering demo
+  cursor-ide/         VS Code-style IDE clone (editor, sidebar, tabs, chat panel)
+  catalog/            Component catalog
+  claude-canvas/      Canvas playground
+  control-panel/      System control panel
   conformance/        Compiler conformance suite (283 tests)
   wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
   autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
@@ -331,20 +335,21 @@ carts/
 
 ## Framework Modules
 
-80 modules in the framework runtime:
+81 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
 | Core | engine, state, events, input, layout, text, geometry, math, random |
-| Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello |
+| Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello, engine_web |
 | UI | theme, classifier, selection, tooltip, context_menu, router, query, windows |
 | Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state, api, core |
 | Terminal | pty, pty_client, pty_remote, vterm, semantic |
 | Networking | http, httpserver, websocket, wsserver, ipc, qjs_ipc, socks5, tor |
 | Media | audio, player, videos, recorder, capture |
 | Data | fs, fswatch, sqlite, localstore, archive, crypto, privacy |
-| Scripting | qjs_runtime, luajit_runtime, luajit_worker |
+| Scripting | qjs_runtime, qjs_value, qjs_semantic, luajit_runtime, luajit_worker, lua_guard |
 | Dev | telemetry, log, log_export, testharness, testdriver, testassert, debug_client, debug_server |
+| Automation | ifttt |
 | System | process, child_engine, physics2d, physics3d, filedrop, breakpoint, crashlog |
 
 ## Conformance
@@ -353,8 +358,7 @@ carts/
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70/70 | W3C CSS flex spec |
-| Compiler conformance suite | 115/237 | Language features, script runtimes, maps, components, integration |
-| Smith conformance (vs OG Zig) | 89/112 | Forge+Smith output parity against the reference Zig compiler |
+| Compiler conformance suite | 161/283 | Language features, script runtimes, maps, components, integration |
 | Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
