@@ -170,12 +170,12 @@ pub fn build(b: *std.Build) void {
     // ── Forge (compiler kernel + QuickJS → runs Smith JS codegen) ──
     {
         const smith_bundle = b.addSystemCommand(&.{"node"});
-        smith_bundle.addFileArg(b.path("compiler/smith/refactor/build_bundle.mjs"));
+        smith_bundle.addFileArg(b.path("compiler/smith/build_bundle.mjs"));
         const smith_bundle_step = b.step("smith-bundle", "Generate smith/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
 
         const smith_sync = b.addSystemCommand(&.{"node"});
-        smith_sync.addFileArg(b.path("compiler/smith/refactor/sync_scan.mjs"));
+        smith_sync.addFileArg(b.path("compiler/smith/sync_scan.mjs"));
         const smith_sync_step = b.step("smith-sync", "Report Smith sync drift and manifest coverage");
         smith_sync_step.dependOn(&smith_sync.step);
 

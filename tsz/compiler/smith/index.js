@@ -5,11 +5,11 @@
 //   __tokens  — "kind start end\n..." flat token data
 //   __file    — input file path
 
-// Collection lives in smith/refactor/collect/*
+// Collection lives in smith/collect/*
 
-// State/object-array collection lives in smith/refactor/collect/state.js
+// State/object-array collection lives in smith/collect/state.js
 
-// Classifier support lives in smith/refactor/collect/classifiers.js
+// Classifier support lives in smith/collect/classifiers.js
 
 // ── Entry point ──
 

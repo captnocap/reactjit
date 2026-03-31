@@ -14,7 +14,7 @@ const lexer_mod = @import("lexer.zig");
 const Lexer = lexer_mod.Lexer;
 const smith = @import("smith_bridge.zig");
 
-// Smith JS source — generated bundle from compiler/smith/refactor/LOAD_ORDER.txt
+// Smith JS source — generated bundle from compiler/smith/LOAD_ORDER.txt
 const SMITH_JS = @embedFile("smith/dist/smith.bundle.js");
 
 const MAX_IMPORTS = 64;

@@ -1,455 +1,279 @@
 # Smith Compiler Dictionary
 
-Reference for the live Smith compiler after the current refactor. This is the document to read before moving code between legacy coordinator files and `refactor/*`.
+Reference for the live Smith compiler after promotion out of `refactor/`.
 
 ## Architecture
 
 ```text
 .tsz source
   -> Forge (Zig host)
-     - resolves imports and merges app/component/script/classifier source
-     - lexes merged source into token triplets
+     - resolves imports and merges source
+     - lexes merged source into flat token triplets
      - sets QuickJS globals (__source, __tokens, __file, __scriptContent, __clsContent, flags)
      - calls Smith compile()
 
-  -> Smith (JS compiler bundle running inside QuickJS)
-     - lane dispatch: soup / module / page / app
-     - collection pass fills ctx
-     - parse pass builds node tree + dynamic metadata
+  -> Smith (JS compiler bundle in QuickJS)
+     - entry-lane dispatch: soup / module / page / app
+     - surface-tier scan: soup / mixed / chad
+     - collection + parse fill ctx
      - preflight validates ctx
-     - emit builds Zig, or split-output payloads
+     - emit returns Zig or split-output payloads
 
-  -> Forge receives Zig source
-     - stamps body hash into integrity header
-     - writes generated output file(s)
+  -> Forge
+     - stamps integrity header
+     - writes generated output
 ```
 
-Smith authoring source lives in two places:
+QuickJS does not resolve runtime imports. Forge embeds one generated Smith bundle from [LOAD_ORDER.txt](/home/siah/creative/reactjit/tsz/compiler/smith/LOAD_ORDER.txt).
 
-- `compiler/smith/*.js` for the still-live coordinator files and standalone lanes
-- `compiler/smith/refactor/**/*.js` for extracted ownership seams
+## Active Layout
 
-QuickJS does not resolve runtime imports. Forge embeds one generated bundle.
+Active Smith source now lives directly under `compiler/smith/`:
+
+- [core.js](/home/siah/creative/reactjit/tsz/compiler/smith/core.js)
+- [collect/](/home/siah/creative/reactjit/tsz/compiler/smith/collect)
+- [lanes/](/home/siah/creative/reactjit/tsz/compiler/smith/lanes)
+- [parse/](/home/siah/creative/reactjit/tsz/compiler/smith/parse)
+- [preflight/](/home/siah/creative/reactjit/tsz/compiler/smith/preflight)
+- [emit/](/home/siah/creative/reactjit/tsz/compiler/smith/emit)
+- top-level coordinators: [index.js](/home/siah/creative/reactjit/tsz/compiler/smith/index.js), [parse.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse.js), [parse_map.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse_map.js), [attrs.js](/home/siah/creative/reactjit/tsz/compiler/smith/attrs.js), [preflight.js](/home/siah/creative/reactjit/tsz/compiler/smith/preflight.js), [emit.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit.js), [page.js](/home/siah/creative/reactjit/tsz/compiler/smith/page.js), [mod.js](/home/siah/creative/reactjit/tsz/compiler/smith/mod.js), [soup_smith.js](/home/siah/creative/reactjit/tsz/compiler/smith/soup_smith.js), [rules.js](/home/siah/creative/reactjit/tsz/compiler/smith/rules.js), [logs.js](/home/siah/creative/reactjit/tsz/compiler/smith/logs.js)
+
+Frozen reference snapshot:
+
+- [refactor/](/home/siah/creative/reactjit/tsz/compiler/smith/refactor)
+
+`refactor/` is no longer part of the active manifest. It is kept only as a historical snapshot. `smith-sync` reports if the active manifest still points there.
 
 ## Bundle Model
 
-Authoritative load order:
+Authoritative manifest:
 
-- `compiler/smith/refactor/LOAD_ORDER.txt`
+- [LOAD_ORDER.txt](/home/siah/creative/reactjit/tsz/compiler/smith/LOAD_ORDER.txt)
+
+Bundle builder:
+
+- [build_bundle.mjs](/home/siah/creative/reactjit/tsz/compiler/smith/build_bundle.mjs)
+
+Sync scanner:
+
+- [sync_scan.mjs](/home/siah/creative/reactjit/tsz/compiler/smith/sync_scan.mjs)
 
 Generated bundle:
 
 - `compiler/smith/dist/smith.bundle.js`
 
-Bundle builder:
+Useful commands:
 
-- `compiler/smith/refactor/build_bundle.mjs`
+- `zig build smith-sync`
+- `zig build smith-bundle`
+- `zig build forge`
 
-Sync scanner:
+`smith-sync` now checks:
 
-- `compiler/smith/refactor/sync_scan.mjs`
+- missing manifest sources
+- active authored JS missing from the manifest
+- manifest entries still pointing at frozen `refactor/`
+- bundle staleness
+- dirty active Smith files
+- dirty frozen reference files
 
-Use these commands when checking refactor health:
+## Entry Lanes Vs Surface Tiers
 
-- `zig build smith-sync` checks manifest coverage, bundle staleness, and dirty active compiler files.
-- `zig build smith-bundle` rebuilds the embedded bundle from `LOAD_ORDER.txt`.
-- `zig build forge` rebuilds the host binary that embeds the bundle.
+This is the key distinction.
 
-`smith-sync` is the fastest answer to "is this slice ready to lift against the current compiler in place?"
+Compiler entry lanes are still:
 
-## Ownership Map
+- `soup`
+- `module`
+- `page`
+- `app`
 
-| Path | Current role |
-|------|--------------|
-| `rules.js` | Token enum and constant lookup tables: style keys, colors, enums, HTML tag aliases, soup constants |
-| `logs.js` | Structured Smith logging and debug bridging through `globalThis.__dbg` |
-| `index.js` | Top-level `compile()` entry, integrity stamping, line-based `--mod` transpilers |
-| `attrs.js` | Still-heavy style, color, handler, and expression parsing logic shared by JSX parsing |
-| `parse.js` | JSX coordinator: tag dispatch, component inlining entry, child dispatch |
-| `parse_map.js` | Compatibility shim for map entrypoints; now forwards to refactor map parsing |
-| `preflight.js` | Rule runner only |
-| `emit.js` | Top-level emit coordinator only |
-| `emit_split.js` | Split-output emission, effect transpile, JS/Lua logic block emission |
-| `mod.js` | Block-based module compiler for `<module>` sources |
-| `page.js` | Block-based page compiler for `<page>` sources |
-| `soup_smith.js` | Separate soup/web lane compiler |
-| `refactor/core.js` | Shared primitives: cursor, ctx reset, slot helpers, prop access helpers |
-| `refactor/collect/*` | Collection pass ownership |
-| `refactor/lanes/*` | Lane detection and lane composition |
-| `refactor/parse/*` | Refactored JSX/map/brace/element parsing helpers |
-| `refactor/preflight/*` | Preflight intent derivation and grouped rules |
-| `refactor/emit/*` | Refactored emit helpers |
-| `refactor/REFACTOR_CHECKLIST.md` | Migration sequencing and remaining seams |
+Surface tiers are the three source shapes the project is aiming at:
 
-## Active Compile Flow
+- `soup`
+- `mixed`
+- `chad`
+
+The entry lane decides which compiler path runs. The surface tier describes the source family that preflight and emitted metadata should report.
+
+Current ownership:
+
+| Concept | File | Meaning |
+|---|---|---|
+| Entry dispatch | [lanes/dispatcher.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/dispatcher.js) | Routes into `soup`, `module`, `page`, or default `app` |
+| Surface-tier scan | [lanes/shared.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/shared.js) | Detects and assigns `ctx._sourceTier` as `soup`, `mixed`, or `chad` |
+| Cached tier | [core.js](/home/siah/creative/reactjit/tsz/compiler/smith/core.js) | `resetCtx()` initializes `_sourceTier` |
+| Preflight lane label | [preflight/context.js](/home/siah/creative/reactjit/tsz/compiler/smith/preflight/context.js) | Uses `ctx._sourceTier` first, then falls back |
+
+Current model:
+
+- `module` is orthogonal to the three surface tiers.
+- `soup` entry lane always compiles the `soup` surface tier.
+- `page` is an entry lane, not a tier. It usually carries `chad`-style source.
+- `app` is the default entry lane for primitive JSX sources and can scan as `mixed` or `chad`.
+
+## Compile Flow
 
 ### Entry
 
-`index.js` owns:
+[index.js](/home/siah/creative/reactjit/tsz/compiler/smith/index.js) owns:
 
 - `compile()` -> reads Forge globals and calls `compileLane(source, tokens, file)`
-- `stampIntegrity(out)` -> prefixes the generated source with the integrity header Forge later finalizes
-
-`refactor/lanes/dispatcher.js` owns lane selection:
-
-1. soup lane if `isSoupLaneSource(source, file)`
-2. module lane if `isModuleLaneBuild()`
-3. page lane if `isPageLaneSource(source)`
-4. app lane otherwise
-
-This dispatcher chooses the compiler entry path. Surface tiering is now a second concept layered on top:
-
-- `soup` for React/HTML/CSS-shaped source
-- `mixed` for primitive JSX with inline styles / direct scripting
-- `chad` for intent/classifier/resource syntax
+- `stampIntegrity(out)` -> prefixes generated output before Forge finalizes the body hash
+- `compileMod(...)` / `compileModLua(...)` -> line-based module transpilers
 
 ### App lane
 
-`refactor/lanes/app.js` is the default pipeline:
+[lanes/app.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/app.js) is the default JSX pipeline:
 
 1. `mkCursor(tokens, source)`
 2. `resetCtx()`
-3. `collectCompilerInputs(c)`
-4. `findAppStart(c)`
-5. `collectRenderLocals(c, appStart)`
-6. `moveToAppReturn(c, appStart)`
-7. `parseJSXElement(c)`
-8. `finishParsedLane(root.nodeExpr, file, opts)`
+3. `assignSurfaceTier(source, file)`
+4. `collectCompilerInputs(c)`
+5. `findAppStart(c)`
+6. `collectRenderLocals(c, appStart)`
+7. `moveToAppReturn(c, appStart)`
+8. `parseJSXElement(c)`
+9. `finishParsedLane(root.nodeExpr, file, opts)`
 
-`finishParsedLane()` in `refactor/lanes/shared.js` runs:
+### Page lane
+
+[lanes/page.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/page.js) delegates to [page.js](/home/siah/creative/reactjit/tsz/compiler/smith/page.js).
+
+`page.js` still owns:
+
+- `<var>`
+- `<state>`
+- `<functions>`
+- `<timer>`
+- `return (...)` extraction before normal JSX parsing
+
+### Module lane
+
+[lanes/module.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/module.js) delegates to:
+
+- line mode in [index.js](/home/siah/creative/reactjit/tsz/compiler/smith/index.js)
+- block mode in [mod.js](/home/siah/creative/reactjit/tsz/compiler/smith/mod.js)
+
+### Soup lane
+
+[lanes/soup.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/soup.js) delegates to [soup_smith.js](/home/siah/creative/reactjit/tsz/compiler/smith/soup_smith.js).
+
+Soup remains its own compiler path with its own tokenizer, tree builder, and emitter behavior. It now still reports the explicit `soup` surface tier.
+
+### Finish path
+
+[lanes/shared.js](/home/siah/creative/reactjit/tsz/compiler/smith/lanes/shared.js) owns `finishParsedLane()`:
 
 1. `preflight(ctx)`
 2. `preflightErrorZig(...)` on failure
 3. `emitOutput(nodeExpr, file)` on success
 4. `stampIntegrity(...)` unless split output already bypassed wrapping
 
-### Page lane
+## Ownership Map
 
-`refactor/lanes/page.js` detects `<page ...>`. It builds a cursor, resets `ctx`, then delegates to `compilePage(source, c, file)` in `page.js`.
+| Path | Role |
+|---|---|
+| [rules.js](/home/siah/creative/reactjit/tsz/compiler/smith/rules.js) | Token enums, style keys, color tables, soup constants |
+| [logs.js](/home/siah/creative/reactjit/tsz/compiler/smith/logs.js) | Logging and debug helpers |
+| [core.js](/home/siah/creative/reactjit/tsz/compiler/smith/core.js) | Shared cursor helpers, ctx reset, slot helpers, runtime-log wrappers |
+| [collect/](/home/siah/creative/reactjit/tsz/compiler/smith/collect) | Collection pass |
+| [lanes/](/home/siah/creative/reactjit/tsz/compiler/smith/lanes) | Entry-lane dispatch plus surface-tier assignment |
+| [parse/](/home/siah/creative/reactjit/tsz/compiler/smith/parse) | Refactored JSX/map/element parsing helpers |
+| [preflight/](/home/siah/creative/reactjit/tsz/compiler/smith/preflight) | Intent derivation and grouped validation rules |
+| [emit/](/home/siah/creative/reactjit/tsz/compiler/smith/emit) | Preamble, node tree, runtime updates, finalization |
+| [parse.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse.js) | Public JSX coordinator |
+| [parse_map.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse_map.js) | Compatibility shim for map entry |
+| [attrs.js](/home/siah/creative/reactjit/tsz/compiler/smith/attrs.js) | Shared style/color/handler/expression parsing still used by JSX parsing |
+| [preflight.js](/home/siah/creative/reactjit/tsz/compiler/smith/preflight.js) | Top-level preflight runner |
+| [emit.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit.js) | Top-level emit coordinator |
+| [emit_split.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_split.js) | Split-output emission and runtime logic block assembly |
+| [page.js](/home/siah/creative/reactjit/tsz/compiler/smith/page.js) | `<page>` block compiler |
+| [mod.js](/home/siah/creative/reactjit/tsz/compiler/smith/mod.js) | `<module>` block compiler |
+| [soup_smith.js](/home/siah/creative/reactjit/tsz/compiler/smith/soup_smith.js) | Soup compiler |
 
-`page.js` owns source-level page blocks:
+## ctx: Important State
 
-- `<var>` -> primitive state slots, object-array vars, ambient reads
-- `<state>` -> setter name validation
-- `<functions>` -> JS logic assembly
-- `<timer>` -> interval wiring into JS logic
-- `return (...)` -> parsed through the normal JSX machinery
-
-### Module lane
-
-`refactor/lanes/module.js` delegates to `index.js` line mode or `mod.js` block mode.
-
-- `compileMod(source, file)` is the simple line-based `--mod` transpiler
-- `compileModBlock(source, file)` handles `<module>` blocks with `<ffi>`, `<types>`, `<state>`, and `<functions>`
-
-### Soup lane
-
-`refactor/lanes/soup.js` delegates to `compileSoup(source, file)` in `soup_smith.js`. This remains a separate compiler with its own tokenizer, tree builder, and emitter.
-
-## ctx: Compiler State
-
-`refactor/core.js` owns `ctx` and `resetCtx()`. Most compiler phases read and write the same shared object.
+[core.js](/home/siah/creative/reactjit/tsz/compiler/smith/core.js) owns `ctx` and `resetCtx()`.
 
 Important fields:
 
-| Field | Owner | Meaning |
-|------|-------|---------|
-| `stateSlots` | `collect/state.js`, component inlining | Scalar state slots: `{ getter, setter, initial, type }` |
-| `components` | `collect/components.js` | Component bodies and per-component slot metadata |
-| `handlers` | `attrs.js`, parse element helpers | Event handlers with Zig body, Lua body, and map ownership |
-| `conditionals` | `parse/brace/*` | `{cond && <X>}` and `{cond ? <A> : <B>}` metadata |
-| `dynTexts` | `parse/template_literal.js`, child parsing | Dynamic text buffers and target array/index wiring |
-| `dynColors` | `attrs.js` | Runtime color updates for text/color fields |
-| `dynStyles` | `attrs.js` | Runtime style updates for non-static style expressions |
-| `objectArrays` | `collect/state.js`, page vars, map inference | Structure-of-arrays backing for `.map()` data |
-| `maps` | `parse/map/*` | Map templates, pool metadata, nested/inline relationships |
-| `arrayDecls` / `arrayComments` / `arrayCounter` | `build_node.js`, map parse helpers | Static node-tree arrays and source breadcrumbs |
-| `scriptBlock` / `scriptFuncs` | `collect/script.js`, `page.js` | JS logic source and discovered callable names |
-| `classifiers` | `collect/classifiers.js` | `.cls.tsz` classifier definitions |
-| `variantNames` / `variantBindings` | classifier collect + element postprocess | Theme variant names and element bindings |
-| `_sourceTier` | lane shared helpers | Explicit source-tier label: `soup`, `mixed`, or `chad` |
-| `renderLocals` | `collect/render_locals.js` | Values declared before `return` that can be folded into JSX |
-| `propStack` / `slotRemap` / `componentChildren` | component inline helpers | Per-inline-call prop and slot substitution state |
-| `_preflight` | `finishParsedLane()` | Cached preflight result used by emit |
-| `_debugLines` and `_...` diagnostics arrays | multiple phases | Deferred diagnostics that preflight or emit consume |
-
-Fields added lazily during parse/emission and not initialized directly in `resetCtx()` include:
-
-- `currentMap`
-- `nameRemap`
-- `mapDynCount`
-- `terminalCount`
-- `inputCount`
-- `_orphanColors`
-
-## Refactor File Dictionary
-
-### `refactor/core.js`
-
-Shared primitives used everywhere:
-
-- `zigEscape(name)`
-- `leftFoldExpr(expr)`
-- `utf8ByteLen(str)`
-- `mkCursor(raw, source)`
-- `resetCtx()`
-- `findSlot(name)`, `isGetter(name)`, `isSetter(name)`, `slotGet(name)`
-- `peekPropsAccess(c)`, `skipPropsAccess(c)`
-
-### `refactor/collect/*`
-
-Collection pass ownership:
-
-| File | Key functions | Purpose |
-|------|---------------|---------|
-| `collect/pipeline.js` | `collectCompilerInputs`, `collectVariantNames` | One-call collection pipeline used by app lane |
-| `collect/script.js` | `collectScript`, `scanScriptFunctionNames`, `isScriptFunc` | Extract `<script>` blocks and imported script names |
-| `collect/components.js` | `collectComponents`, `findComponent` | Record component boundaries, props, and local state |
-| `collect/state.js` | `collectState`, `collectObjectArrayState`, `collectConstArrays`, nested helpers | Discover scalar state, SoA object arrays, const arrays |
-| `collect/classifiers.js` | `collectClassifiers`, `resolveThemeToken`, `clsStyleFields`, `clsNodeFields`, `mergeFields` | Load classifier definitions and translate them into field lists |
-| `collect/render_locals.js` | `collectRenderLocals` and helpers | Resolve locals declared before `return` for JSX substitution |
-
-### `refactor/lanes/*`
-
-Lane ownership:
-
-| File | Key functions | Purpose |
-|------|---------------|---------|
-| `lanes/dispatcher.js` | `compileLane` | Route into soup/module/page/app |
-| `lanes/shared.js` | `detectSurfaceTier`, `assignSurfaceTier`, `finishParsedLane` | Surface-tier scan plus preflight/emit/integrity wrapping |
-| `lanes/app.js` | `findAppStart`, `moveToAppReturn`, `compileAppLane` | Main app compile path |
-| `lanes/page.js` | `isPageLaneSource`, `compilePageLane` | Page mode entry |
-| `lanes/module.js` | `isModuleLaneBuild`, `compileModuleLane` | Module mode entry |
-| `lanes/soup.js` | `isSoupLaneSource`, `compileSoupLane` | Soup mode entry |
-
-### `refactor/parse/*`
-
-Parsing is split by responsibility, but `parse.js` is still the public coordinator.
-
-| Area | Files | Role |
-|------|-------|------|
-| Utilities | `parse/utils.js` | Tag reading, closing-tag reads, brace skipping, source offsets |
-| Node assembly | `parse/build_node.js` | Build final `Node` struct literals and child arrays |
-| Template literals | `parse/template_literal.js` | Convert JS template strings into Zig format strings and args |
-| Brace children | `parse/brace/conditional.js`, `parse/brace/ternary.js` | Conditional JSX/text lowering |
-| Child dispatch | `parse/children/elements.js`, `brace.js`, `text.js`, `inline_glyph.js` | `parseChildren()` resolution order |
-| Map lowering | `parse/map/header.js`, `info.js`, `context.js`, `plain.js`, `nested.js`, `for_loop.js`, `infer_oa.js` | `.map(...)`, nested maps, `<For>`, OA inference, context swap/restore |
-| Element flow | `parse/element/flow.js`, `tags.js`, `defaults.js`, `postprocess.js` | Fragment/script handling, tag normalization, element lifecycle |
-| Element attrs | `parse/element/attrs_dispatch.js`, `attrs_basic.js`, `attrs_text_color.js`, `attrs_handlers.js`, `attrs_spatial.js`, `attrs_canvas.js`, `value_readers.js` | Ordered attribute parsing and specialized attr handlers |
-| Component props | `parse/element/component_props.js`, `component_spread.js`, `component_brace_values.js`, `component_handlers.js`, `component_inline.js` | Prop collection, spreads, brace values, handler props, inline component expansion |
-| Press handlers | `parse/handlers/press.js` | Forwarded and inline press handler capture helpers |
-
-Current public parse entrypoints:
-
-- `parseJSXElement(c)` in `parse.js`
-- `parseChildren(c)` in `parse.js`
-- `tryParseMap(c, oa)` in `parse_map.js`, which now forwards to `tryParsePlainMap(c, oa)`
-
-### `attrs.js`
-
-`attrs.js` is still a real logic owner, not a shell. It contains:
-
-- style parsing: `parseColor`, `parseStyleValue`, `parseTernaryBranch`, `parseStyleBlock`
-- handler parsing: `parseHandler`, `parseValueExpr`, `luaParseHandler`, `luaParseValueExpr`
-- runtime setter helper: `slotSet`
-
-If a refactor slice touches style expressions or handler-body syntax, this file is still part of the critical path.
-
-### `refactor/preflight/*` and `preflight.js`
-
-Preflight ownership is split cleanly:
-
-| File | Key functions | Purpose |
-|------|---------------|---------|
-| `preflight/context.js` | `derivePreflightIntents`, `detectPreflightLane`, `buildPreflightScanState` | Shared scan state and lane classification |
-| `preflight/rules/handlers.js` | handler checks and warnings | Empty handlers, dispatch, duplicate names, Lua leaks, handler refs |
-| `preflight/rules/dyn.js` | dynamic value checks | color placeholders, OA field refs, unresolved dynTexts, item leaks |
-| `preflight/rules/maps.js` | `checkMapObjectArrays` | Map-to-OA validation |
-| `preflight/rules/state.js` | `warnOnUnreadStateSlots` | State-read coverage |
-| `preflight/rules/classifiers.js` | tag leaks, JS leaks, unresolved classifiers, dropped expressions, unknown subsystem tags | Classifier/text and leakage checks |
-| `preflight/rules/js_logic.js` | ignored module blocks, undefined JS calls, duplicate JS vars | JS-logic-specific validation |
-| `preflight.js` | `preflight`, `preflightErrorZig` | Rule runner and failure payload |
+| Field | Meaning |
+|---|---|
+| `stateSlots` | Scalar state slots: `{ getter, setter, initial, type }` |
+| `components` | Collected component bodies and slot metadata |
+| `handlers` | Handler metadata for Zig / JS / Lua dispatch |
+| `dynTexts` | Runtime text buffers and node targets |
+| `dynColors` / `dynStyles` | Runtime-updated colors and styles |
+| `objectArrays` | SoA backing for mapped data |
+| `maps` | Map templates and rebuild metadata |
+| `arrayDecls` / `arrayComments` / `arrayCounter` | Static node-array build state |
+| `scriptBlock` / `scriptFuncs` | JS logic payload and callable names |
+| `classifiers` | Loaded classifier definitions |
+| `renderLocals` | Pre-return locals eligible for JSX substitution |
+| `_sourceTier` | Explicit source tier: `soup`, `mixed`, or `chad` |
+| `_preflight` | Cached preflight result consumed by emit |
+| `_needsRuntimeLog` / `_runtimeLogCounter` | Generated Zig logging support bookkeeping |
 
-### `refactor/emit/*` and emit coordinators
+## Parse / Preflight / Emit Seams
 
-Emission ownership:
+### Parse
 
-| File | Key functions | Purpose |
-|------|---------------|---------|
-| `emit/preamble.js` | `emitPreamble` | imports and lane header |
-| `emit/state_manifest.js` | `emitStateManifest`, `emitInitState` | slot manifest and state init |
-| `emit/node_tree.js` | `emitNodeTree` | static arrays and root node |
-| `emit/dyn_text.js` | `emitDynamicTextBuffers` | dynText backing buffers |
-| `emit/handlers.js` | `emitNonMapHandlers` | non-map Zig handler fns |
-| `emit/effects.js` | `emitEffectRenders` | effect render transpilation entry |
-| `emit/object_arrays.js` | `emitObjectArrayInfrastructure` | SoA storage and QJS unpack bridge |
-| `emit/map_pools.js` | `computePromotedMapArrays`, `emitMapPoolDeclarations`, `emitMapPoolRebuilds`, `appendOrphanedMapArrays` | map pool ownership |
-| `emit/runtime_updates.js` | `emitRuntimeSupportSections` | `_updateDynamicTexts`, `_updateConditionals`, variant updates, runtime support |
-| `emit/entrypoints.js` | `emitRuntimeEntrypoints` | `_appInit`, `_appTick`, exports, `main` wiring |
-| `emit/finalize.js` | `appendEmitDebugSections`, `finalizeEmitOutput` | final cleanup and split-output handoff |
-| `emit.js` | `emitOutput` | top-level composition only |
+Public parse entrypoints:
 
-`emit_split.js` still owns:
+- `parseJSXElement(c)` in [parse.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse.js)
+- `parseChildren(c)` in [parse.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse.js)
+- `tryParseMap(c, oa)` in [parse_map.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse_map.js)
 
-- `transpileEffectBody`
-- `transpileExpr`
-- `splitArgs`
-- `splitOutput`
-- `emitLogicBlocks`
-- `luaTransform`
-- `jsTransform`
+Parse helper groups:
 
-That file is still important for split-output mode and JS/Lua logic string emission.
+- [parse/utils.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse/utils.js)
+- [parse/build_node.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse/build_node.js)
+- [parse/template_literal.js](/home/siah/creative/reactjit/tsz/compiler/smith/parse/template_literal.js)
+- [parse/brace/](/home/siah/creative/reactjit/tsz/compiler/smith/parse/brace)
+- [parse/children/](/home/siah/creative/reactjit/tsz/compiler/smith/parse/children)
+- [parse/map/](/home/siah/creative/reactjit/tsz/compiler/smith/parse/map)
+- [parse/element/](/home/siah/creative/reactjit/tsz/compiler/smith/parse/element)
+- [parse/handlers/](/home/siah/creative/reactjit/tsz/compiler/smith/parse/handlers)
 
-## Standalone Lane Files
+### Preflight
 
-### `page.js`
+Top-level runner:
 
-Important functions:
+- [preflight.js](/home/siah/creative/reactjit/tsz/compiler/smith/preflight.js)
 
-- `extractPageBlock`, `extractPageBlocks`
-- `parsePageVarBlock`
-- `parsePageStateBlock`
-- `parsePageFunctionsBlock`
-- `transpilePageExpr`
-- `transpilePageLine`
-- `buildPageJSLogic`
-- `compilePage`
+Rule/context ownership:
 
-### `mod.js`
+- [preflight/context.js](/home/siah/creative/reactjit/tsz/compiler/smith/preflight/context.js)
+- [preflight/rules/](/home/siah/creative/reactjit/tsz/compiler/smith/preflight/rules)
 
-Important functions:
+### Emit
 
-- `compileModBlock`
-- `emitFfiBlock`
-- `emitTypesBlock`, `emitEnumDecl`, `emitStructDecl`, `emitUnionDecl`
-- `emitStateBlock`
-- `emitFunctionsBlock`, `emitOneFunction`
-- `emitModBody`, `emitArmBodyV2`, `emitForLoopV2`
-- `modTranspileType`, `modTranspileExpr`, `modTranspileForExprV2`
-- `transpileStringConcat`
-- `emitMapFunction`
+Top-level coordinator:
 
-### `soup_smith.js`
+- [emit.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit.js)
 
-Important functions:
+Emit helper ownership:
 
-- `isSoupSource`
-- `soupParseState`
-- `soupCollectHandlers`
-- `soupExtractReturn`
-- `soupTokenize`
-- `soupParseTag`
-- `soupBuildTree`
-- `soupExprToZig`
-- `soupParseStyle`
-- `compileSoup`
+- [emit/preamble.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/preamble.js)
+- [emit/state_manifest.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/state_manifest.js)
+- [emit/node_tree.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/node_tree.js)
+- [emit/dyn_text.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/dyn_text.js)
+- [emit/handlers.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/handlers.js)
+- [emit/effects.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/effects.js)
+- [emit/object_arrays.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/object_arrays.js)
+- [emit/map_pools.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/map_pools.js)
+- [emit/runtime_updates.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/runtime_updates.js)
+- [emit/entrypoints.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/entrypoints.js)
+- [emit/finalize.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit/finalize.js)
 
-Soup sources still use their own compiler, but the emitted lane label now comes from the shared surface-tier detection so the generated artifacts line up with the README tiers.
+## Frozen Snapshot
 
-## Key Runtime Patterns
+[refactor/](/home/siah/creative/reactjit/tsz/compiler/smith/refactor) is now reference-only.
 
-### Component inlining
+Rules:
 
-Components are not emitted as separate runtime units. The parser:
-
-1. records component body positions during collection
-2. captures call-site props and children
-3. allocates fresh slot remaps for per-instance state
-4. jumps into the component body and parses it inline
-5. restores the outer cursor afterward
-
-### Structure-of-arrays object arrays
-
-`useState([{...}])` and page object-array vars compile into SoA storage:
-
-- one array per field
-- nested arrays become linked child OA entries
-- QJS bridge code unpacks field-by-field into the flat buffers
-
-### Map pools
-
-Maps compile into preallocated node pools plus rebuild functions:
-
-- flat pools for top-level `.map()`
-- nested pools for `item.children.map(...)`
-- inline pools for map-driven subtrees owned by another map
-
-`emit/map_pools.js` is the source of truth for declaration order, promoted per-item arrays, handler field refs, and orphan-array recovery.
-
-### Split output
-
-Smith can return one monolith or a split payload. Split mode is driven by `emit_split.js` and currently partitions output into:
-
-- `nodes.zig`
-- `handlers.zig`
-- `state.zig`
-- `maps.zig`
-- `logic.zig`
-- `app.zig`
-
-### JS and Lua logic coexist
-
-Handlers and script logic may exist in both forms:
-
-- Zig handlers for direct runtime calls
-- Lua logic strings for legacy dispatch paths
-- JS logic strings for QuickJS-backed carts and page mode
-
-That is why handler parsing and logic emission still span `attrs.js`, `emit_split.js`, and map-pool emission.
-
-## Lift Readiness Checklist
-
-A refactor seam is ready to lift only when all of these are true:
-
-1. The source of truth is under `refactor/*`, not duplicated in a legacy master file.
-2. `LOAD_ORDER.txt` contains every authored file needed for that seam.
-3. `zig build smith-sync` reports:
-   - no missing manifest sources
-   - no authored JS missing from the manifest
-   - no unexpected drift in active legacy files for the seam you are lifting
-4. `zig build smith-bundle` succeeds, so the authored sources concatenate cleanly.
-5. `zig build forge` succeeds, so the embedded compiler matches the authored bundle.
-6. The legacy public entry file is composition-only or a documented compatibility shim.
-
-Current examples:
-
-- `parse_map.js` is effectively lifted; it is now just a compatibility forwarder.
-- `preflight.js` is effectively lifted; it is now a rule runner over `refactor/preflight/*`.
-- `emit.js` is effectively lifted at the top level; real ownership is in `refactor/emit/*`.
-- `attrs.js`, `page.js`, `mod.js`, `emit_split.js`, and `soup_smith.js` are not fully lifted; they still contain primary logic.
-
-Current lane model:
-
-- `module` remains a separate compiler family and is not part of the three surface tiers.
-- `app`, `page`, and `soup` are entry paths.
-- `soup`, `mixed`, and `chad` are explicit surface tiers carried in `ctx._sourceTier` and surfaced through preflight/emit.
-
-## Forge Globals and Flags
-
-Forge-provided globals:
-
-| Global | Meaning |
-|--------|---------|
-| `__source` | merged `.tsz` source text |
-| `__tokens` | flat `"kind start end\n..."` token payload |
-| `__file` | current input path |
-| `__scriptContent` | merged imported `.script.tsz` source |
-| `__clsContent` | merged imported `.cls.tsz` source |
-
-Important build flags surfaced as globals:
-
-| CLI flag | Global | Meaning |
-|----------|--------|---------|
-| `--fast` | `__fastBuild=1` | fast build import path |
-| `--mod` | `__modBuild=1` | module mode |
-| `--target=X` | `__modTarget="X"` | module target selection |
-| `--split` | `__splitOutput=1` | force split output |
-| `--single` | unset `__splitOutput` | force monolith |
-| `--strict` | `__strict=1` | warnings become errors |
-| `--logs` | `__SMITH_LOGS=1` | enable structured logs |
-| `--logs=find:X` | `__SMITH_LOGS_FIND="X"` | filter structured logs |
-
-## Practical Rule
-
-When you are unsure where behavior lives now, trust the refactor seams first, then confirm whether the legacy file is still only a coordinator or still owns real logic. Use `rg '^function '` across `compiler/smith` before moving code.
+- Do not add new active compiler work there.
+- Do not point [LOAD_ORDER.txt](/home/siah/creative/reactjit/tsz/compiler/smith/LOAD_ORDER.txt) back into it.
+- If `smith-sync` reports manifest entries under `smith/refactor/`, promotion is incomplete.
+- If behavior changes, update the promoted paths under `compiler/smith/`.
