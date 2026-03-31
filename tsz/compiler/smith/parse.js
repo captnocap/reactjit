@@ -77,178 +77,26 @@ function parseJSXElement(c) {
           continue;
         }
 
-        if (rawTag === 'ascript' && attr === 'run') {
-          // <ascript run="tell app ..." /> — capture the script string
-          if (c.kind() === TK.string) {
-            ascriptScript = c.text().slice(1, -1);
-            c.advance();
-          } else if (c.kind() === TK.lbrace) {
-            c.advance();
-            if (c.kind() === TK.string) { ascriptScript = c.text().slice(1, -1); c.advance(); }
-            if (c.kind() === TK.rbrace) c.advance();
-          }
-        } else if (rawTag === 'ascript' && attr === 'onResult') {
-          // <ascript onResult={setMyState} /> — capture the setter
-          if (c.kind() === TK.lbrace) {
-            c.advance();
-            if (c.kind() === TK.identifier) { ascriptOnResult = c.text(); c.advance(); }
-            if (c.kind() === TK.rbrace) c.advance();
-          } else if (c.kind() === TK.identifier) {
-            ascriptOnResult = c.text(); c.advance();
-          }
-        } else if (attr === 'fontSize') {
-          // fontSize={N}, fontSize={prop / N}, fontSize="N" → .font_size = N
-          if (c.kind() === TK.lbrace) {
-            c.advance();
-            // Resolve first operand: number literal or prop reference
-            let fsVal = null;
-            if (c.kind() === TK.number) { fsVal = parseFloat(c.text()); c.advance(); }
-            else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && /^\d+(\.\d+)?$/.test(ctx.propStack[c.text()])) {
-              fsVal = parseFloat(ctx.propStack[c.text()]); c.advance();
-            }
-            if (fsVal !== null) {
-              // Check for arithmetic: val * N, val / N
-              if (c.kind() === TK.star && c.pos + 1 < c.count) { c.advance(); if (c.kind() === TK.number) { fsVal = Math.floor(fsVal * parseFloat(c.text())); c.advance(); } }
-              else if (c.kind() === TK.slash && c.pos + 1 < c.count) { c.advance(); if (c.kind() === TK.number) { fsVal = Math.floor(fsVal / parseFloat(c.text())); c.advance(); } }
-              nodeFields.push(`.font_size = ${fsVal}`);
-            }
-            // Consume remaining tokens until }
-            while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
-            if (c.kind() === TK.rbrace) c.advance();
-          } else if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
-          else if (c.kind() === TK.string) { nodeFields.push(`.font_size = ${c.text().slice(1,-1)}`); c.advance(); }
-        } else if (attr === 'color') {
-          // color="#hex" or color={propName} → .text_color = Color.rgb(...)
-          if (c.kind() === TK.string) {
-            const val = c.text().slice(1, -1);
-            nodeFields.push(`.text_color = ${parseColor(val)}`);
-            c.advance();
-          } else if (c.kind() === TK.lbrace) {
-            c.advance();
-            if (c.kind() === TK.identifier) {
-              const propName = c.text(); c.advance();
-              // Resolve LHS: state getter or map item.field
-              let colorLhs = null;
-              let colorLhsIsString = false;
-              if (isGetter(propName)) {
-                const si = findSlot(propName);
-                colorLhs = slotGet(propName);
-                colorLhsIsString = si >= 0 && ctx.stateSlots[si].type === 'string';
-              } else if (ctx.currentMap && propName === ctx.currentMap.itemParam && c.kind() === TK.dot) {
-                c.advance(); // skip .
-                if (c.kind() === TK.identifier) {
-                  const field = c.text(); c.advance();
-                  const oa = ctx.currentMap.oa;
-                  const fi = oa ? oa.fields.find(f => f.name === field) : null;
-                  if (fi) {
-                    colorLhs = `_oa${oa.oaIdx}_${field}[_i]`;
-                    colorLhsIsString = fi.type === 'string';
-                    if (colorLhsIsString) colorLhs = `${colorLhs}[0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
-                  }
-                }
-              }
-              // Check for ternary: lhs == N ? "#color1" : "#color2"
-              if (colorLhs && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
-                const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
-                c.advance();
-                if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
-                let rhs = '';
-                let rhsIsString = false;
-                if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
-                else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-                else if (c.kind() === TK.identifier) {
-                  const n = c.text(); c.advance();
-                  if (isGetter(n)) {
-                    rhs = slotGet(n);
-                  } else if (ctx.currentMap && n === ctx.currentMap.itemParam && c.kind() === TK.dot) {
-                    // Map item field access: notice.title → OA field
-                    c.advance(); // skip .
-                    if (c.kind() === TK.identifier) {
-                      const field = c.text(); c.advance();
-                      const oa = ctx.currentMap.oa;
-                      const fi = oa ? oa.fields.find(f => f.name === field) : null;
-                      if (fi && fi.type === 'string') {
-                        rhs = `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
-                        rhsIsString = true;
-                      } else if (fi) {
-                        rhs = `_oa${oa.oaIdx}_${field}[_i]`;
-                      } else {
-                        rhs = n + '.' + field;
-                      }
-                    }
-                  } else if (ctx.currentMap && n === ctx.currentMap.indexParam) {
-                    rhs = '@as(i64, @intCast(_i))';
-                  } else if (ctx.propStack && ctx.propStack[n] !== undefined && typeof ctx.propStack[n] === 'string') {
-                    rhs = ctx.propStack[n];
-                  } else {
-                    rhs = n;
-                  }
-                }
-                if (c.kind() === TK.question) {
-                  c.advance();
-                  const tv = parseTernaryBranch(c, 'color');
-                  if (c.kind() === TK.colon) c.advance();
-                  const fv = parseTernaryBranch(c, 'color');
-                  let cond;
-                  if (rhsIsString || colorLhsIsString) {
-                    // If rhs is a Zig expression (OA field, state getter), don't quote it
-                    const rhsExpr = (rhs.includes('[_i]') || rhs.includes('_oa') || rhs.includes('state.get') || rhs.includes('getSlot')) ? rhs : `"${rhs}"`;
-                    const eql = `std.mem.eql(u8, ${colorLhs}, ${rhsExpr})`;
-                    cond = op === '!=' ? `(!${eql})` : `(${eql})`;
-                  } else {
-                    cond = `(${colorLhs} ${op} ${rhs})`;
-                  }
-                  const resolveC = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : 'Color{}';
-                  const colorExpr = `if ${cond} ${resolveC(tv)} else ${resolveC(fv)}`;
-                  if (ctx.currentMap) {
-                    // Inside map — emit inline (evaluated at rebuild time per item)
-                    nodeFields.push(`.text_color = ${colorExpr}`);
-                  } else if (colorLhs && colorLhs.includes('_oa')) {
-                    // Map field ternary — emit inline
-                    nodeFields.push(`.text_color = ${colorExpr}`);
-                  } else {
-                    nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-                    if (!ctx.dynStyles) ctx.dynStyles = [];
-                    const dsId = ctx.dynStyles.length;
-                    ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
-                    if (!nodeFields._dynStyleIds) nodeFields._dynStyleIds = [];
-                    nodeFields._dynStyleIds.push(dsId);
-                  }
-                } else {
-                  nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-                }
-              } else {
-                nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-                const propVal = ctx.propStack && ctx.propStack[propName];
-                if (propVal && typeof propVal === 'string' && propVal.startsWith('#')) {
-                  const dcId = ctx.dynColors.length;
-                  ctx.dynColors.push({ dcId, arrName: '', arrIndex: -1, colorExpr: parseColor(propVal) });
-                  nodeFields._dynColorId = dcId;
-                }
-              }
-            }
-            if (c.kind() === TK.rbrace) c.advance();
-          }
-        } else if (attr === 'textEffect') {
-          // textEffect="name" → .text_effect = "name"
-          if (c.kind() === TK.string) {
-            nodeFields.push(`.text_effect = "${c.text().slice(1, -1)}"`);
-            c.advance();
-          }
-        } else if (attr === 'name' && rawTag === 'Effect') {
-          // <Effect name="foo"> → .effect_name = "foo"
-          if (c.kind() === TK.string) {
-            nodeFields.push(`.effect_name = "${c.text().slice(1, -1)}"`);
-            c.advance();
-          }
-        } else if (tryParseCanvasAttr(c, attr, rawTag, nodeFields)) {
+        const basicAttrResult = tryParseBasicElementAttr(c, attr, rawTag, nodeFields, { ascriptScript, ascriptOnResult });
+        if (basicAttrResult) {
+          ascriptScript = basicAttrResult.ascriptScript;
+          ascriptOnResult = basicAttrResult.ascriptOnResult;
           continue;
-        } else if (attr === 'placeholder' && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
-          if (c.kind() === TK.string) { nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`); c.advance(); }
-          else if (c.kind() === TK.lbrace) { skipBraces(c); }
-        } else if (tryParseSpatialAttr(c, attr, rawTag, styleFields, nodeFields)) {
+        }
+
+        if (tryParseTextColorAttr(c, attr, nodeFields)) {
           continue;
-        } else if (attr === 'color' && rawTag.startsWith('3D.')) {
+        }
+
+        if (tryParseCanvasAttr(c, attr, rawTag, nodeFields)) {
+          continue;
+        }
+
+        if (tryParseSpatialAttr(c, attr, rawTag, styleFields, nodeFields)) {
+          continue;
+        }
+
+        if (attr === 'color' && rawTag.startsWith('3D.')) {
           if (c.kind() === TK.string) {
             const hex = c.text().slice(1, -1).replace('#', '');
             const r = parseInt(hex.slice(0, 2), 16) / 255;
