@@ -61,6 +61,13 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/build_node.js") ++ "\n" ++
     @embedFile("smith/parse_map.js") ++ "\n" ++
     @embedFile("smith/parse.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/context.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/handlers.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/maps.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/dyn.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/state.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/classifiers.js") ++ "\n" ++
+    @embedFile("smith/refactor/preflight/rules/js_logic.js") ++ "\n" ++
     @embedFile("smith/preflight.js") ++ "\n" ++
     @embedFile("smith/emit_split.js") ++ "\n" ++
     @embedFile("smith/emit.js") ++ "\n" ++

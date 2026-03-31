@@ -85,12 +85,12 @@ Current constraint:
 
 ## Phase 5: Preflight
 
-- [ ] Split lane/intents derivation out of `preflight`.
-- [ ] Group handler rules in one rules file.
-- [ ] Group map rules in one rules file.
-- [ ] Group dynText/dynStyle rules in one rules file.
-- [ ] Group classifier/tag leak rules in one rules file.
-- [ ] Make `preflight.js` a rule runner only.
+- [x] Split lane/intents derivation out of `preflight`.
+- [x] Group handler rules in one rules file.
+- [x] Group map rules in one rules file.
+- [x] Group dynText/dynStyle rules in one rules file.
+- [x] Group classifier/tag leak rules in one rules file.
+- [x] Make `preflight.js` a rule runner only.
 
 ## Phase 6: Emit
 
