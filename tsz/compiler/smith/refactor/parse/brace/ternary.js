@@ -27,7 +27,9 @@ function _resolveStringComparison(condExpr) {
   if (m3) {
     var lhs3 = m3[1].trim();
     var rhs3 = m3[2].trim();
-    var lhsIsStr = lhs3.includes('[0..') || lhs3.includes('getSlotString') || lhs3.includes('getString');
+    // Don't apply std.mem.eql when LHS is an if-expression (produces i64, not []const u8)
+    var lhsIsIfExpr = lhs3.startsWith('if (') || lhs3.includes(') @as(');
+    var lhsIsStr = !lhsIsIfExpr && (lhs3.includes('[0..') || lhs3.includes('getSlotString') || lhs3.includes('getString'));
     var rhsIsStr = rhs3.includes('[0..') || rhs3.includes('getSlotString') || rhs3.includes('getString');
     if (lhsIsStr || rhsIsStr) {
       return 'std.mem.eql(u8, ' + lhs3 + ', ' + rhs3 + ')';

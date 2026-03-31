@@ -89,7 +89,10 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
               if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) { depth--; if (depth < 0) break; }
               const pa = peekPropsAccess(c);
               if (pa) {
-                valParts.push(typeof pa.value === 'string' ? pa.value : String(pa.value));
+                let pv = typeof pa.value === 'string' ? pa.value : String(pa.value);
+                // Wrap if-expressions in parens so Zig operator precedence works
+                if (pv.includes('if (') && pv.includes(' else ')) pv = '(' + pv + ')';
+                valParts.push(pv);
                 skipPropsAccess(c);
                 continue;
               }

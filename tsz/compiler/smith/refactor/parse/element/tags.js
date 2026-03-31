@@ -46,5 +46,12 @@ function normalizeRawTag(c, rawTag) {
     ctx._unknownSubsystemTags.push({ tag: rawTag, line: lineOffset });
   }
 
+  // Bare classifier import: <Nav> matches classifier key directly (no C. prefix)
+  if (!clsDef && ctx.classifiers && ctx.classifiers[rawTag]) {
+    clsDef = ctx.classifiers[rawTag];
+    clsName = rawTag;
+    rawTag = clsDef.type || 'Box';
+  }
+
   return { rawTag, clsDef, clsName };
 }

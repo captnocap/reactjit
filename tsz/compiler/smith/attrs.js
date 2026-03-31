@@ -699,11 +699,7 @@ function luaParseHandler(c) {
     }
     const joined = parts.join('');
     // Empty handler body () => {} — return a no-op so map handlers have a valid luaBody
-    if (joined.trim() === '') {
-      globalThis.__dbg = globalThis.__dbg || [];
-      globalThis.__dbg.push('NOOP_HIT: empty handler body → returning --noop');
-      return '-- noop';
-    }
+    if (joined.trim() === '') return '-- noop';
     return luaTransform(joined);
   }
 

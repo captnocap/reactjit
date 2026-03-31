@@ -7,12 +7,42 @@ function tryParseConditional(c, children) {
   let condParts = [];
   // Collect condition expression until && or }
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    // Handle ! prefix (boolean negation)
+    if (c.kind() === TK.bang) {
+      c.advance();
+      if (c.kind() === TK.identifier) {
+        const name = c.text();
+        if (isGetter(name)) {
+          condParts.push('(' + slotGet(name) + ' == 0)');
+        } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+          const rlVal = ctx.renderLocals[name];
+          condParts.push('(' + rlVal + ' == 0)');
+        } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+          condParts.push('(' + _condPropValue(ctx.propStack[name]) + ' == 0)');
+        } else {
+          condParts.push('(0)');
+        }
+        c.advance();
+        continue;
+      }
+      condParts.push('!');
+      continue;
+    }
     if (c.kind() === TK.amp_amp) {
       c.advance();
+      // Skip optional ( wrapper around JSX
+      let parenWrapped = false;
+      let savedBeforeParen = null;
+      if (c.kind() === TK.lparen) {
+        savedBeforeParen = c.save();
+        c.advance();
+        parenWrapped = true;
+      }
       // Check if next is JSX
       if (c.kind() === TK.lt) {
         const condExpr = condParts.join('');
         const jsxNode = parseJSXElement(c);
+        if (parenWrapped && c.kind() === TK.rparen) c.advance();
         if (c.kind() === TK.rbrace) c.advance();
         // Map-item conditional: inject display style inline instead of _updateConditionals
         if (ctx.currentMap) {
@@ -37,6 +67,48 @@ function tryParseConditional(c, children) {
         ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
         children.push({ nodeExpr: jsxNode.nodeExpr, condIdx, dynBufId: jsxNode.dynBufId });
         return true;
+      }
+      // Check for conditional children splice: && children or && props.children
+      if (c.kind() === TK.identifier) {
+        // {cond && children}
+        if (c.text() === 'children' && ctx.componentChildren) {
+          c.advance();
+          if (parenWrapped && c.kind() === TK.rparen) c.advance();
+          if (c.kind() === TK.rbrace) c.advance();
+          const condExpr = condParts.join('');
+          // Wrap all children in a conditional Box
+          const condIdx = ctx.conditionals.length;
+          ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+          const wrapperStyle = '.{ .flex_direction = .column }';
+          // Build children nodes list for the wrapper
+          const childExprs = [];
+          for (const ch of ctx.componentChildren) {
+            childExprs.push(ch.nodeExpr || '.{}');
+          }
+          const wrapperExpr = `.{ .style = ${wrapperStyle} }`;
+          children.push({ nodeExpr: wrapperExpr, condIdx, subChildren: ctx.componentChildren.slice() });
+          return true;
+        }
+        // {cond && props.children} — direct check since children isn't in propStack
+        if (ctx.propsObjectName && c.text() === ctx.propsObjectName &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
+            c.textAt(c.pos + 2) === 'children' && ctx.componentChildren) {
+          c.advance(); // props
+          c.advance(); // .
+          c.advance(); // children
+          if (parenWrapped && c.kind() === TK.rparen) c.advance();
+          if (c.kind() === TK.rbrace) c.advance();
+          const condExpr = condParts.join('');
+          const condIdx = ctx.conditionals.length;
+          ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+          const wrapperExpr = `.{ .style = .{ .flex_direction = .column } }`;
+          children.push({ nodeExpr: wrapperExpr, condIdx, subChildren: ctx.componentChildren.slice() });
+          return true;
+        }
+      }
+      // Restore paren if we consumed it but didn't find JSX or children
+      if (parenWrapped && savedBeforeParen) {
+        c.restore(savedBeforeParen);
       }
       // Not JSX after && — might be chained condition, put && back
       condParts.push(' and ');

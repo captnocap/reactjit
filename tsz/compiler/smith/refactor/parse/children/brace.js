@@ -4,6 +4,8 @@ function tryParseBraceChild(c, children) {
   if (c.kind() !== TK.lbrace) return false;
 
   c.advance();
+  // DEBUG: trace every brace entry
+  ctx._droppedExpressions.push({ expr: 'DBG_BRACE_ENTRY: kind=' + c.kind() + ' text=' + c.text() + ' pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'App'), line: 0 });
   if (c.kind() === TK.comment) {
     c.advance();
     if (c.kind() === TK.rbrace) c.advance();
@@ -42,7 +44,6 @@ function tryParseBraceChild(c, children) {
       let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
       // Handle .slice(...).map() and .filter(...).map() chaining
       if (!isMapCall && (c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
-        // Skip over .slice/filter(...) to check for .map() after
         c.advance(); c.advance(); // skip 'slice' '('
         let pd = 1;
         while (c.pos < c.count && pd > 0) {
@@ -50,7 +51,7 @@ function tryParseBraceChild(c, children) {
           if (c.kind() === TK.rparen) pd--;
           if (pd > 0) c.advance();
         }
-        if (c.kind() === TK.rparen) c.advance(); // skip closing )
+        if (c.kind() === TK.rparen) c.advance();
         if (c.kind() === TK.dot) {
           c.advance();
           isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
@@ -443,6 +444,100 @@ function tryParseBraceChild(c, children) {
       }
       return true;
     }
+  }
+
+  // String concatenation: {'str' + expr + 'str'} → dynText format string
+  if (c.kind() === TK.string && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.plus) {
+    const fmtParts = [];
+    const fmtArgs = [];
+    let allStatic = true;
+    let braceDepth2 = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && braceDepth2 === 0) break;
+      if (c.kind() === TK.lbrace) braceDepth2++;
+      if (c.kind() === TK.rbrace) { braceDepth2--; continue; }
+      if (c.kind() === TK.string) {
+        fmtParts.push(c.text().slice(1, -1));
+        c.advance();
+      } else if (c.kind() === TK.plus) {
+        c.advance();
+      } else if (c.kind() === TK.identifier) {
+        const name = c.text();
+        if (isGetter(name)) {
+          const slotIdx = findSlot(name);
+          const slot = ctx.stateSlots[slotIdx];
+          if (slot && slot.type === 'string') {
+            fmtParts.push('{s}');
+            fmtArgs.push(slotGet(name));
+          } else {
+            fmtParts.push('{d}');
+            fmtArgs.push(slotGet(name));
+          }
+          allStatic = false;
+          c.advance();
+        } else {
+          // Check props access: props.X
+          const pa = peekPropsAccess(c);
+          if (pa) {
+            skipPropsAccess(c);
+            const pv = pa.value;
+            const isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot'));
+            if (isZig) {
+              const isStr = pv.includes('getSlotString') || pv.includes('..');
+              fmtParts.push(isStr ? '{s}' : '{d}');
+              fmtArgs.push(isStr ? pv : leftFoldExpr(pv));
+              allStatic = false;
+            } else {
+              fmtParts.push(String(pv));
+            }
+          } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+            const pv = ctx.propStack[name];
+            const isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot'));
+            if (isZig) {
+              const isStr = pv.includes('getSlotString') || pv.includes('..');
+              fmtParts.push(isStr ? '{s}' : '{d}');
+              fmtArgs.push(isStr ? pv : leftFoldExpr(pv));
+              allStatic = false;
+            } else {
+              fmtParts.push(String(pv));
+            }
+            c.advance();
+          } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+            const rlVal = ctx.renderLocals[name];
+            const isZig = rlVal.includes('state.get') || rlVal.includes('getSlot');
+            if (isZig) {
+              fmtParts.push('{d}');
+              fmtArgs.push(leftFoldExpr(rlVal));
+              allStatic = false;
+            } else {
+              fmtParts.push(String(rlVal));
+            }
+            c.advance();
+          } else {
+            // Unknown identifier — stringify as literal (will be 0 or empty if unresolved)
+            fmtParts.push(name);
+            c.advance();
+          }
+        }
+      } else if (c.kind() === TK.number) {
+        fmtParts.push(c.text());
+        c.advance();
+      } else {
+        c.advance();
+      }
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    const fmtString = fmtParts.join('');
+    if (allStatic || fmtArgs.length === 0) {
+      children.push({ nodeExpr: `.{ .text = "${fmtString}" }` });
+    } else {
+      const bufId = ctx.dynCount;
+      const bufSize = Math.max(64, fmtString.length + 20 * fmtArgs.length + 64);
+      ctx.dynTexts.push({ bufId, fmtString: fmtString, fmtArgs: fmtArgs.join(', '), arrName: '', arrIndex: 0, bufSize });
+      ctx.dynCount++;
+      children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+    }
+    return true;
   }
 
   const dropStart = c.pos;

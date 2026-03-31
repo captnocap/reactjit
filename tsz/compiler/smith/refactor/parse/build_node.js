@@ -91,6 +91,35 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         children[ci].nodeExpr = `.{ .style = .{ ${layoutFields.join(', ')} } }`;
       }
     }
+    // Expand subChildren: conditional wrappers that contain spliced children
+    for (let sci = 0; sci < children.length; sci++) {
+      if (children[sci].subChildren && children[sci].subChildren.length > 0) {
+        const subArrName = `_arr_${ctx.arrayCounter}`;
+        ctx.arrayCounter++;
+        const subExprs = children[sci].subChildren.map(sch => sch.nodeExpr || sch).join(', ');
+        ctx.arrayComments.push('');
+        ctx.arrayDecls.push(`var ${subArrName} = [_]Node{ ${subExprs} };`);
+        // Bind sub-children dynTexts, maps, conditionals to the sub-array
+        for (let sj = 0; sj < children[sci].subChildren.length; sj++) {
+          const sch = children[sci].subChildren[sj];
+          if (sch.dynBufId !== undefined) {
+            const dt = ctx.dynTexts.find(d => d.bufId === sch.dynBufId && !!d.inMap === !!sch.inMap);
+            if (dt && !dt.arrName) { dt.arrName = subArrName; dt.arrIndex = sj; }
+          }
+          if (sch.mapIdx !== undefined) {
+            const m = ctx.maps[sch.mapIdx];
+            if (m) { m.parentArr = subArrName; m.childIdx = sj; }
+          }
+          if (sch.condIdx !== undefined) {
+            const cond = ctx.conditionals[sch.condIdx];
+            if (cond) { cond.arrName = subArrName; cond.trueIdx = sj; }
+          }
+        }
+        // Update the wrapper node to include .children
+        const wrapperParts = children[sci].nodeExpr.replace(/ \}$/, `, .children = &${subArrName} }`);
+        children[sci] = { nodeExpr: wrapperParts, condIdx: children[sci].condIdx, dynBufId: children[sci].dynBufId };
+      }
+    }
     const childExprs = children.map(ch => ch.nodeExpr || ch).join(', ');
     // Source breadcrumb comment
     if (srcTag && srcOffset !== undefined) {
