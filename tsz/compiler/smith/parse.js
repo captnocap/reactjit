@@ -47,12 +47,14 @@ function parseJSXElement(c) {
   const tagSrcOffset = c.starts[c.pos > 0 ? c.pos - 1 : 0];
 
   let elementState = initElementParseState(rawTag, tag);
-  let styleFields = elementState.styleFields;
-  let nodeFields = elementState.nodeFields;
-  let ascriptScript = elementState.ascriptScript;
-  let ascriptOnResult = elementState.ascriptOnResult;
+  const attrState = {
+    styleFields: elementState.styleFields,
+    nodeFields: elementState.nodeFields,
+    ascriptScript: elementState.ascriptScript,
+    ascriptOnResult: elementState.ascriptOnResult,
+    handlerRef: elementState.handlerRef,
+  };
   const effectiveTag = elementState.effectiveTag;
-  let handlerRef = elementState.handlerRef;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
     if (c.kind() === TK.identifier) {
@@ -60,78 +62,16 @@ function parseJSXElement(c) {
       c.advance();
       if (c.kind() === TK.equals) {
         c.advance();
-        if (attr === 'style') {
-          const inlineStyles = parseStyleBlock(c);
-          // Merge: inline styles win over pre-injected (e.g. ScrollView overflow)
-          const preInjected = styleFields.filter(f => !inlineStyles.some(s => s.split(' = ')[0] === f.split(' = ')[0]));
-          styleFields = preInjected.concat(inlineStyles);
-          // Transfer custom properties lost by Array.concat (dynStyle bindings)
-          if (inlineStyles._dynStyleIds) styleFields._dynStyleIds = inlineStyles._dynStyleIds;
-          if (inlineStyles._dynStyleId !== undefined) styleFields._dynStyleId = inlineStyles._dynStyleId;
-          continue;
-        }
-
-        const handlerAttrResult = tryParseElementHandlerAttr(c, attr, rawTag, nodeFields, handlerRef);
-        if (handlerAttrResult) {
-          handlerRef = handlerAttrResult.handlerRef;
-          continue;
-        }
-
-        const basicAttrResult = tryParseBasicElementAttr(c, attr, rawTag, nodeFields, { ascriptScript, ascriptOnResult });
-        if (basicAttrResult) {
-          ascriptScript = basicAttrResult.ascriptScript;
-          ascriptOnResult = basicAttrResult.ascriptOnResult;
-          continue;
-        }
-
-        if (tryParseTextColorAttr(c, attr, nodeFields)) {
-          continue;
-        }
-
-        if (tryParseCanvasAttr(c, attr, rawTag, nodeFields)) {
-          continue;
-        }
-
-        if (tryParseSpatialAttr(c, attr, rawTag, styleFields, nodeFields)) {
-          continue;
-        }
-
-        if (attr === 'color' && rawTag.startsWith('3D.')) {
-          if (c.kind() === TK.string) {
-            const hex = c.text().slice(1, -1).replace('#', '');
-            const r = parseInt(hex.slice(0, 2), 16) / 255;
-            const g = parseInt(hex.slice(2, 4), 16) / 255;
-            const b = parseInt(hex.slice(4, 6), 16) / 255;
-            nodeFields.push(`.scene3d_color_r = ${r.toFixed(3)}`);
-            nodeFields.push(`.scene3d_color_g = ${g.toFixed(3)}`);
-            nodeFields.push(`.scene3d_color_b = ${b.toFixed(3)}`);
-            c.advance();
-          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
-        } else if (attr === 'color' && rawTag.startsWith('Physics.')) {
-          // color="#hex" → background_color style
-          if (c.kind() === TK.string) {
-            const val = c.text().slice(1, -1);
-            styleFields.push(`.background_color = ${parseColor(val)}`);
-            c.advance();
-          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
-        } else if (attr === 'bold') {
-          // bold attribute (no value) → .bold = true
-          nodeFields.push('.bold = true');
-          // Don't consume — no value after bare attribute
-          continue;
-        } else if (attr === 'd' || attr === 'fill' || attr === 'fillEffect' || attr === 'stroke' || attr === 'strokeWidth' || attr === 'scale') {
-          // Glyph attributes in inline context — handled by parseInlineGlyph, skip here
-          if (c.kind() === TK.string) c.advance();
-          else if (c.kind() === TK.lbrace) { skipBraces(c); }
-          else if (c.kind() === TK.number) c.advance();
-        } else {
-          // Skip unknown attributes
-          if (c.kind() === TK.string) c.advance();
-          else if (c.kind() === TK.lbrace) { skipBraces(c); }
-        }
+        parseElementAttr(c, attr, rawTag, attrState);
       }
     } else { c.advance(); }
   }
+
+  let styleFields = attrState.styleFields;
+  let nodeFields = attrState.nodeFields;
+  let ascriptScript = attrState.ascriptScript;
+  let ascriptOnResult = attrState.ascriptOnResult;
+  let handlerRef = attrState.handlerRef;
 
   // Canvas: set drift_active when drift attrs present (enables auto-stacker + drift animation)
   if (rawTag === 'Canvas') {

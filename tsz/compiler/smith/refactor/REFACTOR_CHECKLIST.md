@@ -63,7 +63,8 @@ Current constraint:
 - [x] Extract generic text color attribute parsing from `parseJSXElement`.
 - [x] Extract 3D/Physics spatial attribute parsing from `parseJSXElement`.
 - [x] Extract canvas/graph attribute parsing from `parseJSXElement`.
-- [ ] Split tag normalization from attribute parsing.
+- [x] Extract element attribute dispatch order from `parseJSXElement`.
+- [x] Split tag normalization from attribute parsing.
 - [ ] Split handler parsing from non-handler prop parsing.
 
 ## Phase 4: `.map()` and Brace Expressions
