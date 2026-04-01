@@ -68,7 +68,7 @@ pub fn build(b: *std.Build) void {
 
     // ── Fast cart build (api.zig types + pre-built engine .a) ──────
     // NO dependency on core_so — links against the cached .a on disk.
-    // Run `zig build core` once to produce zig-out/lib/libreactjit-core.current.a,
+    // Run `zig build core` once to produce zig-out/lib/libreactjit-core.a,
     // then every cart build skips the engine entirely.
     {
         const cart_fast_mod = b.createModule(.{
@@ -90,7 +90,7 @@ pub fn build(b: *std.Build) void {
         cart_fast_exe.linkLibCpp();
 
         // Pre-built engine (managed externally by scripts/build --fast)
-        cart_fast_exe.addObjectFile(b.path("zig-out/lib/libreactjit-core.current.a"));
+        cart_fast_exe.addObjectFile(b.path("zig-out/lib/libreactjit-core.a"));
 
         // System libs that the engine .a references (must be linked by the final exe)
         cart_fast_exe.linkSystemLibrary("SDL3");
@@ -127,6 +127,7 @@ pub fn build(b: *std.Build) void {
         }
 
         // Blend2D and Vello (pre-built static libs)
+        cart_fast_exe.root_module.addIncludePath(b.path("../blend2d"));
         cart_fast_exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
         cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         cart_fast_exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
@@ -180,8 +181,32 @@ pub fn build(b: *std.Build) void {
         const smith_bundle = b.addRunArtifact(smith_bundle_tool);
         smith_bundle.setCwd(b.path("."));
         smith_bundle.addDirectoryArg(b.path("compiler"));
+        const smith_bundle_out = smith_bundle.addOutputFileArg("smith.bundle.js");
+        smith_bundle.addFileInput(b.path("compiler/smith_LOAD_ORDER.txt"));
+        const smith_manifest = std.fs.cwd().readFileAlloc(b.allocator, "compiler/smith_LOAD_ORDER.txt", 1024 * 1024) catch @panic("read smith manifest");
+        var smith_lines = std.mem.splitScalar(u8, smith_manifest, '\n');
+        while (smith_lines.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            if (line.len == 0 or line[0] == '#') continue;
+            smith_bundle.addFileInput(b.path(b.fmt("compiler/{s}", .{line})));
+        }
         const smith_bundle_step = b.step("smith-bundle", "Generate compiler/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
+
+        const smith_refactor_bundle = b.addRunArtifact(smith_bundle_tool);
+        smith_refactor_bundle.setCwd(b.path("."));
+        smith_refactor_bundle.addDirectoryArg(b.path("compiler/smith_refactor"));
+        const smith_refactor_bundle_out = smith_refactor_bundle.addOutputFileArg("smith-refactor.bundle.js");
+        smith_refactor_bundle.addFileInput(b.path("compiler/smith_refactor/smith_LOAD_ORDER.txt"));
+        const smith_refactor_manifest = std.fs.cwd().readFileAlloc(b.allocator, "compiler/smith_refactor/smith_LOAD_ORDER.txt", 1024 * 1024) catch @panic("read smith refactor manifest");
+        var smith_refactor_lines = std.mem.splitScalar(u8, smith_refactor_manifest, '\n');
+        while (smith_refactor_lines.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            if (line.len == 0 or line[0] == '#') continue;
+            smith_refactor_bundle.addFileInput(b.path(b.fmt("compiler/smith_refactor/{s}", .{line})));
+        }
+        const smith_refactor_bundle_step = b.step("smith-refactor-bundle", "Generate compiler/smith_refactor/dist/smith.bundle.js");
+        smith_refactor_bundle_step.dependOn(&smith_refactor_bundle.step);
 
         const smith_sync_tool = b.addExecutable(.{
             .name = "smith-sync-tool",
@@ -219,9 +244,36 @@ pub fn build(b: *std.Build) void {
             forge_exe.linkSystemLibrary("pthread");
         }
         forge_exe.step.dependOn(&smith_bundle.step);
+        forge_exe.step.addWatchInput(smith_bundle_out) catch @panic("OOM");
         const forge_install = b.addInstallArtifact(forge_exe, .{});
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
         forge_step.dependOn(&forge_install.step);
+
+        const forge_refactor_mod = b.createModule(.{
+            .root_source_file = b.path("compiler/forge_refactor.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const forge_refactor_exe = b.addExecutable(.{
+            .name = "forge-refactor",
+            .root_module = forge_refactor_mod,
+        });
+        forge_refactor_exe.linkLibC();
+        forge_refactor_exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
+        forge_refactor_exe.root_module.addCSourceFiles(.{
+            .root = b.path("../love2d/quickjs"),
+            .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+        });
+        if (target.result.os.tag == .linux) {
+            forge_refactor_exe.linkSystemLibrary("m");
+            forge_refactor_exe.linkSystemLibrary("pthread");
+        }
+        forge_refactor_exe.step.dependOn(&smith_refactor_bundle.step);
+        forge_refactor_exe.step.addWatchInput(smith_refactor_bundle_out) catch @panic("OOM");
+        const forge_refactor_install = b.addInstallArtifact(forge_refactor_exe, .{});
+        const forge_refactor_step = b.step("forge-refactor", "Forge refactor: isolated Smith refactor host");
+        forge_refactor_step.dependOn(&forge_refactor_install.step);
     }
 
     // ── Compiler tests ───────────────────────────────────────────
@@ -235,6 +287,35 @@ pub fn build(b: *std.Build) void {
     const run_compiler_tests = b.addRunArtifact(compiler_tests);
     const test_step = b.step("test", "Run compiler tests");
     test_step.dependOn(&run_compiler_tests.step);
+
+    // ── Handler Test Harness — headless handler validator ────────────
+    // zig build test-handlers -- <app.zig path> [--js-logic <file>]
+    const test_handlers_mod = b.createModule(.{
+        .root_source_file = b.path("test_handlers.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_handlers_mod.addIncludePath(b.path("../love2d/quickjs"));
+    test_handlers_mod.addCSourceFiles(.{
+        .root = b.path("../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    test_handlers_mod.addIncludePath(b.path("."));
+
+    const test_handlers_exe = b.addExecutable(.{
+        .name = "test-handlers",
+        .root_module = test_handlers_mod,
+    });
+    test_handlers_exe.linkLibC();
+    if (target.result.os.tag == .linux) {
+        test_handlers_exe.linkSystemLibrary("m");
+        test_handlers_exe.linkSystemLibrary("pthread");
+    }
+
+    const test_handlers_install = b.addInstallArtifact(test_handlers_exe, .{});
+    const test_handlers_step = b.step("test-handlers", "Run handler tests (headless) — args: <app.zig> [--js-logic <file>]");
+    test_handlers_step.dependOn(&test_handlers_install.step);
 
     // ── WASM target — layout engine only, no native deps ──────────
     const wasm_lib = b.addExecutable(.{
