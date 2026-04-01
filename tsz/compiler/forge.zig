@@ -239,6 +239,7 @@ pub fn main() !void {
     var strict_mode = false;
     var logs_enabled = false;
     var logs_find: ?[]const u8 = null;
+    var out_dir: []const u8 = "/tmp/tsz-gen";
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
@@ -248,6 +249,8 @@ pub fn main() !void {
             mod_build = true;
         } else if (std.mem.startsWith(u8, arg, "--target=")) {
             mod_target = arg["--target=".len..];
+        } else if (std.mem.startsWith(u8, arg, "--out-dir=")) {
+            out_dir = arg["--out-dir=".len..];
         } else if (std.mem.eql(u8, arg, "--split")) {
             split_output = true;
         } else if (std.mem.eql(u8, arg, "--single")) {
@@ -338,16 +341,21 @@ pub fn main() !void {
         return;
     };
 
-    // 7. Extract stem for output path
+    // 7. Extract stem for output path, ensure out_dir exists
     const basename = std.fs.path.basename(input_path);
     const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
     const stem = basename[0..dot_pos];
+
+    std.fs.cwd().makePath(out_dir) catch |err| {
+        std.debug.print("[forge] Cannot create out-dir '{s}': {}\n", .{ out_dir, err });
+        return;
+    };
 
     // 8. Detect split output and write accordingly
     const split_marker = "__SPLIT_OUTPUT__\n";
     if (zig_output.len > split_marker.len and std.mem.startsWith(u8, zig_output, split_marker)) {
         // ── Split output: create directory with per-concern files ──
-        const dir_path = std.fmt.allocPrint(Alloc, "generated_{s}", .{stem}) catch return;
+        const dir_path = std.fmt.allocPrint(Alloc, "{s}/generated_{s}", .{ out_dir, stem }) catch return;
         std.fs.cwd().makePath(dir_path) catch |err| {
             std.debug.print("[forge] Cannot create dir '{s}': {}\n", .{ dir_path, err });
             return;
@@ -425,7 +433,7 @@ pub fn main() !void {
         const final_output = std.mem.replaceOwned(u8, Alloc, zig_output, "BODYHASH", &hash_hex) catch zig_output;
 
         const ext = if (mod_build and std.mem.eql(u8, mod_target, "lua")) ".lua" else if (mod_build and std.mem.eql(u8, mod_target, "js")) ".js" else ".zig";
-        const out_path = std.fmt.allocPrint(Alloc, "generated_{s}{s}", .{ stem, ext }) catch return;
+        const out_path = std.fmt.allocPrint(Alloc, "{s}/generated_{s}{s}", .{ out_dir, stem, ext }) catch return;
         const out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("[forge] Cannot write '{s}': {}\n", .{ out_path, err });
             return;

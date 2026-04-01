@@ -103,7 +103,7 @@ for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad
         esac
 
         total=$((total + 1))
-        gen_file="generated_${name}.zig"
+        gen_file="/tmp/tsz-gen/generated_${name}.zig"
         binary="zig-out/bin/$name"
 
         rm -f "$gen_file" "$binary"
@@ -113,12 +113,28 @@ for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad
             RESULTS["$name"]="compiled"
             pass=$((pass + 1))
 
-            # Stamp into DB with commit context
+            # Stamp into DB with commit context + size
             sha=$(sha256sum "$binary" | cut -d' ' -f1)
+            bsize=$(stat -c%s "$binary")
             gen=""
             [ -f "$gen_file" ] && gen=$(cat "$gen_file" | sed "s/'/''/g")
-            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha)
-                           VALUES ('$name', '$lane', 'compiled', '$gen', '$sha');"
+
+            # Check for bloat (>30% growth)
+            build_status="compiled"
+            prev_size=$(sqlite3 "$DB" "SELECT binary_size FROM builds
+                        WHERE test_name = '$name' AND status = 'compiled' AND binary_size > 0
+                        ORDER BY built_at DESC LIMIT 1;" 2>/dev/null || echo "0")
+            prev_size="${prev_size:-0}"
+            if [ "$prev_size" -gt 0 ]; then
+                growth=$(( (bsize - prev_size) * 100 / prev_size ))
+                if [ "$growth" -gt 30 ]; then
+                    build_status="bloated"
+                    RESULTS["$name"]="bloated"
+                fi
+            fi
+
+            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha, binary_size)
+                           VALUES ('$name', '$lane', '$build_status', '$gen', '$sha', $bsize);"
         else
             local_status="forge_fail"
             [ -f "$gen_file" ] && local_status="zig_fail"
@@ -138,6 +154,7 @@ done
 newly_regressed=()
 still_broken=()
 newly_fixed=()
+bloated=()
 stable=0
 
 for name in "${!RESULTS[@]}"; do
@@ -145,7 +162,9 @@ for name in "${!RESULTS[@]}"; do
     was_passing=$(echo "$BASELINE_PASS" | grep -c "^${name}$" || true)
     was_failing=$(echo "$BASELINE_FAIL" | grep -c "^${name}$" || true)
 
-    if [ "$status" = "compiled" ]; then
+    if [ "$status" = "bloated" ]; then
+        bloated+=("$name")
+    elif [ "$status" = "compiled" ]; then
         if [ "$was_failing" -gt 0 ]; then
             newly_fixed+=("$name")
         else
@@ -168,6 +187,7 @@ echo "│  Regression Report for $COMMIT_SHA"
 echo "│  $total tests scanned"
 echo "├──────────────────────────────────────────────────────────┤"
 printf "│  %3d newly regressed\n" "${#newly_regressed[@]}"
+printf "│  %3d bloated (>30%% size jump)\n" "${#bloated[@]}"
 printf "│  %3d still broken from before\n" "${#still_broken[@]}"
 printf "│  %3d newly compiling\n" "${#newly_fixed[@]}"
 printf "│  %3d unchanged/stable\n" "$stable"
@@ -175,24 +195,32 @@ echo "└───────────────────────�
 
 if [ ${#newly_regressed[@]} -gt 0 ]; then
     echo ""
-    echo "🔴 REGRESSIONS:"
+    echo "REGRESSIONS:"
     for t in "${newly_regressed[@]}"; do
         echo "  - $t"
     done
 fi
 
+if [ ${#bloated[@]} -gt 0 ]; then
+    echo ""
+    echo "BLOATED (compiled but suspiciously large):"
+    for t in "${bloated[@]}"; do
+        echo "  ! $t"
+    done
+fi
+
 if [ ${#newly_fixed[@]} -gt 0 ]; then
     echo ""
-    echo "🟢 NEWLY PASSING:"
+    echo "NEWLY PASSING:"
     for t in "${newly_fixed[@]}"; do
         echo "  + $t"
     done
 fi
 
-# Exit non-zero if there are regressions (but don't block the commit — it's post-commit)
-if [ ${#newly_regressed[@]} -gt 0 ]; then
+# Exit non-zero if there are regressions or bloat
+if [ ${#newly_regressed[@]} -gt 0 ] || [ ${#bloated[@]} -gt 0 ]; then
     echo ""
-    echo "⚠ ${#newly_regressed[@]} regression(s) detected. Use 'scripts/ledger diff <test>' to investigate."
+    echo "${#newly_regressed[@]} regression(s), ${#bloated[@]} bloat(s). Use 'scripts/ledger diff <test>' to investigate."
     exit 1
 fi
 

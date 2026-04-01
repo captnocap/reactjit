@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS builds (
     test_name   TEXT    NOT NULL,
     lane        TEXT    NOT NULL,
     built_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-    status      TEXT    NOT NULL,  -- compiled | forge_fail | zig_fail | preflight_blocked
+    status      TEXT    NOT NULL,  -- compiled | forge_fail | zig_fail | preflight_blocked | bloated
     generated   TEXT,              -- full generated .zig source
     binary_sha  TEXT,              -- sha256 of the output binary
+    binary_size INTEGER,           -- binary size in bytes
     error_log   TEXT               -- first 500 chars of error output if failed
 );
 
@@ -75,8 +76,32 @@ stamp() {
     fi
 
     local sha=""
+    local size=0
     if [ -f "$binary" ]; then
         sha=$(sha256sum "$binary" | cut -d' ' -f1)
+        size=$(stat -c%s "$binary")
+    fi
+
+    # Check for bloat: if we have a previous good build, compare sizes
+    # >30% growth is suspicious — flag it
+    local bloat_warn=""
+    if [ "$status" = "compiled" ] && [ "$size" -gt 0 ]; then
+        local prev_size
+        prev_size=$(sqlite3 "$DB" "SELECT binary_size FROM builds
+                    WHERE test_name = '${name//\'/\'\'}' AND status = 'compiled' AND binary_size > 0
+                    ORDER BY built_at DESC LIMIT 1;" 2>/dev/null || echo "0")
+        prev_size="${prev_size:-0}"
+
+        if [ "$prev_size" -gt 0 ]; then
+            local growth
+            growth=$(( (size - prev_size) * 100 / prev_size ))
+            if [ "$growth" -gt 30 ]; then
+                local prev_mb=$(python3 -c "print(f'{$prev_size/1048576:.1f}')")
+                local curr_mb=$(python3 -c "print(f'{$size/1048576:.1f}')")
+                bloat_warn="BLOAT: ${prev_mb}M → ${curr_mb}M (+${growth}%)"
+                status="bloated"
+            fi
+        fi
     fi
 
     # Truncate error log
@@ -87,8 +112,11 @@ stamp() {
     err_log="${err_log//\'/\'\'}"
     name="${name//\'/\'\'}"
 
-    sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha, error_log)
-                   VALUES ('$name', '$lane', '$status', '$generated', '$sha', '$err_log');"
+    sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha, binary_size, error_log)
+                   VALUES ('$name', '$lane', '$status', '$generated', '$sha', $size, '$err_log');"
+
+    # Return bloat warning if any (caller can print it)
+    [ -n "$bloat_warn" ] && echo "$bloat_warn"
 }
 
 # Get the last good generated code for a test
@@ -143,7 +171,7 @@ cmd_watch() {
                     fi
                 done
 
-                local gen_file="generated_${name}.zig"
+                local gen_file="/tmp/tsz-gen/generated_${name}.zig"
                 local binary="$BIN_DIR/$name"
                 local sha=""
                 if [ -f "$binary" ]; then
@@ -212,7 +240,7 @@ cmd_run() {
         local name lane gen_file binary
         name=$(test_name_from_path "$f")
         lane=$(detect_lane "$f")
-        gen_file="generated_${name}.zig"
+        gen_file="/tmp/tsz-gen/generated_${name}.zig"
         binary="$BIN_DIR/$name"
 
         total=$((total + 1))
@@ -226,9 +254,14 @@ cmd_run() {
         build_out=$("$SCRIPTS_DIR/build" "$f" 2>&1) || true
 
         if [ -f "$binary" ]; then
-            stamp "$name" "$lane" "compiled" "$gen_file" "$binary"
+            local bloat
+            bloat=$(stamp "$name" "$lane" "compiled" "$gen_file" "$binary")
             pass=$((pass + 1))
-            echo "PASS"
+            if [ -n "$bloat" ]; then
+                echo "$bloat"
+            else
+                echo "PASS"
+            fi
         elif [ -f "$gen_file" ] && grep -q "PREFLIGHT BLOCKED" "$gen_file" 2>/dev/null; then
             stamp "$name" "$lane" "preflight_blocked" "$gen_file" "" "$build_out"
             fail=$((fail + 1))
@@ -321,13 +354,42 @@ cmd_status() {
         AND test_name NOT IN (SELECT DISTINCT test_name FROM builds WHERE status = 'compiled')
         ORDER BY lane, test_name;
     "
+
+    echo ""
+    echo "--- Bloated Binaries (>30% size jump) ---"
+    sqlite3 -header -column "$DB" "
+        SELECT test_name, lane, built_at,
+               printf('%.1fM', binary_size / 1048576.0) as size
+        FROM (
+            SELECT test_name, lane, status, built_at, binary_size,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+        ) WHERE rn = 1 AND status = 'bloated'
+        ORDER BY binary_size DESC;
+    "
+
+    echo ""
+    echo "--- Size Distribution (latest good builds) ---"
+    sqlite3 "$DB" "
+        WITH latest_good AS (
+            SELECT test_name, binary_size,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+            WHERE status = 'compiled' AND binary_size > 0
+        )
+        SELECT
+            printf('%.1fM', MIN(binary_size) / 1048576.0) as smallest,
+            printf('%.1fM', AVG(binary_size) / 1048576.0) as average,
+            printf('%.1fM', MAX(binary_size) / 1048576.0) as largest
+        FROM latest_good WHERE rn = 1;
+    "
 }
 
 # ── Diff mode ─────────────────────────────────────────────────
 
 cmd_diff() {
     local name="$1"
-    local gen_file="generated_${name}.zig"
+    local gen_file="/tmp/tsz-gen/generated_${name}.zig"
 
     if [ ! -f "$gen_file" ]; then
         echo "No current generated file: $gen_file"

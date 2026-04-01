@@ -34,8 +34,9 @@ fi
 CART="${POSITIONAL[0]}"
 NAME=$(basename "$CART" .tsz)
 OPT="${POSITIONAL[1]:---release}"
-GEN="generated_${NAME}.zig"
-GEN_DIR="generated_${NAME}"
+GEN_ROOT="/tmp/tsz-gen"
+GEN="$GEN_ROOT/generated_${NAME}.zig"
+GEN_DIR="$GEN_ROOT/generated_${NAME}"
 
 # Pick optimize flag
 if [ "$OPT" = "--debug" ]; then
