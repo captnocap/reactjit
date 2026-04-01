@@ -597,13 +597,100 @@ Each block closes itself: `</if>`, `</else>`. The compiler reads linearly — se
 </for>
 ```
 
-### `<while>`
+### `<during>` — Lifecycle / Reactive Scope
 
-Condition-based loops (not collection iteration):
+**The most versatile block.** Runs as long as its condition is true. Variable-driven — flip the variable, the block activates or deactivates. Replaces `useEffect`, lifecycle hooks, event subscriptions, recursive walks, and if/else state chains.
+
+**Variable-driven lifecycle:**
 
 ```
-<while running>
-  pollEvents + tick + paint
+<var>
+  recording is false
+  loading is false
+  ready is false
+</var>
+
+<during recording>
+  media.captureFrame every 33
+</during>
+
+<during loading>
+  showSpinner
+</during>
+
+<during ready>
+  showContent
+</during>
+```
+
+Turn `recording` on → the block activates. Turn it off → the block stops and cleans up. No event listeners. The variable IS the switch.
+
+**In JSX — replaces if/else state chains:**
+
+```
+return(
+  <C.Page>
+    <during loading>
+      <C.Spinner />
+    </during>
+    <during error>
+      <C.ErrorCard>{errorMessage}</C.ErrorCard>
+    </during>
+    <during ready>
+      <For each=items>
+        <C.ListItem>{item.name}</C.ListItem>
+      </For>
+    </during>
+  </C.Page>
+)
+```
+
+No chain. No precedence. Each state owns its own view.
+
+**Recursive tree walks:**
+
+```
+<during paintNode(node)>
+  paintNodeVisuals(node)
+  <for node.children as child>
+    paintNode(child)
+  </for>
+</during>
+```
+
+Tells the compiler "this is a sustained operation that can re-enter itself."
+
+**Lifecycle phases:**
+
+```
+<during boot>
+  initSDL + initGPU + initText
+  <during page load>
+    fetchData + buildTree + firstPaint
+  </during>
+</during>
+```
+
+Phases nest. Cleanups unwind with the phase.
+
+**What `<during>` replaces:**
+
+| Old pattern | `<during>` equivalent |
+|------------|----------------------|
+| `useEffect(() => {}, [dep])` | `<during dep>` |
+| `while (running) { }` | `<during running>` |
+| recursive function | `<during funcName(arg)>` |
+| lifecycle hooks | `<during boot>`, `<during page load>` |
+| event subscriptions | `<during connected>`, `<during recording>` |
+| if/else state chains | multiple `<during state>` blocks |
+
+### `<while>`
+
+Condition-based loops for explicit iteration (not lifecycle/reactive — use `<during>` for that):
+
+```
+<while sdl.pollEvent as event>
+  handleEvent
 </while>
 ```
 
@@ -752,17 +839,47 @@ There are no parameterized handlers. Scope handles it. Inside a `<For>`, the fun
 
 **No `{items.map(...)}`**. Use `<For>`.
 
-### Classifiers — ALL Styling
+### Three Visual Layers
+
+All referenced by name. All defined in their own files. No inline styling anywhere.
+
+**1. Classifiers** (`C.Name`) — structural styling (layout, colors, spacing):
 
 ```
 <C.Card> ... </C.Card>
 <C.Title>text</C.Title>
-<C.BigNumber>{count}</C.BigNumber>
+<C.Value>{count}</C.Value>
 ```
 
-Defined in `.cls.tsz` files. `C.Name` pattern.
+Defined in `.cls.tsz` files. `C.Name` pattern. If you need a new look, add a classifier.
 
-**Chad-tier JSX has no `style=` prop.** No visual props (`fontSize`, `color`, `backgroundColor`) on primitives. All visual treatment comes from classifiers. If you need a new look, add a classifier to the `.cls.tsz` file.
+**2. Effects** (bare name on tag) — live procedural fills:
+
+```
+<Text lava>MOLTEN LETTERS</Text>
+<Text plasma>RAINBOW TEXT</Text>
+<Text ocean>DEEP CURRENT</Text>
+<C.Card ember> ... </C.Card>
+```
+
+The effect name IS the prop. A bare word on a tag that matches a named effect applies that effect as a fill. Defined in `.effects.tsz` files.
+
+**3. Glyphs** (`:name:` in text) — Discord-style inline shortcodes:
+
+```
+<Text>Status :check: all good</Text>
+<Text>Alert :warning: something wrong</Text>
+<Text>Energy :star[plasma]: reactor online</Text>
+<Text>Heat :flame[lava]: critical :laugh:</Text>
+```
+
+- `:name:` — inserts a named glyph with its default fill
+- `:name[effect]:` — glyph with a named effect as its fill override
+- Works anywhere inside text content — inline like emoji
+
+Defined in `.glyphs.tsz` files. The compiler resolves `:name:` from the glyphs registry.
+
+**Chad-tier JSX has no `style=` prop.** No visual props (`fontSize`, `color`, `backgroundColor`) on primitives. Classifiers handle structure, effects handle procedural fills, glyphs handle inline assets.
 
 Primitives (`Box`, `Text`, `Pressable`, etc.) appear in `.cls.tsz` definitions, not directly in page files.
 
@@ -1021,6 +1138,10 @@ Imports everything exported (classifiers, effects, glyphs).
 | `a < b` | sigil comparison | `a below b` |
 | `a >= b` | sigil comparison | `a exact or above b` |
 | `a <= b` | sigil comparison | `a exact or below b` |
+| `useEffect(() => {}, [x])` | React effect hook | `<during x>` |
+| `componentDidMount` | React lifecycle | `boot:` or `<during boot>` |
+| `while (true) { }` for state | loop as state machine | `<during varName>` |
+| nested if/else for UI states | branching chains | multiple `<during state>` blocks |
 
 ---
 
