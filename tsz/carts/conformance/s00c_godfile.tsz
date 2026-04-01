@@ -1,0 +1,481 @@
+// INTENT SYNTAX GOD FILE
+// Every construct in the dictionary, one file. If this drifts, the dictionary drifts.
+
+from './s00c_manifest_cls'
+
+<page route=godfile>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // VAR — all three binding levels
+  // ═══════════════════════════════════════════════════════════════════
+
+  <var>
+    // bare — untyped, uninitialized
+    scratch
+
+    // is — mutable with initial value
+    count is 0
+    input is ''
+    frame is 0
+    volume is 80
+    paused is false
+    recording is false
+    playing is false
+    selected is ''
+
+    // exact — immutable
+    appName exact 'Godfile'
+    maxVolume exact 100
+
+    // typed enum via exact type
+    filter exact type
+    priority exact type
+
+    // array data block
+    colors is array
+
+    // object data block
+    config is object
+
+    // objects data block
+    cards is objects
+
+    // shape declaration
+    <stats has>
+      .entries
+      .active
+      .errors is 0
+    </stats>
+  </var>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DATA BLOCKS — named blocks matching var declarations
+  // ═══════════════════════════════════════════════════════════════════
+
+  <colors>
+    red
+    green
+    blue
+    orange
+  </colors>
+
+  <config>
+    name exact 'godfile'
+    version is 1
+    debug is false
+    maxItems is 64
+  </config>
+
+  <cards>
+    id: 1, title: Auth flow, col: todo, done: false
+    id: 2, title: Write tests, col: todo, done: false
+    id: 3, title: API layer, col: progress, done: false
+    id: 4, title: CI pipeline, col: done, done: true
+  </cards>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // TYPES — enum values scoped to their variable
+  // ═══════════════════════════════════════════════════════════════════
+
+  <types>
+    <filter>
+      all
+      active
+      done
+    </filter>
+
+    <priority>
+      low
+      medium
+      high
+      critical
+    </priority>
+  </types>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // STATE — setter declarations with optional constraints
+  // ═══════════════════════════════════════════════════════════════════
+
+  <state>
+    set_count
+    set_input
+    set_frame
+    set_volume
+    set_paused
+    set_recording
+    set_playing
+    set_selected
+    set_cards
+    set_scratch
+    set_filter exact filter
+    set_priority exact priority
+    set_stats
+  </state>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FUNCTIONS — all patterns
+  // ═══════════════════════════════════════════════════════════════════
+
+  <functions>
+
+    // ── simple state mutation ──
+
+    increment:
+      set_count is count + 1
+
+    decrement:
+      set_count is count - 1
+
+    reset:
+      set_count is 0
+
+    // ── guard with stop ──
+
+    validateInput:
+      <if input exact ''>
+        stop
+      </if>
+
+    // ── composition ──
+
+    appendCard:
+      set_cards is cards.concat(input)
+
+    clearInput:
+      set_input is ''
+
+    addCard:
+      validateInput + appendCard + clearInput
+
+    // ── scope-aware functions (called from inside <For>) ──
+
+    toggleDone:
+      item.done is not item.done
+
+    moveToDone:
+      item.col is 'done'
+
+    moveToProgress:
+      item.col is 'progress'
+
+    moveToTodo:
+      item.col is 'todo'
+
+    selectItem:
+      set_selected is item.id
+
+    deleteItem:
+      set_cards is cards.without(item)
+
+    // ── <if> / <else if> / <else> ──
+
+    hint:
+      <if count above 0>
+        'Positive'
+      </if>
+      <else if count exact 0>
+        'Zero'
+      </else>
+      <else>
+        'Negative'
+      </else>
+
+    statusLabel:
+      <if stats.errors above 0>
+        'errors present'
+      </if>
+      <else if stats.active above 0>
+        'running'
+      </else>
+      <else>
+        'idle'
+      </else>
+
+    // ── collection operations ──
+
+    visibleCards:
+      <if filter exact 'all'>
+        cards
+      </if>
+      <else if filter exact 'active'>
+        cards.where(not item.done)
+      </else>
+      <else>
+        cards.where(item.done)
+      </else>
+
+    activeCount:
+      cards.where(not item.done).length
+
+    todoCards:
+      cards.where(item.col exact 'todo')
+
+    progressCards:
+      cards.where(item.col exact 'progress')
+
+    doneCards:
+      cards.where(item.col exact 'done')
+
+    // ── filters ──
+
+    showAll:
+      set_filter exact 'all'
+
+    showActive:
+      set_filter exact 'active'
+
+    showDone:
+      set_filter exact 'done'
+
+    // ── field mutation on scoped var ──
+
+    bumpErrors:
+      stats.errors is stats.errors + 1
+
+    // ── <for> block in functions ──
+
+    resetAllCards:
+      <for cards as item>
+        item.done is false
+        item.col is 'todo'
+      </for>
+
+    countByCol(col):
+      cards.where(item.col exact col).length
+
+    // ── scheduled functions ──
+
+    tick every 33:
+      <if paused>
+        stop
+      </if>
+      set_frame is frame + 1
+
+    autosave every 5000:
+      saveSnapshot
+
+    // ── media/audio (using ambient + module namespaces) ──
+
+    togglePause:
+      set_paused is not paused
+
+    togglePlay:
+      <if playing>
+        audio.pause('bgm')
+      </if>
+      <else>
+        audio.play('bgm')
+      </else>
+      set_playing is not playing
+
+    volumeUp:
+      <if volume exact or above maxVolume>
+        stop
+      </if>
+      set_volume is math.clamp(volume + 10, 0, maxVolume)
+
+    volumeDown:
+      <if volume exact 0>
+        stop
+      </if>
+      set_volume is math.clamp(volume - 10, 0, maxVolume)
+
+    toggleRecording:
+      <if recording>
+        media.stopRecording()
+      </if>
+      <else>
+        media.startRecording('rec_' + time.timestamp + '.mp4')
+      </else>
+      set_recording is not recording
+
+    saveSnapshot:
+      fs.write('snapshot.json', config)
+
+    // ── computed from ambients ──
+
+    batteryLabel:
+      <if device.charging>
+        device.battery + '% charging'
+      </if>
+      <else>
+        device.battery + '%'
+      </else>
+
+    connectLabel:
+      <if device.online>
+        'online'
+      </if>
+      <else>
+        'offline'
+      </else>
+
+    mouseLabel:
+      input.mouse.x + ', ' + input.mouse.y
+  </functions>
+
+  // ═══════════════════════════════════════════════════════════════════
+  // JSX — return block. Zero raw primitives. All classifiers.
+  // ═══════════════════════════════════════════════════════════════════
+
+  return(
+    <C.Page>
+
+      // ── Header ──
+      <C.Row>
+        <C.Title>{appName}</C.Title>
+        <C.Spacer />
+        <C.Hint>{sys.user + ' | up ' + sys.uptime}</C.Hint>
+        <C.Hint>{connectLabel}</C.Hint>
+        <C.Hint>{batteryLabel}</C.Hint>
+      </C.Row>
+
+      <C.Divider />
+
+      <C.Split>
+
+        // ── LEFT: Cards + Filters ──
+        <C.Panel>
+          <C.Subtitle>Cards</C.Subtitle>
+
+          <C.Row>
+            <C.InputWrap>
+              <TextInput value={input} onChange=set_input placeholder='New card...' />
+            </C.InputWrap>
+            <C.Btn onPress=addCard><C.BtnLabel>Add</C.BtnLabel></C.Btn>
+          </C.Row>
+
+          <C.Row>
+            <C.BtnSmall onPress=showAll><C.BtnLabelSmall>All</C.BtnLabelSmall></C.BtnSmall>
+            <C.BtnSmall onPress=showActive><C.BtnLabelSmall>Active</C.BtnLabelSmall></C.BtnSmall>
+            <C.BtnSmall onPress=showDone><C.BtnLabelSmall>Done</C.BtnLabelSmall></C.BtnSmall>
+          </C.Row>
+
+          <For each=visibleCards>
+            <C.ListItem>
+              <Pressable onPress=toggleDone>
+                <if item.done>
+                  <C.DotGreen />
+                </if>
+                <else>
+                  <C.DotYellow />
+                </else>
+              </Pressable>
+              <C.Body>{item.title}</C.Body>
+              <C.Spacer />
+              <C.BtnSmall onPress=deleteItem><C.BtnLabelSmall>x</C.BtnLabelSmall></C.BtnSmall>
+            </C.ListItem>
+          </For>
+
+          <C.Hint>{activeCount + ' remaining'}</C.Hint>
+        </C.Panel>
+
+        // ── MIDDLE: Kanban columns ──
+        <C.Panel>
+          <C.Subtitle>Board</C.Subtitle>
+
+          <C.Row>
+            <C.KanbanCol>
+              <C.Label>Todo</C.Label>
+              <For each=todoCards>
+                <C.KanbanCard>
+                  <C.KanbanTitle>{item.title}</C.KanbanTitle>
+                  <C.Row>
+                    <C.BtnSmall onPress=moveToProgress><C.BtnLabelSmall>Start</C.BtnLabelSmall></C.BtnSmall>
+                  </C.Row>
+                </C.KanbanCard>
+              </For>
+            </C.KanbanCol>
+
+            <C.KanbanCol>
+              <C.Label>In Progress</C.Label>
+              <For each=progressCards>
+                <C.KanbanCard>
+                  <C.KanbanTitle>{item.title}</C.KanbanTitle>
+                  <C.Row>
+                    <C.BtnSmall onPress=moveToTodo><C.BtnLabelSmall>Back</C.BtnLabelSmall></C.BtnSmall>
+                    <C.BtnSmall onPress=moveToDone><C.BtnLabelSmall>Done</C.BtnLabelSmall></C.BtnSmall>
+                  </C.Row>
+                </C.KanbanCard>
+              </For>
+            </C.KanbanCol>
+
+            <C.KanbanCol>
+              <C.Label>Done</C.Label>
+              <For each=doneCards>
+                <C.KanbanCard>
+                  <C.KanbanTitle>{item.title}</C.KanbanTitle>
+                  <C.Row>
+                    <C.BtnSmall onPress=moveToTodo><C.BtnLabelSmall>Reopen</C.BtnLabelSmall></C.BtnSmall>
+                  </C.Row>
+                </C.KanbanCard>
+              </For>
+            </C.KanbanCol>
+          </C.Row>
+        </C.Panel>
+
+        // ── RIGHT: System + Audio ──
+        <C.PanelNarrow>
+          <C.Subtitle>Counter</C.Subtitle>
+          <C.Value>{count}</C.Value>
+          <C.Hint>{hint}</C.Hint>
+          <C.Row>
+            <C.Btn onPress=decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
+            <C.Btn onPress=reset><C.BtnLabel>0</C.BtnLabel></C.Btn>
+            <C.Btn onPress=increment><C.BtnLabel>+</C.BtnLabel></C.Btn>
+          </C.Row>
+
+          <C.Divider />
+
+          <C.Subtitle>Playback</C.Subtitle>
+          <C.Row>
+            <C.Btn onPress=togglePlay>
+              <C.BtnLabel>
+                <if playing>
+                  Pause
+                </if>
+                <else>
+                  Play
+                </else>
+              </C.BtnLabel>
+            </C.Btn>
+            <C.Body>{volume + '%'}</C.Body>
+            <C.Btn onPress=volumeDown><C.BtnLabel>-</C.BtnLabel></C.Btn>
+            <C.Btn onPress=volumeUp><C.BtnLabel>+</C.BtnLabel></C.Btn>
+          </C.Row>
+
+          <C.Divider />
+
+          <C.Subtitle>Animation</C.Subtitle>
+          <C.Row>
+            <C.Btn onPress=togglePause>
+              <C.BtnLabel>
+                <if paused>
+                  Resume
+                </if>
+                <else>
+                  Pause
+                </else>
+              </C.BtnLabel>
+            </C.Btn>
+            <C.Hint>{'frame ' + frame}</C.Hint>
+          </C.Row>
+
+          <C.Divider />
+
+          <C.Subtitle>System</C.Subtitle>
+          <C.Row><C.Label>User</C.Label><C.Spacer /><C.Mono>{sys.user}</C.Mono></C.Row>
+          <C.Row><C.Label>Uptime</C.Label><C.Spacer /><C.Mono>{sys.uptime}</C.Mono></C.Row>
+          <C.Row><C.Label>Battery</C.Label><C.Spacer /><C.Mono>{batteryLabel}</C.Mono></C.Row>
+          <C.Row><C.Label>Network</C.Label><C.Spacer /><C.Mono>{connectLabel}</C.Mono></C.Row>
+          <C.Row><C.Label>Mouse</C.Label><C.Spacer /><C.Mono>{mouseLabel}</C.Mono></C.Row>
+          <C.Row><C.Label>FPS</C.Label><C.Spacer /><C.Mono>{time.fps}</C.Mono></C.Row>
+          <C.Row><C.Label>Frame</C.Label><C.Spacer /><C.Mono>{frame}</C.Mono></C.Row>
+          <C.Row><C.Label>Status</C.Label><C.Spacer /><C.Mono>{statusLabel}</C.Mono></C.Row>
+        </C.PanelNarrow>
+
+      </C.Split>
+    </C.Page>
+  )
+
+</page>
