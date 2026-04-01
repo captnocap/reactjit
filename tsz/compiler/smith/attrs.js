@@ -397,6 +397,7 @@ function slotSet(slotIdx) {
   const s = ctx.stateSlots[slotIdx];
   if (s.type === 'float') return `state.setSlotFloat`;
   if (s.type === 'boolean') return `state.setSlotBool`;
+  if (s.type === 'string') return `state.setSlotString`;
   return `state.setSlot`;
 }
 
