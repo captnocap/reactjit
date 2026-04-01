@@ -1149,6 +1149,70 @@ Wrap any function or group of functions in a hatch:
 - **The compiler handles boundary crossings.** Marshaling data between QuickJS/LuaJIT/Zig at the seams is automatic. The author doesn't think about it unless they want to.
 - **Hatches can wrap multiple functions.** Everything between `<zscript>` and `</zscript>` compiles to that target.
 
+### Cross-backend composition
+
+A single composed chain can cross all three backends. The compiler handles marshaling at each boundary:
+
+```
+<functions>
+  // one line — four functions, three backends
+  frameTick:
+    parseInput + processAudio + stepPhysics + updateUI
+
+  // JS: parse JSON input, set state
+  <script>
+  parseInput:
+    raw is input.poll
+    commands is json.parse(raw)
+    <for commands as cmd>
+      <switch cmd.type>
+        <case 'move'>
+          set_player_target is cmd.position
+        </case>
+        <case 'fire'>
+          set_firing is true
+        </case>
+      </switch>
+    </for>
+  </script>
+
+  // Lua: audio DSP on worker thread
+  <lscript>
+  processAudio:
+    <during firing>
+      audio.playSample('laser')
+    </during>
+    <for audio_channels as ch>
+      ch.volume is ch.volume * decay
+      ch.pan is math.lerp(ch.pan, ch.target_pan, 0.1)
+    </for>
+  </lscript>
+
+  // Zig: hot physics loop, zero alloc
+  <zscript>
+  stepPhysics:
+    <for bodies as body>
+      body.vx is body.vx + body.ax * dt_sec
+      body.vy is body.vy + body.ay * dt_sec + gravity
+      body.x is body.x + body.vx * dt_sec
+      body.y is body.y + body.vy * dt_sec
+      <for bodies as other>
+        <if other not exact body and physics.collision(body, other)>
+          physics.impulse(body, other)
+        </if>
+      </for>
+    </for>
+  </zscript>
+
+  // default backend: UI update
+  updateUI:
+    set_frame is frame + 1
+    set_fps_display is time.fps
+</functions>
+```
+
+The author reads `parseInput + processAudio + stepPhysics + updateUI`. One line, one mental model. The hatches are implementation detail — the intent is the composition.
+
 ### When to use hatches
 
 Most authors never will. The compiler's routing table picks the right backend. Hatches are for:
