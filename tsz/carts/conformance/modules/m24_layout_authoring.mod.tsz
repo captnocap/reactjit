@@ -1,0 +1,110 @@
+// CONFORMANCE TEST: Layout authoring syntax
+//
+// This fixture is intentionally written in the block/intent style we want for
+// authored framework modules. It should fail today until Smith learns this
+// richer module surface.
+//
+// Target surface:
+// - `m99`-style block modules with additional `<imports>` and `<const>` blocks
+// - function-type declarations inside `<types>`
+// - nullable state typed against those function types
+// - null-coalescing and intent guards inside layout helpers
+// - recursive layout verbs over typed node trees
+
+<module layout>
+  <imports>
+    EventHandler  from "./events.zig"
+  </imports>
+
+  <types>
+    FlexDirection: row | column | row_reverse | column_reverse
+    AlignItems: start | center | end | stretch | baseline
+    AlignSelf: auto | start | center | end | stretch | baseline
+
+    LayoutRect: {
+      x: f32 = 0
+      y: f32 = 0
+      w: f32 = 0
+      h: f32 = 0
+    }
+
+    Style: {
+      width: f32?,
+      height: f32?,
+      flex_direction: FlexDirection = column,
+      align_items: AlignItems = stretch,
+      align_self: AlignSelf = auto,
+      padding: f32 = 0,
+      padding_left: f32?,
+      padding_right: f32?,
+      row_gap: f32?,
+      column_gap: f32?
+    }
+
+    Node: {
+      style: Style,
+      children: Node[],
+      computed: LayoutRect,
+      text: string?,
+      font_size: u16 = 16,
+      handlers: EventHandler,
+      scroll_y: f32 = 0,
+      content_height: f32 = 0,
+      _flex_w: f32?,
+      _stretch_h: f32?
+    }
+
+    MeasureTextFn: fn(text: string, font_size: u16, max_width: f32) -> LayoutRect
+  </types>
+
+  <const>
+    LAYOUT_BUDGET: usize = 100000
+  </const>
+
+  <state>
+    measure_text: MeasureTextFn?
+    layout_count: usize = 0
+  </state>
+
+  <functions>
+    set_measure_fn(f: MeasureTextFn?): void
+      measure_text = f
+
+    pad_left(style: Style): f32
+      return style.padding_left ?? style.padding
+
+    pad_right(style: Style): f32
+      return style.padding_right ?? style.padding
+
+    resolve_maybe_pct(value: f32?, parent: f32): f32?
+      value == null ? return null : go
+      value < 0 ? return (-value) * parent : return value
+
+    measure_node_text(node: Node, max_width: f32): LayoutRect
+      node.text == null or measure_text == null
+        ? return { x: 0, y: 0, w: 0, h: 0 }
+        : return measure_text(node.text, node.font_size, max_width)
+
+    layout_node(node: Node, px: f32, py: f32, pw: f32, ph: f32): void
+      layout_count = layout_count + 1
+      layout_count > LAYOUT_BUDGET ? stop : go
+
+      width = resolve_maybe_pct(node.style.width, pw) ?? pw
+      height = resolve_maybe_pct(node.style.height, ph) ?? ph
+
+      node.text != null and node.style.height == null
+        ? metrics = measure_node_text(node, width - pad_left(node.style) - pad_right(node.style)); height = metrics.h
+        : go
+
+      node.computed = { x: px, y: py, w: width, h: height }
+
+      for node.children as child:
+        layout_node(child, px, py, width, height)
+
+    layout(root: Node, x: f32, y: f32, w: f32, h: f32): void
+      layout_count = 0
+      root._flex_w = w
+      root._stretch_h = h
+      layout_node(root, x, y, w, h)
+  </functions>
+</module>
