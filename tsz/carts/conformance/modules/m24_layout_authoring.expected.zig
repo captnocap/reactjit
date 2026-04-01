@@ -81,34 +81,37 @@ pub fn pad_right(style: Style) f32 {
 }
 
 pub fn resolve_maybe_pct(value: ?f32, parent: f32) ?f32 {
-    if (value == null) return null;
-    if (value.? < 0) return (-value.?) * parent;
-    return value.?;
+    if (value == null) {
+        return null;
+    }
+    if (value.? < 0) {
+        return (-value.?) * parent;
+    } else {
+        return value.?;
+    }
 }
 
 pub fn measure_node_text(node: *Node, max_width: f32) LayoutRect {
-    if (node.text != null and measure_text != null) {
+    if (node.text == null or measure_text == null) {
+        return .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+    } else {
         return measure_text.?(node.text.?, node.font_size, max_width);
     }
-    return .{};
 }
 
 pub fn layout_node(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     layout_count += 1;
     if (layout_count > LAYOUT_BUDGET) return;
-
     const width = resolve_maybe_pct(node.style.width, pw) orelse pw;
     var height = resolve_maybe_pct(node.style.height, ph) orelse ph;
-
     if (node.text != null and node.style.height == null) {
-        const metrics = measure_node_text(node, width - pad_left(node.style) - pad_right(node.style));
+        var metrics = measure_node_text(node, width - pad_left(node.style) - pad_right(node.style));
         height = metrics.h;
     }
-
     node.computed = .{ .x = px, .y = py, .w = width, .h = height };
-
-    for (node.children) |*child| {
-        layout_node(child, px, py, width, height);
+    var _i: usize = 0;
+    while (_i < node.children.len) : (_i += 1) {
+        layout_node(&node.children[_i], px, py, width, height);
     }
 }
 

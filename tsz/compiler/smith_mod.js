@@ -7,6 +7,7 @@ var _modEnumVariants = [];
 var _modFfiSymbols = {}; // symbol → prefix (e.g. 'socket' → 'posix')
 var _modStateVars = []; // state variable names — don't redeclare as locals
 var _modImportedNames = []; // imported type/value names available in module scope
+var _modFnPtrParams = {}; // fnName → { paramIdx: true } for pointer params
 
 function modTranspileType(ts) {
   const t = ts.trim();
@@ -51,6 +52,7 @@ function compileModBlock(source, file) {
   const basename = file.split('/').pop();
   _modStateVars = [];
   _modImportedNames = [];
+  _modFnPtrParams = {};
 
   // Extract module name
   const moduleMatch = source.match(/<module\s+(\w+)>/);
@@ -103,6 +105,7 @@ function compileModBlock(source, file) {
   // Extract <functions> block
   const fnMatch = extractModBlock(source, 'functions');
   if (fnMatch) {
+    prescanModFunctionSigs(fnMatch);
     out += emitFunctionsBlock(fnMatch, typeNames, allVariants);
   }
 
@@ -418,15 +421,10 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   const fnMatch = sig.match(/^(\w+)\(([^)]*)\)\s*(?::\s*(\S+))?\s*$/);
   if (!fnMatch) return '';
   const fname = fnMatch[1]; const params = fnMatch[2]; const ret = fnMatch[3] || 'void';
-  const zigParams = modTranspileParams(params); const zigRet = modTranspileType(ret);
-  // Extract param names for local var scoping
-  const paramNames = [];
-  if (params.trim()) {
-    params.split(',').forEach(function(p) {
-      const pm = p.trim().match(/^(\w+)/);
-      if (pm) paramNames.push(pm[1]);
-    });
-  }
+  const paramInfo = parseModParams(params);
+  const zigParams = emitModParams(paramInfo, fname); const zigRet = modTranspileType(ret);
+  const paramNames = paramInfo.map(function(p) { return p.name; });
+  const ptrVars = paramInfo.filter(function(p) { return p.isPtr; }).map(function(p) { return p.name; });
   const bodyLines = [];
   for (let i = 0; i < rawBodyLines.length; i++) {
     const raw = rawBodyLines[i]; const trimmed = raw.trim();
@@ -437,18 +435,70 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   if (bodyLines.length === 1 && bodyLines[0].text.match(/return .+\.map\(/)) {
     return emitMapFunction(fname, zigParams, zigRet, bodyLines[0].text, typeNames);
   }
+  const ctx = {
+    knownVars: (_modStateVars || []).concat(paramNames),
+    localNames: [],
+    ptrVars: ptrVars,
+    narrowedVars: [],
+  };
   let out = 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n';
-  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet, paramNames);
+  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet, ctx);
   out += '}\n\n';
   return out;
 }
 function modTranspileParams(params) {
-  if (!params.trim()) return '';
+  return emitModParams(parseModParams(params), null);
+}
+
+function parseModParams(params) {
+  if (!params.trim()) return [];
   return params.split(',').map(function(p) {
     const m = p.trim().match(/^(\w+):\s*(.+)$/);
-    if (m) return m[1] + ': ' + modTranspileType(m[2].trim());
-    return p.trim();
+    if (!m) return null;
+    const rawType = m[2].trim();
+    return {
+      name: m[1],
+      rawType: rawType,
+      isPtr: isModPointerParamType(rawType),
+    };
+  }).filter(Boolean);
+}
+
+function emitModParams(paramInfo, fnName) {
+  return paramInfo.map(function(p, idx) {
+    let zigType = modTranspileType(p.rawType);
+    if (p.isPtr) {
+      if (fnName) registerModPtrParam(fnName, idx);
+      zigType = '*' + zigType;
+    }
+    return p.name + ': ' + zigType;
   }).join(', ');
+}
+
+function isModPointerParamType(rawType) {
+  return rawType.trim() === 'Node';
+}
+
+function registerModPtrParam(fnName, idx) {
+  if (!_modFnPtrParams[fnName]) _modFnPtrParams[fnName] = {};
+  _modFnPtrParams[fnName][idx] = true;
+}
+
+function prescanModFunctionSigs(content) {
+  _modFnPtrParams = {};
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+    const indent = raw.match(/^(\s*)/)[1].length;
+    const sigMatch = indent <= 4 ? trimmed.match(/^(\w+)\(([^)]*)\)\s*(?::\s*(\S+))?\s*$/) : null;
+    if (!sigMatch) continue;
+    const fnName = sigMatch[1];
+    const paramInfo = parseModParams(sigMatch[2]);
+    for (let p = 0; p < paramInfo.length; p++) {
+      if (paramInfo[p].isPtr) registerModPtrParam(fnName, p);
+    }
+  }
 }
 
 function emitFunctionBody(lines, typeNames, depth) {
@@ -648,15 +698,17 @@ function modTranspileForExpr(expr, baseArr, itemVar) {
   return modTranspileExpr(e);
 }
 
-function modTranspileExpr(expr) {
+function modTranspileExpr(expr, ctx) {
   let e = expr.trim();
   // exact → ==
   e = e.replace(/\bexact\b/g, '==');
   // Prefix known enum variants with . when used as values (after = or ==)
   // Do NOT prefix when used as LHS of comparison (e.g. paused == true where paused is a var)
   if (_modEnumVariants && _modEnumVariants.length > 0) {
+    const localNames = (ctx && ctx.localNames) || [];
     for (let v = 0; v < _modEnumVariants.length; v++) {
       var vname = _modEnumVariants[v];
+      if (localNames.indexOf(vname) !== -1) continue;
       // Match after = (assignment or comparison RHS), comma, semicolon, open paren
       // Use capture group instead of variable-length lookbehind for QuickJS compat
       e = e.replace(new RegExp('([=,;(] ?)' + vname + '(?=[\\s;,)=]|$)', 'g'), '$1.' + vname);
@@ -673,10 +725,12 @@ function modTranspileExpr(expr) {
   e = e.replace(/===/g, '==');
   e = e.replace(/!==/g, '!=');
   // || → or, && → and
-  e = e.replace(/\|\|/g, ' or ');
-  e = e.replace(/&&/g, ' and ');
+  e = e.replace(/\s*\|\|\s*/g, ' or ');
+  e = e.replace(/\s*&&\s*/g, ' and ');
   // ?? → orelse
-  e = e.replace(/\?\?/g, ' orelse ');
+  e = e.replace(/\s*\?\?\s*/g, ' orelse ');
+  const ternaryExpr = rewriteExpressionTernary(e, ctx);
+  if (ternaryExpr) e = ternaryExpr;
   // ── Stdlib method mapping ──
   // Pattern: match complex LHS (words, dots, brackets) before method call
   // x.indexOf(str) → std.mem.indexOf(u8, x, str) orelse x.len
@@ -722,7 +776,7 @@ function modTranspileExpr(expr) {
     var bufPrint = transpileStringConcat(e);
     if (bufPrint) return bufPrint;
   }
-  return e;
+  return rewriteKnownFunctionCalls(e, ctx);
 }
 
 function transpileStringConcat(expr) {
@@ -767,10 +821,11 @@ function transpileStringConcat(expr) {
   return 'std.fmt.bufPrint(&buf, "' + fmt + '", .{' + argStr + '}) catch ""';
 }
 
-function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, paramNames) {
+function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, ctx) {
   let out = '';
   const ind = '    '.repeat(depth);
-  const knownVars = (_modStateVars || []).concat(paramNames || []);
+  const knownVars = ctx.knownVars || [];
+  let narrowedVars = (ctx.narrowedVars || []).slice();
   var guardRetVal = 'return';
   if (retType && retType !== 'void') {
     if (retType === 'bool') guardRetVal = 'return false';
@@ -784,35 +839,63 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, pa
   let i = startIdx;
   while (i < lines.length) {
     const L = lines[i]; const text = L.text;
+    const activeCtx = extendModCtx(ctx, { narrowedVars: narrowedVars });
     if (!text) { i++; continue; }
     // Guard: cond ? stop : go
     const guardMatch = text.match(/^(.+?)\s+\?\s+stop\s*:\s*go$/);
-    if (guardMatch) { out += ind + 'if (' + modTranspileExpr(guardMatch[1]) + ') ' + guardRetVal + ';\n'; i++; continue; }
+    if (guardMatch) { out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(guardMatch[1], narrowedVars), activeCtx) + ') ' + guardRetVal + ';\n'; i++; continue; }
+    // Return
+    if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileValue(text.slice(7), activeCtx) + ';\n'; i++; continue; }
+    // Struct init: target = { field: val }
+    const structAssign = text.match(/^(.+?)\s*=\s*\{(.+)\}\s*$/);
+    if (structAssign && !isComparison(structAssign[1])) {
+      const target = structAssign[1].trim();
+      out += ind + target + ' = ' + transpileStructLiteral(structAssign[2]) + ';\n'; i++; continue;
+    }
+    // Assignment: target = expr (not >= <= == !=)
+    const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
+    if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
+      out += emitSingleStatement(text, depth, typeNames, lines, i, guardRetVal, activeCtx);
+      i++; continue;
+    }
     // Single-line ternary
     const ternaryMatch = text.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/);
     if (ternaryMatch) {
-      out += ind + 'if (' + modTranspileExpr(ternaryMatch[1]) + ') {\n';
-      out += emitInlineStatements(ternaryMatch[2], depth + 1, typeNames, knownVars, lines, i, guardRetVal);
-      if (ternaryMatch[3].trim() !== 'go') {
+      const cond = ternaryMatch[1];
+      const thenCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNonNullVars(cond)) });
+      const elseCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNullGuardedVars(cond)) });
+      const elseExpr = ternaryMatch[3].trim();
+      out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(cond, narrowedVars), activeCtx) + ') {\n';
+      out += emitInlineStatements(ternaryMatch[2], depth + 1, typeNames, lines, i, guardRetVal, thenCtx);
+      if (elseExpr !== 'go' && !(activeCtx.inLoop && elseExpr === 'continue')) {
         out += ind + '} else {\n';
-        out += emitInlineStatements(ternaryMatch[3], depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+        out += emitInlineStatements(ternaryMatch[3], depth + 1, typeNames, lines, i, guardRetVal, elseCtx);
       }
       out += ind + '}\n';
+      if (elseExpr === 'go' && isEarlyExitBranch(ternaryMatch[2])) {
+        narrowedVars = addUniqueVars(narrowedVars, extractNullGuardedVars(cond));
+      }
       i++; continue;
     }
     // Multi-line ternary
     if (i + 2 < lines.length && lines[i + 1].text.startsWith('? ') && lines[i + 2].text.startsWith(': ')) {
-      out += ind + 'if (' + modTranspileExpr(text) + ') {\n';
-      out += emitInlineStatements(lines[i + 1].text.slice(2).trim(), depth + 1, typeNames, knownVars, lines, i, guardRetVal);
-      if (lines[i + 2].text.slice(2).trim() !== 'go') {
+      const cond = text;
+      const thenExpr = lines[i + 1].text.slice(2).trim();
+      const elseExpr = lines[i + 2].text.slice(2).trim();
+      const thenCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNonNullVars(cond)) });
+      const elseCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNullGuardedVars(cond)) });
+      out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(cond, narrowedVars), activeCtx) + ') {\n';
+      out += emitInlineStatements(thenExpr, depth + 1, typeNames, lines, i, guardRetVal, thenCtx);
+      if (elseExpr !== 'go' && !(activeCtx.inLoop && elseExpr === 'continue')) {
         out += ind + '} else {\n';
-        out += emitInlineStatements(lines[i + 2].text.slice(2).trim(), depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+        out += emitInlineStatements(elseExpr, depth + 1, typeNames, lines, i, guardRetVal, elseCtx);
       }
       out += ind + '}\n';
+      if (elseExpr === 'go' && isEarlyExitBranch(thenExpr)) {
+        narrowedVars = addUniqueVars(narrowedVars, extractNullGuardedVars(cond));
+      }
       i += 3; continue;
     }
-    // Return
-    if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileValue(text.slice(7)) + ';\n'; i++; continue; }
     // Switch
     const switchMatch = text.match(/^switch\s+(.+):$/);
     if (switchMatch) {
@@ -824,32 +907,20 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, pa
         out += ind + '    .' + armMatch[1] + ' => {\n'; i++;
         const armBody = [];
         while (i < lines.length && !lines[i].text.match(/^\w+:$/) && lines[i].indent > armIndent) { armBody.push(lines[i]); i++; }
-        out += emitArmBodyV2(armBody, typeNames, depth + 2);
+        out += emitArmBodyV2(armBody, typeNames, depth + 2, extendModCtx(ctx, { narrowedVars: narrowedVars }));
         out += ind + '    },\n';
       }
       out += ind + '}\n'; continue;
     }
     // For loop
-    const forMatch = text.match(/^for\s+(.+?)\s+as\s+(\w+):$/);
+    const forMatch = text.match(/^for\s+(.+?)\s+as\s+(\w+)(?:\s+at\s+(\w+))?:$/);
     if (forMatch) {
       const forIndent = L.indent; i++;
       const forBody = [];
       while (i < lines.length && lines[i].indent > forIndent) { forBody.push(lines[i]); i++; }
-      out += emitForLoopV2(forMatch[1], forMatch[2], forBody, typeNames, depth); continue;
+      out += emitForLoopV2(forMatch[1], forMatch[2], forMatch[3] || null, forBody, typeNames, depth, extendModCtx(ctx, { narrowedVars: narrowedVars })); continue;
     }
-    // Struct init: target = { field: val }
-    const structAssign = text.match(/^(.+?)\s*=\s*\{(.+)\}\s*$/);
-    if (structAssign && !isComparison(structAssign[1])) {
-      const target = modTranspileExpr(structAssign[1]);
-      out += ind + target + ' = ' + transpileStructLiteral(structAssign[2]) + ';\n'; i++; continue;
-    }
-    // Assignment: target = expr (not >= <= == !=)
-    const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
-      out += emitSingleStatement(text, depth, typeNames, knownVars, lines, i, guardRetVal);
-      i++; continue;
-    }
-    out += emitSingleStatement(text, depth, typeNames, knownVars, lines, i, guardRetVal); i++;
+    out += emitSingleStatement(text, depth, typeNames, lines, i, guardRetVal, activeCtx); i++;
   }
   return out;
 }
@@ -912,45 +983,47 @@ function emitStatementList(expr, ind) {
   return out;
 }
 
-function emitInlineStatements(expr, depth, typeNames, knownVars, lines, lineIdx, guardRetVal) {
+function emitInlineStatements(expr, depth, typeNames, lines, lineIdx, guardRetVal, ctx) {
   let out = '';
   const stmts = expr.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
   for (let s = 0; s < stmts.length; s++) {
-    out += emitSingleStatement(stmts[s], depth, typeNames, knownVars, lines, lineIdx, guardRetVal);
+    out += emitSingleStatement(stmts[s], depth, typeNames, lines, lineIdx, guardRetVal, ctx);
   }
   return out;
 }
 
-function emitSingleStatement(stmt, depth, typeNames, knownVars, lines, lineIdx, guardRetVal) {
+function emitSingleStatement(stmt, depth, typeNames, lines, lineIdx, guardRetVal, ctx) {
   const ind = '    '.repeat(depth);
-  const text = stmt.trim();
+  const knownVars = ctx.knownVars || [];
+  const localNames = ctx.localNames || [];
+  const narrowedVars = ctx.narrowedVars || [];
+  const text = applyOptionalUnwraps(stmt.trim(), narrowedVars);
   if (!text || text === 'go') return '';
   if (text === 'continue') return ind + 'continue;\n';
   if (text === 'stop') return ind + guardRetVal + ';\n';
-  if (text.startsWith('return ')) return ind + 'return ' + modTranspileValue(text.slice(7)) + ';\n';
+  if (text.startsWith('return ')) return ind + 'return ' + modTranspileValue(text.slice(7), ctx) + ';\n';
 
   const structAssign = text.match(/^(.+?)\s*=\s*\{(.+)\}\s*$/);
   if (structAssign && !isComparison(structAssign[1])) {
-    const target = modTranspileExpr(structAssign[1]);
+    const target = structAssign[1].trim();
     return ind + target + ' = ' + transpileStructLiteral(structAssign[2]) + ';\n';
   }
 
   const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
   if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
     const rawTarget = assignMatch[1].trim();
-    const target = modTranspileExpr(rawTarget);
-    const val = modTranspileValue(assignMatch[2].trim());
+    const target = rawTarget;
+    const val = modTranspileValue(assignMatch[2].trim(), ctx);
 
     if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && knownVars.indexOf(rawTarget) === -1) {
       knownVars.push(rawTarget);
+      localNames.push(rawTarget);
       const inferredType = inferTypeFromValue(assignMatch[2].trim());
       const isMutable = localIsReassigned(rawTarget, lines, lineIdx);
       if (inferredType) {
         return ind + (isMutable ? 'var ' : 'const ') + target + ': ' + inferredType + ' = ' + val + ';\n';
       }
-      if (/\w+\(/.test(assignMatch[2].trim()) || assignMatch[2].trim().indexOf('??') !== -1) {
-        return ind + (isMutable ? 'var ' : 'const ') + target + ' = ' + val + ';\n';
-      }
+      return ind + (isMutable ? 'var ' : 'const ') + target + ' = ' + val + ';\n';
     }
 
     const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -961,7 +1034,7 @@ function emitSingleStatement(stmt, depth, typeNames, knownVars, lines, lineIdx, 
     return ind + target + ' = ' + val + ';\n';
   }
 
-  return ind + modTranspileExpr(text) + ';\n';
+  return ind + modTranspileExpr(text, ctx) + ';\n';
 }
 
 function localIsReassigned(name, lines, lineIdx) {
@@ -982,18 +1055,18 @@ function localIsReassigned(name, lines, lineIdx) {
   return false;
 }
 
-function modTranspileValue(expr) {
+function modTranspileValue(expr, ctx) {
   const t = expr.trim();
   const structMatch = t.match(/^\{([\s\S]*)\}$/);
   if (structMatch) return transpileStructLiteral(structMatch[1]);
-  return modTranspileExpr(t);
+  return modTranspileExpr(t, ctx);
 }
 
-function emitArmBodyV2(lines, typeNames, depth) {
+function emitArmBodyV2(lines, typeNames, depth, ctx) {
   let out = ''; const ind = '    '.repeat(depth);
   // Multi-line ternary: condition \n ? true-expr \n : false-expr
   if (lines.length >= 3 && lines[1].text.startsWith('? ') && lines[2].text.startsWith(': ')) {
-    const cond = modTranspileExpr(lines[0].text);
+    const cond = modTranspileExpr(lines[0].text, ctx);
     const trueExpr = lines[1].text.slice(2).trim();
     const falseExpr = lines[2].text.slice(2).trim();
     out += ind + 'if (' + cond + ') {\n';
@@ -1004,60 +1077,40 @@ function emitArmBodyV2(lines, typeNames, depth) {
     return out;
   }
   for (let i = 0; i < lines.length; i++) {
-    const text = lines[i].text;
+    const text = applyOptionalUnwraps(lines[i].text, ctx.narrowedVars || []);
     const am = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (am) { out += ind + modTranspileExpr(am[1].trim()) + ' = ' + modTranspileExpr(am[2].trim()) + ';\n'; }
-    else { out += ind + modTranspileExpr(text) + ';\n'; }
+    if (am) { out += ind + am[1].trim() + ' = ' + modTranspileExpr(am[2].trim(), ctx) + ';\n'; }
+    else { out += ind + modTranspileExpr(text, ctx) + ';\n'; }
   }
   return out;
 }
-function emitForLoopV2(arrExpr, itemVar, bodyLines, typeNames, depth) {
+function emitForLoopV2(arrExpr, itemVar, indexVar, bodyLines, typeNames, depth, ctx) {
   let out = ''; const ind = '    '.repeat(depth);
-  const rangeMatch = arrExpr.match(/^(\w+)\[(\d+)\.\.(\w+)\]$/);
-  const baseArr = rangeMatch ? rangeMatch[1] : arrExpr;
-  const countExpr = rangeMatch ? rangeMatch[3] : arrExpr + '.len';
-  out += ind + 'var _i: usize = 0;\n';
-  out += ind + 'while (_i < ' + countExpr + ') : (_i += 1) {\n';
-  let i = 0;
-  while (i < bodyLines.length) {
-    const text = bodyLines[i].text;
-    // Multi-line ternary: cond \n ? action \n : continue
-    if (i + 2 < bodyLines.length && bodyLines[i+1].text.startsWith('? ') && bodyLines[i+2].text.startsWith(': ')) {
-      const cond = modTranspileForExprV2(text, baseArr, itemVar);
-      const trueExpr = modTranspileForExprV2(bodyLines[i+1].text.slice(2).trim(), baseArr, itemVar);
-      const falseExpr = bodyLines[i+2].text.slice(2).trim();
-      out += ind + '    if (' + cond + ') {\n';
-      // True branch: may have multiple statements separated by ;
-      const stmts = trueExpr.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
-      for (let s = 0; s < stmts.length; s++) {
-        const stmt = stmts[s];
-        if (stmt.startsWith('return ')) {
-          out += ind + '        ' + stmt + ';\n';
-        } else {
-          const ta = stmt.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-          if (ta) {
-            const target = ta[1].trim(); const val = ta[2].trim();
-            const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const inc = val.match(new RegExp('^' + esc + '\\s*\\+\\s*(.+)$'));
-            const dec = !inc ? val.match(new RegExp('^' + esc + '\\s*-\\s*(.+)$')) : null;
-            if (inc) { out += ind + '        ' + target + ' += ' + inc[1] + ';\n'; }
-            else if (dec) { out += ind + '        ' + target + ' -= ' + dec[1] + ';\n'; }
-            else { out += ind + '        ' + target + ' = ' + val + ';\n'; }
-          } else {
-            out += ind + '        ' + stmt + ';\n';
-          }
-        }
-      }
-      out += ind + '    }\n';
-      i += 3; continue;
-    }
-    // Single line
-    const processed = modTranspileForExprV2(text, baseArr, itemVar);
-    const am = processed.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (am) { out += ind + '    ' + am[1].trim() + ' = ' + am[2].trim() + ';\n'; }
-    else { out += ind + '    ' + processed + ';\n'; }
-    i++;
+  const spec = parseForExprSpec(arrExpr);
+  const iterVar = (!spec.reverse && indexVar) ? indexVar : '_i';
+  const accessIndexExpr = spec.reverse
+    ? buildReverseIndexExpr(spec.startExpr, spec.endExpr, iterVar)
+    : iterVar;
+  const itemAccessExpr = spec.baseExpr + '[' + accessIndexExpr + ']';
+
+  out += ind + 'var ' + iterVar + ': usize = ' + spec.startExpr + ';\n';
+  out += ind + 'while (' + iterVar + ' < ' + spec.endExpr + ') : (' + iterVar + ' += 1) {\n';
+  if (spec.reverse && indexVar) {
+    out += ind + '    const ' + indexVar + ': usize = ' + accessIndexExpr + ';\n';
   }
+
+  const loopCtx = extendModCtx(ctx, {
+    knownVars: addUniqueVars(ctx.knownVars || [], [itemVar].concat(indexVar ? [indexVar] : [])),
+    localNames: addUniqueVars(ctx.localNames || [], indexVar ? [indexVar] : []),
+    inLoop: true,
+  });
+  const processedLines = bodyLines.map(function(line) {
+    return {
+      indent: line.indent,
+      text: substituteForLoopVars(line.text, itemVar, itemAccessExpr, indexVar, spec.reverse ? accessIndexExpr : null),
+    };
+  });
+  out += emitModBody(processedLines, 0, typeNames, depth + 1, [], 'void', loopCtx);
   out += ind + '}\n';
   return out;
 }
@@ -1076,9 +1129,312 @@ function emitMapFunction(fname, zigParams, zigRet, bodyText, typeNames) {
   }
   return 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n    // TODO: map\n}\n\n';
 }
-function modTranspileForExprV2(expr, baseArr, itemVar) {
+function modTranspileForExprV2(expr, baseArr, itemVar, ctx) {
   let e = expr;
   e = e.replace(new RegExp('\\b' + itemVar + '\\.', 'g'), baseArr + '[_i].');
   e = e.replace(new RegExp('\\b' + itemVar + '\\b', 'g'), baseArr + '[_i]');
-  return modTranspileExpr(e);
+  return modTranspileExpr(applyOptionalUnwraps(e, (ctx && ctx.narrowedVars) || []), ctx);
+}
+
+function parseForExprSpec(expr) {
+  let raw = expr.trim();
+  let reverse = false;
+  if (raw.endsWith('.reverse()')) {
+    reverse = true;
+    raw = raw.slice(0, -'.reverse()'.length).trim();
+  }
+  const rangeMatch = raw.match(/^(.+)\[(.+)\.\.(.+)\]$/);
+  if (rangeMatch) {
+    return {
+      baseExpr: rangeMatch[1].trim(),
+      startExpr: rangeMatch[2].trim(),
+      endExpr: rangeMatch[3].trim(),
+      reverse: reverse,
+    };
+  }
+  return {
+    baseExpr: raw,
+    startExpr: '0',
+    endExpr: raw + '.len',
+    reverse: reverse,
+  };
+}
+
+function buildReverseIndexExpr(startExpr, endExpr, iterVar) {
+  if (startExpr === '0') return '(' + endExpr + ' - 1 - ' + iterVar + ')';
+  return '(' + endExpr + ' - 1 - (' + iterVar + ' - (' + startExpr + ')))';
+}
+
+function substituteForLoopVars(text, itemVar, itemAccessExpr, indexVar, indexExpr) {
+  let out = text;
+  out = out.replace(new RegExp('\\b' + itemVar + '\\.', 'g'), itemAccessExpr + '.');
+  out = out.replace(new RegExp('\\b' + itemVar + '\\b', 'g'), itemAccessExpr);
+  if (indexVar && indexExpr) {
+    out = out.replace(new RegExp('\\b' + indexVar + '\\b', 'g'), indexExpr);
+  }
+  return out;
+}
+
+function extendModCtx(ctx, extra) {
+  const next = {
+    knownVars: (ctx && ctx.knownVars) ? ctx.knownVars : [],
+    localNames: (ctx && ctx.localNames) ? ctx.localNames : [],
+    ptrVars: (ctx && ctx.ptrVars) ? ctx.ptrVars.slice() : [],
+    narrowedVars: (ctx && ctx.narrowedVars) ? ctx.narrowedVars.slice() : [],
+    inLoop: !!(ctx && ctx.inLoop),
+  };
+  if (!extra) return next;
+  if (extra.knownVars) next.knownVars = extra.knownVars;
+  if (extra.localNames) next.localNames = extra.localNames;
+  if (extra.ptrVars) next.ptrVars = extra.ptrVars;
+  if (extra.narrowedVars) next.narrowedVars = extra.narrowedVars;
+  if (Object.prototype.hasOwnProperty.call(extra, 'inLoop')) next.inLoop = extra.inLoop;
+  return next;
+}
+
+function extractNullGuardedVars(cond) {
+  return extractNullComparedVars(cond, '==');
+}
+
+function extractNonNullVars(cond) {
+  if (/\bor\b|\|\|/.test(cond)) return [];
+  return extractNullComparedVars(cond, '!=');
+}
+
+function extractNullComparedVars(cond, op) {
+  const vars = [];
+  const re = new RegExp('([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)\\s*' + op.replace(/[!=]/g, '\\$&') + '\\s*null', 'g');
+  let m;
+  while ((m = re.exec(cond)) !== null) {
+    if (m[1]) vars.push(m[1]);
+  }
+  return addUniqueVars([], vars);
+}
+
+function addUniqueVars(base, extra) {
+  const out = (base || []).slice();
+  for (let i = 0; i < (extra || []).length; i++) {
+    if (out.indexOf(extra[i]) === -1) out.push(extra[i]);
+  }
+  return out;
+}
+
+function isEarlyExitBranch(expr) {
+  const parts = expr.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+  if (parts.length === 0) return false;
+  for (let i = 0; i < parts.length; i++) {
+    if (!(parts[i].startsWith('return ') || parts[i] === 'return' || parts[i] === 'stop' || parts[i] === 'continue')) return false;
+  }
+  return true;
+}
+
+function applyOptionalUnwraps(text, vars) {
+  let out = text;
+  const list = (vars || []).slice().sort(function(a, b) { return b.length - a.length; });
+  for (let i = 0; i < list.length; i++) {
+    out = replaceVarDotAccessWithUnwrap(out, list[i]);
+    out = replaceExactVarWithUnwrap(out, list[i]);
+    out = out.replace(new RegExp(escapeRegExp(list[i]) + '\\.\\?\\.\\?', 'g'), list[i] + '.?');
+    out = out.replace(new RegExp(escapeRegExp(list[i]) + '\\.\\?\\s*=\\s*null', 'g'), list[i] + ' = null');
+  }
+  return out.replace(/\.\?\.\?/g, '.?');
+}
+
+function replaceVarDotAccessWithUnwrap(text, name) {
+  const needle = name + '.';
+  const replacement = name + '.?.';
+  let out = '';
+  for (let i = 0; i < text.length;) {
+    if (text.slice(i, i + replacement.length) === replacement) {
+      out += replacement;
+      i += replacement.length;
+      continue;
+    }
+    if (text.slice(i, i + needle.length) === needle) {
+      const before = i === 0 ? '' : text[i - 1];
+      const beforeOk = !before || !isModIdentChar(before);
+      if (beforeOk) {
+        out += replacement;
+        i += needle.length;
+        continue;
+      }
+    }
+    out += text[i];
+    i++;
+  }
+  return out;
+}
+
+function replaceExactVarWithUnwrap(text, name) {
+  return replaceNeedleWithBoundary(text, name, name + '.?');
+}
+
+function replaceNeedleWithBoundary(text, needle, replacement) {
+  let out = '';
+  for (let i = 0; i < text.length;) {
+    if (text.slice(i, i + needle.length) === needle) {
+      const before = i === 0 ? '' : text[i - 1];
+      const after = i + needle.length >= text.length ? '' : text[i + needle.length];
+      const beforeOk = !before || !isModIdentChar(before);
+      const afterOk = !after || !isModIdentChar(after);
+      if (beforeOk && afterOk) {
+        out += replacement;
+        i += needle.length;
+        continue;
+      }
+    }
+    out += text[i];
+    i++;
+  }
+  return out;
+}
+
+function isModIdentChar(ch) {
+  return /[A-Za-z0-9_.]/.test(ch);
+}
+
+function rewriteKnownFunctionCalls(expr, ctx) {
+  const ptrVars = (ctx && ctx.ptrVars) || [];
+  let out = '';
+  for (let i = 0; i < expr.length;) {
+    if (/[A-Za-z_]/.test(expr[i])) {
+      let j = i + 1;
+      while (j < expr.length && /[A-Za-z0-9_]/.test(expr[j])) j++;
+      const name = expr.slice(i, j);
+      if (_modFnPtrParams[name] && expr[j] === '(') {
+        const end = findMatchingParen(expr, j);
+        if (end !== -1) {
+          const args = splitCallArgs(expr.slice(j + 1, end)).map(function(arg, idx) {
+            const rewritten = rewriteKnownFunctionCalls(arg.trim(), ctx);
+            if (_modFnPtrParams[name][idx] && !argIsPointerLike(rewritten, ptrVars)) return '&' + rewritten;
+            return rewritten;
+          });
+          out += name + '(' + args.join(', ') + ')';
+          i = end + 1;
+          continue;
+        }
+      }
+    }
+    out += expr[i];
+    i++;
+  }
+  return out;
+}
+
+function findMatchingParen(text, openIdx) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIdx; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote && text[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') depth++;
+    if (ch === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function splitCallArgs(text) {
+  const args = [];
+  let cur = '';
+  let paren = 0;
+  let brace = 0;
+  let bracket = 0;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      cur += ch;
+      if (ch === quote && text[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === '(') paren++;
+    if (ch === ')') paren--;
+    if (ch === '{') brace++;
+    if (ch === '}') brace--;
+    if (ch === '[') bracket++;
+    if (ch === ']') bracket--;
+    if (ch === ',' && paren === 0 && brace === 0 && bracket === 0) {
+      args.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim() || text.trim() === '') args.push(cur);
+  return args.length === 1 && args[0] === '' ? [] : args;
+}
+
+function argIsPointerLike(arg, ptrVars) {
+  const trimmed = arg.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('&')) return true;
+  if (ptrVars.indexOf(trimmed) !== -1) return true;
+  return false;
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function rewriteExpressionTernary(expr, ctx) {
+  const parts = splitTopLevelTernary(expr);
+  if (!parts) return null;
+  return 'if (' + modTranspileExpr(parts.cond, ctx) + ') ' + modTranspileExpr(parts.thenExpr, ctx) + ' else ' + modTranspileExpr(parts.elseExpr, ctx);
+}
+
+function splitTopLevelTernary(expr) {
+  let paren = 0;
+  let brace = 0;
+  let bracket = 0;
+  let quote = null;
+  let qIndex = -1;
+  let nestedTernary = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (quote) {
+      if (ch === quote && expr[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '(') { paren++; continue; }
+    if (ch === ')') { paren--; continue; }
+    if (ch === '{') { brace++; continue; }
+    if (ch === '}') { brace--; continue; }
+    if (ch === '[') { bracket++; continue; }
+    if (ch === ']') { bracket--; continue; }
+    if (paren !== 0 || brace !== 0 || bracket !== 0) continue;
+    if (ch === '?') {
+      if (expr[i + 1] === '?') { i++; continue; }
+      if (qIndex === -1) qIndex = i;
+      else nestedTernary++;
+      continue;
+    }
+    if (ch === ':' && qIndex !== -1) {
+      if (nestedTernary > 0) {
+        nestedTernary--;
+        continue;
+      }
+      return {
+        cond: expr.slice(0, qIndex).trim(),
+        thenExpr: expr.slice(qIndex + 1, i).trim(),
+        elseExpr: expr.slice(i + 1).trim(),
+      };
+    }
+  }
+  return null;
 }

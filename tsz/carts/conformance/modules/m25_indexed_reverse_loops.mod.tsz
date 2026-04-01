@@ -1,0 +1,37 @@
+// CONFORMANCE TEST: Indexed and reverse loops
+//
+// This fixture covers the intent syntax that layout uses heavily:
+// - `for items[start..end] as item at idx:`
+// - `for items.reverse() as item:`
+// - value access and pointer-call coercion through loop aliases
+
+<module loops>
+  <types>
+    Entry: {
+      active: bool = true,
+      value: usize = 0
+    }
+  </types>
+
+  <state>
+    entries: Entry[8]
+    count: usize = 0
+  </state>
+
+  <functions>
+    sum_from_one(): usize
+      total = count - count
+      for entries[1..count] as entry at i:
+        entry.active == true
+          ? total = total + entry.value + i
+          : continue
+      return total
+
+    find_last_live(): usize
+      for entries.reverse() as entry:
+        entry.active == true
+          ? return entry.value
+          : continue
+      return 0
+  </functions>
+</module>

@@ -6,15 +6,16 @@ pub fn main() !void {
     const alloc = arena.allocator();
 
     const args = try std.process.argsAlloc(alloc);
-    if (args.len != 2) {
-        std.debug.print("usage: smith_bundle <compiler-root>\n", .{});
+    if (args.len != 2 and args.len != 3) {
+        std.debug.print("usage: smith_bundle <compiler-root> [out-path]\n", .{});
         return error.InvalidArguments;
     }
 
     const compiler_root = args[1];
     const manifest_path = try std.fs.path.join(alloc, &.{ compiler_root, "smith_LOAD_ORDER.txt" });
     const out_dir = try std.fs.path.join(alloc, &.{ compiler_root, "dist" });
-    const out_path = try std.fs.path.join(alloc, &.{ compiler_root, "dist", "smith.bundle.js" });
+    const dist_out_path = try std.fs.path.join(alloc, &.{ compiler_root, "dist", "smith.bundle.js" });
+    const out_path = if (args.len == 3) args[2] else dist_out_path;
 
     const manifest_text = try std.fs.cwd().readFileAlloc(alloc, manifest_path, 1024 * 1024);
 
@@ -46,9 +47,16 @@ pub fn main() !void {
     }
 
     try std.fs.cwd().makePath(out_dir);
+
     var file = try std.fs.cwd().createFile(out_path, .{});
     defer file.close();
     try file.writeAll(parts.items);
+
+    if (!std.mem.eql(u8, out_path, dist_out_path)) {
+        var dist_file = try std.fs.cwd().createFile(dist_out_path, .{});
+        defer dist_file.close();
+        try dist_file.writeAll(parts.items);
+    }
 
     std.debug.print("wrote dist/smith.bundle.js\n", .{});
 }
