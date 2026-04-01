@@ -11,5 +11,9 @@ function compileLane(source, tokens, file) {
     return compilePageLane(source, tokens, file);
   }
 
+  if (isChadBlockSource(source)) {
+    return compilePageLane(source, tokens, file);
+  }
+
   return compileAppLane(source, tokens, file);
 }

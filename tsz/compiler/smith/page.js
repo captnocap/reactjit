@@ -66,6 +66,31 @@ function parsePageVarBlock(block) {
     i++;
     if (!line || line.startsWith('//')) continue;
 
+    // name exact type/value — immutable, constrained
+    var exactMatch = line.match(/^(\w+)\s+exact\s+(.+)$/);
+    if (exactMatch) {
+      var ename = exactMatch[1];
+      var econstraint = exactMatch[2].trim();
+      // Quoted string
+      if ((econstraint[0] === "'" && econstraint[econstraint.length - 1] === "'") ||
+          (econstraint[0] === '"' && econstraint[econstraint.length - 1] === '"')) {
+        vars.push({ name: ename, initial: econstraint.slice(1, -1), type: 'string' });
+      }
+      // Number
+      else if (/^-?\d+(\.\d+)?$/.test(econstraint)) {
+        vars.push({ name: ename, initial: parseFloat(econstraint), type: econstraint.indexOf('.') >= 0 ? 'float' : 'int' });
+      }
+      // Boolean
+      else if (econstraint === 'true' || econstraint === 'false') {
+        vars.push({ name: ename, initial: econstraint === 'true', type: 'boolean' });
+      }
+      // Type reference (e.g., "type") → default empty string for enum-like types
+      else {
+        vars.push({ name: ename, initial: '', type: 'string' });
+      }
+      continue;
+    }
+
     // name is value
     var isMatch = line.match(/^(\w+)\s+is\s+(.+)$/);
     if (isMatch) {
@@ -148,7 +173,11 @@ function parsePageStateBlock(block) {
   if (!block) return [];
   return block.split('\n')
     .map(function(l) { return l.trim(); })
-    .filter(function(l) { return l && !l.startsWith('//'); });
+    .filter(function(l) { return l && !l.startsWith('//'); })
+    .map(function(l) {
+      // Extract just the setter name, ignoring constraints (exact mode, etc.)
+      return l.split(/\s+/)[0];
+    });
 }
 
 // ── <functions> block parser ──
@@ -177,12 +206,12 @@ function parsePageFunctionsBlock(block) {
     // Skip regular comments
     if (trimmed.startsWith('//')) continue;
 
-    // Function header: name: or name(params):
-    var funcMatch = trimmed.match(/^(\w+)(\(([^)]*)\))?\s*:$/);
+    // Function header: name: or name(params): or name every N:
+    var funcMatch = trimmed.match(/^(\w+)(?:\s+every\s+(\d+))?(\(([^)]*)\))?\s*:$/);
     if (funcMatch) {
       if (current) funcs.push(current);
-      var params = funcMatch[3] ? funcMatch[3].split(',').map(function(p) { return p.trim(); }) : [];
-      current = { name: funcMatch[1], params: params, bodyLines: [] };
+      var params = funcMatch[4] ? funcMatch[4].split(',').map(function(p) { return p.trim(); }) : [];
+      current = { name: funcMatch[1], params: params, bodyLines: [], interval: funcMatch[2] ? parseInt(funcMatch[2]) : 0 };
       continue;
     }
 
@@ -198,12 +227,20 @@ function parsePageFunctionsBlock(block) {
 // ── Line transpiler: page function body → JS ──
 
 function transpilePageExpr(expr) {
-  // exact → ===
+  // Multi-word operators first (order matters)
+  expr = expr.replace(/\bexact or above\b/g, '>=');
+  expr = expr.replace(/\bexact or below\b/g, '<=');
+  expr = expr.replace(/\bnot exact\b/g, '!==');
+  // Single-word operators
+  expr = expr.replace(/\babove\b/g, '>');
+  expr = expr.replace(/\bbelow\b/g, '<');
   expr = expr.replace(/\bexact\b/g, '===');
+  // Boolean negation (must be after 'not exact')
+  expr = expr.replace(/\bnot\s+/g, '!');
   return expr;
 }
 
-function transpilePageLine(line, setterNames) {
+function transpilePageLine(line, setterNames, isComputed) {
   // Guard: expr ? stop : go → early return
   if (/\?\s*stop\s*:\s*go\s*$/.test(line)) {
     var guardExpr = line.replace(/\s*\?\s*stop\s*:\s*go\s*$/, '').trim();
@@ -222,8 +259,111 @@ function transpilePageLine(line, setterNames) {
     return setterMatch[1] + '(' + transpilePageExpr(setterMatch[2]) + ');';
   }
 
+  // Setter: set_X is expression (dictionary/chad syntax)
+  var setterIsMatch = line.match(/^(set_\w+)\s+is\s+(.+)$/);
+  if (setterIsMatch) {
+    return setterIsMatch[1] + '(' + transpilePageExpr(setterIsMatch[2]) + ');';
+  }
+
+  // stop → return
+  if (line === 'stop') return 'return;';
+
+  // Bare string literal → return value
+  if (/^'[^']*'$/.test(line) || /^"[^"]*"$/.test(line)) {
+    return 'return ' + line + ';';
+  }
+
+  // Computed function: bare expressions are return values
+  if (isComputed) {
+    return 'return ' + transpilePageExpr(line) + ';';
+  }
+
   // Everything else: passthrough as JS expression/statement
   return transpilePageExpr(line) + ';';
+}
+
+// ── Block-level body transpiler ──
+// Handles <if>/<else if>/<else> blocks inside <functions> bodies.
+
+function transpilePageBody(bodyLines, setterNames, jsLines, indent, isComputed) {
+  for (var i = 0; i < bodyLines.length; i++) {
+    var line = bodyLines[i].trim();
+    if (!line || line.startsWith('//')) continue;
+
+    // <if expr>
+    var ifMatch = line.match(/^<if\s+(.+)>$/);
+    if (ifMatch) {
+      jsLines.push(indent + 'if (' + transpilePageExpr(ifMatch[1]) + ') {');
+      continue;
+    }
+
+    // </if> — check if followed by <else, merge into } else
+    if (line === '</if>') {
+      var nextNonEmpty = '';
+      for (var j = i + 1; j < bodyLines.length; j++) {
+        nextNonEmpty = bodyLines[j].trim();
+        if (nextNonEmpty) break;
+      }
+      if (nextNonEmpty.indexOf('<else') === 0) {
+        continue;
+      }
+      jsLines.push(indent + '}');
+      continue;
+    }
+
+    // <else if expr>
+    var elseIfMatch = line.match(/^<else\s+if\s+(.+)>$/);
+    if (elseIfMatch) {
+      jsLines.push(indent + '} else if (' + transpilePageExpr(elseIfMatch[1]) + ') {');
+      continue;
+    }
+
+    // <else>
+    if (line === '<else>') {
+      jsLines.push(indent + '} else {');
+      continue;
+    }
+
+    // </else>
+    if (line === '</else>') {
+      jsLines.push(indent + '}');
+      continue;
+    }
+
+    // <switch expr>
+    var switchMatch = line.match(/^<switch\s+(.+)>$/);
+    if (switchMatch) {
+      jsLines.push(indent + 'switch (' + transpilePageExpr(switchMatch[1]) + ') {');
+      continue;
+    }
+
+    // </switch>
+    if (line === '</switch>') {
+      jsLines.push(indent + '}');
+      continue;
+    }
+
+    // <case value> or <case else>
+    var caseMatch = line.match(/^<case\s+(.+)>$/);
+    if (caseMatch) {
+      var caseVal = caseMatch[1].trim();
+      if (caseVal === 'else') {
+        jsLines.push(indent + "default: {");
+      } else {
+        jsLines.push(indent + "case '" + caseVal + "': {");
+      }
+      continue;
+    }
+
+    // </case>
+    if (line === '</case>') {
+      jsLines.push(indent + '  break; }');
+      continue;
+    }
+
+    // Regular line
+    jsLines.push(indent + transpilePageLine(line, setterNames, isComputed));
+  }
 }
 
 // ── JS_LOGIC builder ──
@@ -306,13 +446,23 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
       }
     }
 
+    // Detect computed function: no setter calls in body → expressions are returns
+    var isComputed = true;
+    for (var ci = 0; ci < func.bodyLines.length; ci++) {
+      var cl = func.bodyLines[ci].trim();
+      if (/^set_\w+\s+/.test(cl)) { isComputed = false; break; }
+    }
+
     // Regular multi-line function
     var fparams = func.params.length ? func.params.join(', ') : '';
     jsLines.push('function ' + func.name + '(' + fparams + ') {');
-    for (var li = 0; li < func.bodyLines.length; li++) {
-      jsLines.push('  ' + transpilePageLine(func.bodyLines[li], setterNames));
-    }
+    transpilePageBody(func.bodyLines, setterNames, jsLines, '  ', isComputed);
     jsLines.push('}');
+
+    // Timer function: name every N: → setInterval(name, N)
+    if (func.interval) {
+      jsLines.push('setInterval(' + func.name + ', ' + func.interval + ');');
+    }
   }
 
   // ── Timer blocks → setInterval ──
@@ -355,9 +505,11 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
   var callRe = /\b(\w+)\s*\(/g;
   var callMatch;
   // Built-in JS / runtime functions to ignore
-  var jsBuiltins = { 'function': 1, 'if': 1, 'for': 1, 'while': 1, 'return': 1, 'setInterval': 1, 'setTimeout': 1, 'Math': 1, 'parseInt': 1, 'parseFloat': 1, 'String': 1, 'Number': 1, 'Array': 1, 'Object': 1, 'JSON': 1, 'console': 1, '__ambient': 1, '__setStateString': 1, '__setState': 1, '__setObjArr0': 1, '__setObjArr1': 1, '__setObjArr2': 1, '__setObjArr3': 1 };
+  var jsBuiltins = { 'function': 1, 'if': 1, 'for': 1, 'while': 1, 'switch': 1, 'case': 1, 'return': 1, 'setInterval': 1, 'setTimeout': 1, 'Math': 1, 'parseInt': 1, 'parseFloat': 1, 'String': 1, 'Number': 1, 'Array': 1, 'Object': 1, 'JSON': 1, 'console': 1, '__ambient': 1, '__setStateString': 1, '__setState': 1, '__setObjArr0': 1, '__setObjArr1': 1, '__setObjArr2': 1, '__setObjArr3': 1 };
   while ((callMatch = callRe.exec(allJS)) !== null) {
     var callee = callMatch[1];
+    // Skip method calls preceded by '.' (net.get, items.where, etc.)
+    if (callMatch.index > 0 && allJS[callMatch.index - 1] === '.') continue;
     if (!jsBuiltins[callee] && !definedFuncs[callee] && !seenVars[callee]) {
       // Skip module-namespaced calls (db.init, net.get, etc.) — those are tracked as ignored modules
       // Also skip concat, map, find, filter, slice, push, etc.
