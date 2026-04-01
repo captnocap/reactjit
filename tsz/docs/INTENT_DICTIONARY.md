@@ -242,6 +242,34 @@ from './counter'
 </home>
 ```
 
+### Lib (`.tsz`) — backend package, owns modules
+
+A lib composes modules into a reusable package. Same pattern as app owning pages.
+
+```
+<backend lib>
+  <database module />
+  <auth module />
+  <cache module />
+</backend>
+```
+
+Used by a page or app:
+
+```
+from './backend'
+
+<home page>
+  <functions>
+    boot:
+      database.init('app.db')
+      auth.init
+  </functions>
+</home>
+```
+
+The lib flattens its modules into the importing scope.
+
 ### Module (`.mod.tsz`) — backend logic, no UI
 
 ```
@@ -253,31 +281,51 @@ from './counter'
 </database>
 ```
 
-| Type | Imports | Standalone | Reusable | Has UI | File |
-|------|---------|------------|----------|--------|------|
-| `app` | pages/widgets | yes | no | no (shell) | `.tsz` |
-| `widget` | no | yes | no | yes | `.tsz` |
-| `page` | yes | yes | no | yes | `.tsz` |
-| `component` | yes | no | yes | yes | `.c.tsz` |
-| `module` | yes | no | yes | no | `.mod.tsz` |
+### Two Trees
 
-### Full File Extension Table
+```
+UI:      app  → page → component
+Backend: lib  → module
+Solo:    widget (standalone, inlines everything)
+```
 
-| Extension | What | Example |
-|-----------|------|---------|
-| `.tsz` | entry point (app, page, widget) | `my.tsz`, `home.tsz` |
-| `.c.tsz` | component | `counter.c.tsz` |
-| `.cls.tsz` | classifiers | `theme.cls.tsz` |
-| `.vcls.tsz` | classifier variations | `dark.vcls.tsz` |
-| `.tcls.tsz` | theme tokens | `tokens.tcls.tsz` |
-| `.effects.tsz` | effects | `fire.effects.tsz` |
-| `.glyphs.tsz` | glyphs (inline svg, 3d, polygons) | `icons.glyphs.tsz` |
-| `.script.tsz` | JS logic escape hatch | `bridge.script.tsz` |
-| `.zscript.tsz` | Zig logic escape hatch | `physics.zscript.tsz` |
-| `.lscript.tsz` | Lua logic escape hatch | `audio.lscript.tsz` |
-| `.mod.tsz` | module (also an entry point) | `database.mod.tsz` |
+A page can use modules from a lib. A module can't use pages. Clean separation.
 
-A `.tsz` entry point (widget especially) can inline everything — classifiers, effects, glyphs, logic — all in one file. The separate extensions exist for organization in larger apps, not because the language requires them.
+| Type | Parent | Children | Has UI |
+|------|--------|----------|--------|
+| `app` | none | pages, widgets | shell |
+| `lib` | none | modules | no |
+| `page` | app | components | yes |
+| `module` | lib | — | no |
+| `component` | page | — | yes |
+| `widget` | none (or app) | — | yes |
+
+### Entry Points and File Extensions
+
+**`.tsz` is the only entry point.** The first block tag tells the compiler the compile path:
+
+- `<my app>` → app shell with navigation
+- `<backend lib>` → module package
+- `<weather widget>` → standalone binary
+- `<home page>` → page (entry when standalone, child when inside app)
+
+Non-entry files use extensions to identify their kind:
+
+| Extension | What | Entry? | Example |
+|-----------|------|--------|---------|
+| `.tsz` | app, lib, page, widget | **yes** | `my.tsz`, `backend.tsz` |
+| `.c.tsz` | component | no | `counter.c.tsz` |
+| `.cls.tsz` | classifiers | no | `theme.cls.tsz` |
+| `.vcls.tsz` | classifier variations | no | `dark.vcls.tsz` |
+| `.tcls.tsz` | theme tokens | no | `tokens.tcls.tsz` |
+| `.effects.tsz` | effects | no | `fire.effects.tsz` |
+| `.glyphs.tsz` | glyphs (svg, 3d, polygons) | no | `icons.glyphs.tsz` |
+| `.script.tsz` | JS logic escape hatch | no | `bridge.script.tsz` |
+| `.zscript.tsz` | Zig logic escape hatch | no | `physics.zscript.tsz` |
+| `.lscript.tsz` | Lua logic escape hatch | no | `audio.lscript.tsz` |
+| `.mod.tsz` | module | no | `database.mod.tsz` |
+
+A `.tsz` entry (widget especially) can inline everything — classifiers, effects, glyphs, logic — all in one file. The separate extensions exist for organization in larger apps, not because the language requires them.
 
 All blocks are optional. Order doesn't matter. Every block appears at most once (except data blocks — see below).
 
