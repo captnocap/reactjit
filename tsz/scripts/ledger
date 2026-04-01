@@ -13,7 +13,9 @@
 #
 # The DB lives at tsz/conformance.db (gitignored).
 
-set -euo pipefail
+set -uo pipefail
+# NOTE: no set -e — the watch loop must survive non-zero returns from
+# grep, sqlite3, stat, etc. Individual commands handle their own errors.
 cd "$(dirname "$0")/.."
 
 DB="conformance.db"
@@ -111,6 +113,13 @@ stamp() {
         size=$(file_size "$binary")
     fi
 
+    # Skip intermediate binaries — the build pipeline writes a small linked
+    # binary first, then repacks as a self-extracting archive (~23MB).
+    # Anything under 1MB is the intermediate, not the final binary.
+    if [ "$size" -gt 0 ] && [ "$size" -lt 1048576 ]; then
+        return 0
+    fi
+
     # Check for bloat: if we have a previous good build, compare sizes
     # >30% growth is suspicious — flag it
     local bloat_warn=""
@@ -146,7 +155,7 @@ stamp() {
                    VALUES ('$name', '$lane', '$status', '$generated', '$sha', $size, '$err_log');"
 
     # Return bloat warning if any (caller can print it)
-    [ -n "$bloat_warn" ] && echo "$bloat_warn"
+    if [ -n "$bloat_warn" ]; then echo "$bloat_warn"; fi
 }
 
 # Get the last good generated code for a test
@@ -174,16 +183,16 @@ cmd_watch() {
     echo "Watching $BIN_DIR/ for new binaries. Ctrl+C to stop."
     echo ""
 
-    local snapshot="/tmp/ledger_snapshot_$$"
-    local current="/tmp/ledger_current_$$"
-    trap 'rm -f "$snapshot" "$current"' EXIT INT TERM
+    WATCH_SNAPSHOT="/tmp/ledger_snapshot_$$"
+    WATCH_CURRENT="/tmp/ledger_current_$$"
+    trap 'rm -f "$WATCH_SNAPSHOT" "$WATCH_CURRENT"; exit 0' INT TERM
 
-    find_executables "$BIN_DIR" | sort > "$snapshot"
+    find_executables "$BIN_DIR" | sort > "$WATCH_SNAPSHOT"
 
     while true; do
         sleep 2
 
-        find_executables "$BIN_DIR" | sort > "$current"
+        find_executables "$BIN_DIR" | sort > "$WATCH_CURRENT"
 
         # Find new or modified binaries
         while IFS= read -r line; do
@@ -198,7 +207,7 @@ cmd_watch() {
 
             # Check if this is new or modified
             local old_mtime
-            old_mtime=$(grep "^${name} " "$snapshot" 2>/dev/null | cut -d' ' -f2)
+            old_mtime=$(grep "^${name} " "$WATCH_SNAPSHOT" 2>/dev/null | cut -d' ' -f2)
 
             if [ -z "$old_mtime" ] || [ "$old_mtime" != "$mtime" ]; then
                 # Try to find the source .tsz and its lane
@@ -225,10 +234,10 @@ cmd_watch() {
                 ts=$(date '+%H:%M:%S')
                 echo "[$ts] STAMPED: $name ($lane) sha:${sha:0:12}..."
             fi
-        done < "$current"
+        done < "$WATCH_CURRENT"
 
         # Update snapshot
-        mv "$current" "$snapshot"
+        mv "$WATCH_CURRENT" "$WATCH_SNAPSHOT"
     done
 }
 
@@ -479,6 +488,64 @@ cmd_history() {
 
 # ── Clean mode ────────────────────────────────────────────────
 
+# Count buildable entry points in a directory
+count_entry_points() {
+    local dir="$1"
+    find "$dir" -name '*.tsz' \
+        ! -name '*.script.tsz' ! -name '*.cls.tsz' ! -name '*.effects.tsz' \
+        ! -name '*.glyphs.tsz' ! -name '*.tcls.tsz' ! -name '*.vcls.tsz' \
+        ! -name '*.c.tsz' ! -name '*.cmod.tsz' ! -name '*.mod.tsz' \
+        ! -name '*.lscript.tsz' 2>/dev/null | wc -l
+}
+
+# ── Baseline mode ─────────────────────────────────────────────
+
+cmd_baseline() {
+    echo "=== Conformance Baseline ==="
+    echo ""
+    printf "  %-20s %6s %6s %6s\n" "Lane" "Pass" "Total" "Rate"
+    printf "  %-20s %6s %6s %6s\n" "----" "----" "-----" "----"
+
+    local grand_pass=0 grand_total=0
+
+    for lane in soup mixed chad lscript wpt-flex; do
+        local dir="carts/conformance/$lane"
+        [ -d "$dir" ] || continue
+
+        local total
+        total=$(count_entry_points "$dir")
+
+        local pass
+        pass=$(sqlite3 "$DB" "
+            SELECT COUNT(DISTINCT test_name) FROM (
+                SELECT test_name, status,
+                       ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+                FROM builds WHERE lane = '$lane'
+            ) WHERE rn = 1 AND status = 'compiled';
+        " 2>/dev/null || echo "0")
+        pass="${pass:-0}"
+
+        local rate="0%"
+        if [ "$total" -gt 0 ]; then
+            rate="$(awk "BEGIN{printf \"%.0f%%\", ($pass/$total)*100}")"
+        fi
+
+        printf "  %-20s %6d %6d %6s\n" "$lane" "$pass" "$total" "$rate"
+        grand_pass=$((grand_pass + pass))
+        grand_total=$((grand_total + total))
+    done
+
+    printf "  %-20s %6s %6s %6s\n" "----" "----" "-----" "----"
+    local grand_rate="0%"
+    if [ "$grand_total" -gt 0 ]; then
+        grand_rate="$(awk "BEGIN{printf \"%.0f%%\", ($grand_pass/$grand_total)*100}")"
+    fi
+    printf "  %-20s %6d %6d %6s\n" "TOTAL" "$grand_pass" "$grand_total" "$grand_rate"
+    echo ""
+}
+
+# ── Clean mode ────────────────────────────────────────────────
+
 cmd_clean() {
     local keep="${1:-10}"
     local before
@@ -542,8 +609,11 @@ case "${1:-help}" in
         [ -z "${2:-}" ] && echo "Usage: ledger history <test_name>" && exit 1
         cmd_history "$2"
         ;;
+    baseline)
+        cmd_baseline
+        ;;
     clean)
-        cmd_clean "${2:-50}"
+        cmd_clean "${2:-10}"
         ;;
     help|--help|-h)
         echo "Conformance Ledger — SQLite-backed build tracker"
@@ -551,16 +621,19 @@ case "${1:-help}" in
         echo "Usage: scripts/ledger <command> [args]"
         echo ""
         echo "Commands:"
-        echo "  watch          Poll zig-out/bin/, auto-stamp new binaries"
-        echo "  run [lane]     Build all tests (or one lane), stamp results"
+        echo "  run [lane]     Build all tests (or one lane), stamp results (pass + fail)"
+        echo "  baseline       Show pass rate per lane against filesystem entry point count"
         echo "  status         Show passing/broken/regressed/fixed summary"
         echo "  diff <test>    Diff current generated .zig vs last good"
         echo "  show <test>    Print last good generated .zig"
         echo "  history <test> Show build history for a test"
-        echo "  clean [N]      Prune to last N builds per test (default 50)"
+        echo "  clean [N]      Prune to last N builds per test (default 10)"
         echo "  init           (Re)create the database"
         echo ""
-        echo "Lanes: soup, mixed, chad, lscript"
+        echo "Passive watcher (catches new passes during dev):"
+        echo "  scripts/ledger-watch"
+        echo ""
+        echo "Lanes: soup, mixed, chad, lscript, wpt-flex"
         ;;
     *)
         echo "Unknown command: $1 (try 'ledger help')"
