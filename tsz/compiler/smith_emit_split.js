@@ -464,11 +464,15 @@ function emitLogicBlocks(ctx) {
       // No setter rewriting needed — declared setter functions handle state updates
       // Strip <script>/<\/script> tags and 'export' keywords — file imports include them raw
       // QuickJS eval doesn't support ES module syntax, so 'export' must be removed
-      const scriptLines = globalThis.__scriptContent.split('\n')
+      // Strip tags, TS declarations, export keywords, and export { ... } blocks
+      var _scriptRaw = globalThis.__scriptContent
+        .replace(/export\s*\{[^}]*\}\s*;?/g, '')  // remove export { ... }; blocks entirely
+        .split('\n')
         .filter(l => !/^\s*<\/?script>\s*$/.test(l))
         .filter(l => !/^\s*declare\s+/.test(l))
         .map(l => l.replace(/^export\s+/, ''))
         .map(l => l.replace(/:\s*(any|void|string|number|boolean)\b/g, ''));
+      const scriptLines = _scriptRaw;
       for (const line of scriptLines) jsLines.push(line);
       jsLines.push('');  // trailing blank line
     }
@@ -648,7 +652,8 @@ function emitLogicBlocks(ctx) {
     // Generate Lua state variable declarations + setter functions
     const luaLines = [];
     const hasLuaHandlers = ctx.handlers.some(h => h.luaBody);
-    if (hasLuaHandlers || ctx.stateSlots.length > 0) {
+    // Only emit Lua state setters when there's an <lscript> block
+    if (ctx.luaBlock && (hasLuaHandlers || ctx.stateSlots.length > 0)) {
       luaLines.push('-- State variables (mirroring Zig state slots)');
       for (let si = 0; si < ctx.stateSlots.length; si++) {
         const s = ctx.stateSlots[si];
@@ -667,11 +672,13 @@ function emitLogicBlocks(ctx) {
       }
       luaLines.push('');
     }
-    // Object array data loading via Lua
-    for (const oa of ctx.objectArrays) {
-      if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
-      luaLines.push(`local ${oa.getter} = {}`);
-      luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
+    // Object array data loading via Lua (only when <lscript> block exists)
+    if (ctx.luaBlock) {
+      for (const oa of ctx.objectArrays) {
+        if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
+        luaLines.push(`local ${oa.getter} = {}`);
+        luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
+      }
     }
     // Map handler functions in Lua — MUST come before script content
     // (script may call OA setters that fail in Lua, aborting the rest of the script)
@@ -736,6 +743,20 @@ function emitLogicBlocks(ctx) {
       for (const line of ctx.luaBlock.split('\n')) {
         luaLines.push(line);
       }
+      luaLines.push('');
+    }
+    // Lua-side dynamic text evaluation (mirrors JS __evalDynTexts)
+    if (ctx._luaDynTexts && ctx._luaDynTexts.length > 0) {
+      luaLines.push('-- Dynamic text expressions');
+      luaLines.push('local __evalInterval = nil');
+      luaLines.push('function __evalDynTexts()');
+      for (const ldt of ctx._luaDynTexts) {
+        luaLines.push(`  pcall(function() ${ctx.stateSlots[ldt.slotIdx].setter}(tostring(${ldt.luaExpr})) end)`);
+      }
+      luaLines.push('end');
+      luaLines.push('__evalDynTexts()');
+      luaLines.push('if __evalInterval then __evalInterval:stop() end');
+      luaLines.push('__evalInterval = __setInterval(__evalDynTexts, 16)');
       luaLines.push('');
     }
     // Script file imports — NOT included in LUA_LOGIC.
