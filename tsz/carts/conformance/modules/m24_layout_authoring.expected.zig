@@ -64,57 +64,57 @@ pub const Node = struct {
 
 pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32) LayoutRect;
 
-var measureFn: ?MeasureTextFn = null;
 const LAYOUT_BUDGET: usize = 100000;
-var layoutCount: usize = 0;
+var measure_text: ?MeasureTextFn = null;
+var layout_count: usize = 0;
 
-pub fn setMeasureFn(f: ?MeasureTextFn) void {
-    measureFn = f;
+pub fn set_measure_fn(f: ?MeasureTextFn) void {
+    measure_text = f;
 }
 
-fn padLeft(s: Style) f32 {
-    return s.padding_left orelse s.padding;
+pub fn pad_left(style: Style) f32 {
+    return style.padding_left orelse style.padding;
 }
 
-fn padRight(s: Style) f32 {
-    return s.padding_right orelse s.padding;
+pub fn pad_right(style: Style) f32 {
+    return style.padding_right orelse style.padding;
 }
 
-fn resolveMaybePct(val: ?f32, parent: f32) ?f32 {
-    if (val == null) return null;
-    if (val.? < 0) return (-val.?) * parent;
-    return val.?;
+pub fn resolve_maybe_pct(value: ?f32, parent: f32) ?f32 {
+    if (value == null) return null;
+    if (value.? < 0) return (-value.?) * parent;
+    return value.?;
 }
 
-fn measureNodeTextW(node: *Node, max_width: f32) LayoutRect {
-    if (node.text != null and measureFn != null) {
-        return measureFn.?(node.text.?, node.font_size, max_width);
+pub fn measure_node_text(node: *Node, max_width: f32) LayoutRect {
+    if (node.text != null and measure_text != null) {
+        return measure_text.?(node.text.?, node.font_size, max_width);
     }
     return .{};
 }
 
-pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
-    layoutCount += 1;
-    if (layoutCount > LAYOUT_BUDGET) return;
+pub fn layout_node(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
+    layout_count += 1;
+    if (layout_count > LAYOUT_BUDGET) return;
 
-    var w = resolveMaybePct(node.style.width, pw) orelse pw;
-    var h = resolveMaybePct(node.style.height, ph) orelse ph;
+    const width = resolve_maybe_pct(node.style.width, pw) orelse pw;
+    var height = resolve_maybe_pct(node.style.height, ph) orelse ph;
 
     if (node.text != null and node.style.height == null) {
-        const text = measureNodeTextW(node, w - padLeft(node.style) - padRight(node.style));
-        h = text.h;
+        const metrics = measure_node_text(node, width - pad_left(node.style) - pad_right(node.style));
+        height = metrics.h;
     }
 
-    node.computed = .{ .x = px, .y = py, .w = w, .h = h };
+    node.computed = .{ .x = px, .y = py, .w = width, .h = height };
 
     for (node.children) |*child| {
-        layoutNode(child, px, py, w, h);
+        layout_node(child, px, py, width, height);
     }
 }
 
 pub fn layout(root: *Node, x: f32, y: f32, w: f32, h: f32) void {
-    layoutCount = 0;
+    layout_count = 0;
     root._flex_w = w;
     root._stretch_h = h;
-    layoutNode(root, x, y, w, h);
+    layout_node(root, x, y, w, h);
 }

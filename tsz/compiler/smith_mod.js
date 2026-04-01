@@ -6,9 +6,12 @@
 var _modEnumVariants = [];
 var _modFfiSymbols = {}; // symbol → prefix (e.g. 'socket' → 'posix')
 var _modStateVars = []; // state variable names — don't redeclare as locals
+var _modImportedNames = []; // imported type/value names available in module scope
 
 function modTranspileType(ts) {
   const t = ts.trim();
+  // Type? → optional (suffix form used by intent syntax)
+  if (t.endsWith('?')) return '?' + modTranspileType(t.slice(0, -1));
   if (t === 'int') return 'i64';
   if (t === 'i32') return 'i32';
   if (t === 'i64') return 'i64';
@@ -24,12 +27,13 @@ function modTranspileType(ts) {
   if (t === 'bool' || t === 'boolean') return 'bool';
   if (t === 'string') return '[]const u8';
   if (t === 'void') return 'void';
+  if (t.startsWith('fn(') || t.startsWith('fn (')) return modTranspileFnType(t);
   // ?Type → optional
   if (t.startsWith('?')) return '?' + modTranspileType(t.slice(1));
   // !Type → error union
   if (t.startsWith('!')) return '!' + modTranspileType(t.slice(1));
   // TypeName[N] → [N]TypeName (fixed array)
-  const arrMatch = t.match(/^(\w+)\[(\d+)\]$/);
+  const arrMatch = t.match(/^(\w+)\[([A-Za-z_]\w*|\d+)\]$/);
   if (arrMatch) return '[' + arrMatch[2] + ']' + modTranspileType(arrMatch[1]);
   // Type[] → slice — []Type
   if (t.endsWith('[]')) return '[]' + modTranspileType(t.slice(0, -2));
@@ -37,9 +41,16 @@ function modTranspileType(ts) {
   return t;
 }
 
+function modTranspileFnType(ts) {
+  const m = ts.trim().match(/^fn\s*\((.*)\)\s*->\s*(.+)$/);
+  if (!m) return ts.trim();
+  return '*const fn (' + modTranspileParams(m[1].trim()) + ') ' + modTranspileType(m[2].trim());
+}
+
 function compileModBlock(source, file) {
   const basename = file.split('/').pop();
   _modStateVars = [];
+  _modImportedNames = [];
 
   // Extract module name
   const moduleMatch = source.match(/<module\s+(\w+)>/);
@@ -50,41 +61,76 @@ function compileModBlock(source, file) {
   out += '//! Module: ' + moduleName + '\n\n';
   out += 'const std = @import("std");\n';
 
+  // Extract <imports> block → named @import bindings
+  const importsMatch = extractModBlock(source, 'imports');
+  if (importsMatch) {
+    out += emitImportsBlock(importsMatch);
+  }
+
   // Collect known type and enum variant names for context-aware codegen
   const typeNames = [];
   const enumVariants = {}; // typeName → [variant1, variant2, ...]
   const allVariants = []; // flat list of all enum variant names
 
   // Extract <ffi> block → import declarations
-  const ffiMatch = source.match(/<ffi>([\s\S]*?)<\/ffi>/);
+  const ffiMatch = extractModBlock(source, 'ffi');
   if (ffiMatch) {
-    out += emitFfiBlock(ffiMatch[1]);
+    out += emitFfiBlock(ffiMatch);
   }
 
   // Extract <types> block
-  const typesMatch = source.match(/<types>([\s\S]*?)<\/types>/);
+  const typesMatch = extractModBlock(source, 'types');
   if (typesMatch) {
-    out += emitTypesBlock(typesMatch[1], typeNames, enumVariants, allVariants);
+    out += emitTypesBlock(typesMatch, typeNames, enumVariants, allVariants);
   } else {
     out += '\n'; // blank line after imports when no types block
   }
   // Set module-level enum variants for expression transpiling
   _modEnumVariants = allVariants;
 
+  // Extract <const> block
+  const constMatch = extractModBlock(source, 'const');
+  if (constMatch) {
+    out += emitConstBlock(constMatch, typeNames);
+  }
+
   // Extract <state> block
-  const stateMatch = source.match(/<state>([\s\S]*?)<\/state>/);
+  const stateMatch = extractModBlock(source, 'state');
   if (stateMatch) {
-    out += emitStateBlock(stateMatch[1], typeNames);
+    out += emitStateBlock(stateMatch, typeNames);
   }
 
   // Extract <functions> block
-  const fnMatch = source.match(/<functions>([\s\S]*?)<\/functions>/);
+  const fnMatch = extractModBlock(source, 'functions');
   if (fnMatch) {
-    out += emitFunctionsBlock(fnMatch[1], typeNames, allVariants);
+    out += emitFunctionsBlock(fnMatch, typeNames, allVariants);
   }
 
   // Trim trailing whitespace but keep final newline
   return out.replace(/\n+$/, '\n');
+}
+
+function extractModBlock(source, tag) {
+  const re = new RegExp('^\\s*<' + tag + '>\\s*\\n([\\s\\S]*?)^\\s*<\\/' + tag + '>\\s*$', 'm');
+  const m = source.match(re);
+  return m ? m[1] : null;
+}
+
+function emitImportsBlock(content) {
+  let out = '';
+  _modImportedNames = [];
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('//')) continue;
+    const m = line.match(/^(\w+)\s+from\s+"([^"]+)"$/);
+    if (!m) continue;
+    const name = m[1];
+    const path = m[2];
+    _modImportedNames.push(name);
+    out += 'const ' + name + ' = @import("' + path + '").' + name + ';\n';
+  }
+  return out;
 }
 
 function emitFfiBlock(content) {
@@ -188,10 +234,18 @@ function emitTypesBlock(content, typeNames, enumVariants, allVariants) {
       continue;
     }
 
+    // Type alias: Name: fn(...) -> Ret  OR  Name: SomeOtherType
+    out += emitTypeAliasDecl(name, rest);
     i++;
+    continue;
+
   }
 
   return out;
+}
+
+function emitTypeAliasDecl(name, rest) {
+  return 'pub const ' + name + ' = ' + modTranspileType(rest) + ';\n\n';
 }
 
 function emitEnumDecl(name, rest, allVariants) {
@@ -234,10 +288,14 @@ function emitStructDecl(name, bodyLines, typeNames) {
 function inferDefault(rawType, zigType, typeNames) {
   // string → ""
   if (rawType === 'string') return '""';
+  // Type? → null
+  if (rawType.endsWith('?')) return 'null';
   // ?Type → null
   if (rawType.startsWith('?')) return 'null';
+  // Type[] → empty slice
+  if (rawType.endsWith('[]')) return '&.{}';
   // Type[N] where Type is a known struct → [_]Type{.{}} ** N
-  const arrMatch = rawType.match(/^(\w+)\[(\d+)\]$/);
+  const arrMatch = rawType.match(/^(\w+)\[([A-Za-z_]\w*|\d+)\]$/);
   if (arrMatch) {
     const elemType = arrMatch[1];
     const count = arrMatch[2];
@@ -247,6 +305,7 @@ function inferDefault(rawType, zigType, typeNames) {
   }
   // Known struct type → .{}
   if (typeNames.indexOf(rawType) !== -1) return '.{}';
+  if (_modImportedNames.indexOf(rawType) !== -1) return '.{}';
   return null;
 }
 
@@ -267,7 +326,8 @@ function modTranspileDefault(val, zigType, typeNames) {
   // Boolean
   if (v === 'true' || v === 'false') return v;
   // Null
-  if (v === 'null' || v === 'none') return 'null';
+  if (v === 'null') return 'null';
+  if (v === 'none' && zigType && zigType.startsWith('?')) return 'null';
   // Numeric
   if (/^-?\d+(\.\d+)?$/.test(v)) return v;
   // String literal
@@ -296,15 +356,21 @@ function emitStateBlock(content, typeNames) {
 
     out += 'var ' + vname + ': ' + zigType;
     // Array types get zero-init
-    const arrM = rawType.match(/^(\w+)\[(\d+)\]$/);
+    const arrM = rawType.match(/^(\w+)\[([A-Za-z_]\w*|\d+)\]$/);
     if (arrM) {
       if (typeNames.indexOf(arrM[1]) !== -1) {
         out += ' = [_]' + modTranspileType(arrM[1]) + '{.{}} ** ' + arrM[2];
       } else {
         out += ' = undefined';
       }
+    } else if (zigType.startsWith('?')) {
+      out += ' = null';
     } else if (vdefault !== null) {
       out += ' = ' + modTranspileDefault(vdefault, zigType, typeNames);
+    } else if (rawType.endsWith('[]')) {
+      out += ' = &.{}';
+    } else if (_modImportedNames.indexOf(rawType) !== -1) {
+      out += ' = .{}';
     } else {
       out += ' = .{}';
     }
@@ -313,22 +379,36 @@ function emitStateBlock(content, typeNames) {
   return out;
 }
 
+function emitConstBlock(content, typeNames) {
+  let out = '';
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith('//')) continue;
+    const m = line.match(/^(\w+):\s*([^=]+?)\s*=\s*(.+)$/);
+    if (!m) continue;
+    out += 'const ' + m[1] + ': ' + modTranspileType(m[2].trim()) + ' = ' + modTranspileDefault(m[3].trim(), modTranspileType(m[2].trim()), typeNames) + ';\n';
+  }
+  return out;
+}
+
 function emitFunctionsBlock(content, typeNames, allVariants) {
   let out = '\n';
-  // Split into individual functions by detecting sigs at base indent
+  // Split into individual functions by detecting signatures at top-level indent.
   const lines = content.split('\n');
   const funcs = [];
   let current = null;
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]; const trimmed = raw.trim();
-    if (!trimmed) { if (current) { funcs.push(current); current = null; } continue; }
-    if (trimmed.startsWith('//')) {
-      const indent = raw.match(/^(\s*)/)[1].length;
-      if (indent <= 4 && current) { funcs.push(current); current = null; }
+    const raw = lines[i];
+    const trimmed = raw.trim();
+    const indent = raw.match(/^(\s*)/)[1].length;
+    const isSig = indent <= 4 && trimmed.match(/^\w+\([^)]*\)\s*(?::\s*.+)?$/);
+    if (isSig) {
+      if (current) funcs.push(current);
+      current = { sig: trimmed, body: [] };
       continue;
     }
-    if (!current && trimmed.match(/^\w+\(/)) { current = { sig: trimmed, body: [] }; continue; }
-    if (current) { current.body.push(raw); continue; }
+    if (current) current.body.push(raw);
   }
   if (current) funcs.push(current);
   for (let f = 0; f < funcs.length; f++) out += emitOneFunction(funcs[f].sig, funcs[f].body, typeNames, allVariants);
@@ -351,6 +431,7 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   for (let i = 0; i < rawBodyLines.length; i++) {
     const raw = rawBodyLines[i]; const trimmed = raw.trim();
     if (!trimmed) continue;
+    if (trimmed.startsWith('//')) continue;
     bodyLines.push({ indent: raw.match(/^(\s*)/)[1].length, text: trimmed });
   }
   if (bodyLines.length === 1 && bodyLines[0].text.match(/return .+\.map\(/)) {
@@ -703,11 +784,35 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, pa
   let i = startIdx;
   while (i < lines.length) {
     const L = lines[i]; const text = L.text;
+    if (!text) { i++; continue; }
     // Guard: cond ? stop : go
     const guardMatch = text.match(/^(.+?)\s+\?\s+stop\s*:\s*go$/);
     if (guardMatch) { out += ind + 'if (' + modTranspileExpr(guardMatch[1]) + ') ' + guardRetVal + ';\n'; i++; continue; }
+    // Single-line ternary
+    const ternaryMatch = text.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/);
+    if (ternaryMatch) {
+      out += ind + 'if (' + modTranspileExpr(ternaryMatch[1]) + ') {\n';
+      out += emitInlineStatements(ternaryMatch[2], depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+      if (ternaryMatch[3].trim() !== 'go') {
+        out += ind + '} else {\n';
+        out += emitInlineStatements(ternaryMatch[3], depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+      }
+      out += ind + '}\n';
+      i++; continue;
+    }
+    // Multi-line ternary
+    if (i + 2 < lines.length && lines[i + 1].text.startsWith('? ') && lines[i + 2].text.startsWith(': ')) {
+      out += ind + 'if (' + modTranspileExpr(text) + ') {\n';
+      out += emitInlineStatements(lines[i + 1].text.slice(2).trim(), depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+      if (lines[i + 2].text.slice(2).trim() !== 'go') {
+        out += ind + '} else {\n';
+        out += emitInlineStatements(lines[i + 2].text.slice(2).trim(), depth + 1, typeNames, knownVars, lines, i, guardRetVal);
+      }
+      out += ind + '}\n';
+      i += 3; continue;
+    }
     // Return
-    if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileExpr(text.slice(7)) + ';\n'; i++; continue; }
+    if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileValue(text.slice(7)) + ';\n'; i++; continue; }
     // Switch
     const switchMatch = text.match(/^switch\s+(.+):$/);
     if (switchMatch) {
@@ -741,32 +846,10 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, pa
     // Assignment: target = expr (not >= <= == !=)
     const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
     if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
-      const target = modTranspileExpr(assignMatch[1].trim());
-      const val = modTranspileExpr(assignMatch[2].trim());
-      // Local variable declaration: bare identifier = expr → var name[: Type] = val
-      // BUT NOT if it's a known state variable or function parameter
-      const rawTarget = assignMatch[1].trim();
-      if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && knownVars.indexOf(rawTarget) === -1) {
-        const inferredType = inferTypeFromValue(assignMatch[2].trim());
-        if (inferredType) {
-          out += ind + 'var ' + target + ': ' + inferredType + ' = ' + val + ';\n'; i++; continue;
-        }
-        // Function call: result = fn(...) — emit var (Zig infers type)
-        if (/\w+\(/.test(assignMatch[2].trim())) {
-          out += ind + 'const ' + target + ' = ' + val + ';\n'; i++; continue;
-        }
-      }
-      const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const incMatch = val.match(new RegExp('^' + esc + '\\s*\\+\\s*(.+)$'));
-      if (incMatch) { out += ind + target + ' += ' + incMatch[1] + ';\n'; }
-      else {
-        const decMatch = val.match(new RegExp('^' + esc + '\\s*-\\s*(.+)$'));
-        if (decMatch) { out += ind + target + ' -= ' + decMatch[1] + ';\n'; }
-        else { out += ind + target + ' = ' + val + ';\n'; }
-      }
+      out += emitSingleStatement(text, depth, typeNames, knownVars, lines, i, guardRetVal);
       i++; continue;
     }
-    out += ind + modTranspileExpr(text) + ';\n'; i++;
+    out += emitSingleStatement(text, depth, typeNames, knownVars, lines, i, guardRetVal); i++;
   }
   return out;
 }
@@ -827,6 +910,83 @@ function emitStatementList(expr, ind) {
     }
   }
   return out;
+}
+
+function emitInlineStatements(expr, depth, typeNames, knownVars, lines, lineIdx, guardRetVal) {
+  let out = '';
+  const stmts = expr.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+  for (let s = 0; s < stmts.length; s++) {
+    out += emitSingleStatement(stmts[s], depth, typeNames, knownVars, lines, lineIdx, guardRetVal);
+  }
+  return out;
+}
+
+function emitSingleStatement(stmt, depth, typeNames, knownVars, lines, lineIdx, guardRetVal) {
+  const ind = '    '.repeat(depth);
+  const text = stmt.trim();
+  if (!text || text === 'go') return '';
+  if (text === 'continue') return ind + 'continue;\n';
+  if (text === 'stop') return ind + guardRetVal + ';\n';
+  if (text.startsWith('return ')) return ind + 'return ' + modTranspileValue(text.slice(7)) + ';\n';
+
+  const structAssign = text.match(/^(.+?)\s*=\s*\{(.+)\}\s*$/);
+  if (structAssign && !isComparison(structAssign[1])) {
+    const target = modTranspileExpr(structAssign[1]);
+    return ind + target + ' = ' + transpileStructLiteral(structAssign[2]) + ';\n';
+  }
+
+  const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
+  if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
+    const rawTarget = assignMatch[1].trim();
+    const target = modTranspileExpr(rawTarget);
+    const val = modTranspileValue(assignMatch[2].trim());
+
+    if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && knownVars.indexOf(rawTarget) === -1) {
+      knownVars.push(rawTarget);
+      const inferredType = inferTypeFromValue(assignMatch[2].trim());
+      const isMutable = localIsReassigned(rawTarget, lines, lineIdx);
+      if (inferredType) {
+        return ind + (isMutable ? 'var ' : 'const ') + target + ': ' + inferredType + ' = ' + val + ';\n';
+      }
+      if (/\w+\(/.test(assignMatch[2].trim()) || assignMatch[2].trim().indexOf('??') !== -1) {
+        return ind + (isMutable ? 'var ' : 'const ') + target + ' = ' + val + ';\n';
+      }
+    }
+
+    const esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const incMatch = val.match(new RegExp('^' + esc + '\\s*\\+\\s*(.+)$'));
+    if (incMatch) return ind + target + ' += ' + incMatch[1] + ';\n';
+    const decMatch = val.match(new RegExp('^' + esc + '\\s*-\\s*(.+)$'));
+    if (decMatch) return ind + target + ' -= ' + decMatch[1] + ';\n';
+    return ind + target + ' = ' + val + ';\n';
+  }
+
+  return ind + modTranspileExpr(text) + ';\n';
+}
+
+function localIsReassigned(name, lines, lineIdx) {
+  const pat = new RegExp('^' + name + '\\s*=');
+  for (let i = lineIdx + 1; i < lines.length; i++) {
+    const text = (lines[i].text || '').trim();
+    if (!text) continue;
+    if (pat.test(text)) return true;
+    if (text.indexOf('? ') !== -1 || text.startsWith('? ') || text.startsWith(': ')) {
+      const bare = text.replace(/^[?:]\s*/, '').trim();
+      if (pat.test(bare)) return true;
+      const parts = bare.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+      for (let p = 0; p < parts.length; p++) {
+        if (pat.test(parts[p])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function modTranspileValue(expr) {
+  const t = expr.trim();
+  const structMatch = t.match(/^\{([\s\S]*)\}$/);
+  if (structMatch) return transpileStructLiteral(structMatch[1]);
+  return modTranspileExpr(t);
 }
 
 function emitArmBodyV2(lines, typeNames, depth) {

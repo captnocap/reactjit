@@ -63,6 +63,8 @@ pub fn resize(id: u8, rows: i64, cols: i64) void {
 
 pub fn focus_next() u8 {
     focused += 1;
-    focused >= session_count ? focused = 0 : go;
+    if (focused >= session_count) {
+        focused = 0;
+    }
     return focused;
 }
