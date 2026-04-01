@@ -64,17 +64,14 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   }
 
   if (handlerRef) {
-    // Look up the handler to decide dispatch method
     const handler = ctx.handlers.find(h => h.name === handlerRef);
-    // Prefer Zig function pointer when handler has a pure-Zig body (state.setSlot calls).
-    // This avoids JS eval dispatch which can trigger mid-tick map rebuilds → segfault.
     const hasZigBody = handler && handler.body && handler.body.trim().length > 0 && !handler.body.includes('qjs_runtime.');
     if (hasZigBody) {
       parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
-    } else if (handler && handler.luaBody && !ctx.scriptBlock && !globalThis.__scriptContent) {
+    } else if (handler && handler.luaBody && ctx.handlerDispatch === 'lua') {
       const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
-    } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
+    } else if (handler && handler.luaBody && ctx.handlerDispatch === 'js') {
       const jsBody = jsTransform(handler.luaBody);
       const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);

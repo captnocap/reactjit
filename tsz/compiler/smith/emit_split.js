@@ -565,6 +565,16 @@ function emitLogicBlocks(ctx) {
             }
           }
           if (jsHandlerBody) {
+            if (m.isNested && m.parentMap) {
+              // Nested map handler receives (parent_idx, item_idx)
+              const outerIdxParam = m.parentMap.indexParam || 'gi';
+              const innerIdxParam = m.indexParam || 'ii';
+              jsLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam}) {`);
+              jsLines.push(`  ${jsHandlerBody};`);
+              jsLines.push(`}`);
+              mh._emittedInJS = true;
+              continue;
+            }
             jsLines.push(`function __mapPress_${mi}_${hi}(idx) {`);
             if (m.oa) {
               jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[idx];`);
