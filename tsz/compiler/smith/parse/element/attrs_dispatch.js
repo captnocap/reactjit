@@ -7,6 +7,12 @@ function parseElementAttr(c, attr, rawTag, state) {
     state.styleFields = preInjected.concat(inlineStyles);
     if (inlineStyles._dynStyleIds) state.styleFields._dynStyleIds = inlineStyles._dynStyleIds;
     if (inlineStyles._dynStyleId !== undefined) state.styleFields._dynStyleId = inlineStyles._dynStyleId;
+    // Hoist Text node fields (fontSize, color) from style block to node level
+    if (inlineStyles._nodeFields) {
+      for (var nfi = 0; nfi < inlineStyles._nodeFields.length; nfi++) {
+        state.nodeFields.push(inlineStyles._nodeFields[nfi]);
+      }
+    }
     return;
   }
 

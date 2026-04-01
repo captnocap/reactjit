@@ -368,6 +368,21 @@ function parseStyleBlock(c) {
         if (val.type === 'string' && e.values[val.value]) {
           fields.push(`.${e.field} = ${e.values[val.value]}`);
         }
+      } else if (key === 'fontSize') {
+        // Text node field — not a style field, hoist to node level
+        if (!fields._nodeFields) fields._nodeFields = [];
+        if (val.type === 'number') {
+          fields._nodeFields.push(`.font_size = ${val.value}`);
+        } else if (val.type === 'string' && val.value.startsWith('theme-')) {
+          fields._nodeFields.push(`.font_size = ${resolveThemeToken(val.value)}`);
+        }
+      } else if (key === 'color') {
+        // Text node field — not a style field, hoist to node level
+        if (!fields._nodeFields) fields._nodeFields = [];
+        if (val.type === 'string') {
+          const resolved = resolveThemeToken(val.value);
+          fields._nodeFields.push(`.text_color = ${parseColor(String(resolved))}`);
+        }
       }
       if (c.kind() === TK.comma) c.advance();
     } else { c.advance(); }
@@ -553,8 +568,15 @@ function luaParseValueExpr(c) {
         } else if (pv === 'ci' || pv === '_j' || (ctx.currentMap && ctx.currentMap.parentMap && pv === ctx.currentMap.parentMap.indexParam)) {
           // Outer map index variable leaked as prop — keep raw name
           parts.push(pv);
-        } else {
+        } else if (/^-?\d+(\.\d+)?$/.test(pv) || /^0x[0-9a-fA-F]+$/.test(pv)) {
+          // Numeric prop — push as-is
           parts.push(pv);
+        } else if (pv.startsWith("'") || pv.startsWith('"')) {
+          // Already quoted — push as-is
+          parts.push(pv);
+        } else {
+          // String prop value — quote it for valid JS/Lua
+          parts.push("'" + pv.replace(/'/g, "\\'") + "'");
         }
       } else {
         parts.push((ctx.nameRemap && ctx.nameRemap[name]) || name);
@@ -636,7 +658,13 @@ function luaParseHandler(c) {
           const pv = pa.value;
           if (typeof pv === 'string') {
             const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
-            parts.push(isZigExpr ? pa.field : pv);
+            if (isZigExpr) {
+              parts.push(pa.field);
+            } else if (/^-?\d+(\.\d+)?$/.test(pv) || /^0x[0-9a-fA-F]+$/.test(pv) || pv.startsWith("'") || pv.startsWith('"')) {
+              parts.push(pv);
+            } else {
+              parts.push("'" + pv.replace(/'/g, "\\'") + "'");
+            }
           } else {
             parts.push(String(pv));
           }
@@ -674,8 +702,13 @@ function luaParseHandler(c) {
           const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
           if (isZigExpr) {
             parts.push(name);
-          } else {
+          } else if (/^-?\d+(\.\d+)?$/.test(pv) || /^0x[0-9a-fA-F]+$/.test(pv)) {
             parts.push(pv);
+          } else if (pv.startsWith("'") || pv.startsWith('"')) {
+            parts.push(pv);
+          } else {
+            // String prop value — quote it for valid JS/Lua
+            parts.push("'" + pv.replace(/'/g, "\\'") + "'");
           }
         } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
           var _hrlv = ctx.renderLocals[name];
