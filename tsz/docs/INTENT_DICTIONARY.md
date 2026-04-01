@@ -254,7 +254,19 @@ A lib composes modules into a reusable package. Same pattern as app owning pages
 </backend>
 ```
 
-Used by a page or app:
+**Modules are ambient within their lib** — sibling modules can see each other directly:
+
+```
+// inside database.mod.tsz — auth is a sibling, visible directly
+<database module>
+  <functions>
+    initWithAuth:
+      auth.getToken + init
+  </functions>
+</database>
+```
+
+**Outside the lib, access goes through the lib name:**
 
 ```
 from './backend'
@@ -262,13 +274,15 @@ from './backend'
 <home page>
   <functions>
     boot:
-      database.init('app.db')
-      auth.init
+      backend.database.init('app.db')
+      backend.auth.init
   </functions>
 </home>
 ```
 
-The lib flattens its modules into the importing scope.
+Modules don't leak into global scope. The lib is the namespace. If you see `backend.database.init`, you know exactly where it lives.
+
+**Only the engine's system modules are truly global ambients:** `sys.*`, `time.*`, `device.*`, `input.*`, `math.*`, `locale.*`, `privacy.*`. Everything else comes through a lib or a direct import.
 
 ### Module (`.mod.tsz`) — backend logic, no UI
 
@@ -1086,9 +1100,9 @@ Every activation gets logged. Deactivation logs the duration.
 
 ---
 
-## Ambient Namespaces
+## Ambient Namespaces (Engine-Provided Only)
 
-Always available. No import needed. These are modules the engine provides — the FFI and equations live inside, the author just uses named verbs.
+These are the **only** globally ambient namespaces. They are provided by the engine runtime — always available, no import needed. User-created modules are NOT ambient — they live inside a `<lib>` and are accessed through the lib name (e.g. `backend.database.init`).
 
 ### System / Device
 
