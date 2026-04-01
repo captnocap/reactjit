@@ -417,6 +417,12 @@ pub fn main() !void {
         std.debug.print("[forge] Wrote {d} files ({d} bytes) to {s}/\n", .{ file_count, total_bytes, dir_path });
     } else {
         // ── Single file output (legacy / --single) ──
+        // Create framework symlink in output dir so @import("framework/...") resolves
+        const mono_fw_link = std.fmt.allocPrint(Alloc, "{s}/framework", .{out_dir}) catch return;
+        std.fs.cwd().access(mono_fw_link, .{}) catch {
+            const mono_fw_abs = std.fs.cwd().realpathAlloc(Alloc, "framework") catch null;
+            if (mono_fw_abs) |abs| std.fs.cwd().symLink(abs, mono_fw_link, .{}) catch {};
+        };
         // Compute body hash and patch BODYHASH placeholder
         var body_start: usize = 0;
         var newline_count: u8 = 0;
