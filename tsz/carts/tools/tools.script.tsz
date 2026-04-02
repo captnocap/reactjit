@@ -20,7 +20,7 @@ function loadRegistry() {
       { name: 'terminal', path: 'tsz/carts/terminal/terminal.tsz' },
       { name: 'hackernews', path: 'tsz/carts/hackernews/hackernews.tsz' },
       { name: 'charts', path: 'tsz/carts/charts/charts.tsz' },
-      { name: 'tools', path: 'tsz/carts/tools/Tools.app.tsz' }
+      { name: 'tools', path: 'tsz/carts/tools/Tools.tsz' }
     ];
     saveRegistry();
   }
@@ -210,7 +210,7 @@ globalThis._toolsAddProject = function(path) {
   if (!path || path.length === 0) return;
   var parts = path.split('/');
   var filename = parts[parts.length - 1];
-  var name = filename.replace('.app.tsz', '').replace('.tsz', '');
+  var name = filename.replace('.tsz', '').replace('.tsz', '');
   if (findProject(name)) {
     appendLog('Project "' + name + '" already registered');
     return;

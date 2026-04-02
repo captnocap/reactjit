@@ -4,7 +4,7 @@
 
 ## Entry point
 
-`carts/tools/Tools.app.tsz` — single cart that compiles to `tsz-tools` binary.
+`carts/tools/Tools.tsz` — single cart that compiles to `tsz-tools` binary.
 
 ## Modes (tabs/views within the app)
 

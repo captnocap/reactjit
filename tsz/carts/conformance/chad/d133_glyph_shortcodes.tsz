@@ -1,0 +1,28 @@
+// CONFORMANCE: Glyph shortcodes — :name: resolution, `l` prop literal mode.
+// Proves: :name: resolves to inline glyph, `l` prop skips resolution,
+//         both modes coexist, unknown shortcodes render as text with hint.
+
+from './theme.cls'
+from './icons.glyphs'
+
+<glyphdemo widget>
+  <var>
+    status is 'ok'
+  </var>
+
+  return(
+    <C.Panel>
+      <C.Title>Glyph Shortcodes</C.Title>
+
+      <C.Body>Status :check: ok</C.Body>
+
+      <C.Body>Alert :warning: caution</C.Body>
+
+      <C.Body l>Literal :check: no glyph here</C.Body>
+
+      <C.Body>:unknown_name: stays as text</C.Body>
+
+      <C.Body>:check: and :warning: both inline</C.Body>
+    </C.Panel>
+  )
+</glyphdemo>

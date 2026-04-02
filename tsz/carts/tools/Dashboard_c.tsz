@@ -43,7 +43,7 @@ function deleteProject(name) {
 // Init new project
 function initProject(name) {
   if (!name || name.length === 0) return;
-  var path = 'tsz/carts/' + name + '/' + name + '.app.tsz';
+  var path = 'tsz/carts/' + name + '/' + name + '.tsz';
   globalThis._toolsAddProject(path);
 }
 

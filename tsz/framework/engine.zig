@@ -1617,10 +1617,14 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
+                                std.debug.print("[press] zig handler at ({d:.0},{d:.0})\n", .{ mx, my });
                                 handler();
                                 // Also run JS handler if present
                                 if (h.handlers.js_on_press) |js_expr| {
-                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                    const expr = std.mem.span(js_expr);
+                                    std.debug.print("[press] +js: '{s}'\n", .{expr});
+                                    qjs_runtime.evalExpr(expr);
+                                    std.debug.print("[press] +js done\n", .{});
                                 }
                                 // Also run Lua handler if present
                                 if (h.handlers.lua_on_press) |lua_expr| {
@@ -1633,7 +1637,10 @@ pub fn run(config_in: AppConfig) !void {
                                 std.debug.print("[lua_on_press] done\n", .{});
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
-                                qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                const expr = std.mem.span(js_expr);
+                                std.debug.print("[js_on_press] eval: '{s}'\n", .{expr});
+                                qjs_runtime.evalExpr(expr);
+                                std.debug.print("[js_on_press] done\n", .{});
                             } else if (h.href) |url| {
                                 openUrl(url);
                             }
@@ -2004,7 +2011,13 @@ pub fn run(config_in: AppConfig) !void {
         luajit_runtime.tick();
 
         // App tick (FFI polling, state updates, dynamic texts)
-        if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
+        if (config.tick) |tickFn| {
+            tickFn(@truncate(c.SDL_GetTicks()));
+            // Tick may reset arena pools (map rebuilds), invalidating node pointers.
+            // Null out hovered_node to prevent telemetry/paint from reading freed memory.
+            // Next mouse move re-establishes it via updateHover().
+            hovered_node = null;
+        }
 
         // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
         if (cart.count() > 0) cart.tickAll(@truncate(c.SDL_GetTicks()));

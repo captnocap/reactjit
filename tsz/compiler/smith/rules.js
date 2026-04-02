@@ -81,7 +81,7 @@ const soupTags = {
   ul:'box', ol:'box', li:'box', form:'box', span:'box',
   table:'box', thead:'box', tbody:'box', tr:'box', td:'box', th:'text',
   p:'text', h1:'text', h2:'text', h3:'text', h4:'text', h5:'text', h6:'text',
-  label:'text', strong:'text', em:'text', small:'text', code:'text',
+  pre:'text', label:'text', strong:'text', em:'text', small:'text', code:'text',
   button:'pressable',
   input:'stub', canvas:'stub', img:'stub', select:'stub', textarea:'stub',
   br:'void', hr:'void',

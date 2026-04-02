@@ -79,7 +79,7 @@ pub fn build(b: *std.Build) void {
         // Cart uses api.zig for types — NO framework source compilation.
         // extern fns in api.zig resolve against the pre-built engine .a at link time.
         cart_fast_mod.addIncludePath(b.path("../love2d/quickjs"));
-        cart_fast_mod.addIncludePath(b.path("ffi"));
+        cart_fast_mod.addIncludePath(b.path("framework/ffi"));
 
         const cart_fast_exe = b.addExecutable(.{
             .name = app_name,
@@ -129,7 +129,7 @@ pub fn build(b: *std.Build) void {
         // Blend2D and Vello (pre-built static libs)
         cart_fast_exe.root_module.addIncludePath(b.path("../blend2d"));
         cart_fast_exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         cart_fast_exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
         // wgpu-native
@@ -252,37 +252,24 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_compiler_tests.step);
 
     // ── Handler Test Harness — headless handler validator ────────────
-    // zig build test-handlers -Dtest-app=generated_app.zig
+    // zig build test-handlers
+    // zig build run-test-handlers
     //
-    // Compiles the app with a test harness entry point that:
-    //   1. Boots headless (no SDL, no GPU)
-    //   2. Initializes state + QuickJS
-    //   3. Loads JS_LOGIC from the app
-    //   4. Walks the node tree and fires every handler
-    //   5. Reports segfaults, exceptions, and state changes
+    // This is a proof-of-concept demonstrating:
+    //   1. Signal handling for catching segfaults
+    //   2. Handler invocation tracking
+    //   3. State change detection
+    //   4. Reporting
     //
-    // The test harness imports the app file and uses its root node and JS_LOGIC.
-    // Both share the same framework imports.
+    // For full integration with generated apps, the app needs to be compiled
+    // with the test harness as a combined unit.
     
-    // The app to test is specified in test_harness_main.zig via @import
-    // To test a different app, modify that file or regenerate it
-    _ = b.option([]const u8, "test-app", "App source file to test (unused - edit test_harness_main.zig)");
-    
-    // Create the test harness executable 
-    // The test_harness_main.zig file imports the app directly
     const test_handlers_mod = b.createModule(.{
-        .root_source_file = b.path("test_harness_main.zig"),
+        .root_source_file = b.path("test_handlers.zig"),
         .target = target,
         .optimize = optimize,
     });
-    test_handlers_mod.addIncludePath(b.path("../love2d/quickjs"));
-    test_handlers_mod.addCSourceFiles(.{
-        .root = b.path("../love2d/quickjs"),
-        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
-        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
-    });
-    test_handlers_mod.addIncludePath(b.path("."));
-
+    
     const test_handlers_exe = b.addExecutable(.{
         .name = "test-handlers",
         .root_module = test_handlers_mod,
@@ -293,9 +280,8 @@ pub fn build(b: *std.Build) void {
         test_handlers_exe.linkSystemLibrary("pthread");
     }
 
-
     const test_handlers_install = b.addInstallArtifact(test_handlers_exe, .{});
-    const test_handlers_step = b.step("test-handlers", "Build handler test harness — run with: zig-out/bin/test-handlers");
+    const test_handlers_step = b.step("test-handlers", "Build handler test harness");
     test_handlers_step.dependOn(&test_handlers_install.step);
     
     // Also add a run step
@@ -761,13 +747,13 @@ fn addCoreLib(
         lib.linkFramework("IOKit");
         lib.linkFramework("CoreVideo");
         // AppleScript bridge (NSAppleScript via ObjC FFI)
-        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths ──────────────────────────────────────────
     lib.root_module.addIncludePath(b.path("."));
     lib.root_module.addIncludePath(b.path("../love2d/quickjs"));
-    lib.root_module.addIncludePath(b.path("ffi"));
+    lib.root_module.addIncludePath(b.path("framework/ffi"));
 
     // ── C sources ──────────────────────────────────────────────
     lib.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
@@ -777,10 +763,10 @@ fn addCoreLib(
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
     lib.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
     lib.linkSystemLibrary("box2d");
     lib.linkSystemLibrary("sqlite3");
     lib.linkSystemLibrary("vterm");
@@ -791,7 +777,7 @@ fn addCoreLib(
     if (linkage == .static) {
         lib.root_module.addIncludePath(b.path("../blend2d"));
         lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         lib.linkLibCpp();
     }
 
@@ -888,7 +874,7 @@ fn addAppExe(
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
         if (target.result.abi == .musl) {
-            exe.root_module.addCSourceFile(.{ .file = b.path("ffi/musl_compat.c"), .flags = &.{"-O2"} });
+            exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/musl_compat.c"), .flags = &.{"-O2"} });
         }
     } else if (os == .macos) {
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
@@ -903,13 +889,13 @@ fn addAppExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths needed by framework headers (even in lean — for @cImport) ──
     exe.root_module.addIncludePath(b.path("."));
     exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
-    exe.root_module.addIncludePath(b.path("ffi"));
+    exe.root_module.addIncludePath(b.path("framework/ffi"));
 
     // (core exports linked via comptime import in generated preamble)
 
@@ -925,11 +911,11 @@ fn addAppExe(
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
         exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
-        exe.root_module.addIncludePath(b.path("ffi"));
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+        exe.root_module.addIncludePath(b.path("framework/ffi"));
         exe.linkSystemLibrary("box2d");
         exe.linkSystemLibrary("sqlite3");
         exe.linkSystemLibrary("vterm");
@@ -939,7 +925,7 @@ fn addAppExe(
         // ── Blend2D (2D vector graphics engine) ──
         exe.root_module.addIncludePath(b.path("../blend2d"));
         exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         exe.linkLibCpp();
 
         // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
@@ -1084,12 +1070,12 @@ fn addDevShellExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     exe.root_module.addIncludePath(b.path("."));
     exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
-    exe.root_module.addIncludePath(b.path("ffi"));
+    exe.root_module.addIncludePath(b.path("framework/ffi"));
 
     // stb_image
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
@@ -1101,12 +1087,12 @@ fn addDevShellExe(
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addIncludePath(b.path("ffi"));
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addIncludePath(b.path("framework/ffi"));
     exe.linkSystemLibrary("box2d");
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("vterm");
@@ -1116,7 +1102,7 @@ fn addDevShellExe(
     // ── Blend2D (2D vector graphics engine) ──
     exe.root_module.addIncludePath(b.path("../blend2d"));
     exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
     exe.linkLibCpp();
 
     // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──

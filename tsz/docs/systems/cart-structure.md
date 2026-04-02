@@ -157,7 +157,7 @@ function App() {
 
 ### Counter (minimal state)
 ```
-carts/hotreload-test/counter.app.tsz    # Single file, useState + onPress
+carts/hotreload-test/counter.tsz    # Single file, useState + onPress
 ```
 
 ### Dashboard (multi-file)
@@ -217,6 +217,6 @@ bin/tsz lint carts/dashboard/dashboard.tsz
 
 - Max 32 imports per file
 - All files in a cart must be in the same directory (no subdirectory imports)
-- `.app.tsz` is a legacy naming convention — plain `.tsz` is preferred for entry points
+- `.tsz` is a legacy naming convention — plain `.tsz` is preferred for entry points
 - Cart directories have no manifest file — the entry point `.tsz` file IS the manifest
 - File length limit: 1600 lines per `.zig` or `.tsz` file (enforced by build)

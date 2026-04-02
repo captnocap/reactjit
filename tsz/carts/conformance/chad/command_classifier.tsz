@@ -1,0 +1,186 @@
+// CONFORMANCE: Command Classifier — chad-tier port of Claude Code BashTool.tsx
+// Proves: objects data block, <For>, <if>/<else> chains, word comparisons,
+// requires, composition, computed functions, set membership via .where()
+
+from './theme.cls'
+
+<commandClassifier widget>
+  <var>
+    commands is objects
+    searchCmds is array
+    readCmds is array
+    listCmds is array
+    writeCmds is array
+    dangerCmds is array
+    selectedCmd is 0
+    searchCount is 0
+    readCount is 0
+    listCount is 0
+    writeCount is 0
+    dangerCount is 0
+    totalClassified is 0
+    lastResult is ''
+  </var>
+
+  <commands>
+    cmd: grep -r TODO src/, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: cat package.json, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: ls -la, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: find . -name *.tsx, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: rm -rf node_modules, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: cp src/app.ts dist/, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: tree src/, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+    cmd: rg pattern, classified: false, isSearch: false, isRead: false, isList: false, isWrite: false, isDanger: false
+  </commands>
+
+  <searchCmds>
+    find
+    grep
+    rg
+    ag
+    ack
+    locate
+  </searchCmds>
+
+  <readCmds>
+    cat
+    head
+    tail
+    less
+    wc
+    jq
+    awk
+    sort
+  </readCmds>
+
+  <listCmds>
+    ls
+    tree
+    du
+  </listCmds>
+
+  <writeCmds>
+    mv
+    cp
+    mkdir
+    touch
+    chmod
+  </writeCmds>
+
+  <dangerCmds>
+    rm
+    rmdir
+    dd
+    mkfs
+  </dangerCmds>
+
+  <state>
+    set_commands
+    set_selectedCmd
+    set_searchCount
+    set_readCount
+    set_listCount
+    set_writeCount
+    set_dangerCount
+    set_totalClassified
+    set_lastResult
+  </state>
+
+  <functions>
+    classifyOne requires item:
+      <if searchCmds.where(item.cmd) as match>
+        item.isSearch is true
+      </if>
+      <if readCmds.where(item.cmd) as match>
+        item.isRead is true
+      </if>
+      <if listCmds.where(item.cmd) as match>
+        item.isList is true
+      </if>
+      <if writeCmds.where(item.cmd) as match>
+        item.isWrite is true
+      </if>
+      <if dangerCmds.where(item.cmd) as match>
+        item.isDanger is true
+      </if>
+      item.classified is true
+
+    recount:
+      set_searchCount is commands.where(item.isSearch).length
+      set_readCount is commands.where(item.isRead).length
+      set_listCount is commands.where(item.isList).length
+      set_writeCount is commands.where(item.isWrite).length
+      set_dangerCount is commands.where(item.isDanger).length
+      set_totalClassified is commands.where(item.classified).length
+
+    classifyAndCount requires item:
+      classifyOne + recount
+
+    classifyAll:
+      <For each=commands>
+        classifyOne
+      </For>
+      recount
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Header>
+        <C.Title>Command Classifier</C.Title>
+        <C.Btn onPress=classifyAll>
+          <C.BtnLabel>Classify All</C.BtnLabel>
+        </C.Btn>
+      </C.Header>
+
+      <C.Row>
+        <C.Badge><C.DotBlue /><C.BadgeLabel>Search {searchCount}</C.BadgeLabel></C.Badge>
+        <C.Badge><C.DotGreen /><C.BadgeLabel>Read {readCount}</C.BadgeLabel></C.Badge>
+        <C.Badge><C.DotPurple /><C.BadgeLabel>List {listCount}</C.BadgeLabel></C.Badge>
+        <C.Badge><C.DotYellow /><C.BadgeLabel>Write {writeCount}</C.BadgeLabel></C.Badge>
+        <C.Badge><C.DotRed /><C.BadgeLabel>Danger {dangerCount}</C.BadgeLabel></C.Badge>
+      </C.Row>
+
+      <C.Scroll>
+        <For each=commands>
+          <Pressable onPress=classifyAndCount>
+            <C.ListItem>
+              <C.Col>
+                <if item.isDanger>
+                  <C.BodyDanger>{item.cmd}</C.BodyDanger>
+                </if>
+                <else>
+                  <C.Body>{item.cmd}</C.Body>
+                </else>
+
+                <if item.classified>
+                  <C.Row>
+                    <if item.isSearch>
+                      <C.TagBlue>SEARCH</C.TagBlue>
+                    </if>
+                    <if item.isRead>
+                      <C.TagGreen>READ</C.TagGreen>
+                    </if>
+                    <if item.isList>
+                      <C.TagPurple>LIST</C.TagPurple>
+                    </if>
+                    <if item.isWrite>
+                      <C.TagYellow>WRITE</C.TagYellow>
+                    </if>
+                    <if item.isDanger>
+                      <C.TagRed>DANGEROUS</C.TagRed>
+                    </if>
+                  </C.Row>
+                </if>
+                <else>
+                  <C.Hint>tap to classify</C.Hint>
+                </else>
+              </C.Col>
+            </C.ListItem>
+          </Pressable>
+        </For>
+      </C.Scroll>
+
+      <C.Hint>{totalClassified + '/8 classified'}</C.Hint>
+    </C.Page>
+  )
+</commandClassifier>

@@ -88,8 +88,7 @@ pub const EventHandler = struct {
 pub const GpuShaderDesc = struct { wgsl: []const u8 };
 pub const MenuItem = struct { label: []const u8, handler: *const fn () void };
 
-// EffectContext is opaque to carts — they never construct one
-pub const EffectContext = opaque {};
+pub const EffectContext = @import("effect_ctx.zig").EffectContext;
 pub const RenderFn = *const fn (*EffectContext) void;
 
 // ── Style ──────────────────────────────────────────────────────────

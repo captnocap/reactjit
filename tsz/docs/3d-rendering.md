@@ -82,4 +82,4 @@ Inline 3D elements in the 2D layout tree, rendered via wgpu to an offscreen text
 ## Scene readability tips
 - Give navigation scenes `showGrid` and `showAxes` so motion is legible immediately.
 - Set `style.backgroundColor` on `Scene3D`; the viewport now clears and fogs toward that color.
-- Use one obvious landmark near the origin before building larger worlds. `carts/flatworld/flatworld.app.tsz` is the current navigation reference.
+- Use one obvious landmark near the origin before building larger worlds. `carts/flatworld/flatworld.tsz` is the current navigation reference.

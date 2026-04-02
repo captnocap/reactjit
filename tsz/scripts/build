@@ -44,9 +44,9 @@ CONF_DB="conformance.db"
 IS_CONFORMANCE=0
 CONF_LANE="unknown"
 
-if [[ "$CART" == *carts/conformance/* ]]; then
+if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ "$CART" != *.cls.tsz ]] && [[ "$CART" != *.mod.tsz ]] && [[ "$CART" != *.c.tsz ]]; then
     IS_CONFORMANCE=1
-    # Lane = subdirectory under carts/conformance/, or "root"
+    # Lane = first subdirectory under carts/conformance/, or "root"
     CONF_REL="${CART#*carts/conformance/}"
     if [[ "$CONF_REL" == */* ]]; then
         CONF_LANE="${CONF_REL%%/*}"
@@ -54,22 +54,54 @@ if [[ "$CART" == *carts/conformance/* ]]; then
         CONF_LANE="root"
     fi
 
+    # Qualified test name: includes subdirectory to avoid collisions.
+    # e.g. "smith-test/counter" instead of just "counter"
+    CONF_BASENAME=$(basename "$CART" .tsz | sed 's/\.app$//')
+    CONF_LANE_REL="${CONF_REL%/*}"  # strip filename, keep subdirs under lane
+    if [[ "$CONF_REL" == */*/* ]]; then
+        # Has sub-subdirectory: lane/subdir/file → subdir/name
+        CONF_SUBPATH="${CONF_LANE_REL#*/}"
+        CONF_NAME="${CONF_SUBPATH}/${CONF_BASENAME}"
+    elif [[ "$CONF_REL" == */* ]]; then
+        # Direct child of lane: lane/file → name
+        CONF_NAME="$CONF_BASENAME"
+    else
+        # Root level
+        CONF_NAME="$CONF_BASENAME"
+    fi
+
+    # sqlite3 with busy timeout for parallel build safety
+    cdb() { sqlite3 "$CONF_DB" ".timeout 5000" "$1"; }
+
     # Ensure db + table exist
-    sqlite3 "$CONF_DB" "CREATE TABLE IF NOT EXISTS builds (
+    cdb "CREATE TABLE IF NOT EXISTS builds (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         test_name   TEXT    NOT NULL,
         lane        TEXT    NOT NULL,
-        built_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        built_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')),
         status      TEXT    NOT NULL,
         generated   TEXT,
         binary_sha  TEXT,
         binary_size INTEGER,
         error_log   TEXT,
-        verified_at TEXT
+        verified_at TEXT,
+        source_sha  TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_test_time ON builds(test_name, built_at DESC);
     CREATE INDEX IF NOT EXISTS idx_lane      ON builds(lane);
-    CREATE INDEX IF NOT EXISTS idx_status    ON builds(status);"
+    CREATE INDEX IF NOT EXISTS idx_status    ON builds(status);
+    CREATE TABLE IF NOT EXISTS source_overrides (
+        test_name     TEXT PRIMARY KEY,
+        source_sha    TEXT NOT NULL,
+        overridden_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS verified_sources (
+        test_name        TEXT PRIMARY KEY,
+        source_sha       TEXT NOT NULL,
+        verified_at      TEXT NOT NULL,
+        source_path      TEXT NOT NULL,
+        verified_build_id INTEGER
+    );"
 fi
 
 record_build() {
@@ -87,9 +119,14 @@ record_build() {
 
     # Truncate error log to 500 chars, escape single quotes for SQL
     error_log=$(printf '%s' "$error_log" | head -c 500 | sed "s/'/''/g")
+    # Escape all values for SQL safety
+    local safe_name=$(printf '%s' "$CONF_NAME" | sed "s/'/''/g")
+    local safe_lane=$(printf '%s' "$CONF_LANE" | sed "s/'/''/g")
+    local safe_sha=$(printf '%s' "$bin_sha" | sed "s/'/''/g")
+    local safe_src_sha=$(printf '%s' "$SOURCE_HASH" | sed "s/'/''/g")
 
-    sqlite3 "$CONF_DB" "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log)
-        VALUES ('$NAME', '$CONF_LANE', '$status', '$bin_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log');"
+    cdb "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log, source_sha)
+        VALUES ('$safe_name', '$safe_lane', '$status', '$safe_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log', '$safe_src_sha');"
 }
 
 # Pick optimize flag
@@ -97,6 +134,38 @@ if [ "$OPT" = "--debug" ]; then
     ZIG_OPT=""
 else
     ZIG_OPT="-Doptimize=ReleaseFast"
+fi
+
+# ── Source hash: baseline lock + tamper check ──────────────────────
+SOURCE_HASH=""
+if [ "$IS_CONFORMANCE" -eq 1 ]; then
+    SOURCE_HASH=$(sha256sum "$CART" | awk '{print $1}')
+
+    # Get the hash from the very first build of this test
+    SAFE_CONF_NAME=$(printf '%s' "$CONF_NAME" | sed "s/'/''/g")
+    BASELINE_HASH=$(cdb "SELECT source_sha FROM builds WHERE test_name = '$SAFE_CONF_NAME' AND source_sha IS NOT NULL AND source_sha != '' ORDER BY id ASC LIMIT 1;" 2>/dev/null || true)
+
+    if [ -n "$BASELINE_HASH" ] && [ "$SOURCE_HASH" != "$BASELINE_HASH" ]; then
+        # Check if human has overridden to accept this hash
+        OVERRIDE_HASH=$(cdb "SELECT source_sha FROM source_overrides WHERE test_name = '$SAFE_CONF_NAME';" 2>/dev/null || true)
+        if [ "$SOURCE_HASH" != "$OVERRIDE_HASH" ]; then
+            echo ""
+            echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            echo "  TAMPER DETECTED: $NAME"
+            echo ""
+            echo "  The source .tsz has changed since it was first built."
+            echo "  Baseline: $BASELINE_HASH"
+            echo "  Current:  $SOURCE_HASH"
+            echo ""
+            echo "  If the source change is legitimate, the HUMAN must run:"
+            echo "    ./scripts/conformance-report --override $NAME"
+            echo ""
+            echo "  DO NOT edit conformance test source files."
+            echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            echo ""
+            exit 1
+        fi
+    fi
 fi
 
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
@@ -141,7 +210,7 @@ fi
 LINT_FAIL=0
 LINT_WARN=0
 
-BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
+BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v 'evalExpr' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
 if [ -n "$BAD_QUOTES" ]; then
     echo "[$NAME] LINT FAIL: JS string leaked into Zig (single-quoted multi-char):"
     echo "$BAD_QUOTES"
@@ -182,6 +251,19 @@ if [ "$LINT_WARN" -eq 1 ]; then
 fi
 
 if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
+
+# ── Step 2b: flight check (source↔generated integrity) ─────────
+FLIGHT_GEN="$GEN_DIR"
+[ ! -d "$FLIGHT_GEN" ] && FLIGHT_GEN="$GEN_ROOT/generated_${NAME}.zig"
+if [ -e "$FLIGHT_GEN" ]; then
+    FLIGHT_EXIT=0
+    FLIGHT_OUT=$(./scripts/flight-check "$CART" "$FLIGHT_GEN" 2>&1) || FLIGHT_EXIT=$?
+    if [ "$FLIGHT_EXIT" -ne 0 ]; then
+        echo "$FLIGHT_OUT"
+        record_build "flight_fail" "$FLIGHT_OUT"
+        exit 1
+    fi
+fi
 
 # Resolve source: prefer split directory over monolith
 if [ -d "$GEN_DIR" ] && [ -f "$GEN_DIR/app.zig" ]; then

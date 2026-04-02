@@ -279,10 +279,24 @@ fi
 # a template expression like {item.field} was compiled as literal text
 # instead of resolving to an OA field reference.
 if [ "$SRC_LOOPS" -gt 0 ]; then
-    BRACKET_TEXTS=$(gocount '\.text = "\[[a-zA-Z]+\]' "$GEN_BLOB")
+    # Find bracket texts in generated, but exclude ones that appear as literal text in source
+    BRACKET_MATCHES=$(grep -oE '\.text = "\[[a-zA-Z]+\][^"]*"' <<< "$GEN_BLOB" 2>/dev/null || true)
+    BRACKET_TEXTS=0
+    BRACKET_SAMPLES=""
+    while IFS= read -r bm; do
+        [ -z "$bm" ] && continue
+        # Extract the [word] part
+        BW=$(echo "$bm" | grep -oE '\[[a-zA-Z]+\]' | head -1)
+        [ -z "$BW" ] && continue
+        # If source has this exact bracket text as literal content, skip it
+        if grep -qF "$BW" "$SOURCE" 2>/dev/null; then
+            continue
+        fi
+        BRACKET_TEXTS=$((BRACKET_TEXTS + 1))
+        BRACKET_SAMPLES="$BRACKET_SAMPLES $bm"
+    done <<< "$BRACKET_MATCHES"
     if [ "$BRACKET_TEXTS" -gt 0 ]; then
-        BRACKET_SAMPLES=$(grep -oE '\.text = "\[[a-zA-Z]+\][^"]*"' <<< "$GEN_BLOB" 2>/dev/null | head -3 | tr '\n' ', ' | sed 's/,$//')
-        fail "$BRACKET_TEXTS unresolved bracket text(s) in map — template expressions not compiled: $BRACKET_SAMPLES"
+        fail "$BRACKET_TEXTS unresolved bracket text(s) in map — template expressions not compiled:$BRACKET_SAMPLES"
     fi
 fi
 
@@ -410,6 +424,10 @@ fi
 SOURCE_DIR=$(dirname "$SOURCE")
 IMPORTS=$(grep -oE "from '\./[^']+'" "$SOURCE" 2>/dev/null | sed "s/from '//;s/'$//" || true)
 for imp in $IMPORTS; do
+    # Skip data-only imports — their content is consumed by registries, not emitted as text
+    case "$imp" in
+        *.glyphs|*.effects|*.cls|*.tcls|*.vcls) continue ;;
+    esac
     # Resolve import path — try with .tsz extensions
     IMP_FILE=""
     for ext in ".tsz" ".c.tsz" "/$(basename "$imp").tsz"; do

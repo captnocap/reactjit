@@ -26,7 +26,7 @@
 function detectChadBlock(source) {
   // Find the LAST matching block — forge prepends imports, main source is last.
   // We want the main entry block (app/page/widget/component), not an imported lib.
-  var re = /<(\w+)\s+(widget|page|app|component|lib)\s*>/g;
+  var re = /<(\w+)\s+(widget|page|app|component|lib|effect|glyph)\s*>/g;
   var match;
   var last = null;
   while ((match = re.exec(source)) !== null) {
@@ -52,8 +52,8 @@ function chadSourcePreflight(source, block) {
     return { ok: false, reason: 'missing closing tag ' + block.closeTag };
   }
 
-  // Lib blocks have no return() — they compose modules
-  if (block.type !== 'lib') {
+  // Lib/effect/glyph blocks have no return() — they define data, not UI
+  if (block.type !== 'lib' && block.type !== 'effect' && block.type !== 'glyph') {
     if (source.indexOf('return(') < 0 && source.indexOf('return (') < 0) {
       return { ok: false, reason: 'no return() found in ' + block.type + ' block' };
     }
@@ -339,6 +339,12 @@ function compileChadLane(source, tokens, file) {
   }
 
   if (!foundReturn) {
+    if (block.type === 'lib' || block.type === 'effect' || block.type === 'glyph') {
+      // Non-UI blocks — generate a minimal root with a label identifying the artifact
+      var label = block.name + '.' + block.type;
+      var stubRoot = '.{ .text = "' + label + '", .font_size = 12, .text_color = Color.rgb(0x80, 0x80, 0x80) }';
+      return finishParsedLane(stubRoot, file);
+    }
     return '// Smith error: no return() found in chad block <' + block.name + ' ' + block.type + '>\n' +
            'comptime { @compileError("No return() in <' + block.name + ' ' + block.type + '>"); }\n';
   }

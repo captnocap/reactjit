@@ -57,8 +57,8 @@ find_cart() {
         echo "$found"
         return
     fi
-    # Try .app.tsz
-    found=$(find carts/ -name "${name}.app.tsz" 2>/dev/null | head -1)
+    # Try .tsz
+    found=$(find carts/ -name "${name}.tsz" 2>/dev/null | head -1)
     if [ -n "$found" ]; then
         echo "$found"
         return

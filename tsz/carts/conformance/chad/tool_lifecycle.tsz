@@ -1,0 +1,237 @@
+// CONFORMANCE: Tool Lifecycle — chad-tier port of Claude Code tool execution system
+// Proves: <types> enum, <switch>/<case>, <during>, objects data block, requires,
+// composition, multi-state per-item, word comparisons, function guards with stop
+
+from './theme.cls'
+
+<toolLifecycle widget>
+  <var>
+    tools is objects
+    queuedCount is 8
+    runningCount is 0
+    completeCount is 0
+    errorCount is 0
+    selectedTool is 0
+    autoApprove is false
+    totalActions is 0
+    filterState exact types
+  </var>
+
+  <tools>
+    name: git status, kind: bash, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: Read package.json, kind: read, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: npm test, kind: bash, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: Search codebase, kind: agent, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: Edit src/app.ts, kind: edit, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: rm -rf dist/, kind: bash, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: docker build, kind: bash, state: queued, progress: 0, output: , errorKind: none, expanded: false
+    name: Review PR, kind: agent, state: queued, progress: 0, output: , errorKind: none, expanded: false
+  </tools>
+
+  <types>
+    <filterState>
+      all
+      queued
+      running
+      complete
+      error
+    </filterState>
+  </types>
+
+  <state>
+    set_tools
+    set_queuedCount
+    set_runningCount
+    set_completeCount
+    set_errorCount
+    set_selectedTool
+    set_autoApprove
+    set_totalActions
+    set_filterState exact filterState
+  </state>
+
+  <functions>
+    recount:
+      set_queuedCount is tools.where(item.state exact 'queued' or item.state exact 'permission').length
+      set_runningCount is tools.where(item.state exact 'running').length
+      set_completeCount is tools.where(item.state exact 'complete').length
+      set_errorCount is tools.where(item.state exact 'error').length
+
+    requestPermission requires item:
+      item.state is 'permission'
+      set_totalActions is totalActions + 1
+      recount
+
+    approve requires item:
+      item.state is 'running'
+      item.progress is 0
+      set_totalActions is totalActions + 1
+      recount
+
+    reject requires item:
+      item.state is 'error'
+      item.errorKind is 'rejected'
+      item.output is 'Permission denied by user'
+      set_totalActions is totalActions + 1
+      recount
+
+    advanceProgress requires item:
+      <if item.state not exact 'running'>
+        stop
+      </if>
+      item.progress is item.progress + 25
+      <if item.progress exact or above 100>
+        item.state is 'complete'
+        item.output is 'Completed successfully'
+        item.progress is 100
+      </if>
+      set_totalActions is totalActions + 1
+      recount
+
+    failTool requires item:
+      item.state is 'error'
+      item.errorKind is 'crashed'
+      item.output is 'Process exited with code 1'
+      set_totalActions is totalActions + 1
+      recount
+
+    timeoutTool requires item:
+      item.state is 'error'
+      item.errorKind is 'timeout'
+      item.output is 'Exceeded 120000ms timeout'
+      set_totalActions is totalActions + 1
+      recount
+
+    toggleExpand requires item:
+      item.expanded is not item.expanded
+
+    runAll:
+      <For each=tools>
+        <if item.state exact 'queued'>
+          <if autoApprove>
+            item.state is 'running'
+            item.progress is 0
+          </if>
+          <else>
+            item.state is 'permission'
+          </else>
+        </if>
+      </For>
+      set_totalActions is totalActions + 1
+      recount
+
+    resetAll:
+      <For each=tools>
+        item.state is 'queued'
+        item.progress is 0
+        item.output is ''
+        item.errorKind is 'none'
+        item.expanded is false
+      </For>
+      set_totalActions is totalActions + 1
+      recount
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Header>
+        <C.Title>Tool Lifecycle</C.Title>
+        <C.Row>
+          <Pressable onPress=runAll>
+            <C.BtnBlue><C.BtnLabel>Run All</C.BtnLabel></C.BtnBlue>
+          </Pressable>
+          <Pressable onPress=resetAll>
+            <C.BtnDim><C.BtnLabelDim>Reset</C.BtnLabelDim></C.BtnDim>
+          </Pressable>
+        </C.Row>
+      </C.Header>
+
+      <C.Row>
+        <Pressable onPress={set_filterState is 'all'}>
+          <C.FilterTab>All {queuedCount + runningCount + completeCount + errorCount}</C.FilterTab>
+        </Pressable>
+        <Pressable onPress={set_filterState is 'queued'}>
+          <C.FilterTab>Queued {queuedCount}</C.FilterTab>
+        </Pressable>
+        <Pressable onPress={set_filterState is 'running'}>
+          <C.FilterTab>Running {runningCount}</C.FilterTab>
+        </Pressable>
+        <Pressable onPress={set_filterState is 'complete'}>
+          <C.FilterTab>Done {completeCount}</C.FilterTab>
+        </Pressable>
+        <Pressable onPress={set_filterState is 'error'}>
+          <C.FilterTab>Errors {errorCount}</C.FilterTab>
+        </Pressable>
+      </C.Row>
+
+      <C.Scroll>
+        <For each=tools>
+          <if filterState exact 'all' or item.state exact filterState>
+            <Pressable onPress=toggleExpand>
+              <C.Card>
+                <C.Row>
+                  <C.KindIcon>{item.kind}</C.KindIcon>
+                  <C.Col>
+                    <C.Body>{item.name}</C.Body>
+                    <switch item.state>
+                      <case queued>
+                        <C.Hint>Queued</C.Hint>
+                      </case>
+                      <case permission>
+                        <C.BodyYellow>Awaiting Permission</C.BodyYellow>
+                      </case>
+                      <case running>
+                        <C.BodyBlue>Running {item.progress + '%'}</C.BodyBlue>
+                      </case>
+                      <case complete>
+                        <C.BodyGreen>Complete</C.BodyGreen>
+                      </case>
+                      <case error>
+                        <C.BodyRed>Error</C.BodyRed>
+                      </case>
+                    </switch>
+                  </C.Col>
+                </C.Row>
+
+                <during item.state exact 'permission'>
+                  <C.Row>
+                    <Pressable onPress=approve><C.BtnGreen><C.BtnLabel>Allow</C.BtnLabel></C.BtnGreen></Pressable>
+                    <Pressable onPress=reject><C.BtnRed><C.BtnLabel>Deny</C.BtnLabel></C.BtnRed></Pressable>
+                  </C.Row>
+                </during>
+
+                <during item.state exact 'running'>
+                  <C.ProgressTrack><C.ProgressFill /></C.ProgressTrack>
+                  <C.Row>
+                    <Pressable onPress=advanceProgress><C.BtnBlue><C.BtnLabel>Advance</C.BtnLabel></C.BtnBlue></Pressable>
+                    <Pressable onPress=failTool><C.BtnRed><C.BtnLabel>Fail</C.BtnLabel></C.BtnRed></Pressable>
+                    <Pressable onPress=timeoutTool><C.BtnYellow><C.BtnLabel>Timeout</C.BtnLabel></C.BtnYellow></Pressable>
+                  </C.Row>
+                </during>
+
+                <during item.expanded and item.output not exact ''>
+                  <C.OutputBox>
+                    <C.Mono>{item.output}</C.Mono>
+                    <switch item.errorKind>
+                      <case timeout>
+                        <C.HintYellow>timeout</C.HintYellow>
+                      </case>
+                      <case rejected>
+                        <C.HintRed>rejected</C.HintRed>
+                      </case>
+                      <case crashed>
+                        <C.HintRed>crashed</C.HintRed>
+                      </case>
+                    </switch>
+                  </C.OutputBox>
+                </during>
+              </C.Card>
+            </Pressable>
+          </if>
+        </For>
+      </C.Scroll>
+
+      <C.Hint>{totalActions + ' actions'}</C.Hint>
+    </C.Page>
+  )
+</toolLifecycle>

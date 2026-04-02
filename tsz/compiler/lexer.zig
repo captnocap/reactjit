@@ -470,10 +470,12 @@ pub const Lexer = struct {
 };
 
 fn isIdentStart(ch: u8) bool {
-    // Allow ASCII letters, underscore, dollar, AND any non-ASCII byte (>= 0x80).
+    // Allow ASCII letters, underscore, dollar, hash, AND any non-ASCII byte (>= 0x80).
+    // '#' must survive tokenization so JSX text like "# general" is not dropped as
+    // an unknown character before the text child parser slices it back out.
     // Non-ASCII bytes are UTF-8 continuation/lead bytes — treating them as
     // identifier characters keeps multi-byte Unicode text intact in the token stream.
-    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or ch == '_' or ch == '$' or ch >= 0x80;
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or ch == '_' or ch == '$' or ch == '#' or ch >= 0x80;
 }
 
 fn isIdentCont(ch: u8) bool {

@@ -1,0 +1,162 @@
+// CONFORMANCE: Message Dispatcher — chad-tier port of Claude Code Message.tsx
+// Proves: <types> enum, <switch>/<case> in return(), objects data block,
+// <For> with per-item type dispatch, <during> for verbose mode, requires
+
+from './theme.cls'
+
+<messageDispatch widget>
+  <var>
+    messages is objects
+    verboseMode is false
+    selectedMsg is 0
+    filterType exact types
+  </var>
+
+  <types>
+    <filterType>
+      all
+      assistant
+      user
+      thinking
+      tool
+      result
+      attachment
+      error
+      duration
+    </filterType>
+  </types>
+
+  <messages>
+    kind: assistant, content: Hello how can I help you today?, sender: assistant, time: 10:01, toolName: , errorCode: 0, thinkingText:
+    kind: user, content: Can you fix the auth bug?, sender: user, time: 10:02, toolName: , errorCode: 0, thinkingText:
+    kind: thinking, content: Let me look at the auth module, sender: assistant, time: 10:02, toolName: , errorCode: 0, thinkingText: The user wants me to fix an auth bug. Check middleware first.
+    kind: tool, content: cat src/auth/middleware.ts, sender: assistant, time: 10:03, toolName: Bash, errorCode: 0, thinkingText:
+    kind: result, content: export function authMiddleware(req res next), sender: tool, time: 10:03, toolName: Bash, errorCode: 0, thinkingText:
+    kind: attachment, content: screenshot.png, sender: system, time: 10:04, toolName: , errorCode: 0, thinkingText:
+    kind: error, content: Rate limit exceeded, sender: system, time: 10:05, toolName: , errorCode: 429, thinkingText:
+    kind: assistant, content: I found and fixed the issue with token validation., sender: assistant, time: 10:06, toolName: , errorCode: 0, thinkingText:
+    kind: duration, content: Turn completed in 4.2s, sender: system, time: 10:06, toolName: , errorCode: 0, thinkingText:
+    kind: error, content: Connection reset, sender: system, time: 10:07, toolName: , errorCode: 500, thinkingText:
+  </messages>
+
+  <state>
+    set_verboseMode
+    set_selectedMsg
+    set_filterType exact filterType
+  </state>
+
+  <functions>
+    toggleVerbose:
+      set_verboseMode is not verboseMode
+
+    selectMessage requires item:
+      set_selectedMsg is item
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Header>
+        <C.Title>Message Dispatcher</C.Title>
+        <Pressable onPress=toggleVerbose>
+          <if verboseMode>
+            <C.BtnPurple><C.BtnLabel>Verbose</C.BtnLabel></C.BtnPurple>
+          </if>
+          <else>
+            <C.BtnDim><C.BtnLabelDim>Normal</C.BtnLabelDim></C.BtnDim>
+          </else>
+        </Pressable>
+      </C.Header>
+
+      <C.Row>
+        <Pressable onPress={set_filterType is 'all'}><C.FilterTab>All</C.FilterTab></Pressable>
+        <Pressable onPress={set_filterType is 'assistant'}><C.FilterTab>Asst</C.FilterTab></Pressable>
+        <Pressable onPress={set_filterType is 'user'}><C.FilterTab>User</C.FilterTab></Pressable>
+        <Pressable onPress={set_filterType is 'tool'}><C.FilterTab>Tool</C.FilterTab></Pressable>
+        <Pressable onPress={set_filterType is 'error'}><C.FilterTab>Error</C.FilterTab></Pressable>
+      </C.Row>
+
+      <C.Scroll>
+        <For each=messages>
+          <if filterType exact 'all' or item.kind exact filterType>
+            <Pressable onPress=selectMessage>
+              <switch item.kind>
+                <case assistant>
+                  <C.MsgAssistant>
+                    <C.Row><C.DotPurple /><C.LabelPurple>Assistant</C.LabelPurple><C.Hint>{item.time}</C.Hint></C.Row>
+                    <C.Body>{item.content}</C.Body>
+                  </C.MsgAssistant>
+                </case>
+
+                <case user>
+                  <C.MsgUser>
+                    <C.Row><C.DotBlue /><C.LabelBlue>User</C.LabelBlue><C.Hint>{item.time}</C.Hint></C.Row>
+                    <C.Body>{item.content}</C.Body>
+                  </C.MsgUser>
+                </case>
+
+                <case thinking>
+                  <C.MsgThinking>
+                    <C.Row><C.LabelPurple>Thinking</C.LabelPurple><C.Hint>{item.time}</C.Hint></C.Row>
+                    <C.BodyDim>{item.content}</C.BodyDim>
+                    <during verboseMode>
+                      <C.OutputBox><C.Mono>{item.thinkingText}</C.Mono></C.OutputBox>
+                    </during>
+                  </C.MsgThinking>
+                </case>
+
+                <case tool>
+                  <C.MsgTool>
+                    <C.Row><C.ToolBadge>{item.toolName}</C.ToolBadge><C.Hint>{item.time}</C.Hint></C.Row>
+                    <C.Mono>{item.content}</C.Mono>
+                  </C.MsgTool>
+                </case>
+
+                <case result>
+                  <C.MsgResult>
+                    <C.Row><C.Hint>{item.toolName + ' result'}</C.Hint><C.Hint>{item.time}</C.Hint></C.Row>
+                    <C.OutputBox><C.Mono>{item.content}</C.Mono></C.OutputBox>
+                    <during verboseMode>
+                      <C.Hint>{item.content.length + ' chars'}</C.Hint>
+                    </during>
+                  </C.MsgResult>
+                </case>
+
+                <case attachment>
+                  <C.MsgAttachment>
+                    <C.Row><C.ImgPlaceholder>IMG</C.ImgPlaceholder><C.Body>{item.content}</C.Body><C.Hint>{item.time}</C.Hint></C.Row>
+                  </C.MsgAttachment>
+                </case>
+
+                <case error>
+                  <if item.errorCode exact 429>
+                    <C.MsgWarn>
+                      <C.Row><C.BodyYellow>Error</C.BodyYellow><C.Hint>{'code: ' + item.errorCode}</C.Hint><C.Hint>{item.time}</C.Hint></C.Row>
+                      <C.BodyYellow>{item.content}</C.BodyYellow>
+                      <C.HintYellow>Rate limited — will retry</C.HintYellow>
+                    </C.MsgWarn>
+                  </if>
+                  <else>
+                    <C.MsgError>
+                      <C.Row><C.BodyRed>Error</C.BodyRed><C.Hint>{'code: ' + item.errorCode}</C.Hint><C.Hint>{item.time}</C.Hint></C.Row>
+                      <C.BodyRed>{item.content}</C.BodyRed>
+                    </C.MsgError>
+                  </else>
+                </case>
+
+                <case duration>
+                  <C.MsgDivider>
+                    <C.Divider />
+                    <C.Hint>{item.content}</C.Hint>
+                    <C.Divider />
+                  </C.MsgDivider>
+                </case>
+              </switch>
+            </Pressable>
+          </if>
+        </For>
+      </C.Scroll>
+
+      <C.Hint>{messages.length + ' messages · verbose: ' + verboseMode}</C.Hint>
+    </C.Page>
+  )
+</messageDispatch>

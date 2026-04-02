@@ -49,6 +49,7 @@ function parseJSXElement(c) {
   };
   const effectiveTag = elementState.effectiveTag;
 
+  var hasLiteralProp = false;
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
     if (c.kind() === TK.identifier) {
       const attr = c.text();
@@ -56,13 +57,21 @@ function parseJSXElement(c) {
       if (c.kind() === TK.equals) {
         c.advance();
         parseElementAttr(c, attr, rawTag, attrState);
+      } else if (attr === 'l') {
+        // Bare `l` prop — literal text mode, skip glyph resolution
+        hasLiteralProp = true;
       }
     } else { c.advance(); }
   }
+  attrState._literalText = hasLiteralProp;
 
   finalizeElementAttrState(rawTag, clsDef, clsName, attrState);
 
-  return finishParsedElement(
+  // Set literal text mode for children if `l` prop is present
+  var prevLiteral = ctx._literalTextMode;
+  if (attrState._literalText) ctx._literalTextMode = true;
+
+  var result = finishParsedElement(
     c,
     rawTag,
     effectiveTag,
@@ -73,6 +82,9 @@ function parseJSXElement(c) {
     clsDef,
     tagSrcOffset
   );
+
+  ctx._literalTextMode = prevLiteral;
+  return result;
 }
 
 function parseChildren(c) {

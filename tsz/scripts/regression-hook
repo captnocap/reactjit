@@ -1,7 +1,7 @@
 #!/bin/bash
 # Post-commit regression hook.
 # Fires ONLY when compiler or engine files changed in the commit.
-# Runs conformance rescan and reports regressions vs the prior baseline.
+# Delegates to `ledger run all` for builds, then diffs against the prior baseline.
 #
 # Install:  ln -sf ../../tsz/scripts/regression-hook .git/hooks/post-commit
 # Manual:   scripts/regression-hook [commit-sha]
@@ -25,8 +25,10 @@ COMMIT_MSG=$(git log -1 --format='%s' "$COMMIT" 2>/dev/null || echo "manual run"
 TRIGGER_PATHS=(
     "compiler/"
     "framework/"
+    "runtime/"
     "scripts/build"
     "scripts/link.lua"
+    "*.zig"
 )
 
 changed_files=$(git diff-tree --no-commit-id --name-only -r "$COMMIT" 2>/dev/null || echo "")
@@ -48,106 +50,65 @@ if [ "$should_run" -eq 0 ]; then
     exit 0
 fi
 
-echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  Regression scan triggered by: $COMMIT_SHA              "
-echo "║  $COMMIT_MSG"
-echo "╚══════════════════════════════════════════════════════════╝"
-echo ""
+printf "\n"
+printf "╔══════════════════════════════════════════════════════════╗\n"
+printf "║  Regression scan: %-37s  ║\n" "$COMMIT_SHA"
+printf "║  %-55s ║\n" "${COMMIT_MSG:0:55}"
+printf "╚══════════════════════════════════════════════════════════╝\n"
+printf "\n"
 
-# ── Snapshot the current baseline ─────────────────────────────
+# ── Snapshot the current baseline (by id, not timestamp) ──────
 
-# Get current pass/fail state per test before we rebuild
-BASELINE_PASS=$(sqlite3 "$DB" "
-    SELECT test_name FROM (
-        SELECT test_name, status,
-               ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
-        FROM builds
-    ) WHERE rn = 1 AND status = 'compiled'
+BASELINE_PASS=$(sqlite3 "$DB" ".timeout 5000" "
+    SELECT test_name FROM builds
+    WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+      AND status = 'compiled'
     ORDER BY test_name;
 " 2>/dev/null || echo "")
 
-BASELINE_FAIL=$(sqlite3 "$DB" "
-    SELECT test_name FROM (
-        SELECT test_name, status,
-               ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
-        FROM builds
-    ) WHERE rn = 1 AND status != 'compiled'
+BASELINE_FAIL=$(sqlite3 "$DB" ".timeout 5000" "
+    SELECT test_name FROM builds
+    WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+      AND status != 'compiled'
     ORDER BY test_name;
 " 2>/dev/null || echo "")
 
-# ── Run the full conformance sweep ────────────────────────────
+# ── Run the full conformance sweep via ledger ─────────────────
+# Single source of truth: ledger handles building + db recording.
 
-echo "Running conformance sweep..."
+echo "Running conformance sweep via ledger..."
 echo ""
 
-# Build all tests silently, just collect results
-pass=0
-fail=0
-total=0
-declare -A RESULTS=()
-
-for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad carts/conformance/lscript carts/conformance; do
-    [ -d "$dir" ] || continue
-    for f in "$dir"/*.tsz; do
-        [ -f "$f" ] || continue
-        bn=$(basename "$f")
-        case "$bn" in
-            *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
-        esac
-
-        name=$(basename "$f" .tsz)
-        lane="shared"
-        case "$dir" in
-            *soup*) lane="soup" ;; *mixed*) lane="mixed" ;; *chad*) lane="chad" ;; *lscript*) lane="lscript" ;;
-        esac
-
-        total=$((total + 1))
-        gen_file="/tmp/tsz-gen/generated_${name}.zig"
-        binary="zig-out/bin/$name"
-
-        rm -f "$gen_file" "$binary"
-        build_out=$(scripts/build "$f" 2>&1) || true
-
-        if [ -f "$binary" ]; then
-            RESULTS["$name"]="compiled"
-            pass=$((pass + 1))
-
-            # Stamp into DB with commit context + size
-            sha=$(sha256sum "$binary" | cut -d' ' -f1)
-            bsize=$(stat -c%s "$binary")
-            gen=""
-            [ -f "$gen_file" ] && gen=$(cat "$gen_file" | sed "s/'/''/g")
-
-            # Check for bloat (>30% growth)
-            build_status="compiled"
-            prev_size=$(sqlite3 "$DB" "SELECT binary_size FROM builds
-                        WHERE test_name = '$name' AND status = 'compiled' AND binary_size > 0
-                        ORDER BY built_at DESC LIMIT 1;" 2>/dev/null || echo "0")
-            prev_size="${prev_size:-0}"
-            if [ "$prev_size" -gt 0 ]; then
-                growth=$(( (bsize - prev_size) * 100 / prev_size ))
-                if [ "$growth" -gt 30 ]; then
-                    build_status="bloated"
-                    RESULTS["$name"]="bloated"
-                fi
-            fi
-
-            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha, binary_size)
-                           VALUES ('$name', '$lane', '$build_status', '$gen', '$sha', $bsize);"
-        else
-            local_status="forge_fail"
-            [ -f "$gen_file" ] && local_status="zig_fail"
-            grep -q "PREFLIGHT BLOCKED" "$gen_file" 2>/dev/null && local_status="preflight_blocked"
-            RESULTS["$name"]="$local_status"
-            fail=$((fail + 1))
-
-            err=$(echo "$build_out" | head -c 500 | sed "s/'/''/g")
-            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, error_log)
-                           VALUES ('$name', '$lane', '$local_status', '$err');"
+if [ -x "$LEDGER" ]; then
+    "$LEDGER" run all >/dev/null 2>&1 || true
+else
+    # Fallback: build each cart individually via scripts/build
+    fail_count=0
+    for f in $(find carts/conformance -name "*.tsz" \
+        ! -name "*.script.tsz" ! -name "*.cls.tsz" \
+        ! -name "*.mod.tsz" ! -name "*.c.tsz" -type f | sort); do
+        scripts/build "$f" >/dev/null 2>&1 || true
+        # Early abort on catastrophic failure
+        fail_count=$((fail_count + 1))
+        current_fails=$(sqlite3 "$DB" ".timeout 5000" "
+            SELECT COUNT(*) FROM builds
+            WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+              AND status != 'compiled';" 2>/dev/null || echo "0")
+        if [ "$current_fails" -gt 50 ] && [ "$fail_count" -gt 60 ]; then
+            echo "Catastrophic failure ($current_fails tests failing), aborting early."
+            break
         fi
     done
-done
+fi
+
+# ── Query new state from db ───────────────────────────────────
+
+NEW_STATE=$(sqlite3 "$DB" ".timeout 5000" "
+    SELECT test_name, status, binary_size, substr(error_log, 1, 120)
+    FROM builds
+    WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+    ORDER BY test_name;
+" 2>/dev/null || echo "")
 
 # ── Compute diff ──────────────────────────────────────────────
 
@@ -156,15 +117,32 @@ still_broken=()
 newly_fixed=()
 bloated=()
 stable=0
+total=0
 
-for name in "${!RESULTS[@]}"; do
-    status="${RESULTS[$name]}"
+while IFS='|' read -r name status bsize err; do
+    [ -z "$name" ] && continue
+    total=$((total + 1))
+
     was_passing=$(echo "$BASELINE_PASS" | grep -c "^${name}$" || true)
     was_failing=$(echo "$BASELINE_FAIL" | grep -c "^${name}$" || true)
 
     if [ "$status" = "bloated" ]; then
         bloated+=("$name")
     elif [ "$status" = "compiled" ]; then
+        # Check for bloat (>30% growth)
+        prev_size=$(sqlite3 "$DB" ".timeout 5000" "
+            SELECT binary_size FROM builds
+            WHERE test_name = '${name//\'/\'\'}' AND status = 'compiled' AND binary_size > 0
+              AND id < (SELECT MAX(id) FROM builds WHERE test_name = '${name//\'/\'\'}')
+            ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
+        prev_size="${prev_size:-0}"
+        if [ "$prev_size" -gt 0 ] && [ "${bsize:-0}" -gt 0 ]; then
+            growth=$(awk "BEGIN {printf \"%d\", (($bsize - $prev_size) * 100) / $prev_size}")
+            if [ "$growth" -gt 30 ]; then
+                bloated+=("$name (+${growth}%)")
+            fi
+        fi
+
         if [ "$was_failing" -gt 0 ]; then
             newly_fixed+=("$name")
         else
@@ -172,25 +150,27 @@ for name in "${!RESULTS[@]}"; do
         fi
     else
         if [ "$was_passing" -gt 0 ]; then
-            newly_regressed+=("$name ($status)")
+            # Include error context for regressions
+            err_line=$(echo "$err" | grep -oP 'error:.*' | head -1)
+            newly_regressed+=("$name ($status)${err_line:+: $err_line}")
         else
             still_broken+=("$name")
         fi
     fi
-done
+done <<< "$NEW_STATE"
 
 # ── Report ────────────────────────────────────────────────────
 
 echo ""
 echo "┌──────────────────────────────────────────────────────────┐"
-echo "│  Regression Report for $COMMIT_SHA"
-echo "│  $total tests scanned"
+printf "│  Regression Report for %-33s  │\n" "$COMMIT_SHA"
+printf "│  %d tests scanned%*s│\n" "$total" $((39 - ${#total})) ""
 echo "├──────────────────────────────────────────────────────────┤"
-printf "│  %3d newly regressed\n" "${#newly_regressed[@]}"
-printf "│  %3d bloated (>30%% size jump)\n" "${#bloated[@]}"
-printf "│  %3d still broken from before\n" "${#still_broken[@]}"
-printf "│  %3d newly compiling\n" "${#newly_fixed[@]}"
-printf "│  %3d unchanged/stable\n" "$stable"
+printf "│  %3d newly regressed                                    │\n" "${#newly_regressed[@]}"
+printf "│  %3d bloated (>30%% size jump)                           │\n" "${#bloated[@]}"
+printf "│  %3d still broken from before                           │\n" "${#still_broken[@]}"
+printf "│  %3d newly compiling                                    │\n" "${#newly_fixed[@]}"
+printf "│  %3d unchanged/stable                                   │\n" "$stable"
 echo "└──────────────────────────────────────────────────────────┘"
 
 if [ ${#newly_regressed[@]} -gt 0 ]; then

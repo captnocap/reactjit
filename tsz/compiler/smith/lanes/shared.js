@@ -42,6 +42,22 @@ function finishParsedLane(nodeExpr, file, opts) {
 
   ctx._preflight = pf;
 
+  // Emit glyph resolution report
+  if (ctx._glyphLog && ctx._glyphLog.length > 0) {
+    var hasResolved = false;
+    for (var gi = 0; gi < ctx._glyphLog.length; gi++) {
+      print(ctx._glyphLog[gi]);
+      if (ctx._glyphLog[gi].indexOf('resolved') >= 0) hasResolved = true;
+    }
+    if (hasResolved) {
+      var glyphNames = Object.keys(ctx._glyphRegistry || {});
+      print("hint: to use as literal text, add 'l' prop: <C.Body l>");
+      if (glyphNames.length > 0) {
+        print('hint: registered glyphs: ' + glyphNames.join(', '));
+      }
+    }
+  }
+
   var zigOut = emitOutput(nodeExpr, file);
   if (opts.logEmit) {
     LOG_EMIT('L003', { bytes: zigOut.length });

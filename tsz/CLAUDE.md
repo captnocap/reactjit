@@ -140,6 +140,10 @@ Every `scripts/build` run on a `carts/conformance/` cart auto-records to `confor
 ./scripts/conformance-report --untested
 ```
 
+**DO NOT run `--verify`, `--verified`, or `--override`.** Human verification is a manual process only. See `docs/CONFORMANCE_VERIFY.md` for the human workflow.
+
+**DO NOT edit verified test sources.** The build script will detect source hash changes on verified tests and block the build with `TAMPER DETECTED`. Only the human can run `--override` to accept a legitimate source change. If your build is blocked by a tamper check, STOP and tell the user.
+
 ## File Length Limit (ENFORCED)
 
 **Max 1600 lines per `.zig` or `.tsz` file.** Enforced by `scripts/check-file-length.sh`. If a file is over 1600 lines, the build fails. Split the file — never raise the limit.

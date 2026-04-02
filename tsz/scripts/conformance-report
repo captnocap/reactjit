@@ -29,6 +29,10 @@ disk_tests() {
         ! -name "*.cls.tsz" \
         ! -name "*.mod.tsz" \
         ! -name "*.c.tsz" \
+        ! -name "*.effects.tsz" \
+        ! -name "*.glyphs.tsz" \
+        ! -name "*.tcls.tsz" \
+        ! -name "*.vcls.tsz" \
         -type f
 }
 
@@ -42,7 +46,27 @@ lane_from_path() {
 }
 
 name_from_path() {
-    basename "$1" .tsz | sed 's/\.app$//'
+    # Qualified name: includes subdirectory under lane to avoid collisions.
+    # e.g. "carts/conformance/mixed/smith-test/counter.tsz" → "smith-test/counter"
+    # e.g. "carts/conformance/mixed/d01_nested_maps.tsz" → "d01_nested_maps"
+    local rel="${1#*carts/conformance/}"
+    local lane="${rel%%/*}"
+    local rest="${rel#*/}"
+    local base=$(basename "$rest" .tsz | sed 's/\.app$//')
+    # If rest still has a subdirectory, include it
+    local subdir=$(dirname "$rest")
+    if [ "$subdir" != "." ] && [[ "$subdir" == */* ]]; then
+        # Has sub-subdirectory under lane: lane/subdir/file
+        local subpath="${subdir#*/}"
+        echo "${subpath}/${base}"
+    else
+        echo "$base"
+    fi
+}
+
+# Escape a value for safe SQL interpolation (double single quotes)
+sql_escape() {
+    printf '%s' "$1" | sed "s/'/''/g"
 }
 
 MODE="${1:---summary}"
@@ -57,8 +81,9 @@ case "$MODE" in
         fi
 
         # Check test exists in db
+        SAFE_TNAME=$(sql_escape "$TNAME")
         LATEST_ID=$(sqlite3 "$DB" \
-            "SELECT id FROM builds WHERE test_name = '$TNAME' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+            "SELECT id FROM builds WHERE test_name = '$SAFE_TNAME' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
         if [ -z "$LATEST_ID" ]; then
             echo "No build found for '$TNAME'. Run a build first."
             exit 1
@@ -70,9 +95,26 @@ case "$MODE" in
             exit 1
         fi
 
-        # Mark as verified
-        NOW=$(date -u +"%Y-%m-%d %H:%M:%S")
-        sqlite3 "$DB" "UPDATE builds SET verified_at = '$NOW' WHERE id = $LATEST_ID;"
+        # Find source .tsz on disk
+        SOURCE_PATH=$(disk_tests | while read -r p; do
+            n=$(name_from_path "$p")
+            if [ "$n" = "$TNAME" ]; then echo "$p"; break; fi
+        done)
+        if [ -z "$SOURCE_PATH" ]; then
+            echo "Cannot find source .tsz for '$TNAME' on disk."
+            exit 1
+        fi
+
+        # Mark as verified + lock source hash + record which build was verified
+        NOW=$(date +"%Y-%m-%d %I:%M:%S %p")
+        SOURCE_HASH=$(sha256sum "$SOURCE_PATH" | awk '{print $1}')
+        SAFE_SOURCE_PATH=$(sql_escape "$SOURCE_PATH")
+        sqlite3 "$DB" ".timeout 5000" "UPDATE builds SET verified_at = '$NOW' WHERE id = $LATEST_ID;"
+        sqlite3 "$DB" ".timeout 5000" "INSERT OR REPLACE INTO verified_sources (test_name, source_sha, verified_at, source_path, verified_build_id)
+            VALUES ('$SAFE_TNAME', '$SOURCE_HASH', '$NOW', '$SAFE_SOURCE_PATH', $LATEST_ID);"
+
+        echo "LOCKED: $SOURCE_PATH"
+        echo "  SHA256: $SOURCE_HASH"
 
         # Snapshot generated code
         GEN_ROOT="/tmp/tsz-gen"
@@ -97,17 +139,72 @@ case "$MODE" in
         fi
         ;;
 
+    --override)
+        TNAME="${2:-}"
+        if [ -z "$TNAME" ]; then
+            echo "Usage: conformance-report --override <test_name>"
+            echo "Accepts the current source hash as the new baseline."
+            exit 1
+        fi
+
+        # Find source .tsz on disk
+        SOURCE_PATH=$(disk_tests | while read -r p; do
+            n=$(name_from_path "$p")
+            if [ "$n" = "$TNAME" ]; then echo "$p"; break; fi
+        done)
+        if [ -z "$SOURCE_PATH" ]; then
+            echo "Cannot find source .tsz for '$TNAME' on disk."
+            exit 1
+        fi
+
+        # Get baseline hash from first build
+        SAFE_TNAME=$(sql_escape "$TNAME")
+        BASELINE=$(sqlite3 "$DB" ".timeout 5000" \
+            "SELECT source_sha FROM builds WHERE test_name = '$SAFE_TNAME' AND source_sha IS NOT NULL AND source_sha != '' ORDER BY id ASC LIMIT 1;" 2>/dev/null || true)
+        NEW_HASH=$(sha256sum "$SOURCE_PATH" | awk '{print $1}')
+
+        if [ -z "$BASELINE" ]; then
+            echo "'$TNAME' has no builds yet. Run a build first."
+            exit 1
+        fi
+
+        if [ "$BASELINE" = "$NEW_HASH" ]; then
+            echo "Source matches baseline — no override needed."
+            exit 0
+        fi
+
+        NOW=$(date +"%Y-%m-%d %I:%M:%S %p")
+        sqlite3 "$DB" ".timeout 5000" \
+            "INSERT OR REPLACE INTO source_overrides (test_name, source_sha, overridden_at)
+             VALUES ('$SAFE_TNAME', '$NEW_HASH', '$NOW');"
+        echo "OVERRIDE: $TNAME"
+        echo "  Baseline: $BASELINE"
+        echo "  Accepted: $NEW_HASH"
+        echo "  Source change accepted at $NOW"
+        ;;
+
     --verified)
         echo ""
-        printf "%-35s %-12s %-20s %s\n" "TEST" "LANE" "VERIFIED" "BUILT"
-        printf "%-35s %-12s %-20s %s\n" "---" "----" "--------" "-----"
-        sqlite3 "$DB" \
-            "SELECT b.test_name, b.lane, b.verified_at, b.built_at
-             FROM builds b
-             WHERE b.verified_at IS NOT NULL
-               AND b.id IN (SELECT MAX(id) FROM builds WHERE verified_at IS NOT NULL GROUP BY test_name)
-             ORDER BY b.verified_at DESC;" | while IFS='|' read -r name lane verified built; do
-            printf "%-35s %-12s %-20s %s\n" "$name" "$lane" "$verified" "$built"
+        printf "%-30s %-10s %-20s %-20s %s\n" "TEST" "LANE" "FIRST BUILT" "VERIFIED BUILD" "LAST BUILD"
+        printf "%-30s %-10s %-20s %-20s %s\n" "---" "----" "-----------" "--------------" "----------"
+        sqlite3 "$DB" ".timeout 5000" \
+            "SELECT v.test_name, v.source_path,
+                    first.built_at,
+                    v.verified_at,
+                    latest.built_at
+             FROM verified_sources v
+             LEFT JOIN builds first ON first.test_name = v.test_name
+               AND first.id = (SELECT MIN(id) FROM builds WHERE test_name = v.test_name)
+             LEFT JOIN builds latest ON latest.test_name = v.test_name
+               AND latest.id = (SELECT MAX(id) FROM builds WHERE test_name = v.test_name)
+             ORDER BY v.verified_at DESC;" | while IFS='|' read -r name spath first_built verified_at last_built; do
+            rel="${spath#*carts/conformance/}"
+            if [[ "$rel" == */* ]]; then
+                lane="${rel%%/*}"
+            else
+                lane="root"
+            fi
+            printf "%-30s %-10s %-20s %-20s %s\n" "$name" "$lane" "${first_built:--}" "${verified_at:--}" "${last_built:--}"
         done
         ;;
 
@@ -118,9 +215,10 @@ case "$MODE" in
         disk_tests | while read -r path; do
             tname=$(name_from_path "$path")
             lane=$(lane_from_path "$path")
+            safe_tname=$(sql_escape "$tname")
             row=$(sqlite3 "$DB" \
                 "SELECT status, built_at, verified_at FROM builds
-                 WHERE test_name = '$tname'
+                 WHERE test_name = '$safe_tname'
                  ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
             if [ -n "$row" ]; then
                 status=$(echo "$row" | cut -d'|' -f1)
@@ -145,9 +243,10 @@ case "$MODE" in
         disk_tests | while read -r path; do
             tname=$(name_from_path "$path")
             lane=$(lane_from_path "$path")
+            safe_tname=$(sql_escape "$tname")
             row=$(sqlite3 "$DB" \
                 "SELECT status, substr(error_log, 1, 80) FROM builds
-                 WHERE test_name = '$tname'
+                 WHERE test_name = '$safe_tname'
                  ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
             if [ -n "$row" ]; then
                 status=$(echo "$row" | cut -d'|' -f1)
@@ -169,7 +268,8 @@ case "$MODE" in
         disk_tests | while read -r path; do
             tname=$(name_from_path "$path")
             lane=$(lane_from_path "$path")
-            exists=$(sqlite3 "$DB" "SELECT COUNT(*) FROM builds WHERE test_name = '$tname';" 2>/dev/null || echo "0")
+            safe_tname=$(sql_escape "$tname")
+            exists=$(sqlite3 "$DB" "SELECT COUNT(*) FROM builds WHERE test_name = '$safe_tname';" 2>/dev/null || echo "0")
             if [ "$exists" = "0" ]; then
                 printf "  %-35s %s\n" "$tname" "$lane"
             fi
@@ -193,9 +293,10 @@ case "$MODE" in
             tname=$(name_from_path "$path")
             lane=$(lane_from_path "$path")
             [ "$lane" != "$LANE_FILTER" ] && continue
+            safe_tname=$(sql_escape "$tname")
             row=$(sqlite3 "$DB" \
                 "SELECT status, built_at, verified_at FROM builds
-                 WHERE test_name = '$tname'
+                 WHERE test_name = '$safe_tname'
                  ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
             if [ -n "$row" ]; then
                 status=$(echo "$row" | cut -d'|' -f1)
@@ -229,13 +330,12 @@ case "$MODE" in
              WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
                AND status != 'compiled';")
         DB_VERIFIED=$(sqlite3 "$DB" \
-            "SELECT COUNT(DISTINCT test_name) FROM builds
-             WHERE verified_at IS NOT NULL;")
+            "SELECT COUNT(DISTINCT test_name) FROM verified_sources;")
         DB_TOTAL=$((DB_COMPILED + DB_FAILED))
         UNTESTED=$((DISK_TOTAL - DB_TOTAL))
         [ "$UNTESTED" -lt 0 ] && UNTESTED=0
 
-        LATEST=$(sqlite3 "$DB" "SELECT MAX(built_at) FROM builds;")
+        LATEST=$(sqlite3 "$DB" "SELECT built_at FROM builds ORDER BY id DESC LIMIT 1;")
 
         echo "=== CONFORMANCE REPORT ==="
         echo ""
@@ -264,18 +364,20 @@ case "$MODE" in
                 tname=$(name_from_path "$path")
                 plane=$(lane_from_path "$path")
                 [ "$plane" != "$lane" ] && continue
+                safe_tname=$(sql_escape "$tname")
                 row=$(sqlite3 "$DB" \
                     "SELECT status, verified_at FROM builds
-                     WHERE test_name = '$tname'
+                     WHERE test_name = '$safe_tname'
                      ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
                 if [ -z "$row" ]; then
                     untested=$((untested + 1))
                 else
                     s=$(echo "$row" | cut -d'|' -f1)
-                    v=$(echo "$row" | cut -d'|' -f2)
                     if [ "$s" = "compiled" ]; then
                         compiled=$((compiled + 1))
-                        [ -n "$v" ] && verified=$((verified + 1))
+                        v=$(sqlite3 "$DB" \
+                            "SELECT COUNT(*) FROM verified_sources WHERE test_name = '$safe_tname';" 2>/dev/null || echo "0")
+                        [ "$v" -gt 0 ] && verified=$((verified + 1))
                     else
                         failed=$((failed + 1))
                     fi

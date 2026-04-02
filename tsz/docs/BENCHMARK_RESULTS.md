@@ -10,7 +10,7 @@ Real subsystem performance measurements for the tsz framework.
 
 ## 1. Layout Benchmark
 
-**Cart:** `carts/benchmarks/layout-bench.app.tsz`
+**Cart:** `carts/benchmarks/layout-bench.tsz`
 **Method:** `.map()` over object array that grows every 4s. Each item = 4 layout nodes (row + 3 children). Telemetry via script block at 200ms.
 
 | Tier | Items | Nodes | Visible | FPS | Layout (us) | Paint (us) |
@@ -28,7 +28,7 @@ Real subsystem performance measurements for the tsz framework.
 
 ## 2. Render Benchmark
 
-**Cart:** `carts/benchmarks/render-bench.app.tsz`
+**Cart:** `carts/benchmarks/render-bench.tsz`
 **Method:** `.map()` over array of colored rects with `borderRadius: 4` in a `flexWrap` grid. Grows every 4s.
 
 | Tier | Rects | Visible | FPS | Layout (us) | Paint (us) |
@@ -46,7 +46,7 @@ Real subsystem performance measurements for the tsz framework.
 
 ## 3. State Benchmark
 
-**Cart:** `carts/benchmarks/state-bench.app.tsz`
+**Cart:** `carts/benchmarks/state-bench.tsz`
 **Method:** `setInterval(tick, 16)` calls N `setState` per tick via JS bridge. N increases every 4s: 10→50→200→1000→5000.
 
 | Tier | Calls/tick | Bridge calls/sec | FPS | Layout (us) | Paint (us) |
@@ -65,7 +65,7 @@ Real subsystem performance measurements for the tsz framework.
 
 ## 4. Script Benchmark
 
-**Cart:** `carts/benchmarks/script-bench.app.tsz`
+**Cart:** `carts/benchmarks/script-bench.tsz`
 **Method:** `setInterval` at decreasing frequencies: 16ms→8ms→4ms→2ms→1ms, with 100 setState calls per tick. Measures interval drift and total throughput.
 
 | Tier | Interval | Bridge calls/sec | FPS | Notes |
@@ -109,10 +109,10 @@ Real subsystem performance measurements for the tsz framework.
 cd ~/creative/reactjit
 
 # Build
-bin/tsz build tsz/carts/benchmarks/layout-bench.app.tsz
-bin/tsz build tsz/carts/benchmarks/render-bench.app.tsz
-bin/tsz build tsz/carts/benchmarks/state-bench.app.tsz
-bin/tsz build tsz/carts/benchmarks/script-bench.app.tsz
+bin/tsz build tsz/carts/benchmarks/layout-bench.tsz
+bin/tsz build tsz/carts/benchmarks/render-bench.tsz
+bin/tsz build tsz/carts/benchmarks/state-bench.tsz
+bin/tsz build tsz/carts/benchmarks/script-bench.tsz
 
 # Run (30s each, redirect to file for capture)
 timeout 30 ./tsz/zig-out/bin/layout-bench.app > /tmp/bench-layout.log 2>&1

@@ -32,7 +32,7 @@ Update README.md to reflect the current state of the codebase.
    - **Framework modules**: List with `ls tsz/framework/*.zig`
    - **Primitives**: Check `tsz/compiler/surfaces.zig` for current surface list
    - **Carts**: List with `ls tsz/carts/`
-   - **Conformance scores**: Check `tsz/carts/conformance/RESULTS.md`
+   - **Conformance scores**: Run `cd tsz && ./scripts/conformance-report` for full status, and `./scripts/conformance-report --verified` for verified-only results. Include both in the README — total pass rate and verified pass rate.
    - **Performance**: Check recent benchmark commits
    - **File extensions**: Check `tsz/compiler/cli.zig` for current taxonomy
    - **Script runtimes**: Check for lscript/lua support in compiler

@@ -3,8 +3,9 @@ function isPageLaneSource(source) {
 }
 
 function isChadBlockSource(source) {
-  // Match <name widget>, <name page>, <name app>, <name component>
-  return /<\w+\s+(widget|page|app|component)\s*>/.test(source);
+  // Match <name widget>, <name page>, <name app>, <name component>,
+  // <name lib>, <name effect>, <name glyph>
+  return /<\w+\s+(widget|page|app|component|lib|effect|glyph)\s*>/.test(source);
 }
 
 function compilePageLane(source, tokens, file) {

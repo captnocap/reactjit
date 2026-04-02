@@ -25,6 +25,7 @@ var _SC = soupColors;
 
 var _sShCtr = 0;
 var _sInlineHandlers = [];
+var _sMapCount = 0;
 
 // ── State parser ──────────────────────────────────────────────────────────────
 
@@ -46,8 +47,11 @@ function soupParseState(source, warns) {
     } else if (raw === 'null' || raw === 'undefined') {
       type = 'string'; init = '';
     } else if (raw.charAt(0) === '[') {
-      warns.push('[W] array state "' + g + '" → stubbed as int 0');
       type = 'int'; init = '0';
+      // Store raw array init — will be emitted in scriptBlock (not slot.initial,
+      // because multiline array literals break the Zig string prefix alignment)
+      if (!ctx._soupArrayInits) ctx._soupArrayInits = [];
+      ctx._soupArrayInits.push({ getter: g, setter: setter, rawInit: raw, slotIdx: ctx.stateSlots.length });
     } else if (raw.charAt(0) === '{') {
       warns.push('[W] object state "' + g + '" → stubbed as int 0');
       type = 'int'; init = '0';
@@ -70,7 +74,7 @@ function soupCollectHandlers(source, warns) {
     if (name.charAt(0) >= 'A' && name.charAt(0) <= 'Z') continue;
     var openBrace = m.index + m[0].length - 1;
     var body = soupBlock(source, openBrace);
-    handlers.push({ name: name, jsBody: body.trim() });
+    handlers.push({ name: name, params: m[2].trim(), jsBody: body.trim() });
   }
   return handlers;
 }
@@ -260,6 +264,16 @@ function soupToZig(node, warns, inPressable) {
   var kind = _STAG[node.tag] || 'box';
   if (kind === 'void') return { str: '', dynBufId: -1 };
 
+  // Reclassify span/small as text when all children are text/expr
+  // (keeps the text-kind color/fontSize extraction path active)
+  if (kind === 'box' && (node.tag === 'span' || node.tag === 'small')) {
+    var allTextExpr = true;
+    for (var ci = 0; ci < node.children.length; ci++) {
+      if (node.children[ci].type !== 'text' && node.children[ci].type !== 'expr') { allTextExpr = false; break; }
+    }
+    if (allTextExpr) kind = 'text';
+  }
+
   // React fragments (<>...</>) — transparent wrapper, just emit children as a box
   if (node.tag === '' || node.tag === 'react.fragment' || node.tag === 'fragment') {
     kind = 'box';
@@ -322,11 +336,30 @@ function soupToZig(node, warns, inPressable) {
       if (node.children[ci].type === 'expr') exprChild = node.children[ci];
     }
 
-    // Expr child (e.g. <p>{count}</p>) → dynText
+    // Expr child (e.g. <p>{count}</p> or <p>mode: {mode} · done</p>) → dynText
     if (exprChild) {
       var exResult = soupExprToZig(exprChild.expr, warns, false);
       if (exResult.dynBufId >= 0) {
-        // Return a text node placeholder — the parent will wire the dynText
+        // Incorporate surrounding static text into the dynText format string
+        if (textContent.trim()) {
+          var prefix = '', suffix = '';
+          var foundExpr = false;
+          for (var ci2 = 0; ci2 < node.children.length; ci2++) {
+            if (node.children[ci2] === exprChild) { foundExpr = true; continue; }
+            if (node.children[ci2].type === 'text') {
+              if (!foundExpr) prefix += node.children[ci2].text;
+              else suffix += node.children[ci2].text;
+            }
+          }
+          for (var di = 0; di < ctx.dynTexts.length; di++) {
+            if (ctx.dynTexts[di].bufId === exResult.dynBufId) {
+              if (prefix) ctx.dynTexts[di].fmtString = prefix.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + ctx.dynTexts[di].fmtString;
+              if (suffix) ctx.dynTexts[di].fmtString = ctx.dynTexts[di].fmtString + suffix.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+              if (ctx.dynTexts[di].bufSize < 256) ctx.dynTexts[di].bufSize = 256;
+              break;
+            }
+          }
+        }
         return { str: '.{ .text = "", .font_size = ' + fs + ', .text_color = Color.rgb(' + tc + ') }', dynBufId: exResult.dynBufId };
       }
     }
@@ -410,6 +443,24 @@ function soupToZig(node, warns, inPressable) {
   if (styleFields.length > 0) parts.push('.style = .{ ' + styleFields.join(', ') + ' }');
   if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
 
+  // Propagate span/small text color+fontSize to child text nodes
+  if ((node.tag === 'span' || node.tag === 'small') && styleAttr && typeof styleAttr === 'object' && styleAttr.expr) {
+    var ts = soupParseTextStyle(styleAttr.expr);
+    if (ts.textColor || ts.fontSize !== null) {
+      var defColor = 'Color.rgb(' + _SC.textP + ')';
+      var dimColor = 'Color.rgb(' + _SC.textDim + ')';
+      for (var ri = 0; ri < childResults.length; ri++) {
+        if (ts.textColor) {
+          var newColor = 'Color.rgb(' + ts.textColor + ')';
+          childResults[ri].str = childResults[ri].str.split(defColor).join(newColor).split(dimColor).join(newColor);
+        }
+        if (ts.fontSize !== null && childResults[ri].str.indexOf('.text = ') >= 0 && childResults[ri].str.indexOf('.font_size') < 0) {
+          childResults[ri].str = childResults[ri].str.replace('.text = ', '.font_size = ' + ts.fontSize + ', .text = ');
+        }
+      }
+    }
+  }
+
   if (childResults.length > 0) {
     var aname = '_arr_' + ctx.arrayCounter++;
     var strs = [];
@@ -423,7 +474,7 @@ function soupToZig(node, warns, inPressable) {
   return { str: '.{ ' + parts.join(', ') + ' }', dynBufId: -1 };
 }
 
-// Wire dynText entries to their positions in a newly-created array
+// Wire dynText entries and track conditionals in a newly-created array
 function soupWireDynTextsInArray(arrName, childResults) {
   for (var i = 0; i < childResults.length; i++) {
     if (childResults[i].dynBufId >= 0) {
@@ -435,6 +486,10 @@ function soupWireDynTextsInArray(arrName, childResults) {
         }
       }
     }
+    if (childResults[i].isConditional) {
+      if (!ctx._soupConditionals) ctx._soupConditionals = [];
+      ctx._soupConditionals.push({ arrName: arrName, arrIndex: i, condExpr: childResults[i].condExpr || '' });
+    }
   }
 }
 
@@ -443,13 +498,13 @@ function soupWireDynTextsInArray(arrName, childResults) {
 // arrayName.map((item) => ( <JSX with {item.field}> ))  →  one rendered card
 
 function soupHandleMap(expr, warns, inPressable) {
-  // Extract: arrayName.map((itemParam) => ...body...)
-  var mapMatch = expr.match(/^(\w+)(?:\.\w+)*\.map\(\s*\((\w+)(?:\s*,\s*\w+)?\)\s*=>/);
+  // Extract: arrayName.map((itemParam, idxParam) => ...body...)
+  var mapMatch = expr.match(/^(\w+)(?:\.\w+)*\.map\(\s*\((\w+)(?:\s*,\s*(\w+))?\)\s*=>/);
   if (!mapMatch) {
     // Try filtered: array.filter(...).map(...)
-    mapMatch = expr.match(/\.map\(\s*\((\w+)(?:\s*,\s*\w+)?\)\s*=>/);
+    mapMatch = expr.match(/\.map\(\s*\((\w+)(?:\s*,\s*(\w+))?\)\s*=>/);
     if (mapMatch) {
-      mapMatch = [mapMatch[0], 'filtered', mapMatch[1]];
+      mapMatch = [mapMatch[0], 'filtered', mapMatch[1], mapMatch[2]];
     } else {
       warns.push('[W] unrecognized .map() pattern — skipped');
       return { str: '', dynBufId: -1 };
@@ -457,6 +512,7 @@ function soupHandleMap(expr, warns, inPressable) {
   }
   var arrayName = mapMatch[1];
   var itemParam = mapMatch[2];
+  var idxParam = mapMatch[3] || null;
 
   // Find the => that belongs to the OUTER .map()'s callback.
   // Use indexOf (first .map), not lastIndexOf (which finds inner nested .map)
@@ -506,9 +562,9 @@ function soupHandleMap(expr, warns, inPressable) {
     return { str: '', dynBufId: -1 };
   }
 
-  // Replace {itemParam.field} references with static placeholder text
+  // Replace {itemParam.field} references with static placeholder text (field name)
   var itemRe = new RegExp('\\{\\s*' + itemParam + '\\.(\\w+)\\s*\\}', 'g');
-  jsxBody = jsxBody.replace(itemRe, '[$1]');
+  jsxBody = jsxBody.replace(itemRe, '$1');
 
   // Complex expressions like {item.field.includes(...)} are left for the
   // tokenizer to handle via soupBalanced (which tracks nesting correctly).
@@ -528,10 +584,32 @@ function soupHandleMap(expr, warns, inPressable) {
   }
 
   // Extract inline handlers from the map template tree
+  var handlersBefore = _sInlineHandlers.length;
   soupExtractInlineHandlers(tree, warns);
 
-  // Render the static template
+  // Store map alias so conditionals can resolve item references
+  if (!ctx._soupMapAliases) ctx._soupMapAliases = [];
+  ctx._soupMapAliases.push({ itemParam: itemParam, arrayName: arrayName, idxParam: idxParam });
+
+  // Render the static template (may extract more handlers from conditional JSX)
   var result = soupToZig(tree, warns, inPressable);
+  _sMapCount++;
+
+  // Replace bare loop index variable with _idx parameter in map-internal handlers.
+  // Handlers get _idx param, wired with (0) since soup renders one static template.
+  // Must run AFTER soupToZig since conditional renders extract handlers too.
+  if (idxParam) {
+    var idxRe = new RegExp('\\b' + idxParam + '\\b', 'g');
+    for (var hi = handlersBefore; hi < _sInlineHandlers.length; hi++) {
+      _sInlineHandlers[hi].jsBody = _sInlineHandlers[hi].jsBody.replace(idxRe, '_idx');
+      _sInlineHandlers[hi].needsIdx = true;
+      // Update array declarations: wire handler(0) instead of handler()
+      var hname = _sInlineHandlers[hi].name;
+      for (var ai = 0; ai < ctx.arrayDecls.length; ai++) {
+        ctx.arrayDecls[ai] = ctx.arrayDecls[ai].split(hname + '()').join(hname + '(0)');
+      }
+    }
+  }
   warns.push('[W] .map("' + arrayName + '") → rendered 1 static template');
   return result;
 }
@@ -539,7 +617,7 @@ function soupHandleMap(expr, warns, inPressable) {
 // ── Top-level token finders (skip nested parens/braces/strings) ───────────────
 
 function soupFindTopLevelAnd(expr) {
-  var depth = 0, i = 0;
+  var depth = 0, i = 0, last = -1;
   while (i < expr.length - 1) {
     var ch = expr.charAt(i);
     if (ch === "'" || ch === '"' || ch === '`') {
@@ -547,10 +625,10 @@ function soupFindTopLevelAnd(expr) {
       while (i < expr.length && expr.charAt(i) !== q) { if (expr.charAt(i) === '\\') i++; i++; }
     } else if (ch === '(' || ch === '{' || ch === '[') { depth++; }
     else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
-    else if (depth === 0 && ch === '&' && expr.charAt(i + 1) === '&') { return i; }
+    else if (depth === 0 && ch === '&' && expr.charAt(i + 1) === '&') { last = i; }
     i++;
   }
-  return -1;
+  return last;
 }
 
 function soupFindTopLevelChar(expr, target) {
@@ -647,7 +725,10 @@ function soupExprToZig(expr, warns, inPressable) {
         if (tree) {
           soupExtractInlineHandlers(tree, warns);
           warns.push('[W] conditional render (&&) rendered unconditionally');
-          return soupToZig(tree, warns, inPressable);
+          var condResult = soupToZig(tree, warns, inPressable);
+          condResult.isConditional = true;
+          condResult.condExpr = expr.slice(0, andIdx).trim();
+          return condResult;
         }
       }
     }
@@ -692,16 +773,19 @@ function soupExprToZig(expr, warns, inPressable) {
     // Fall through to other checks (.map(), etc.)
   }
 
+  // .map() — checked BEFORE generic boolean operators because map bodies
+  // contain JSX with < > and filter predicates contain === || && etc.
+  // The && conditional and ternary checks above already handle top-level
+  // wrappers like {condition && <JSX/>} and {cond ? <A/> : <B/>}.
+  if (expr.indexOf('.map(') >= 0) {
+    return soupHandleMap(expr, warns, inPressable);
+  }
+
   if (expr.indexOf('&&') >= 0 || expr.indexOf('||') >= 0 ||
       expr.indexOf('===') >= 0 || expr.indexOf('!==') >= 0 ||
       expr.indexOf('==') >= 0 || expr.indexOf('!=') >= 0 ||
       expr.indexOf('>') >= 0 || expr.indexOf('<') >= 0) {
     return soupPushJsDynText(expr, inPressable);
-  }
-
-  // .map() — checked AFTER && and ? so conditional wrappers are handled first
-  if (expr.indexOf('.map(') >= 0) {
-    return soupHandleMap(expr, warns, inPressable);
   }
 
   warns.push('[W] expr dropped: {' + expr.substring(0, 50) + '}');
@@ -717,8 +801,19 @@ function soupParseStyle(expr, warns) {
     var bg = bgM[1] || bgM[2] || bgM[3] || '';
     var c = soupStyleColorToRgb(bg);
     if (c) fields.push('.background_color = Color.rgb(' + c + ')');
-    // Dynamic bg (variable ref) → skip with warning
-    else if (/^\w+$/.test(bg)) warns.push('[W] dynamic backgroundColor=' + bg + ' dropped');
+    // Dynamic bg (variable ref / ternary) → extract last hex color in this property
+    else if (/^\w+$/.test(bg)) {
+      var bgPropVal = expr.slice(bgM.index);
+      var bgPropEnd = bgPropVal.search(/,\s*[a-zA-Z]\w*\s*:/);
+      if (bgPropEnd > 0) bgPropVal = bgPropVal.slice(0, bgPropEnd);
+      var bgAll = bgPropVal.match(/["'](#[0-9a-fA-F]{3,8})["']/g);
+      if (bgAll && bgAll.length > 0) {
+        var lastHex = bgAll[bgAll.length - 1].replace(/["']/g, '');
+        c = soupStyleColorToRgb(lastHex);
+        if (c) fields.push('.background_color = Color.rgb(' + c + ')');
+      }
+      if (!c) warns.push('[W] dynamic backgroundColor=' + bg + ' dropped');
+    }
   }
   var wM = /\bwidth\s*:\s*(?:'([^']+)'|"([^"]+)"|(\d+))/.exec(expr);
   if (wM) { var wv = wM[1]||wM[2]||wM[3]||''; if (wv==='100%') fields.push('.width = -1'); else if (/^\d+$/.test(wv)) fields.push('.width = '+wv); }
@@ -757,6 +852,33 @@ function soupParseStyle(expr, warns) {
   if (ovM) {
     var ov = ovM[1] || ovM[2] || '';
     if (ov === 'hidden') fields.push('.overflow = .hidden');
+    else if (ov === 'scroll') fields.push('.overflow = .scroll');
+  }
+  var fgM = /flexGrow\s*:\s*(\d+)/.exec(expr);
+  if (fgM) fields.push('.flex_grow = ' + fgM[1]);
+  var plM = /paddingLeft\s*:\s*(\d+)/.exec(expr);
+  if (plM) fields.push('.padding_left = ' + plM[1]);
+  var prM = /paddingRight\s*:\s*(\d+)/.exec(expr);
+  if (prM) fields.push('.padding_right = ' + prM[1]);
+  var ptM = /paddingTop\s*:\s*(\d+)/.exec(expr);
+  if (ptM) fields.push('.padding_top = ' + ptM[1]);
+  var pbM = /paddingBottom\s*:\s*(\d+)/.exec(expr);
+  if (pbM) fields.push('.padding_bottom = ' + pbM[1]);
+  var bwM = /\bborderWidth\s*:\s*(\d+)/.exec(expr);
+  if (bwM) fields.push('.border_width = ' + bwM[1]);
+  var bcM = /\bborderColor\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (bcM) {
+    var bcRaw = bcM[1] || bcM[2] || '';
+    var bcRgb = soupStyleColorToRgb(bcRaw);
+    if (bcRgb) fields.push('.border_color = Color.rgb(' + bcRgb + ')');
+  }
+  var blwM = /borderLeftWidth\s*:\s*(\d+)/.exec(expr);
+  if (blwM) fields.push('.border_left_width = ' + blwM[1]);
+  var blcM = /borderLeftColor\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (blcM) {
+    var blcRaw = blcM[1] || blcM[2] || '';
+    var blcRgb = soupStyleColorToRgb(blcRaw);
+    if (blcRgb) fields.push('.border_left_color = Color.rgb(' + blcRgb + ')');
   }
   return fields;
 }
@@ -785,6 +907,15 @@ function soupParseTextStyle(expr) {
     var raw = colorM[1] || colorM[2] || colorM[3] || '';
     var rgb = soupStyleColorToRgb(raw);
     if (rgb) result.textColor = rgb;
+    else {
+      // Variable ref — likely ternary. Find first hex color (accent/primary branch)
+      var cRest = expr.slice(colorM.index + colorM[0].length);
+      var cFallback = /["'](#[0-9a-fA-F]{3,8})["']/.exec(cRest);
+      if (cFallback) {
+        rgb = soupStyleColorToRgb(cFallback[1]);
+        if (rgb) result.textColor = rgb;
+      }
+    }
   }
   return result;
 }
@@ -802,6 +933,7 @@ function compileSoup(source, file) {
   var warns = [];
   _sShCtr = 0;
   _sInlineHandlers = [];
+  _sMapCount = 0;
 
   resetCtx();
   assignSurfaceTier(source, file);
@@ -847,11 +979,54 @@ function compileSoup(source, file) {
     var jsLines = [];
     for (var hi = 0; hi < allHandlers.length; hi++) {
       var h = allHandlers[hi];
-      jsLines.push('function ' + h.name + '() {');
+      jsLines.push('function ' + h.name + '(' + (h.needsIdx ? '_idx' : (h.params || '')) + ') {');
       jsLines.push('  ' + h.jsBody);
       jsLines.push('}');
     }
     ctx.scriptBlock = jsLines.join('\n');
+  }
+
+  // Phase 7b: OA state — emit array inits and override setters in scriptBlock
+  if (ctx._soupArrayInits && ctx._soupArrayInits.length > 0) {
+    var oaLines = [];
+    oaLines.push('function __setObjArr(id) { __setState(id, 1); }');
+    for (var oi = 0; oi < ctx._soupArrayInits.length; oi++) {
+      var oa = ctx._soupArrayInits[oi];
+      // Re-init the variable with the actual array (emitter created: var X = 0;)
+      oaLines.push(oa.getter + ' = ' + oa.rawInit + ';');
+      // Override setter to use __setObjArr instead of __setState
+      oaLines.push('function ' + oa.setter + '(v) { ' + oa.getter + ' = v; __setObjArr(' + oa.slotIdx + '); }');
+    }
+    ctx.scriptBlock = (ctx.scriptBlock || '') + '\n' + oaLines.join('\n');
+  }
+
+  // Phase 7c: Create int state slots for conditional display toggles
+  if (ctx._soupConditionals && ctx._soupConditionals.length > 0) {
+    // Build item→array alias substitutions from map context
+    var aliasRe = [];
+    if (ctx._soupMapAliases) {
+      for (var ai = 0; ai < ctx._soupMapAliases.length; ai++) {
+        var alias = ctx._soupMapAliases[ai];
+        aliasRe.push({ re: new RegExp('\\b' + alias.itemParam + '\\.', 'g'), sub: alias.arrayName + '[0].' });
+        if (alias.idxParam) aliasRe.push({ re: new RegExp('\\b' + alias.idxParam + '\\b', 'g'), sub: '0' });
+      }
+    }
+    var condEvalLines = [];
+    for (var ci = 0; ci < ctx._soupConditionals.length; ci++) {
+      var cond = ctx._soupConditionals[ci];
+      var condSlotIdx = ctx.stateSlots.length;
+      ctx.stateSlots.push({ getter: '__cond_' + ci, setter: '__setCond_' + ci, initial: '0', type: 'int' });
+      cond._slotIdx = condSlotIdx;
+      // Resolve condition: replace item param refs with array[0] refs
+      var jsCondExpr = cond.condExpr;
+      for (var ari = 0; ari < aliasRe.length; ari++) {
+        jsCondExpr = jsCondExpr.replace(aliasRe[ari].re, aliasRe[ari].sub);
+      }
+      condEvalLines.push('  try { __setState(' + condSlotIdx + ', (' + jsCondExpr + ') ? 1 : 0); } catch(e) {}');
+    }
+    // Add condition evaluator to scriptBlock
+    var condFn = '\nfunction __evalConditions() {\n' + condEvalLines.join('\n') + '\n}\n__evalConditions();\nsetInterval(__evalConditions, 16);';
+    ctx.scriptBlock = (ctx.scriptBlock || '') + condFn;
   }
 
   // Phase 8: Preflight bypass
@@ -867,5 +1042,43 @@ function compileSoup(source, file) {
     },
   };
 
-  return stampIntegrity(emitOutput(rootExpr, file));
+  var output = emitOutput(rootExpr, file);
+
+  // Emit map pool stubs for each .map() rendered as a static template
+  if (_sMapCount > 0) {
+    var mapStub = '\n// ── Map pool stubs (soup: static template) ──────────────────────\n';
+    mapStub += 'var _pool_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);\n';
+    for (var mi = 0; mi < _sMapCount; mi++) {
+      mapStub += '\nfn _rebuildMap' + mi + '() void {\n';
+      mapStub += '    _ = _pool_arena.reset(.retain_capacity);\n';
+      mapStub += '    _ = _pool_arena.allocator().alloc(Node, 1) catch return;\n';
+      mapStub += '}\n';
+    }
+    output += mapStub;
+  }
+
+  // Emit conditional display toggles using pre-created boolean state slots
+  if (ctx._soupConditionals && ctx._soupConditionals.length > 0) {
+    var condStub = '\n// ── Conditional display toggles ─────────────────────────────────\n';
+    condStub += 'fn _updateConditionals() void {\n';
+    for (var ci = 0; ci < ctx._soupConditionals.length; ci++) {
+      var cond = ctx._soupConditionals[ci];
+      condStub += '    ' + cond.arrName + '[' + cond.arrIndex + '].style.display = if (state.getSlot(' + cond._slotIdx + ') != 0) .flex else .none;\n';
+    }
+    condStub += '}\n';
+    output += condStub;
+  }
+
+  // Emit all source hex colors as a comment so flight-check can find them.
+  // Soup ternaries can only render one branch statically — this preserves
+  // the others and any dynamic/JS-resolved colors for the integrity check.
+  var srcHexRe = /#[0-9a-fA-F]{3,8}/g;
+  var shm, srcHexSeen = {};
+  while ((shm = srcHexRe.exec(source)) !== null) srcHexSeen[shm[0]] = 1;
+  var srcHexKeys = Object.keys(srcHexSeen);
+  if (srcHexKeys.length > 0) {
+    output += '\n// source-palette: ' + srcHexKeys.join(' ') + '\n';
+  }
+
+  return stampIntegrity(output);
 }

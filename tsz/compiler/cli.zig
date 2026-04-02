@@ -162,28 +162,25 @@ pub fn main() !void {
     };
     defer alloc.free(source);
 
-    // Imperative compilation: _zscript.tsz → .zig module (no JSX)
-    // If the file also has an App function, route through the app path instead —
-    // <zscript> blocks will be treated as JS for QuickJS by the codegen.
-    if (file_kind == .zscript and std.mem.indexOf(u8, source, "function App()") == null) {
-        var lex = lexer_mod.Lexer.init(source);
-        lex.tokenize();
-        const zig_source = modulegen.generate(alloc, &lex, source, input_path) catch |err| {
-            std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
-            return;
-        };
-        const basename = std.fs.path.basename(input_path);
-        const stem = basename[0 .. basename.len - "_zscript.tsz".len];
-        const out_path = std.fmt.allocPrint(alloc, "{s}.zig", .{stem}) catch return;
-        {
-            const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
-                std.debug.print("Error creating {s}: {any}\n", .{ out_path, err });
-                return;
-            };
-            defer f.close();
-            f.writeAll(zig_source) catch return;
-        }
-        std.debug.print("[tsz] Compiled imperative {s} -> {s}\n", .{ basename, out_path });
+    // Script files are never standalone entry points — they're imported by .tsz or .mod.tsz
+    if (file_kind == .zscript or file_kind == .script) {
+        const ext = if (file_kind == .zscript) "zscript" else "script";
+        std.debug.print("\n[tsz] ERROR: .{s}.tsz is not a compile entry point.\n", .{ext});
+        std.debug.print("[tsz] Script files are imported by a .tsz or .mod.tsz entry via <{s}> blocks.\n", .{ext});
+        return;
+    }
+
+    // Non-entry files: components, classifiers — these are imported, not compiled directly
+    if (file_kind == .app_comp or file_kind == .app_cls or file_kind == .mod_comp or file_kind == .mod_cls) {
+        std.debug.print("\n[tsz] ERROR: This file is not a compile entry point.\n", .{});
+        std.debug.print("[tsz] Components (.c.tsz) and classifiers (.cls.tsz) are imported by a .tsz entry.\n", .{});
+        std.debug.print("[tsz] Only .tsz and .mod.tsz can be compiled directly.\n", .{});
+        return;
+    }
+
+    if (file_kind == .unknown) {
+        std.debug.print("\n[tsz] ERROR: Unrecognized file extension for '{s}'\n", .{input_path});
+        std.debug.print("[tsz] Valid entry points: .tsz (app/lib/widget) and .mod.tsz (module)\n", .{});
         return;
     }
 
@@ -431,6 +428,12 @@ fn classifyFile(path: []const u8) FileKind {
     if (std.mem.endsWith(u8, path, ".mod.tsz")) return .module;
     if (std.mem.endsWith(u8, path, ".script.tsz")) return .script; // legacy
     if (std.mem.endsWith(u8, path, ".cls.tsz")) return .app_cls; // legacy
+    // Catch hallucinated .app.tsz before the generic .tsz match
+    if (std.mem.endsWith(u8, path, ".app.tsz")) {
+        std.debug.print("\n[tsz] ERROR: '.app.tsz' is not a valid extension. Use '.tsz' instead.\n", .{});
+        std.debug.print("[tsz] Rename: {s} → remove the '.app' part\n", .{path});
+        return .unknown;
+    }
     if (std.mem.endsWith(u8, path, ".tsz")) return .app;
     return .unknown;
 }

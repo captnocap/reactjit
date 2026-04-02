@@ -157,6 +157,8 @@ function resetCtx() {
     _duplicateJSVars: [],
     _jsDynTexts: [],
     _luaDynTexts: [],
+    _glyphLog: [],
+    _literalTextMode: false,
   };
 }
 
