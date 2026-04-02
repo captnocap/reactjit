@@ -36,6 +36,12 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
           if (colorLhsIsString) colorLhs = `${colorLhs}[0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
         }
       }
+    } else if (ctx.propStack && ctx.propStack[propName] !== undefined) {
+      const propVal = ctx.propStack[propName];
+      if (typeof propVal === 'string') {
+        colorLhs = propVal;
+        colorLhsIsString = propVal.includes('getSlotString') || (propVal.includes('[0..') && propVal.includes('_lens'));
+      }
     }
 
     if (colorLhs && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
