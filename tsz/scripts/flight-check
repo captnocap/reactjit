@@ -134,15 +134,44 @@ fi
 
 # ── 3. Handler balance ────────────────────────────────────────
 SRC_HANDLERS=$(gocount_file 'on(Press|Change|Scroll|Focus|Blur)\s*=' "$SOURCE")
+# Also count soup-style handlers (onClick, onSubmit, etc.)
+SRC_SOUP_HANDLERS=$(gocount_file 'on(Click|Submit|Change)\s*=' "$SOURCE")
+SRC_HANDLERS=$((SRC_HANDLERS + SRC_SOUP_HANDLERS))
 
 GEN_HANDLER_FNS=$(gcount 'pub fn _handler_(press|change|scroll|focus|blur)_[0-9]+' "$GEN_BLOB")
 GEN_MAP_HANDLER_SETS=$(gocount '_map_lua_bufs_[0-9]+_[0-9]+' "$GEN_BLOB")
-GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS))
+# Also count soup-style JS handlers (_sh_N) and js_on_press wiring
+GEN_JS_HANDLERS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
+GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS + GEN_JS_HANDLERS))
 
 if [ "$SRC_HANDLERS" -gt 0 ] && [ "$GEN_HANDLERS" -eq 0 ]; then
     fail "$SRC_HANDLERS handler(s) in source but 0 in generated output"
 elif [ "$SRC_HANDLERS" -gt "$((GEN_HANDLERS + 3))" ]; then
     fail "handler imbalance: $SRC_HANDLERS in source, $GEN_HANDLERS generated"
+fi
+
+# ── 3b. Orphaned JS handlers ────────────────────────────────
+# JS defines handler functions (_sh_N, __mapPress_N_M) that must be wired
+# to a node's js_on_press. If defined but not referenced, handlers are lost.
+JS_HANDLER_DEFS=$(gocount 'function (_sh_[0-9]+|__mapPress_[0-9]+_[0-9]+)\(' "$GEN_BLOB")
+JS_HANDLER_REFS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
+# Map handlers also count — each _map_lua_bufs set is one handler wired per-item
+JS_HANDLER_REFS=$((JS_HANDLER_REFS + GEN_MAP_HANDLER_SETS))
+
+if [ "$JS_HANDLER_DEFS" -gt 0 ] && [ "$JS_HANDLER_REFS" -eq 0 ]; then
+    fail "$JS_HANDLER_DEFS JS handler(s) defined but 0 wired to nodes — all handlers orphaned"
+elif [ "$JS_HANDLER_DEFS" -gt 0 ] && [ "$JS_HANDLER_REFS" -lt "$JS_HANDLER_DEFS" ]; then
+    ORPHANED=$((JS_HANDLER_DEFS - JS_HANDLER_REFS))
+    fail "$ORPHANED orphaned JS handler(s): $JS_HANDLER_DEFS defined, $JS_HANDLER_REFS wired to nodes"
+fi
+
+# ── 3c. Map handlers without index ────────────────────────────
+# Static _sh_N() handlers (no args) that call functions with bare (i) or (j)
+# are broken — the loop variable is unbound. Should be __mapPress with idx.
+SH_NO_ARGS=$(grep -A1 'function _sh_[0-9]*()' <<< "$GEN_BLOB" 2>/dev/null || true)
+SH_BARE_LOOP=$(echo "$SH_NO_ARGS" | grep -cE '\([ij]\)' 2>/dev/null || true)
+if [ "$SH_BARE_LOOP" -gt 0 ]; then
+    fail "$SH_BARE_LOOP static _sh handler(s) call functions with bare loop variable (i/j) — should be __mapPress with idx arg"
 fi
 
 # ── 4. State slot balance ─────────────────────────────────────
