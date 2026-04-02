@@ -230,6 +230,24 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
     fi
 fi
 
+# ── 6b. Map conditional display toggles ──────────────────────
+# If source has conditionals inside a .map() (e.g. {expr && <JSX>}),
+# the generated code must have display toggle statements. If the source
+# has conditionals referencing map-item fields but zero display toggles
+# appear in the generated code, the conditionals were dropped/static.
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    # Count conditionals inside map bodies in source (both React and soup syntax)
+    # Look for {expr && pattern and {expr === pattern inside the map block
+    SRC_MAP_CONDS=$(gocount_file '\{[^}]*===?\s*(null|true|false|[0-9]+)\s*&&' "$SOURCE")
+    # Also count mixed-style: item.field == N &&
+    SRC_MAP_CONDS2=$(gocount_file '\{[^}]*\.[a-zA-Z]+\s*==\s*[0-9]+\s*&&' "$SOURCE")
+    SRC_MAP_CONDS=$((SRC_MAP_CONDS + SRC_MAP_CONDS2))
+    GEN_DISPLAY_TOGGLES=$(gcount 'style\.display = if' "$GEN_BLOB")
+    if [ "$SRC_MAP_CONDS" -gt 0 ] && [ "$GEN_DISPLAY_TOGGLES" -eq 0 ]; then
+        fail "$SRC_MAP_CONDS conditional(s) in map body but 0 display toggles in generated — conditionals not compiled"
+    fi
+fi
+
 # ── 7. Component inlining check ──────────────────────────────
 COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
     sed 's/^function //' | grep -v '^App$' || true)
