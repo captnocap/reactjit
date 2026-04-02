@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~449 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~13,200 lines across 76 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~460 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
+- **Smith** — JS compiler intelligence (~15,200 lines across 79 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -84,7 +84,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 5 Zig modules + 76 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 5 Zig modules + 79 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -115,13 +115,16 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | Extension | What | Example |
 |-----------|------|---------|
 | `.tsz` | App entry point | `Counter.tsz` |
-| `.c.tsz` | Component | `Button.c.tsz` |
+| `_c.tsz` | App component | `Button_c.tsz` |
+| `_cls.tsz` | App classifiers | `styles_cls.tsz` |
 | `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
-| `.cmod.tsz` | Component module | `Badge.cmod.tsz` |
-| `.script.tsz` | QuickJS runtime script | `data.script.tsz` |
-| `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
-| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
-| `.lscript.tsz` | LuaJIT runtime script | `logic.lscript.tsz` |
+| `_cmod.tsz` | Module component | `Badge_cmod.tsz` |
+| `_clsmod.tsz` | Module classifiers | `theme_clsmod.tsz` |
+| `_script.tsz` | QuickJS runtime script | `data_script.tsz` |
+| `_zscript.tsz` | Imperative Zig module (no JSX) | `logic_zscript.tsz` |
+| `_lscript.tsz` | LuaJIT runtime script | `logic_lscript.tsz` |
+
+Legacy dot-prefix forms (`.c.tsz`, `.cls.tsz`, `.script.tsz`, `.zscript.tsz`, `.lscript.tsz`) are also accepted.
 
 ### `<script>` vs `<lscript>` vs `<zscript>` vs `<ascript>` — when to use which
 
@@ -264,19 +267,6 @@ zig build forge
 zig build smith-bundle
 ```
 
-### Engine Channels
-
-The engine ships as a shared library (`.so`). Three channels run side by side — carts pick which engine to load at launch:
-
-```bash
-./my_app                         # stable (default)
-./my_app --engine=nightly        # nightly (pre-stable, passing conformance)
-./my_app --engine=bleeding       # bleeding edge (latest experimental)
-RJIT_ENGINE=bleeding ./my_app    # env var also works
-```
-
-Promotion flow: `bleeding → nightly` (after conformance passes) → `nightly → stable` (after soak period).
-
 Cart binaries are ~23MB (engine is shared, not embedded). Updating the engine doesn't require rebuilding any carts — the next launch picks up the new `.so` automatically.
 
 ## Primitives
@@ -301,9 +291,12 @@ carts/
   terminal/           PTY terminal emulator with scrollback + selection
   crypto-test/        Cryptography test suite (HMAC, HKDF, Shamir, encryption, PII)
   scene3d-demo/       3D rendering demo
+  3d-ui-experiment/   3D UI interaction experiments
   constraint-graph/   Constraint graph visualization
   animations/         Animation and physics demos
   effects/            Visual effects demos
+  effect-bench/       Effect subsystem benchmarks
+  effect-test/        Effect test harness
   benchmarks/         Subsystem benchmarks (layout, render, state, script)
   stress-test/        Progressive load across all subsystems
   parity/             React parity demos (TodoMVC, Slack, VS Code, Gmail, Figma, ...)
@@ -317,15 +310,28 @@ carts/
   remote-chat/        WebSocket chat demo
   world3d-demo/       3D physics + world rendering demo
   cursor-ide/         VS Code-style IDE clone (editor, sidebar, tabs, chat panel)
+  cursor-ide-hell/    Stress-test IDE clone with heavy content
   lua-test/           LuaJIT runtime test cart
   lua-bench/          LuaJIT vs QuickJS benchmark suite
   catalog/            Component catalog
   claude-canvas/      Canvas playground
   control-panel/      System control panel
+  applescript-demo/   macOS AppleScript automation demo
+  polygons/           Polygon rendering tests
+  render-test/        GPU rendering test harness
+  smith-test/         Smith compiler test cart
+  transition-test/    Transition animation tests
+  video-test/         Video playback tests
+  web-demo/           Web runtime demo
+  window-paths/       Windowing path tests
+  hotreload-test/     Hot reload experiments
+  flex-wrap-test/     Flexbox wrap behavior tests
+  ipc-test/           IPC test harness
+  tools/              Developer utilities
   conformance/        Conformance test suites, organized by lane:
-    soup/             End-to-end app tests in real-world syntax (18 tests)
-    mixed/            Exhaustive feature + torture tests (144 tests)
-    chad/             Intent dictionary syntax tests (57 tests)
+    soup/             End-to-end app tests in real-world syntax (21 tests)
+    mixed/            Exhaustive feature + torture tests (153 tests)
+    chad/             Intent dictionary syntax tests (34 tests)
     lscript/          LuaJIT script backend tests (35 tests)
     wpt-flex/         W3C Web Platform Tests for flexbox (75 tests)
     ws/               WebSocket conformance (Autobahn + protocol)
@@ -355,15 +361,17 @@ carts/
 
 ## Conformance
 
-| Suite | Tests | What |
-|-------|-------|------|
-| Autobahn WebSocket | 202/204 | RFC 6455 compliance |
-| WPT Flexbox | 75 | W3C CSS flex spec |
-| Mixed (feature + torture) | 144 | Exhaustive compiler coverage — every feature, every edge case |
-| Chad (intent syntax) | 57 | Dictionary-based intent syntax, multi-file apps, libs |
-| Lscript | 35 | LuaJIT script backend |
-| Soup (real-world) | 18 | End-to-end apps in messy real-world syntax |
-| Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
+| Suite | Tests | Pass Rate | What |
+|-------|-------|-----------|------|
+| Autobahn WebSocket | 202/204 | 99% | RFC 6455 compliance |
+| WPT Flexbox | 75 | 100% | W3C CSS flex spec |
+| Mixed (feature + torture) | 153 | 117/153 compiled | Exhaustive compiler coverage — every feature, every edge case |
+| Chad (intent syntax) | 34 | 22/34 compiled | Dictionary-based intent syntax, multi-file apps, libs |
+| Lscript | 35 | 14/35 compiled | LuaJIT script backend |
+| Soup (real-world) | 21 | 7/21 compiled | End-to-end apps in messy real-world syntax |
+| Crypto | 13/13 | 100% | HMAC, HKDF, Shamir, encryption, PII detection |
+
+**Overall: 261/319 compiled (81% pass rate), 201/319 verified (63% verified pass rate).**
 
 Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
 
