@@ -15,6 +15,46 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   // and drop all static text siblings (matches reference compiler behavior)
   if (tag === 'Text') {
     const dynChild = children.find(ch => ch.dynBufId !== undefined);
+    const hasGlyphsWithDyn = dynChild && children.some(ch => ch.isGlyph);
+
+    if (hasGlyphsWithDyn) {
+      // Split: glyph children become a static text node, dynamic gets its own node.
+      // Both sit side-by-side in a row container that inherits the Text styling.
+      let glyphText = '';
+      const glyphExprs = [];
+      for (const ch of children) {
+        if (ch.isGlyph) {
+          glyphText += '\\x01';
+          glyphExprs.push(ch.glyphExpr);
+        } else if (!ch.dynBufId && ch.nodeExpr) {
+          const m = ch.nodeExpr.match(/\.text = "(.*)"/);
+          if (m) glyphText += m[1];
+        }
+      }
+      // Build glyph text node
+      var glyphNodeParts = [`.text = "${glyphText}"`];
+      glyphNodeParts.push(`.inline_glyphs = &[_]layout.InlineGlyph{ ${glyphExprs.join(', ')} }`);
+      if (nodeFields) for (const nf of nodeFields) glyphNodeParts.push(nf);
+      var glyphNode = `.{ ${glyphNodeParts.join(', ')} }`;
+
+      // Build dynamic text node
+      var dynNodeParts = [dynChild.inMap ? `.text = "__mt${dynChild.dynBufId}__"` : `.text = ""`];
+      if (nodeFields) for (const nf of nodeFields) dynNodeParts.push(nf);
+      var dynNode = `.{ ${dynNodeParts.join(', ')} }`;
+
+      // Row container with both siblings
+      parts.push('.style = .{ .flex_direction = .row, .gap = 0 }');
+      const rowExpr = `.{ ${parts.join(', ')}, .children = &[_]Node{ ${glyphNode}, ${dynNode} } }`;
+      const result = { nodeExpr: rowExpr, dynBufId: dynChild.dynBufId };
+      if (dynChild.inMap) result.inMap = true;
+      if (nodeFields && nodeFields._dynColorId !== undefined) result.dynColorId = nodeFields._dynColorId;
+      if (nodeFields && nodeFields._dynStyleIds) result.dynStyleIds = nodeFields._dynStyleIds;
+      if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
+      if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
+      if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
+      return result;
+    }
+
     if (dynChild) {
       parts.push(dynChild.inMap ? `.text = "__mt${dynChild.dynBufId}__"` : `.text = ""`);
       if (nodeFields) for (const nf of nodeFields) parts.push(nf);
