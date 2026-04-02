@@ -2,6 +2,28 @@
 
 The compiler is a highway, not a funnel. Lanes exit and re-enter the shared road multiple times during compilation.
 
+## The Shape
+
+One straight line. Parabolas that leave and come back. That's it.
+
+```
+          ╭─ soup ─╮              ╭─ soup ─╮
+         ╱          ╲            ╱          ╲
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+.tsz in   lex    detect   shared parse    shared collect     emit      .zig out
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         ╲          ╱            ╲          ╱
+          ╰ mixed ─╯              ╰ mixed ─╯
+         ╲          ╱            ╲          ╱
+          ╰─ chad ─╯              ╰─ chad ─╯
+                                 ╲    ╱╲    ╱
+                                  ╰──╯  ╰──╯
+                                  widget app
+                                   lib  mod
+```
+
+The baseline is the compile path. It's always straight. The parabolas are lane-specific work — they leave the baseline, do their thing, and come back. Some lanes (chad) have parabolas within parabolas (widget/app/lib/module). But the baseline never bends.
+
 ```mermaid
 graph LR
     subgraph PORTLAND["🏁 PORTLAND — Source In"]
