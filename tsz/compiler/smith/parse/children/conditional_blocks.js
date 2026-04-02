@@ -15,6 +15,29 @@
 //     <C.Spinner />
 //   </during>
 
+// ── Computed function field resolver ──
+// Resolves func.field where func is a scriptFunc returning arrayName[indexVar].
+// e.g., currentTrack.id → _oa0_id[@intCast(state.getSlot(0))]
+function _resolveComputedFieldAccess(funcName, field) {
+  if (!ctx.scriptBlock) return null;
+  // Match: function funcName() { return arrayName[indexVar]; }
+  var re = new RegExp('function\\s+' + funcName + '\\([^)]*\\)\\s*\\{\\s*return\\s+(\\w+)\\[(\\w+)\\]');
+  var m = ctx.scriptBlock.match(re);
+  if (!m) return null;
+  var arrayName = m[1];
+  var indexVar = m[2];
+  // Find the OA for arrayName
+  var oa = null;
+  for (var i = 0; i < ctx.objectArrays.length; i++) {
+    if (ctx.objectArrays[i].getter === arrayName) { oa = ctx.objectArrays[i]; break; }
+  }
+  if (!oa) return null;
+  // Find the state slot for indexVar
+  var slotIdx = findSlot(indexVar);
+  if (slotIdx < 0) return null;
+  return '_oa' + oa.oaIdx + '_' + field + '[@intCast(state.getSlot(' + slotIdx + '))]';
+}
+
 // ── Condition expression parser ──
 // Reads tokens from cursor until > and builds a Zig condition expression.
 // Handles dictionary word operators: exact, not exact, above, below, etc.
@@ -146,6 +169,23 @@ function parseBlockCondition(c) {
       if (ctx.currentMap && word === ctx.currentMap.indexParam) {
         parts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
         c.advance();
+        continue;
+      }
+
+      // Script function with .field access: currentTrack.id → resolve to OA field
+      if (ctx.scriptFuncs && ctx.scriptFuncs.indexOf(word) >= 0 &&
+          c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.identifier) {
+        c.advance(); // skip word
+        c.advance(); // skip .
+        var accessField = c.text();
+        c.advance(); // skip field
+        var cfResolved = _resolveComputedFieldAccess(word, accessField);
+        if (cfResolved) {
+          parts.push(cfResolved);
+        } else {
+          parts.push(word + '_' + accessField);
+        }
         continue;
       }
 

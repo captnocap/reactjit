@@ -1,3 +1,22 @@
+// ── Zig boolean wrapping for map conditions ──
+// OA fields are i64, so bare values need != 0. But !(i64) is invalid Zig —
+// negated expressions need (expr == 0) instead of !(expr) != 0.
+function _wrapMapCondition(expr) {
+  var isComp = expr.includes('==') || expr.includes('!=') ||
+    expr.includes('>=') || expr.includes('<=') ||
+    expr.includes(' > ') || expr.includes(' < ') ||
+    expr.includes('std.mem.eql') || expr.includes('getSlotBool');
+  if (isComp) return '(' + expr + ')';
+  if (expr.match(/^!\s*\(/)) {
+    var inner = expr.replace(/^!\s*\(/, '').replace(/\)\s*$/, '');
+    return '((' + inner + ') == 0)';
+  }
+  if (expr.startsWith('!')) {
+    return '((' + expr.slice(1).trim() + ') == 0)';
+  }
+  return '((' + expr + ') != 0)';
+}
+
 // Emit map-pool declarations and shared metadata for rebuild passes
 
 function buildMapEmitOrder(ctx) {
@@ -491,21 +510,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
         }
       }
-      // Detect if expression is already boolean (comparison, getSlotBool, or boolean OA field)
-      var isAlreadyBool = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
-        resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
-        resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ') ||
-        resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool');
-      // Check for boolean OA field access: _oaN_fieldName[_i] where field is boolean
-      if (!isAlreadyBool && m && m.oa) {
-        for (var bfi = 0; bfi < m.oa.fields.length; bfi++) {
-          if (m.oa.fields[bfi].type === 'boolean' && resolvedExpr.includes('_oa' + m.oa.oaIdx + '_' + m.oa.fields[bfi].name + '[')) {
-            isAlreadyBool = true;
-            break;
-          }
-        }
-      }
-      const wrapped = isAlreadyBool ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+      const wrapped = _wrapMapCondition(resolvedExpr);
       if (cond.kind === 'show_hide') {
         out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
       } else if (cond.kind === 'ternary_jsx') {
@@ -803,7 +808,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         if (cond.kind === 'show_hide') {
           out += `            ${poolArr}[${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
         } else if (cond.kind === 'ternary_jsx') {
-          const _w = (resolvedExpr.includes('==') || resolvedExpr.includes('!=') || resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool')) ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+          const _w = _wrapMapCondition(resolvedExpr);
           out += `            ${poolArr}[${cond.trueIdx}].style.display = if ${_w} .flex else .none;\n`;
           out += `            ${poolArr}[${cond.falseIdx}].style.display = if ${_w} .none else .flex;\n`;
         }
@@ -816,7 +821,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           if (cond.kind === 'show_hide') {
             out += `            _map_inner_${imi}[_i][_j][${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
           } else if (cond.kind === 'ternary_jsx') {
-            const _w2 = (resolvedExpr.includes('==') || resolvedExpr.includes('!=') || resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool')) ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+            const _w2 = _wrapMapCondition(resolvedExpr);
             out += `            _map_inner_${imi}[_i][_j][${cond.trueIdx}].style.display = if ${_w2} .flex else .none;\n`;
             out += `            _map_inner_${imi}[_i][_j][${cond.falseIdx}].style.display = if ${_w2} .none else .flex;\n`;
           }
@@ -924,17 +929,12 @@ function emitMapPoolRebuilds(ctx, meta) {
               resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
             }
           }
-          const isComp = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
-            resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
-            resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ') ||
-            resolvedExpr.includes('getSlotBool') || resolvedExpr.includes('std.mem.eql');
+          const _wc = _wrapMapCondition(resolvedExpr);
           if (cond.kind === 'show_hide') {
-            const wrapped = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
-            out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+            out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_wc} .flex else .none;\n`;
           } else if (cond.kind === 'ternary_jsx') {
-            const _w3 = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
-            out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_w3} .flex else .none;\n`;
-            out += `        _inner_${mi}[${cond.falseIdx}].style.display = if ${_w3} .none else .flex;\n`;
+            out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_wc} .flex else .none;\n`;
+            out += `        _inner_${mi}[${cond.falseIdx}].style.display = if ${_wc} .none else .flex;\n`;
           }
         }
       }

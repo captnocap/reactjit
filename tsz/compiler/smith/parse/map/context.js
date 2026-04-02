@@ -36,5 +36,5 @@ function consumeMapClose(c) {
 
 function finalizeMapNode(mapInfo, templateNode) {
   mapInfo.templateExpr = templateNode.nodeExpr;
-  return { nodeExpr: '.{}', mapIdx: mapInfo.mapIdx };
+  return { nodeExpr: '.{ .style = .{ .flex_direction = .column } }', mapIdx: mapInfo.mapIdx };
 }

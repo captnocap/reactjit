@@ -694,12 +694,13 @@ function tryParseBraceChild(c, children) {
     ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
 
     const bufId = ctx.dynCount;
-    ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
+    const isInMap = !!ctx.currentMap;
+    ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
     ctx.dynCount++;
 
     ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: jsExpr });
 
-    children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+    children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
   } else if (exprText.length > 0) {
     ctx._droppedExpressions.push({ expr: exprText, line: c.starts[dropStart] || 0 });
   }
