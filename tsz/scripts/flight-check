@@ -165,6 +165,19 @@ elif [ "$JS_HANDLER_DEFS" -gt 0 ] && [ "$JS_HANDLER_REFS" -lt "$JS_HANDLER_DEFS"
     fail "$ORPHANED orphaned JS handler(s): $JS_HANDLER_DEFS defined, $JS_HANDLER_REFS wired to nodes"
 fi
 
+# ── 3e. Missing change handlers ──────────────────────────────
+# If source has onChangeText/onChange but generated code has zero
+# change handler wiring, the change handlers were dropped entirely.
+SRC_CHANGE_HANDLERS=$(gocount_file 'on(ChangeText|Change)\s*=' "$SOURCE")
+if [ "$SRC_CHANGE_HANDLERS" -gt 0 ]; then
+    GEN_CHANGE_FNS=$(gcount '_handler_change_[0-9]' "$GEN_BLOB")
+    GEN_CHANGE_WIRED=$(gocount 'js_on_change' "$GEN_BLOB")
+    GEN_CHANGE_TOTAL=$((GEN_CHANGE_FNS + GEN_CHANGE_WIRED))
+    if [ "$GEN_CHANGE_TOTAL" -eq 0 ]; then
+        fail "$SRC_CHANGE_HANDLERS onChangeText/onChange handler(s) in source but 0 change handlers in generated — all dropped"
+    fi
+fi
+
 # ── 3c. Map handlers without index ────────────────────────────
 # Static _sh_N() handlers (no args) that call functions with bare (i) or (j)
 # are broken — the loop variable is unbound. Should be __mapPress with idx.
