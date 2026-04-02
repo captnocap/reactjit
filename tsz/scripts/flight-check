@@ -292,6 +292,35 @@ if [ "$GEN_EMPTY_TEXTS" -gt 0 ]; then
     fi
 fi
 
+# ── 6e. Truncated mixed text ──────────────────────────────────
+# If source has text nodes with static text + {expr} interpolations
+# (e.g. <p>mode: {mode} · selected: {idx}</p> or `count: ${n}`),
+# the static text segments must appear in the generated bufPrint format.
+# A bare "{d}" or "{s}" format means surrounding text was dropped.
+#
+# Detect: extract static text before/between {expr} from source text nodes,
+# check if those segments appear in generated bufPrint format strings.
+BARE_FMTS=$(gocount 'bufPrint\(&[^,]+, "\{[ds]\}"' "$GEN_BLOB")
+if [ "$BARE_FMTS" -gt 0 ]; then
+    # Extract mixed text patterns: >static text {expr} more text<
+    # These are JSX text nodes with both static text and expressions
+    MIXED_TEXTS=$(grep -oE '>[a-zA-Z][^<]*\{[a-zA-Z]' "$SOURCE" 2>/dev/null | sed 's/^>//' | head -5 || true)
+    TRUNCATED=0
+    while IFS= read -r mt; do
+        [ -z "$mt" ] && continue
+        # Get the static prefix before the first {
+        PREFIX=$(echo "$mt" | cut -d'{' -f1 | sed 's/[[:space:]]*$//')
+        [ -z "$PREFIX" ] && continue
+        [ ${#PREFIX} -lt 3 ] && continue
+        if ! grep -qF "$PREFIX" <<< "$GEN_BLOB"; then
+            TRUNCATED=$((TRUNCATED + 1))
+        fi
+    done <<< "$MIXED_TEXTS"
+    if [ "$TRUNCATED" -gt 0 ]; then
+        fail "$TRUNCATED mixed text node(s) truncated — static text dropped, only bare {d}/{s} remains"
+    fi
+fi
+
 # ── 7. Component inlining check ──────────────────────────────
 COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
     sed 's/^function //' | grep -v '^App$' || true)
