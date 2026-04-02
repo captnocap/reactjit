@@ -33,23 +33,30 @@ function parseTemplateLiteral(raw) {
           fmt += expr;
         }
       } else if (/^(\w+)\s*([+\-*\/])\s*(.+)$/.test(expr)) {
-        // Arithmetic expression: getter + N, getter - 1, etc.
+        // Arithmetic expression: getter + N, getter - 1, getter + getter + getter, etc.
+        // Resolve ALL state getter identifiers in the expression
+        const resolveArithExpr = (e) => {
+          return e.replace(/\b(\w+)\b/g, (w) => {
+            const si = findSlot(w);
+            if (si >= 0) return slotGet(w);
+            if (ctx.currentMap && w === ctx.currentMap.indexParam) {
+              return '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
+            }
+            return w;
+          });
+        };
         const m = expr.match(/^(\w+)\s*([+\-*\/])\s*(.+)$/);
         const lhsSlot = findSlot(m[1]);
-        if (lhsSlot >= 0) {
-          const rhsSlot = findSlot(m[3].trim());
-          const rhsVal = rhsSlot >= 0 ? slotGet(m[3].trim()) : m[3].trim();
+        if (lhsSlot >= 0 || (ctx.currentMap && m[1] === ctx.currentMap.indexParam)) {
+          const resolved = resolveArithExpr(expr);
           fmt += '{d}';
-          if (m[2] === '/') args.push(`@divTrunc(${slotGet(m[1])}, ${rhsVal})`);
-          else if (m[2] === '%') args.push(`@mod(${slotGet(m[1])}, ${rhsVal})`);
-          else args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
-        } else if (ctx.currentMap && m[1] === ctx.currentMap.indexParam) {
-          // Map index param in arithmetic: ${i + 1}, ${i - 1}, etc.
-          const iv = ctx.currentMap.iterVar || '_i';
-          fmt += '{d}';
-          if (m[2] === '/') args.push(`@divTrunc(@as(i64, @intCast(${iv})), ${m[3].trim()})`);
-          else if (m[2] === '%') args.push(`@mod(@as(i64, @intCast(${iv})), ${m[3].trim()})`);
-          else args.push(`@as(i64, @intCast(${iv})) ${m[2]} ${m[3].trim()}`);
+          if (m[2] === '/' && !m[3].includes('+') && !m[3].includes('-')) {
+            args.push(`@divTrunc(${resolveArithExpr(m[1])}, ${resolveArithExpr(m[3].trim())})`);
+          } else if (m[2] === '%' && !m[3].includes('+') && !m[3].includes('-')) {
+            args.push(`@mod(${resolveArithExpr(m[1])}, ${resolveArithExpr(m[3].trim())})`);
+          } else {
+            args.push(resolved);
+          }
         } else {
           fmt += expr;
         }

@@ -685,7 +685,7 @@ function tryParseBraceChild(c, children) {
   const exprText = dropTokens.join(' ');
 
   if (ctx.scriptBlock && exprText.length > 0) {
-    let jsExpr = exprText.replace(/\bexact\b/g, '===');
+    let jsExpr = exprText.replace(/== =/g, '===').replace(/!= =/g, '!==').replace(/\bexact\b/g, '===');
     if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
       jsExpr = jsExpr + '()';
     }

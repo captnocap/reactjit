@@ -164,12 +164,46 @@ function tryParseConditional(c, children) {
         c.advance();
         continue;
       }
+      // OA getter followed by [mapIndex].field → resolve to OA field access
+      if (oa && ctx.currentMap && c.pos + 4 < c.count &&
+          c.kindAt(c.pos + 1) === TK.lbracket) {
+        // Check if bracket contains map index param
+        const bracketIdent = c.textAt(c.pos + 2);
+        const isMapIdx = bracketIdent === ctx.currentMap.indexParam;
+        if (isMapIdx && c.kindAt(c.pos + 3) === TK.rbracket &&
+            c.kindAt(c.pos + 4) === TK.dot && c.pos + 5 < c.count &&
+            c.kindAt(c.pos + 5) === TK.identifier) {
+          const field = c.textAt(c.pos + 5);
+          const iterVar = ctx.currentMap.iterVar || '_i';
+          const fieldInfo = oa.fields.find(f => f.name === field);
+          if (fieldInfo && fieldInfo.type === 'string') {
+            condParts.push(`_oa${oa.oaIdx}_${field}[${iterVar}][0.._oa${oa.oaIdx}_${field}_lens[${iterVar}]]`);
+          } else {
+            condParts.push(`_oa${oa.oaIdx}_${field}[${iterVar}]`);
+          }
+          c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); // skip name [ idx ] . field
+          continue;
+        }
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
         condParts.push(ctx.renderLocals[name]);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
+        // If prop is a map-item ref and next is .field, resolve as OA field access
+        if (ctx.currentMap && ctx.currentMap.oa &&
+            typeof pv === 'string' && pv.includes('@intCast(') &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip prop name
+          c.advance(); // skip dot
+          const field = c.text();
+          const mapOa = ctx.currentMap.oa;
+          const iterVar = ctx.currentMap.iterVar || '_i';
+          condParts.push(`_oa${mapOa.oaIdx}_${field}[${iterVar}]`);
+          c.advance(); // skip field
+          continue;
+        }
         condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');

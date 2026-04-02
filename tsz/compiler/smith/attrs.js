@@ -62,6 +62,41 @@ function parseStyleValue(c) {
   }
   if (c.kind() === TK.identifier) {
     const name = c.text();
+    // OA getter followed by [mapIndex].field → resolve to OA field access
+    const _svOa = ctx.objectArrays ? ctx.objectArrays.find(o => o.getter === name) : null;
+    if (_svOa && c.pos + 4 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
+      const saved = c.save();
+      c.advance(); // skip name
+      c.advance(); // skip [
+      // Check if bracket contains map index param or a prop that resolves to map index
+      let isMapIdx = false;
+      if (c.kind() === TK.identifier) {
+        const bracketName = c.text();
+        isMapIdx = (ctx.currentMap && bracketName === ctx.currentMap.indexParam) ||
+                   (ctx.propStack && ctx.propStack[bracketName] !== undefined &&
+                    typeof ctx.propStack[bracketName] === 'string' &&
+                    ctx.propStack[bracketName].includes('@intCast('));
+      }
+      if (isMapIdx && c.pos + 3 < c.count) {
+        c.advance(); // skip index identifier
+        if (c.kind() === TK.rbracket) {
+          c.advance(); // skip ]
+          if (c.kind() === TK.dot) {
+            c.advance(); // skip .
+            if (c.kind() === TK.identifier) {
+              const field = c.text(); c.advance();
+              const iterVar = (ctx.currentMap && ctx.currentMap.iterVar) || '_i';
+              const fi = _svOa.fields.find(f => f.name === field);
+              if (fi && fi.type === 'string') {
+                return { type: 'map_field', value: `_oa${_svOa.oaIdx}_${field}[${iterVar}]`, zigExpr: `_oa${_svOa.oaIdx}_${field}[${iterVar}][0.._oa${_svOa.oaIdx}_${field}_lens[${iterVar}]]`, fieldType: 'string' };
+              }
+              return { type: 'map_field', value: `_oa${_svOa.oaIdx}_${field}[${iterVar}]`, zigExpr: `_oa${_svOa.oaIdx}_${field}[${iterVar}]`, fieldType: fi ? fi.type : 'int' };
+            }
+          }
+        }
+      }
+      c.restore(saved);
+    }
     if (isGetter(name)) {
       c.advance();
       return { type: 'state', value: name, zigExpr: slotGet(name) };
@@ -140,7 +175,8 @@ function parseStyleValue(c) {
         const zigExpr = pv.startsWith('if (') ? '(' + pv + ')' : pv;
         return { type: 'state', value: name, zigExpr };
       }
-      return { type: 'number', value: pv };
+      // Ensure numeric props have zigExpr so ternary resolution works (prop == N ? A : B)
+      return { type: 'number', value: pv, zigExpr: pv };
     }
   }
   c.advance();

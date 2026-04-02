@@ -1,0 +1,380 @@
+#!/bin/bash
+# flight-check — post-compile integrity check for generated Zig
+# Validates that source .tsz content survived compilation intact.
+#
+# Runs AFTER forge (Smith), BEFORE zig build.
+# Catches: phantom colors, dropped colors, handler imbalance,
+#          state slot mismatch, dropped static text.
+#
+# Usage:
+#   ./scripts/flight-check <source.tsz> <gen_dir_or_file>
+#   Exit 0 = clean, Exit 2 = failures
+
+SOURCE="${1:-}"
+GEN="${2:-}"
+
+if [ -z "$SOURCE" ] || [ -z "$GEN" ]; then
+    echo "Usage: flight-check <source.tsz> <gen_dir_or_file>"
+    exit 1
+fi
+
+NAME=$(basename "$SOURCE" .tsz | sed 's/\.app$//')
+
+# Concat all generated .zig into one blob for searching
+if [ -d "$GEN" ]; then
+    GEN_BLOB=$(cat "$GEN"/*.zig 2>/dev/null)
+else
+    GEN_BLOB=$(cat "$GEN" 2>/dev/null)
+fi
+
+if [ -z "$GEN_BLOB" ]; then
+    echo "[flight] ERROR: no generated code found at $GEN"
+    exit 2
+fi
+
+FAILS=0
+
+fail() { echo "[flight] FAIL: $1"; FAILS=$((FAILS + 1)); }
+
+# Safe grep count — always returns a clean number, never fails
+gcount() { local n; n=$(grep -cE "$1" <<< "$2" 2>/dev/null) || n=0; echo "$n"; }
+gcount_file() { local n; n=$(grep -cE "$1" "$2" 2>/dev/null) || n=0; echo "$n"; }
+gocount() { grep -oE "$1" <<< "$2" 2>/dev/null | wc -l | tr -d ' '; }
+gocount_file() { grep -oE "$1" "$2" 2>/dev/null | wc -l | tr -d ' '; }
+
+# ── Hex-to-RGB helper ─────────────────────────────────────────
+hex_to_rgb() {
+    local hex="${1#\#}"
+    if [ ${#hex} -eq 3 ]; then
+        hex="${hex:0:1}${hex:0:1}${hex:1:1}${hex:1:1}${hex:2:1}${hex:2:1}"
+    fi
+    local r=$((16#${hex:0:2}))
+    local g=$((16#${hex:2:2}))
+    local b=$((16#${hex:4:2}))
+    echo "$r, $g, $b"
+}
+
+# ── 1. Color integrity ────────────────────────────────────────
+SOURCE_COLORS=$(grep -oE '#[0-9a-fA-F]{3,8}' "$SOURCE" 2>/dev/null | sort -u || true)
+
+SOURCE_HAS_WHITE=0
+for c in $SOURCE_COLORS; do
+    norm=$(echo "$c" | tr '[:upper:]' '[:lower:]')
+    case "$norm" in
+        "#fff"|"#ffffff"|"#ffffffff") SOURCE_HAS_WHITE=1 ;;
+    esac
+done
+
+if [ "$SOURCE_HAS_WHITE" -eq 0 ]; then
+    PHANTOM_WHITES=$(gocount '(background_color|border_color) = Color\.rgb\(255, 255, 255\)' "$GEN_BLOB")
+    if [ "$PHANTOM_WHITES" -gt 0 ]; then
+        fail "$PHANTOM_WHITES phantom white Color.rgb(255,255,255) in output — source has no #ffffff on background/border"
+    fi
+fi
+
+# Find component functions that are defined but never used in JSX
+UNUSED_COMP_COLORS=""
+DEFINED_COMPS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | sed 's/^function //' | grep -v '^App$' || true)
+for comp in $DEFINED_COMPS; do
+    if ! grep -qE "<$comp[ />]" "$SOURCE"; then
+        # This component is never used — collect its colors to exclude
+        COMP_BODY=$(sed -n "/^function $comp/,/^function \|^}/p" "$SOURCE" 2>/dev/null)
+        COMP_HEX=$(echo "$COMP_BODY" | grep -oE '#[0-9a-fA-F]{3,8}' | sort -u || true)
+        UNUSED_COMP_COLORS="$UNUSED_COMP_COLORS $COMP_HEX"
+    fi
+done
+
+# Check each source color lands in generated output
+DROPPED=0
+DROPPED_LIST=""
+for hex in $SOURCE_COLORS; do
+    # Skip colors that only appear in unused components
+    if [ -n "$UNUSED_COMP_COLORS" ]; then
+        IS_UNUSED_ONLY=0
+        for uc in $UNUSED_COMP_COLORS; do
+            if [ "$hex" = "$uc" ]; then IS_UNUSED_ONLY=1; break; fi
+        done
+        # Only skip if the color doesn't ALSO appear in used code
+        if [ "$IS_UNUSED_ONLY" -eq 1 ]; then
+            # Check if this color appears outside the unused component(s)
+            OUTSIDE_COUNT=$(grep -oE '#[0-9a-fA-F]{3,8}' "$SOURCE" 2>/dev/null | grep -c "^${hex}$" || true)
+            INSIDE_COUNT=0
+            for comp in $DEFINED_COMPS; do
+                if ! grep -qE "<$comp[ />]" "$SOURCE"; then
+                    COMP_BODY=$(sed -n "/^function $comp/,/^function \|^}/p" "$SOURCE" 2>/dev/null)
+                    IC=$(echo "$COMP_BODY" | grep -oE '#[0-9a-fA-F]{3,8}' | grep -c "^${hex}$" || true)
+                    INSIDE_COUNT=$((INSIDE_COUNT + IC))
+                fi
+            done
+            [ "$OUTSIDE_COUNT" -le "$INSIDE_COUNT" ] && continue
+        fi
+    fi
+    rgb=$(hex_to_rgb "$hex")
+    if ! grep -q "Color\.rgb($rgb)" <<< "$GEN_BLOB"; then
+        hex_lower=$(echo "$hex" | tr '[:upper:]' '[:lower:]')
+        if ! grep -qi "$hex_lower" <<< "$GEN_BLOB"; then
+            DROPPED=$((DROPPED + 1))
+            DROPPED_LIST="$DROPPED_LIST $hex"
+        fi
+    fi
+done
+
+if [ "$DROPPED" -gt 0 ]; then
+    fail "$DROPPED source color(s) not found in generated output:$DROPPED_LIST"
+fi
+
+# ── 2. Color{} placeholder audit ──────────────────────────────
+EMPTY_COLORS=$(gocount '(background_color|border_color|text_color) = Color\{\}' "$GEN_BLOB")
+if [ "$EMPTY_COLORS" -gt 0 ]; then
+    DYN_COLOR_EXPRS=$(gcount_file '(color|backgroundColor|borderColor):.*\?' "$SOURCE")
+    if [ "$EMPTY_COLORS" -gt "$((DYN_COLOR_EXPRS + 2))" ]; then
+        fail "$EMPTY_COLORS Color{} placeholders but only ~$DYN_COLOR_EXPRS dynamic color expressions in source"
+    fi
+fi
+
+# ── 3. Handler balance ────────────────────────────────────────
+SRC_HANDLERS=$(gocount_file 'on(Press|Change|Scroll|Focus|Blur)\s*=' "$SOURCE")
+
+GEN_HANDLER_FNS=$(gcount 'pub fn _handler_(press|change|scroll|focus|blur)_[0-9]+' "$GEN_BLOB")
+GEN_MAP_HANDLER_SETS=$(gocount '_map_lua_bufs_[0-9]+_[0-9]+' "$GEN_BLOB")
+GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS))
+
+if [ "$SRC_HANDLERS" -gt 0 ] && [ "$GEN_HANDLERS" -eq 0 ]; then
+    fail "$SRC_HANDLERS handler(s) in source but 0 in generated output"
+elif [ "$SRC_HANDLERS" -gt "$((GEN_HANDLERS + 3))" ]; then
+    fail "handler imbalance: $SRC_HANDLERS in source, $GEN_HANDLERS generated"
+fi
+
+# ── 4. State slot balance ─────────────────────────────────────
+SRC_USESTATE=$(gcount_file 'useState\(' "$SOURCE")
+SRC_VAR_DECLS=$(gocount_file '^  +[a-z].* is ' "$SOURCE")
+GEN_SLOTS=$(gcount 'state\.createSlot' "$GEN_BLOB")
+# Object arrays replace useState slots — count OA unpack functions as equivalent
+GEN_OA_UNPACKS=$(gcount 'pub fn _oa[0-9]+_unpack' "$GEN_BLOB")
+GEN_TOTAL_SLOTS=$((GEN_SLOTS + GEN_OA_UNPACKS))
+IS_CHAD=0
+[ "$SRC_VAR_DECLS" -gt 0 ] && [ "$SRC_USESTATE" -eq 0 ] && IS_CHAD=1
+
+if [ "$IS_CHAD" -eq 1 ]; then
+    # Chad syntax: <var> blocks instead of useState()
+    if [ "$GEN_SLOTS" -eq 0 ]; then
+        fail "$SRC_VAR_DECLS <var> declarations in source but 0 state slots in generated"
+    fi
+elif [ "$SRC_USESTATE" -gt 0 ] && [ "$GEN_TOTAL_SLOTS" -eq 0 ]; then
+    fail "$SRC_USESTATE useState() in source but 0 createSlot() in generated"
+elif [ "$SRC_USESTATE" -gt 0 ] && [ "$GEN_TOTAL_SLOTS" -lt "$SRC_USESTATE" ]; then
+    fail "state slot mismatch: $SRC_USESTATE useState() in source, $GEN_TOTAL_SLOTS createSlot()+OA in generated (slots missing)"
+fi
+
+# ── 5. Static text survival ──────────────────────────────────
+STATIC_TEXTS=$(grep -oE '<Text[^>]*>[^{<][^<]*</Text>' "$SOURCE" 2>/dev/null | \
+    sed 's/<Text[^>]*>//;s/<\/Text>//' | \
+    sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
+    grep -v '^\s*$' || true)
+
+DROPPED_TEXT=0
+DROPPED_TEXT_LIST=""
+while IFS= read -r txt; do
+    [ -z "$txt" ] && continue
+    if ! grep -qF "$txt" <<< "$GEN_BLOB"; then
+        DROPPED_TEXT=$((DROPPED_TEXT + 1))
+        DROPPED_TEXT_LIST="$DROPPED_TEXT_LIST \"$txt\""
+    fi
+done <<< "$STATIC_TEXTS"
+
+if [ "$DROPPED_TEXT" -gt 0 ]; then
+    fail "$DROPPED_TEXT static text(s) missing from generated output:$DROPPED_TEXT_LIST"
+fi
+
+# ── 6. Map / For loop content check ──────────────────────────
+SRC_MAPS=$(gcount_file '\.map\s*\(' "$SOURCE")
+SRC_FOR=$(gcount_file '<For ' "$SOURCE")
+SRC_LOOPS=$((SRC_MAPS + SRC_FOR))
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    GEN_REBUILD_FNS=$(gcount 'pub fn _rebuildMap[0-9]+' "$GEN_BLOB")
+    if [ "$GEN_REBUILD_FNS" -eq 0 ]; then
+        fail "$SRC_LOOPS loop(s) in source (.map/$SRC_MAPS, <For>/$SRC_FOR) but no _rebuildMap function in generated"
+    fi
+    GEN_MAP_ALLOCS=$(gcount '_pool_arena\.allocator\(\)\.alloc\(' "$GEN_BLOB")
+    if [ "$GEN_REBUILD_FNS" -gt 0 ] && [ "$GEN_MAP_ALLOCS" -eq 0 ]; then
+        fail "map rebuild exists but allocates 0 child arrays — loop content was dropped"
+    fi
+fi
+
+# ── 7. Component inlining check ──────────────────────────────
+COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
+    sed 's/^function //' | grep -v '^App$' || true)
+
+for comp in $COMPONENT_DEFS; do
+    if grep -qE "<$comp[ />]" "$SOURCE"; then
+        COMP_BODY=$(sed -n "/^function $comp/,/^function \|^}/p" "$SOURCE")
+        COMP_COLORS=$(echo "$COMP_BODY" | grep -oE '#[0-9a-fA-F]{6}' | sort -u || true)
+        COMP_MISSING=0
+        COMP_TOTAL=0
+        for cc in $COMP_COLORS; do
+            [ -z "$cc" ] && continue
+            COMP_TOTAL=$((COMP_TOTAL + 1))
+            cc_rgb=$(hex_to_rgb "$cc")
+            if ! grep -q "Color\.rgb($cc_rgb)" <<< "$GEN_BLOB"; then
+                COMP_MISSING=$((COMP_MISSING + 1))
+            fi
+        done
+        if [ "$COMP_TOTAL" -gt 0 ] && [ "$COMP_MISSING" -eq "$COMP_TOTAL" ]; then
+            fail "component $comp used in JSX but ALL its colors ($COMP_TOTAL) missing from output — likely not inlined"
+        fi
+    fi
+done
+
+# ── 8. Empty node array detection ────────────────────────────
+# Node arrays with a single empty node `.{  }` or `.{}` indicate dropped content
+EMPTY_NODES=$(gocount '_arr_[0-9]+ = \[_\]Node\{ \.\{[[:space:]]*\} \}' "$GEN_BLOB")
+if [ "$EMPTY_NODES" -gt 0 ]; then
+    fail "$EMPTY_NODES empty node array(s) — content was dropped (look for _arr_N = [_]Node{ .{} })"
+fi
+
+# ── 9. Multi-file import content check ───────────────────────
+# If source imports other files, check their static text survives
+SOURCE_DIR=$(dirname "$SOURCE")
+IMPORTS=$(grep -oE "from '\./[^']+'" "$SOURCE" 2>/dev/null | sed "s/from '//;s/'$//" || true)
+for imp in $IMPORTS; do
+    # Resolve import path — try with .tsz extensions
+    IMP_FILE=""
+    for ext in ".tsz" ".c.tsz" "/$(basename "$imp").tsz"; do
+        if [ -f "$SOURCE_DIR/${imp}${ext}" ]; then
+            IMP_FILE="$SOURCE_DIR/${imp}${ext}"
+            break
+        fi
+    done
+    [ -z "$IMP_FILE" ] && continue
+
+    # Check characteristic static text from imported file
+    IMP_TEXTS=$(grep -oE ">[A-Z][^<{]+</" "$IMP_FILE" 2>/dev/null | sed 's/^>//;s/<\/$//' | head -5 || true)
+    IMP_NAME=$(basename "$imp")
+    IMP_MISSING=0
+    IMP_TOTAL=0
+    while IFS= read -r itxt; do
+        [ -z "$itxt" ] && continue
+        [ ${#itxt} -lt 3 ] && continue
+        IMP_TOTAL=$((IMP_TOTAL + 1))
+        if ! grep -qF "$itxt" <<< "$GEN_BLOB"; then
+            IMP_MISSING=$((IMP_MISSING + 1))
+        fi
+    done <<< "$IMP_TEXTS"
+    if [ "$IMP_TOTAL" -gt 0 ] && [ "$IMP_MISSING" -eq "$IMP_TOTAL" ]; then
+        fail "imported $IMP_NAME: ALL static text ($IMP_TOTAL items) missing from output — page/component may not be compiled"
+    fi
+done
+
+# ── 11. Handler coverage for chad syntax ─────────────────────
+# Chad uses onPress=functionName and <For> with onPress
+SRC_CHAD_HANDLERS=$(gocount_file 'onPress=' "$SOURCE")
+if [ "$SRC_CHAD_HANDLERS" -gt 0 ] && [ "$SRC_HANDLERS" -eq 0 ]; then
+    # Recount with chad-style handler pattern
+    GEN_ANY_HANDLERS=$(gcount '(on_press|js_on_press|lua_on_press)' "$GEN_BLOB")
+    if [ "$GEN_ANY_HANDLERS" -eq 0 ]; then
+        fail "$SRC_CHAD_HANDLERS onPress in source but 0 press handlers wired in generated"
+    fi
+fi
+
+# ── 12. Map handler arg check ─────────────────────────────────
+# In map rebuild functions, handlers should pass the item index.
+# "functionName()" with no args is wrong when it's inside a map —
+# the handler needs the item/index. Only check maps.zig, not nodes.zig.
+if [ -d "$GEN" ] && [ -f "$GEN/maps.zig" ]; then
+    MAP_BLOB=$(cat "$GEN/maps.zig" 2>/dev/null)
+    MAP_HANDLERS_NO_ARGS=$(gocount 'js_on_press = "[a-zA-Z_]+\(\)"' "$MAP_BLOB")
+    if [ "$MAP_HANDLERS_NO_ARGS" -gt 0 ]; then
+        fail "$MAP_HANDLERS_NO_ARGS map handler(s) call with no arguments — item/index not passed to handler"
+    fi
+fi
+
+# ── 13. Chad page routing check ──────────────────────────────
+# If source has <pages> block declaring page names, the generated code
+# should contain content from those page files (found in same directory).
+SRC_PAGES=$(sed -n '/<pages>/,/<\/pages>/p' "$SOURCE" 2>/dev/null | grep -v '<' | tr -s ' ' '\n' | grep -v '^$' | sort -u || true)
+if [ -n "$SRC_PAGES" ]; then
+    SOURCE_DIR=$(dirname "$SOURCE")
+    PAGES_MISSING=0
+    PAGES_MISSING_LIST=""
+    for pg in $SRC_PAGES; do
+        PG_FILE=""
+        for candidate in "$SOURCE_DIR/$pg.tsz" "$SOURCE_DIR/${pg}.tsz"; do
+            [ -f "$candidate" ] && PG_FILE="$candidate" && break
+        done
+        [ -z "$PG_FILE" ] && continue
+        # Check if ANY characteristic content from this page made it to output
+        # Look for static text or unique identifiers from the page file
+        PG_TEXTS=$(grep -oE ">[A-Z][^<{]*<" "$PG_FILE" 2>/dev/null | sed 's/^>//;s/<$//' | head -5 || true)
+        PG_FOUND=0
+        while IFS= read -r ptxt; do
+            [ -z "$ptxt" ] && continue
+            [ ${#ptxt} -lt 3 ] && continue
+            if grep -qF "$ptxt" <<< "$GEN_BLOB"; then
+                PG_FOUND=1
+                break
+            fi
+        done <<< "$PG_TEXTS"
+        if [ "$PG_FOUND" -eq 0 ]; then
+            PAGES_MISSING=$((PAGES_MISSING + 1))
+            PAGES_MISSING_LIST="$PAGES_MISSING_LIST $pg"
+        fi
+    done
+    if [ "$PAGES_MISSING" -gt 0 ]; then
+        fail "$PAGES_MISSING page(s) declared in <pages> but no content in output:$PAGES_MISSING_LIST"
+    fi
+fi
+
+# ── 14. Unresolved glyph shortcodes ──────────────────────────
+# Glyph shortcodes like :sun: :check: :error: should resolve to inline
+# SVG paths (inline_glyphs). If they appear as literal ":word:" strings
+# in the generated .text fields, the glyph resolver failed.
+SRC_GLYPHS=$(grep -oE ':[a-z_]+:' "$SOURCE" 2>/dev/null | sort -u || true)
+if [ -n "$SRC_GLYPHS" ]; then
+    UNRESOLVED=0
+    UNRESOLVED_LIST=""
+    for glyph in $SRC_GLYPHS; do
+        # Check if this shortcode appears as a literal string in generated text
+        if grep -qF "\"$glyph\"" <<< "$GEN_BLOB" || grep -qF "'$glyph'" <<< "$GEN_BLOB"; then
+            UNRESOLVED=$((UNRESOLVED + 1))
+            UNRESOLVED_LIST="$UNRESOLVED_LIST $glyph"
+        fi
+    done
+    # Also check: source has glyphs but generated has zero inline_glyphs
+    GEN_INLINE_GLYPHS=$(gcount 'inline_glyphs' "$GEN_BLOB")
+    SRC_GLYPH_COUNT=0
+    for _g in $SRC_GLYPHS; do SRC_GLYPH_COUNT=$((SRC_GLYPH_COUNT + 1)); done
+    if [ "$SRC_GLYPH_COUNT" -gt 0 ] && [ "$GEN_INLINE_GLYPHS" -eq 0 ]; then
+        fail "$SRC_GLYPH_COUNT glyph shortcode(s) in source but 0 inline_glyphs in generated — glyphs not resolved"
+    elif [ "$UNRESOLVED" -gt 0 ]; then
+        fail "$UNRESOLVED glyph shortcode(s) appear as literal strings in output:$UNRESOLVED_LIST"
+    fi
+fi
+
+# ── 15. Map variant stomp check ───────────────────────────────
+# If multiple classifier entries patch inside a map loop, they must target
+# DIFFERENT nodes. If 2+ different "Map variant patch: X" comments all
+# target the same _map_pool_N[_mi] (no .children[...] indexing), the
+# patches stomp each other and only the last one takes effect.
+VARIANT_PATCH_NAMES=$(grep -oE '// Map variant patch: [A-Za-z0-9_]+' <<< "$GEN_BLOB" 2>/dev/null | sort -u || true)
+VARIANT_PATCH_COUNT=0
+for _vp in $VARIANT_PATCH_NAMES; do VARIANT_PATCH_COUNT=$((VARIANT_PATCH_COUNT + 1)); done
+if [ "$VARIANT_PATCH_COUNT" -gt 1 ]; then
+    # Extract unique target paths from variant patch lines (maps._map_pool_N[_mi].xxx = ...)
+    # Strip the .style.property = ... part, keep just the node target
+    VARIANT_TARGETS=$(grep -oE 'maps\._map_pool_[0-9]+\[_mi\][^.]*' <<< "$GEN_BLOB" 2>/dev/null | sort -u || true)
+    UNIQUE_TARGETS=0
+    for _vt in $VARIANT_TARGETS; do UNIQUE_TARGETS=$((UNIQUE_TARGETS + 1)); done
+    if [ "$UNIQUE_TARGETS" -le 1 ]; then
+        PATCH_LIST=$(echo "$VARIANT_PATCH_NAMES" | sed 's/\/\/ Map variant patch: //' | tr '\n' ', ' | sed 's/,$//')
+        fail "$VARIANT_PATCH_COUNT variant classifiers ($PATCH_LIST) ALL target same map node — patches stomp each other, only last wins"
+    fi
+fi
+
+# ── Summary ───────────────────────────────────────────────────
+if [ "$FAILS" -gt 0 ]; then
+    echo "[flight] $NAME: $FAILS FAILURE(S)"
+    exit 2
+else
+    echo "[flight] $NAME: OK"
+    exit 0
+fi
