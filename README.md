@@ -435,10 +435,10 @@ app.glyphs.tsz    — named inline assets (vector shapes, compositions)
 
 ### Intent Syntax (Implemented)
 
-The chad tier uses an intent-driven syntax where file structure dictates compiler behavior. The `<page>` block compiler (`smith/page.js`) handles `<var>`, `<state>`, `<functions>`, and `<timer>` blocks, with support for guards (`? stop : go`), composition (`submit = save + clear`), ambient namespace reads (`sys.*`, `device.*`), and the `exact` keyword:
+The chad tier uses an intent-driven syntax where file structure dictates compiler behavior. The page block compiler handles `<var>`, `<state>`, `<functions>`, and `<types>` blocks, with support for `<if>` guards, composition (`addNote: validate + append + clear`), ambient namespace reads (`sys.*`, `device.*`), and the `exact` keyword:
 
 ```
-<page route=notes>
+<notes page>
   <var>
     input is ''
     notes
@@ -453,10 +453,16 @@ The chad tier uses an intent-driven syntax where file structure dictates compile
 
   <functions>
     addNote:
-      input exact '' ? stop : go
-      set_notes to notes.concat([input])
-      set_count to count + 1
-      set_input to ''
+      <if input exact ''>
+        stop
+      </if>
+      set_notes is notes.concat([input])
+      set_count is count + 1
+      set_input is ''
+
+    clearNotes:
+      set_notes is array
+      set_count is 0
   </functions>
 
   return(
@@ -467,10 +473,10 @@ The chad tier uses an intent-driven syntax where file structure dictates compile
       </For>
     </C.Page>
   )
-</page>
+</notes>
 ```
 
-Each `<tag>` is a parser scope — the compiler switches to a minimal grammar per zone. `<var>` only parses declarations. `<state>` only parses setter names. `<functions>` parses linear chains with guards (`? stop : go`) and composition (`submit = saveCustomer + clearForm`). The return block is pure JSX with classifiers. No ambiguity, no surprises, linear top-to-bottom comprehension.
+Each `<tag>` is a parser scope — the compiler switches to a minimal grammar per zone. `<var>` only parses declarations. `<state>` only parses setter names. `<functions>` parses linear chains with `<if>` guards and composition (`addNote: validate + append + clear`). The return block is pure JSX with classifiers. No ambiguity, no surprises, linear top-to-bottom comprehension.
 
 ---
 
