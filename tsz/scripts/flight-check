@@ -321,6 +321,46 @@ if [ "$BARE_FMTS" -gt 0 ]; then
     fi
 fi
 
+# ── 6f. Unconditional display toggles ────────────────────────
+# if (true) .flex in display toggles means the conditional was not resolved —
+# it's always visible, defeating the purpose of the conditional.
+UNCONDITIONAL_DISPLAY=$(gocount 'if \(true\) \.flex' "$GEN_BLOB")
+if [ "$UNCONDITIONAL_DISPLAY" -gt 0 ]; then
+    fail "$UNCONDITIONAL_DISPLAY display toggle(s) compiled as 'if (true)' — conditional not resolved"
+fi
+
+# ── 6g. Handler parameter dropped ────────────────────────────
+# Script functions defined with parameters (e.g. const toggle = (index) => {...})
+# must keep those parameters in the generated JS. If the generated function has
+# no params but the body references a param name, the parameter was dropped.
+PARAMLESS_WITH_BODY_REF=$(grep -A2 'function [a-zA-Z_][a-zA-Z0-9_]*()' <<< "$GEN_BLOB" 2>/dev/null | \
+    grep -cE '\b(index|idx|id)\b' 2>/dev/null || true)
+# Only flag if these are script-defined functions (not built-in _sh_N)
+PARAMLESS_SCRIPT_FNS=$(grep -A2 'function [a-zA-Z][a-zA-Z0-9]*()' <<< "$GEN_BLOB" 2>/dev/null | \
+    grep -v '_sh_\|__mapPress\|__eval\|__setObj' | \
+    grep -cE '\b(index|idx|id)\b' 2>/dev/null || true)
+if [ "$PARAMLESS_SCRIPT_FNS" -gt 0 ]; then
+    fail "$PARAMLESS_SCRIPT_FNS script function(s) reference 'index/idx/id' but have no parameters — param dropped"
+fi
+
+# ── 6h. Object array stubbed as scalar ───────────────────────
+# If source has useState([{...}]) (array of objects) but generated JS has
+# var name = 0 (scalar int), the OA was not created properly.
+# Match useState([ { across same or adjacent lines
+SRC_OA_STATES=$(grep -c 'useState(\[{' "$SOURCE" 2>/dev/null || true)
+SRC_OA_STATES2=$(grep -c 'useState(\[ {' "$SOURCE" 2>/dev/null || true)
+# Also check multi-line: useState([\n  {
+SRC_OA_STATES3=$(grep -A1 'useState(\[' "$SOURCE" 2>/dev/null | grep -c '^\s*{' || true)
+SRC_OA_STATES=$((SRC_OA_STATES + SRC_OA_STATES2 + SRC_OA_STATES3))
+if [ "$SRC_OA_STATES" -gt 0 ]; then
+    GEN_OA_ZIG=$(gcount 'fn _oa[0-9]+_unpack' "$GEN_BLOB")
+    GEN_OA_JS=$(gcount '__setObjArr' "$GEN_BLOB")
+    GEN_OA_UNPACKS=$((GEN_OA_ZIG + GEN_OA_JS))
+    if [ "$GEN_OA_UNPACKS" -eq 0 ]; then
+        fail "$SRC_OA_STATES useState([{...}]) in source but 0 OA unpacks in generated — object array stubbed as scalar"
+    fi
+fi
+
 # ── 7. Component inlining check ──────────────────────────────
 COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
     sed 's/^function //' | grep -v '^App$' || true)
