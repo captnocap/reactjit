@@ -10,8 +10,16 @@ function emitRuntimeSupportSections(ctx, meta) {
 
   const mapPoolArrayNames = new Set();
   for (const map of ctx.maps) {
-    if (!map._mapPerItemDecls) continue;
-    for (const perItemDecl of map._mapPerItemDecls) mapPoolArrayNames.add(perItemDecl.name);
+    if (map._mapPerItemDecls) {
+      for (const perItemDecl of map._mapPerItemDecls) mapPoolArrayNames.add(perItemDecl.name);
+    }
+    // All arrays from map templates are runtime-allocated, not in nodes.zig
+    if (map.mapArrayDecls) {
+      for (var mdi = 0; mdi < map.mapArrayDecls.length; mdi++) {
+        var mdMatch = map.mapArrayDecls[mdi].match(/^var (_arr_\d+)/);
+        if (mdMatch) mapPoolArrayNames.add(mdMatch[1]);
+      }
+    }
   }
 
   out += `fn _updateDynamicTexts() void {\n`;
@@ -29,7 +37,7 @@ function emitRuntimeSupportSections(ctx, meta) {
 
   const dynUpdates = [];
   for (const dc of ctx.dynColors) {
-    if (dc.arrName && promotedToPerItem.has(dc.arrName)) continue;
+    if (dc.arrName && (promotedToPerItem.has(dc.arrName) || mapPoolArrayNames.has(dc.arrName))) continue;
     if (dc.arrName && dc.arrIndex >= 0) {
       const arrNum = parseInt(dc.arrName.replace('_arr_', ''));
       dynUpdates.push({ arrNum: arrNum, arrIndex: dc.arrIndex, line: `    ${dc.arrName}[${dc.arrIndex}].text_color = ${dc.colorExpr};\n` });
@@ -38,7 +46,7 @@ function emitRuntimeSupportSections(ctx, meta) {
   if (ctx.dynStyles && ctx.dynStyles.length > 0) {
     for (const ds of ctx.dynStyles) {
       if (ds.expression && (ds.expression.includes('_i)') || ds.expression.includes('_i]') || ds.expression.includes('(_i'))) continue;
-      if (ds.arrName && promotedToPerItem.has(ds.arrName)) continue;
+      if (ds.arrName && (promotedToPerItem.has(ds.arrName) || mapPoolArrayNames.has(ds.arrName))) continue;
       if (ds.arrName && ds.arrIndex >= 0) {
         const arrNum = parseInt(ds.arrName.replace('_arr_', ''));
         const nodeFields = ['text_color', 'font_size', 'text'];
@@ -215,6 +223,8 @@ function emitRuntimeSupportSections(ctx, meta) {
 
     for (const vb of ctx.variantBindings) {
       if (!vb.inMap) continue;
+      // Skip — map variant patches are now emitted inside _rebuildMap where per-item locals are in scope
+      continue;
       const mapIdx = ctx.maps.findIndex(function(map) {
         return !map.isNested && !map.isInline;
       });

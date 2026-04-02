@@ -1048,6 +1048,40 @@ function emitMapPoolRebuilds(ctx, meta) {
         }
       }
     }
+    // Variant patches for classifier nodes inside this map (must be in-loop where _pi_ locals are in scope)
+    const mapVBs = ctx.variantBindings.filter(function(vb) { return vb.inMap; });
+    if (mapVBs.length > 0 && ctx.variantNames.length > 0) {
+      out += `        {\n`;
+      out += `        const _v = @as(usize, @import("framework/api.zig").theme.rjit_theme_active_variant());\n`;
+      for (const vb of mapVBs) {
+        let target;
+        if (!vb.arrName) {
+          target = `_map_pool_${mi}[_i]`;
+        } else if (vb.arrName === innerArr) {
+          target = `_inner_${mi}[${vb.arrIndex}]`;
+        } else {
+          target = `_pi_${vb.arrName}_${mi}[${vb.arrIndex}]`;
+        }
+        for (let vi = 0; vi < vb.styles.length; vi++) {
+          if (!vb.styles[vi]) continue;
+          const fields = vb.styles[vi].split(/,\s*(?=\.)/).filter(function(f) { return f.trim().startsWith('.'); });
+          const assignments = fields.map(function(f) {
+            const eqIdx = f.indexOf('=');
+            if (eqIdx < 0) return '';
+            const sf = f.trim().slice(1, eqIdx).trim();
+            const sv = f.slice(eqIdx + 1).trim();
+            return `        ${target}.style.${sf} = ${sv};\n`;
+          }).join('');
+          if (!assignments) continue;
+          if (vi === 0) {
+            out += `        if (_v == 0) {\n${assignments}        }\n`;
+          } else {
+            out += `        else if (_v == ${vi}) {\n${assignments}        }\n`;
+          }
+        }
+      }
+      out += `        }\n`;
+    }
     out += `    }\n`;
     // Bind pool to parent array
     if (m.parentArr) {
