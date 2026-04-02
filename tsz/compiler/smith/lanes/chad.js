@@ -150,6 +150,102 @@ function compileChadLane(source, tokens, file) {
     }
   }
 
+  // ── Parse data blocks: <name> for vars declared as array/objects ──
+  // Dictionary: cards is objects → <cards> id: 1, title: Auth flow, col: todo</cards>
+  //             pages is page array → <pages> overview\n users\n analytics </pages>
+  for (var dbi = 0; dbi < stateVars.length; dbi++) {
+    var dbVar = stateVars[dbi];
+    if (dbVar.type !== 'array' && dbVar.type !== 'object_array') continue;
+    if (dbVar.dataKind !== 'objects' && dbVar.dataKind !== 'array' && !/\w+\s+array$/.test(dbVar.dataKind || '')) continue;
+
+    var dataBlock = extractPageBlock(inner, dbVar.name);
+    if (!dataBlock) continue;
+
+    if (dbVar.dataKind === 'objects') {
+      // Parse objects: each line is comma-separated key: value pairs
+      var dataLines = dataBlock.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('//'); });
+      if (dataLines.length === 0) continue;
+
+      // Discover fields from first row
+      var oaFields = [];
+      var firstPairs = dataLines[0].split(',');
+      for (var fpi = 0; fpi < firstPairs.length; fpi++) {
+        var fpair = firstPairs[fpi].trim();
+        var fcolon = fpair.indexOf(':');
+        if (fcolon < 0) continue;
+        var fname = fpair.slice(0, fcolon).trim();
+        var fval = fpair.slice(fcolon + 1).trim();
+        var ftype = 'string';
+        if (fval === 'true' || fval === 'false') ftype = 'boolean';
+        else if (/^-?\d+(\.\d+)?$/.test(fval)) ftype = fval.indexOf('.') >= 0 ? 'float' : 'int';
+        oaFields.push({ name: fname, type: ftype });
+      }
+
+      // Parse all rows into data
+      var constData = [];
+      for (var dli = 0; dli < dataLines.length; dli++) {
+        var row = {};
+        var pairs = dataLines[dli].split(',');
+        for (var pi2 = 0; pi2 < pairs.length; pi2++) {
+          var pair = pairs[pi2].trim();
+          var cidx = pair.indexOf(':');
+          if (cidx < 0) continue;
+          var pname = pair.slice(0, cidx).trim();
+          var pval = pair.slice(cidx + 1).trim();
+          if (pval === 'true') pval = true;
+          else if (pval === 'false') pval = false;
+          else if (/^-?\d+(\.\d+)?$/.test(pval)) pval = parseFloat(pval);
+          row[pname] = pval;
+        }
+        constData.push(row);
+      }
+
+      var oaIdx = ctx.objectArrays.length;
+      ctx.objectArrays.push({
+        fields: oaFields,
+        getter: dbVar.name,
+        setter: 'set_' + dbVar.name,
+        oaIdx: oaIdx,
+        constData: constData,
+      });
+
+      // Build JS initial value: [{id: 1, title: 'Auth flow', ...}, ...]
+      var jsRows = [];
+      for (var jri = 0; jri < constData.length; jri++) {
+        var jParts = [];
+        for (var jfi = 0; jfi < oaFields.length; jfi++) {
+          var jf = oaFields[jfi];
+          var jv = constData[jri][jf.name];
+          if (jf.type === 'string') jv = "'" + jv + "'";
+          else if (typeof jv === 'boolean') jv = jv ? 'true' : 'false';
+          jParts.push(jf.name + ': ' + jv);
+        }
+        jsRows.push('{' + jParts.join(', ') + '}');
+      }
+      dbVar.initial = '[' + jsRows.join(', ') + ']';
+      dbVar.type = 'object_array';
+    } else {
+      // Simple array or typed array: one item per line
+      var items = dataBlock.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('//'); });
+      if (items.length === 0) continue;
+
+      // Register as simple OA
+      var saOaIdx = ctx.objectArrays.length;
+      ctx.objectArrays.push({
+        fields: [{ name: '_v', type: 'string' }],
+        getter: dbVar.name,
+        setter: 'set_' + dbVar.name,
+        oaIdx: saOaIdx,
+        isSimpleArray: true,
+        constData: items.map(function(item) { return { _v: item }; }),
+      });
+
+      // Build JS initial value: ['overview', 'users', 'analytics']
+      dbVar.initial = "['" + items.join("', '") + "']";
+      dbVar.type = 'object_array';
+    }
+  }
+
   // ── Parse <state> block → setter names ──
   var declaredSetters = parsePageStateBlock(stateBlock);
 
@@ -217,17 +313,23 @@ function compileChadLane(source, tokens, file) {
   // ── Chad always dispatches handlers through JS ──
   ctx.handlerDispatch = 'js';
 
-  // ── Find return() in tokens → parse JSX ──
+  // ── Find the LAST return() in tokens → parse JSX ──
+  // Imports are prepended to the token stream. The main chad block's
+  // return() is the last one. Scanning forward finds component returns first.
   c.pos = 0;
   var foundReturn = false;
+  var lastReturnPos = -1;
   while (c.pos < c.count) {
     if (c.isIdent('return') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
-      c.advance(); // skip 'return'
-      c.advance(); // skip '('
-      foundReturn = true;
-      break;
+      lastReturnPos = c.pos;
     }
     c.advance();
+  }
+  if (lastReturnPos >= 0) {
+    c.pos = lastReturnPos;
+    c.advance(); // skip 'return'
+    c.advance(); // skip '('
+    foundReturn = true;
   }
 
   if (!foundReturn) {
