@@ -242,7 +242,21 @@ function wrapConditionalChildren(blockChildren, condIdx, children) {
     return;
   }
 
-  // Multiple children → wrap in a flex-column container
+  // Inside a map context: push each child individually with condIdx.
+  // Don't create static array declarations — they inflate ctx.arrayCounter
+  // but get consumed by the map pool, causing misaligned references.
+  if (ctx.currentMap) {
+    for (var mi = 0; mi < blockChildren.length; mi++) {
+      children.push({
+        nodeExpr: blockChildren[mi].nodeExpr,
+        condIdx: condIdx,
+        dynBufId: blockChildren[mi].dynBufId,
+      });
+    }
+    return;
+  }
+
+  // Outside maps: wrap in a flex-column container with static array
   var arrName = '_arr_' + ctx.arrayCounter++;
   var childExprs = [];
   for (var i = 0; i < blockChildren.length; i++) {

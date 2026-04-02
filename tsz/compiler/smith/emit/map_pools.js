@@ -491,11 +491,21 @@ function emitMapPoolRebuilds(ctx, meta) {
           resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
         }
       }
-      const isComparison = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
+      // Detect if expression is already boolean (comparison, getSlotBool, or boolean OA field)
+      var isAlreadyBool = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
         resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
         resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ') ||
         resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool');
-      const wrapped = isComparison ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+      // Check for boolean OA field access: _oaN_fieldName[_i] where field is boolean
+      if (!isAlreadyBool && m && m.oa) {
+        for (var bfi = 0; bfi < m.oa.fields.length; bfi++) {
+          if (m.oa.fields[bfi].type === 'boolean' && resolvedExpr.includes('_oa' + m.oa.oaIdx + '_' + m.oa.fields[bfi].name + '[')) {
+            isAlreadyBool = true;
+            break;
+          }
+        }
+      }
+      const wrapped = isAlreadyBool ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
       if (cond.kind === 'show_hide') {
         out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
       } else if (cond.kind === 'ternary_jsx') {
