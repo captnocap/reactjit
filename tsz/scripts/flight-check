@@ -174,6 +174,19 @@ if [ "$SH_BARE_LOOP" -gt 0 ]; then
     fail "$SH_BARE_LOOP static _sh handler(s) call functions with bare loop variable (i/j) — should be __mapPress with idx arg"
 fi
 
+# ── 3d. Map handlers with hardcoded index ─────────────────────
+# If source has handlers inside .map() that use the loop variable (e.g. dismiss(i)),
+# but generated code has _sh_N() calling the same function with constant 0,
+# the map index was baked instead of passed dynamically.
+if [ "$(gcount_file '\.map\s*\(' "$SOURCE")" -gt 0 ]; then
+    # Find _sh functions that call something with literal (0) — potential hardcoded index
+    SH_HARDCODED=$(grep -A1 'function _sh_[0-9]*()' <<< "$GEN_BLOB" 2>/dev/null | grep -oE '\w+\(0\)' | sort | uniq -d | wc -l | tr -d ' ')
+    if [ "$SH_HARDCODED" -gt 0 ]; then
+        DUPED_CALLS=$(grep -A1 'function _sh_[0-9]*()' <<< "$GEN_BLOB" 2>/dev/null | grep -oE '\w+\(0\)' | sort | uniq -d | tr '\n' ', ' | sed 's/,$//')
+        fail "$SH_HARDCODED map handler(s) with hardcoded index 0: $DUPED_CALLS — should pass per-item index"
+    fi
+fi
+
 # ── 4. State slot balance ─────────────────────────────────────
 SRC_USESTATE=$(gcount_file 'useState\(' "$SOURCE")
 SRC_VAR_DECLS=$(gocount_file '^  +[a-z].* is ' "$SOURCE")
