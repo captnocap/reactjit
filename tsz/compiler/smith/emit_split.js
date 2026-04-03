@@ -12,6 +12,7 @@ function transpileEffectBody(jsBody, param) {
   const p = param || 'e'; // effect context param name
   const indent = (n) => '    '.repeat(n);
   let depth = 1; // start at 1 for function body indent
+  const arrayVars = new Set(); // vars that hold [2]f32 or [3]f32 (voronoi, hsv, hsl results)
 
   for (let li = 0; li < lines.length; li++) {
     let line = lines[li];
@@ -23,7 +24,7 @@ function transpileEffectBody(jsBody, param) {
     const bElseIf = line.match(/^}\s*else\s+if\s*\((.+)\)\s*\{?\s*$/);
     if (bElseIf) {
       depth--;
-      out += indent(depth) + `} else if (${transpileExpr(bElseIf[1], p)}) {\n`;
+      out += indent(depth) + `} else if (${transpileExpr(bElseIf[1], p, arrayVars)}) {\n`;
       depth++;
       continue;
     }
@@ -41,8 +42,8 @@ function transpileEffectBody(jsBody, param) {
     const forMatch = line.match(/^for\s*\(\s*(?:let|var|const)\s+(\w+)\s*=\s*([^;]+);\s*(\w+)\s*(<|<=|>|>=)\s*([^;]+);\s*(\w+)\+\+\s*\)\s*\{?\s*$/);
     if (forMatch) {
       const [, vname, init, , op, bound] = forMatch;
-      const zigInit = /^\d+$/.test(init.trim()) ? init.trim() + '.0' : transpileExpr(init, p);
-      const zigBound = transpileExpr(bound, p);
+      const zigInit = /^\d+$/.test(init.trim()) ? init.trim() + '.0' : transpileExpr(init, p, arrayVars);
+      const zigBound = transpileExpr(bound, p, arrayVars);
       out += indent(depth) + `{\n`;
       depth++;
       out += indent(depth) + `var ${vname}: f32 = ${zigInit};\n`;
@@ -55,10 +56,12 @@ function transpileEffectBody(jsBody, param) {
     const declMatch = line.match(/^(?:const|let|var)\s+(\w+)\s*=\s*(.+?);?\s*$/);
     if (declMatch) {
       const [, vname, expr] = declMatch;
-      const zigExpr = transpileExpr(expr, p);
-      // Detect hsv/hsl return type → [3]f32 instead of f32
+      const zigExpr = transpileExpr(expr, p, arrayVars);
+      // Detect return types: hsv/hsl → [3]f32, voronoi → [2]f32
       const isColorArray = new RegExp(`\\b${p}\\.(hsv|hsl)\\(`).test(expr);
-      const zigType = isColorArray ? '[3]f32' : 'f32';
+      const isVoronoi = new RegExp(`\\b${p}\\.voronoi\\(`).test(expr);
+      const zigType = isColorArray ? '[3]f32' : isVoronoi ? '[2]f32' : 'f32';
+      if (isColorArray || isVoronoi) arrayVars.add(vname);
       out += indent(depth) + `const ${vname}: ${zigType} = ${zigExpr};\n`;
       continue;
     }
@@ -66,7 +69,7 @@ function transpileEffectBody(jsBody, param) {
     // if statement (standalone — } else if/else handled above before } stripping)
     const ifMatch = line.match(/^if\s*\((.+)\)\s*\{?\s*$/);
     if (ifMatch) {
-      const zigCond = transpileExpr(ifMatch[1], p);
+      const zigCond = transpileExpr(ifMatch[1], p, arrayVars);
       out += indent(depth) + `if (${zigCond}) {\n`;
       depth++;
       continue;
@@ -76,7 +79,7 @@ function transpileEffectBody(jsBody, param) {
     const callMatch = line.match(new RegExp(`^${p}\\.(\\w+)\\((.*)\\);?\\s*$`));
     if (callMatch) {
       const [, method, argsStr] = callMatch;
-      const args = splitArgs(argsStr).map(a => transpileExpr(a.trim(), p));
+      const args = splitArgs(argsStr).map(a => transpileExpr(a.trim(), p, arrayVars));
       if (method === 'setPixel') {
         // setPixel(x, y, r, g, b, a) — all f32 (loop vars are f32)
         out += indent(depth) + `ctx_e.setPixel(${args[0]}, ${args[1]}, ${args[2]}, ${args[3]}, ${args[4]}, ${args[5]});\n`;
@@ -99,7 +102,7 @@ function transpileEffectBody(jsBody, param) {
 }
 
 // Transpile a JS expression to Zig, replacing e.method() calls with ctx_e equivalents
-function transpileExpr(expr, p) {
+function transpileExpr(expr, p, arrayVars) {
   if (!expr) return '0';
   let e = expr.trim();
   // e.time → ctx_e.time
@@ -111,13 +114,114 @@ function transpileExpr(expr, p) {
   e = e.replace(new RegExp(`\\b${p}\\.hsv\\(`, 'g'), 'effect_ctx.EffectContext.hsvToRgb(');
   // e.hsl(h, s, l) → effect_ctx.EffectContext.hslToRgb(h, s, l) — returns [3]f32
   e = e.replace(new RegExp(`\\b${p}\\.hsl\\(`, 'g'), 'effect_ctx.EffectContext.hslToRgb(');
+  // e.dt → ctx_e.dt, e.frame → ctx_e.frame_count
+  e = e.replace(new RegExp(`\\b${p}\\.dt\\b`, 'g'), 'ctx_e.dt');
+  e = e.replace(new RegExp(`\\b${p}\\.frame\\b`, 'g'), '@as(f32, @floatFromInt(ctx_e.frame))');
+  // Mouse
+  e = e.replace(new RegExp(`\\b${p}\\.mouseX\\b`, 'g'), 'ctx_e.mouse_x');
+  e = e.replace(new RegExp(`\\b${p}\\.mouseY\\b`, 'g'), 'ctx_e.mouse_y');
+  e = e.replace(new RegExp(`\\b${p}\\.mouseInside\\b`, 'g'), '(if (ctx_e.mouse_inside) @as(f32, 1.0) else @as(f32, 0.0))');
   // e.sin(x) → @sin(x), e.sqrt(x) → @sqrt(x) — Zig builtins, not methods
   e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil)\\(`, 'g'), '@$1(');
   e = e.replace(new RegExp(`\\b${p}\\.pow\\(`, 'g'), 'std.math.pow(f32, ');
   e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), '@mod(');
-  // array[0] → array[0] (already valid Zig for [3]f32)
-  // No automatic int-to-float conversion — loop vars are f32 (see for loop transpilation)
+  e = e.replace(new RegExp(`\\b${p}\\.mod\\(`, 'g'), '@mod(');
+  e = e.replace(new RegExp(`\\b${p}\\.fract\\(`, 'g'), '@mod(1.0, ');  // fract(x) ≈ @mod(x, 1.0) — approximate
+  e = e.replace(new RegExp(`\\b${p}\\.atan2\\(`, 'g'), 'std.math.atan2(');
+  e = e.replace(new RegExp(`\\b${p}\\.atan\\(`, 'g'), 'std.math.atan(');
+  e = e.replace(new RegExp(`\\b${p}\\.tan\\(`, 'g'), '@tan(');
+  e = e.replace(new RegExp(`\\b${p}\\.exp\\(`, 'g'), '@exp(');
+  e = e.replace(new RegExp(`\\b${p}\\.log\\(`, 'g'), '@log(');
+  // Interpolation — ctx_e method calls
+  e = e.replace(new RegExp(`\\b${p}\\.mix\\(`, 'g'), 'ctx_e.lerp(');
+  e = e.replace(new RegExp(`\\b${p}\\.lerp\\(`, 'g'), 'ctx_e.lerp(');
+  e = e.replace(new RegExp(`\\b${p}\\.clamp\\(`, 'g'), 'ctx_e.clampVal(');
+  e = e.replace(new RegExp(`\\b${p}\\.smoothstep\\(`, 'g'), 'ctx_e.smoothstep(');
+  e = e.replace(new RegExp(`\\b${p}\\.remap\\(`, 'g'), 'ctx_e.remap(');
+  e = e.replace(new RegExp(`\\b${p}\\.dist\\(`, 'g'), 'ctx_e.dist(');
+  e = e.replace(new RegExp(`\\b${p}\\.min\\(`, 'g'), '@min(');
+  e = e.replace(new RegExp(`\\b${p}\\.max\\(`, 'g'), '@max(');
+  e = e.replace(new RegExp(`\\b${p}\\.step\\(`, 'g'), 'ctx_e.step(');
+  // Noise — ctx_e method calls
+  e = e.replace(new RegExp(`\\b${p}\\.noise\\(`, 'g'), 'ctx_e.noise(');
+  e = e.replace(new RegExp(`\\b${p}\\.noise3\\(`, 'g'), 'ctx_e.noise3(');
+  e = e.replace(new RegExp(`\\b${p}\\.fbm\\(`, 'g'), 'ctx_e.fbm(');
+  e = e.replace(new RegExp(`\\b${p}\\.voronoi\\(`, 'g'), 'ctx_e.voronoi(');
+  // Math.PI
+  e = e.replace(/\bMath\.PI\b/g, '3.14159265');
+  // Convert .x/.y/.z to [0]/[1]/[2] for array-typed vars (voronoi, hsv, hsl results)
+  if (arrayVars && arrayVars.size > 0) {
+    for (const av of arrayVars) {
+      e = e.replace(new RegExp(`\\b${av}\\.x\\b`, 'g'), `${av}[0]`);
+      e = e.replace(new RegExp(`\\b${av}\\.y\\b`, 'g'), `${av}[1]`);
+      e = e.replace(new RegExp(`\\b${av}\\.z\\b`, 'g'), `${av}[2]`);
+    }
+  }
   return e;
+}
+
+// ── Shared WGSL math library for GPU effects ────────────────────────
+// Mirrors framework/gpu/effect_math.wgsl. Keep in sync.
+function _effectMathWGSL() {
+  return '' +
+  // Hash functions
+  'fn _hash(p: vec2f) -> f32 {\n  var h = dot(p, vec2f(127.1, 311.7));\n  return fract(sin(h) * 43758.5453123);\n}\n' +
+  'fn _hash2(p: vec2f) -> vec2f {\n  let h = vec2f(dot(p, vec2f(127.1, 311.7)), dot(p, vec2f(269.5, 183.3)));\n  return fract(sin(h) * 43758.5453123);\n}\n' +
+  'fn _hash3(p: vec3f) -> f32 {\n  var h = dot(p, vec3f(127.1, 311.7, 74.7));\n  return fract(sin(h) * 43758.5453123);\n}\n' +
+  // Noise 2D
+  'fn snoise(px: f32, py: f32) -> f32 {\n' +
+  '  let p = vec2f(px, py); let i = floor(p); let f = fract(p);\n' +
+  '  let u = f * f * (3.0 - 2.0 * f);\n' +
+  '  return mix(mix(_hash(i), _hash(i + vec2f(1.0, 0.0)), u.x), mix(_hash(i + vec2f(0.0, 1.0)), _hash(i + vec2f(1.0, 1.0)), u.x), u.y) * 2.0 - 1.0;\n}\n' +
+  // Noise 3D
+  'fn snoise3(px: f32, py: f32, pz: f32) -> f32 {\n' +
+  '  let p = vec3f(px, py, pz); let i = floor(p); let f = fract(p);\n' +
+  '  let u = f * f * (3.0 - 2.0 * f);\n' +
+  '  let a00 = mix(_hash3(i), _hash3(i + vec3f(1.0, 0.0, 0.0)), u.x);\n' +
+  '  let a10 = mix(_hash3(i + vec3f(0.0, 1.0, 0.0)), _hash3(i + vec3f(1.0, 1.0, 0.0)), u.x);\n' +
+  '  let a01 = mix(_hash3(i + vec3f(0.0, 0.0, 1.0)), _hash3(i + vec3f(1.0, 0.0, 1.0)), u.x);\n' +
+  '  let a11 = mix(_hash3(i + vec3f(0.0, 1.0, 1.0)), _hash3(i + vec3f(1.0, 1.0, 1.0)), u.x);\n' +
+  '  return mix(mix(a00, a10, u.y), mix(a01, a11, u.y), u.z) * 2.0 - 1.0;\n}\n' +
+  // FBM
+  'fn fbm(px: f32, py: f32, octaves: f32) -> f32 {\n' +
+  '  var val = 0.0; var amp = 0.5; var freq = 1.0; var x = px; var y = py;\n' +
+  '  let oct = i32(clamp(octaves, 1.0, 8.0));\n' +
+  '  for (var i = 0; i < oct; i = i + 1) {\n' +
+  '    val = val + amp * snoise(x * freq, y * freq); freq = freq * 2.0; amp = amp * 0.5;\n' +
+  '    x = x * 1.02 + 1.7; y = y * 1.02 + 3.1;\n  }\n  return val;\n}\n' +
+  // Voronoi
+  'fn voronoi(px: f32, py: f32) -> vec2f {\n' +
+  '  let p = vec2f(px, py); let n = floor(p); let f = fract(p);\n' +
+  '  var md = 8.0; var md2 = 8.0;\n' +
+  '  for (var j = -1; j <= 1; j = j + 1) { for (var i = -1; i <= 1; i = i + 1) {\n' +
+  '    let g = vec2f(f32(i), f32(j)); let o = _hash2(n + g); let r = g + o - f; let d = dot(r, r);\n' +
+  '    if (d < md) { md2 = md; md = d; } else if (d < md2) { md2 = d; }\n' +
+  '  } }\n  return vec2f(sqrt(md), sqrt(md2));\n}\n' +
+  // HSV
+  'fn hsv2rgb(h_in: f32, s: f32, v: f32) -> vec3f {\n' +
+  '  if (s <= 0.0) { return vec3f(v, v, v); }\n' +
+  '  let h = fract(h_in) * 6.0; let sector = u32(floor(h)); let f = h - floor(h);\n' +
+  '  let p = v * (1.0 - s); let q = v * (1.0 - s * f); let t = v * (1.0 - s * (1.0 - f));\n' +
+  '  switch (sector) {\n' +
+  '    case 0u: { return vec3f(v, t, p); } case 1u: { return vec3f(q, v, p); }\n' +
+  '    case 2u: { return vec3f(p, v, t); } case 3u: { return vec3f(p, q, v); }\n' +
+  '    case 4u: { return vec3f(t, p, v); } default: { return vec3f(v, p, q); }\n  }\n}\n' +
+  // HSL
+  'fn _hue2rgb(p: f32, q: f32, t_in: f32) -> f32 {\n' +
+  '  var t = fract(t_in);\n' +
+  '  if (t < 1.0/6.0) { return p + (q - p) * 6.0 * t; }\n' +
+  '  if (t < 0.5) { return q; }\n' +
+  '  if (t < 2.0/3.0) { return p + (q - p) * (2.0/3.0 - t) * 6.0; }\n' +
+  '  return p;\n}\n' +
+  'fn hsl2rgb(h_in: f32, s: f32, l: f32) -> vec3f {\n' +
+  '  if (s <= 0.0) { return vec3f(l, l, l); }\n' +
+  '  let h = fract(h_in); let q = select(l + s - l * s, l * (1.0 + s), l < 0.5); let p = 2.0 * l - q;\n' +
+  '  return vec3f(_hue2rgb(p, q, h + 1.0/3.0), _hue2rgb(p, q, h), _hue2rgb(p, q, h - 1.0/3.0));\n}\n' +
+  // Distance / interpolation
+  'fn _dist(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 { return length(vec2f(x1 - x2, y1 - y2)); }\n' +
+  'fn _lerp(a: f32, b: f32, t: f32) -> f32 { return a + (b - a) * t; }\n' +
+  'fn _remap(value: f32, in_min: f32, in_max: f32, out_min: f32, out_max: f32) -> f32 { return out_min + (out_max - out_min) * ((value - in_min) / (in_max - in_min)); }\n' +
+  '\n';
 }
 
 // ── WGSL transpiler for GPU effects ──────────────────────────────────
@@ -214,48 +318,10 @@ function transpileEffectToWGSL(jsBody, param) {
   wgsl += '  return out;\n';
   wgsl += '}\n\n';
 
-  // HSV→RGB helper (if needed)
-  const needsHsv = jsBody.includes('.hsv(');
-  const needsHsl = jsBody.includes('.hsl(');
-  if (needsHsv) {
-    wgsl += 'fn hsv2rgb(h_in: f32, s: f32, v: f32) -> vec3f {\n';
-    wgsl += '  if (s <= 0.0) { return vec3f(v, v, v); }\n';
-    wgsl += '  let h = fract(h_in) * 6.0;\n';
-    wgsl += '  let sector = u32(floor(h));\n';
-    wgsl += '  let f = h - floor(h);\n';
-    wgsl += '  let p = v * (1.0 - s);\n';
-    wgsl += '  let q = v * (1.0 - s * f);\n';
-    wgsl += '  let t = v * (1.0 - s * (1.0 - f));\n';
-    wgsl += '  switch (sector) {\n';
-    wgsl += '    case 0u: { return vec3f(v, t, p); }\n';
-    wgsl += '    case 1u: { return vec3f(q, v, p); }\n';
-    wgsl += '    case 2u: { return vec3f(p, v, t); }\n';
-    wgsl += '    case 3u: { return vec3f(p, q, v); }\n';
-    wgsl += '    case 4u: { return vec3f(t, p, v); }\n';
-    wgsl += '    default: { return vec3f(v, p, q); }\n';
-    wgsl += '  }\n';
-    wgsl += '}\n\n';
-  }
-  if (needsHsl) {
-    wgsl += 'fn hsl2rgb(h_in: f32, s: f32, l: f32) -> vec3f {\n';
-    wgsl += '  if (s <= 0.0) { return vec3f(l, l, l); }\n';
-    wgsl += '  let h = fract(h_in);\n';
-    wgsl += '  let q = select(l + s - l * s, l * (1.0 + s), l < 0.5);\n';
-    wgsl += '  let p = 2.0 * l - q;\n';
-    wgsl += '  return vec3f(\n';
-    wgsl += '    hue2rgb(p, q, h + 1.0/3.0),\n';
-    wgsl += '    hue2rgb(p, q, h),\n';
-    wgsl += '    hue2rgb(p, q, h - 1.0/3.0),\n';
-    wgsl += '  );\n';
-    wgsl += '}\n';
-    wgsl += 'fn hue2rgb(p: f32, q: f32, t_in: f32) -> f32 {\n';
-    wgsl += '  var t = fract(t_in);\n';
-    wgsl += '  if (t < 1.0/6.0) { return p + (q - p) * 6.0 * t; }\n';
-    wgsl += '  if (t < 0.5) { return q; }\n';
-    wgsl += '  if (t < 2.0/3.0) { return p + (q - p) * (2.0/3.0 - t) * 6.0; }\n';
-    wgsl += '  return p;\n';
-    wgsl += '}\n\n';
-  }
+  // Include shared math library — all effect helper functions
+  // Source of truth: framework/gpu/effect_math.wgsl
+  // Any new math functions go there + here simultaneously
+  wgsl += _effectMathWGSL();
 
   // Fragment shader
   wgsl += '@fragment fn fs_main(in: VsOut) -> @location(0) vec4f {\n';
@@ -278,20 +344,48 @@ function transpileEffectToWGSL(jsBody, param) {
 function transpileExprWGSL(expr, p) {
   if (!expr) return '0.0';
   let e = expr.trim();
-  // e.time → u.time
+  // e.time → u.time, e.dt → u.dt, e.frame → u.frame
   e = e.replace(new RegExp(`\\b${p}\\.time\\b`, 'g'), 'u.time');
+  e = e.replace(new RegExp(`\\b${p}\\.dt\\b`, 'g'), 'u.dt');
+  e = e.replace(new RegExp(`\\b${p}\\.frame\\b`, 'g'), 'u.frame');
   // e.width / e.height → u.size_w / u.size_h
   e = e.replace(new RegExp(`\\b${p}\\.width\\b`, 'g'), 'u.size_w');
   e = e.replace(new RegExp(`\\b${p}\\.height\\b`, 'g'), 'u.size_h');
-  // e.hsv(h, s, v) → hsv2rgb(h, s, v)
+  // Mouse — already in uniforms
+  e = e.replace(new RegExp(`\\b${p}\\.mouseX\\b`, 'g'), 'u.mouse_x');
+  e = e.replace(new RegExp(`\\b${p}\\.mouseY\\b`, 'g'), 'u.mouse_y');
+  e = e.replace(new RegExp(`\\b${p}\\.mouseInside\\b`, 'g'), 'u.mouse_inside');
+  // Color helpers
   e = e.replace(new RegExp(`\\b${p}\\.hsv\\(`, 'g'), 'hsv2rgb(');
   e = e.replace(new RegExp(`\\b${p}\\.hsl\\(`, 'g'), 'hsl2rgb(');
-  // e.sin(x) → sin(x) — WGSL builtins
-  e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil)\\(`, 'g'), '$1(');
+  // Math builtins — direct WGSL equivalents
+  e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil|exp|exp2|log|log2)\\(`, 'g'), '$1(');
   e = e.replace(new RegExp(`\\b${p}\\.pow\\(`, 'g'), 'pow(');
   e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), 'fract(');
-  // Ensure numeric literals are float (WGSL requires 0.0 not 0)
-  // But be careful not to break things like variable names
+  e = e.replace(new RegExp(`\\b${p}\\.fract\\(`, 'g'), 'fract(');
+  e = e.replace(new RegExp(`\\b${p}\\.mix\\(`, 'g'), 'mix(');
+  e = e.replace(new RegExp(`\\b${p}\\.clamp\\(`, 'g'), 'clamp(');
+  e = e.replace(new RegExp(`\\b${p}\\.min\\(`, 'g'), 'min(');
+  e = e.replace(new RegExp(`\\b${p}\\.max\\(`, 'g'), 'max(');
+  e = e.replace(new RegExp(`\\b${p}\\.step\\(`, 'g'), 'step(');
+  e = e.replace(new RegExp(`\\b${p}\\.smoothstep\\(`, 'g'), 'smoothstep(');
+  e = e.replace(new RegExp(`\\b${p}\\.atan2\\(`, 'g'), 'atan2(');
+  e = e.replace(new RegExp(`\\b${p}\\.atan\\(`, 'g'), 'atan(');
+  e = e.replace(new RegExp(`\\b${p}\\.tan\\(`, 'g'), 'tan(');
+  // Distance / vector ops
+  e = e.replace(new RegExp(`\\b${p}\\.length\\(`, 'g'), 'length(vec2f(');
+  e = e.replace(new RegExp(`\\b${p}\\.distance\\(`, 'g'), '_dist(');
+  // Noise functions → WGSL helper calls
+  e = e.replace(new RegExp(`\\b${p}\\.noise\\(`, 'g'), 'snoise(');
+  e = e.replace(new RegExp(`\\b${p}\\.noise3\\(`, 'g'), 'snoise3(');
+  e = e.replace(new RegExp(`\\b${p}\\.fbm\\(`, 'g'), 'fbm(');
+  e = e.replace(new RegExp(`\\b${p}\\.voronoi\\(`, 'g'), 'voronoi(');
+  // Interpolation → prefixed helpers (avoid WGSL keyword conflicts)
+  e = e.replace(new RegExp(`\\b${p}\\.lerp\\(`, 'g'), '_lerp(');
+  e = e.replace(new RegExp(`\\b${p}\\.remap\\(`, 'g'), '_remap(');
+  e = e.replace(new RegExp(`\\b${p}\\.dist\\(`, 'g'), '_dist(');
+  // Math.PI
+  e = e.replace(/\bMath\.PI\b/g, '3.14159265');
   return e;
 }
 

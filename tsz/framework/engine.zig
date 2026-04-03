@@ -883,9 +883,8 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const ox = node.style.shadow_offset_x;
             const oy = node.style.shadow_offset_y;
             const blur = node.style.shadow_blur;
-            // Left half: multi-rect (Love2D approach), right half: SDF shader
-            if (r.x + r.w * 0.5 < 640) {
-                // Multi-rect: N expanded rects with fading alpha
+            if (node.style.shadow_method == 1) {
+                // Multi-rect: N expanded rects with fading alpha (shadowMethod: 'rect')
                 var steps: u32 = @intFromFloat(@ceil(blur));
                 if (steps > 16) steps = 16;
                 if (steps < 1) steps = 1;
@@ -903,7 +902,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     );
                 }
             } else {
-                // SDF shader: single rect with GPU blur
+                // SDF shader: single rect with GPU blur (default, shadowMethod: 'sdf')
                 gpu.drawRectShadow(
                     r.x + ox, r.y + oy, r.w, r.h,
                     sr, sg, sb, sa,

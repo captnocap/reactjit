@@ -183,6 +183,7 @@ pub const Style = struct {
     shadow_offset_y: f32 = 0,
     shadow_blur: f32 = 0,
     shadow_color: ?Color = null,
+    shadow_method: u8 = 0, // 0 = sdf (default), 1 = rect (multi-rect)
 
     pub fn padLeft(self: Style) f32 {
         return self.padding_left orelse self.padding;
@@ -729,20 +730,66 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     var total: f32 = 0;
     var maxCross: f32 = 0;
     var visibleCount: usize = 0;
-    for (node.children) |*child| {
-        if (child.style.display == .none) {
-            continue;
+    if (isRow and innerW > 0) {
+        // Row: estimate each child's actual allocated width before measuring height.
+        // Without this, text children get measured at full row width and don't wrap,
+        // causing the row's height estimate to be too short.
+        const MAX_ROW_EST = 32;
+        var childWidths: [MAX_ROW_EST]f32 = undefined;
+        var totalIntrinsic: f32 = 0;
+        var growTotal: f32 = 0;
+        var vc: usize = 0;
+        for (node.children) |*child| {
+            if (child.style.display == .none) continue;
+            if (vc >= MAX_ROW_EST) break;
+            const cw = resolveMaybePct(child.style.width, innerW) orelse estimateIntrinsicWidth(child);
+            const cmL = marLeft(child.style);
+            const cmR = marRight(child.style);
+            childWidths[vc] = cw;
+            totalIntrinsic += cw + cmL + cmR;
+            growTotal += child.style.flex_grow;
+            vc += 1;
         }
-        const ch = estimateIntrinsicHeight(child, innerW);
-        const cmT = marTop(child.style);
-        const cmB = marBottom(child.style);
-        if (!isRow) {
-            total += ch + cmT + cmB;
-            visibleCount += 1;
-        } else {
+        const rowGaps = if (vc > 1) g * @as(f32, @floatFromInt(vc - 1)) else 0;
+        const freeSpace = innerW - totalIntrinsic - rowGaps;
+        // Distribute free space to grow children
+        if (freeSpace > 0 and growTotal > 0) {
+            var ri: usize = 0;
+            for (node.children) |*child| {
+                if (child.style.display == .none) continue;
+                if (ri >= vc) break;
+                if (child.style.flex_grow > 0) {
+                    childWidths[ri] += (child.style.flex_grow / growTotal) * freeSpace;
+                }
+                ri += 1;
+            }
+        }
+        // Now measure height with estimated widths
+        var ri2: usize = 0;
+        for (node.children) |*child| {
+            if (child.style.display == .none) continue;
+            if (ri2 >= vc) break;
+            const allocW = childWidths[ri2];
+            const ch = estimateIntrinsicHeight(child, allocW);
+            const cmT = marTop(child.style);
+            const cmB = marBottom(child.style);
             const cross = ch + cmT + cmB;
-            if (cross > maxCross) {
-                maxCross = cross;
+            if (cross > maxCross) maxCross = cross;
+            ri2 += 1;
+        }
+        visibleCount = vc;
+    } else {
+        for (node.children) |*child| {
+            if (child.style.display == .none) continue;
+            const ch = estimateIntrinsicHeight(child, innerW);
+            const cmT = marTop(child.style);
+            const cmB = marBottom(child.style);
+            if (!isRow) {
+                total += ch + cmT + cmB;
+                visibleCount += 1;
+            } else {
+                const cross = ch + cmT + cmB;
+                if (cross > maxCross) maxCross = cross;
             }
         }
     }
@@ -1310,39 +1357,40 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
                     const child = &node.children[@intCast(childIdx)];
-                    if (child.text == null) {
-                        continue;
-                    }
                     if (isRow) {
-                        if (child.style.height != null) {
-                            continue;
+                        if (child.text != null) {
+                            if (child.style.height != null) continue;
+                            const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
+                            const prevW = childMainSize[@intCast(i)];
+                            if (@abs(finalW - prevW) > 0.5) {
+                                const cpl = padLeft(child.style);
+                                const cpr = padRight(child.style);
+                                const cpt = padTop(child.style);
+                                const cpb = padBottom(child.style);
+                                const constrainW = finalW - cpl - cpr;
+                                const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
+                                childCrossSize[@intCast(i)] = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                            }
                         }
-                        const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
-                        const prevW = childMainSize[@intCast(i)];
-                        if (@abs(finalW - prevW) > 0.5) {
+                    } else {
+                        // Column: re-estimate height at actual cross-axis width for ALL auto-height children,
+                        // not just direct text nodes. Nested text may wrap at narrower widths than innerW.
+                        const effAlign = resolveAlign(child.style.align_self, @"align");
+                        const finalW = resolveMaybePct(child.style.width, innerW) orelse (if (effAlign == .stretch) innerW else childCrossSize[@intCast(i)]);
+                        if (child.text != null) {
                             const cpl = padLeft(child.style);
                             const cpr = padRight(child.style);
                             const cpt = padTop(child.style);
                             const cpb = padBottom(child.style);
-                            const constrainW = finalW - cpl - cpr;
+                            const constrainW = asF32(finalW) - asF32(cpl) - cpr;
                             const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
-                            childCrossSize[@intCast(i)] = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                            const newH = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                            if (child.style.height == null) {
+                                childBasis[@intCast(i)] = newH;
+                                childMainSize[@intCast(i)] = newH;
+                            }
+                            childCrossSize[@intCast(i)] = finalW;
                         }
-                    } else {
-                        const effAlign = resolveAlign(child.style.align_self, @"align");
-                        const finalW = resolveMaybePct(child.style.width, innerW) orelse (if (effAlign == .stretch) innerW else childCrossSize[@intCast(i)]);
-                        const cpl = padLeft(child.style);
-                        const cpr = padRight(child.style);
-                        const cpt = padTop(child.style);
-                        const cpb = padBottom(child.style);
-                        const constrainW = asF32(finalW) - asF32(cpl) - cpr;
-                        const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
-                        const newH = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
-                        if (child.style.height == null) {
-                            childBasis[@intCast(i)] = newH;
-                            childMainSize[@intCast(i)] = newH;
-                        }
-                        childCrossSize[@intCast(i)] = finalW;
                     }
                 }
             }

@@ -403,4 +403,34 @@ pub const EffectContext = struct {
     pub fn dist(_: *const EffectContext, x0: f32, y0: f32, x1: f32, y1: f32) f32 {
         return math.v2distance(.{ .x = x0, .y = y0 }, .{ .x = x1, .y = y1 });
     }
+
+    /// Step function: 0 if x < edge, 1 if x >= edge.
+    pub fn step(_: *const EffectContext, edge: f32, x: f32) f32 {
+        return math.step(edge, x);
+    }
+
+    /// Voronoi cellular noise. Returns [2]f32: [nearest_dist, second_nearest_dist].
+    pub fn voronoi(_: *const EffectContext, px: f32, py: f32) [2]f32 {
+        const n = math.v2floor(.{ .x = px, .y = py });
+        const f = .{ .x = px - n.x, .y = py - n.y };
+        var md: f32 = 8.0;
+        var md2: f32 = 8.0;
+        var j: i32 = -1;
+        while (j <= 1) : (j += 1) {
+            var i: i32 = -1;
+            while (i <= 1) : (i += 1) {
+                const gx = @as(f32, @floatFromInt(i));
+                const gy = @as(f32, @floatFromInt(j));
+                const h = math.noise2d(n.x + gx, n.y + gy, 0);
+                const ox = (h + 1.0) * 0.5;
+                const h2 = math.noise2d(n.x + gx + 127.1, n.y + gy + 311.7, 0);
+                const oy = (h2 + 1.0) * 0.5;
+                const rx = gx + ox - f.x;
+                const ry = gy + oy - f.y;
+                const d = rx * rx + ry * ry;
+                if (d < md) { md2 = md; md = d; } else if (d < md2) { md2 = d; }
+            }
+        }
+        return .{ @sqrt(md), @sqrt(md2) };
+    }
 };

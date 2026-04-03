@@ -51,6 +51,7 @@ const enumKeys = {
   textAlign:         { field: 'text_align', values: { left: '.left', center: '.center', right: '.right', justify: '.justify' }},
   overflow:          { field: 'overflow', values: { visible: '.visible', hidden: '.hidden', scroll: '.scroll' }},
   gradientDirection: { field: 'gradient_direction', values: { vertical: '.vertical', horizontal: '.horizontal', none: '.none' }},
+  shadowMethod:      { field: 'shadow_method', values: { sdf: '0', rect: '1' }},
 };
 
 const htmlTags = {
@@ -83,7 +84,7 @@ const soupTags = {
   p:'text', h1:'text', h2:'text', h3:'text', h4:'text', h5:'text', h6:'text',
   pre:'text', label:'text', strong:'text', em:'text', small:'text', code:'text',
   button:'pressable',
-  input:'stub', canvas:'stub', img:'stub', select:'stub', textarea:'stub',
+  input:'input', canvas:'stub', img:'stub', select:'input', textarea:'input',
   br:'void', hr:'void',
 };
 

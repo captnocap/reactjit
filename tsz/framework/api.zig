@@ -154,6 +154,7 @@ pub const Style = struct {
     shadow_offset_y: f32 = 0,
     shadow_blur: f32 = 0,
     shadow_color: ?Color = null,
+    shadow_method: u8 = 0, // 0 = sdf (default), 1 = rect (multi-rect)
 
     pub fn padLeft(self: Style) f32 { return self.padding_left orelse self.padding; }
     pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }
@@ -468,6 +469,7 @@ pub const qjs_runtime = struct {
     pub extern fn rjit_qjs_call_global_str(name: [*:0]const u8, arg: [*:0]const u8) void;
     pub extern fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void;
     pub extern fn rjit_qjs_eval_expr(expr: [*:0]const u8) void;
+    pub extern fn rjit_qjs_eval_to_string(expr: [*]const u8, expr_len: usize, buf: [*]u8, buf_len: usize) usize;
 
     pub fn registerHostFn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void {
         rjit_qjs_register_host_fn(name, fn_ptr, argc);
@@ -476,4 +478,8 @@ pub const qjs_runtime = struct {
     pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void { rjit_qjs_call_global_str(name, arg); }
     pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void { rjit_qjs_call_global_int(name, arg); }
     pub fn evalExpr(expr: [*:0]const u8) void { rjit_qjs_eval_expr(expr); }
+    pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
+        const n = rjit_qjs_eval_to_string(code.ptr, code.len, buf, 256);
+        return buf[0..n];
+    }
 };
