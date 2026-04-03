@@ -281,11 +281,84 @@ pub fn paintCanvasPath(node: *Node) callconv(.auto) void {
     }
 }
 
+/// Paint a box shadow using the multi-rect approach (Love2D method).
+/// Draws N expanded rectangles from outermost to innermost with fading alpha.
+fn paintShadowMultiRect(r: layout.LayoutRect, style: layout.Style, sc: Color) void {
+    @setRuntimeSafety(false);
+    const blur = style.shadow_blur;
+    if (blur <= 0) return;
+
+    var steps: u32 = @intFromFloat(@ceil(blur));
+    if (steps > 10) steps = 10;
+    if (steps < 1) steps = 1;
+
+    const base_alpha = @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity;
+    const sr = @as(f32, @floatFromInt(sc.r)) / 255.0;
+    const sg = @as(f32, @floatFromInt(sc.g)) / 255.0;
+    const sb = @as(f32, @floatFromInt(sc.b)) / 255.0;
+    const ox = style.shadow_offset_x;
+    const oy = style.shadow_offset_y;
+    const fsteps = @as(f32, @floatFromInt(steps));
+
+    var i: u32 = steps;
+    while (i >= 1) : (i -= 1) {
+        const expand = @as(f32, @floatFromInt(i));
+        const alpha = (base_alpha / fsteps) * (fsteps - expand + 1);
+        const rad = style.radiusTL() + expand;
+        gpu.drawRectCorners(
+            r.x + ox - expand, r.y + oy - expand,
+            r.w + expand * 2, r.h + expand * 2,
+            sr, sg, sb, alpha,
+            rad, rad, rad, rad,
+            0, 0, 0, 0, 0,
+        );
+    }
+}
+
+/// Paint a box shadow using SDF blur (shader method).
+/// Emits a single expanded rect; the fragment shader widens the SDF falloff.
+fn paintShadowSDF(r: layout.LayoutRect, style: layout.Style, sc: Color) void {
+    @setRuntimeSafety(false);
+    const blur = style.shadow_blur;
+    if (blur <= 0) return;
+
+    const sa = @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity;
+    const sr = @as(f32, @floatFromInt(sc.r)) / 255.0;
+    const sg = @as(f32, @floatFromInt(sc.g)) / 255.0;
+    const sb = @as(f32, @floatFromInt(sc.b)) / 255.0;
+    const ox = style.shadow_offset_x;
+    const oy = style.shadow_offset_y;
+
+    gpu.drawRectShadow(
+        r.x + ox, r.y + oy, r.w, r.h,
+        sr, sg, sb, sa,
+        style.radiusTL(), style.radiusTR(), style.radiusBR(), style.radiusBL(),
+        blur,
+    );
+}
+
 /// Paint node visuals: background, hover, text, selection, text input.
 /// Separated from paintNode to reduce the recursive frame size.
 noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
     const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+
+    // DEBUG: unconditional red marker on every node with background
+    if (node.style.background_color != null) {
+        gpu.drawRect(r.x, r.y, 8, 8, 1.0, 0.0, 0.0, 1.0, 0, 0, 0, 0, 0, 0);
+    }
+
+    // Box shadow — draw BEFORE background so it appears behind
+    if (node.style.shadow_color) |sc| {
+        if (node.style.shadow_blur > 0) {
+            // Comparison mode: left half = multi-rect, right half = SDF shader
+            if (r.x + r.w * 0.5 < 400) {
+                paintShadowMultiRect(r, node.style, sc);
+            } else {
+                paintShadowSDF(r, node.style, sc);
+            }
+        }
+    }
 
     if (is_hovered and node.style.background_color == null) {
         gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6,
@@ -355,7 +428,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
     if (node.effect_render) |render_fn| {
         _ = render_fn;
         if (node.effect_name) |ename| {
-            // Named effect: render but don't draw — used as fill source by Graph.Path fillEffect
             _ = effects.paintNamedEffect(node, ename, r.x, r.y, r.w, r.h);
         } else {
             _ = effects.paintCustomEffect(node, r.x, r.y, r.w, r.h, g_paint_opacity);

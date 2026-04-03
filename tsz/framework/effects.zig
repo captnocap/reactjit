@@ -374,10 +374,10 @@ var g_dt: f32 = 0;
 
 fn parseBackendPref() BackendPref {
     if (builtin.cpu.arch == .wasm32) return .cpu;
-    const env = std.posix.getenv("ZIGOS_EFFECTS_BACKEND") orelse return .cpu;
+    const env = std.posix.getenv("ZIGOS_EFFECTS_BACKEND") orelse return .auto;
     if (std.mem.eql(u8, env, "cpu")) return .cpu;
     if (std.mem.eql(u8, env, "gpu")) return .gpu;
-    return .cpu;
+    return .auto;
 }
 
 fn shouldTryGpu(node: *const Node) bool {

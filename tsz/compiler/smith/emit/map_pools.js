@@ -511,7 +511,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         }
       }
       // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
-      if (/\b0\(/.test(resolvedExpr) || /\b0\b.*@as/.test(resolvedExpr)) continue;
+      if (/\b0\(/.test(resolvedExpr) || /(?<!\()0\b.*@as/.test(resolvedExpr)) continue;
       const wrapped = _wrapMapCondition(resolvedExpr);
       if (cond.kind === 'show_hide') {
         out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
@@ -657,7 +657,12 @@ function emitMapPoolRebuilds(ctx, meta) {
       // Handler pointers BEFORE node literals that embed .js_on_press / .lua_on_press (otherwise nodes capture null).
       for (let hi = 0; hi < imMeta.mapHandlers.length; hi++) {
         out += `            {\n`;
-        out += `                const _n = std.fmt.bufPrint(_map_lua_bufs_${imi}_${hi}[_i][_j][0..47], "__mapPress_${imi}_${hi}({d})", .{_j}) catch "";\n`;
+        if (im.parentMap) {
+          // Inline map inside another map — pass both outer (_i) and inner (_j) indices
+          out += `                const _n = std.fmt.bufPrint(_map_lua_bufs_${imi}_${hi}[_i][_j][0..47], "__mapPress_${imi}_${hi}({d},{d})", .{_i, _j}) catch "";\n`;
+        } else {
+          out += `                const _n = std.fmt.bufPrint(_map_lua_bufs_${imi}_${hi}[_i][_j][0..47], "__mapPress_${imi}_${hi}({d})", .{_j}) catch "";\n`;
+        }
         out += `                _map_lua_bufs_${imi}_${hi}[_i][_j][_n.len] = 0;\n`;
         out += `                _map_lua_ptrs_${imi}_${hi}[_i][_j] = @ptrCast(_map_lua_bufs_${imi}_${hi}[_i][_j][0.._n.len :0]);\n`;
         out += `            }\n`;
@@ -882,10 +887,11 @@ function emitMapPoolRebuilds(ctx, meta) {
               }
             }
           }
-          // Replace nested map shared children refs with per-group pool slices
+          // Replace nested/inline map shared children refs with per-group pool slices
           for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
             const nm = ctx.maps[nmi];
-            if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
+            const isChildOfThisMap = (nm.isNested && nm.parentOaIdx === m.oaIdx) || (nm.isInline && nm.parentMap === m);
+            if (!isChildOfThisMap) continue;
             if (nm.parentArr && inner.includes(`&${nm.parentArr}`)) {
               inner = inner.replace(`&${nm.parentArr}`, `_map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]]`);
             }
@@ -932,7 +938,7 @@ function emitMapPoolRebuilds(ctx, meta) {
             }
           }
           // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
-          if (/\b0\(/.test(resolvedExpr) || /\b0\b.*@as/.test(resolvedExpr)) continue;
+          if (/\b0\(/.test(resolvedExpr) || /(?<!\()0\b.*@as/.test(resolvedExpr)) continue;
           const _wc = _wrapMapCondition(resolvedExpr);
           if (cond.kind === 'show_hide') {
             out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_wc} .flex else .none;\n`;
@@ -943,10 +949,11 @@ function emitMapPoolRebuilds(ctx, meta) {
         }
       }
   
-      // Assign nested map children to the correct inner array slot
+      // Assign nested/inline map children to the correct inner array slot
       for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
         const nm = ctx.maps[nmi];
-        if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
+        const isChildOfThisMap = (nm.isNested && nm.parentOaIdx === m.oaIdx) || (nm.isInline && nm.parentMap === m);
+        if (!isChildOfThisMap) continue;
         if (nm.parentArr) {
           // Find which inner array slot this nested map targets
           // nm.parentArr is the array name, nm.childIdx is the slot index
@@ -1028,6 +1035,34 @@ function emitMapPoolRebuilds(ctx, meta) {
       } else {
         out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
       }
+      // .filter() display toggles — hide items that don't match filter conditions
+      if (m.filterConditions && m.filterConditions.length > 0) {
+        var filterParts = [];
+        for (var fi = 0; fi < m.filterConditions.length; fi++) {
+          var fc = m.filterConditions[fi];
+          var cond = fc.raw;
+          // Resolve: param.field → OA field access (handle optional spaces around dot from tokenizer)
+          if (m.oa) {
+            for (var ffi = 0; ffi < m.oa.fields.length; ffi++) {
+              var f = m.oa.fields[ffi];
+              cond = cond.replace(new RegExp('\\b' + fc.param + '\\s*\\.\\s*' + f.name + '\\b', 'g'), '_oa' + m.oaIdx + '_' + f.name + '[_i]');
+            }
+          }
+          // Resolve: state getters
+          for (var si = 0; si < ctx.stateSlots.length; si++) {
+            var s = ctx.stateSlots[si];
+            cond = cond.replace(new RegExp('\\b' + s.getter + '\\b', 'g'), 'state.getSlot(' + si + ')');
+          }
+          // JS → Zig operators
+          cond = cond.replace(/\|\|/g, ' or ');
+          cond = cond.replace(/&&/g, ' and ');
+          cond = cond.replace(/===/g, '==');
+          cond = cond.replace(/!==/g, '!=');
+          filterParts.push('(' + cond.trim() + ')');
+        }
+        var filterExpr = filterParts.join(' and ');
+        out += `        _map_pool_${mi}[_i].style.display = if (${filterExpr}) .flex else .none;\n`;
+      }
     } else {
       // Single-node map template (no inner array) — wire dynamic text refs
       let tExpr = m.templateExpr;
@@ -1045,10 +1080,31 @@ function emitMapPoolRebuilds(ctx, meta) {
       for (const da of m._deferredCanvasAttrs) {
         const oaIdx = m.oaIdx;
         const oaField = `_oa${oaIdx}_${da.oaField}`;
+        // Find the correct target node — canvas_path attrs go on the per-item
+        // node that has .canvas_path = true, not on the pool root.
+        // canvas_view_zoom goes on the graph_container node (parent of path).
+        let target = `_map_pool_${mi}[_i]`;
+        const isPathAttr = da.zigField === 'canvas_path_d' || da.zigField === 'canvas_fill_effect' ||
+            da.zigField === 'canvas_fill_color' || da.zigField === 'canvas_stroke_width' ||
+            da.zigField === 'canvas_flow_speed';
+        const isGraphAttr = da.zigField === 'canvas_view_zoom';
+        if (m._mapPerItemDecls) {
+          if (isPathAttr) {
+            for (const pid of m._mapPerItemDecls) {
+              if (pid.expr && pid.expr.includes('.canvas_path = true')) {
+                target = `_pi_${pid.name}_${mi}[0]`;
+                break;
+              }
+            }
+          } else if (isGraphAttr) {
+            // Graph attrs go on the inner node (graph_container), not the pool root
+            target = `_inner_${mi}[0]`;
+          }
+        }
         if (da.type === 'string') {
-          out += `        _map_pool_${mi}[_i].${da.zigField} = ${oaField}[_i][0..${oaField}_lens[_i]];\n`;
+          out += `        ${target}.${da.zigField} = ${oaField}[_i][0..${oaField}_lens[_i]];\n`;
         } else {
-          out += `        _map_pool_${mi}[_i].${da.zigField} = @floatFromInt(${oaField}[_i]);\n`;
+          out += `        ${target}.${da.zigField} = @floatFromInt(${oaField}[_i]);\n`;
         }
       }
     }

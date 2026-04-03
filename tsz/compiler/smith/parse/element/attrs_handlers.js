@@ -75,6 +75,7 @@ function parseElementRenderAttr(c, nodeFields) {
     const effectId = ctx.effectRenders.length;
     ctx.effectRenders.push({ id: effectId, param: effectParam, body: bodySource });
     nodeFields.push(`.effect_render = _effect_render_${effectId}`);
+    nodeFields.push(`.effect_shader = _effect_shader_${effectId}`);
     return;
   }
 

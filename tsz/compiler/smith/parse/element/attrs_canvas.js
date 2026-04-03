@@ -17,8 +17,23 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
   }
 
   if (attr === 'strokeWidth' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
-    const value = parseNumericAttrValue(c, false);
-    if (value !== null) nodeFields.push(`.canvas_stroke_width = ${value}`);
+    if (c.kind() === TK.lbrace && ctx.currentMap) {
+      c.advance();
+      if (c.kind() === TK.identifier && c.text() === ctx.currentMap.itemParam) {
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          const fieldName = c.text();
+          c.advance();
+          if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
+          ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_stroke_width', oaField: fieldName, type: 'number' });
+        }
+      }
+      if (c.kind() === TK.rbrace) c.advance();
+    } else {
+      const value = parseNumericAttrValue(c, false);
+      if (value !== null) nodeFields.push(`.canvas_stroke_width = ${value}`);
+    }
     return true;
   }
 
@@ -33,16 +48,43 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
       nodeFields.push(`.canvas_fill_effect = "${c.text().slice(1, -1)}"`);
       c.advance();
     } else if (c.kind() === TK.lbrace) {
-      skipBraces(c);
+      c.advance();
+      if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          const fieldName = c.text();
+          c.advance();
+          if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
+          ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_fill_effect', oaField: fieldName, type: 'string' });
+        }
+      }
+      if (c.kind() === TK.rbrace) c.advance();
     }
     return true;
   }
 
   if (attr === 'viewZoom') {
-    const value = parseNumericAttrValue(c, false);
-    if (value !== null) {
-      nodeFields.push(`.canvas_view_zoom = ${value}`);
-      nodeFields.push('.canvas_view_set = true');
+    if (c.kind() === TK.lbrace && ctx.currentMap) {
+      c.advance();
+      if (c.kind() === TK.identifier && c.text() === ctx.currentMap.itemParam) {
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          const fieldName = c.text();
+          c.advance();
+          if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
+          ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_view_zoom', oaField: fieldName, type: 'number' });
+          nodeFields.push('.canvas_view_set = true');
+        }
+      }
+      if (c.kind() === TK.rbrace) c.advance();
+    } else {
+      const value = parseNumericAttrValue(c, false);
+      if (value !== null) {
+        nodeFields.push(`.canvas_view_zoom = ${value}`);
+        nodeFields.push('.canvas_view_set = true');
+      }
     }
     return true;
   }

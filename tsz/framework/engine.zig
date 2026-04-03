@@ -932,7 +932,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
     if (node.effect_render) |render_fn| {
         _ = render_fn;
         if (node.effect_name) |ename| {
-            // Named effect: render but don't draw — used as fill source by Graph.Path fillEffect
             _ = effects.paintNamedEffect(node, ename, r.x, r.y, r.w, r.h);
         } else {
             _ = effects.paintCustomEffect(node, r.x, r.y, r.w, r.h, g_paint_opacity);

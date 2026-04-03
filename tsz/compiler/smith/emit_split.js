@@ -120,6 +120,181 @@ function transpileExpr(expr, p) {
   return e;
 }
 
+// ── WGSL transpiler for GPU effects ──────────────────────────────────
+// Converts JS onRender body to a complete WGSL shader string.
+// The fragment shader runs per-pixel — no loops needed (global_invocation = pixel coord).
+// Uses a render pipeline: vs_main outputs a fullscreen triangle, fs_main does the math.
+
+function transpileEffectToWGSL(jsBody, param) {
+  const p = param || 'e';
+  const lines = jsBody.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Collect variable declarations and the setPixel call
+  const vars = [];
+  let setPixelArgs = null;
+  const bodyLines = [];
+
+  for (let li = 0; li < lines.length; li++) {
+    let line = lines[li];
+    // Skip pure braces, for loops (x/y iteration handled by GPU dispatch)
+    if (line === '{' || line === '}' || line === '};') continue;
+    if (/^for\s*\(/.test(line)) continue;
+
+    // const/let/var declaration
+    const declMatch = line.match(/^(?:const|let|var)\s+(\w+)\s*=\s*(.+?);?\s*$/);
+    if (declMatch) {
+      const [, vname, expr] = declMatch;
+      // Skip x/y/fx/fy if they're just scaled coords — we compute those from frag coord
+      if (vname === 'x' || vname === 'y') continue;
+      const wgslExpr = transpileExprWGSL(expr, p);
+      // Detect hsv/hsl → vec3f
+      const isColor = new RegExp(`\\b${p}\\.(hsv|hsl)\\(`).test(expr);
+      bodyLines.push(`  let ${vname} = ${wgslExpr};`);
+      continue;
+    }
+
+    // e.setPixel(x, y, r, g, b, a)
+    const spMatch = line.match(new RegExp(`^${p}\\.setPixel\\((.*)\\);?\\s*$`));
+    if (spMatch) {
+      const args = splitArgs(spMatch[1]).map(a => transpileExprWGSL(a.trim(), p));
+      // In fragment shader, we don't need x,y — we return the color
+      setPixelArgs = { r: args[2], g: args[3], b: args[4], a: args[5] };
+      continue;
+    }
+
+    // if/else if/else
+    const ifMatch = line.match(/^if\s*\((.+)\)\s*\{?\s*$/);
+    if (ifMatch) {
+      bodyLines.push(`  if (${transpileExprWGSL(ifMatch[1], p)}) {`);
+      continue;
+    }
+    const elseIfMatch = line.match(/^}\s*else\s+if\s*\((.+)\)\s*\{?\s*$/);
+    if (elseIfMatch) {
+      bodyLines.push(`  } else if (${transpileExprWGSL(elseIfMatch[1], p)}) {`);
+      continue;
+    }
+    if (/^}\s*else\s*\{?\s*$/.test(line)) {
+      bodyLines.push('  } else {');
+      continue;
+    }
+    if (line === '}' || line === '};') {
+      bodyLines.push('  }');
+      continue;
+    }
+
+    // Another setPixel inside a branch
+    const spMatch2 = line.match(new RegExp(`^${p}\\.setPixel\\((.*)\\);?\\s*$`));
+    if (spMatch2) {
+      const args = splitArgs(spMatch2[1]).map(a => transpileExprWGSL(a.trim(), p));
+      bodyLines.push(`    out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]});`);
+      continue;
+    }
+  }
+
+  // Build the full WGSL shader
+  let wgsl = '';
+  wgsl += 'struct Uniforms {\n';
+  wgsl += '  size_w: f32,\n  size_h: f32,\n  time: f32,\n  dt: f32,\n';
+  wgsl += '  frame: f32,\n  mouse_x: f32,\n  mouse_y: f32,\n  mouse_inside: f32,\n';
+  wgsl += '};\n\n';
+  wgsl += '@group(0) @binding(0) var<uniform> u: Uniforms;\n\n';
+
+  // Vertex shader — fullscreen triangle (3 vertices cover the screen)
+  wgsl += 'struct VsOut {\n  @builtin(position) pos: vec4f,\n  @location(0) uv: vec2f,\n};\n\n';
+  wgsl += '@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {\n';
+  wgsl += '  // 6 vertices = 2 triangles covering [0,0]-[1,1]\n';
+  wgsl += '  var pos = array<vec2f, 6>(\n';
+  wgsl += '    vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0),\n';
+  wgsl += '    vec2f(1.0, 0.0), vec2f(1.0, 1.0), vec2f(0.0, 1.0),\n';
+  wgsl += '  );\n';
+  wgsl += '  let p = pos[vi];\n';
+  wgsl += '  var out: VsOut;\n';
+  wgsl += '  out.pos = vec4f(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);\n';
+  wgsl += '  out.uv = p;\n';
+  wgsl += '  return out;\n';
+  wgsl += '}\n\n';
+
+  // HSV→RGB helper (if needed)
+  const needsHsv = jsBody.includes('.hsv(');
+  const needsHsl = jsBody.includes('.hsl(');
+  if (needsHsv) {
+    wgsl += 'fn hsv2rgb(h_in: f32, s: f32, v: f32) -> vec3f {\n';
+    wgsl += '  if (s <= 0.0) { return vec3f(v, v, v); }\n';
+    wgsl += '  let h = fract(h_in) * 6.0;\n';
+    wgsl += '  let sector = u32(floor(h));\n';
+    wgsl += '  let f = h - floor(h);\n';
+    wgsl += '  let p = v * (1.0 - s);\n';
+    wgsl += '  let q = v * (1.0 - s * f);\n';
+    wgsl += '  let t = v * (1.0 - s * (1.0 - f));\n';
+    wgsl += '  switch (sector) {\n';
+    wgsl += '    case 0u: { return vec3f(v, t, p); }\n';
+    wgsl += '    case 1u: { return vec3f(q, v, p); }\n';
+    wgsl += '    case 2u: { return vec3f(p, v, t); }\n';
+    wgsl += '    case 3u: { return vec3f(p, q, v); }\n';
+    wgsl += '    case 4u: { return vec3f(t, p, v); }\n';
+    wgsl += '    default: { return vec3f(v, p, q); }\n';
+    wgsl += '  }\n';
+    wgsl += '}\n\n';
+  }
+  if (needsHsl) {
+    wgsl += 'fn hsl2rgb(h_in: f32, s: f32, l: f32) -> vec3f {\n';
+    wgsl += '  if (s <= 0.0) { return vec3f(l, l, l); }\n';
+    wgsl += '  let h = fract(h_in);\n';
+    wgsl += '  let q = select(l + s - l * s, l * (1.0 + s), l < 0.5);\n';
+    wgsl += '  let p = 2.0 * l - q;\n';
+    wgsl += '  return vec3f(\n';
+    wgsl += '    hue2rgb(p, q, h + 1.0/3.0),\n';
+    wgsl += '    hue2rgb(p, q, h),\n';
+    wgsl += '    hue2rgb(p, q, h - 1.0/3.0),\n';
+    wgsl += '  );\n';
+    wgsl += '}\n';
+    wgsl += 'fn hue2rgb(p: f32, q: f32, t_in: f32) -> f32 {\n';
+    wgsl += '  var t = fract(t_in);\n';
+    wgsl += '  if (t < 1.0/6.0) { return p + (q - p) * 6.0 * t; }\n';
+    wgsl += '  if (t < 0.5) { return q; }\n';
+    wgsl += '  if (t < 2.0/3.0) { return p + (q - p) * (2.0/3.0 - t) * 6.0; }\n';
+    wgsl += '  return p;\n';
+    wgsl += '}\n\n';
+  }
+
+  // Fragment shader
+  wgsl += '@fragment fn fs_main(in: VsOut) -> @location(0) vec4f {\n';
+  wgsl += '  let x = in.uv.x * u.size_w;\n';
+  wgsl += '  let y = in.uv.y * u.size_h;\n';
+  wgsl += '  var out_color = vec4f(0.0, 0.0, 0.0, 1.0);\n';
+  for (const bl of bodyLines) {
+    wgsl += bl + '\n';
+  }
+  if (setPixelArgs) {
+    wgsl += `  out_color = vec4f(${setPixelArgs.r}, ${setPixelArgs.g}, ${setPixelArgs.b}, ${setPixelArgs.a});\n`;
+  }
+  wgsl += '  return out_color;\n';
+  wgsl += '}\n';
+
+  return wgsl;
+}
+
+// Transpile a JS expression to WGSL
+function transpileExprWGSL(expr, p) {
+  if (!expr) return '0.0';
+  let e = expr.trim();
+  // e.time → u.time
+  e = e.replace(new RegExp(`\\b${p}\\.time\\b`, 'g'), 'u.time');
+  // e.width / e.height → u.size_w / u.size_h
+  e = e.replace(new RegExp(`\\b${p}\\.width\\b`, 'g'), 'u.size_w');
+  e = e.replace(new RegExp(`\\b${p}\\.height\\b`, 'g'), 'u.size_h');
+  // e.hsv(h, s, v) → hsv2rgb(h, s, v)
+  e = e.replace(new RegExp(`\\b${p}\\.hsv\\(`, 'g'), 'hsv2rgb(');
+  e = e.replace(new RegExp(`\\b${p}\\.hsl\\(`, 'g'), 'hsl2rgb(');
+  // e.sin(x) → sin(x) — WGSL builtins
+  e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil)\\(`, 'g'), '$1(');
+  e = e.replace(new RegExp(`\\b${p}\\.pow\\(`, 'g'), 'pow(');
+  e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), 'fract(');
+  // Ensure numeric literals are float (WGSL requires 0.0 not 0)
+  // But be careful not to break things like variable names
+  return e;
+}
+
 // Split function arguments respecting nested parens
 function splitArgs(s) {
   const args = [];
@@ -236,6 +411,7 @@ function splitOutput(monolith, file) {
   if (F['nodes.zig']) {
     F['nodes.zig'] = F['nodes.zig'].replace(/= (_handler_\w+)/g, '= handlers.$1');
     F['nodes.zig'] = F['nodes.zig'].replace(/= (_effect_render_\w+)/g, '= handlers.$1');
+    F['nodes.zig'] = F['nodes.zig'].replace(/= (_effect_shader_\w+)/g, '= handlers.$1');
   }
 
   // maps.zig: node refs → nodes.X, OA refs → st.X
@@ -613,6 +789,13 @@ function emitLogicBlocks(ctx) {
               const outerIdxParam = m.parentMap.indexParam || 'gi';
               const innerIdxParam = m.indexParam || 'ii';
               jsLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam}) {`);
+              // Declare item variables for parent and inner maps so handler body can access fields
+              if (m.parentMap.oa) {
+                jsLines.push(`  var ${m.parentMap.itemParam} = ${m.parentMap.oa.getter}[${outerIdxParam}];`);
+              }
+              if (m.oa) {
+                jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[${innerIdxParam}];`);
+              }
               jsLines.push(`  ${jsHandlerBody};`);
               jsLines.push(`}`);
               mh._emittedInJS = true;
