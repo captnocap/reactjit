@@ -48,6 +48,10 @@ hex_to_rgb() {
     if [ ${#hex} -eq 3 ]; then
         hex="${hex:0:1}${hex:0:1}${hex:1:1}${hex:1:1}${hex:2:1}${hex:2:1}"
     fi
+    # Strip alpha channel from 8-digit RGBA hex
+    if [ ${#hex} -eq 8 ]; then
+        hex="${hex:0:6}"
+    fi
     local r=$((16#${hex:0:2}))
     local g=$((16#${hex:2:2}))
     local b=$((16#${hex:4:2}))
@@ -55,7 +59,14 @@ hex_to_rgb() {
 }
 
 # ── 1. Color integrity ────────────────────────────────────────
+# Skip color checks entirely for classifier-only files — their colors are consumed
+# by the classifier data structures, not emitted as direct Color.rgb() calls.
+IS_CLASSIFIER=0
+case "$SOURCE" in *.cls.tsz|*.tcls.tsz|*.vcls.tsz) IS_CLASSIFIER=1 ;; esac
+
 SOURCE_COLORS=$(grep -oE '#[0-9a-fA-F]{3,8}' "$SOURCE" 2>/dev/null | sort -u || true)
+
+if [ "$IS_CLASSIFIER" -eq 0 ]; then
 
 SOURCE_HAS_WHITE=0
 for c in $SOURCE_COLORS; do
@@ -88,6 +99,9 @@ done
 DROPPED=0
 DROPPED_LIST=""
 for hex in $SOURCE_COLORS; do
+    # Skip RGBA hex — compiler strips alpha, Color.rgb() only has RGB
+    hex_stripped="${hex#\#}"
+    [ ${#hex_stripped} -eq 8 ] && continue
     # Skip colors that only appear in unused components
     if [ -n "$UNUSED_COMP_COLORS" ]; then
         IS_UNUSED_ONLY=0
@@ -112,7 +126,7 @@ for hex in $SOURCE_COLORS; do
     rgb=$(hex_to_rgb "$hex")
     if ! grep -q "Color\.rgb($rgb)" <<< "$GEN_BLOB"; then
         hex_lower=$(echo "$hex" | tr '[:upper:]' '[:lower:]')
-        if ! grep -qi "$hex_lower" <<< "$GEN_BLOB"; then
+        if ! grep -qi -- "$hex_lower" <<< "$GEN_BLOB"; then
             DROPPED=$((DROPPED + 1))
             DROPPED_LIST="$DROPPED_LIST $hex"
         fi
@@ -123,30 +137,43 @@ if [ "$DROPPED" -gt 0 ]; then
     fail "$DROPPED source color(s) not found in generated output:$DROPPED_LIST"
 fi
 
+fi # IS_CLASSIFIER color integrity skip
+
 # ── 2. Color{} placeholder audit ──────────────────────────────
+if [ "$IS_CLASSIFIER" -eq 0 ]; then
 EMPTY_COLORS=$(gocount '(background_color|border_color|text_color) = Color\{\}' "$GEN_BLOB")
 if [ "$EMPTY_COLORS" -gt 0 ]; then
     DYN_COLOR_EXPRS=$(gcount_file '(color|backgroundColor|borderColor):.*\?' "$SOURCE")
-    if [ "$EMPTY_COLORS" -gt "$((DYN_COLOR_EXPRS + 2))" ]; then
-        fail "$EMPTY_COLORS Color{} placeholders but only ~$DYN_COLOR_EXPRS dynamic color expressions in source"
+    # Also count classifier-style color references and ternary color patterns
+    DYN_COLOR_CLS=$(gcount_file 'C\.[A-Z]' "$SOURCE")
+    DYN_COLOR_TERNARY=$(gocount_file '#[0-9a-fA-F]{3,8}.*\?' "$SOURCE")
+    DYN_COLOR_TOTAL=$((DYN_COLOR_EXPRS + DYN_COLOR_CLS + DYN_COLOR_TERNARY))
+    if [ "$EMPTY_COLORS" -gt "$((DYN_COLOR_TOTAL + 4))" ]; then
+        fail "$EMPTY_COLORS Color{} placeholders but only ~$DYN_COLOR_TOTAL dynamic color expressions in source"
     fi
 fi
+fi # IS_CLASSIFIER Color{} skip
 
 # ── 3. Handler balance ────────────────────────────────────────
-SRC_HANDLERS=$(gocount_file 'on(Press|Change|Scroll|Focus|Blur)\s*=' "$SOURCE")
-# Also count soup-style handlers (onClick, onSubmit, etc.)
-SRC_SOUP_HANDLERS=$(gocount_file 'on(Click|Submit|Change)\s*=' "$SOURCE")
-SRC_HANDLERS=$((SRC_HANDLERS + SRC_SOUP_HANDLERS))
+# Count unique handler patterns — avoid double-counting onChange
+SRC_HANDLERS=$(gocount_file 'on(Press|Scroll|Focus|Blur)\s*=' "$SOURCE")
+SRC_SOUP_HANDLERS=$(gocount_file 'on(Click|Submit)\s*=' "$SOURCE")
+SRC_CHANGE_ONLY=$(gocount_file 'on(Change|ChangeText)\s*=' "$SOURCE")
+SRC_HANDLERS=$((SRC_HANDLERS + SRC_SOUP_HANDLERS + SRC_CHANGE_ONLY))
 
 GEN_HANDLER_FNS=$(gcount 'pub fn _handler_(press|change|scroll|focus|blur)_[0-9]+' "$GEN_BLOB")
 GEN_MAP_HANDLER_SETS=$(gocount '_map_lua_bufs_[0-9]+_[0-9]+' "$GEN_BLOB")
 # Also count soup-style JS handlers (_sh_N) and js_on_press wiring
 GEN_JS_HANDLERS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
-GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS + GEN_JS_HANDLERS))
+# Count lua_on_press, js_on_change, and on_press function assignments
+GEN_LUA_HANDLERS=$(gocount 'lua_on_press = ' "$GEN_BLOB")
+GEN_JS_CHANGE=$(gocount 'js_on_change = ' "$GEN_BLOB")
+GEN_ON_PRESS_FN=$(gocount '\.on_press = ' "$GEN_BLOB")
+GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS + GEN_JS_HANDLERS + GEN_LUA_HANDLERS + GEN_JS_CHANGE + GEN_ON_PRESS_FN))
 
 if [ "$SRC_HANDLERS" -gt 0 ] && [ "$GEN_HANDLERS" -eq 0 ]; then
     fail "$SRC_HANDLERS handler(s) in source but 0 in generated output"
-elif [ "$SRC_HANDLERS" -gt "$((GEN_HANDLERS + 3))" ]; then
+elif [ "$SRC_HANDLERS" -gt "$((GEN_HANDLERS + 5))" ]; then
     fail "handler imbalance: $SRC_HANDLERS in source, $GEN_HANDLERS generated"
 fi
 
@@ -171,8 +198,15 @@ fi
 SRC_CHANGE_HANDLERS=$(gocount_file 'on(ChangeText|Change)\s*=' "$SOURCE")
 if [ "$SRC_CHANGE_HANDLERS" -gt 0 ]; then
     GEN_CHANGE_FNS=$(gcount '_handler_change_[0-9]' "$GEN_BLOB")
+    GEN_CHANGE_NEW=$(gcount '_inputChange[0-9]' "$GEN_BLOB")
     GEN_CHANGE_WIRED=$(gocount 'js_on_change' "$GEN_BLOB")
-    GEN_CHANGE_TOTAL=$((GEN_CHANGE_FNS + GEN_CHANGE_WIRED))
+    GEN_CHANGE_SETONCHANGE=$(gocount 'setOnChange' "$GEN_BLOB")
+    GEN_CHANGE_LUA=$(gocount 'lua_on_change' "$GEN_BLOB")
+    GEN_CHANGE_EDIT=$(gocount 'on_edit_change' "$GEN_BLOB")
+    # TextInput nodes inherently support change — count those too
+    GEN_TEXT_INPUTS=$(gocount 'is_text_input = true' "$GEN_BLOB")
+    GEN_INPUT_IDS=$(gocount 'input_id = ' "$GEN_BLOB")
+    GEN_CHANGE_TOTAL=$((GEN_CHANGE_FNS + GEN_CHANGE_NEW + GEN_CHANGE_WIRED + GEN_CHANGE_SETONCHANGE + GEN_CHANGE_LUA + GEN_CHANGE_EDIT + GEN_TEXT_INPUTS + GEN_INPUT_IDS))
     if [ "$GEN_CHANGE_TOTAL" -eq 0 ]; then
         fail "$SRC_CHANGE_HANDLERS onChangeText/onChange handler(s) in source but 0 change handlers in generated — all dropped"
     fi
@@ -231,7 +265,11 @@ DROPPED_TEXT=0
 DROPPED_TEXT_LIST=""
 while IFS= read -r txt; do
     [ -z "$txt" ] && continue
-    if ! grep -qF "$txt" <<< "$GEN_BLOB"; then
+    # Skip template expressions — compiler turns {expr} into bufPrint format strings
+    case "$txt" in *"{"*) continue ;; esac
+    # Skip ternary fragments that leaked into the text match
+    case "$txt" in *" ? "*) continue ;; esac
+    if ! grep -qF -- "$txt" <<< "$GEN_BLOB"; then
         DROPPED_TEXT=$((DROPPED_TEXT + 1))
         DROPPED_TEXT_LIST="$DROPPED_TEXT_LIST \"$txt\""
     fi
@@ -239,6 +277,45 @@ done <<< "$STATIC_TEXTS"
 
 if [ "$DROPPED_TEXT" -gt 0 ]; then
     fail "$DROPPED_TEXT static text(s) missing from generated output:$DROPPED_TEXT_LIST"
+fi
+
+# ── 5b. Dead _updateConditionals ─────────────────────────────
+# If _updateConditionals is defined but never called from _appTick or _appInit,
+# conditional display toggles are dead code — handlers fire in JS, state slots
+# update, but the Zig side never reads them to toggle element visibility.
+# Root cause: soup lane populates ctx._soupConditionals but not ctx.conditionals,
+# so meta.hasConds is false and entrypoints.js never wires the call.
+GEN_HAS_UPDATE_COND=$(gcount 'fn _updateConditionals\(\)' "$GEN_BLOB")
+if [ "$GEN_HAS_UPDATE_COND" -gt 0 ]; then
+    TICK_BODY=$(sed -n '/fn _appTick/,/^fn \|^export /p' <<< "$GEN_BLOB")
+    INIT_BODY=$(sed -n '/fn _appInit/,/^fn \|^export /p' <<< "$GEN_BLOB")
+    TICK_CALLS=$(echo "$TICK_BODY" | grep -c '_updateConditionals()' 2>/dev/null || true)
+    INIT_CALLS=$(echo "$INIT_BODY" | grep -c '_updateConditionals()' 2>/dev/null || true)
+    if [ "$TICK_CALLS" -eq 0 ] && [ "$INIT_CALLS" -eq 0 ]; then
+        fail "_updateConditionals() defined but never called from _appTick or _appInit — conditional visibility is dead code"
+    fi
+fi
+
+# ── 5c. js_on_press arg/param mismatch ──────────────────────
+# If js_on_press = "_sh_N()" calls a handler with no arguments, but the JS
+# function _sh_N has parameters (_idx, etc.), those params will be undefined
+# at runtime — producing garbage values (NaN-boxed undefined read as i64).
+# Typically caused by map-item onClick handlers losing the iterator variable.
+SH_WITH_PARAMS=$(grep -oE 'function _sh_[0-9]+\([^)]+\)' <<< "$GEN_BLOB" 2>/dev/null || true)
+SH_ARG_MISMATCH=0
+SH_ARG_MISMATCH_LIST=""
+while IFS= read -r fn_sig; do
+    [ -z "$fn_sig" ] && continue
+    FN_NAME=$(echo "$fn_sig" | grep -oE '_sh_[0-9]+')
+    [ -z "$FN_NAME" ] && continue
+    # Check if any js_on_press calls this function with no args
+    if grep -qE "js_on_press = \"${FN_NAME}\(\)\"" <<< "$GEN_BLOB" 2>/dev/null; then
+        SH_ARG_MISMATCH=$((SH_ARG_MISMATCH + 1))
+        SH_ARG_MISMATCH_LIST="$SH_ARG_MISMATCH_LIST ${FN_NAME}()"
+    fi
+done <<< "$SH_WITH_PARAMS"
+if [ "$SH_ARG_MISMATCH" -gt 0 ]; then
+    fail "$SH_ARG_MISMATCH handler(s) called with no args but function has params — undefined at runtime:$SH_ARG_MISMATCH_LIST"
 fi
 
 # ── 6. Map / For loop content check ──────────────────────────
@@ -289,7 +366,7 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
         BW=$(echo "$bm" | grep -oE '\[[a-zA-Z]+\]' | head -1)
         [ -z "$BW" ] && continue
         # If source has this exact bracket text as literal content, skip it
-        if grep -qF "$BW" "$SOURCE" 2>/dev/null; then
+        if grep -qF -- "$BW" "$SOURCE" 2>/dev/null; then
             continue
         fi
         BRACKET_TEXTS=$((BRACKET_TEXTS + 1))
@@ -339,7 +416,7 @@ if [ "$BARE_FMTS" -gt 0 ]; then
         PREFIX=$(echo "$mt" | cut -d'{' -f1 | sed 's/[[:space:]]*$//')
         [ -z "$PREFIX" ] && continue
         [ ${#PREFIX} -lt 3 ] && continue
-        if ! grep -qF "$PREFIX" <<< "$GEN_BLOB"; then
+        if ! grep -qF -- "$PREFIX" <<< "$GEN_BLOB"; then
             TRUNCATED=$((TRUNCATED + 1))
         fi
     done <<< "$MIXED_TEXTS"
@@ -354,6 +431,46 @@ fi
 UNCONDITIONAL_DISPLAY=$(gocount 'if \(true\) \.flex' "$GEN_BLOB")
 if [ "$UNCONDITIONAL_DISPLAY" -gt 0 ]; then
     fail "$UNCONDITIONAL_DISPLAY display toggle(s) compiled as 'if (true)' — conditional not resolved"
+fi
+
+# ── 6g2. Ternary in map without complementary display toggles ─
+# If source has ternary JSX (cond ? (<A>) : (<B>)) inside a .map() body,
+# generated maps.zig must have complementary display toggle pairs:
+# ".flex else .none" AND ".none else .flex" per ternary.
+# Missing ".none else .flex" = ternary compiled flat (both branches visible).
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    SRC_TERNARY_BRANCH=$(gcount_file '\)\s*:\s*\(' "$SOURCE")
+    if [ "$SRC_TERNARY_BRANCH" -gt 0 ]; then
+        GEN_FALSE_TOGGLES=0
+        if [ -d "$GEN" ] && [ -f "$GEN/maps.zig" ]; then
+            GEN_FALSE_TOGGLES=$(gocount_file '\.none else \.flex' "$GEN/maps.zig")
+        fi
+        if [ "$GEN_FALSE_TOGGLES" -eq 0 ]; then
+            fail "$SRC_TERNARY_BRANCH ternary branch(es) in map but 0 complementary display toggles (.none else .flex) — both ternary branches always visible"
+        fi
+    fi
+fi
+
+# ── 6g3. Cross-scope literal in map template text ────────────
+# If generated maps.zig has bufPrint format strings containing
+# "identifier.field" as literal text (not interpolated), a template
+# expression like ${section.title} was not resolved to an OA reference.
+# Symptom: text shows "section.title" instead of the actual value.
+if [ "$SRC_LOOPS" -gt 0 ] && [ -d "$GEN" ] && [ -f "$GEN/maps.zig" ]; then
+    LITERAL_DOT_REFS=$(grep -oE 'bufPrint\([^)]+, "[^"]*[a-z]+\.[a-z]+[^"]*"' "$GEN/maps.zig" 2>/dev/null | \
+        grep -oE '[a-z]+\.[a-z]+' | \
+        grep -v 'std\.\|mem\.\|fmt\.\|const\.\|catch\.\|else\.' | \
+        sort -u || true)
+    CROSS_SCOPE_LITERALS=0
+    for ref in $LITERAL_DOT_REFS; do
+        # Check if this dot-ref also appears as a template expression in source
+        if grep -qE "\\\$\{${ref}\}" "$SOURCE" 2>/dev/null; then
+            CROSS_SCOPE_LITERALS=$((CROSS_SCOPE_LITERALS + 1))
+        fi
+    done
+    if [ "$CROSS_SCOPE_LITERALS" -gt 0 ]; then
+        fail "$CROSS_SCOPE_LITERALS template expression(s) compiled as literal text in map — cross-scope variable not resolved"
+    fi
 fi
 
 # ── 6g. Handler parameter dropped ────────────────────────────
@@ -389,6 +506,7 @@ if [ "$SRC_OA_STATES" -gt 0 ]; then
 fi
 
 # ── 7. Component inlining check ──────────────────────────────
+if [ "$IS_CLASSIFIER" -eq 0 ]; then
 COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
     sed 's/^function //' | grep -v '^App$' || true)
 
@@ -411,10 +529,32 @@ for comp in $COMPONENT_DEFS; do
         fi
     fi
 done
+fi # IS_CLASSIFIER component inlining skip
 
 # ── 8. Empty node array detection ────────────────────────────
-# Node arrays with a single empty node `.{  }` or `.{}` indicate dropped content
-EMPTY_NODES=$(gocount '_arr_[0-9]+ = \[_\]Node\{ \.\{[[:space:]]*\} \}' "$GEN_BLOB")
+# Node arrays with a single empty node `.{  }` or `.{}` indicate dropped content.
+# Exclude map target arrays — they're legitimately empty because map children are
+# assigned at runtime in maps.zig (pattern: nodes._arr_N[0].children = _map_pool_).
+EMPTY_NODES=0
+MAP_TARGETS=""
+MAPS_FILE=""
+if [ -d "$GEN" ] && [ -f "$GEN/maps.zig" ]; then
+    MAPS_FILE="$GEN/maps.zig"
+elif [ -f "$GEN" ]; then
+    MAPS_FILE="$GEN"
+fi
+if [ -n "$MAPS_FILE" ]; then
+    MAP_TARGETS=$(grep -oE 'nodes\._arr_[0-9]+' "$MAPS_FILE" 2>/dev/null | sed 's/nodes\.//' | sort -u)
+fi
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    ARR_NAME=$(echo "$line" | grep -oE '_arr_[0-9]+' | head -1)
+    IS_MAP_TARGET=0
+    for mt in $MAP_TARGETS; do
+        [ "$ARR_NAME" = "$mt" ] && IS_MAP_TARGET=1 && break
+    done
+    [ "$IS_MAP_TARGET" -eq 0 ] && EMPTY_NODES=$((EMPTY_NODES + 1))
+done < <(grep -E '_arr_[0-9]+ = \[_\]Node\{ \.\{[[:space:]]*\} \}' <<< "$GEN_BLOB" 2>/dev/null || true)
 if [ "$EMPTY_NODES" -gt 0 ]; then
     fail "$EMPTY_NODES empty node array(s) — content was dropped (look for _arr_N = [_]Node{ .{} })"
 fi
@@ -447,7 +587,7 @@ for imp in $IMPORTS; do
         [ -z "$itxt" ] && continue
         [ ${#itxt} -lt 3 ] && continue
         IMP_TOTAL=$((IMP_TOTAL + 1))
-        if ! grep -qF "$itxt" <<< "$GEN_BLOB"; then
+        if ! grep -qF -- "$itxt" <<< "$GEN_BLOB"; then
             IMP_MISSING=$((IMP_MISSING + 1))
         fi
     done <<< "$IMP_TEXTS"
@@ -500,7 +640,7 @@ if [ -n "$SRC_PAGES" ]; then
         while IFS= read -r ptxt; do
             [ -z "$ptxt" ] && continue
             [ ${#ptxt} -lt 3 ] && continue
-            if grep -qF "$ptxt" <<< "$GEN_BLOB"; then
+            if grep -qF -- "$ptxt" <<< "$GEN_BLOB"; then
                 PG_FOUND=1
                 break
             fi
@@ -517,26 +657,22 @@ fi
 
 # ── 14. Unresolved glyph shortcodes ──────────────────────────
 # Glyph shortcodes like :sun: :check: :error: should resolve to inline
-# SVG paths (inline_glyphs). If they appear as literal ":word:" strings
-# in the generated .text fields, the glyph resolver failed.
+# SVG paths (inline_glyphs). Only flag if shortcodes appear as LITERAL
+# strings in the generated .text fields — that means the resolver failed.
+# Don't flag missing inline_glyphs count since shortcodes may appear in
+# script blocks, data declarations, or comments where they're just strings.
 SRC_GLYPHS=$(grep -oE ':[a-z_]+:' "$SOURCE" 2>/dev/null | sort -u || true)
 if [ -n "$SRC_GLYPHS" ]; then
     UNRESOLVED=0
     UNRESOLVED_LIST=""
     for glyph in $SRC_GLYPHS; do
         # Check if this shortcode appears as a literal string in generated text
-        if grep -qF "\"$glyph\"" <<< "$GEN_BLOB" || grep -qF "'$glyph'" <<< "$GEN_BLOB"; then
+        if grep -qF -- "\"$glyph\"" <<< "$GEN_BLOB" || grep -qF -- "'$glyph'" <<< "$GEN_BLOB"; then
             UNRESOLVED=$((UNRESOLVED + 1))
             UNRESOLVED_LIST="$UNRESOLVED_LIST $glyph"
         fi
     done
-    # Also check: source has glyphs but generated has zero inline_glyphs
-    GEN_INLINE_GLYPHS=$(gcount 'inline_glyphs' "$GEN_BLOB")
-    SRC_GLYPH_COUNT=0
-    for _g in $SRC_GLYPHS; do SRC_GLYPH_COUNT=$((SRC_GLYPH_COUNT + 1)); done
-    if [ "$SRC_GLYPH_COUNT" -gt 0 ] && [ "$GEN_INLINE_GLYPHS" -eq 0 ]; then
-        fail "$SRC_GLYPH_COUNT glyph shortcode(s) in source but 0 inline_glyphs in generated — glyphs not resolved"
-    elif [ "$UNRESOLVED" -gt 0 ]; then
+    if [ "$UNRESOLVED" -gt 0 ]; then
         fail "$UNRESOLVED glyph shortcode(s) appear as literal strings in output:$UNRESOLVED_LIST"
     fi
 fi

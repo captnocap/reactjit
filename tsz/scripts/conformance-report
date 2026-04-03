@@ -10,6 +10,7 @@
 #   ./scripts/conformance-report --untested        # list tests with no db entry
 #   ./scripts/conformance-report --verify <name>   # mark test as human-verified, snapshot generated code
 #   ./scripts/conformance-report --verified        # list all human-verified tests
+#   ./scripts/conformance-report --pending         # list tests that need verification (compiled but not verified)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,18 +48,16 @@ lane_from_path() {
 
 name_from_path() {
     # Qualified name: includes subdirectory under lane to avoid collisions.
+    # Must match scripts/build CONF_NAME derivation exactly.
     # e.g. "carts/conformance/mixed/smith-test/counter.tsz" → "smith-test/counter"
+    # e.g. "carts/conformance/mixed/parity/twitter-clone/twitter-clone.tsz" → "parity/twitter-clone/twitter-clone"
     # e.g. "carts/conformance/mixed/d01_nested_maps.tsz" → "d01_nested_maps"
     local rel="${1#*carts/conformance/}"
-    local lane="${rel%%/*}"
-    local rest="${rel#*/}"
+    local rest="${rel#*/}"          # strip lane prefix
     local base=$(basename "$rest" .tsz | sed 's/\.app$//')
-    # If rest still has a subdirectory, include it
     local subdir=$(dirname "$rest")
-    if [ "$subdir" != "." ] && [[ "$subdir" == */* ]]; then
-        # Has sub-subdirectory under lane: lane/subdir/file
-        local subpath="${subdir#*/}"
-        echo "${subpath}/${base}"
+    if [ "$subdir" != "." ]; then
+        echo "${subdir}/${base}"
     else
         echo "$base"
     fi
@@ -80,10 +79,26 @@ case "$MODE" in
             exit 1
         fi
 
-        # Check test exists in db
+        # Check test exists in db (exact match first, then fuzzy by basename)
         SAFE_TNAME=$(sql_escape "$TNAME")
         LATEST_ID=$(sqlite3 "$DB" \
             "SELECT id FROM builds WHERE test_name = '$SAFE_TNAME' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+        if [ -z "$LATEST_ID" ]; then
+            # Fuzzy: match test_name ending with /TNAME or basename TNAME
+            FUZZY_MATCH=$(sqlite3 "$DB" \
+                "SELECT test_name FROM builds WHERE test_name LIKE '%/$SAFE_TNAME' OR test_name LIKE '%/$SAFE_TNAME/$SAFE_TNAME' GROUP BY test_name;" 2>/dev/null || true)
+            MATCH_COUNT=$(echo "$FUZZY_MATCH" | grep -c . 2>/dev/null || echo "0")
+            if [ "$MATCH_COUNT" -eq 1 ] && [ -n "$FUZZY_MATCH" ]; then
+                TNAME="$FUZZY_MATCH"
+                SAFE_TNAME=$(sql_escape "$TNAME")
+                LATEST_ID=$(sqlite3 "$DB" \
+                    "SELECT id FROM builds WHERE test_name = '$SAFE_TNAME' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+            elif [ "$MATCH_COUNT" -gt 1 ]; then
+                echo "Ambiguous name '$TNAME'. Matches:"
+                echo "$FUZZY_MATCH" | sed 's/^/  /'
+                exit 1
+            fi
+        fi
         if [ -z "$LATEST_ID" ]; then
             echo "No build found for '$TNAME'. Run a build first."
             exit 1
@@ -104,6 +119,8 @@ case "$MODE" in
             echo "Cannot find source .tsz for '$TNAME' on disk."
             exit 1
         fi
+        # Refresh in case fuzzy match resolved TNAME
+        SAFE_TNAME=$(sql_escape "$TNAME")
 
         # Mark as verified + lock source hash + record which build was verified
         NOW=$(date +"%Y-%m-%d %I:%M:%S %p")
@@ -257,6 +274,33 @@ case "$MODE" in
             fi
             if [ "$status" != "compiled" ]; then
                 printf "%-35s %-12s %-12s %s\n" "$tname" "$lane" "$status" "$err"
+            fi
+        done | sort
+        ;;
+
+    --pending)
+        echo ""
+        echo "Tests needing verification (compiled but not yet verified):"
+        echo ""
+        printf "  %-35s %-12s %s\n" "TEST" "LANE" "LAST BUILT"
+        printf "  %-35s %-12s %s\n" "---" "----" "----------"
+        COUNT=0
+        disk_tests | while read -r path; do
+            tname=$(name_from_path "$path")
+            lane=$(lane_from_path "$path")
+            safe_tname=$(sql_escape "$tname")
+            row=$(sqlite3 "$DB" \
+                "SELECT status, built_at FROM builds
+                 WHERE test_name = '$safe_tname'
+                 ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+            [ -z "$row" ] && continue
+            status=$(echo "$row" | cut -d'|' -f1)
+            built=$(echo "$row" | cut -d'|' -f2)
+            [ "$status" != "compiled" ] && continue
+            verified=$(sqlite3 "$DB" \
+                "SELECT COUNT(*) FROM verified_sources WHERE test_name = '$safe_tname';" 2>/dev/null || echo "0")
+            if [ "$verified" = "0" ]; then
+                printf "  %-35s %-12s %s\n" "$tname" "$lane" "$built"
             fi
         done | sort
         ;;
