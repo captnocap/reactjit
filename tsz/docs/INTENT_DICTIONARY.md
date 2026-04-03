@@ -42,6 +42,8 @@ Visible to everything in that file — functions, return(), the whole thing. Inv
 
 Name collisions are caught at preflight, before any code compiles. Two files both claiming `<counter component>` is an error. Two files both having `count` in `<var>` is fine — different file scopes.
 
+**Files are portable.** Because identity lives in the header, not the filename, you can rename files, move them between directories, reorganize your project — nothing breaks. There are no file paths to update, no import chains to fix. The compiler reads `<sidebar component>` and knows what it is regardless of where the file lives or what it's called. The directory structure is for human organization, not compiler dependency.
+
 ---
 
 ## Binding Levels
