@@ -1,0 +1,209 @@
+function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosingBrace) {
+  if (consumeClosingBrace === undefined) consumeClosingBrace = true;
+  const saved = c.save();
+  c.advance(); // skip base identifier
+  const suffixStart = c.save();
+  let dotPos = -1;
+  let mapPos = -1;
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  while (c.pos < c.count) {
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 &&
+        c.kind() === TK.dot &&
+        c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier &&
+        c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      dotPos = c.pos;
+      mapPos = c.pos + 1;
+      break;
+    }
+    if (c.kind() === TK.lparen) depthParen++;
+    else if (c.kind() === TK.rparen) {
+      if (depthParen > 0) depthParen--;
+    } else if (c.kind() === TK.lbracket) depthBracket++;
+    else if (c.kind() === TK.rbracket) {
+      if (depthBracket > 0) depthBracket--;
+    } else if (c.kind() === TK.lbrace) depthBrace++;
+    else if (c.kind() === TK.rbrace) {
+      if (depthBrace === 0) break;
+      depthBrace--;
+    }
+    c.advance();
+  }
+  if (mapPos < 0) { c.restore(saved); return false; }
+
+  const suffixParts = [];
+  for (let ti = suffixStart; ti < dotPos; ti++) suffixParts.push(c.textAt(ti));
+  const suffixText = suffixParts.join('');
+
+  c.restore(mapPos);
+  const header = tryParseMapHeaderFromMethod(c, '_item', '_i');
+  if (!header) { c.restore(saved); return false; }
+
+  let closePos = c.save();
+  let parenDepth = 1;
+  while (closePos < c.count && parenDepth > 0) {
+    if (c.kindAt(closePos) === TK.lparen) parenDepth++;
+    else if (c.kindAt(closePos) === TK.rparen) parenDepth--;
+    closePos++;
+  }
+  const snippetParts = [];
+  for (let ti2 = mapPos; ti2 < closePos; ti2++) snippetParts.push(c.textAt(ti2));
+  const mapSnippet = snippetParts.join('');
+
+  const getterName = _sanitizeComputedGetter(baseName, suffixText);
+  const mapExpr = (baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText;
+
+  // ── Lua detour: if the source is render-local/computed, route to LuaJIT ──
+  // Let the normal parser handle the JSX (it handles block bodies, destructuring,
+  // nested maps, ternaries — everything). Then convert the parsed result to Lua.
+  // Do NOT walk raw tokens — that's what caused the infinite loop.
+  var _isRenderLocal = ctx._renderLocalRaw && ctx._renderLocalRaw[baseName] !== undefined;
+  var _isStateOa = false;
+  for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
+    if (ctx.objectArrays[_oai].getter === baseName && !ctx.objectArrays[_oai]._computedExpr) {
+      _isStateOa = true; break;
+    }
+  }
+  if (_isRenderLocal && !_isStateOa) {
+    // Let the normal Zig path parse the JSX and create the OA.
+    // But tag the resulting map as lua_runtime so emit skips Zig pool/rebuild.
+    var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+    c.restore(mapPos);
+    var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
+    if (!mapResult) { c.restore(saved); return false; }
+
+    // Tag the map for Lua routing — emit will skip Zig rebuild, use evalLuaMapData instead
+    var mapIdx = -1;
+    for (var _mi = 0; _mi < ctx.maps.length; _mi++) {
+      if (ctx.maps[_mi].oa === oa) { mapIdx = _mi; break; }
+    }
+    if (mapIdx >= 0) ctx.maps[mapIdx].mapBackend = 'lua_runtime';
+
+    // Register as a Lua map rebuilder with a parsed-node Lua template
+    if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+    var _luaIdx = ctx._luaMapRebuilders.length;
+    var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
+    // Convert the parsed nodeExpr tree to a Lua template
+    var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, mapResult, oa);
+    ctx._luaMapRebuilders.push({
+      index: _luaIdx,
+      luaCode: _luaBody,
+      rawSource: _luaRaw,
+      varName: baseName
+    });
+    // Replace the Zig node with a Lua wrapper placeholder
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
+    if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+    return true;
+  }
+
+  var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+
+  c.restore(mapPos);
+  var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
+  if (!mapResult) { c.restore(saved); return false; }
+  children.push(mapResult);
+  if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+  return true;
+}
+
+function _identifierStartsMapCall(c) {
+  if (c.kind() !== TK.identifier || c.pos + 3 >= c.count || c.kindAt(c.pos + 1) !== TK.dot) return false;
+  const savedPeek = c.save();
+  c.advance();
+  c.advance();
+  let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+  while (!isMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    c.advance();
+    c.advance();
+    let pd = 1;
+    while (c.pos < c.count && pd > 0) {
+      if (c.kind() === TK.lparen) pd++;
+      if (c.kind() === TK.rparen) pd--;
+      if (pd > 0) c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+    if (c.kind() === TK.dot) {
+      c.advance();
+      isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+    } else {
+      break;
+    }
+  }
+  c.restore(savedPeek);
+  return isMapCall;
+}
+
+function _identifierMapHasBlockBody(c) {
+  const saved = c.save();
+  c.advance();
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  let mapPos = -1;
+  while (c.pos < c.count) {
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 &&
+        c.kind() === TK.dot &&
+        c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier &&
+        c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      mapPos = c.pos + 1;
+      break;
+    }
+    if (c.kind() === TK.lparen) depthParen++;
+    else if (c.kind() === TK.rparen) { if (depthParen > 0) depthParen--; }
+    else if (c.kind() === TK.lbracket) depthBracket++;
+    else if (c.kind() === TK.rbracket) { if (depthBracket > 0) depthBracket--; }
+    else if (c.kind() === TK.lbrace) depthBrace++;
+    else if (c.kind() === TK.rbrace) { if (depthBrace > 0) depthBrace--; }
+    c.advance();
+  }
+  if (mapPos < 0) { c.restore(saved); return false; }
+  c.restore(mapPos);
+  c.advance(); // map
+  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.advance(); // (
+  let callDepth = 1;
+  while (c.pos < c.count) {
+    if (c.kind() === TK.arrow && callDepth === 1) {
+      c.advance();
+      const isBlock = c.kind() === TK.lbrace;
+      c.restore(saved);
+      return isBlock;
+    }
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) callDepth++;
+    else if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) callDepth--;
+    c.advance();
+  }
+  c.restore(saved);
+  return false;
+}
+
+function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
+  if (consumeClosingBrace === undefined) consumeClosingBrace = true;
+  if (c.kind() !== TK.identifier) return false;
+
+  const maybeArr = c.text();
+  if (ctx._renderLocalRaw && ctx._renderLocalRaw[maybeArr]) {
+    var rawExpr = ctx._renderLocalRaw[maybeArr];
+    // Render-local map → route through _tryParseComputedChainMap which
+    // handles the Lua detour using the parser (not raw token walking).
+    if (_tryParseComputedChainMap(c, children, maybeArr, rawExpr, consumeClosingBrace)) return true;
+  }
+
+  if (!_identifierStartsMapCall(c)) return false;
+
+  let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
+  if (!oa) oa = inferOaFromSource(c, maybeArr);
+  if (!oa) return false;
+
+  const mapResult = tryParseMap(c, oa);
+  if (!mapResult) return false;
+  children.push(mapResult);
+  if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+  return true;
+}
