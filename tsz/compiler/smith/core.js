@@ -145,6 +145,7 @@ function resetCtx() {
     variantBindings: [],
     _sourceTier: null,
     renderLocals: {},
+    _renderLocalRaw: {},
     propsObjectName: null,
     _needsRuntimeLog: false,
     _runtimeLogCounter: 0,
@@ -157,9 +158,44 @@ function resetCtx() {
     _duplicateJSVars: [],
     _jsDynTexts: [],
     _luaDynTexts: [],
+    _computedMapCounter: 0,
     _glyphLog: [],
     _literalTextMode: false,
+    // Pattern trace — records every pattern match for diagnostics
+    _patternTrace: [],
+    _patternDepth: 0,
+    _patternTraceEnabled: !!globalThis.__DBG_COMPILER,
   };
+}
+
+// Record a pattern match in the trace
+function tracePattern(patternId, name, detail) {
+  if (!ctx._patternTraceEnabled) return;
+  var indent = '';
+  for (var i = 0; i < ctx._patternDepth; i++) indent += '  ';
+  ctx._patternTrace.push(indent + 'p' + String(patternId).padStart(3, '0') + ' ' + name + (detail ? ' (' + detail + ')' : ''));
+}
+
+// Record a pattern failure / unknown
+function tracePatternFail(tokenText, pos, context) {
+  if (!ctx._patternTraceEnabled) return;
+  var indent = '';
+  for (var i = 0; i < ctx._patternDepth; i++) indent += '  ';
+  ctx._patternTrace.push(indent + '??? UNKNOWN at "' + (tokenText || '').substring(0, 40) + '" pos=' + pos + (context ? ' in=' + context : ''));
+}
+
+// Increase/decrease trace depth for nesting
+function traceEnter() { if (ctx._patternTraceEnabled) ctx._patternDepth++; }
+function traceExit() { if (ctx._patternTraceEnabled && ctx._patternDepth > 0) ctx._patternDepth--; }
+
+// Export trace to global for forge to read
+function dumpPatternTrace() {
+  if (ctx._patternTrace.length === 0) return;
+  var out = '[PATTERN TRACE] ' + ctx._patternTrace.length + ' steps:\n';
+  for (var i = 0; i < ctx._patternTrace.length; i++) {
+    out += '  ' + ctx._patternTrace[i] + '\n';
+  }
+  globalThis.__patternTrace = out;
 }
 
 function findSlot(name) {

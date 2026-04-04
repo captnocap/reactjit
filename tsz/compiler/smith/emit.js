@@ -1,4 +1,12 @@
 function emitOutput(rootExpr, file) {
+  // Dump pattern trace if enabled (--dbg-compiler / -c) or if unknowns were hit
+  if (ctx._patternTrace.length > 0) {
+    var hasUnknowns = false;
+    for (var _ti = 0; _ti < ctx._patternTrace.length; _ti++) {
+      if (ctx._patternTrace[_ti].indexOf('???') >= 0) { hasUnknowns = true; break; }
+    }
+    if (hasUnknowns || ctx._patternTraceEnabled) dumpPatternTrace();
+  }
   const basename = file.split('/').pop();
   const appName = basename.replace(/\.tsz$/, '');
   const hasState = ctx.stateSlots.length > 0;
@@ -20,6 +28,7 @@ function emitOutput(rootExpr, file) {
     hasRuntimeLog: ctx._needsRuntimeLog === true,
     fastBuild: fastBuild,
     hasScriptRuntime: hasScriptRuntime,
+    hasLuaMaps: ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0,
   });
   out += emitStateManifest(ctx, hasState);
 

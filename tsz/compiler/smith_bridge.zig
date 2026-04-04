@@ -58,6 +58,21 @@ pub fn setGlobalString(name: [*:0]const u8, value: []const u8) void {
 }
 
 
+/// Get a global string variable from the JS context.
+pub fn getGlobalString(name: [*:0]const u8) ?[]const u8 {
+    const ctx = g_ctx orelse return null;
+    const global = qjs.JS_GetGlobalObject(ctx);
+    defer qjs.JS_FreeValue(ctx, global);
+    const val = qjs.JS_GetPropertyStr(ctx, global, name);
+    defer qjs.JS_FreeValue(ctx, val);
+    if (qjs.JS_IsUndefined(val) or qjs.JS_IsNull(val)) return null;
+    var len: usize = 0;
+    const ptr = qjs.JS_ToCStringLen(ctx, &len, val);
+    if (ptr == null) return null;
+    // Note: this pointer is valid until next JS_FreeCString. Caller must use immediately.
+    return ptr[0..len];
+}
+
 /// Set a global integer variable in the JS context.
 pub fn setGlobalInt(name: [*:0]const u8, value: i64) void {
     const ctx = g_ctx orelse return;

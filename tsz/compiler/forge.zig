@@ -359,6 +359,13 @@ pub fn main() !void {
         return;
     };
 
+    // 6b. Print pattern trace if available (--dbg-compiler)
+    if (dbg_compiler) {
+        if (smith.getGlobalString("__patternTrace")) |trace| {
+            std.debug.print("{s}", .{trace});
+        }
+    }
+
     // 7. Extract stem for output path, ensure out_dir exists
     const basename = std.fs.path.basename(input_path);
     const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;

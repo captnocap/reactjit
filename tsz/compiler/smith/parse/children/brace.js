@@ -1,5 +1,494 @@
 // ── Child parsing: brace expressions ──────────────────────────────
 
+function _syntheticFieldType(name) {
+  if (!name) return 'string';
+  if (name.indexOf('is') === 0 || name.indexOf('has') === 0 || name.indexOf('can') === 0 || name.indexOf('should') === 0) return 'boolean';
+  if (name.indexOf('count') >= 0 || name.indexOf('index') >= 0 || name.indexOf('idx') >= 0 || name.indexOf('token') >= 0 || name.indexOf('pct') >= 0 || name === 'value') return 'int';
+  if (name === 'id' || name === 'name' || name === 'label' || name === 'description' || name === 'content' || name === 'type' || name === 'title' || name === 'reason' || name === 'date') return 'string';
+  return 'string';
+}
+
+function _sanitizeComputedGetter(baseName, suffix) {
+  const raw = (baseName || '__expr') + (suffix || '');
+  const clean = raw.replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '');
+  return (clean.length > 0 ? clean : '__expr') + '_' + (ctx._computedMapCounter++);
+}
+
+function _findAliasPropertyPaths(snippet, alias) {
+  const out = [];
+  const seen = {};
+  const re = new RegExp('\\b' + alias + '\\.([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)', 'g');
+  let m;
+  while ((m = re.exec(snippet)) !== null) {
+    const path = m[1];
+    if (seen[path]) continue;
+    seen[path] = true;
+    out.push(path);
+  }
+  return out;
+}
+
+function _aliasUsedBare(snippet, alias) {
+  const re = new RegExp('\\b' + alias + '\\b', 'g');
+  let m;
+  while ((m = re.exec(snippet)) !== null) {
+    let next = m.index + alias.length;
+    while (next < snippet.length && /\s/.test(snippet[next])) next++;
+    if (next >= snippet.length || snippet[next] !== '.') return true;
+  }
+  return false;
+}
+
+function _buildDestructuredComputedPlan(mapExpr, snippet, aliases) {
+  const aliasProps = {};
+  const bareAliases = {};
+  let primaryAlias = aliases[0] || '_item';
+  let bestPropCount = -1;
+
+  for (const alias of aliases) {
+    const props = _findAliasPropertyPaths(snippet, alias);
+    aliasProps[alias] = props;
+    bareAliases[alias] = _aliasUsedBare(snippet, alias);
+    if (props.length > bestPropCount) {
+      bestPropCount = props.length;
+      primaryAlias = alias;
+    }
+  }
+
+  const fields = [];
+  const seenFields = {};
+  const transformEntries = [];
+  const aliasFieldMap = {};
+
+  for (let ai = 0; ai < aliases.length; ai++) {
+    const alias = aliases[ai];
+    const props = aliasProps[alias];
+
+    if ((bareAliases[alias] || props.length === 0) && !seenFields[alias]) {
+      seenFields[alias] = true;
+      fields.push({ name: alias, type: _syntheticFieldType(alias) });
+      transformEntries.push(`${alias}: _entry[${ai}]`);
+      aliasFieldMap[alias] = alias;
+    }
+
+    for (const path of props) {
+      const flat = path.replace(/\./g, '_');
+      const fieldName = alias === primaryAlias ? flat : alias + '_' + flat;
+      if (!seenFields[fieldName]) {
+        seenFields[fieldName] = true;
+        fields.push({ name: fieldName, type: _syntheticFieldType(fieldName) });
+      }
+      transformEntries.push(`${fieldName}: _entry[${ai}].${path}`);
+    }
+  }
+
+  if (fields.length === 0) return null;
+
+  return {
+    fields,
+    primaryAlias,
+    aliasFieldMap,
+    computedExpr: `(${_normalizeJoinedJsExpr(_expandRenderLocalJsFully(mapExpr))}).map((_entry, _idx) => ({ ${transformEntries.join(', ')} }))`,
+  };
+}
+
+function _ensureSyntheticComputedOa(getterName, mapExpr, snippet, header) {
+  if (!ctx._computedMapByGetter) ctx._computedMapByGetter = {};
+  if (ctx._computedMapByGetter[getterName]) return ctx._computedMapByGetter[getterName];
+
+  const itemParam = header && header.itemParam ? header.itemParam : '_item';
+  const destructuredAliases = header && header.destructuredAliases ? header.destructuredAliases : null;
+  const destructuredPlan = destructuredAliases && destructuredAliases.length > 0
+    ? _buildDestructuredComputedPlan(mapExpr, snippet, destructuredAliases)
+    : null;
+  const nestedHints = {};
+  const fields = destructuredPlan ? destructuredPlan.fields.slice() : [];
+  const seen = {};
+  for (const field of fields) seen[field.name] = true;
+  if (!destructuredPlan) {
+    const fieldRe = new RegExp('\\b' + itemParam + '\\.([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)', 'g');
+    let m;
+    while ((m = fieldRe.exec(snippet)) !== null) {
+      const path = m[1];
+      const first = path.split('.')[0];
+      if (snippet.indexOf(itemParam + '.' + first + '.map(') >= 0) {
+        nestedHints[first] = true;
+        continue;
+      }
+      const flat = path.replace(/\./g, '_');
+      if (seen[flat]) continue;
+      seen[flat] = true;
+      fields.push({ name: flat, type: _syntheticFieldType(flat) });
+    }
+  }
+
+  for (const nf of Object.keys(nestedHints)) {
+    fields.push({ name: nf, type: 'nested_array', nestedFields: [{ name: '_v', type: 'string' }] });
+  }
+
+  let oa;
+  const colorMatches = snippet.match(/#[0-9a-fA-F]{3,8}/g) || [];
+  const uniqueColors = [];
+  for (let ci = 0; ci < colorMatches.length; ci++) {
+    if (uniqueColors.indexOf(colorMatches[ci]) < 0) uniqueColors.push(colorMatches[ci]);
+  }
+  if (fields.length === 0) {
+    oa = {
+      fields: [{ name: '_v', type: 'string' }],
+      getter: getterName,
+      setter: 'set' + getterName[0].toUpperCase() + getterName.slice(1),
+      oaIdx: ctx.objectArrays.length,
+      isSimpleArray: true,
+      _computedExpr: _normalizeJoinedJsExpr(_expandRenderLocalJsFully(mapExpr)),
+      _computedColors: uniqueColors,
+      _computedHasTernary: snippet.indexOf('?(') >= 0 || snippet.indexOf('? (') >= 0,
+    };
+    ctx.objectArrays.push(oa);
+  } else {
+    oa = {
+      fields: fields,
+      getter: getterName,
+      setter: 'set' + getterName[0].toUpperCase() + getterName.slice(1),
+      oaIdx: ctx.objectArrays.length,
+      _computedExpr: destructuredPlan ? destructuredPlan.computedExpr : _normalizeJoinedJsExpr(_expandRenderLocalJsFully(mapExpr)),
+      _computedColors: uniqueColors,
+      _computedHasTernary: snippet.indexOf('?(') >= 0 || snippet.indexOf('? (') >= 0,
+    };
+    if (destructuredPlan) {
+      oa._computedHeader = {
+        itemParam: destructuredPlan.primaryAlias,
+        indexParam: header.indexParam,
+        destructuredAliases: header.destructuredAliases,
+        filterConditions: [],
+        renderLocalAliases: destructuredPlan.aliasFieldMap,
+      };
+    }
+    ctx.objectArrays.push(oa);
+    for (const field of fields) {
+      if (field.type === 'nested_array') {
+        const childOaIdx = ctx.objectArrays.length;
+        field.nestedOaIdx = childOaIdx;
+        ctx.objectArrays.push({
+          fields: field.nestedFields,
+          getter: getterName + '_' + field.name,
+          setter: 'set' + getterName[0].toUpperCase() + getterName.slice(1) + '_' + field.name,
+          oaIdx: childOaIdx,
+          parentOaIdx: oa.oaIdx,
+          parentField: field.name,
+          isNested: true,
+        });
+      }
+    }
+  }
+
+  ctx._computedMapByGetter[getterName] = oa;
+  return oa;
+}
+
+function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosingBrace) {
+  if (consumeClosingBrace === undefined) consumeClosingBrace = true;
+  const saved = c.save();
+  c.advance(); // skip base identifier
+  const suffixStart = c.save();
+  let dotPos = -1;
+  let mapPos = -1;
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  while (c.pos < c.count) {
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 &&
+        c.kind() === TK.dot &&
+        c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier &&
+        c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      dotPos = c.pos;
+      mapPos = c.pos + 1;
+      break;
+    }
+    if (c.kind() === TK.lparen) depthParen++;
+    else if (c.kind() === TK.rparen) {
+      if (depthParen > 0) depthParen--;
+    } else if (c.kind() === TK.lbracket) depthBracket++;
+    else if (c.kind() === TK.rbracket) {
+      if (depthBracket > 0) depthBracket--;
+    } else if (c.kind() === TK.lbrace) depthBrace++;
+    else if (c.kind() === TK.rbrace) {
+      if (depthBrace === 0) break;
+      depthBrace--;
+    }
+    c.advance();
+  }
+  if (mapPos < 0) { c.restore(saved); return false; }
+
+  const suffixParts = [];
+  for (let ti = suffixStart; ti < dotPos; ti++) suffixParts.push(c.textAt(ti));
+  const suffixText = suffixParts.join('');
+
+  c.restore(mapPos);
+  const header = tryParseMapHeaderFromMethod(c, '_item', '_i');
+  if (!header) { c.restore(saved); return false; }
+
+  let closePos = c.save();
+  let parenDepth = 1;
+  while (closePos < c.count && parenDepth > 0) {
+    if (c.kindAt(closePos) === TK.lparen) parenDepth++;
+    else if (c.kindAt(closePos) === TK.rparen) parenDepth--;
+    closePos++;
+  }
+  const snippetParts = [];
+  for (let ti2 = mapPos; ti2 < closePos; ti2++) snippetParts.push(c.textAt(ti2));
+  const mapSnippet = snippetParts.join('');
+
+  const getterName = _sanitizeComputedGetter(baseName, suffixText);
+  const mapExpr = (baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText;
+  const oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+
+  c.restore(mapPos);
+  const mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
+  if (!mapResult) { c.restore(saved); return false; }
+  children.push(mapResult);
+  if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+  return true;
+}
+
+function _identifierStartsMapCall(c) {
+  if (c.kind() !== TK.identifier || c.pos + 3 >= c.count || c.kindAt(c.pos + 1) !== TK.dot) return false;
+  const savedPeek = c.save();
+  c.advance();
+  c.advance();
+  let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+  while (!isMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    c.advance();
+    c.advance();
+    let pd = 1;
+    while (c.pos < c.count && pd > 0) {
+      if (c.kind() === TK.lparen) pd++;
+      if (c.kind() === TK.rparen) pd--;
+      if (pd > 0) c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+    if (c.kind() === TK.dot) {
+      c.advance();
+      isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+    } else {
+      break;
+    }
+  }
+  c.restore(savedPeek);
+  return isMapCall;
+}
+
+function _identifierMapHasBlockBody(c) {
+  const saved = c.save();
+  c.advance();
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  let mapPos = -1;
+  while (c.pos < c.count) {
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 &&
+        c.kind() === TK.dot &&
+        c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier &&
+        c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      mapPos = c.pos + 1;
+      break;
+    }
+    if (c.kind() === TK.lparen) depthParen++;
+    else if (c.kind() === TK.rparen) { if (depthParen > 0) depthParen--; }
+    else if (c.kind() === TK.lbracket) depthBracket++;
+    else if (c.kind() === TK.rbracket) { if (depthBracket > 0) depthBracket--; }
+    else if (c.kind() === TK.lbrace) depthBrace++;
+    else if (c.kind() === TK.rbrace) { if (depthBrace > 0) depthBrace--; }
+    c.advance();
+  }
+  if (mapPos < 0) { c.restore(saved); return false; }
+  c.restore(mapPos);
+  c.advance(); // map
+  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.advance(); // (
+  let callDepth = 1;
+  while (c.pos < c.count) {
+    if (c.kind() === TK.arrow && callDepth === 1) {
+      c.advance();
+      const isBlock = c.kind() === TK.lbrace;
+      c.restore(saved);
+      return isBlock;
+    }
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) callDepth++;
+    else if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) callDepth--;
+    c.advance();
+  }
+  c.restore(saved);
+  return false;
+}
+
+function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
+  if (consumeClosingBrace === undefined) consumeClosingBrace = true;
+  if (c.kind() !== TK.identifier) return false;
+
+  const maybeArr = c.text();
+  if (ctx._renderLocalRaw && ctx._renderLocalRaw[maybeArr]) {
+    const rawExpr = ctx._renderLocalRaw[maybeArr];
+    // Check for imperative source patterns — if found, skip OA path (Lua bus handles it)
+    // One-level dependency check: look at raw + raw of any referenced render locals
+    var _cmAll = rawExpr;
+    if (ctx._renderLocalRaw) {
+      var _cmNames = Object.keys(ctx._renderLocalRaw);
+      for (var _cmi = 0; _cmi < _cmNames.length; _cmi++) {
+        if (_cmNames[_cmi] !== maybeArr && rawExpr.indexOf(_cmNames[_cmi]) >= 0) {
+          _cmAll += ' ' + (ctx._renderLocalRaw[_cmNames[_cmi]] || '');
+        }
+      }
+    }
+    var _cmCompact = _cmAll.replace(/\s+/g, '');
+    var _cmIsImperative = _cmCompact.indexOf('newMap') >= 0 || _cmCompact.indexOf('newSet') >= 0 ||
+      _cmCompact.indexOf('.entries()') >= 0 || _cmCompact.indexOf('Array.from') >= 0 ||
+      _cmCompact.indexOf('for(') >= 0;
+    // Even if imperative, let the OA path register fields — __computeRenderBody() fixes data at runtime
+    if (_tryParseComputedChainMap(c, children, maybeArr, rawExpr, consumeClosingBrace)) return true;
+  }
+
+  if (!_identifierStartsMapCall(c)) return false;
+
+  let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
+  if (!oa) oa = inferOaFromSource(c, maybeArr);
+  if (!oa) return false;
+
+  const mapResult = tryParseMap(c, oa);
+  if (!mapResult) return false;
+  children.push(mapResult);
+  if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+  return true;
+}
+
+function _joinTokenText(c, start, end) {
+  const parts = [];
+  for (let ti = start; ti < end; ti++) parts.push(c.textAt(ti));
+  return parts.join(' ');
+}
+
+function _expandRenderLocalJs(expr) {
+  let out = expr;
+  if (!ctx._renderLocalRaw) return out;
+  const names = Object.keys(ctx._renderLocalRaw).sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    const raw = ctx._renderLocalRaw[name];
+    if (!raw || raw === expr) continue;
+    out = out.replace(new RegExp(`\\b${name}\\b`, 'g'), function(match, offset, full) {
+      let prev = offset - 1;
+      while (prev >= 0 && /\s/.test(full[prev])) prev--;
+      if (prev >= 0 && full[prev] === '.') return match;
+      return `(${_normalizeJoinedJsExpr(raw)})`;
+    });
+  }
+  return out;
+}
+
+function _expandRenderLocalJsFully(expr) {
+  let out = expr;
+  for (let i = 0; i < 6; i++) {
+    const next = _expandRenderLocalJs(out);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+function _makeEvalTruthyExpr(jsExpr) {
+  if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+  const evalBufId = ctx._jsEvalCount;
+  ctx._jsEvalCount = evalBufId + 1;
+  const escaped = _expandRenderLocalJs(jsExpr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `(qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId}).len > 0)`;
+}
+
+function _normalizeJoinedJsExpr(expr) {
+  return String(expr)
+    .replace(/!\s*=\s*=/g, '!==')
+    .replace(/=\s*=\s*=/g, '===')
+    .replace(/!\s*=(?!=)/g, '!=')
+    .replace(/=\s*=(?!=)/g, '==')
+    .replace(/>\s*=/g, '>=')
+    .replace(/<\s*=/g, '<=')
+    .replace(/&\s*&/g, '&&')
+    .replace(/\|\s*\|/g, '||')
+    .replace(/\bexact\b/g, '===');
+}
+
+function _findLastTopLevelAmpAmp(c, start, end) {
+  let depthParen = 0;
+  let depthBracket = 0;
+  let depthBrace = 0;
+  let last = -1;
+  for (let ti = start; ti < end; ti++) {
+    const kind = c.kindAt(ti);
+    if (kind === TK.lparen) depthParen++;
+    else if (kind === TK.rparen) { if (depthParen > 0) depthParen--; }
+    else if (kind === TK.lbracket) depthBracket++;
+    else if (kind === TK.rbracket) { if (depthBracket > 0) depthBracket--; }
+    else if (kind === TK.lbrace) depthBrace++;
+    else if (kind === TK.rbrace) { if (depthBrace > 0) depthBrace--; }
+    else if (kind === TK.amp_amp && depthParen === 0 && depthBracket === 0 && depthBrace === 0) last = ti;
+  }
+  return last;
+}
+
+function _tryParseStoredRenderLocal(c, children, varName) {
+  const rawExpr = ctx._renderLocalRaw && ctx._renderLocalRaw[varName];
+  const span = ctx._renderLocalSpan && ctx._renderLocalSpan[varName];
+  if (!rawExpr || !span) return false;
+  if (rawExpr.indexOf('.map(') < 0 && rawExpr.indexOf('<') < 0) return false;
+
+  const originalPos = c.save();
+  let condExpr = null;
+  let payloadStart = span.start;
+  const lastAnd = _findLastTopLevelAmpAmp(c, span.start, span.end);
+  if (lastAnd >= 0) {
+    const condJs = _joinTokenText(c, span.start, lastAnd).trim();
+    if (condJs.length > 0) condExpr = _makeEvalTruthyExpr(condJs);
+    payloadStart = lastAnd + 1;
+  }
+
+  c.pos = payloadStart;
+  let wrapped = false;
+  if (c.kind() === TK.lparen) {
+    wrapped = true;
+    c.advance();
+  }
+
+  let parsed = null;
+  if (c.kind() === TK.identifier) {
+    const tmpChildren = [];
+    if (_tryParseIdentifierMapExpression(c, tmpChildren, false) && tmpChildren.length > 0) parsed = tmpChildren[0];
+  }
+  if (!parsed && c.kind() === TK.lt) {
+    parsed = parseJSXElement(c);
+  }
+  if (!parsed) {
+    c.restore(originalPos);
+    return false;
+  }
+  if (wrapped && c.kind() === TK.rparen) c.advance();
+
+  c.restore(originalPos);
+  c.advance();
+  if (c.kind() === TK.rbrace) c.advance();
+
+  if (condExpr) {
+    const condIdx = ctx.conditionals.length;
+    ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+    const wrappedNode = Object.assign({}, parsed);
+    wrappedNode.condIdx = condIdx;
+    children.push(wrappedNode);
+  } else {
+    children.push(parsed);
+  }
+  return true;
+}
+
 function tryParseBraceChild(c, children) {
   if (c.kind() !== TK.lbrace) return false;
 
@@ -17,24 +506,28 @@ function tryParseBraceChild(c, children) {
 
   const condResult = tryParseConditional(c, children);
   if (condResult) {
-    if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push('-> consumed by tryParseConditional');
+    tracePattern(16, 'and_short_circuit', '');
     return true;
   }
 
   const ternJSXResult = tryParseTernaryJSX(c, children);
   if (ternJSXResult) {
-    if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push('-> consumed by tryParseTernaryJSX');
+    tracePattern(11, 'ternary_element', '');
     return true;
   }
 
   const ternTextResult = tryParseTernaryText(c, children);
   if (ternTextResult) {
-    if (globalThis.__SMITH_DEBUG_MAP_DETECT) globalThis.__dbg.push('-> consumed by tryParseTernaryText');
+    tracePattern(13, 'ternary_string', '');
     return true;
   }
 
   if (c.kind() === TK.identifier) {
     const maybeArr = c.text();
+    if (_tryParseIdentifierMapExpression(c, children, true)) {
+      tracePattern(19, 'map_element', maybeArr);
+      return true;
+    }
     // Handle props.X.map() — resolve through propStack to find the OA name
     if (ctx.propsObjectName && maybeArr === ctx.propsObjectName &&
         c.pos + 4 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
@@ -67,40 +560,6 @@ function tryParseBraceChild(c, children) {
           c.advance(); // props
           c.advance(); // .
           // Now cursor is at field name — tryParseMap handles field.map(...)
-          const mapResult = tryParseMap(c, oa);
-          if (mapResult) {
-            children.push(mapResult);
-            if (c.kind() === TK.rbrace) c.advance();
-            return true;
-          }
-        }
-      }
-    }
-    if (c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
-      const savedPeek = c.save();
-      c.advance();
-      c.advance();
-      let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-      // Handle .slice(...).filter(...).sort(...).map() chaining (multiple)
-      while (!isMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
-        c.advance(); c.advance(); // skip 'filter/slice/sort' '('
-        let pd = 1;
-        while (c.pos < c.count && pd > 0) {
-          if (c.kind() === TK.lparen) pd++;
-          if (c.kind() === TK.rparen) pd--;
-          if (pd > 0) c.advance();
-        }
-        if (c.kind() === TK.rparen) c.advance();
-        if (c.kind() === TK.dot) {
-          c.advance();
-          isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-        } else break;
-      }
-      c.restore(savedPeek);
-      if (isMapCall) {
-        let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
-        if (!oa) oa = inferOaFromSource(c, maybeArr);
-        if (oa) {
           const mapResult = tryParseMap(c, oa);
           if (mapResult) {
             children.push(mapResult);
@@ -161,7 +620,7 @@ function tryParseBraceChild(c, children) {
         children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
       }
     } else {
-      children.push({ nodeExpr: `.{ .text = "${fmt}" }` });
+      children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(fmt)} }` });
     }
     return true;
   }
@@ -179,9 +638,10 @@ function tryParseBraceChild(c, children) {
         if (c.kind() === TK.rbrace) c.advance();
         const mapBufId = ctx.mapDynCount || 0;
         ctx.mapDynCount = mapBufId + 1;
-        const fmt = fieldInfo && fieldInfo.type === 'string' ? '{s}' : '{d}';
+        const _inferredType = fieldInfo ? fieldInfo.type : _syntheticFieldType(field);
+        const fmt = _inferredType === 'string' ? '{s}' : '{d}';
         let args;
-        if (fieldInfo && fieldInfo.type === 'string') {
+        if (_inferredType === 'string') {
           args = `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`;
         } else {
           args = `_oa${oaIdx}_${field}[_i]`;
@@ -211,8 +671,80 @@ function tryParseBraceChild(c, children) {
   }
 
   if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-    var _brRlVal = ctx.renderLocals[c.text()];
+    if (_tryParseStoredRenderLocal(c, children, c.text())) return true;
+    const _brExprStart = c.save();
+    const _brRlName = c.text();
+    const _brRlRaw = ctx._renderLocalRaw && ctx._renderLocalRaw[_brRlName];
+    var _brRlVal = ctx.renderLocals[_brRlName];
+    if (_brRlVal && typeof _brRlVal === 'object' && _brRlVal.__jsxSlot) {
+      c.advance();
+      if (c.kind() === TK.rbrace) c.advance();
+      children.push(_brRlVal.result);
+      return true;
+    }
     c.advance();
+    // Render-local followed by .map() — detour to Lua bus
+    if (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier &&
+        (c.textAt(c.pos + 1) === 'map' || c.textAt(c.pos + 1) === 'filter' || c.textAt(c.pos + 1) === 'slice') &&
+        c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.lparen &&
+        typeof emitLuaRebuildList === 'function') {
+      // Save position for the map body walk
+      if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+      var _luaMapIdx = ctx._luaMapRebuilders.length;
+      // Skip to .map( and parse the header to get itemParam
+      var _lmSaved = c.save();
+      // Skip any chained .filter()/.slice() before .map()
+      while (c.kind() === TK.dot && c.pos + 1 < c.count &&
+             (c.textAt(c.pos + 1) === 'filter' || c.textAt(c.pos + 1) === 'slice') &&
+             c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.lparen) {
+        c.advance(); c.advance(); c.advance(); // . filter (
+        var _skipDepth = 1;
+        while (c.pos < c.count && _skipDepth > 0) {
+          if (c.kind() === TK.lparen) _skipDepth++;
+          if (c.kind() === TK.rparen) _skipDepth--;
+          if (_skipDepth > 0) c.advance();
+        }
+        if (c.kind() === TK.rparen) c.advance();
+      }
+      if (c.kind() === TK.dot) c.advance(); // .
+      if (c.isIdent('map')) c.advance(); // map
+      if (c.kind() === TK.lparen) c.advance(); // (
+      // Parse arrow function params: (item) => or (item, idx) =>
+      var _luaItemParam = '_item';
+      if (c.kind() === TK.lparen) {
+        c.advance();
+        if (c.kind() === TK.identifier) { _luaItemParam = c.text(); c.advance(); }
+        while (c.kind() !== TK.rparen && c.pos < c.count) c.advance();
+        if (c.kind() === TK.rparen) c.advance();
+      } else if (c.kind() === TK.identifier) {
+        _luaItemParam = c.text(); c.advance();
+      }
+      if (c.kind() === TK.arrow) c.advance(); // =>
+      // Now c is at the map body JSX — emit Lua
+      // Lua walker disabled pending fix — use placeholder
+      var _luaCode = '-- lua map placeholder\nfunction __rebuildLuaMap' + _luaMapIdx + '() end\n';
+      // Consume remaining tokens until closing }
+      var _lmDepth = 0;
+      while (c.pos < c.count) {
+        if (c.kind() === TK.lparen) _lmDepth++;
+        if (c.kind() === TK.rparen) { _lmDepth--; if (_lmDepth < 0) { c.advance(); break; } }
+        c.advance();
+      }
+      if (c.kind() === TK.rparen) c.advance(); // outer )
+      if (c.kind() === TK.rbrace) c.advance(); // }
+      // Store the Lua rebuilder and raw JS for the source array computation
+      var _luaRawSource = ctx._renderLocalRaw && ctx._renderLocalRaw[_brRlName] || _brRlName;
+      ctx._luaMapRebuilders.push({
+        index: _luaMapIdx,
+        luaCode: _luaCode,
+        rawSource: _luaRawSource,
+        varName: _brRlName
+      });
+      // Emit a wrapper node placeholder — Lua will populate its children
+      // Tag with __lmwN so entrypoints can find and register the pointer with LuaJIT
+      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaMapIdx + '" }', _luaMapWrapper: _luaMapIdx });
+      return true;
+    }
     // Const OA row ref: resolve .field access before closing brace
     if (typeof _brRlVal === 'string' && _brRlVal.charCodeAt(0) === 1 &&
         c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
@@ -229,10 +761,64 @@ function tryParseBraceChild(c, children) {
         c.advance(); // skip field
       }
     }
-    if (c.kind() === TK.rbrace) c.advance();
-    const isZigExpr = typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as'));
+    if (c.kind() !== TK.rbrace) {
+      const exprLine = c.starts[_brExprStart] || 0;
+      let braceDepth = 0;
+      while (c.kind() !== TK.eof) {
+        if (c.kind() === TK.lbrace) braceDepth++;
+        if (c.kind() === TK.rbrace) {
+          if (braceDepth === 0) break;
+          braceDepth--;
+        }
+        c.advance();
+      }
+      const _brExprEnd = c.save();
+      if (c.kind() === TK.rbrace) c.advance();
+      let fullExpr = _normalizeJoinedJsExpr(_joinTokenText(c, _brExprStart, _brExprEnd));
+      fullExpr = _normalizeJoinedJsExpr(_expandRenderLocalJs(fullExpr));
+      if (ctx.scriptBlock && fullExpr.length > 0) {
+        const slotIdx = ctx.stateSlots.length;
+        ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
+        const isInMap = !!ctx.currentMap;
+        let bufId;
+        if (isInMap) {
+          bufId = ctx.mapDynCount || 0;
+          ctx.mapDynCount = bufId + 1;
+        } else {
+          bufId = ctx.dynCount;
+          ctx.dynCount++;
+        }
+        ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+        ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: fullExpr });
+        children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+      } else if (fullExpr.length > 0) {
+        ctx._droppedExpressions.push({ expr: fullExpr, line: exprLine });
+      }
+      return true;
+    }
+    c.advance();
+    const isEvalExpr = typeof _brRlVal === 'string' && _brRlVal.includes('qjs_runtime.evalToString');
+    const isPureEvalExpr = typeof _brRlVal === 'string' && /^\s*qjs_runtime\.evalToString\(/.test(_brRlVal);
+    if (isEvalExpr && !isPureEvalExpr && _brRlRaw && ctx.scriptBlock) {
+      const slotIdx = ctx.stateSlots.length;
+      ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
+      const isInMap = !!ctx.currentMap;
+      let bufId;
+      if (isInMap) {
+        bufId = ctx.mapDynCount || 0;
+        ctx.mapDynCount = bufId + 1;
+      } else {
+        bufId = ctx.dynCount;
+        ctx.dynCount++;
+      }
+      ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)) });
+      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+      return true;
+    }
+    const isZigExpr = isEvalExpr || (typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as')));
     if (isZigExpr) {
-      const isStr = _brRlVal.includes('getSlotString') || _brRlVal.includes('@as([]const u8');
+      const isStr = isEvalExpr || _brRlVal.includes('getSlotString') || _brRlVal.includes('@as([]const u8') || _brRlVal.includes('[0..');
       const fmt = isStr ? '{s}' : '{d}';
       const fmtArgs = isStr ? _brRlVal : leftFoldExpr(_brRlVal);
       const bufSize = isStr ? 128 : 64;
@@ -248,7 +834,7 @@ function tryParseBraceChild(c, children) {
         children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
       }
     } else {
-      children.push({ nodeExpr: `.{ .text = "${_brRlVal}" }` });
+      children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(_brRlVal)} }` });
     }
     return true;
   }
@@ -282,7 +868,7 @@ function tryParseBraceChild(c, children) {
           children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
         }
       } else {
-        children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+        children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(propVal)} }` });
       }
       return true;
     }
@@ -317,7 +903,7 @@ function tryParseBraceChild(c, children) {
             children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
           }
         } else {
-          children.push({ nodeExpr: `.{ .text = "${propVal}" }` });
+          children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(propVal)} }` });
         }
         return true;
       }
@@ -333,9 +919,10 @@ function tryParseBraceChild(c, children) {
         if (c.kind() === TK.rbrace) c.advance();
         const mapBufId = ctx.mapDynCount || 0;
         ctx.mapDynCount = mapBufId + 1;
-        const fmt = fieldInfo && fieldInfo.type === 'string' ? '{s}' : '{d}';
+        const _inferredType = fieldInfo ? fieldInfo.type : _syntheticFieldType(field);
+        const fmt = _inferredType === 'string' ? '{s}' : '{d}';
         let args;
-        if (fieldInfo && fieldInfo.type === 'string') {
+        if (_inferredType === 'string') {
           args = `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`;
         } else {
           args = `_oa${oaIdx}_${field}[_i]`;
@@ -356,7 +943,7 @@ function tryParseBraceChild(c, children) {
       if (c.kind() === TK.rbrace) c.advance();
       const exprText2 = dropTokens2.join(' ');
       if (ctx.scriptBlock && exprText2.length > 0) {
-        const jsExpr2 = exprText2.replace(/\bexact\b/g, '===');
+        const jsExpr2 = _normalizeJoinedJsExpr(exprText2);
         const slotIdx2 = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx2, setter: '__setJsExpr_' + slotIdx2, initial: '', type: 'string' });
         const bufId2 = ctx.dynCount;
@@ -518,7 +1105,7 @@ function tryParseBraceChild(c, children) {
       if (tailTokens.length > 0 && (ctx.scriptBlock || ctx.luaBlock)) {
         ctx.dynTexts.pop();
         ctx.dynCount--;
-        const fullExpr = (getter + ' ' + tailTokens.join(' ')).replace(/\bexact\b/g, '===');
+        const fullExpr = _normalizeJoinedJsExpr(getter + ' ' + tailTokens.join(' '));
         const jsSlotIdx = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + jsSlotIdx, setter: '__setJsExpr_' + jsSlotIdx, initial: '', type: 'string' });
         const jsBufId = ctx.dynCount;
@@ -651,7 +1238,7 @@ function tryParseBraceChild(c, children) {
     if (c.kind() === TK.rbrace) c.advance();
     const fmtString = fmtParts.join('');
     if (allStatic || fmtArgs.length === 0) {
-      children.push({ nodeExpr: `.{ .text = "${fmtString}" }` });
+      children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(fmtString)} }` });
     } else {
       const isMapConcat = ctx.currentMap && fmtArgs.join(', ').includes('_oa');
       if (isMapConcat) {
@@ -685,7 +1272,7 @@ function tryParseBraceChild(c, children) {
   const exprText = dropTokens.join(' ');
 
   if (ctx.scriptBlock && exprText.length > 0) {
-    let jsExpr = exprText.replace(/== =/g, '===').replace(/!= =/g, '!==').replace(/\bexact\b/g, '===');
+    let jsExpr = _normalizeJoinedJsExpr(exprText);
     if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
       jsExpr = jsExpr + '()';
     }
@@ -693,14 +1280,20 @@ function tryParseBraceChild(c, children) {
     const slotIdx = ctx.stateSlots.length;
     ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
 
-    const bufId = ctx.dynCount;
     const isInMap = !!ctx.currentMap;
+    var bufId;
+    if (isInMap) {
+      bufId = ctx.mapDynCount || 0;
+      ctx.mapDynCount = bufId + 1;
+    } else {
+      bufId = ctx.dynCount;
+      ctx.dynCount++;
+    }
     ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
-    ctx.dynCount++;
 
     ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: jsExpr });
 
-    children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+    children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
   } else if (exprText.length > 0) {
     ctx._droppedExpressions.push({ expr: exprText, line: c.starts[dropStart] || 0 });
   }

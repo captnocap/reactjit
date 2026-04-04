@@ -30,11 +30,13 @@ function parseJSXElement(c) {
     }
   }
   if (comp) {
+    tracePattern(73, 'direct_component', rawTag);
     const propValues = collectComponentPropValues(c);
     const compChildren = parseComponentCallChildren(c);
     return inlineComponentCall(c, comp, rawTag, propValues, compChildren);
   }
 
+  tracePattern(6, 'jsx_element', rawTag);
   const tag = resolveTag(rawTag);
   // Track source position for breadcrumb comments
   const tagSrcOffset = lastTokenOffset(c);
@@ -57,9 +59,14 @@ function parseJSXElement(c) {
       if (c.kind() === TK.equals) {
         c.advance();
         parseElementAttr(c, attr, rawTag, attrState);
-      } else if (attr === 'l') {
-        // Bare `l` prop — literal text mode, skip glyph resolution
-        hasLiteralProp = true;
+      } else {
+        if (attr === 'l') {
+          // Bare `l` prop — literal text mode, skip glyph resolution
+          hasLiteralProp = true;
+        }
+        // Bare attrs such as `background`, `bold`, and other flag-like props
+        // still need to flow through the normal attr dispatcher.
+        parseElementAttr(c, attr, rawTag, attrState);
       }
     } else { c.advance(); }
   }
@@ -89,10 +96,18 @@ function parseJSXElement(c) {
 
 function parseChildren(c) {
   const children = [];
+  traceEnter();
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
+    var _prePos = c.pos;
     if (tryParseElementChild(c, children)) continue;
     if (tryParseBraceChild(c, children)) continue;
     if (tryParseTextChild(c, children)) continue;
+    // If no handler consumed the token, record and skip to avoid infinite loop
+    if (c.pos === _prePos) {
+      tracePatternFail(c.text(), c.pos, 'parseChildren');
+      c.advance();
+    }
   }
+  traceExit();
   return children;
 }
