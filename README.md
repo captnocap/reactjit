@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~460 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~15,300 lines across 79 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~485 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
+- **Smith** — JS compiler intelligence (~33,300 lines across 276 files in 42 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -84,7 +84,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 5 Zig modules + 79 JS modules (Smith, ~15,300 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 5 Zig modules + 276 JS modules (Smith, ~33,300 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -115,14 +115,18 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | Extension | What | Example |
 |-----------|------|---------|
 | `.tsz` | App entry point | `Counter.tsz` |
-| `_c.tsz` | App component | `Button_c.tsz` |
-| `_cls.tsz` | App classifiers | `styles_cls.tsz` |
+| `_c.tsz` / `.c.tsz` | App component | `Button_c.tsz` |
+| `_cls.tsz` / `.cls.tsz` | App classifiers | `styles_cls.tsz` |
 | `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
-| `_cmod.tsz` | Module component | `Badge_cmod.tsz` |
-| `_clsmod.tsz` | Module classifiers | `theme_clsmod.tsz` |
-| `_script.tsz` | QuickJS runtime script | `data_script.tsz` |
-| `_zscript.tsz` | Imperative Zig module (no JSX) | `logic_zscript.tsz` |
-| `_lscript.tsz` | LuaJIT runtime script | `logic_lscript.tsz` |
+| `_cmod.tsz` / `.cmod.tsz` | Module component | `Badge_cmod.tsz` |
+| `_clsmod.tsz` / `.clsmod.tsz` | Module classifiers | `theme_clsmod.tsz` |
+| `_script.tsz` / `.script.tsz` | QuickJS runtime script | `data_script.tsz` |
+| `_zscript.tsz` / `.zscript.tsz` | Imperative Zig module (no JSX) | `logic_zscript.tsz` |
+| `_lscript.tsz` / `.lscript.tsz` | LuaJIT runtime script | `logic_lscript.tsz` |
+| `_effects.tsz` / `.effects.tsz` | GPU effect shaders | `fire_effects.tsz` |
+| `_glyphs.tsz` / `.glyphs.tsz` | Named glyph assets | `icons_glyphs.tsz` |
+| `_tcls.tsz` / `.tcls.tsz` | Theme tokens (colors, spacing) | `theme_tcls.tsz` |
+| `_vcls.tsz` / `.vcls.tsz` | Variants (per-theme overrides) | `dark_vcls.tsz` |
 
 Legacy dot-prefix forms (`.c.tsz`, `.cls.tsz`, `.script.tsz`, `.zscript.tsz`, `.lscript.tsz`) are also accepted.
 
@@ -314,7 +318,7 @@ carts/
 
 ## Framework Modules
 
-81 modules in the framework runtime:
+86 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
@@ -335,13 +339,13 @@ carts/
 
 | Suite | Disk | Compiled | Verified | What |
 |-------|------|----------|----------|------|
-| Mixed (feature + torture) | 256 | 135 | 94 | Exhaustive compiler coverage |
-| WPT Flexbox | 75 | 75 | 70 | W3C CSS flex spec |
-| Lscript | 37 | 9 | 5 | LuaJIT script backend |
-| Chad (intent syntax) | 35 | 7 | 4 | Dictionary-based intent syntax |
-| Soup (real-world) | 21 | 13 | 2 | End-to-end apps in messy real-world syntax |
-| Parity | 7 | 0 | 0 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
-| **Overall** | **432** | **270 (62%)** | **201** | |
+| Mixed (feature + torture) | 255 | 185 | 115 | Exhaustive compiler coverage |
+| WPT Flexbox | 76 | 76 | 72 | W3C CSS flex spec |
+| Lscript | 37 | 12 | 5 | LuaJIT script backend |
+| Chad (intent syntax) | 27 | 6 | 0 | Dictionary-based intent syntax |
+| Soup (real-world) | 25 | 16 | 4 | End-to-end apps in messy real-world syntax |
+| Parity | 7 | 5 | 0 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
+| **Overall** | **428** | **335 (78%)** | **225** | |
 
 Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
 
@@ -388,9 +392,9 @@ Conformance tests are organized into lanes under `carts/conformance/`:
 
 | Lane | What it proves |
 |------|----------------|
-| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (21 tests) |
-| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (256 tests) |
-| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (35 tests) |
+| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (25 tests) |
+| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (255 tests) |
+| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (27 tests) |
 | **`parity/`** | React parity demos — TodoMVC, Slack, VS Code, Gmail, Figma. Proves the framework can replicate real-world UIs. (7 tests) |
 
 Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
