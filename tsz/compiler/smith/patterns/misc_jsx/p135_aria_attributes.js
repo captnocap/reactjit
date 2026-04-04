@@ -1,7 +1,7 @@
 // ── Pattern 135: ARIA / role attrs ─────────────────────────────
 // Index: 135
 // Group: misc_jsx
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <Box aria-label="close" role="button" />
@@ -30,6 +30,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented.
+  // Intentionally outside the current node-field model.
   return null;
 }

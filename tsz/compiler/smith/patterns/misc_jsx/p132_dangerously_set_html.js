@@ -1,7 +1,7 @@
 // ── Pattern 132: dangerouslySetInnerHTML ───────────────────────
 // Index: 132
 // Group: misc_jsx
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <div dangerouslySetInnerHTML={{ __html: rawHtml }} />
@@ -31,6 +31,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented.
+  // Intentionally not compiled in this runtime model.
   return null;
 }

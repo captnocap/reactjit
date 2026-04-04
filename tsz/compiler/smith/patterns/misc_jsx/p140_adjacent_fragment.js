@@ -1,7 +1,7 @@
 // ── Pattern 140: Adjacent root elements ────────────────────────
 // Index: 140
 // Group: misc_jsx
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   function App() {
@@ -28,7 +28,10 @@
 //   }
 //
 // Notes:
-//   Adjacent root siblings are not supported as a bare return form.
+//   The adjacent-root *intent* is supported in Smith, but only through an
+//   explicit fragment wrapper or container node.
+//
+//   Bare adjacent root siblings are not supported as a raw return form.
 //   The component/app entry paths record the first root JSX position and then
 //   call parseJSXElement() once. That means `return <A /><B />` only has a
 //   chance to compile the first element; the second sibling is not wrapped into
@@ -43,6 +46,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented — use an explicit fragment wrapper.
+  // Documentary only. Use an explicit fragment wrapper for the supported path.
   return null;
 }

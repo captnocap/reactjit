@@ -1,7 +1,7 @@
 // ── Pattern 134: data-* attributes ─────────────────────────────
 // Index: 134
 // Group: misc_jsx
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <Box data-testid="main" />
@@ -34,6 +34,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented.
+  // Intentionally not preserved in the current native node model.
   return null;
 }

@@ -1,7 +1,7 @@
 // ── Pattern 049: Boolean shorthand ─────────────────────────────
 // Index: 49
 // Group: props
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <Button disabled />
@@ -16,9 +16,15 @@
 //   // so inline component bodies can treat the prop as a real boolean flag
 //
 // Notes:
-//   Not implemented in the current component prop collector.
-//   collectComponentPropValues() only records an attribute when it is followed
-//   by `=`. A bare identifier attr is currently advanced past and dropped.
+//   Shorthand booleans exist in the parser, but only partially.
+//
+//   Native element parsing already has a bare-attr path in parseJSXElement():
+//   identifiers without `=` still flow through parseElementAttr(), which is
+//   how flags like `bold`, `background`, and literal-mode `l` work today.
+//
+//   Component props are weaker. collectComponentPropValues() only records an
+//   attribute when it is followed by `=`, so `<C disabled />` is currently
+//   advanced past and dropped at the component-call layer.
 //
 //   Supporting this would require an attribute-position rule roughly like:
 //     if (attr seen and next token !== '=') propValues[attr] = true;
@@ -33,6 +39,8 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // No live implementation yet.
+  // Documentary only. The live partial behavior is split between:
+  //   - native element bare attrs in parseJSXElement()
+  //   - no equivalent component-prop capture yet
   return null;
 }

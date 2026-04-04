@@ -1,7 +1,7 @@
 // ── Pattern 133: Spread on native element ──────────────────────
 // Index: 133
 // Group: misc_jsx
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <div {...domProps} />
@@ -16,9 +16,12 @@
 //   // before buildNode(...)
 //
 // Notes:
-//   Native element spread is not implemented. parseJSXElement() only dispatches
-//   attrs when the next token is an identifier; `{...domProps}` starts with
-//   TK.lbrace, so the loop just advances token-by-token and drops it.
+//   This is partial rather than complete because the underlying native attrs
+//   *are* supported when spelled explicitly, but spread syntax is not.
+//
+//   parseJSXElement() only dispatches attrs when the next token is an
+//   identifier; `{...domProps}` starts with TK.lbrace, so the loop just
+//   advances token-by-token and drops it.
 //
 //   This is different from component spread (p054), which has a dedicated
 //   parser in parse/element/component_spread.js. That support does not apply
@@ -32,6 +35,7 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented for native elements.
+  // Documentary only. Explicit attrs compile; spread attrs on native elements
+  // currently fall through and are dropped.
   return null;
 }

@@ -1,7 +1,7 @@
 // ── Pattern 137: Namespaced attrs ──────────────────────────────
 // Index: 137
 // Group: misc_jsx
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <use xlinkHref="#icon" />
@@ -29,6 +29,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented.
+  // Blocked on first-class SVG support; intentionally not compiled today.
   return null;
 }
