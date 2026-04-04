@@ -121,32 +121,32 @@ patterns[10] = require('./primitives/p010_expression_interpolation');
 // patterns[68] = require('./children/p068_string_children');
 // patterns[69] = require('./children/p069_expression_children');
 // patterns[70] = require('./children/p070_mixed_children');
-// patterns[71] = require('./children/p071_array_children');
-// patterns[72] = require('./children/p072_no_children');
+patterns[71] = require('./children/p071_array_children');
+patterns[72] = require('./children/p072_no_children');
 
 // ── Component Reference (73-80) ──
-// patterns[73] = require('./component_ref/p073_direct_component');
-// patterns[74] = require('./component_ref/p074_dot_notation');
-// patterns[75] = require('./component_ref/p075_dynamic_variable');
-// patterns[76] = require('./component_ref/p076_dynamic_ternary');
-// patterns[77] = require('./component_ref/p077_create_element');
-// patterns[78] = require('./component_ref/p078_clone_element');
-// patterns[79] = require('./component_ref/p079_lazy_component');
-// patterns[80] = require('./component_ref/p080_suspense');
+patterns[73] = require('./component_ref/p073_direct_component');
+patterns[74] = require('./component_ref/p074_dot_notation');
+patterns[75] = require('./component_ref/p075_dynamic_variable');
+patterns[76] = require('./component_ref/p076_dynamic_ternary');
+patterns[77] = require('./component_ref/p077_create_element');
+patterns[78] = require('./component_ref/p078_clone_element');
+patterns[79] = require('./component_ref/p079_lazy_component');
+patterns[80] = require('./component_ref/p080_suspense');
 
 // ── Conditional Rendering (81-85) ──
-patterns[81] = require('./conditional_rendering/p081_if_else_early_return');
-patterns[82] = require('./conditional_rendering/p082_guard_null');
-patterns[83] = require('./conditional_rendering/p083_switch_return');
-patterns[84] = require('./conditional_rendering/p084_object_lookup');
-patterns[85] = require('./conditional_rendering/p085_iife');
+// patterns[81] = require('./conditional_rendering/p081_if_else_early_return');
+// patterns[82] = require('./conditional_rendering/p082_guard_null');
+// patterns[83] = require('./conditional_rendering/p083_switch_return');
+// patterns[84] = require('./conditional_rendering/p084_object_lookup');
+// patterns[85] = require('./conditional_rendering/p085_iife');
 
 // ── Composition (86-93) ──
-patterns[86] = require('./composition/p086_wrapper');
-patterns[87] = require('./composition/p087_hoc');
-patterns[88] = require('./composition/p088_forwarded_ref');
-patterns[89] = require('./composition/p089_context_provider');
-patterns[90] = require('./composition/p090_context_consumer');
+// patterns[86] = require('./composition/p086_wrapper');
+// patterns[87] = require('./composition/p087_hoc');
+// patterns[88] = require('./composition/p088_forwarded_ref');
+// patterns[89] = require('./composition/p089_context_provider');
+// patterns[90] = require('./composition/p090_context_consumer');
 // patterns[91] = require('./composition/p091_portal');
 // patterns[92] = require('./composition/p092_error_boundary');
 // patterns[93] = require('./composition/p093_slot_pattern');
@@ -211,3 +211,5 @@ patterns[90] = require('./composition/p090_context_consumer');
 // patterns[138] = require('./misc_jsx/p138_jsx_comment');
 // patterns[139] = require('./misc_jsx/p139_multiline_parens');
 // patterns[140] = require('./misc_jsx/p140_adjacent_fragment');
+
+module.exports = patterns;
