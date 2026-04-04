@@ -37,6 +37,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
   if (meta.hasFlatMaps) out += `    _ = _pool_arena.reset(.retain_capacity);\n`;
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+    if (ctx.maps[mi].mapBackend === 'lua_runtime') continue; // Lua maps rebuild via LuaJIT
     out += `    _rebuildMap${mi}();\n`;
   }
   // Register Lua map wrapper pointers and populate data for LuaJIT maps
@@ -90,6 +91,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
       if (meta.hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
       for (let mi = 0; mi < ctx.maps.length; mi++) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+        if (ctx.maps[mi].mapBackend === 'lua_runtime') continue;
         out += `        _rebuildMap${mi}();\n`;
       }
       if (hasLuaMaps) out += _luaDataEvalBlock + `        luajit_runtime.callGlobal("__rebuildLuaMaps");\n`;
@@ -101,6 +103,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
       if (meta.hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
       for (let mi = 0; mi < ctx.maps.length; mi++) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+        if (ctx.maps[mi].mapBackend === 'lua_runtime') continue;
         out += `        _rebuildMap${mi}();\n`;
       }
       if (hasLuaMaps) out += _luaDataEvalBlock + `        luajit_runtime.callGlobal("__rebuildLuaMaps");\n`;

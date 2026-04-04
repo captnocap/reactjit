@@ -159,6 +159,8 @@ function emitMapPoolDeclarations(ctx, promotedToPerItem) {
 
   for (const mi of mapOrder) {
     const map = ctx.maps[mi];
+    // Skip lua_runtime maps — they don't need Zig pool declarations
+    if (map.mapBackend === 'lua_runtime') continue;
     if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
       out += `// computed-map colors: ${map.oa._computedColors.join(' ')}\n`;
     }
@@ -367,6 +369,7 @@ function emitMapPoolRebuilds(ctx, meta) {
   for (const mi of mapOrder) {
     const m = ctx.maps[mi];
     if (m.isNested || m.isInline) continue; // nested/inline rebuilds inlined into parent
+    if (m.mapBackend === 'lua_runtime') continue; // lua maps rebuild via LuaJIT, not Zig
     const { mapPerItemDecls, mapDynTexts, mapHandlers } = _mapMeta[mi];
     let { innerCount, innerArr } = _mapMeta[mi];
   
