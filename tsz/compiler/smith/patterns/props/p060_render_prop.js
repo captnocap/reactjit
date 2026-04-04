@@ -1,7 +1,7 @@
 // ── Pattern 060: Render prop ────────────────────────────────────
 // Index: 60
 // Group: props
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <DataProvider render={(data) => <Text>{data.name}</Text>} />
@@ -81,7 +81,9 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented as a general pattern. Stub.
-  // onRender callbacks handled by parseElementRenderAttr() in attrs_handlers.js.
+  // General render props: not implemented (use JSX props/slots instead).
+  // onRender={(e) => {...}} on Effect elements: handled by
+  // parseElementRenderAttr() in attrs_handlers.js — extracts function body,
+  // compiles to effect_render/effect_shader node fields.
   return null;
 }

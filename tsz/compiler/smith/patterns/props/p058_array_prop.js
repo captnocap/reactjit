@@ -1,7 +1,7 @@
 // ── Pattern 058: Array prop ─────────────────────────────────────
 // Index: 58
 // Group: props
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <Select options={[1, 2, 3]} />
@@ -47,6 +47,8 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented. Stub.
+  // parseComponentBraceValue() collects array tokens as raw text.
+  // Valid when component inlining doesn't need typed array access.
+  // For typed array data, use OA (object array) data blocks instead.
   return null;
 }

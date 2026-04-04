@@ -1,7 +1,7 @@
 // ── Pattern 056: Computed prop name ─────────────────────────────
 // Index: 56
 // Group: props
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <Component {[dynamicKey]: value} />
@@ -44,6 +44,7 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented. Stub.
+  // Not applicable — Zig structs require compile-time field names.
+  // Workaround: use explicit conditional props or data-* attributes (p134).
   return null;
 }
