@@ -38,8 +38,19 @@
 //   See also: p024 (index key), p026 (compound key)
 
 function match(c, ctx) {
-  // A map with key={item.field} on the root element.
-  // Same parse path as any map — key is stripped in attrs.
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

@@ -1,7 +1,7 @@
 // ── Pattern 063: default prop values ───────────────────────────
 // Index: 63
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   function Greeting({name = "anon"}) {
@@ -57,7 +57,40 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only incidentally by the destructured-signature path.
-  // Missing-prop defaults are not implemented.
-  return null;
+  // Default prop values: function Name({name = "default"}) { ... }
+  // Parse the destructured signature and extract name=default pairs.
+  // These defaults are stored so inlineComponentCall() can fall back
+  // to them when a prop is not supplied at the call site.
+  c.advance(); // skip 'function'
+  var componentName = c.text();
+  c.advance(); // skip component name
+  c.advance(); // skip (
+  c.advance(); // skip {
+
+  var defaults = {};
+  while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+    if (c.kind() === TK.identifier) {
+      var propName = c.text();
+      c.advance();
+      if (c.kind() === TK.equals) {
+        c.advance(); // skip =
+        // Collect default value
+        if (c.kind() === TK.string) {
+          defaults[propName] = c.text().slice(1, -1);
+          c.advance();
+        } else if (c.kind() === TK.number) {
+          defaults[propName] = c.text();
+          c.advance();
+        } else if (c.kind() === TK.identifier) {
+          defaults[propName] = c.text();
+          c.advance();
+        }
+      }
+      if (c.kind() === TK.comma) c.advance();
+      continue;
+    }
+    c.advance();
+  }
+
+  return { defaults: defaults, componentName: componentName };
 }

@@ -8,12 +8,12 @@
 // Trigger: state, script runtime, LuaJIT maps, or fast-build APIs.
 // Output target: state/engine/qjs_runtime/luajit_runtime imports.
 
-function applies(ctx, meta) {
+function _a003_applies(ctx, meta) {
   void ctx;
   return meta.hasState || meta.hasDynamicOA || meta.hasScriptRuntime || meta.hasLuaMaps || true;
 }
 
-function emit(ctx, meta) {
+function _a003_emit(ctx, meta) {
   void ctx;
   var out = '';
   if (meta.fastBuild) {
@@ -44,13 +44,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[3] = {
   id: 3,
   name: 'runtime_imports',
   group: 'preamble',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/preamble.js',
-  applies: applies,
-  emit: emit,
+  applies: _a003_applies,
+  emit: _a003_emit,
 };

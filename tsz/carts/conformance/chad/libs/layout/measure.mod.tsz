@@ -6,36 +6,36 @@
     <TextMetrics>
       width is 0
       height is 0
-      lineCount is 1
+      line_count is 1
     </TextMetrics>
   </types>
 
   <functions>
-    measureText(content, fontSize, maxWidth):
+    measureText(content, font_size, max_width):
       metrics is TextMetrics
       x is 0
-      charWidth is fontSize * 0.6
+      char_width is font_size * 0.6
 
       <for 0..content.length as i>
-        <if x + charWidth above maxWidth>
+        <if x + char_width above max_width>
           x is 0
-          metrics.lineCount is metrics.lineCount + 1
+          metrics.line_count is metrics.line_count + 1
         </if>
-        x is x + charWidth
+        x is x + char_width
         <if x above metrics.width>
           metrics.width is x
         </if>
       </for>
 
-      metrics.height is metrics.lineCount * fontSize * 1.2
+      metrics.height is metrics.line_count * font_size * 1.2
       metrics
 
-    estimateLines(content, fontSize, maxWidth):
-      charWidth is fontSize * 0.6
-      charsPerLine is math.floor(maxWidth / charWidth)
-      <if charsPerLine below 1>
-        charsPerLine is 1
+    estimateLines(content, font_size, max_width):
+      char_width is font_size * 0.6
+      chars_per_line is math.floor(max_width / char_width)
+      <if chars_per_line below 1>
+        chars_per_line is 1
       </if>
-      math.ceil(content.length / charsPerLine)
+      math.ceil(content.length / chars_per_line)
   </functions>
 </measure>

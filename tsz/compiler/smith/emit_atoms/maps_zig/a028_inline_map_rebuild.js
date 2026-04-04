@@ -31,26 +31,26 @@
 //   This atom produces no output — atom 026 handles it. It serves as
 //   documentation of the inline rebuild contract.
 
-function applies(ctx, meta) {
+function _a028_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return m.isInline; });
 }
 
-function emit(ctx, meta) {
+function _a028_emit(ctx, meta) {
   void ctx; void meta;
   // Inline rebuilds are emitted inline by atom 026 (flat_map_rebuild).
   // This atom is a reference/documentation placeholder.
   return '';
 }
 
-module.exports = {
+_emitAtoms[28] = {
   id: 28,
   name: 'inline_map_rebuild',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a028_applies,
+  emit: _a028_emit,
 };

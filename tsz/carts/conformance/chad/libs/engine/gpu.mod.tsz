@@ -6,16 +6,16 @@
     sdl
   </uses>
 
-  <ffi>
-    wgpu_create_instance @("libwgpu_native.a")
-    wgpu_create_surface  @("libwgpu_native.a")
-    wgpu_create_device   @("libwgpu_native.a")
-    wgpu_begin_frame     @("libwgpu_native.a")
-    wgpu_end_frame       @("libwgpu_native.a")
-    wgpu_draw_rect       @("libwgpu_native.a")
-    wgpu_draw_text       @("libwgpu_native.a")
-    wgpu_release         @("libwgpu_native.a")
-  </ffi>
+  <wgpu ffi>
+    create_instance
+    create_surface
+    create_device
+    begin_frame
+    end_frame
+    draw_rect
+    draw_text
+    release
+  </wgpu>
 
   <types>
     <Color>
@@ -41,47 +41,43 @@
   </types>
 
   <var>
-    render is RenderState
+    set_render is RenderState
   </var>
-
-  <state>
-    set_render
-  </state>
 
   <functions>
     boot:
-      render.instance is wgpu_create_instance()
+      render.instance is wgpu.create_instance()
       <if sdl.window>
-        render.surface is wgpu_create_surface(render.instance, sdl.window)
-        render.device is wgpu_create_device(render.instance)
+        render.surface is wgpu.create_surface(render.instance, sdl.window)
+        render.device is wgpu.create_device(render.instance)
         render.ready is true
       </if>
 
     boot cleanup:
       <if render.ready>
-        wgpu_release(render.device)
-        wgpu_release(render.surface)
-        wgpu_release(render.instance)
+        wgpu.release(render.device)
+        wgpu.release(render.surface)
+        wgpu.release(render.instance)
       </if>
 
     beginFrame:
       <if render.ready>
-        wgpu_begin_frame(render.surface, render.device)
+        wgpu.begin_frame(render.surface, render.device)
       </if>
 
     endFrame:
       <if render.ready>
-        wgpu_end_frame(render.surface, render.device)
+        wgpu.end_frame(render.surface, render.device)
       </if>
 
     drawRect(rect, color):
       <if render.ready>
-        wgpu_draw_rect(render.device, rect.x, rect.y, rect.w, rect.h, color.r, color.g, color.b, color.a)
+        wgpu.draw_rect(render.device, rect.x, rect.y, rect.w, rect.h, color.r, color.g, color.b, color.a)
       </if>
 
     drawText(text, x, y, size, color):
       <if render.ready>
-        wgpu_draw_text(render.device, text, x, y, size, color.r, color.g, color.b, color.a)
+        wgpu.draw_text(render.device, text, x, y, size, color.r, color.g, color.b, color.a)
       </if>
   </functions>
 </gpu>

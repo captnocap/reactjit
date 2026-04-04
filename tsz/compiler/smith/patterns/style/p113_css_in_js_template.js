@@ -36,11 +36,19 @@
 //   Users should convert to inline style objects.
 
 function match(c, ctx) {
-  // Tagged template literals (styled.div`...`, css`...`) are parsed as
-  // normal expressions by the lexer. The tag function is treated as an
-  // identifier, the template as a template literal. Neither triggers
-  // special style handling — the expression falls through to qjs eval
-  // or is ignored depending on context.
+  // css`...` or styled.div`...`
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t === 'css') {
+    if (c.pos + 1 >= c.count) return false;
+    return c.kindAt(c.pos + 1) === TK.template_literal;
+  }
+  if (t === 'styled') {
+    if (c.pos + 3 >= c.count) return false;
+    return c.kindAt(c.pos + 1) === TK.dot &&
+           c.kindAt(c.pos + 2) === TK.identifier &&
+           c.kindAt(c.pos + 3) === TK.template_literal;
+  }
   return false;
 }
 

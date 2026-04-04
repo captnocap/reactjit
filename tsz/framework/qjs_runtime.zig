@@ -1760,6 +1760,54 @@ fn hostExec(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSV
     return qjs.JS_NewStringLen(c2, &buf, @intCast(total));
 }
 
+/// __db_query(path, sql) → query results as pipe-delimited rows, newline-separated.
+/// Opens the sqlite db at path, executes the SQL query, returns all result rows.
+/// Each row's columns are separated by '|', rows by '\n'. Empty string on error.
+fn hostDbQuery(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 2) return qjs.JS_NewString(c2, "");
+    const path_ptr = qjs.JS_ToCString(c2, argv[0]);
+    if (path_ptr == null) return qjs.JS_NewString(c2, "");
+    defer qjs.JS_FreeCString(c2, path_ptr);
+    const sql_ptr = qjs.JS_ToCString(c2, argv[1]);
+    if (sql_ptr == null) return qjs.JS_NewString(c2, "");
+    defer qjs.JS_FreeCString(c2, sql_ptr);
+
+    const sqlite = @import("sqlite.zig");
+    var db = sqlite.Database.open(std.mem.span(path_ptr)) catch return qjs.JS_NewString(c2, "");
+    defer db.close();
+
+    var stmt = db.prepare(sql_ptr) catch return qjs.JS_NewString(c2, "");
+    defer stmt.deinit();
+
+    var buf: [65536]u8 = undefined;
+    var pos: usize = 0;
+    while (true) {
+        const has_row = stmt.step() catch break;
+        if (!has_row) break;
+        const ncols = stmt.columnCount();
+        var col: c_int = 0;
+        while (col < ncols) : (col += 1) {
+            if (col > 0 and pos < buf.len) {
+                buf[pos] = '|';
+                pos += 1;
+            }
+            const val = stmt.columnText(col) orelse "";
+            const copy_len = @min(val.len, buf.len - pos);
+            if (copy_len > 0) {
+                @memcpy(buf[pos .. pos + copy_len], val[0..copy_len]);
+                pos += copy_len;
+            }
+        }
+        if (pos < buf.len) {
+            buf[pos] = '\n';
+            pos += 1;
+        }
+    }
+    if (pos == 0) return qjs.JS_NewString(c2, "");
+    return qjs.JS_NewStringLen(c2, &buf, @intCast(pos));
+}
+
 /// Function pointer set by engine to open a window. Avoids importing windows.zig here.
 var g_open_window_fn: ?*const fn ([*:0]const u8, c_int, c_int) void = null;
 
@@ -1913,6 +1961,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_writefile", qjs.JS_NewCFunction(ctx, hostFsWritefile, "__fs_writefile", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_deletefile", qjs.JS_NewCFunction(ctx, hostFsDeletefile, "__fs_deletefile", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__exec", qjs.JS_NewCFunction(ctx, hostExec, "__exec", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__db_query", qjs.JS_NewCFunction(ctx, hostDbQuery, "__db_query", 2));
 
     // Window management
     _ = qjs.JS_SetPropertyStr(ctx, global, "__openWindow", qjs.JS_NewCFunction(ctx, hostOpenWindow, "__openWindow", 3));
@@ -2039,6 +2088,36 @@ pub fn evalExpr(code: []const u8) void {
         }
         qjs.JS_FreeValue(ctx, r);
     }
+}
+
+/// Evaluate a JS expression and return the result as a string slice.
+/// Writes into the caller-provided buffer. Returns "" on error or empty result.
+pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
+    if (comptime !HAS_QUICKJS) return "";
+    if (g_qjs_ctx) |ctx| {
+        if (code.len == 0) return "";
+        const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<expr>", 0);
+        defer qjs.JS_FreeValue(ctx, r);
+        if (qjs.JS_IsException(r)) {
+            const ex = qjs.JS_GetException(ctx);
+            defer qjs.JS_FreeValue(ctx, ex);
+            const es = qjs.JS_ToCString(ctx, ex);
+            if (es) |s| {
+                std.debug.print("[evalToString error] {s}: {s}\n", .{ code, s });
+                qjs.JS_FreeCString(ctx, s);
+            }
+            return "";
+        }
+        const s = qjs.JS_ToCString(ctx, r);
+        if (s) |str| {
+            defer qjs.JS_FreeCString(ctx, s);
+            const span = std.mem.span(str);
+            const len = @min(span.len, 256);
+            @memcpy(buf[0..len], span[0..len]);
+            return buf[0..len];
+        }
+    }
+    return "";
 }
 
 pub fn tick() void {

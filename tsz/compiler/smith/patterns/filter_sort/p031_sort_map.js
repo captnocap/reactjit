@@ -1,7 +1,7 @@
 // ── Pattern 031: sort().map() ───────────────────────────────────
 // Index: 31
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {items.sort((a, b) => a.name - b.name).map(item => (
@@ -68,13 +68,15 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Compilation is handled by the existing map pipeline.
-  // tryParseMapHeader skips .sort() and proceeds to .map().
-  // The sort comparator is discarded — OA data order comes from
-  // the _computedExpr evaluated by QuickJS at runtime.
+  // Compilation is handled by the existing map pipeline:
+  //   1. _identifierStartsMapCall (brace.js) skips .sort() to find .map()
+  //   2. tryParseMapHeader (header.js:40-75) skips .sort() body entirely
+  //   3. The sort comparator is discarded at parse time
+  //   4. For _computedExpr OAs, the JS expression includes .sort() so
+  //      QuickJS evaluates it at runtime — data arrives pre-sorted
+  //   5. For static/prop-driven OAs, sort order is whatever the host provides
+  //   6. The .map() body is parsed normally after the chain is consumed
   //
-  // This compile function is a no-op stub because the consumer
-  // (brace.js) calls tryParsePlainMap / tryParsePlainMapFromMethod
-  // directly, which already handles the full chain.
+  // No compile action needed — the map pipeline owns this end-to-end.
   return null;
 }

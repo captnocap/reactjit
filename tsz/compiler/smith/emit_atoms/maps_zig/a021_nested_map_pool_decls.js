@@ -14,13 +14,13 @@
 //   fixed-size 2D arrays indexed by [parent_i][nested_j].
 //   _parentMi is stashed on the map for rebuild-time parent reference.
 
-function applies(ctx, meta) {
+function _a021_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return m.isNested; });
 }
 
-function emit(ctx, meta) {
+function _a021_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   if (!mapOrder) return '';
 
@@ -54,13 +54,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[21] = {
   id: 21,
   name: 'nested_map_pool_decls',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a021_applies,
+  emit: _a021_emit,
 };

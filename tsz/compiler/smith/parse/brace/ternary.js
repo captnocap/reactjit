@@ -182,8 +182,13 @@ function _parseTernaryCondParts(c) {
           var field = c.text();
           var mapOa = ctx.currentMap.oa;
           var iterVar = ctx.currentMap.iterVar || '_i';
-          condParts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iterVar + ']');
           c.advance(); // skip field
+          // Consume .length after OA field — nested arrays store count directly
+          if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+            c.advance(); // skip .
+            c.advance(); // skip length
+          }
+          condParts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iterVar + ']');
           continue;
         }
         condParts.push(_condPropValue(pv));
@@ -283,6 +288,20 @@ function _parseTernaryBranchNode(c) {
       if (wrapped && c.kind() === TK.rparen) c.advance();
       return branchChildren[0];
     }
+  }
+
+  // Fallback: unresolvable branch (e.g. prop.field.map(...), runtime expression).
+  // Skip to matching ) or } and emit a placeholder node so raw JS doesn't leak.
+  if (wrapped || c.kind() === TK.identifier) {
+    var _depth = wrapped ? 1 : 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.lparen) _depth++;
+      if (c.kind() === TK.rparen) { _depth--; if (_depth <= 0) break; }
+      if (_depth === 0 && (c.kind() === TK.colon || c.kind() === TK.rbrace)) break;
+      c.advance();
+    }
+    if (wrapped && c.kind() === TK.rparen) c.advance();
+    return { nodeExpr: '.{ .text = "[runtime branch]" }' };
   }
 
   c.restore(saved);
@@ -484,8 +503,13 @@ function tryParseTernaryText(c, children) {
           const _f2 = c.text();
           const _moa2 = ctx.currentMap.oa;
           const _iv2 = ctx.currentMap.iterVar || '_i';
-          condParts.push(`_oa${_moa2.oaIdx}_${_f2}[${_iv2}]`);
           c.advance(); // skip field
+          // Consume .length after OA field — nested arrays store count directly
+          if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+            c.advance(); // skip .
+            c.advance(); // skip length
+          }
+          condParts.push(`_oa${_moa2.oaIdx}_${_f2}[${_iv2}]`);
           continue;
         }
         condParts.push(_condPropValue(_pv2));

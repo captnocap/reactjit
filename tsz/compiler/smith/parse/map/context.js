@@ -5,6 +5,7 @@ function enterMapContext(mapInfo) {
     currentMap: ctx.currentMap,
     arrayDecls: ctx.arrayDecls,
     arrayComments: ctx.arrayComments,
+    renderLocals: ctx.renderLocals,
   };
 
   // Reserve a stable map slot before template parsing so nested maps get
@@ -17,6 +18,9 @@ function enterMapContext(mapInfo) {
   mapInfo._topArrayComments = scope.arrayComments;
   ctx.arrayDecls = mapInfo.mapArrayDecls;
   ctx.arrayComments = mapInfo.mapArrayComments;
+  if (mapInfo.renderLocalAliases && Object.keys(mapInfo.renderLocalAliases).length > 0) {
+    ctx.renderLocals = Object.assign({}, ctx.renderLocals, mapInfo.renderLocalAliases);
+  }
 
   return scope;
 }
@@ -24,6 +28,7 @@ function enterMapContext(mapInfo) {
 function exitMapContext(scope) {
   ctx.arrayDecls = scope.arrayDecls;
   ctx.arrayComments = scope.arrayComments;
+  ctx.renderLocals = scope.renderLocals;
   ctx.currentMap = scope.currentMap;
 }
 
@@ -36,5 +41,5 @@ function consumeMapClose(c) {
 
 function finalizeMapNode(mapInfo, templateNode) {
   mapInfo.templateExpr = templateNode.nodeExpr;
-  return { nodeExpr: '.{ .style = .{ .flex_direction = .column } }', mapIdx: mapInfo.mapIdx };
+  return { nodeExpr: '.{}', mapIdx: mapInfo.mapIdx };
 }

@@ -28,9 +28,11 @@
 //   Lua map wrappers, not author-facing data-* attribute support.
 
 function match(c, ctx) {
-  // Not reliably matchable from the value side because the attr name itself
-  // is split by the lexer.
-  return false;
+  // data-* attribute: identifier 'data' followed by minus token
+  if (c.kind() !== TK.identifier) return false;
+  if (c.text() !== 'data') return false;
+  if (c.pos + 1 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.minus;
 }
 
 function compile(c, ctx) {

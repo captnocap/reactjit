@@ -1,7 +1,7 @@
 // ── Pattern 049: Boolean shorthand ─────────────────────────────
 // Index: 49
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Button disabled />
@@ -39,8 +39,9 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Documentary only. The live partial behavior is split between:
-  //   - native element bare attrs in parseJSXElement()
-  //   - no equivalent component-prop capture yet
-  return null;
+  // Boolean shorthand: bare attribute name with no = after it.
+  // Consume the identifier and return true as the prop value.
+  var name = c.text();
+  c.advance();
+  return { value: 'true', attr: name };
 }

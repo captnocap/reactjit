@@ -8,13 +8,13 @@
 // Trigger: every emitted app with zero or more state slots.
 // Output target: _initState() slot creation calls.
 
-function applies(ctx, meta) {
+function _a005_applies(ctx, meta) {
   void meta;
   // Always emitted — even with zero slots the function must exist
   return Array.isArray(ctx.stateSlots);
 }
 
-function emit(ctx, meta) {
+function _a005_emit(ctx, meta) {
   void meta;
   var out = 'fn _initState() void {\n';
   for (var i = 0; i < ctx.stateSlots.length; i++) {
@@ -28,13 +28,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[5] = {
   id: 5,
   name: 'init_state_slots',
   group: 'state_tree',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/state_manifest.js',
-  applies: applies,
-  emit: emit,
+  applies: _a005_applies,
+  emit: _a005_emit,
 };

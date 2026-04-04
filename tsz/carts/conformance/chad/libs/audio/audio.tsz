@@ -2,6 +2,8 @@
 // Usage: backend.audio.playback.play(track)
 
 <audio lib>
-  <playback module />
-  <mixer module />
+  <lscript>
+    playback
+    mixer
+  </lscript>
 </audio>

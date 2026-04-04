@@ -1,7 +1,7 @@
 // ── Pattern 051: Expression prop ────────────────────────────────
 // Index: 51
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Counter value={a + b} />
@@ -95,7 +95,79 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to parseComponentBraceValue() which handles all resolution.
-  // See component_brace_values.js for the full implementation.
-  return null;
+  // Expression prop: { expr } — delegates to parseComponentBraceValue() resolution.
+  // Consume opening brace, then resolve tokens using the same priority chain:
+  //   script func calls → state getters → render locals → prop stack → map params
+  c.advance(); // skip {
+
+  // Script function call: unresolvable identifier followed by (
+  if ((ctx.scriptBlock || globalThis.__scriptContent) &&
+      c.kind() === TK.identifier && !isGetter(c.text()) &&
+      !(ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) &&
+      !(ctx.propStack && ctx.propStack[c.text()] !== undefined) &&
+      c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    var rawParts = [];
+    var bd = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && bd === 0) break;
+      if (c.kind() === TK.lbrace) bd++;
+      if (c.kind() === TK.rbrace) bd--;
+      rawParts.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    var rawExpr = rawParts.join(' ').replace(/\s*\.\s*/g, '.').replace(/\s*\(\s*/g, '(').replace(/\s*\)\s*/g, ')').replace(/\s*,\s*/g, ', ');
+    return { value: buildEval(rawExpr, ctx) };
+  }
+
+  // General expression: collect tokens, resolving identifiers along the way
+  var val = '';
+  var depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rbrace) {
+      if (depth === 0) break;
+      depth--;
+    }
+
+    if (c.kind() === TK.identifier && isGetter(c.text())) {
+      val += slotGet(c.text());
+    } else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
+      val += ctx.renderLocals[c.text()];
+    } else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+      val += ctx.propStack[c.text()];
+    } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) {
+      val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
+    } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+      // Map item param .field access
+      if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        c.advance(); // skip item name
+        c.advance(); // skip dot
+        var mf = c.text();
+        var moa = ctx.currentMap.oa;
+        var mfi = moa ? moa.fields.find(function(f) { return f.name === mf; }) : null;
+        var miv = ctx.currentMap.iterVar || '_i';
+        if (moa && mfi && mfi.type === 'string') {
+          val += '_oa' + moa.oaIdx + '_' + mf + '[' + miv + '][0.._oa' + moa.oaIdx + '_' + mf + '_lens[' + miv + ']]';
+        } else if (moa) {
+          val += '_oa' + moa.oaIdx + '_' + mf + '[' + miv + ']';
+        } else {
+          val += '0';
+        }
+      } else {
+        val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
+      }
+    } else if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
+      val += c.text();
+      c.advance();
+      if (c.kind() === TK.equals) c.advance(); // skip 3rd = of ===
+      continue;
+    } else {
+      val += c.text();
+    }
+    c.advance();
+  }
+
+  if (c.kind() === TK.rbrace) c.advance();
+  return { value: val };
 }

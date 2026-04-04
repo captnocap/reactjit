@@ -1,7 +1,7 @@
 // ── Pattern 060: Render prop ────────────────────────────────────
 // Index: 60
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <DataProvider render={(data) => <Text>{data.name}</Text>} />
@@ -81,9 +81,37 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // General render props: not implemented (use JSX props/slots instead).
-  // onRender={(e) => {...}} on Effect elements: handled by
-  // parseElementRenderAttr() in attrs_handlers.js — extracts function body,
-  // compiles to effect_render/effect_shader node fields.
-  return null;
+  // Render prop: { (params) => <JSX /> }
+  // General render props are not supported in the compile-time model.
+  // Special case: onRender on Effect elements is handled by
+  // parseElementRenderAttr() in attrs_handlers.js.
+  // For the general case, collect the arrow function body as raw text
+  // so downstream can attempt to use it or warn.
+  c.advance(); // skip {
+
+  // Collect parameter names from (params)
+  var params = [];
+  if (c.kind() === TK.lparen) {
+    c.advance(); // skip (
+    while (c.kind() !== TK.rparen && c.kind() !== TK.eof) {
+      if (c.kind() === TK.identifier) params.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+  }
+  if (c.kind() === TK.arrow) c.advance();
+
+  // Collect body tokens
+  var bodyParts = [];
+  var bd = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.rbrace && bd === 0) break;
+    if (c.kind() === TK.lbrace) bd++;
+    if (c.kind() === TK.rbrace) bd--;
+    bodyParts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+
+  return { value: null, renderProp: true, params: params, rawBody: bodyParts.join(' ') };
 }

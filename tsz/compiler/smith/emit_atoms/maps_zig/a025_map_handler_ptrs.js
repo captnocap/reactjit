@@ -16,13 +16,13 @@
 //   build ptrs inline during rebuild (not here).
 //   Inline maps get 3D arrays [outer][inner][bufSize]u8.
 
-function applies(ctx, meta) {
+function _a025_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.handlers.some(function(h) { return h.inMap; });
 }
 
-function emit(ctx, meta) {
+function _a025_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   if (!mapOrder) return '';
 
@@ -71,13 +71,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[25] = {
   id: 25,
   name: 'map_handler_ptrs',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a025_applies,
+  emit: _a025_emit,
 };

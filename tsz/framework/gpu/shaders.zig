@@ -26,6 +26,8 @@ pub const rect_wgsl =
     \\    @location(7) scale_x: f32,
     \\    @location(8) scale_y: f32,
     \\    @location(9) blur_radius: f32,   // SDF shadow blur (0 = sharp)
+    \\    @location(10) grad_color: vec4f, // gradient end color RGBA
+    \\    @location(11) grad_dir: f32,     // 0=none, 1=vertical, 2=horizontal, 3=diagonal
     \\};
     \\
     \\// ── Vertex output ────────────────────────────────────────────
@@ -38,6 +40,8 @@ pub const rect_wgsl =
     \\    @location(4) radii: vec4f,
     \\    @location(5) border_width: f32,
     \\    @location(6) blur_radius: f32,
+    \\    @location(7) grad_color: vec4f,
+    \\    @location(8) grad_dir: f32,
     \\};
     \\
     \\// ── Vertex shader ────────────────────────────────────────────
@@ -87,6 +91,8 @@ pub const rect_wgsl =
     \\    out.radii = inst.radii;
     \\    out.border_width = inst.border_width;
     \\    out.blur_radius = inst.blur_radius;
+    \\    out.grad_color = inst.grad_color;
+    \\    out.grad_dir = inst.grad_dir;
     \\    return out;
     \\}
     \\
@@ -126,15 +132,30 @@ pub const rect_wgsl =
     \\        discard;
     \\    }
     \\
+    \\    // Gradient: mix start color → end color based on direction
+    \\    var base_color = in.color;
+    \\    if in.grad_dir > 0.0 {
+    \\        let uv = in.local_pos / in.size; // [0..1] within rect
+    \\        var t: f32 = 0.0;
+    \\        if in.grad_dir < 1.5 {
+    \\            t = uv.y;  // vertical: top→bottom
+    \\        } else if in.grad_dir < 2.5 {
+    \\            t = uv.x;  // horizontal: left→right
+    \\        } else {
+    \\            t = (uv.x + uv.y) * 0.5;  // diagonal
+    \\        }
+    \\        base_color = mix(in.color, in.grad_color, t);
+    \\    }
+    \\
     \\    // Border: if border_width > 0, inner region is fill, outer ring is border
     \\    var final_color: vec4f;
     \\    if in.border_width > 0.0 {
     \\        let inner_dist = sdf_rounded_rect(p, half_size - in.border_width, in.radii);
     \\        let inner_aa = smoothstep(-1.0, 0.5, inner_dist);
     \\        // mix: inner_aa=0 means inside fill, inner_aa=1 means in border zone
-    \\        final_color = mix(in.color, in.border_color, inner_aa);
+    \\        final_color = mix(base_color, in.border_color, inner_aa);
     \\    } else {
-    \\        final_color = in.color;
+    \\        final_color = base_color;
     \\    }
     \\
     \\    // Apply edge anti-aliasing

@@ -38,9 +38,12 @@
 //   and intentional behavior.
 
 function match(c, ctx) {
-  // className="..." — string value after className attr.
-  // Detected by attr name, not value.
-  return false; // Handled by the skip + warn in soup.js
+  // className="string" or class="string"
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t !== 'className' && t !== 'class') return false;
+  if (c.pos + 2 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.equals && c.kindAt(c.pos + 2) === TK.string;
 }
 
 function compile(c, ctx) {

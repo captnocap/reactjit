@@ -8,12 +8,12 @@
 // Trigger: ctx.variantBindings has entries.
 // Output target: _setVariantHost() QJS callback for runtime theme variants.
 
-function applies(ctx, meta) {
+function _a018_applies(ctx, meta) {
   void meta;
   return ctx.variantBindings && ctx.variantBindings.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a018_emit(ctx, meta) {
   void ctx;
   var out = '';
   out += 'fn _setVariantHost(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n';
@@ -31,13 +31,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[18] = {
   id: 18,
   name: 'variant_host_setter',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a018_applies,
+  emit: _a018_emit,
 };

@@ -153,12 +153,12 @@ function computePromotedMapArrays(ctx) {
   return promotedToPerItem;
 }
 
-function applies(ctx, meta) {
+function _a019_applies(ctx, meta) {
   void meta;
   return ctx.maps && ctx.maps.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a019_emit(ctx, meta) {
   // Compute and stash metadata — no Zig output
   var promotedToPerItem = computePromotedMapArrays(ctx);
   var mapOrder = buildMapEmitOrder(ctx);
@@ -172,15 +172,15 @@ function emit(ctx, meta) {
   return '';
 }
 
-module.exports = {
+_emitAtoms[19] = {
   id: 19,
   name: 'map_metadata',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a019_applies,
+  emit: _a019_emit,
   // Exported for direct use by other atoms and the live emitter
   _wrapMapCondition: _wrapMapCondition,
   buildMapEmitOrder: buildMapEmitOrder,

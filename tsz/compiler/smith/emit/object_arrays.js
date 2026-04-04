@@ -37,10 +37,28 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     len_slot.* = 0;
 }\n\n`;
 
+  // Merge duplicate OA entries (same oaIdx) — component inlining can re-register
+  const _mergedOas = {};
   for (const oa of ctx.objectArrays) {
     if (oa.isNested) continue;
     const idx = oa.oaIdx;
+    if (!_mergedOas[idx]) {
+      _mergedOas[idx] = Object.assign({}, oa, { fields: oa.fields.slice() });
+    } else {
+      // Merge fields from duplicate entry
+      for (const f of oa.fields) {
+        if (!_mergedOas[idx].fields.some(function(ef) { return ef.name === f.name; })) {
+          _mergedOas[idx].fields.push(f);
+        }
+      }
+    }
+  }
+  const _dedupedOas = [];
+  for (const k in _mergedOas) _dedupedOas.push(_mergedOas[k]);
+  for (const oa of _dedupedOas) {
+    const idx = oa.oaIdx;
     const flatFields = oa.fields.filter(function(f) { return f.type !== 'nested_array'; });
+    const nestedFields = oa.fields.filter(function(f) { return f.type === 'nested_array'; });
 
     if (oa.isConst) {
       const len = oa.constLen;
@@ -69,10 +87,12 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `var _oa${idx}_${f.name}_cap: usize = 0;\n`;
       }
     }
+    for (const nf of nestedFields) {
+      out += `var _oa${idx}_${nf.name}: []i64 = &[_]i64{};\n`;
+      out += `var _oa${idx}_${nf.name}_cap: usize = 0;\n`;
+    }
     out += `var _oa${idx}_len: usize = 0;\n`;
     out += `var _oa${idx}_dirty: bool = false;\n\n`;
-
-    const nestedFields = oa.fields.filter(function(f) { return f.type === 'nested_array'; });
     for (const nf of nestedFields) {
       const childOa = ctx.objectArrays.find(function(o) { return o.oaIdx === nf.nestedOaIdx; });
       if (!childOa) continue;
@@ -126,6 +146,16 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `    }\n`;
         out += `    _oa${idx}_${f.name}_cap = new_cap;\n`;
       }
+    }
+    for (const nf of nestedFields) {
+      out += `    if (_oa${idx}_${nf.name}_cap == 0) {\n`;
+      out += `        _oa${idx}_${nf.name} = _oa_alloc.alloc(i64, new_cap) catch return;\n`;
+      out += `        @memset(_oa${idx}_${nf.name}, 0);\n`;
+      out += `    } else {\n`;
+      out += `        _oa${idx}_${nf.name} = _oa_alloc.realloc(_oa${idx}_${nf.name}.ptr[0.._oa${idx}_${nf.name}_cap], new_cap) catch return;\n`;
+      out += `        @memset(_oa${idx}_${nf.name}[_oa${idx}_${nf.name}_cap..new_cap], 0);\n`;
+      out += `    }\n`;
+      out += `    _oa${idx}_${nf.name}_cap = new_cap;\n`;
     }
     out += `}\n\n`;
 
@@ -210,6 +240,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `        _ = qjs.JS_ToInt32(c2, &_nested_len, _nested_len_val);\n`;
         out += `        qjs.JS_FreeValue(c2, _nested_len_val);\n`;
         out += `        const _ncount: usize = @intCast(@max(0, _nested_len));\n`;
+        out += `        _oa${idx}_${f.name}[_i] = @intCast(_ncount);\n`;
         out += `        _oa${cidx}_ensureCapacity(_nested_total_${cidx} + _ncount);\n`;
         out += `        for (0.._ncount) |_j| {\n`;
         out += `            const _nelem = qjs.JS_GetPropertyUint32(c2, _nested_arr, @intCast(_j));\n`;

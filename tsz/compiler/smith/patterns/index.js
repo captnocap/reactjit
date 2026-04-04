@@ -212,4 +212,53 @@ patterns[80] = require('./component_ref/p080_suspense');
 // patterns[139] = require('./misc_jsx/p139_multiline_parens');
 // patterns[140] = require('./misc_jsx/p140_adjacent_fragment');
 
+// ── Chad Intent Patterns (c001–c030) ──
+// These catalog Intent Dictionary constructs — the chad-tier compiler lane.
+// Same match()/compile() contract as soup/mixed patterns.
+// All stubs until chad lane migration extracts logic from lanes/chad.js.
+
+// Core Binding & Declaration
+patterns['c001'] = require('./c001_blocks');
+patterns['c002'] = require('./c002_var');
+patterns['c003'] = require('./c003_is');
+patterns['c004'] = require('./c004_exact');
+patterns['c005'] = require('./c005_types');
+patterns['c006'] = require('./c006_props');
+
+// Control Flow
+patterns['c007'] = require('./c007_if');
+patterns['c008'] = require('./c008_else');
+patterns['c009'] = require('./c009_for');
+patterns['c010'] = require('./c010_during');
+patterns['c011'] = require('./c011_while');
+patterns['c012'] = require('./c012_switch');
+
+// Functions & Logic
+patterns['c013'] = require('./c013_functions');
+patterns['c014'] = require('./c014_composition');
+patterns['c015'] = require('./c015_stop');
+patterns['c016'] = require('./c016_every');
+patterns['c017'] = require('./c017_set');
+
+// Data & Structure
+patterns['c018'] = require('./c018_data_blocks');
+patterns['c019'] = require('./c019_ffi');
+patterns['c020'] = require('./c020_log');
+
+// Visual Layer
+patterns['c021'] = require('./c021_classifiers');
+patterns['c022'] = require('./c022_effects');
+patterns['c023'] = require('./c023_glyphs');
+patterns['c024'] = require('./c024_tokens');
+patterns['c025'] = require('./c025_colors');
+patterns['c026'] = require('./c026_animations');
+
+// Backend Hatches
+patterns['c027'] = require('./c027_hatches');
+
+// Collection Operations
+patterns['c028'] = require('./c028_where');
+patterns['c029'] = require('./c029_without');
+patterns['c030'] = require('./c030_concat');
+
 module.exports = patterns;

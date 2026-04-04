@@ -55,6 +55,13 @@ function tryParseBasicElementAttr(c, attr, rawTag, nodeFields, currentState) {
     return { ascriptScript, ascriptOnResult };
   }
 
+  if (attr === 'background' && rawTag === 'Effect') {
+    nodeFields.push('.effect_background = true');
+    // Skip the value if present (background={true} or just background)
+    if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() !== TK.rbrace) c.advance(); if (c.kind() === TK.rbrace) c.advance(); }
+    return { ascriptScript, ascriptOnResult };
+  }
+
   if (attr === 'placeholder' && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
     if (c.kind() === TK.string) {
       nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`);

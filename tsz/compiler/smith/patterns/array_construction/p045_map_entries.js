@@ -1,7 +1,7 @@
 // ── Pattern 045: Map.entries() via Array.from().map() ──────────
 // Index: 45
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Array.from(map.entries()).map(([k, v]) => (
@@ -62,6 +62,20 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only through the render-local computed-map path today.
+  // Array.from(map.entries()).map() is NOT supported inline by Smith.
+  //
+  // Why no inline support:
+  //   - The head expression is Array.from(...) — same limitation as p040.
+  //     The chain detector sees 'Array' as the identifier and 'from' after
+  //     the dot, which does not match the map dispatch pattern.
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const entries = Array.from(map.entries());
+  //     {entries.map(([k, v]) => <Row label={k} value={v} />)}
+  //   _tryParseIdentifierMapExpression sees the render-local identifier,
+  //   notices the raw JS contains 'Array.from', and _tryParseComputedChainMap
+  //   synthesizes a computed OA. QuickJS evaluates Array.from(map.entries())
+  //   at runtime. Destructured [k, v] params work the same as p044.
   return null;
 }

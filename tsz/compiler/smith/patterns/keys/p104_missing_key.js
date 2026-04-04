@@ -36,7 +36,27 @@
 //   there's no reconciliation.
 
 function match(c, ctx) {
-  return false;
+  // Element inside a .map() callback with NO key attr.
+  // Match: < identifier, scan attrs until > or /> — if no 'key' found, true.
+  if (c.kind() !== TK.lt) return false;
+  var saved = c.save();
+  c.advance(); // skip <
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance(); // skip tag name
+  var foundKey = false;
+  while (c.pos < c.count) {
+    var k = c.kind();
+    if (k === TK.gt || k === TK.slash_gt || k === TK.eof) break;
+    if (k === TK.identifier && c.text() === 'key') {
+      if (c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.equals) {
+        foundKey = true;
+        break;
+      }
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return !foundKey;
 }
 
 function compile(c, ctx) {

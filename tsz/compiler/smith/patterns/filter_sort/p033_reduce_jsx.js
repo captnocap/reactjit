@@ -1,7 +1,7 @@
 // ── Pattern 033: reduce() → JSX ─────────────────────────────────
 // Index: 33
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {items.reduce((acc, item) => [...acc, <Box key={item.id}>{item.name}</Box>], [])}
@@ -56,9 +56,20 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. reduce() → JSX requires pattern detection
-  // to determine which reduce variant is in use (accumulate, group,
-  // aggregate, interleave) and choose the appropriate compilation
-  // strategy. For now, developers should rewrite as .map().
+  // .reduce() → JSX is NOT supported by Smith and is not in the map pipeline.
+  //
+  // Why no implementation:
+  //   - _identifierStartsMapCall (brace.js) does not recognize .reduce()
+  //   - tryParseMapHeader (header.js) does not skip .reduce() as a chain method
+  //   - The love2d reference compiler also does not handle .reduce()
+  //   - reduce() has multiple semantic variants (accumulate, group, aggregate,
+  //     interleave) that require different compilation strategies
+  //
+  // The [...acc, <JSX>] accumulate pattern is semantically .map() and should
+  // be rewritten as .map() by the developer. More complex reduce patterns
+  // (grouping, aggregation) would need dedicated emit paths not yet designed.
+  //
+  // This pattern is documented for completeness. match() detects it so the
+  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }

@@ -17,6 +17,13 @@ function parseComponentCallChildren(c) {
 }
 
 function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
+  // Guard against recursive component inlining (e.g. RecursiveCard calls itself)
+  if (!ctx._inliningStack) ctx._inliningStack = [];
+  if (ctx._inliningStack.indexOf(rawTag) >= 0) {
+    return { nodeExpr: '.{ .text = "[recursive: ' + rawTag + ']" }' };
+  }
+  ctx._inliningStack.push(rawTag);
+
   const savedPos = c.save();
   const savedProps = ctx.propStack;
   const savedInline = ctx.inlineComponent;
@@ -161,6 +168,14 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
               c.advance();
             }
             const valStr = valParts.join('');
+            // Template literals with unresolvable interpolations → route through QJS eval
+            if (valStr.indexOf('`') === 0 || (valStr.indexOf('${') >= 0 && valStr.indexOf('`') >= 0)) {
+              if (!ctx._renderLocalRaw) ctx._renderLocalRaw = {};
+              ctx._renderLocalRaw[varName] = valStr;
+              // Store a QJS eval placeholder as the resolved value
+              ctx.renderLocals[varName] = buildEval(valStr, ctx);
+              continue;
+            }
             if (!valStr.includes('useState')) {
               // Skip if this variable is a registered const OA
               var _isConstOa2 = false;
@@ -197,6 +212,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     result = parseJSXElement(c);
   }
 
+  ctx._inliningStack.pop();
   ctx.propStack = savedProps;
   ctx.inlineComponent = savedInline;
   ctx.componentChildren = savedChildren;

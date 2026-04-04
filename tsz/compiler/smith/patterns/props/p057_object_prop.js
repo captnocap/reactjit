@@ -1,7 +1,7 @@
 // ── Pattern 057: Object prop ────────────────────────────────────
 // Index: 57
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Box style={{color: 'red', padding: 8}} />
@@ -56,7 +56,52 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // For style: delegates to parseStyleBlock() in attrs.js.
-  // For other attrs: parseComponentBraceValue() collects inner tokens.
-  return null;
+  // Object prop: {{ key: value, ... }}
+  // Two paths: style={{...}} is handled by parseStyleBlock() in attrs.js,
+  // generic object props collect inner tokens as raw text.
+  c.advance(); // skip outer {
+  c.advance(); // skip inner {
+
+  // Collect key:value pairs from the object literal
+  var pairs = {};
+  var depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.rbrace && depth === 0) break;
+    if (c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rbrace) { depth--; continue; }
+
+    // Key: value pair
+    if (c.kind() === TK.identifier || c.kind() === TK.string) {
+      var key = c.kind() === TK.string ? c.text().slice(1, -1) : c.text();
+      c.advance();
+      if (c.kind() === TK.colon) {
+        c.advance(); // skip :
+        // Collect value tokens until comma or closing brace
+        var valParts = [];
+        var vd = 0;
+        while (c.kind() !== TK.eof) {
+          if (c.kind() === TK.lbrace) vd++;
+          if (c.kind() === TK.rbrace) { if (vd === 0) break; vd--; }
+          if (c.kind() === TK.comma && vd === 0) break;
+          // Resolve identifiers
+          if (c.kind() === TK.identifier && isGetter(c.text())) {
+            valParts.push(slotGet(c.text()));
+          } else if (c.kind() === TK.string) {
+            valParts.push(c.text().slice(1, -1));
+          } else {
+            valParts.push(c.text());
+          }
+          c.advance();
+        }
+        pairs[key] = valParts.join(' ');
+        if (c.kind() === TK.comma) c.advance();
+        continue;
+      }
+    }
+    c.advance();
+  }
+
+  if (c.kind() === TK.rbrace) c.advance(); // skip inner }
+  if (c.kind() === TK.rbrace) c.advance(); // skip outer }
+  return { value: pairs, object: true };
 }

@@ -32,12 +32,12 @@
 //   Lines emitted as Zig multiline string: \\line\n
 //   Terminated with \\\n;\n
 
-function applies(ctx, meta) {
+function _a033_applies(ctx, meta) {
   void meta;
   return !!ctx;
 }
 
-function emit(ctx, meta) {
+function _a033_emit(ctx, meta) {
   void meta;
   // Reference scaffolding — live emit is in emit_split.js emitLogicBlocks()
   // (~370 lines covering ambient namespaces, OA setters, script blocks,
@@ -45,13 +45,13 @@ function emit(ctx, meta) {
   return '';
 }
 
-module.exports = {
+_emitAtoms[33] = {
   id: 33,
   name: 'js_logic_block',
   group: 'logic_runtime',
   target: 'js_in_zig',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a033_applies,
+  emit: _a033_emit,
 };

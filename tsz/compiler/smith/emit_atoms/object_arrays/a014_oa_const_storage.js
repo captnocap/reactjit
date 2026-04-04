@@ -30,7 +30,7 @@ function _mergeOas(ctx) {
   return result;
 }
 
-function applies(ctx, meta) {
+function _a014_applies(ctx, meta) {
   void meta;
   if (!ctx.objectArrays || ctx.objectArrays.length === 0) return false;
   var oas = _mergeOas(ctx);
@@ -40,7 +40,7 @@ function applies(ctx, meta) {
   return false;
 }
 
-function emit(ctx, meta) {
+function _a014_emit(ctx, meta) {
   void meta;
   var oas = _mergeOas(ctx);
   var out = '';
@@ -67,13 +67,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[14] = {
   id: 14,
   name: 'oa_const_storage',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a014_applies,
+  emit: _a014_emit,
 };

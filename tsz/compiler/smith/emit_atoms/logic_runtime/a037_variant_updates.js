@@ -29,12 +29,12 @@
 //   Imports _theme (or api.theme for fastBuild) and optionally
 //   _bp (breakpoint) at function scope.
 
-function applies(ctx, meta) {
+function _a037_applies(ctx, meta) {
   void meta;
   return ctx.variantBindings && ctx.variantBindings.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a037_emit(ctx, meta) {
   var promotedToPerItem = meta.promotedToPerItem || new Set();
   var prefix = meta.prefix;
   var fastBuild = meta.fastBuild;
@@ -164,13 +164,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[37] = {
   id: 37,
   name: 'variant_updates',
   group: 'logic_runtime',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/runtime_updates.js',
-  applies: applies,
-  emit: emit,
+  applies: _a037_applies,
+  emit: _a037_emit,
 };

@@ -52,8 +52,21 @@
 //   Our block syntax (<if>/<else>) is strictly superior.
 
 function match(c, ctx) {
-  // Not applicable — IIFEs don't exist in our syntax. The equivalent
-  // <if>/<else> blocks are matched by p081.
+  // Detect (() => { ... })() or (function() { ... })() — IIFE in brace position
+  if (c.kind() !== TK.lparen) return false;
+  var saved = c.save();
+  c.advance(); // skip opening (
+  // Arrow IIFE: ((...) => { ... })()
+  if (c.kind() === TK.lparen) {
+    c.restore(saved);
+    return true;
+  }
+  // Function IIFE: (function(...) { ... })()
+  if (c.kind() === TK.identifier && c.text() === 'function') {
+    c.restore(saved);
+    return true;
+  }
+  c.restore(saved);
   return false;
 }
 

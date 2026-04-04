@@ -8,12 +8,12 @@
 // Trigger: every app emit.
 // Output target: app_get_* exports and state ABI exports.
 
-function applies(ctx, meta) {
+function _a041_applies(ctx, meta) {
   void ctx; void meta;
   return true;
 }
 
-function emit(ctx, meta) {
+function _a041_emit(ctx, meta) {
   var out = '';
   out += 'export fn app_get_root() *Node { return &_root; }\n';
   out += 'export fn app_get_init() ?*const fn () void { return _appInit; }\n';
@@ -47,13 +47,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[41] = {
   id: 41,
   name: 'app_exports',
   group: 'entry',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js',
-  applies: applies,
-  emit: emit,
+  applies: _a041_applies,
+  emit: _a041_emit,
 };

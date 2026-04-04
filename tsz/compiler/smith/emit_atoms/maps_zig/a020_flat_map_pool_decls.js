@@ -12,13 +12,13 @@
 //   Flat maps use dynamic arena allocation (std.heap.ArenaAllocator).
 //   Pool is a []Node slice allocated per-rebuild, not a fixed array.
 
-function applies(ctx, meta) {
+function _a020_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
 }
 
-function emit(ctx, meta) {
+function _a020_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   if (!mapOrder) return '';
 
@@ -47,13 +47,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[20] = {
   id: 20,
   name: 'flat_map_pool_decls',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a020_applies,
+  emit: _a020_emit,
 };

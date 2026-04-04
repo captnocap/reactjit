@@ -23,11 +23,11 @@
 //    - maps.zig:  _arr_ refs → nodes.X, _oa → st.X, _dyn → st.X
 //    - app.zig:   all cross-module refs (nodes/st/maps/logic)
 
-function applies() {
+function _a044_applies() {
   return globalThis.__splitOutput == 1;
 }
 
-function emit(F) {
+function _a044_emit(F) {
   // ── pub promotion ──
   var pubFiles = ['nodes.zig', 'handlers.zig', 'state.zig', 'maps.zig', 'logic.zig'];
   for (var pfi = 0; pfi < pubFiles.length; pfi++) {
@@ -112,13 +112,13 @@ function emit(F) {
   return F;
 }
 
-module.exports = {
+_emitAtoms[44] = {
   id: 44,
   name: 'split_namespace_prefixing',
   group: 'split_finalize',
   target: 'split',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a044_applies,
+  emit: _a044_emit,
 };

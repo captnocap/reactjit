@@ -1,7 +1,7 @@
 // ── Pattern 052: Callback prop ──────────────────────────────────
 // Index: 52
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Button onClick={() => doThing()} />
@@ -84,8 +84,41 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseElementHandlerAttr() or tryParseComponentHandlerProp()
-  // depending on whether the element is native or component.
-  // See attrs_handlers.js and component_handlers.js.
+  // Callback prop: bare identifier ref or { arrow/function expression }
+  // Mirrors tryParseComponentHandlerProp() from component_handlers.js.
+
+  // Bare identifier: handleClick → look up as script func or setter
+  if (c.kind() === TK.identifier && c.kindAt(c.pos + 1) !== TK.dot) {
+    var name = c.text();
+    c.advance();
+    if (isScriptFunc(name) || isSetter(name)) {
+      var handlerName = '_handler_press_' + ctx.handlerCount;
+      ctx.handlerCount++;
+      return { value: handlerName, handler: true, body: name };
+    }
+    return { value: name, handler: true };
+  }
+
+  // Brace expression: { () => ... } or { function() { ... } }
+  if (c.kind() === TK.lbrace) {
+    c.advance(); // skip {
+
+    // Collect the handler body tokens as raw text for handler compilation
+    var parts = [];
+    var bd = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && bd === 0) break;
+      if (c.kind() === TK.lbrace) bd++;
+      if (c.kind() === TK.rbrace) bd--;
+      parts.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+
+    var handlerName = '_handler_press_' + ctx.handlerCount;
+    ctx.handlerCount++;
+    return { value: handlerName, handler: true, rawBody: parts.join(' ') };
+  }
+
   return null;
 }

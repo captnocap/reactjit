@@ -36,9 +36,8 @@
 //   template appears (prop value vs JSX child).
 
 function match(c, ctx) {
-  // Template literal in prop position is detected by the prop parser,
-  // not the child brace parser. This pattern documents the prop path.
-  return false;
+  // Template literal token at current position
+  return c.kind() === TK.template_literal;
 }
 
 function compile(c, ctx) {

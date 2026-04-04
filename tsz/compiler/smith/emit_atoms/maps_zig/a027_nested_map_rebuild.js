@@ -24,26 +24,26 @@
 //   This atom produces no output — atom 026 handles it. It serves as
 //   documentation of the nested rebuild contract.
 
-function applies(ctx, meta) {
+function _a027_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return m.isNested; });
 }
 
-function emit(ctx, meta) {
+function _a027_emit(ctx, meta) {
   void ctx; void meta;
   // Nested rebuilds are emitted inline by atom 026 (flat_map_rebuild).
   // This atom is a reference/documentation placeholder.
   return '';
 }
 
-module.exports = {
+_emitAtoms[27] = {
   id: 27,
   name: 'nested_map_rebuild',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a027_applies,
+  emit: _a027_emit,
 };

@@ -23,14 +23,17 @@ function App() {
         <Effect onRender={(e) => {
           for (let y = 0; y < e.height; y++) {
             for (let x = 0; x < e.width; x++) {
-              const vx = x / e.width * 8.0;
-              const vy = y / e.height * 8.0;
-              const v = e.voronoi(vx + e.time * 0.5, vy + e.time * 0.3);
-              const edge = e.smoothstep(0.0, 0.05, v.x);
-              const cell = v.y - v.x;
-              const r = edge * (0.1 + cell * 0.6);
-              const g = edge * (0.3 + e.sin(v.x * 20.0 + e.time) * 0.2);
-              const b = edge * (0.8 + cell * 0.2);
+              const vx = x / e.width * 6.0 + e.time * 0.08;
+              const vy = y / e.height * 6.0 + e.time * 0.05;
+              const v = e.voronoi(vx, vy);
+              const membrane = e.smoothstep(0.02, 0.08, v.x);
+              const nucleus = 1.0 - e.smoothstep(0.0, 0.15, v.x);
+              const inner = e.noise(vx * 3.0 + e.time * 0.2, vy * 3.0) * 0.15;
+              const organelle = e.smoothstep(0.3, 0.35, v.x) * (1.0 - e.smoothstep(0.35, 0.4, v.x));
+              const depth = e.noise(vx * 0.5, vy * 0.5 + e.time * 0.1) * 0.2 + 0.8;
+              const r = (0.15 + inner + nucleus * 0.3 + organelle * 0.2) * membrane * depth;
+              const g = (0.55 + inner + nucleus * 0.1 + organelle * 0.3) * membrane * depth;
+              const b = (0.1 + inner * 0.5 + nucleus * 0.15) * membrane * depth;
               e.setPixel(x, y, r, g, b, 1.0);
             }
           }

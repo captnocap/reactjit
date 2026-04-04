@@ -1,7 +1,7 @@
 // ── Pattern 034: slice().map() ──────────────────────────────────
 // Index: 34
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {items.slice(0, 5).map(item => (
@@ -72,9 +72,20 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled by the map pipeline — tryParseMapHeader skips .slice()
-  // and proceeds to .map(). For computed OAs, the slice is part of
-  // the QuickJS eval expression. For static OAs, slice is currently
-  // not applied (all items render).
+  // Handled by the map pipeline — tryParseMapHeader (header.js:62-69)
+  // skips .slice() body and proceeds to .map():
+  //   1. _identifierStartsMapCall (brace.js) recognizes .slice() as
+  //      a valid pre-map chain method and skips past it
+  //   2. tryParseMapHeader consumes .slice() args without capturing them
+  //   3. For _computedExpr OAs, the .slice() call is included in the JS
+  //      expression — QuickJS evaluates it so OA data is already sliced
+  //   4. For static/prop-driven OAs, slice is NOT applied (all items render)
+  //   5. The .map() body is parsed normally after the chain is consumed
+  //
+  // True compile-time slice (adjusting for loop bounds from constant args)
+  // is not yet implemented. The runtime path via _computedExpr is correct
+  // but allocates the full pool size regardless of slice bounds.
+  //
+  // No compile action needed — the map pipeline owns this end-to-end.
   return null;
 }

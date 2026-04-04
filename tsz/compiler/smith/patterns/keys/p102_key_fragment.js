@@ -32,7 +32,36 @@
 //   Status is "complete" because dropping the key is the correct behavior.
 
 function match(c, ctx) {
-  return false; // Keys are handled by the skip in the main parse loop
+  // <Fragment key= or <React.Fragment key=
+  if (c.kind() !== TK.lt) return false;
+  var saved = c.save();
+  c.advance(); // skip <
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  var name = c.text();
+  if (name === 'React') {
+    c.advance(); // skip React
+    if (c.kind() !== TK.dot) { c.restore(saved); return false; }
+    c.advance(); // skip .
+    if (c.kind() !== TK.identifier || c.text() !== 'Fragment') { c.restore(saved); return false; }
+    c.advance(); // skip Fragment
+  } else if (name === 'Fragment') {
+    c.advance(); // skip Fragment
+  } else {
+    c.restore(saved); return false;
+  }
+  // scan attrs for key=
+  while (c.pos < c.count) {
+    var k = c.kind();
+    if (k === TK.gt || k === TK.slash_gt || k === TK.eof) break;
+    if (k === TK.identifier && c.text() === 'key') {
+      if (c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.equals) {
+        c.restore(saved); return true;
+      }
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return false;
 }
 
 function compile(c, ctx) {

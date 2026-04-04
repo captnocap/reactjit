@@ -8,12 +8,12 @@
 // Trigger: standalone app emit path.
 // Output target: pub fn main() and engine.run() scaffold.
 
-function applies(ctx, meta) {
+function _a042_applies(ctx, meta) {
   void ctx; void meta;
   return true;
 }
 
-function emit(ctx, meta) {
+function _a042_emit(ctx, meta) {
   void ctx;
   var out = '\npub fn main() !void {\n';
   if (!meta.fastBuild) out += '    if (IS_LIB) return;\n';
@@ -28,13 +28,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[42] = {
   id: 42,
   name: 'app_main',
   group: 'entry',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js',
-  applies: applies,
-  emit: emit,
+  applies: _a042_applies,
+  emit: _a042_emit,
 };

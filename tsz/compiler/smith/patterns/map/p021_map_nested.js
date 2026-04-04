@@ -46,32 +46,20 @@
 //   d141_log_selector_nested_map.tsz, d145_elicitation_nested_map.tsz
 
 function match(c, ctx) {
-  // Nested map is detected structurally during brace child parsing:
-  // when we encounter item.field.map() inside an active map context,
-  // and the field is typed as nested_array on the parent OA.
-  //
-  // The match is: we're inside a map body, cursor is on an identifier
-  // that resolves to a nested_array field, followed by .map(
-  //
-  // In practice, brace.js calls tryParseNestedMap directly when it
-  // finds a nested_array field access. This pattern documents the
-  // recognition criteria.
-  if (!ctx.currentMap) return false;
   var saved = c.save();
-  // Look for: fieldName.map( where fieldName is a nested_array field
-  if (c.kind() !== 6 /* TK.identifier */) { c.restore(saved); return false; }
-  var fieldName = c.text();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 14 /* TK.dot */) { c.restore(saved); return false; }
-  c.advance();
-  var isMap = c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === 8 /* TK.lparen */;
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
   c.restore(saved);
-  if (!isMap) return false;
-  // Verify field is nested_array on current map's OA
-  var parentOa = ctx.currentMap.oa;
-  if (!parentOa) return false;
-  var field = parentOa.fields.find(function(f) { return f.name === fieldName && f.type === 'nested_array'; });
-  return !!field;
+  return false;
 }
 
 function compile(c, ctx) {

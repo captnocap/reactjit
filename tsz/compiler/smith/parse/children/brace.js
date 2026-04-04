@@ -398,11 +398,7 @@ function _expandRenderLocalJsFully(expr) {
 }
 
 function _makeEvalTruthyExpr(jsExpr) {
-  if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-  const evalBufId = ctx._jsEvalCount;
-  ctx._jsEvalCount = evalBufId + 1;
-  const escaped = _expandRenderLocalJs(jsExpr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `(qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId}).len > 0)`;
+  return zigBool(buildEval(_expandRenderLocalJs(jsExpr), ctx), ctx);
 }
 
 function _normalizeJoinedJsExpr(expr) {
@@ -797,8 +793,8 @@ function tryParseBraceChild(c, children) {
       return true;
     }
     c.advance();
-    const isEvalExpr = typeof _brRlVal === 'string' && _brRlVal.includes('qjs_runtime.evalToString');
-    const isPureEvalExpr = typeof _brRlVal === 'string' && /^\s*qjs_runtime\.evalToString\(/.test(_brRlVal);
+    const isEvalExpr = isEval(_brRlVal);
+    const isPureEvalExpr = isEvalExpr && _brRlVal.trimStart().startsWith('qjs_runtime.evalToString(');
     if (isEvalExpr && !isPureEvalExpr && _brRlRaw && ctx.scriptBlock) {
       const slotIdx = ctx.stateSlots.length;
       ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
@@ -818,7 +814,7 @@ function tryParseBraceChild(c, children) {
     }
     const isZigExpr = isEvalExpr || (typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as')));
     if (isZigExpr) {
-      const isStr = isEvalExpr || _brRlVal.includes('getSlotString') || _brRlVal.includes('@as([]const u8') || _brRlVal.includes('[0..');
+      const isStr = isEval(_brRlVal) || _brRlVal.includes('getSlotString') || _brRlVal.includes('@as([]const u8') || _brRlVal.includes('[0..');
       const fmt = isStr ? '{s}' : '{d}';
       const fmtArgs = isStr ? _brRlVal : leftFoldExpr(_brRlVal);
       const bufSize = isStr ? 128 : 64;

@@ -1,7 +1,7 @@
 // ── Pattern 126: Array.isArray gate ─────────────────────────────
 // Index: 126
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Array.isArray(items) && items.map(i => <Box key={i.id}>{i.name}</Box>)}
@@ -50,7 +50,34 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Falls through to QuickJS eval via the conditional parser.
-  // Array.isArray() is evaluated at runtime in the JS context.
-  return null;
+  // Array.isArray() is a JavaScript runtime check with no compile-time
+  // equivalent. Collect the full expression and route through QuickJS eval.
+  //
+  // For OA-backed arrays, this check is always true (the data is always an
+  // array), but we don't optimize that away — the eval path is correct and
+  // the check is typically guarding against missing data from external sources.
+
+  // Collect: Array.isArray(expr)
+  var parts = [];
+  // Consume Array.isArray(
+  parts.push(c.text()); c.advance(); // Array
+  parts.push(c.text()); c.advance(); // .
+  parts.push(c.text()); c.advance(); // isArray
+  parts.push(c.text()); c.advance(); // (
+
+  // Collect arguments until matching )
+  var depth = 1;
+  while (c.kind() !== TK.eof && depth > 0) {
+    if (c.kind() === TK.lparen) depth++;
+    if (c.kind() === TK.rparen) depth--;
+    if (depth > 0) {
+      parts.push(c.text());
+      c.advance();
+    }
+  }
+  parts.push(')');
+  if (c.kind() === TK.rparen) c.advance();
+
+  var expr = parts.join('');
+  return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }

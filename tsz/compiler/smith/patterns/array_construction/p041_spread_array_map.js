@@ -1,7 +1,7 @@
 // ── Pattern 041: [...Array(n)].map() ───────────────────────────
 // Index: 41
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {[...Array(n)].map((_, i) => (
@@ -72,7 +72,22 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Direct inline support is not wired. The existing partial behavior lives
-  // in the render-local computed-map path, not here.
+  // [...Array(n)].map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - The token sequence starts with [ not an identifier, so it bypasses
+  //     _identifierStartsMapCall (brace.js) entirely
+  //   - tryParseBraceChild dispatches map parsing only from identifier heads
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const slots = [...Array(n)];
+  //     {slots.map((_, i) => <Box key={i}><Text>{i}</Text></Box>)}
+  //   _tryParseIdentifierMapExpression + _tryParseComputedChainMap synthesize
+  //   a computed OA. QuickJS materializes the array at runtime.
+  //
+  // The item value is undefined ([...Array(n)] produces undefined elements).
+  // Only the index param is useful. Simple-array OAs store element text via
+  // JS_ToCString, so the index is the reliable piece of data.
   return null;
 }

@@ -53,9 +53,48 @@
 //   See conformance: some tests use function() form for .map callbacks.
 
 function match(c, ctx) {
-  // Map callback with { return ... } body. Detected by tryParseMapHeader
-  // when after => the next token is { (TK.lbrace).
-  // Also: function keyword before ( params ).
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() !== TK.lparen) break;
+      c.advance(); // skip ( after map
+      // Skip callback params: either (params) => or param =>
+      // Also handle function(params) { ... }
+      if (c.kind() === TK.identifier && c.text() === 'function') {
+        // function(params) { — explicit return form
+        c.restore(saved);
+        return true;
+      }
+      var depth = 0;
+      if (c.kind() === TK.lparen) {
+        depth = 1;
+        c.advance();
+        while (c.pos < c.count && depth > 0) {
+          if (c.kind() === TK.lparen) depth++;
+          if (c.kind() === TK.rparen) depth--;
+          c.advance();
+        }
+      } else if (c.kind() === TK.identifier) {
+        c.advance(); // skip bare param
+      } else { break; }
+      // Expect =>
+      if (c.kind() !== TK.arrow) break;
+      c.advance(); // skip =>
+      // Explicit return: next is { (block body)
+      if (c.kind() === TK.lbrace) {
+        c.restore(saved);
+        return true;
+      }
+      break;
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

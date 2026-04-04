@@ -1,7 +1,7 @@
 // ── Pattern 131: Discriminated union render ────────────────────
 // Index: 131
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {item.type === "text" ? <Text>{item.value}</Text> : <Image src={item.url} />}

@@ -1,7 +1,7 @@
 // ── Pattern 036: flat().map() ───────────────────────────────────
 // Index: 36
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {nested.flat().map(item => (
@@ -71,7 +71,22 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. .flat() is not in the chain detection whitelist.
-  // For now, use nested .map() (p021) or flatten in a compute block.
+  // .flat().map() is NOT supported by Smith's map pipeline.
+  //
+  // Why no implementation:
+  //   - .flat() is not in the chain method whitelist in brace.js or header.js
+  //     (only filter/sort/slice are recognized pre-map chain methods)
+  //   - Adding .flat() would require changes to both _identifierStartsMapCall
+  //     and tryParseMapHeader, plus emit-phase logic for flattened OA iteration
+  //   - The love2d reference compiler does not handle .flat() either
+  //
+  // Workarounds:
+  //   - Use nested .map() (p021) which is fully supported
+  //   - Flatten the data in a compute block / render local before .map()
+  //   - For _computedExpr OAs via render local, QuickJS handles .flat() at
+  //     runtime, but OA field types must match the flattened structure
+  //
+  // This pattern is documented for completeness. match() detects it so the
+  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }

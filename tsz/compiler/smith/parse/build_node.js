@@ -70,7 +70,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       return result;
     }
     // Single static text child — hoist to .text field
-    if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
+    if (children.length === 1 && !children[0].isGlyph && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
       const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
       if (m) {
         parts.push(`.text = "${m[1]}"`);

@@ -1,7 +1,7 @@
 // ── Pattern 044: Object.entries().map() ────────────────────────
 // Index: 44
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Object.entries(obj).map(([k, v]) => (
@@ -65,6 +65,22 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only through the render-local computed-map path today.
+  // Object.entries().map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - Same as p042/p043: the head expression is Object.entries(...) which
+  //     does not match the chain detector's identifier.dot.map pattern
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const entries = Object.entries(obj);
+  //     {entries.map(([k, v]) => <Row label={k} value={v} />)}
+  //   readMapParamList (header.js) records [k, v] destructuring, and
+  //   _buildDestructuredComputedPlan synthesizes fields plus render-local
+  //   aliases so bare k/v references inside the JSX body resolve cleanly.
+  //
+  // Destructured aliases only become useful when the callback body actually
+  // references them. If unused, the OA falls back toward a simple-array
+  // shape with no direct key/value fields.
   return null;
 }

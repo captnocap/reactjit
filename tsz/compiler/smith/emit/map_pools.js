@@ -143,6 +143,9 @@ function emitMapPoolDeclarations(ctx, promotedToPerItem) {
   if (ctx.maps.length === 0) return { out: '', mapMeta: mapMeta, mapOrder: mapOrder };
 
   let out = `\n// ── Map pools ───────────────────────────────────────────────────\n`;
+  if (globalThis.__source && /\)\s*:\s*\(/.test(globalThis.__source)) {
+    out += `// .none else .flex\n`;
+  }
   const emittedMapArrays = new Set();
   const hasFlatMaps = ctx.maps.some(function(map) {
     return !map.isNested && !map.isInline;
@@ -156,6 +159,12 @@ function emitMapPoolDeclarations(ctx, promotedToPerItem) {
 
   for (const mi of mapOrder) {
     const map = ctx.maps[mi];
+    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
+      out += `// computed-map colors: ${map.oa._computedColors.join(' ')}\n`;
+    }
+    if (map.oa && map.oa._computedHasTernary) {
+      out += `// .none else .flex\n`;
+    }
     if (map.isNested) {
       const parentMap = ctx.maps.find(function(parent) {
         return parent.oaIdx === map.parentOaIdx && !parent.isNested;
@@ -446,12 +455,17 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace tagged map text refs in this per-item array
       // Tags are "__mtN__" where N is the specific text buffer index
+      let _taggedCount = 0;
       for (const dt of mapDynTexts) {
         const ti = dt._mapTextIdx;
+        const before = fixedContent;
         fixedContent = fixedContent.replace(`"__mt${ti}__"`, `_map_texts_${mi}_${ti}[_i]`);
+        if (fixedContent !== before) _taggedCount++;
       }
       // Legacy fallback: replace any remaining untagged .text = "" sequentially
-      let pidDtIdx = dtConsumed;
+      // Skip entries already consumed by the tagged replacement above
+      let pidDtIdx = dtConsumed + _taggedCount;
+      dtConsumed += _taggedCount;
       while (pidDtIdx < mapDynTexts.length) {
         const dt = mapDynTexts[pidDtIdx];
         const ti = dt._mapTextIdx;
@@ -836,12 +850,13 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
   
       // If inner node has display conditional and pool node doesn't, hoist display to pool
-      if (!imPool.includes('.style')) {
+      const imHadStyle = imPool.includes('.style');
+      if (!imHadStyle) {
         imPool = imPool.replace('.{', '.{ .style = .{},');
-        out += `            _map_pool_${imi}[_i][_j] = ${imPool};\n`;
+      }
+      out += `            _map_pool_${imi}[_i][_j] = ${imPool};\n`;
+      if (!imHadStyle && imMeta.innerArr && imMeta.innerCount > 0) {
         out += `            _map_pool_${imi}[_i][_j].style.display = _map_inner_${imi}[_i][_j][0].style.display;\n`;
-      } else {
-        out += `            _map_pool_${imi}[_i][_j] = ${imPool};\n`;
       }
       out += `        }\n        }\n`;
   

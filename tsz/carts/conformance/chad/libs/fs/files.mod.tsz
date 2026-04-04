@@ -2,32 +2,32 @@
 // Exercises: ffi, <if as>, <switch>/<case else>, struct types
 
 <files module>
-  <ffi>
-    fopen   @("libc.so", "fopen")
-    fclose  @("libc.so", "fclose")
-    fread   @("libc.so", "fread")
-    fwrite  @("libc.so", "fwrite")
-    opendir @("libc.so", "opendir")
-    readdir @("libc.so", "readdir")
-    closedir @("libc.so", "closedir")
-    stat    @("libc.so", "stat")
-    mkdir   @("libc.so", "mkdir")
-    remove  @("libc.so", "remove")
-  </ffi>
+  <libc ffi>
+    fopen
+    fclose
+    fread
+    fwrite
+    opendir
+    readdir
+    closedir
+    stat
+    mkdir
+    remove
+  </libc>
 
   <types>
     <FileStat>
       size is 0
       modified is 0
-      isDir is false
-      isFile is false
+      is_dir is false
+      is_file is false
       permissions is 0
     </FileStat>
 
     <DirEntry>
       name exact string
       path exact string
-      isDir is false
+      is_dir is false
     </DirEntry>
 
     <FileType>
@@ -42,56 +42,64 @@
   </types>
 
   <var>
-    lastError is ''
+    set_last_error is ''
   </var>
-
-  <state>
-    set_lastError
-  </state>
 
   <functions>
     read(path):
-      <if fopen(path, 'r') as handle>
-        content is fread(handle)
-        fclose(handle)
+      <if libc.fopen(path, 'r') as handle>
+        content is libc.fread(handle)
+        libc.fclose(handle)
         content
       </if>
       <else>
-        set_lastError is 'cannot read: ' + path
+        set_last_error is 'cannot read: ' + path
       </else>
 
     write(path, data):
-      <if fopen(path, 'w') as handle>
-        fwrite(handle, data)
-        fclose(handle)
+      <if libc.fopen(path, 'w') as handle>
+        libc.fwrite(handle, data)
+        libc.fclose(handle)
       </if>
       <else>
-        set_lastError is 'cannot write: ' + path
+        set_last_error is 'cannot write: ' + path
       </else>
 
     list(path):
       entries is array
-      <if opendir(path) as dir>
-        <while readdir(dir) as entry>
+      <if libc.opendir(path) as dir>
+        <while libc.readdir(dir) as entry>
           entries is entries.concat(entry)
         </while>
-        closedir(dir)
+        libc.closedir(dir)
       </if>
       entries
 
     info(path):
-      <if stat(path) as s>
+      <if libc.stat(path) as s>
         s
       </if>
 
     delete(path):
-      remove(path)
+      libc.remove(path)
 
     makeDir(path):
-      mkdir(path, 755)
+      libc.mkdir(path, 755)
+
+    afterLastDot(source):
+      result is ''
+      <for 0..source.length as i>
+        <if source[i] exact '.'>
+          result is ''
+        </if>
+        <else>
+          result is result + source[i]
+        </else>
+      </for>
+      result
 
     detectType(path):
-      ext is path.split('.').last
+      ext is afterLastDot(path)
       <switch ext>
         <case 'txt'>
           text

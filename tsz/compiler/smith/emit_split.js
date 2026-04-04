@@ -478,6 +478,18 @@ function splitOutput(monolith, file) {
     c = c.replace(/^(const JS_LOGIC)/gm, 'pub $1');
     c = c.replace(/^(const LUA_LOGIC)/gm, 'pub $1');
     c = c.replace(/^(fn _)/gm, 'pub $1');
+    // Dedup duplicate var declarations in state.zig (component inlining can re-register OAs)
+    if (pfn === 'state.zig') {
+      var seenVars = {};
+      c = c.split('\n').filter(function(line) {
+        var m = line.match(/^pub (var|const) (_oa\d+_\w+)\b/);
+        if (m) {
+          if (seenVars[m[2]]) return false;
+          seenVars[m[2]] = true;
+        }
+        return true;
+      }).join('\n');
+    }
     F[pfn] = c;
   }
 
@@ -599,6 +611,19 @@ function splitOutput(monolith, file) {
         h += '    pub fn registerHostFn(_: []const u8, _: ?*const anyopaque, _: u8) void {}\n';
         h += '    pub fn evalExpr(_: []const u8) void {}\n';
         h += '} else @import("' + fwPrefix + 'qjs_runtime.zig");\n';
+      }
+    }
+
+    // luajit_runtime
+    if (F[fname] && F[fname].indexOf('luajit_runtime.') >= 0) {
+      if (fastBuild) {
+        if (h.indexOf('const api =') < 0) h += 'const api = @import("' + fwPrefix + 'api.zig");\n';
+        h += 'const luajit_runtime = api.luajit_runtime;\n';
+      } else {
+        h += 'const luajit_runtime = if (IS_LIB) struct {\n';
+        h += '    pub fn callGlobal(_: [*:0]const u8) void {}\n';
+        h += '    pub fn setMapWrapper(_: usize, _: *anyopaque) void {}\n';
+        h += '} else @import("' + fwPrefix + 'luajit_runtime.zig");\n';
       }
     }
 
@@ -775,6 +800,10 @@ function emitLogicBlocks(ctx) {
         jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
         const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
         jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
+        if (s._opaqueFor && s._opaqueSetter) {
+          jsLines.push(`var ${s._opaqueFor} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
+          jsLines.push(`function ${s._opaqueSetter}(v) { ${s._opaqueFor} = v; ${s.setter}(v); }`);
+        }
       }
       // No setter rewriting needed — declared setter functions handle state updates
       // Strip <script>/<\/script> tags and 'export' keywords — file imports include them raw
@@ -794,11 +823,18 @@ function emitLogicBlocks(ctx) {
     // Script block (inline <script>) or script file import — also emit state var declarations
     if (ctx.scriptBlock || globalThis.__scriptContent) {
       if (ctx.scriptBlock) {
-        for (const s of ctx.stateSlots) {
-          const idx = ctx.stateSlots.indexOf(s);
-          jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
-          const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
-          jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
+        // Only emit state declarations if __scriptContent didn't already emit them
+        if (!globalThis.__scriptContent) {
+          for (const s of ctx.stateSlots) {
+            const idx = ctx.stateSlots.indexOf(s);
+            jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
+            const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
+            jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
+            if (s._opaqueFor && s._opaqueSetter) {
+              jsLines.push(`var ${s._opaqueFor} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
+              jsLines.push(`function ${s._opaqueSetter}(v) { ${s._opaqueFor} = v; ${s.setter}(v); }`);
+            }
+          }
         }
         for (const line of ctx.scriptBlock.split('\n')) jsLines.push(line);
       }
@@ -818,10 +854,18 @@ function emitLogicBlocks(ctx) {
         }
         for (const s of ctx.stateSlots) {
           proxyProps.push(`set ${s.getter}(v) { ${s.setter}(v); }`);
+          if (s._opaqueFor && s._opaqueSetter) proxyProps.push(`set ${s._opaqueFor}(v) { ${s._opaqueSetter}(v); }`);
         }
         if (proxyProps.length > 0) {
           jsLines.push(`if (typeof init === 'function') init({ ${proxyProps.join(', ')} });`);
         }
+      }
+      // Computed OAs derived from render-local expressions need to be materialized
+      // after script/state declarations exist, before the initial Zig-side OA push.
+      for (const oa of ctx.objectArrays) {
+        if (oa.isNested || oa.isConst) continue;
+        if (!oa._computedExpr) continue;
+        jsLines.push(`${oa.getter} = ${oa._computedExpr};`);
       }
       // Auto-push initial OA data to Zig side — script block may have set initial values
       // that need to flow through __setObjArr to be visible in the node tree.
@@ -988,6 +1032,38 @@ function emitLogicBlocks(ctx) {
       }
     }
     // Append __evalDynTexts for JS-evaluated dynamic text expressions (e.g., {fmtTime()})
+    // __computeRenderBody: emit the full render body as a JS function when there are
+    // imperative render locals (for loops, Map.set, etc.) that can't be captured as expressions.
+    // This replaces the broken individual OA init expressions with one function that runs the
+    // full computation and pushes results via OA setters.
+    // __computeRenderBody: emit the full render body as a JS function when there are
+    // imperative patterns (for loops, new Map, etc.) that individual OA inits can't capture.
+    var _rbCompact = ctx._renderBodyRaw ? ctx._renderBodyRaw.replace(/\s+/g, '') : '';
+    var _hasImperativeBody = _rbCompact.indexOf('newMap') >= 0 || _rbCompact.indexOf('newSet') >= 0 ||
+      _rbCompact.indexOf('.set(') >= 0 || _rbCompact.indexOf('.add(') >= 0 ||
+      _rbCompact.indexOf('for(') >= 0 || _rbCompact.indexOf('Array.from') >= 0;
+    if (ctx._renderBodyRaw && _hasImperativeBody && ctx.objectArrays.length > 0) {
+      jsLines.push('function __computeRenderBody() {');
+      jsLines.push('  try {');
+      for (var _rbLine of ctx._renderBodyRaw.split(';')) {
+        // Replace const/let with var so variables persist in QJS global scope
+        // (evalToString calls need to see treeNodes, sortedTags, etc.)
+        var _rbl = _rbLine.trim().replace(/^const\s+/, 'var ').replace(/^let\s+/, 'var ');
+        if (_rbl.length > 0) jsLines.push('    ' + _rbl + ';');
+      }
+      // Push all non-const, non-nested OAs — use base name (render body var) not suffixed getter
+      for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
+        var _oa = ctx.objectArrays[_oai];
+        if (_oa.isConst || _oa.isNested) continue;
+        var _oaName = _oa._computedGetter || _oa.getter;
+        var _oaBaseName = _oaName ? _oaName.replace(/_\d+$/, '') : _oaName;
+        jsLines.push('    if (typeof ' + _oaBaseName + ' !== "undefined" && ' + _oaBaseName + ' && ' + _oaBaseName + '.length > 0) ' + _oa.setter + '(' + _oaBaseName + ');');
+      }
+      jsLines.push('  } catch(e) {}');
+      jsLines.push('}');
+      jsLines.push('__computeRenderBody();');
+      jsLines.push('setInterval(__computeRenderBody, 16);');
+    }
     if (ctx._jsDynTexts && ctx._jsDynTexts.length > 0) {
       jsLines.push('function __evalDynTexts() {');
       for (var jdi = 0; jdi < ctx._jsDynTexts.length; jdi++) {
@@ -1121,6 +1197,22 @@ function emitLogicBlocks(ctx) {
     // Inline script block — NOT included in LUA_LOGIC.
     // Script content goes into JS_LOGIC only. Including it in Lua causes syntax errors
     // (JS arrays, for loops, ===, etc.) that abort the entire Lua chunk.
+    // Lua map rebuilders — emitted when .map() sources aren't registered OAs
+    if (ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0) {
+      luaLines.push('-- Lua map rebuilders (detour from Zig OA path)');
+      for (var lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
+        var lmr = ctx._luaMapRebuilders[lmi];
+        for (var ll of lmr.luaCode.split('\n')) luaLines.push(ll);
+      }
+      // Master rebuild function called on state change
+      luaLines.push('function __rebuildLuaMaps()');
+      luaLines.push('  __clearLuaNodes()');
+      for (var lmi2 = 0; lmi2 < ctx._luaMapRebuilders.length; lmi2++) {
+        luaLines.push('  __rebuildLuaMap' + lmi2 + '()');
+      }
+      luaLines.push('end');
+      luaLines.push('');
+    }
     // Emit Lua lines as Zig multiline string
     if (luaLines.length > 0) {
       for (const line of luaLines) {

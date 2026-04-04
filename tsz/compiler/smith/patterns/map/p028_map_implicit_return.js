@@ -43,8 +43,42 @@
 //   See: virtually all map conformance tests use implicit return.
 
 function match(c, ctx) {
-  // Default map callback form. Detected by tryParseMapHeader when
-  // after => the next token is ( or < (start of JSX).
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() !== TK.lparen) break;
+      c.advance(); // skip ( after map
+      // Skip callback params: either (params) => or param =>
+      var depth = 0;
+      if (c.kind() === TK.lparen) {
+        depth = 1;
+        c.advance();
+        while (c.pos < c.count && depth > 0) {
+          if (c.kind() === TK.lparen) depth++;
+          if (c.kind() === TK.rparen) depth--;
+          c.advance();
+        }
+      } else if (c.kind() === TK.identifier) {
+        c.advance(); // skip bare param
+      } else { break; }
+      // Expect =>
+      if (c.kind() !== TK.arrow) break;
+      c.advance(); // skip =>
+      // Implicit return: next is ( (paren-wrapped JSX) or < (direct JSX)
+      if (c.kind() === TK.lparen || c.kind() === TK.lt) {
+        c.restore(saved);
+        return true;
+      }
+      break;
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

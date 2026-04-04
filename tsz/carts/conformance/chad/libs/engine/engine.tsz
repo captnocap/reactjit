@@ -2,8 +2,10 @@
 // The runtime's own modules, written in intent syntax.
 
 <engine lib>
-  <sdl module />
-  <gpu module />
-  <text module />
-  <input module />
+  <zscript>
+    sdl
+    gpu
+    text
+    input
+  </zscript>
 </engine>

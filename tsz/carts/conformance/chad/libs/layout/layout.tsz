@@ -2,7 +2,9 @@
 // The framework's own layout engine, written in intent syntax.
 
 <layout lib>
-  <flex module />
-  <measure module />
-  <scroll module />
+  <zscript>
+    flex
+    measure
+    scroll
+  </zscript>
 </layout>

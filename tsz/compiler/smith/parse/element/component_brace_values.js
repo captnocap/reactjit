@@ -93,19 +93,8 @@ function parseComponentBraceValue(c) {
     }
     if (c.kind() === TK.rbrace) c.advance();
     let rawExpr = rawParts.join(' ').replace(/\s*\.\s*/g, '.').replace(/\s*\(\s*/g, '(').replace(/\s*\)\s*/g, ')').replace(/\s*,\s*/g, ', ');
-    // If it's a ternary, extract branches: cond ? "then" : "else"
-    let qIdx = -1, bd2 = 0;
-    for (let ri = 0; ri < rawExpr.length; ri++) {
-      if (rawExpr[ri] === '(') bd2++;
-      else if (rawExpr[ri] === ')') bd2--;
-      else if (rawExpr[ri] === '?' && bd2 === 0) { qIdx = ri; break; }
-    }
     // Eval the entire expression via QuickJS — ternary and all
-    if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-    let evalBufId = ctx._jsEvalCount;
-    ctx._jsEvalCount = evalBufId + 1;
-    let escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    return 'qjs_runtime.evalToString("String(' + escaped + ')", &_eval_buf_' + evalBufId + ')';
+    return buildEval(rawExpr, ctx);
   }
 
   let val = '';
@@ -161,7 +150,7 @@ function parseComponentBraceValue(c) {
         } else {
           val += _rlv;
         }
-      } else if (typeof _rlv === 'string' && _rlv.includes('qjs_runtime.evalToString') &&
+      } else if (isEval(_rlv) &&
           c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
         // qjs eval render-local + .field → route field access through QuickJS
         var _rlName = c.text();
@@ -169,17 +158,11 @@ function parseComponentBraceValue(c) {
         // Use raw expression if available, otherwise try to extract from eval string
         var _rawExpr = ctx._renderLocalRaw && ctx._renderLocalRaw[_rlName];
         if (_rawExpr) {
-          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-          var _qBuf = ctx._jsEvalCount; ctx._jsEvalCount = _qBuf + 1;
-          var _qEsc = _rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          val += 'qjs_runtime.evalToString("String((' + _qEsc + ').' + _qField + ')", &_eval_buf_' + _qBuf + ')';
+          val += buildFieldEval(_rawExpr, _qField, ctx);
         } else {
-          var _qInner = _rlv.match(/evalToString\("String\((.+)\)",/);
+          var _qInner = extractInner(_rlv);
           if (_qInner) {
-            if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-            var _qBuf2 = ctx._jsEvalCount; ctx._jsEvalCount = _qBuf2 + 1;
-            var _qExpr = _qInner[1].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            val += 'qjs_runtime.evalToString("String((' + _qExpr + ').' + _qField + ')", &_eval_buf_' + _qBuf2 + ')';
+            val += buildFieldEval(_qInner, _qField, ctx);
           } else {
             val += _rlv;
           }

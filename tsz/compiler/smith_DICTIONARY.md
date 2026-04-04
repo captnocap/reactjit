@@ -181,6 +181,7 @@ Soup remains its own compiler path with its own tokenizer, tree builder, and emi
 | [smith_parse/](/home/siah/creative/reactjit/tsz/compiler/smith_parse) | Refactored JSX/map/element parsing helpers |
 | [smith_preflight/](/home/siah/creative/reactjit/tsz/compiler/smith_preflight) | Intent derivation and grouped validation rules |
 | [smith_emit/](/home/siah/creative/reactjit/tsz/compiler/smith_emit) | Preamble, node tree, runtime updates, finalization |
+| [smith/emit_atoms/](/home/siah/creative/reactjit/tsz/compiler/smith/emit_atoms) | Reference-only output atom catalog for decomposing emit into additive units; OA-backed map atoms stay Zig, non-OA/runtime map atoms route to LuaJIT |
 | [smith_parse.js](/home/siah/creative/reactjit/tsz/compiler/smith_parse.js) | Public JSX coordinator |
 | [smith_parse_map.js](/home/siah/creative/reactjit/tsz/compiler/smith_parse_map.js) | Compatibility shim for map entry |
 | [smith_attrs.js](/home/siah/creative/reactjit/tsz/compiler/smith_attrs.js) | Shared style/color/handler/expression parsing still used by JSX parsing |

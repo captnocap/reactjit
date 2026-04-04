@@ -17,27 +17,21 @@
     </Channel>
 
     <MixConfig>
-      masterVolume is 100
-      channelCount is 8
-      sampleRate is 44100
+      master_volume is 100
+      channel_count is 8
+      sample_rate is 44100
     </MixConfig>
   </types>
 
   <var>
-    channels is Channel array
-    config is MixConfig
-    mixing is false
+    set_channels is Channel array
+    set_config is MixConfig
+    set_mixing is false
   </var>
-
-  <state>
-    set_channels
-    set_config
-    set_mixing
-  </state>
 
   <functions>
     boot:
-      <for 0..config.channelCount as i>
+      <for 0..config.channel_count as i>
         ch is Channel
         ch.id is i
         ch.label is 'Ch ' + i
@@ -54,7 +48,7 @@
     setChannelPan(id, pan):
       <for channels as ch>
         <if ch.id exact id>
-          ch.pan is math.clamp(pan, -100, 100)
+          ch.pan is math.clamp(pan, 0 - 100, 100)
         </if>
       </for>
 
@@ -66,7 +60,7 @@
       </for>
 
     setMasterVolume(vol):
-      config.masterVolume is math.clamp(vol, 0, 100)
+      config.master_volume is math.clamp(vol, 0, 100)
 
     activeChannels:
       channels.where(ch.active and not ch.muted)
@@ -79,9 +73,9 @@
       </if>
       <for channels as ch>
         <if ch.active and not ch.muted>
-          effectiveVol is (ch.volume / 100) * (config.masterVolume / 100)
-          leftGain is effectiveVol * math.clamp(1 - ch.pan / 100, 0, 1)
-          rightGain is effectiveVol * math.clamp(1 + ch.pan / 100, 0, 1)
+          effective_vol is (ch.volume / 100) * (config.master_volume / 100)
+          left_gain is effective_vol * math.clamp(1 - ch.pan / 100, 0, 1)
+          right_gain is effective_vol * math.clamp(1 + ch.pan / 100, 0, 1)
         </if>
       </for>
     </lscript>

@@ -62,8 +62,13 @@ function collectState(c) {
                 type = collectObjectArrayState(c, getter, setter);
               } else if (c.kind() === TK.lbrace) {
                 type = collectObjectState(c, getter, setter);
+                registerOpaqueStateMarker(getter, setter);
+              } else if (c.isIdent('new') || c.kind() === TK.identifier) {
+                type = collectOpaqueState(c, getter, setter);
               }
-              if (type !== 'object_array' && type !== 'object_flat') ctx.stateSlots.push({ getter, setter, initial, type });
+              if (type !== 'object_array' && type !== 'object_flat' && type !== 'opaque_state') {
+                ctx.stateSlots.push({ getter, setter, initial, type });
+              }
             }
           }
         }
@@ -72,6 +77,33 @@ function collectState(c) {
     c.advance();
   }
   c.restore(saved);
+}
+
+function registerOpaqueStateMarker(getter, setter) {
+  const hiddenGetter = '__opaque_' + getter;
+  if (ctx.stateSlots.some(function(s) { return s.getter === hiddenGetter; })) return;
+  const slotIdx = ctx.stateSlots.length;
+  ctx.stateSlots.push({ getter: hiddenGetter, setter: '__setOpaque_' + getter, initial: 0, type: 'int', _opaqueFor: getter, _opaqueSetter: setter });
+  if (!ctx.slotRemap) ctx.slotRemap = {};
+  ctx.slotRemap[getter] = slotIdx;
+  if (setter) ctx.slotRemap[setter] = slotIdx;
+}
+
+function collectOpaqueState(c, getter, setter) {
+  let depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      if (depth === 0) break;
+      depth--;
+      if (depth < 0) break;
+    }
+    if (depth === 0 && c.kind() === TK.rparen) break;
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  registerOpaqueStateMarker(getter, setter);
+  return 'opaque_state';
 }
 
 // Flatten useState({ field: val, ... }) into per-field state slots

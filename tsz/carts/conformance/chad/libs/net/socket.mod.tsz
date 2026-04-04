@@ -2,13 +2,13 @@
 // Exercises: <during>, cleanup pairing, state, <if as>
 
 <socket module>
-  <ffi>
-    ws_connect    @("libwebsockets.so")
-    ws_send       @("libwebsockets.so")
-    ws_recv       @("libwebsockets.so")
-    ws_close      @("libwebsockets.so")
-    ws_poll       @("libwebsockets.so")
-  </ffi>
+  <libwebsockets ffi>
+    connect
+    send
+    recv
+    close
+    poll
+  </libwebsockets>
 
   <types>
     <Connection>
@@ -24,22 +24,15 @@
   </types>
 
   <var>
-    conn
-    connected is false
-    messages is array
-    lastMessage
+    set_conn
+    set_connected is false
+    set_messages is array
+    set_last_message
   </var>
 
-  <state>
-    set_conn
-    set_connected
-    set_messages
-    set_lastMessage
-  </state>
-
   <functions>
-    connect(url):
-      <if ws_connect(url) as handle>
+    open(url):
+      <if libwebsockets.connect(url) as handle>
         set_conn is handle
         conn.url is url
         conn.ready is true
@@ -48,23 +41,23 @@
 
     disconnect:
       <if connected>
-        ws_close(conn.handle)
+        libwebsockets.close(conn.handle)
         conn.ready is false
         set_connected is false
       </if>
 
-    connect cleanup:
+    open cleanup:
       disconnect
 
     send(data):
       <if connected>
-        ws_send(conn.handle, data)
+        libwebsockets.send(conn.handle, data)
       </if>
 
     poll every 16:
       <if connected>
-        <if ws_poll(conn.handle) as msg>
-          set_lastMessage is msg
+        <if libwebsockets.poll(conn.handle) as msg>
+          set_last_message is msg
           set_messages is messages.concat(msg)
         </if>
       </if>

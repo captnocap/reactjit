@@ -104,9 +104,9 @@ function ShellSection(title, toolbar, children, selectedTitle) {
         </Box>
         {toolbar}
       </Box>
-      <Box style={{ padding: 12, gap: 8 }}>
+      <ScrollView style={{ flexGrow: 1, padding: 12, gap: 8 }}>
         {children}
-      </Box>
+      </ScrollView>
     </Box>
   );
 }

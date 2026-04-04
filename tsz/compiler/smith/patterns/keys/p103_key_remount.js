@@ -34,7 +34,11 @@
 //   pattern that doesn't translate to a compile-time model.
 
 function match(c, ctx) {
-  return false;
+  // Same token pattern as p101 — key= on any element.
+  // Remount vs regular is semantic, not syntactic.
+  if (c.kind() !== TK.identifier || c.text() !== 'key') return false;
+  if (c.pos + 1 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.equals;
 }
 
 function compile(c, ctx) {

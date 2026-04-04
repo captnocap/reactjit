@@ -34,6 +34,12 @@ function inferOaFromSource(c, name) {
                 } else if (c.isIdent('true') || c.isIdent('false')) {
                   ftype = 'boolean';
                   c.advance();
+                } else if (c.kind() === TK.template_literal) {
+                  ftype = 'string';
+                  c.advance();
+                } else if (c.kind() === TK.identifier && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+                  // Function call — assume string return (most common for display values)
+                  ftype = 'string';
                 }
                 fields.push({ name: fname, type: ftype });
               }

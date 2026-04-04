@@ -1,7 +1,7 @@
 // ── Pattern 054: Spread props ───────────────────────────────────
 // Index: 54
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <UserCard {...user} />
@@ -52,7 +52,29 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseComponentPropSpread() in component_spread.js.
-  // Advances past { ... name } and populates propValues with OA fields.
-  return null;
+  // Spread: { ...name } — mirrors tryParseComponentPropSpread().
+  // Only map item spreads are supported (spreadName === currentMap.itemParam).
+  c.advance(); // skip {
+  c.advance(); // skip ...
+  var spreadName = c.text();
+  c.advance(); // skip identifier
+  if (c.kind() === TK.rbrace) c.advance();
+
+  // Expand OA fields into propValues when spreading a map item
+  if (ctx.currentMap && spreadName === ctx.currentMap.itemParam) {
+    var oa = ctx.currentMap.oa;
+    var expanded = {};
+    for (var i = 0; i < oa.fields.length; i++) {
+      var field = oa.fields[i];
+      if (field.type === 'nested_array') continue;
+      if (field.type === 'string') {
+        expanded[field.name] = '_oa' + oa.oaIdx + '_' + field.name + '[_i][0.._oa' + oa.oaIdx + '_' + field.name + '_lens[_i]]';
+      } else {
+        expanded[field.name] = '_oa' + oa.oaIdx + '_' + field.name + '[_i]';
+      }
+    }
+    return { spread: true, fields: expanded };
+  }
+
+  return { spread: true, name: spreadName };
 }

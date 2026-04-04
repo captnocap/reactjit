@@ -19,16 +19,15 @@
 //   (they run per parent iteration), but are extracted to atoms 027/028
 //   as reference. In the live emitter they remain inlined here.
 
-var a019 = require('./a019_map_metadata.js');
-var _wrapMapCondition = a019._wrapMapCondition;
+// _wrapMapCondition is a global function defined in a019_map_metadata.js
 
-function applies(ctx, meta) {
+function _a026_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
 }
 
-function emit(ctx, meta) {
+function _a026_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   var _promotedToPerItem = meta._promotedToPerItem;
   var _mapMeta = meta._perMap;
@@ -793,13 +792,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[26] = {
   id: 26,
   name: 'flat_map_rebuild',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a026_applies,
+  emit: _a026_emit,
 };

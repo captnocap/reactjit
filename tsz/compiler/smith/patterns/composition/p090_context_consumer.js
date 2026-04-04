@@ -59,10 +59,13 @@
 //   to known state slots. No runtime context propagation needed.
 
 function match(c, ctx) {
-  // useContext is a function call in component body scope, not in JSX.
-  // It's handled during render local collection in the collection pass.
-  // No JSX-level match — the values it produces are consumed by
-  // p009 (variable interpolation) and attribute resolution.
+  // Detect: useContext(
+  if (c.kind() !== TK.identifier) return false;
+  if (c.text() !== 'useContext') return false;
+  var saved = c.save();
+  c.advance(); // skip useContext
+  if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+  c.restore(saved);
   return false;
 }
 

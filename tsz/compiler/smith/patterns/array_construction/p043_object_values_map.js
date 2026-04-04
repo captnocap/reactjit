@@ -1,7 +1,7 @@
 // ── Pattern 043: Object.values().map() ─────────────────────────
 // Index: 43
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Object.values(obj).map((v) => (
@@ -65,6 +65,21 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only through the render-local computed-map path today.
+  // Object.values().map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - Same as p042: the head expression is Object.values(...) which does
+  //     not match the chain detector's identifier.dot.map pattern
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const values = Object.values(obj);
+  //     {values.map(v => <Text>{v}</Text>)}
+  //   _tryParseComputedChainMap creates a computed simple-array OA whose
+  //   runtime data is pushed from QuickJS before the Zig map emit runs.
+  //
+  // Simple-array item values are strongest in child text position. Passing
+  // bare v through component brace props can degrade into index-like behavior
+  // depending on how the downstream resolver interprets it.
   return null;
 }

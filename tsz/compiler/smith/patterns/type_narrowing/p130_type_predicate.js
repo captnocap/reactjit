@@ -1,7 +1,7 @@
 // ── Pattern 130: Type predicate ─────────────────────────────────
 // Index: 130
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {isAdmin(user) && <AdminPanel />}
@@ -61,8 +61,31 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled by the conditional parser (conditional.js / ternary.js).
-  // Function calls in conditions fall through to QuickJS eval.
-  // The truthiness wrapper converts boolean → display toggle.
-  return null;
+  // Type predicates (isX(value)) are just function calls that return boolean.
+  // Smith doesn't distinguish them from regular function calls. They route
+  // through QuickJS eval for truthiness evaluation.
+  //
+  // If the predicate function is defined in a <script> block, QuickJS can
+  // evaluate it. If it's an external import, the eval fails silently and
+  // the guard defaults to hidden.
+  //
+  // Collect: funcName(args)
+  var funcName = c.text();
+  c.advance(); // identifier
+  c.advance(); // (
+
+  var argParts = [];
+  var depth = 1;
+  while (c.kind() !== TK.eof && depth > 0) {
+    if (c.kind() === TK.lparen) depth++;
+    if (c.kind() === TK.rparen) depth--;
+    if (depth > 0) {
+      argParts.push(c.text());
+      c.advance();
+    }
+  }
+  if (c.kind() === TK.rparen) c.advance();
+
+  var expr = funcName + '(' + argParts.join(' ') + ')';
+  return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }

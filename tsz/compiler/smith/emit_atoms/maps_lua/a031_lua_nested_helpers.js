@@ -16,11 +16,11 @@
 // inside emitLuaRebuildList() in emit/lua_maps.js. It is included
 // at the end of each rebuilder's luaCode output.
 
-function applies(ctx) {
+function _a031_applies(ctx) {
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 
-function emit() {
+function _a031_emit() {
   // The __luaNestedMap helper is already included in the luaCode
   // output from emitLuaRebuildList. This atom documents its shape.
   var lines = [];
@@ -36,13 +36,13 @@ function emit() {
   return lines;
 }
 
-module.exports = {
+_emitAtoms[31] = {
   id: 31,
   name: 'lua_nested_helpers',
   group: 'maps_lua',
   target: 'lua_in_zig',
   status: 'complete',
   currentOwner: 'emit/lua_maps.js',
-  applies: applies,
-  emit: emit,
+  applies: _a031_applies,
+  emit: _a031_emit,
 };

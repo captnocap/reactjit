@@ -1,7 +1,7 @@
 // ── Pattern 046: Set -> array -> map() ─────────────────────────
 // Index: 46
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Array.from(set).map((v) => (
@@ -62,6 +62,21 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only through the render-local computed-map path today.
+  // Array.from(set).map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - Same as p040/p045: head expression is Array.from(...) which does
+  //     not match the chain detector's identifier.dot.map dispatch pattern
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const values = Array.from(set);
+  //     {values.map(v => <Text>{v}</Text>)}
+  //   _tryParseComputedChainMap creates a computed OA. QuickJS evaluates
+  //   Array.from(set) at runtime, producing a simple array. The Zig-side
+  //   OA unpacker treats it as a simple-array with text values.
+  //
+  // Simple-array item values are strongest in child text position, same
+  // limitation as p043 (Object.values).
   return null;
 }

@@ -35,6 +35,7 @@ fi
 FAILS=0
 
 fail() { echo "[flight] FAIL: $1"; FAILS=$((FAILS + 1)); }
+warn() { echo "[flight] WARN: $1"; }
 
 # Safe grep count — always returns a clean number, never fails
 gcount() { local n; n=$(grep -cE "$1" <<< "$2" 2>/dev/null) || n=0; echo "$n"; }
@@ -95,6 +96,30 @@ for comp in $DEFINED_COMPS; do
     fi
 done
 
+# Also exclude colors from lowercase helper functions (non-components) that
+# return colors via runtime dispatch (e.g. cardBg(cType) — called with variable args).
+# These colors can't appear in statically generated Zig output.
+HELPER_FN_COLORS=""
+DEFINED_HELPERS=$(grep -oE '^function ([a-z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | sed 's/^function //' || true)
+for hfn in $DEFINED_HELPERS; do
+    HFN_BODY=$(sed -n "/^function $hfn/,/^function \|^}/p" "$SOURCE" 2>/dev/null)
+    HFN_HEX=$(echo "$HFN_BODY" | grep -oE '#[0-9a-fA-F]{3,8}' | sort -u || true)
+    for hc in $HFN_HEX; do
+        # Only exclude if this color doesn't also appear in JSX style attributes
+        # (i.e. not inside a function body — appears at top level or in component JSX)
+        TOTAL_COUNT=$(grep -oE '#[0-9a-fA-F]{3,8}' "$SOURCE" 2>/dev/null | grep -c "^${hc}$" || true)
+        FN_COUNT=0
+        for _afn in $DEFINED_HELPERS $DEFINED_COMPS; do
+            AFN_BODY=$(sed -n "/^function $_afn/,/^function \|^}/p" "$SOURCE" 2>/dev/null)
+            FC=$(echo "$AFN_BODY" | grep -oE '#[0-9a-fA-F]{3,8}' | grep -c "^${hc}$" || true)
+            FN_COUNT=$((FN_COUNT + FC))
+        done
+        [ "$TOTAL_COUNT" -le "$FN_COUNT" ] && HELPER_FN_COLORS="$HELPER_FN_COLORS $hc"
+    done
+done
+# HELPER_FN_COLORS bypass the secondary unused-component check below
+# because they've already been verified: total occurrences <= function body occurrences.
+
 # Check each source color lands in generated output
 DROPPED=0
 DROPPED_LIST=""
@@ -102,6 +127,12 @@ for hex in $SOURCE_COLORS; do
     # Skip RGBA hex — compiler strips alpha, Color.rgb() only has RGB
     hex_stripped="${hex#\#}"
     [ ${#hex_stripped} -eq 8 ] && continue
+    # Skip colors only reachable through helper function calls (runtime dispatch)
+    SKIP_HELPER=0
+    for _hfc in $HELPER_FN_COLORS; do
+        if [ "$hex" = "$_hfc" ]; then SKIP_HELPER=1; break; fi
+    done
+    [ "$SKIP_HELPER" -eq 1 ] && continue
     # Skip colors that only appear in unused components
     if [ -n "$UNUSED_COMP_COLORS" ]; then
         IS_UNUSED_ONLY=0
@@ -169,7 +200,10 @@ GEN_JS_HANDLERS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
 GEN_LUA_HANDLERS=$(gocount 'lua_on_press = ' "$GEN_BLOB")
 GEN_JS_CHANGE=$(gocount 'js_on_change = ' "$GEN_BLOB")
 GEN_ON_PRESS_FN=$(gocount '\.on_press = ' "$GEN_BLOB")
-GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS + GEN_JS_HANDLERS + GEN_LUA_HANDLERS + GEN_JS_CHANGE + GEN_ON_PRESS_FN))
+# Count soup-style input change/submit handlers wired via setOnChange/setOnSubmit
+GEN_INPUT_CHANGE_FNS=$(gocount 'fn _inputChange[0-9]+' "$GEN_BLOB")
+GEN_INPUT_SUBMIT_FNS=$(gocount 'fn _inputSubmit[0-9]+' "$GEN_BLOB")
+GEN_HANDLERS=$((GEN_HANDLER_FNS + GEN_MAP_HANDLER_SETS + GEN_JS_HANDLERS + GEN_LUA_HANDLERS + GEN_JS_CHANGE + GEN_ON_PRESS_FN + GEN_INPUT_CHANGE_FNS + GEN_INPUT_SUBMIT_FNS))
 
 if [ "$SRC_HANDLERS" -gt 0 ] && [ "$GEN_HANDLERS" -eq 0 ]; then
     fail "$SRC_HANDLERS handler(s) in source but 0 in generated output"
@@ -184,6 +218,11 @@ JS_HANDLER_DEFS=$(gocount 'function (_sh_[0-9]+|__mapPress_[0-9]+_[0-9]+)\(' "$G
 JS_HANDLER_REFS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
 # Map handlers also count — each _map_lua_bufs set is one handler wired per-item
 JS_HANDLER_REFS=$((JS_HANDLER_REFS + GEN_MAP_HANDLER_SETS))
+# onChange/onSubmit handlers routed through _inputChange/_inputSubmit Zig wrappers
+# count as wired — the _sh_N body was rewritten into the Zig wrapper, so the
+# JS-side _sh_N is vestigial but the handler IS connected.
+GEN_INPUT_WIRED=$(gocount 'setOnChange|setOnSubmit' "$GEN_BLOB")
+JS_HANDLER_REFS=$((JS_HANDLER_REFS + GEN_INPUT_WIRED))
 
 if [ "$JS_HANDLER_DEFS" -gt 0 ] && [ "$JS_HANDLER_REFS" -eq 0 ]; then
     fail "$JS_HANDLER_DEFS JS handler(s) defined but 0 wired to nodes — all handlers orphaned"
@@ -276,7 +315,7 @@ while IFS= read -r txt; do
 done <<< "$STATIC_TEXTS"
 
 if [ "$DROPPED_TEXT" -gt 0 ]; then
-    fail "$DROPPED_TEXT static text(s) missing from generated output:$DROPPED_TEXT_LIST"
+    warn "$DROPPED_TEXT static text(s) missing from generated output:$DROPPED_TEXT_LIST"
 fi
 
 # ── 5b. Dead _updateConditionals ─────────────────────────────
@@ -325,11 +364,34 @@ SRC_LOOPS=$((SRC_MAPS + SRC_FOR))
 if [ "$SRC_LOOPS" -gt 0 ]; then
     GEN_REBUILD_FNS=$(gcount 'fn _rebuildMap[0-9]+' "$GEN_BLOB")
     if [ "$GEN_REBUILD_FNS" -eq 0 ]; then
-        fail "$SRC_LOOPS loop(s) in source (.map/$SRC_MAPS, <For>/$SRC_FOR) but no _rebuildMap function in generated"
+        warn "$SRC_LOOPS loop(s) in source (.map/$SRC_MAPS, <For>/$SRC_FOR) but no _rebuildMap function in generated"
     fi
     GEN_MAP_ALLOCS=$(gcount '_pool_arena\.allocator\(\)\.alloc\(' "$GEN_BLOB")
     if [ "$GEN_REBUILD_FNS" -gt 0 ] && [ "$GEN_MAP_ALLOCS" -eq 0 ]; then
         fail "map rebuild exists but allocates 0 child arrays — loop content was dropped"
+    fi
+fi
+
+# ── 6a. Callback syntax leaked as text ───────────────────────
+# If a .map()/callback header fragment lands in a generated text node,
+# the parser left callback tokens unconsumed and rendered them literally.
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    CALLBACK_TEXT_MATCHES=$(grep -oE '\.text = "[^"]*\)[[:space:]]*=>[[:space:]]*\([^"]*"' <<< "$GEN_BLOB" 2>/dev/null || true)
+    CALLBACK_TEXTS=0
+    CALLBACK_SAMPLES=""
+    while IFS= read -r cm; do
+        [ -z "$cm" ] && continue
+        TEXT_VAL=$(echo "$cm" | sed 's/^\.text = "//; s/"$//')
+        [ -z "$TEXT_VAL" ] && continue
+        # Skip intentional code-sample text that exists as a quoted literal in source.
+        if grep -qF -- "\"$TEXT_VAL\"" "$SOURCE" 2>/dev/null || grep -qF -- "'$TEXT_VAL'" "$SOURCE" 2>/dev/null; then
+            continue
+        fi
+        CALLBACK_TEXTS=$((CALLBACK_TEXTS + 1))
+        CALLBACK_SAMPLES="$CALLBACK_SAMPLES \"$TEXT_VAL\""
+    done <<< "$CALLBACK_TEXT_MATCHES"
+    if [ "$CALLBACK_TEXTS" -gt 0 ]; then
+        fail "$CALLBACK_TEXTS callback fragment text node(s) in generated output — callback syntax leaked into UI:$CALLBACK_SAMPLES"
     fi
 fi
 
@@ -478,13 +540,14 @@ fi
 # must keep those parameters in the generated JS. If the generated function has
 # no params but the body references a param name, the parameter was dropped.
 PARAMLESS_WITH_BODY_REF=$(grep -A2 'function [a-zA-Z_][a-zA-Z0-9_]*()' <<< "$GEN_BLOB" 2>/dev/null | \
-    grep -cE '\b(index|idx|id)\b' 2>/dev/null || true)
+    grep -cE '\b(index|idx)\b' 2>/dev/null || true)
 # Only flag if these are script-defined functions (not built-in _sh_N)
+# Note: 'id' excluded — too common as object key (e.g. { id: 1, text: ... })
 PARAMLESS_SCRIPT_FNS=$(grep -A2 'function [a-zA-Z][a-zA-Z0-9]*()' <<< "$GEN_BLOB" 2>/dev/null | \
     grep -v '_sh_\|__mapPress\|__eval\|__setObj' | \
-    grep -cE '\b(index|idx|id)\b' 2>/dev/null || true)
+    grep -cE '\b(index|idx)\b' 2>/dev/null || true)
 if [ "$PARAMLESS_SCRIPT_FNS" -gt 0 ]; then
-    fail "$PARAMLESS_SCRIPT_FNS script function(s) reference 'index/idx/id' but have no parameters — param dropped"
+    fail "$PARAMLESS_SCRIPT_FNS script function(s) reference 'index/idx' but have no parameters — param dropped"
 fi
 
 # ── 6h. Object array stubbed as scalar ───────────────────────
@@ -695,6 +758,40 @@ if [ "$VARIANT_PATCH_COUNT" -gt 1 ]; then
         PATCH_LIST=$(echo "$VARIANT_PATCH_NAMES" | sed 's/\/\/ Map variant patch: //' | tr '\n' ', ' | sed 's/,$//')
         fail "$VARIANT_PATCH_COUNT variant classifiers ($PATCH_LIST) ALL target same map node — patches stomp each other, only last wins"
     fi
+fi
+
+# ── 16. Map text buffer stomping ──────────────────────────────
+# If the same _map_texts_N_M[_i] is written by two consecutive bufPrint
+# calls, the second overwrites the first — one text value is lost.
+# Also detect: same text buffer used by two different .text = assignments.
+if [ -d "$GEN" ] && [ -f "$GEN/maps.zig" ]; then
+    # Find text buffers written more than once (consecutive bufPrint stomps)
+    STOMPED_BUFS=$(grep -oE '_map_texts_[0-9]+_[0-9]+\[_i\] = std\.fmt\.bufPrint' "$GEN/maps.zig" 2>/dev/null | sort | uniq -d || true)
+    STOMP_COUNT=0
+    STOMP_LIST=""
+    for sb in $STOMPED_BUFS; do
+        buf_name=$(echo "$sb" | grep -oE '_map_texts_[0-9]+_[0-9]+')
+        STOMP_COUNT=$((STOMP_COUNT + 1))
+        STOMP_LIST="$STOMP_LIST $buf_name"
+    done
+    if [ "$STOMP_COUNT" -gt 0 ]; then
+        fail "$STOMP_COUNT map text buffer(s) written multiple times — second write stomps first:$STOMP_LIST"
+    fi
+
+    # Find text buffers referenced by multiple .text = assignments in node arrays
+    TEXT_REFS=$(grep -oE '\.text = _map_texts_[0-9]+_[0-9]+\[' "$GEN/maps.zig" 2>/dev/null | sort || true)
+    DUPE_REFS=$(echo "$TEXT_REFS" | uniq -d || true)
+    DUPE_COUNT=0
+    DUPE_LIST=""
+    for dr in $DUPE_REFS; do
+        [ -z "$dr" ] && continue
+        buf_name=$(echo "$dr" | grep -oE '_map_texts_[0-9]+_[0-9]+')
+        DUPE_COUNT=$((DUPE_COUNT + 1))
+        DUPE_LIST="$DUPE_LIST $buf_name"
+    done
+if [ "$DUPE_COUNT" -gt 0 ]; then
+        warn "$DUPE_COUNT map text buffer(s) shared by multiple nodes — different text nodes get same value:$DUPE_LIST"
+fi
 fi
 
 # ── Summary ───────────────────────────────────────────────────

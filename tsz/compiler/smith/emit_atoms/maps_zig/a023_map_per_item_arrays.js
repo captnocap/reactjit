@@ -16,13 +16,13 @@
 //   For flat maps, these are arena-allocated at rebuild time.
 //   For nested/inline maps, these are fixed 2D/3D arrays declared here.
 
-function applies(ctx, meta) {
+function _a023_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.maps.some(function(m) { return m.mapArrayDecls && m.mapArrayDecls.length > 0; });
 }
 
-function emit(ctx, meta) {
+function _a023_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   var promotedToPerItem = meta._promotedToPerItem;
   var countEntries = meta._countTopLevelNodeDeclEntries;
@@ -154,13 +154,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[23] = {
   id: 23,
   name: 'map_per_item_arrays',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a023_applies,
+  emit: _a023_emit,
 };

@@ -74,6 +74,15 @@ function extractInner(evalStr) {
   return null;
 }
 
+// Build a var-decl eval: assigns to a named JS variable then returns it as string.
+// Used for render locals where the variable name must be visible in the JS scope.
+// qjs_runtime.evalToString("var varName = jsExpr; String(varName)", &_eval_buf_N)
+function buildVarEval(varName, jsExpr, ctx) {
+  var bufId = allocBuf(ctx);
+  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return 'qjs_runtime.evalToString("var ' + varName + ' = ' + escaped + '; String(' + varName + ')", &_eval_buf_' + bufId + ')';
+}
+
 // Check if a string is a qjs eval expression
 function isEval(expr) {
   return typeof expr === 'string' && expr.includes('qjs_runtime.evalToString');

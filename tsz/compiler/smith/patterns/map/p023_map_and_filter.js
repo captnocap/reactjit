@@ -44,12 +44,19 @@
 //   d17_map_conditional_card.tsz
 
 function match(c, ctx) {
-  // Inside a map body, the return expression uses && short-circuit:
-  //   (item) => item.show && <JSX>
-  //
-  // Detection: after map header, the body starts with an expression
-  // followed by && and then JSX. Parsed by brace child handling
-  // which recognizes logical && with JSX on the right.
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

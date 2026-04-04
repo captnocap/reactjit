@@ -483,3 +483,12 @@ pub const qjs_runtime = struct {
         return buf[0..n];
     }
 };
+
+// ── LuaJIT Runtime extern ──────────────────────────────────────────
+pub const luajit_runtime = struct {
+    pub extern fn rjit_lua_call_global(name: [*:0]const u8) void;
+    pub extern fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void;
+
+    pub fn callGlobal(name: [*:0]const u8) void { rjit_lua_call_global(name); }
+    pub fn setMapWrapper(index: usize, ptr: *anyopaque) void { rjit_lua_set_map_wrapper(index, ptr); }
+};

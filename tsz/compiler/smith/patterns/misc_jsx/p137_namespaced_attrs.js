@@ -25,7 +25,10 @@
 //   preserving namespaced references has nowhere meaningful to land.
 
 function match(c, ctx) {
-  return false;
+  // identifier:identifier — namespaced attribute (e.g. xlink:href)
+  if (c.kind() !== TK.identifier) return false;
+  if (c.pos + 2 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.colon && c.kindAt(c.pos + 2) === TK.identifier;
 }
 
 function compile(c, ctx) {

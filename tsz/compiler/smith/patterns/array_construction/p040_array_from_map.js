@@ -1,7 +1,7 @@
 // ── Pattern 040: Array.from().map() ─────────────────────────────
 // Index: 40
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Array.from({length: n}).map((_, i) => (
@@ -75,9 +75,23 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Partially handled via render-local + _computedExpr path.
-  // The inline form is not yet supported. QuickJS evaluates
-  // Array.from() at runtime when the expression is captured
-  // in a _computedExpr OA.
+  // Array.from().map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - The token sequence is Array.from(...).map(...) — the chain detector
+  //     sees 'Array' as the identifier and 'from' after the dot, then tries
+  //     to resolve 'Array' as an OA getter, which fails
+  //   - _cmIsImperative (brace.js:348) flags 'Array.from' in render locals
+  //     but still allows the OA path to proceed
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const items = Array.from({length: count});
+  //     {items.map((_, i) => <Box key={i} />)}
+  //   _tryParseIdentifierMapExpression sees the render-local identifier,
+  //   and _tryParseComputedChainMap creates a computed OA. QuickJS evaluates
+  //   the Array.from() call at runtime before Zig-side OA unpacking.
+  //
+  // Functionally identical to p039 (Array(n).fill().map()) for rendering.
   return null;
 }

@@ -1,7 +1,7 @@
 // ── Pattern 117: Event parameter ────────────────────────────────
 // Index: 117
 // Group: events
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <TextInput onChange={(e) => setText(e.target.value)} />
@@ -63,11 +63,24 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // For TextInput: delegates to parseTextInputHandlerAttr which captures
-  // the handler body as JS to be eval'd when input changes.
-  // For other elements: delegates to pushInlinePressHandler which
-  // captures params via luaParseHandler._closureParams but the event
-  // param itself is not forwarded in the native handler dispatch.
-  return null; // Handled by attrs_handlers.js dispatch
+function compile(c, ctx) {
+  // Event parameter handlers are attribute-context patterns, not child-context.
+  // They are dispatched by tryParseElementHandlerAttr() in attrs_handlers.js
+  // during element attribute parsing.
+  //
+  // For TextInput onChange/onSubmit: parseTextInputHandlerAttr captures the
+  // full arrow function body as JS and stores it in _inputChangeHandlers or
+  // _inputSubmitHandlers. The event param (e) is available in the JS context,
+  // with e.target.value rewritten to getInputText(N) by the soup lane.
+  //
+  // For Pressable/Box onPress: parseElementPressAttr captures the handler
+  // body. The event param is parsed but not forwarded — native handlers
+  // don't construct DOM-style event objects.
+  //
+  // This pattern's compile() cannot self-contain because handler registration
+  // requires element context (tag name, handler index, input ID). The actual
+  // work happens in attrs_handlers.js dispatch during parseJSXElement.
+  //
+  // Returning null signals that the caller's attribute parsing path handles it.
+  return null;
 }

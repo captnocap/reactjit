@@ -216,23 +216,15 @@ function tryParseConditional(c, children) {
         const hasExplicitComparison = nextKind === TK.eq_eq || nextKind === TK.not_eq ||
           nextKind === TK.gt || nextKind === TK.gt_eq || nextKind === TK.lt || nextKind === TK.lt_eq;
         if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.rparen) {
-          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-          const evalBufId = ctx._jsEvalCount;
-          ctx._jsEvalCount = evalBufId + 1;
-          const escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          condParts.push(`(qjs_runtime.evalToString("String(( ${escaped} )())", &_eval_buf_${evalBufId}).len > 0)`);
+          condParts.push(zigBool(buildEval('( ' + rawExpr + ' )()', ctx), ctx));
           c.advance();
           c.advance();
           c.advance();
           continue;
         }
         if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
-          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
-          const evalBufId = ctx._jsEvalCount;
-          ctx._jsEvalCount = evalBufId + 1;
           const field = c.textAt(c.pos + 2);
-          const escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          condParts.push(`(qjs_runtime.evalToString("String((${escaped}).${field})", &_eval_buf_${evalBufId}).len > 0)`);
+          condParts.push(zigBool(buildFieldEval(rawExpr, field, ctx), ctx));
           c.advance();
           c.advance();
           c.advance();
@@ -252,8 +244,27 @@ function tryParseConditional(c, children) {
           const field = c.text();
           const mapOa = ctx.currentMap.oa;
           const iterVar = ctx.currentMap.iterVar || '_i';
-          condParts.push(`_oa${mapOa.oaIdx}_${field}[${iterVar}]`);
           c.advance(); // skip field
+          // Consume .length after OA field — nested arrays store count directly
+          if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+            c.advance(); // skip .
+            c.advance(); // skip length
+          }
+          // Bracket access on nested array count → bounds check (count > index)
+          if (c.kind() === TK.lbracket) {
+            c.advance(); // skip [
+            var _bracketParts = [];
+            while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+              if (c.kind() === TK.identifier && isGetter(c.text())) _bracketParts.push(slotGet(c.text()));
+              else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) _bracketParts.push(_condPropValue(ctx.propStack[c.text()]));
+              else _bracketParts.push(c.text());
+              c.advance();
+            }
+            if (c.kind() === TK.rbracket) c.advance();
+            condParts.push(`(_oa${mapOa.oaIdx}_${field}[${iterVar}] > @as(i64, ${_bracketParts.join('')}))`);
+            continue;
+          }
+          condParts.push(`_oa${mapOa.oaIdx}_${field}[${iterVar}]`);
           continue;
         }
         condParts.push(_condPropValue(pv));
@@ -282,6 +293,22 @@ function tryParseConditional(c, children) {
         } else {
           condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
         }
+      } else if (c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+        // Unknown identifier followed by ( — script function call.
+        // Collect func(args) and route through QJS eval.
+        var _fnCall = name;
+        c.advance(); // skip name
+        _fnCall += c.text(); // (
+        c.advance();
+        var _fnDepth = 1;
+        while (c.kind() !== TK.eof && _fnDepth > 0) {
+          if (c.kind() === TK.lparen) _fnDepth++;
+          if (c.kind() === TK.rparen) _fnDepth--;
+          _fnCall += c.text();
+          c.advance();
+        }
+        condParts.push(zigBool(buildEval(_fnCall, ctx), ctx));
+        continue;
       } else if (ctx.inlineComponent) {
         condParts.push('0');
       } else {

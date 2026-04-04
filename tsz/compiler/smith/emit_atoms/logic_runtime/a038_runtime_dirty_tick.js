@@ -32,12 +32,12 @@
 //
 //   Applescript polling also runs outside the dirty gate (every tick).
 
-function applies(ctx, meta) {
+function _a038_applies(ctx, meta) {
   return (meta.hasState || ctx.objectArrays.length > 0 ||
     (ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0));
 }
 
-function emit(ctx, meta) {
+function _a038_emit(ctx, meta) {
   var hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
   var out = '';
 
@@ -74,13 +74,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[38] = {
   id: 38,
   name: 'runtime_dirty_tick',
   group: 'logic_runtime',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js, emit/runtime_updates.js',
-  applies: applies,
-  emit: emit,
+  applies: _a038_applies,
+  emit: _a038_emit,
 };

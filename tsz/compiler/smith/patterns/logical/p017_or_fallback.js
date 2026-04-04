@@ -1,7 +1,7 @@
 // ── Pattern 017: || fallback ────────────────────────────────────
 // Index: 17
 // Group: logical
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {name || "Anonymous"}
@@ -69,14 +69,94 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Partial: currently handled by expression interpolation (p010) via
-  // qjs eval. A proper implementation would:
-  // 1. Parse LHS identifier → resolve to slot/rl/prop
-  // 2. Skip ||
-  // 3. Parse RHS string/expression
-  // 4. Generate: if (lhs.len > 0) lhs else "fallback" (for strings)
-  //    or: if (lhs != 0) lhs else fallback (for numbers)
-  // For now, returns null to let the fallback expression handler take over.
-  return null;
+function compile(c, ctx) {
+  // Parse LHS: collect tokens before ||
+  var lhsParts = [];
+  var lhsRaw = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace && c.kind() !== TK.pipe_pipe) {
+    lhsRaw.push(c.text());
+    c.advance();
+  }
+  if (c.kind() !== TK.pipe_pipe) return null;
+  c.advance(); // skip ||
+
+  // Parse RHS: the fallback value
+  var fallback = null;
+  if (c.kind() === TK.string) {
+    fallback = c.text().slice(1, -1); // strip quotes
+    c.advance();
+  } else if (c.kind() === TK.number) {
+    fallback = c.text();
+    c.advance();
+  } else {
+    // Complex RHS — collect remaining tokens and route through eval
+    var rhsParts = [];
+    while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+      rhsParts.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    var rawExpr = lhsRaw.join(' ') + ' || ' + rhsParts.join(' ');
+    return { value: buildEval(rawExpr, ctx) };
+  }
+
+  // Resolve LHS identifier
+  var lhsName = lhsRaw.length === 1 ? lhsRaw[0] : null;
+
+  if (lhsName && isGetter(lhsName)) {
+    var slotIdx = findSlot(lhsName);
+    var slot = slotIdx >= 0 ? ctx.stateSlots[slotIdx] : null;
+    if (slot && slot.type === 'string') {
+      var zigExpr = 'if (' + slotGet(lhsName) + '.len > 0) ' + slotGet(lhsName) + ' else "' + fallback + '"';
+      if (c.kind() === TK.rbrace) c.advance();
+      return { value: zigExpr };
+    }
+    // Numeric slot
+    var numFallback = /^-?\d+(\.\d+)?$/.test(fallback) ? fallback : '0';
+    var zigExprNum = 'if (' + slotGet(lhsName) + ' != 0) ' + slotGet(lhsName) + ' else ' + numFallback;
+    if (c.kind() === TK.rbrace) c.advance();
+    return { value: zigExprNum };
+  }
+
+  if (lhsName && ctx.renderLocals && ctx.renderLocals[lhsName] !== undefined) {
+    var rlVal = ctx.renderLocals[lhsName];
+    if (isEval(rlVal)) {
+      // QuickJS-backed render local — route whole expression through eval
+      var rawExpr2 = lhsRaw.join(' ') + ' || "' + fallback + '"';
+      if (c.kind() === TK.rbrace) c.advance();
+      return { value: buildEval(rawExpr2, ctx) };
+    }
+    // Zig expression render local — check length for strings
+    var zigExprRl = 'if (' + rlVal + '.len > 0) ' + rlVal + ' else "' + fallback + '"';
+    if (c.kind() === TK.rbrace) c.advance();
+    return { value: zigExprRl };
+  }
+
+  if (lhsName && ctx.propStack && ctx.propStack[lhsName] !== undefined) {
+    var pv = ctx.propStack[lhsName];
+    var isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot') || pv.includes('_oa'));
+    if (isZig && (pv.includes('String') || pv.includes('..'))) {
+      var zigExprProp = 'if (' + pv + '.len > 0) ' + pv + ' else "' + fallback + '"';
+      if (c.kind() === TK.rbrace) c.advance();
+      return { value: zigExprProp };
+    }
+    if (isZig) {
+      var numFb = /^-?\d+(\.\d+)?$/.test(fallback) ? fallback : '0';
+      var zigExprPropNum = 'if (' + pv + ' != 0) ' + pv + ' else ' + numFb;
+      if (c.kind() === TK.rbrace) c.advance();
+      return { value: zigExprPropNum };
+    }
+    // Static prop — if non-empty, use it; otherwise use fallback
+    if (typeof pv === 'string' && pv.length > 0) {
+      if (c.kind() === TK.rbrace) c.advance();
+      return { value: '"' + pv + '"' };
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    return { value: '"' + fallback + '"' };
+  }
+
+  // Unresolvable LHS — route through QuickJS eval
+  var rawExprFull = lhsRaw.join(' ') + ' || "' + fallback + '"';
+  if (c.kind() === TK.rbrace) c.advance();
+  return { value: buildEval(rawExprFull, ctx) };
 }

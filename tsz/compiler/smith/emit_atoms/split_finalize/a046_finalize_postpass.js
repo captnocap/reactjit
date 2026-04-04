@@ -17,12 +17,12 @@
 // 3. Split handoff — if __splitOutput == 1, passes the monolith
 //    to splitOutput() which returns the encoded multi-file string.
 
-function applies() {
+function _a046_applies() {
   // Always runs — it's the final step
   return true;
 }
 
-function emit(out, ctx, file) {
+function _a046_emit(out, ctx, file) {
   // ── 1. Debug appendix ──
   if (ctx._debugLines && ctx._debugLines.length > 0) {
     out += '\n// ── SMITH DEBUG ──\n';
@@ -51,13 +51,13 @@ function emit(out, ctx, file) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[46] = {
   id: 46,
   name: 'finalize_postpass',
   group: 'split_finalize',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/finalize.js',
-  applies: applies,
-  emit: emit,
+  applies: _a046_applies,
+  emit: _a046_emit,
 };

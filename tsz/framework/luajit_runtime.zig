@@ -15,6 +15,10 @@
 const std = @import("std");
 const state = @import("state.zig");
 const input_mod = @import("input.zig");
+const layout = @import("layout.zig");
+const Node = layout.Node;
+const Style = layout.Style;
+const Color = layout.Color;
 
 const lua = @cImport({
     @cInclude("lua.h");
@@ -314,6 +318,163 @@ const TSL_STDLIB =
     \\function __tsl.toLowerCase(s) return s:lower() end
 ;
 
+// ── Lua Map Node Stamping ───────────────────────────────────────────────
+// LuaJIT-side .map() support. Lua iterates the array and builds a template
+// table, then calls __declareChildren(wrapperPtr, tmpl) to stamp Zig Nodes.
+
+var lua_node_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+
+fn readLuaColor(L: ?*lua.lua_State, idx: c_int) ?Color {
+    if (lua.lua_isnumber(L, idx) != 0) {
+        const val: u32 = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, idx))));
+        return Color.rgb(@intCast((val >> 16) & 0xFF), @intCast((val >> 8) & 0xFF), @intCast(val & 0xFF));
+    }
+    return null;
+}
+
+fn readLuaOptFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
+    lua.lua_getfield(L, idx, field);
+    const result: ?f32 = if (lua.lua_isnumber(L, -1) != 0) @floatCast(lua.lua_tonumber(L, -1)) else null;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
+    var s = Style{};
+    if (!lua.lua_istable(L, idx)) return s;
+    if (readLuaOptFloat(L, idx, "flex_grow")) |v| s.flex_grow = v;
+    if (readLuaOptFloat(L, idx, "gap")) |v| s.gap = v;
+    if (readLuaOptFloat(L, idx, "width")) |v| s.width = v;
+    if (readLuaOptFloat(L, idx, "height")) |v| s.height = v;
+    if (readLuaOptFloat(L, idx, "padding")) |v| { s.padding_top = v; s.padding_bottom = v; s.padding_left = v; s.padding_right = v; }
+    if (readLuaOptFloat(L, idx, "padding_top")) |v| s.padding_top = v;
+    if (readLuaOptFloat(L, idx, "padding_bottom")) |v| s.padding_bottom = v;
+    if (readLuaOptFloat(L, idx, "padding_left")) |v| s.padding_left = v;
+    if (readLuaOptFloat(L, idx, "padding_right")) |v| s.padding_right = v;
+    if (readLuaOptFloat(L, idx, "margin_top")) |v| s.margin_top = v;
+    if (readLuaOptFloat(L, idx, "margin_left")) |v| s.margin_left = v;
+    if (readLuaOptFloat(L, idx, "border_radius")) |v| s.border_radius = v;
+    if (readLuaOptFloat(L, idx, "border_width")) |v| s.border_width = v;
+    // flex_direction: check string
+    lua.lua_getfield(L, idx, "flex_direction");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const dir: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, dir, "row")) s.flex_direction = .row;
+        }
+    }
+    lua.lua_pop(L, 1);
+    // background_color
+    lua.lua_getfield(L, idx, "background_color");
+    s.background_color = readLuaColor(L, -1) orelse Color{};
+    lua.lua_pop(L, 1);
+    // border_color
+    lua.lua_getfield(L, idx, "border_color");
+    if (readLuaColor(L, -1)) |c| s.border_color = c;
+    lua.lua_pop(L, 1);
+    // display: "none"
+    lua.lua_getfield(L, idx, "display");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and std.mem.eql(u8, @as([*]const u8, @ptrCast(ptr))[0..len], "none")) {
+            s.display = .none;
+        }
+    }
+    lua.lua_pop(L, 1);
+    return s;
+}
+
+fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
+    var node = Node{};
+    if (!lua.lua_istable(L, idx)) return node;
+    // text
+    lua.lua_getfield(L, idx, "text");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const copy = alloc.alloc(u8, len) catch {
+                lua.lua_pop(L, 1);
+                return node;
+            };
+            @memcpy(copy, @as([*]const u8, @ptrCast(ptr))[0..len]);
+            node.text = copy;
+        }
+    }
+    lua.lua_pop(L, 1);
+    // font_size
+    lua.lua_getfield(L, idx, "font_size");
+    if (lua.lua_isnumber(L, -1) != 0) node.font_size = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+    lua.lua_pop(L, 1);
+    // text_color
+    lua.lua_getfield(L, idx, "text_color");
+    node.text_color = readLuaColor(L, -1);
+    lua.lua_pop(L, 1);
+    // style
+    lua.lua_getfield(L, idx, "style");
+    if (lua.lua_istable(L, -1)) node.style = readLuaStyle(L, -1);
+    lua.lua_pop(L, 1);
+    // children (recursive)
+    lua.lua_getfield(L, idx, "children");
+    if (lua.lua_istable(L, -1)) {
+        const n: usize = @intCast(lua.lua_objlen(L, -1));
+        if (n > 0) {
+            const kids = alloc.alloc(Node, n) catch {
+                lua.lua_pop(L, 1);
+                return node;
+            };
+            for (0..n) |i| {
+                lua.lua_rawgeti(L, -1, @intCast(i + 1));
+                kids[i] = stampLuaNode(L, -1, alloc);
+                lua.lua_pop(L, 1);
+            }
+            node.children = kids;
+        }
+    }
+    lua.lua_pop(L, 1);
+    return node;
+}
+
+fn hostDeclareChildren(L: ?*lua.lua_State) callconv(.c) c_int {
+    // Arg 1: wrapper node pointer (lightuserdata)
+    const wrapper_ptr = lua.lua_touserdata(L, 1) orelse return 0;
+    const wrapper: *Node = @ptrCast(@alignCast(wrapper_ptr));
+    // Arg 2: Lua table array of child node descriptions
+    if (!lua.lua_istable(L, 2)) return 0;
+    const count: usize = @intCast(lua.lua_objlen(L, 2));
+    if (count == 0) {
+        wrapper.children = &.{};
+        return 0;
+    }
+    const alloc = lua_node_arena.allocator();
+    const kids = alloc.alloc(Node, count) catch return 0;
+    for (0..count) |i| {
+        lua.lua_rawgeti(L, 2, @intCast(i + 1));
+        kids[i] = stampLuaNode(L, -1, alloc);
+        lua.lua_pop(L, 1);
+    }
+    wrapper.children = kids;
+    return 0;
+}
+
+fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = lua_node_arena.reset(.retain_capacity);
+    return 0;
+}
+
+/// Set a map wrapper node as a Lua global lightuserdata (__mw0, __mw1, etc.)
+pub fn setMapWrapper(index: usize, ptr: *anyopaque) void {
+    const L = g_lua orelse return;
+    lua.lua_pushlightuserdata(L, ptr);
+    var buf: [16]u8 = undefined;
+    const name_slice = std.fmt.bufPrint(&buf, "__mw{d}", .{index}) catch return;
+    buf[name_slice.len] = 0;
+    lua.lua_setglobal(L, @as([*:0]const u8, @ptrCast(buf[0..name_slice.len :0])));
+}
+
 // ── Init / Deinit ───────────────────────────────────────────────────────
 
 pub fn initVM() void {
@@ -343,6 +504,8 @@ pub fn initVM() void {
         .{ .name = "getTickUs", .func = &hostGetTickUs },
         .{ .name = "__applescript", .func = &hostApplescript },
         .{ .name = "__applescript_file", .func = &hostApplescriptFile },
+        .{ .name = "__declareChildren", .func = &hostDeclareChildren },
+        .{ .name = "__clearLuaNodes", .func = &hostClearLuaNodes },
     };
 
     for (funcs) |f| {

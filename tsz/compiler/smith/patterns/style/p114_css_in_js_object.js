@@ -41,11 +41,10 @@
 //   Users should use the `style` prop with inline objects instead.
 
 function match(c, ctx) {
-  // css() function calls are treated as normal expressions.
-  // If used as a prop value (css={{...}}), the `css` prop is unknown
-  // to the framework and is dropped during attribute parsing.
-  // Only `style` is recognized as a style attribute.
-  return false;
+  // css({...})
+  if (c.kind() !== TK.identifier || c.text() !== 'css') return false;
+  if (c.pos + 2 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.lbrace;
 }
 
 function compile(c, children, ctx) {

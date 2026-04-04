@@ -306,3 +306,74 @@ Pattern files call resolvers. Resolvers never call pattern files.
 | 138 | `misc_jsx/p138_jsx_comment.js` | JSX comment | `{/* this is a comment */}` |
 | 139 | `misc_jsx/p139_multiline_parens.js` | Multiline parens | `return (\n  <Box>\n    ...\n  </Box>\n)` |
 | 140 | `misc_jsx/p140_adjacent_fragment.js` | Adjacent elements | `return <A /><B />` → needs fragment wrapper |
+
+---
+
+## Chad Intent Patterns (c001–c030)
+
+These catalog Intent Dictionary constructs — the chad-tier compiler lane. Same `match()`/`compile()` contract. Source of truth: `tsz/docs/INTENT_DICTIONARY.md`.
+
+### Core Binding & Declaration (c001–c006)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c001 | `c001_blocks.js` | Block headers | `<my app>`, `<home page>`, `<counter component>` |
+| c002 | `c002_var.js` | `<var>` block | `set_count is 0`, `items is array`, `MAX exact 100` |
+| c003 | `c003_is.js` | `is` binding | `set_count is 0`, `fontSize is 18`, `set_count is count + 1` |
+| c004 | `c004_exact.js` | `exact` binding | `MAX exact 100`, `<if count exact 0>`, `height exact 1` |
+| c005 | `c005_types.js` | `<types>` block | `<types><mode>time\ndate</mode></types>` |
+| c006 | `c006_props.js` | `<props>` block | `initial is 0`, `max exact number`, `onSave` |
+
+### Control Flow (c007–c012)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c007 | `c007_if.js` | `<if>` conditional | `<if count above 0>`, `<if status exact 'active'>` |
+| c008 | `c008_else.js` | `<else>` / `<else if>` | `<else if number exact 0>`, `<else>` |
+| c009 | `c009_for.js` | `<for>` iteration | `<for items>`, `<for channels as ch>`, `<for 0..count as i>` |
+| c010 | `c010_during.js` | `<during>` lifecycle | `<during recording>`, `<during loading>` |
+| c011 | `c011_while.js` | `<while>` loop | `<while sdl.pollEvent as event>` |
+| c012 | `c012_switch.js` | `<switch>` / `<case>` | `<switch event.type><case quit>stop</case></switch>` |
+
+### Functions & Logic (c013–c017)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c013 | `c013_functions.js` | `<functions>` block | `increment:\n  set_count is count + 1` |
+| c014 | `c014_composition.js` | `+` composition | `validateInput + appendItem + clearInput` |
+| c015 | `c015_stop.js` | `stop` / `skip` | `stop` (halt chain), `skip` (next iteration) |
+| c016 | `c016_every.js` | Scheduled functions | `tick every 33:` |
+| c017 | `c017_set.js` | `set_` mutation | `set_count is count + 1` |
+
+### Data & Structure (c018–c020)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c018 | `c018_data_blocks.js` | Named data blocks | `<cards>\n  id: 1, title: Auth\n</cards>` |
+| c019 | `c019_ffi.js` | `<ffi>` block | `<sqlite3 ffi>\n  open\n  close\n</sqlite3>` |
+| c020 | `c020_log.js` | `<log>` block | `<log save>\n  fetchData + writeToDb\n</log>` |
+
+### Visual Layer (c021–c026)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c021 | `c021_classifiers.js` | Classifiers (`C.Name`) | `<C.Row is Box>`, `<C.Btn decrement>` |
+| c022 | `c022_effects.js` | Effects | `<Text lava>`, `<lava effect>fill(x,y,t)` |
+| c023 | `c023_glyphs.js` | Glyph shortcodes | `:check:`, `:star[plasma]:`, glyph tiers 1-4 |
+| c024 | `c024_tokens.js` | Theme tokens | `<tokens>`, `<main>`, `theme-primary` |
+| c025 | `c025_colors.js` | `<colors>` block | `red(dark)`, `<ocean gradient>` |
+| c026 | `c026_animations.js` | Animations | `<C.Card fadeIn>`, `<pulse animation>` |
+
+### Backend Hatches (c027)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c027 | `c027_hatches.js` | `<script>`/`<zscript>`/`<lscript>` | Backend target directives |
+
+### Collection Operations (c028–c030)
+
+| # | File | Construct | Chad Example |
+|---|------|-----------|-------------|
+| c028 | `c028_where.js` | `items.where()` | `items.where(item.active)` |
+| c029 | `c029_without.js` | `items.without()` | `items.without(item)` |
+| c030 | `c030_concat.js` | `items.concat()` | `items.concat(newItem)` |

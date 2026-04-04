@@ -21,12 +21,12 @@
 //   Comparison expressions get double-wrapped: ((expr)).
 //   Non-comparison expressions get != 0 test: ((expr) != 0).
 
-function applies(ctx, meta) {
+function _a036_applies(ctx, meta) {
   void meta;
   return ctx.conditionals && ctx.conditionals.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a036_emit(ctx, meta) {
   void meta;
   var mapPoolArrayNames = new Set();
   for (var mi = 0; mi < ctx.maps.length; mi++) {
@@ -65,13 +65,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[36] = {
   id: 36,
   name: 'conditional_updates',
   group: 'logic_runtime',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/runtime_updates.js',
-  applies: applies,
-  emit: emit,
+  applies: _a036_applies,
+  emit: _a036_emit,
 };

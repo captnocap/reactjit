@@ -8,7 +8,7 @@
 // Trigger: ctx.handlers filtered to !inMap.
 // Output target: Zig handler stubs/functions for direct nodes.
 
-function applies(ctx, meta) {
+function _a009_applies(ctx, meta) {
   void meta;
   if (!ctx.handlers || ctx.handlers.length === 0) return false;
   return ctx.handlers.some(function(handler) {
@@ -16,7 +16,7 @@ function applies(ctx, meta) {
   });
 }
 
-function emit(ctx, meta) {
+function _a009_emit(ctx, meta) {
   void meta;
   var nonMapHandlers = (ctx.handlers || []).filter(function(handler) {
     return !handler.inMap;
@@ -30,13 +30,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[9] = {
   id: 9,
   name: 'non_map_handlers',
   group: 'handlers_effects',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/handlers.js',
-  applies: applies,
-  emit: emit,
+  applies: _a009_applies,
+  emit: _a009_emit,
 };

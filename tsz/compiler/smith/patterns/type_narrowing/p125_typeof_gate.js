@@ -1,7 +1,7 @@
 // ── Pattern 125: typeof gate ────────────────────────────────────
 // Index: 125
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {typeof x === 'string' && <Text>{x}</Text>}
@@ -49,8 +49,25 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled by the conditional parser (conditional.js / ternary.js).
-  // typeof expressions that can't be resolved statically fall through
-  // to QuickJS eval. The && / ternary consumer handles display toggling.
-  return null;
+  // typeof is a JavaScript runtime operator with no Zig equivalent.
+  // Smith has no type system — all values are i64, string slices, or
+  // QuickJS-managed JS values. typeof is meaningful only in JS eval context.
+  //
+  // The expression is collected as raw tokens and routed through QuickJS:
+  //   typeof x === 'string' → evalToString("(typeof x === 'string') ? 'T' : ''")
+  //
+  // This happens via the conditional parser (conditional.js) for && guards,
+  // or via the ternary parser (ternary.js) for ternary conditions.
+  //
+  // Collect the full typeof expression for eval
+  var parts = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace &&
+         c.kind() !== TK.amp_amp && c.kind() !== TK.question) {
+    parts.push(c.text());
+    c.advance();
+  }
+
+  var expr = parts.join(' ');
+  // Return as a condition expression for the caller to use
+  return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }

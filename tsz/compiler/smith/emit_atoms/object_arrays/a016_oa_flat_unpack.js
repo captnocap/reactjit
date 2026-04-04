@@ -33,7 +33,7 @@ function _mergeOas(ctx) {
   return result;
 }
 
-function applies(ctx, meta) {
+function _a016_applies(ctx, meta) {
   void meta;
   if (!ctx.objectArrays || ctx.objectArrays.length === 0) return false;
   var oas = _mergeOas(ctx);
@@ -83,7 +83,7 @@ function _emitFieldExtract(oa, idx, f) {
   return out;
 }
 
-function emit(ctx, meta) {
+function _a016_emit(ctx, meta) {
   void meta;
   var oas = _mergeOas(ctx);
   var out = '';
@@ -213,13 +213,13 @@ function _emitNestedFieldUnpack(ctx, idx, f) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[16] = {
   id: 16,
   name: 'oa_flat_unpack',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a016_applies,
+  emit: _a016_emit,
 };

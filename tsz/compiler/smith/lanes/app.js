@@ -12,11 +12,29 @@ function findAppStart(c) {
 
 function moveToAppReturn(c, appStart) {
   c.pos = appStart;
+  var bodyDepth = 0;
+  var inBody = false;
   while (c.pos < c.count) {
-    if (c.isIdent('return')) {
+    if (!inBody) {
+      if (c.kind() === TK.lbrace) {
+        inBody = true;
+        bodyDepth = 1;
+      }
+      c.advance();
+      continue;
+    }
+
+    if (bodyDepth === 1 && c.isIdent('return')) {
       c.advance();
       if (c.kind() === TK.lparen) c.advance();
       break;
+    }
+
+    if (c.kind() === TK.lbrace) {
+      bodyDepth++;
+    } else if (c.kind() === TK.rbrace) {
+      bodyDepth--;
+      if (bodyDepth <= 0) break;
     }
     c.advance();
   }

@@ -43,6 +43,15 @@ pub const RectInstance = extern struct {
     rotation: f32 = 0,   // degrees
     scale_x: f32 = 1.0,
     scale_y: f32 = 1.0,
+    // SDF shadow blur — widens the smoothstep falloff in the fragment shader.
+    // 0 = normal sharp rect, >0 = soft shadow edge over blur_radius pixels.
+    blur_radius: f32 = 0,
+    // Gradient: end color + direction (0=none, 1=vertical, 2=horizontal, 3=diagonal)
+    grad_r: f32 = 0,
+    grad_g: f32 = 0,
+    grad_b: f32 = 0,
+    grad_a: f32 = 0,
+    grad_dir: f32 = 0,
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -194,6 +203,63 @@ pub fn drawRectTransformed(
     g_rect_count += 1;
 }
 
+/// Queue a single shadow rect with SDF blur.
+/// The rect is expanded by blur pixels and positioned at the shadow offset.
+/// The fragment shader uses blur_radius to widen the SDF falloff for a soft edge.
+pub fn drawRectShadow(
+    x: f32, y: f32, w: f32, h: f32,
+    r: f32, g: f32, b: f32, a: f32,
+    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    blur: f32,
+) void {
+    if (g_rect_count >= MAX_RECTS) return;
+    const transform = core.getTransform();
+    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
+    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
+    const tw = if (transform.active) w * transform.scale else w;
+    const th = if (transform.active) h * transform.scale else h;
+    g_rects[g_rect_count] = .{
+        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
+        .border_color_r = 0, .border_color_g = 0, .border_color_b = 0, .border_color_a = 0,
+        .radius_tl = rtl, .radius_tr = rtr,
+        .radius_br = rbr, .radius_bl = rbl,
+        .border_width = 0,
+        .blur_radius = blur,
+    };
+    g_rect_count += 1;
+}
+
+/// Queue a rectangle with a gradient background.
+/// dir: 1=vertical, 2=horizontal, 3=diagonal
+pub fn drawRectGradient(
+    x: f32, y: f32, w: f32, h: f32,
+    r: f32, g: f32, b: f32, a: f32,
+    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    border_width: f32,
+    br: f32, bg: f32, bb: f32, ba: f32,
+    gr: f32, gg: f32, gb: f32, ga: f32,
+    dir: f32,
+) void {
+    if (g_rect_count >= MAX_RECTS) return;
+    const transform = core.getTransform();
+    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
+    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
+    const tw = if (transform.active) w * transform.scale else w;
+    const th = if (transform.active) h * transform.scale else h;
+    g_rects[g_rect_count] = .{
+        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
+        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
+        .radius_tl = rtl, .radius_tr = rtr,
+        .radius_br = rbr, .radius_bl = rbl,
+        .border_width = border_width,
+        .grad_r = gr, .grad_g = gg, .grad_b = gb, .grad_a = ga,
+        .grad_dir = dir,
+    };
+    g_rect_count += 1;
+}
+
 /// Initialize the rect rendering pipeline.
 pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     const shader_desc = wgpu.shaderModuleWGSLDescriptor(.{
@@ -248,7 +314,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     }) orelse return;
     defer pipeline_layout.release();
 
-    // Instance vertex attributes (9 locations for 20 floats)
+    // Instance vertex attributes (12 locations for 26 floats)
     const instance_attrs = [_]wgpu.VertexAttribute{
         .{ .format = .float32x2, .offset = 0, .shader_location = 0 }, // pos
         .{ .format = .float32x2, .offset = 8, .shader_location = 1 }, // size
@@ -256,9 +322,12 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .{ .format = .float32x4, .offset = 32, .shader_location = 3 }, // border_color
         .{ .format = .float32x4, .offset = 48, .shader_location = 4 }, // radii
         .{ .format = .float32, .offset = 64, .shader_location = 5 }, // border_width
-        .{ .format = .float32, .offset = 68, .shader_location = 6 }, // _pad0
-        .{ .format = .float32, .offset = 72, .shader_location = 7 }, // _pad1
-        .{ .format = .float32, .offset = 76, .shader_location = 8 }, // _pad2
+        .{ .format = .float32, .offset = 68, .shader_location = 6 }, // rotation
+        .{ .format = .float32, .offset = 72, .shader_location = 7 }, // scale_x
+        .{ .format = .float32, .offset = 76, .shader_location = 8 }, // scale_y
+        .{ .format = .float32, .offset = 80, .shader_location = 9 }, // blur_radius
+        .{ .format = .float32x4, .offset = 84, .shader_location = 10 }, // grad_color
+        .{ .format = .float32, .offset = 100, .shader_location = 11 }, // grad_dir
     };
 
     const instance_buffer_layout = wgpu.VertexBufferLayout{

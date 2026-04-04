@@ -1,0 +1,876 @@
+// Progress cart script — git history, filesystem births, conformance db, and runner control
+// Host functions: __exec, __db_query
+
+var REPO_ROOT = '/home/siah/creative/reactjit';
+var TSZ_DIR = REPO_ROOT + '/tsz';
+var CONF_DB = TSZ_DIR + '/conformance.db';
+var CONF_DIR = TSZ_DIR + '/carts/conformance';
+
+var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function shellQuote(value) {
+  return "'" + value.split("'").join("'\"'\"'") + "'";
+}
+
+function endsWithStr(value, suffix) {
+  if (!value) return 0;
+  if (suffix.length > value.length) return 0;
+  return value.substring(value.length - suffix.length) === suffix;
+}
+
+function normalizeRepoPath(path) {
+  if (!path) return '';
+  if (path.indexOf(REPO_ROOT + '/') === 0) return path.substring(REPO_ROOT.length + 1);
+  if (path.indexOf(TSZ_DIR + '/') === 0) return 'tsz/' + path.substring(TSZ_DIR.length + 1);
+  if (path.indexOf('tsz/') === 0) return path;
+  if (path.indexOf('carts/') === 0 || path.indexOf('compiler/') === 0 || path.indexOf('framework/') === 0 || path.indexOf('scripts/') === 0 || path.indexOf('docs/') === 0) {
+    return 'tsz/' + path;
+  }
+  return path;
+}
+
+function shortDay(day) {
+  if (!day || day.length < 10) return day;
+  var month = parseInt(day.substring(5, 7), 10) - 1;
+  var date = parseInt(day.substring(8, 10), 10);
+  if (month < 0 || month >= MONTHS.length) return day;
+  return MONTHS[month] + ' ' + date;
+}
+
+function dayFromEpoch(epochSec) {
+  var dt = new Date(epochSec * 1000);
+  var y = dt.getFullYear();
+  var m = dt.getMonth() + 1;
+  var d = dt.getDate();
+  return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+}
+
+function dayKeyToday() {
+  return dayFromEpoch(Math.floor(Date.now() / 1000));
+}
+
+function nextDay(day) {
+  var dt = new Date(day + 'T00:00:00');
+  dt.setDate(dt.getDate() + 1);
+  return dayFromEpoch(Math.floor(dt.getTime() / 1000));
+}
+
+function inc(map, key, amount) {
+  if (map[key] === undefined) map[key] = 0;
+  map[key] = map[key] + (amount === undefined ? 1 : amount);
+}
+
+function areaColor(area) {
+  if (area === 'compiler') return '#a78bfa';
+  if (area === 'framework') return '#38bdf8';
+  if (area === 'conformance') return '#34d399';
+  if (area === 'tools') return '#f97316';
+  if (area === 'scripts') return '#f59e0b';
+  if (area === 'docs') return '#94a3b8';
+  if (area === 'carts') return '#f43f5e';
+  if (area === 'root') return '#64748b';
+  return '#475569';
+}
+
+function laneColor(lane) {
+  if (lane === 'mixed') return '#38bdf8';
+  if (lane === 'chad') return '#f59e0b';
+  if (lane === 'soup') return '#34d399';
+  if (lane === 'lscript') return '#a78bfa';
+  if (lane === 'wpt-flex') return '#f87171';
+  if (lane === 'parity') return '#fb7185';
+  if (lane === 'root') return '#94a3b8';
+  return '#64748b';
+}
+
+function typeColor(prefix) {
+  if (prefix === 'fix') return '#f87171';
+  if (prefix === 'feat') return '#34d399';
+  if (prefix === 'docs') return '#94a3b8';
+  if (prefix === 'refactor') return '#38bdf8';
+  if (prefix === 'test') return '#f59e0b';
+  if (prefix === 'perf') return '#f97316';
+  return '#7b93a6';
+}
+
+function typeBadgeBg(prefix) {
+  if (prefix === 'fix') return '#35161b';
+  if (prefix === 'feat') return '#0f2b25';
+  if (prefix === 'docs') return '#1f2937';
+  if (prefix === 'refactor') return '#0f2940';
+  if (prefix === 'test') return '#3b2a10';
+  if (prefix === 'perf') return '#402414';
+  return '#182632';
+}
+
+function parseCommitType(msg) {
+  var paren = msg.indexOf('(');
+  var colon = msg.indexOf(':');
+  if (colon > 0 && colon < 18) {
+    if (paren > 0 && paren < colon) return msg.substring(0, paren);
+    return msg.substring(0, colon);
+  }
+  return 'chore';
+}
+
+function isIgnoredPath(path) {
+  var p = normalizeRepoPath(path);
+  if (!p) return 1;
+  if (p.indexOf('tsz/carts/conformance/.verified/') === 0) return 1;
+  if (p.indexOf('/.verified/') >= 0) return 1;
+  if (p.indexOf('/zig-cache/') >= 0) return 1;
+  if (p.indexOf('/zig-out/') >= 0) return 1;
+  if (endsWithStr(p, '.gen.zig')) return 1;
+  return 0;
+}
+
+function bucketArea(path) {
+  var p = normalizeRepoPath(path);
+  if (p.indexOf('tsz/compiler/') === 0) return 'compiler';
+  if (p.indexOf('tsz/framework/') === 0) return 'framework';
+  if (p.indexOf('tsz/carts/conformance/') === 0) return 'conformance';
+  if (p.indexOf('tsz/carts/tools/') === 0) return 'tools';
+  if (p.indexOf('tsz/carts/') === 0) return 'carts';
+  if (p.indexOf('tsz/scripts/') === 0) return 'scripts';
+  if (p.indexOf('tsz/docs/') === 0) return 'docs';
+  if (p.indexOf('tsz/') === 0 && p.indexOf('/', 4) < 0) return 'root';
+  return 'other';
+}
+
+function isBuildableConformancePath(path) {
+  var p = normalizeRepoPath(path);
+  if (p.indexOf('tsz/carts/conformance/') !== 0) return 0;
+  if (isIgnoredPath(p)) return 0;
+  if (!endsWithStr(p, '.tsz')) return 0;
+  if (endsWithStr(p, '.script.tsz')) return 0;
+  if (endsWithStr(p, '.cls.tsz')) return 0;
+  if (endsWithStr(p, '.mod.tsz')) return 0;
+  if (endsWithStr(p, '.c.tsz')) return 0;
+  if (endsWithStr(p, '.effects.tsz')) return 0;
+  if (endsWithStr(p, '.glyphs.tsz')) return 0;
+  if (endsWithStr(p, '.tcls.tsz')) return 0;
+  if (endsWithStr(p, '.vcls.tsz')) return 0;
+  if (endsWithStr(p, '.cmod.tsz')) return 0;
+  if (endsWithStr(p, '.lscript.tsz')) return 0;
+  return 1;
+}
+
+function laneFromConformancePath(path) {
+  var p = normalizeRepoPath(path);
+  var prefix = 'tsz/carts/conformance/';
+  var rel = p.indexOf(prefix) === 0 ? p.substring(prefix.length) : p;
+  var slash = rel.indexOf('/');
+  if (slash < 0) return 'root';
+  return rel.substring(0, slash);
+}
+
+function conformanceNameFromPath(path) {
+  var p = normalizeRepoPath(path);
+  var prefix = 'tsz/carts/conformance/';
+  var rel = p.indexOf(prefix) === 0 ? p.substring(prefix.length) : p;
+  var slash = rel.indexOf('/');
+  var rest = slash >= 0 ? rel.substring(slash + 1) : rel;
+  if (endsWithStr(rest, '.app.tsz')) rest = rest.substring(0, rest.length - 8);
+  else if (endsWithStr(rest, '.tsz')) rest = rest.substring(0, rest.length - 4);
+  return rest;
+}
+
+function ensureArea(areaMap, name) {
+  if (!areaMap[name]) {
+    areaMap[name] = {
+      name: name,
+      color: areaColor(name),
+      gitAdds: 0,
+      diskNow: 0,
+      fresh7d: 0,
+      firstGitDay: '',
+      lastGitDay: '',
+      lastDiskDay: '',
+      pct: 0
+    };
+  }
+  return areaMap[name];
+}
+
+function ensureLane(laneMap, name) {
+  if (!laneMap[name]) {
+    laneMap[name] = {
+      name: name,
+      color: laneColor(name),
+      diskTotal: 0,
+      seenCurrent: 0,
+      compiledCurrent: 0,
+      failedCurrent: 0,
+      verifiedCurrent: 0,
+      testsAdded: 0,
+      firstAddDay: '',
+      lastAddDay: '',
+      compilePct: 0,
+      verifyPct: 0,
+      untested: 0
+    };
+  }
+  return laneMap[name];
+}
+
+function collectConformanceDisk() {
+  var tests = [];
+  var laneDisk = {};
+  try {
+    var raw = __exec("cd " + TSZ_DIR + " && find carts/conformance -name \"*.tsz\" ! -name \"*.script.tsz\" ! -name \"*.cls.tsz\" ! -name \"*.mod.tsz\" ! -name \"*.c.tsz\" ! -name \"*.effects.tsz\" ! -name \"*.glyphs.tsz\" ! -name \"*.tcls.tsz\" ! -name \"*.vcls.tsz\" ! -name \"*.cmod.tsz\" ! -name \"*.lscript.tsz\" -type f | sort 2>/dev/null");
+    var lines = raw.split('\n');
+    var i = 0;
+    while (i < lines.length) {
+      var path = lines[i].trim();
+      if (path.length > 0) {
+        var repoPath = normalizeRepoPath(path);
+        var lane = laneFromConformancePath(repoPath);
+        var name = conformanceNameFromPath(repoPath);
+        tests.push({ path: path, repoPath: repoPath, name: name, lane: lane });
+        inc(laneDisk, lane);
+      }
+      i = i + 1;
+    }
+  } catch (e) {
+    console.log('collect conformance disk error: ' + e);
+  }
+  return { tests: tests, laneDisk: laneDisk };
+}
+
+function latestConformanceMap() {
+  var map = {};
+  var latestBuildDay = '';
+  var failures = [];
+  try {
+    var latestRaw = __db_query(CONF_DB,
+      "SELECT b.test_name, b.lane, b.status, substr(b.built_at, 1, 10), COALESCE(v.verified_at, ''), COALESCE(b.source_sha, '') " +
+      "FROM builds b " +
+      "LEFT JOIN verified_sources v ON v.test_name = b.test_name " +
+      "WHERE b.id IN (SELECT MAX(id) FROM builds GROUP BY test_name) " +
+      "ORDER BY b.lane, b.test_name;"
+    );
+    var lines = latestRaw.split('\n');
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (line.length > 0) {
+        var parts = line.split('|');
+        if (parts.length > 5) {
+          map[parts[0]] = {
+            name: parts[0],
+            lane: parts[1],
+            status: parts[2],
+            builtDay: parts[3],
+            verified: parts[4],
+            sourceSha: parts[5]
+          };
+          if (parts[3] > latestBuildDay) latestBuildDay = parts[3];
+        }
+      }
+      i = i + 1;
+    }
+
+    var failRaw = __db_query(CONF_DB,
+      "SELECT test_name, status, substr(error_log, 1, 120) " +
+      "FROM builds " +
+      "WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name) AND status != 'compiled' " +
+      "ORDER BY lane, test_name LIMIT 24;"
+    );
+    var failLines = failRaw.split('\n');
+    var f = 0;
+    while (f < failLines.length) {
+      var failLine = failLines[f];
+      if (failLine.length > 0) {
+        var fp = failLine.split('|');
+        if (fp.length > 1) {
+          failures.push({
+            name: fp[0],
+            status: fp[1],
+            error: fp.length > 2 ? fp[2] : ''
+          });
+        }
+      }
+      f = f + 1;
+    }
+  } catch (e) {
+    console.log('latest conformance map error: ' + e);
+  }
+  return { map: map, latestBuildDay: latestBuildDay, failures: failures };
+}
+
+function loadProgressMeta() {
+  try {
+    var dayRows = {};
+    var recent = [];
+    var areaMap = {};
+    var laneMap = {};
+    var totalCommits = 0;
+    var gitBornCount = 0;
+    var repoFileCount = 0;
+    var fresh7dCount = 0;
+    var firstDay = '';
+    var freshFiles = [];
+    var freshCutoff = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
+
+    var commitRaw = __exec("cd " + REPO_ROOT + " && git log --date=short --format='%h\t%cs\t%an\t%s' -- tsz 2>/dev/null");
+    var commitLines = commitRaw.split('\n');
+    var ci = 0;
+    while (ci < commitLines.length) {
+      var cl = commitLines[ci];
+      if (cl.length > 0) {
+        var cp = cl.split('\t');
+        if (cp.length > 3) {
+          totalCommits = totalCommits + 1;
+          var cday = cp[1];
+          if (!firstDay || cday < firstDay) firstDay = cday;
+          if (!dayRows[cday]) dayRows[cday] = {};
+          inc(dayRows[cday], 'commitCount');
+          var ctype = parseCommitType(cp[3]);
+          if (recent.length < 18) {
+            recent.push({
+              hash: cp[0],
+              day: cday,
+              shortDay: shortDay(cday),
+              author: cp[2],
+              msg: cp[3],
+              ctype: ctype,
+              dotColor: typeColor(ctype),
+              badgeBg: typeBadgeBg(ctype)
+            });
+          }
+        }
+      }
+      ci = ci + 1;
+    }
+
+    var addRaw = __exec("cd " + REPO_ROOT + " && git log --diff-filter=A --date=short --format='DATE\t%cs' --name-only -- tsz 2>/dev/null");
+    var addLines = addRaw.split('\n');
+    var currentDay = '';
+    var ai = 0;
+    while (ai < addLines.length) {
+      var al = addLines[ai].trim();
+      if (al.length > 0) {
+        if (al.indexOf('DATE\t') === 0) {
+          currentDay = al.substring(5);
+          if (!firstDay || currentDay < firstDay) firstDay = currentDay;
+        } else {
+          var repoPath = normalizeRepoPath(al);
+          if (repoPath.indexOf('tsz/') === 0 && !isIgnoredPath(repoPath)) {
+            if (!dayRows[currentDay]) dayRows[currentDay] = {};
+            inc(dayRows[currentDay], 'fileAdds');
+            gitBornCount = gitBornCount + 1;
+
+            var area = bucketArea(repoPath);
+            var areaRow = ensureArea(areaMap, area);
+            areaRow.gitAdds = areaRow.gitAdds + 1;
+            if (!areaRow.firstGitDay || currentDay < areaRow.firstGitDay) areaRow.firstGitDay = currentDay;
+            if (!areaRow.lastGitDay || currentDay > areaRow.lastGitDay) areaRow.lastGitDay = currentDay;
+
+            if (isBuildableConformancePath(repoPath)) {
+              inc(dayRows[currentDay], 'conformanceAdds');
+              var lane = laneFromConformancePath(repoPath);
+              var laneRow = ensureLane(laneMap, lane);
+              laneRow.testsAdded = laneRow.testsAdded + 1;
+              if (!laneRow.firstAddDay || currentDay < laneRow.firstAddDay) laneRow.firstAddDay = currentDay;
+              if (!laneRow.lastAddDay || currentDay > laneRow.lastAddDay) laneRow.lastAddDay = currentDay;
+            }
+          }
+        }
+      }
+      ai = ai + 1;
+    }
+
+    var statRaw = __exec("cd " + REPO_ROOT + " && find tsz -type f -exec stat -c '%W|%Y|%n' {} + 2>/dev/null");
+    var statLines = statRaw.split('\n');
+    var si = 0;
+    while (si < statLines.length) {
+      var sl = statLines[si];
+      if (sl.length > 0) {
+        var sp = sl.split('|');
+        if (sp.length > 2) {
+          var birth = parseInt(sp[0], 10) || 0;
+          var mtime = parseInt(sp[1], 10) || 0;
+          var path = normalizeRepoPath(sp[2]);
+          if (path.indexOf('tsz/') === 0 && !isIgnoredPath(path)) {
+            repoFileCount = repoFileCount + 1;
+            var when = birth > 0 ? birth : mtime;
+            var day = dayFromEpoch(when);
+            var areaName = bucketArea(path);
+            var areaDiskRow = ensureArea(areaMap, areaName);
+            areaDiskRow.diskNow = areaDiskRow.diskNow + 1;
+            if (!areaDiskRow.lastDiskDay || day > areaDiskRow.lastDiskDay) areaDiskRow.lastDiskDay = day;
+            if (when >= freshCutoff) {
+              areaDiskRow.fresh7d = areaDiskRow.fresh7d + 1;
+              fresh7dCount = fresh7dCount + 1;
+            }
+            freshFiles.push({
+              area: areaName,
+              color: areaColor(areaName),
+              day: day,
+              epoch: when,
+              path: path.substring(4)
+            });
+          }
+        }
+      }
+      si = si + 1;
+    }
+    freshFiles.sort(function(a, b) { return b.epoch - a.epoch; });
+    if (freshFiles.length > 14) freshFiles = freshFiles.slice(0, 14);
+
+    var disk = collectConformanceDisk();
+    var latest = latestConformanceMap();
+    var latestMap = latest.map;
+
+    var compiledCurrent = 0;
+    var failedCurrent = 0;
+    var verifiedCurrent = 0;
+    var currentSeen = 0;
+    var lt = latest.latestBuildDay;
+
+    for (var testName in latestMap) {
+      currentSeen = currentSeen + 1;
+      var row = latestMap[testName];
+      var laneCell = ensureLane(laneMap, row.lane);
+      laneCell.seenCurrent = laneCell.seenCurrent + 1;
+      if (row.status === 'compiled') {
+        compiledCurrent = compiledCurrent + 1;
+        laneCell.compiledCurrent = laneCell.compiledCurrent + 1;
+      } else {
+        failedCurrent = failedCurrent + 1;
+        laneCell.failedCurrent = laneCell.failedCurrent + 1;
+      }
+      if (row.verified && row.verified.length > 0) {
+        verifiedCurrent = verifiedCurrent + 1;
+        laneCell.verifiedCurrent = laneCell.verifiedCurrent + 1;
+      }
+    }
+
+    for (var laneName in disk.laneDisk) {
+      var laneDiskRow = ensureLane(laneMap, laneName);
+      laneDiskRow.diskTotal = disk.laneDisk[laneName];
+    }
+
+    var buildAttemptCount = 0;
+    var rollingByDay = {};
+    var rollingStatus = {};
+    var passingNow = 0;
+    var seenNow = 0;
+    var firstCompileSeen = {};
+
+    try {
+      var buildRaw = __db_query(CONF_DB,
+        "SELECT test_name, lane, substr(built_at, 1, 10), status FROM builds ORDER BY built_at ASC, id ASC;"
+      );
+      var buildLines = buildRaw.split('\n');
+      var bi = 0;
+      while (bi < buildLines.length) {
+        var bl = buildLines[bi];
+        if (bl.length > 0) {
+          var bp = bl.split('|');
+          if (bp.length > 3) {
+            var btest = bp[0];
+            var bday = bp[2];
+            var status = bp[3];
+            if (!firstDay || bday < firstDay) firstDay = bday;
+            if (!dayRows[bday]) dayRows[bday] = {};
+            inc(dayRows[bday], 'buildAttempts');
+            buildAttemptCount = buildAttemptCount + 1;
+            if (status === 'compiled') inc(dayRows[bday], 'buildPasses');
+            else inc(dayRows[bday], 'buildFails');
+
+            if (firstCompileSeen[btest] === undefined && status === 'compiled') {
+              firstCompileSeen[btest] = bday;
+              inc(dayRows[bday], 'compileAdds');
+            }
+
+            var prevStatus = rollingStatus[btest];
+            if (prevStatus === undefined) seenNow = seenNow + 1;
+            else if (prevStatus === 'compiled') passingNow = passingNow - 1;
+            rollingStatus[btest] = status;
+            if (status === 'compiled') passingNow = passingNow + 1;
+
+            rollingByDay[bday] = { currentPassing: passingNow, currentSeen: seenNow };
+          }
+        }
+        bi = bi + 1;
+      }
+    } catch (e1) {
+      console.log('build history error: ' + e1);
+    }
+
+    var verifyCumulative = 0;
+    try {
+      var verifyRaw = __db_query(CONF_DB,
+        "SELECT test_name, substr(verified_at, 1, 10) FROM verified_sources ORDER BY verified_at ASC;"
+      );
+      var verifyLines = verifyRaw.split('\n');
+      var vi = 0;
+      while (vi < verifyLines.length) {
+        var vl = verifyLines[vi];
+        if (vl.length > 0) {
+          var vp = vl.split('|');
+          if (vp.length > 1) {
+            var vday = vp[1];
+            if (!firstDay || vday < firstDay) firstDay = vday;
+            if (!dayRows[vday]) dayRows[vday] = {};
+            inc(dayRows[vday], 'verifyAdds');
+          }
+        }
+        vi = vi + 1;
+      }
+    } catch (e2) {
+      console.log('verify history error: ' + e2);
+    }
+
+    if (!firstDay) firstDay = dayKeyToday();
+    var endDay = dayKeyToday();
+    var timeline = [];
+    var cursor = firstDay;
+    var cumulativeFiles = 0;
+    var cumulativeConformance = 0;
+    var carryPassing = 0;
+    var carrySeen = 0;
+
+    while (cursor <= endDay) {
+      var src = dayRows[cursor] || {};
+      cumulativeFiles = cumulativeFiles + (src.fileAdds || 0);
+      cumulativeConformance = cumulativeConformance + (src.conformanceAdds || 0);
+      verifyCumulative = verifyCumulative + (src.verifyAdds || 0);
+
+      if (rollingByDay[cursor]) {
+        carryPassing = rollingByDay[cursor].currentPassing;
+        carrySeen = rollingByDay[cursor].currentSeen;
+      }
+
+      timeline.push({
+        day: cursor,
+        shortDay: shortDay(cursor),
+        commitCount: src.commitCount || 0,
+        fileAdds: src.fileAdds || 0,
+        conformanceAdds: src.conformanceAdds || 0,
+        compileAdds: src.compileAdds || 0,
+        verifyAdds: src.verifyAdds || 0,
+        buildAttempts: src.buildAttempts || 0,
+        buildPasses: src.buildPasses || 0,
+        buildFails: src.buildFails || 0,
+        totalFiles: cumulativeFiles,
+        totalConformance: cumulativeConformance,
+        currentPassing: carryPassing,
+        currentSeen: carrySeen,
+        currentVerified: verifyCumulative
+      });
+
+      cursor = nextDay(cursor);
+    }
+
+    var areaRows = [];
+    var maxAreaFiles = 1;
+    for (var areaKey in areaMap) {
+      if (areaMap[areaKey].diskNow > maxAreaFiles) maxAreaFiles = areaMap[areaKey].diskNow;
+    }
+    for (var areaName2 in areaMap) {
+      var areaOut = areaMap[areaName2];
+      areaOut.pct = maxAreaFiles > 0 ? Math.round((areaOut.diskNow * 100) / maxAreaFiles) : 0;
+      areaRows.push(areaOut);
+    }
+    areaRows.sort(function(a, b) {
+      if (b.diskNow !== a.diskNow) return b.diskNow - a.diskNow;
+      return a.name < b.name ? -1 : 1;
+    });
+
+    var laneRows = [];
+    for (var laneName2 in laneMap) {
+      var laneOut = laneMap[laneName2];
+      laneOut.untested = laneOut.diskTotal - laneOut.seenCurrent;
+      if (laneOut.untested < 0) laneOut.untested = 0;
+      laneOut.compilePct = laneOut.diskTotal > 0 ? Math.round((laneOut.compiledCurrent * 100) / laneOut.diskTotal) : 0;
+      laneOut.verifyPct = laneOut.diskTotal > 0 ? Math.round((laneOut.verifiedCurrent * 100) / laneOut.diskTotal) : 0;
+      laneRows.push(laneOut);
+    }
+    laneRows.sort(function(a, b) {
+      if (b.diskTotal !== a.diskTotal) return b.diskTotal - a.diskTotal;
+      return a.name < b.name ? -1 : 1;
+    });
+
+    setTimelineDays(timeline);
+    setTimelineCount(timeline.length);
+    setProjectStartDay(firstDay);
+    setProjectEndDay(endDay);
+    setCommitCount(totalCommits);
+    setRecentCommits(recent);
+    setRepoFileCount(repoFileCount);
+    setGitBornCount(gitBornCount);
+    setActiveDays(timeline.length);
+    setFresh7dCount(fresh7dCount);
+    setAreaRows(areaRows);
+    setAreaCount(areaRows.length);
+    setLaneRows(laneRows);
+    setLaneCount(laneRows.length);
+    setFreshFiles(freshFiles);
+    setFreshFileCount(freshFiles.length);
+    setConfCompiled(compiledCurrent);
+    setConfFailed(failedCurrent);
+    setConfVerified(verifiedCurrent);
+    setConfTotal(disk.tests.length);
+    setConfUntested(disk.tests.length - currentSeen > 0 ? (disk.tests.length - currentSeen) : 0);
+    setConfPassRate(disk.tests.length > 0 ? Math.round((compiledCurrent * 100) / disk.tests.length) : 0);
+    setConfFailures(latest.failures);
+    setConfFailureCount(latest.failures.length);
+    setCompileBacklog(disk.tests.length - compiledCurrent > 0 ? (disk.tests.length - compiledCurrent) : 0);
+    setVerifyBacklog(compiledCurrent - verifiedCurrent > 0 ? (compiledCurrent - verifiedCurrent) : 0);
+    setCurrentSeen(currentSeen);
+    setBuildAttemptCount(buildAttemptCount);
+    setLatestBuildDay(lt);
+  } catch (e) {
+    console.log('progress meta error: ' + e);
+  }
+}
+
+function loadTestList() {
+  try {
+    var disk = collectConformanceDisk();
+    var latest = latestConformanceMap().map;
+    var keepName = selTestName;
+    var tests = [];
+    var i = 0;
+    while (i < disk.tests.length) {
+      var base = disk.tests[i];
+      var latestRow = latest[base.name];
+      var status = latestRow ? latestRow.status : 'untested';
+      var verified = latestRow ? latestRow.verified : '';
+      var builtDay = latestRow ? latestRow.builtDay : '';
+      var sourceSha = latestRow ? latestRow.sourceSha : '';
+      var priority = 3;
+      var dotColor = '#475569';
+
+      if (verified && verified.length > 0) {
+        priority = 4;
+        dotColor = '#60a5fa';
+      } else if (status === 'compiled') {
+        priority = 0;
+        dotColor = '#34d399';
+      } else if (status === 'untested') {
+        priority = 2;
+        dotColor = '#94a3b8';
+      } else {
+        priority = 1;
+        dotColor = '#f87171';
+      }
+
+      tests.push({
+        tidx: 0,
+        path: base.path,
+        repoPath: base.repoPath,
+        name: base.name,
+        lane: base.lane,
+        status: status,
+        verified: verified,
+        builtDay: builtDay,
+        sourceSha: sourceSha,
+        priority: priority,
+        dotColor: dotColor
+      });
+      i = i + 1;
+    }
+
+    tests.sort(function(a, b) {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (a.lane !== b.lane) return a.lane < b.lane ? -1 : 1;
+      return a.name < b.name ? -1 : 1;
+    });
+
+    var t = 0;
+    while (t < tests.length) {
+      tests[t].tidx = t;
+      t = t + 1;
+    }
+
+    setTestList(tests);
+    setTestCount(tests.length);
+
+    var focus = 0;
+    if (keepName && keepName.length > 0) {
+      var k = 0;
+      while (k < tests.length) {
+        if (tests[k].name === keepName) {
+          focus = k;
+          break;
+        }
+        k = k + 1;
+      }
+    }
+
+    if (tests.length > 0) {
+      var picked = tests[focus];
+      setSelectedTest(focus);
+      setSelTestName(picked.name);
+      setSelTestLane(picked.lane);
+      setSelTestStatus(picked.status);
+      setSelTestVerified(picked.verified);
+      setSelTestBuiltDay(picked.builtDay);
+      setSelTestSourceSha(picked.sourceSha);
+      setSelTestHasVerified(picked.verified.length > 0 ? 1 : 0);
+    } else {
+      setSelectedTest(0);
+      setSelTestName('');
+      setSelTestLane('');
+      setSelTestStatus('untested');
+      setSelTestVerified('');
+      setSelTestBuiltDay('');
+      setSelTestSourceSha('');
+      setSelTestHasVerified(0);
+    }
+  } catch (e) {
+    console.log('test list error: ' + e);
+  }
+}
+
+function loadPerfData() {
+  try {
+    var laneAvgRaw = __db_query(CONF_DB,
+      "SELECT lane, ROUND(AVG(total_ms)), ROUND(AVG(forge_ms)), ROUND(AVG(zig_ms)), ROUND(AVG(lines_per_sec), 1), ROUND(AVG(bytes_per_line), 1), COUNT(*) " +
+      "FROM build_perf GROUP BY lane ORDER BY AVG(total_ms) DESC;"
+    );
+    var laneLines = laneAvgRaw.split('\n');
+    var perfLaneRows = [];
+    var li = 0;
+    while (li < laneLines.length) {
+      var laneLine = laneLines[li];
+      if (laneLine.length > 0) {
+        var lp = laneLine.split('|');
+        if (lp.length > 6) {
+          perfLaneRows.push({
+            name: lp[0],
+            avgMs: parseInt(lp[1], 10) || 0,
+            avgForge: parseInt(lp[2], 10) || 0,
+            avgZig: parseInt(lp[3], 10) || 0,
+            avgLps: parseFloat(lp[4]) || 0,
+            avgBpl: parseFloat(lp[5]) || 0,
+            buildCount: parseInt(lp[6], 10) || 0,
+            color: laneColor(lp[0])
+          });
+        }
+      }
+      li = li + 1;
+    }
+    setPerfLanes(perfLaneRows);
+    setPerfLaneCount(perfLaneRows.length);
+
+    var overallRaw = __db_query(CONF_DB,
+      "SELECT ROUND(AVG(total_ms)), ROUND(AVG(forge_ms)), ROUND(AVG(zig_ms)), ROUND(AVG(lines_per_sec), 1), ROUND(AVG(bytes_per_line), 1), COUNT(*), ROUND(AVG(source_lines)), ROUND(AVG(generated_bytes)) FROM build_perf;"
+    );
+    var ov = overallRaw.trim().split('|');
+    if (ov.length > 7) {
+      setPerfAvgTotal(parseInt(ov[0], 10) || 0);
+      setPerfAvgForge(parseInt(ov[1], 10) || 0);
+      setPerfAvgZig(parseInt(ov[2], 10) || 0);
+      setPerfAvgLps(parseFloat(ov[3]) || 0);
+      setPerfAvgBpl(parseFloat(ov[4]) || 0);
+      setPerfBuildCount(parseInt(ov[5], 10) || 0);
+      setPerfAvgLines(parseInt(ov[6], 10) || 0);
+      setPerfAvgBytes(parseInt(ov[7], 10) || 0);
+    }
+
+    var slowRaw = __db_query(CONF_DB,
+      "SELECT test_name, lane, total_ms, forge_ms, zig_ms, source_lines, lines_per_sec FROM build_perf ORDER BY total_ms DESC LIMIT 8;"
+    );
+    var slowLines = slowRaw.split('\n');
+    var slowBuilds = [];
+    var si = 0;
+    while (si < slowLines.length) {
+      var sl = slowLines[si];
+      if (sl.length > 0) {
+        var sp = sl.split('|');
+        if (sp.length > 6) {
+          slowBuilds.push({
+            name: sp[0],
+            lane: sp[1],
+            totalMs: parseInt(sp[2], 10) || 0,
+            forgeMs: parseInt(sp[3], 10) || 0,
+            zigMs: parseInt(sp[4], 10) || 0,
+            lines: parseInt(sp[5], 10) || 0,
+            lps: parseFloat(sp[6]) || 0
+          });
+        }
+      }
+      si = si + 1;
+    }
+    setPerfSlowest(slowBuilds);
+    setPerfSlowestCount(slowBuilds.length);
+
+    var bigRaw = __db_query(CONF_DB,
+      "SELECT test_name, lane, source_lines, generated_bytes, bytes_per_line FROM build_perf ORDER BY source_lines DESC LIMIT 8;"
+    );
+    var bigLines = bigRaw.split('\n');
+    var bigSources = [];
+    var bi = 0;
+    while (bi < bigLines.length) {
+      var bl = bigLines[bi];
+      if (bl.length > 0) {
+        var bp = bl.split('|');
+        if (bp.length > 4) {
+          bigSources.push({
+            name: bp[0],
+            lane: bp[1],
+            lines: parseInt(bp[2], 10) || 0,
+            bytes: parseInt(bp[3], 10) || 0,
+            bpl: parseFloat(bp[4]) || 0
+          });
+        }
+      }
+      bi = bi + 1;
+    }
+    setPerfLargest(bigSources);
+    setPerfLargestCount(bigSources.length);
+  } catch (e) {
+    console.log('perf data error: ' + e);
+  }
+}
+
+var _childPid = '';
+
+function buildAndLaunchTest(testPath) {
+  setIpcStatus('building...');
+  try {
+    var buildOut = __exec('cd ' + TSZ_DIR + ' && ./scripts/build ' + shellQuote(testPath) + ' 2>&1');
+
+    var parts = testPath.split('/');
+    var filename = parts[parts.length - 1];
+    var binName = filename.replace('.app.tsz', '').replace('.tsz', '');
+    var relBin = 'zig-out/bin/' + binName;
+    var binCheck = __exec('cd ' + TSZ_DIR + ' && test -x ' + shellQuote(relBin) + ' && echo ok || echo missing');
+    if (binCheck.trim() !== 'ok') {
+      setIpcStatus('build missing binary');
+      setIpcLog(buildOut.substring(0, 320));
+      return;
+    }
+
+    if (_childPid.length > 0) {
+      __exec('kill ' + _childPid + ' 2>/dev/null');
+      _childPid = '';
+    }
+
+    var binPath = TSZ_DIR + '/' + relBin;
+    var pidOut = __exec(shellQuote(binPath) + ' >/dev/null 2>&1 & echo $!');
+    _childPid = pidOut.trim();
+    setIpcStatus('running ' + binName + ' pid ' + _childPid);
+    setIpcLog(buildOut.substring(0, 220));
+
+    loadProgressMeta();
+    loadTestList();
+    loadPerfData();
+  } catch (e) {
+    setIpcStatus('build failed');
+    setIpcLog(('' + e).substring(0, 320));
+  }
+}
+
+function killTestProcess() {
+  if (_childPid.length > 0) {
+    __exec('kill ' + _childPid + ' 2>/dev/null');
+    _childPid = '';
+    setIpcStatus('stopped');
+    setIpcLog('process killed');
+  }
+}

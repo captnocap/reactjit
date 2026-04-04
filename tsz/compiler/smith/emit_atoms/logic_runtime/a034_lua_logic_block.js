@@ -29,25 +29,25 @@
 //   Lines emitted as Zig multiline string: \\line\n
 //   Terminated with \\\n;\n
 
-function applies(ctx, meta) {
+function _a034_applies(ctx, meta) {
   void meta;
   return !!ctx;
 }
 
-function emit(ctx, meta) {
+function _a034_emit(ctx, meta) {
   void meta;
   // Reference scaffolding — live emit is in emit_split.js emitLogicBlocks()
   // (~140 lines covering Lua state/OA/handler/script/rebuilder logic).
   return '';
 }
 
-module.exports = {
+_emitAtoms[34] = {
   id: 34,
   name: 'lua_logic_block',
   group: 'logic_runtime',
   target: 'lua_in_zig',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a034_applies,
+  emit: _a034_emit,
 };

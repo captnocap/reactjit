@@ -31,7 +31,7 @@ function _mergeOas(ctx) {
   return result;
 }
 
-function applies(ctx, meta) {
+function _a015_applies(ctx, meta) {
   void meta;
   if (!ctx.objectArrays || ctx.objectArrays.length === 0) return false;
   var oas = _mergeOas(ctx);
@@ -139,7 +139,7 @@ function _emitChildEnsureCapacity(childOa) {
   return out;
 }
 
-function emit(ctx, meta) {
+function _a015_emit(ctx, meta) {
   void meta;
   var oas = _mergeOas(ctx);
   var out = '';
@@ -208,13 +208,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[15] = {
   id: 15,
   name: 'oa_dynamic_storage',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a015_applies,
+  emit: _a015_emit,
 };

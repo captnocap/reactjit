@@ -52,10 +52,30 @@
 //   See: virtually every conformance test uses useState.
 
 function match(c, ctx) {
-  // Detection: {getter} in JSX where getter is a known state slot.
-  // The brace child parser checks findSlot(identifier) to determine
-  // if a bare identifier is a state getter.
-  return false;
+  // Detect: const/let [getter, setter] = useState(
+  if (c.kind() !== TK.identifier) return false;
+  var kw = c.text();
+  if (kw !== 'const' && kw !== 'let') return false;
+  var saved = c.save();
+  c.advance(); // skip const/let
+  if (c.kind() !== TK.lbracket) { c.restore(saved); return false; }
+  c.advance(); // skip [
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance(); // skip getter
+  if (c.kind() !== TK.comma) { c.restore(saved); return false; }
+  c.advance(); // skip ,
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance(); // skip setter
+  if (c.kind() !== TK.rbracket) { c.restore(saved); return false; }
+  c.advance(); // skip ]
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
+  c.advance(); // skip =
+  var isUseState = (c.kind() === TK.identifier && c.text() === 'useState');
+  if (!isUseState) { c.restore(saved); return false; }
+  c.advance(); // skip useState
+  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.restore(saved);
+  return true;
 }
 
 function compile(c, ctx) {

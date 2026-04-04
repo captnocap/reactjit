@@ -2,12 +2,12 @@
 // Exercises: <if as>, <during>, <switch>/<case else>, state, composition
 
 <http module>
-  <ffi>
-    curl_easy_init    @("libcurl.so")
-    curl_easy_setopt  @("libcurl.so")
-    curl_easy_perform @("libcurl.so")
-    curl_easy_cleanup @("libcurl.so")
-  </ffi>
+  <curl ffi>
+    easy_init
+    easy_setopt
+    easy_perform
+    easy_cleanup
+  </curl>
 
   <types>
     <Response>
@@ -25,45 +25,39 @@
   </types>
 
   <var>
-    pending is false
-    lastResponse
-    lastError is ''
+    set_pending is false
+    set_last_response
+    set_last_error is ''
   </var>
-
-  <state>
-    set_pending
-    set_lastResponse
-    set_lastError
-  </state>
 
   <functions>
     request(method, url, body):
       set_pending is true
-      set_lastError is ''
-      <if curl_easy_init() as handle>
-        curl_easy_setopt(handle, 'url', url)
+      set_last_error is ''
+      <if curl.easy_init() as handle>
+        curl.easy_setopt(handle, 'url', url)
         <switch method>
           <case POST>
-            curl_easy_setopt(handle, 'postfields', body)
+            curl.easy_setopt(handle, 'postfields', body)
           </case>
           <case PUT>
-            curl_easy_setopt(handle, 'customrequest', 'PUT')
-            curl_easy_setopt(handle, 'postfields', body)
+            curl.easy_setopt(handle, 'customrequest', 'PUT')
+            curl.easy_setopt(handle, 'postfields', body)
           </case>
           <case DELETE>
-            curl_easy_setopt(handle, 'customrequest', 'DELETE')
+            curl.easy_setopt(handle, 'customrequest', 'DELETE')
           </case>
           <case else>
             // GET is default
           </case>
         </switch>
-        <if curl_easy_perform(handle) as response>
-          set_lastResponse is response
+        <if curl.easy_perform(handle) as response>
+          set_last_response is response
         </if>
         <else>
-          set_lastError is 'request failed: ' + url
+          set_last_error is 'request failed: ' + url
         </else>
-        curl_easy_cleanup(handle)
+        curl.easy_cleanup(handle)
       </if>
       set_pending is false
 

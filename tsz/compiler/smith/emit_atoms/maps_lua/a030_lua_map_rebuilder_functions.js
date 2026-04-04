@@ -25,11 +25,11 @@
 //   emitLuaElement — recursive JSX element → Lua table
 //   emitLuaChildren — child list including conditionals and nested maps
 
-function applies(ctx) {
+function _a030_applies(ctx) {
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 
-function emit(ctx) {
+function _a030_emit(ctx) {
   // The actual Lua code is already compiled and stored in
   // ctx._luaMapRebuilders[i].luaCode by emit/lua_maps.js.
   // This atom emits the individual rebuilder functions into LUA_LOGIC.
@@ -45,13 +45,13 @@ function emit(ctx) {
   return lines;
 }
 
-module.exports = {
+_emitAtoms[30] = {
   id: 30,
   name: 'lua_map_rebuilder_functions',
   group: 'maps_lua',
   target: 'lua_in_zig',
   status: 'complete',
   currentOwner: 'emit/lua_maps.js, emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a030_applies,
+  emit: _a030_emit,
 };

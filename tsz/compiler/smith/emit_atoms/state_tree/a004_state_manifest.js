@@ -8,12 +8,12 @@
 // Trigger: ctx.stateSlots.length > 0.
 // Output target: slot comments and comptime slot-count guard.
 
-function applies(ctx, meta) {
+function _a004_applies(ctx, meta) {
   void meta;
   return ctx.stateSlots && ctx.stateSlots.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a004_emit(ctx, meta) {
   void meta;
   var out = '// \u2500\u2500 State manifest \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
   ctx.stateSlots.forEach(function(s, i) {
@@ -24,13 +24,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[4] = {
   id: 4,
   name: 'state_manifest',
   group: 'state_tree',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/state_manifest.js',
-  applies: applies,
-  emit: emit,
+  applies: _a004_applies,
+  emit: _a004_emit,
 };

@@ -1,7 +1,7 @@
 // ── Pattern 035: slice + show more ──────────────────────────────
 // Index: 35
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const [limit, setLimit] = useState(5);
@@ -48,12 +48,38 @@
 //   currently happens for _computedExpr OAs — the whole chain runs in JS.
 
 function match(c, ctx) {
-  // This pattern is contextual — it's a slice().map() where the slice
-  // end is a useState value, combined with a conditional button.
-  // Detection requires cross-referencing the slice argument with
-  // known state slots, which match() can't do (no ctx access to state).
-  // For now, this falls through to the general slice().map() path (p034)
-  // and the button is handled separately by p016 (&&) + p115 (handler).
+  // Detect: identifier.slice(0, identifier).map(
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  // Walk optional dot-access chain before .slice
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'slice') {
+      c.advance(); // skip 'slice'
+      // Expect ( number , identifier )
+      if (c.kind() !== TK.lparen) break;
+      c.advance(); // skip (
+      if (c.kind() !== TK.number) break;
+      c.advance(); // skip number (e.g. 0)
+      if (c.kind() !== TK.comma) break;
+      c.advance(); // skip ,
+      if (c.kind() !== TK.identifier) break;
+      c.advance(); // skip identifier (the variable limit)
+      if (c.kind() !== TK.rparen) break;
+      c.advance(); // skip )
+      // Now expect .map(
+      if (c.kind() !== TK.dot) break;
+      c.advance(); // skip .
+      if (c.kind() !== TK.identifier || c.text() !== 'map') break;
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+      break;
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

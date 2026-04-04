@@ -8,12 +8,12 @@
 // Trigger: every app emit.
 // Output target: _appInit() setup for state, handlers, maps, wrappers.
 
-function applies(ctx, meta) {
+function _a039_applies(ctx, meta) {
   void ctx; void meta;
   return true;
 }
 
-function emit(ctx, meta) {
+function _a039_emit(ctx, meta) {
   var out = 'fn _appInit() void {\n    _initState();\n';
 
   for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
@@ -84,13 +84,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[39] = {
   id: 39,
   name: 'app_init',
   group: 'entry',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js',
-  applies: applies,
-  emit: emit,
+  applies: _a039_applies,
+  emit: _a039_emit,
 };

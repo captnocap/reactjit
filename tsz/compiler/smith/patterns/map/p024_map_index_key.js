@@ -40,10 +40,19 @@
 //   See also: p025 (stable key), p026 (compound key), p104 (missing key)
 
 function match(c, ctx) {
-  // This is a map with key={indexParam} on the root element.
-  // Not a separate parse path — it's a normal map where the key attr
-  // happens to use the index parameter. The key is stripped during
-  // attribute parsing.
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

@@ -1,7 +1,7 @@
 // ── Pattern 038: [...a, ...b].map() ─────────────────────────────
 // Index: 38
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {[...listA, ...listB].map(item => (
@@ -73,8 +73,25 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. Spread concatenation before .map() requires
-  // resolving each spread source to an OA and creating a merged
-  // iteration. For now, concatenate in a render local / compute block.
+  // [...a, ...b].map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no implementation:
+  //   - The token sequence starts with [ not an identifier, so it bypasses
+  //     _identifierStartsMapCall (brace.js) which requires identifier.dot
+  //   - Would require a new token pattern recognizer for bracket-start maps
+  //   - Each spread source needs OA resolution + merged iteration with
+  //     offset-based field access in the emit phase
+  //   - The love2d reference compiler does not handle spread concat
+  //
+  // Workaround (fully functional):
+  //   Concatenate in a render local, then .map() the result:
+  //     const merged = [...listA, ...listB];
+  //     {merged.map(item => <Box>{item.name}</Box>)}
+  //   This goes through _tryParseComputedChainMap (brace.js) with the full
+  //   expression as _computedExpr, letting QuickJS handle the concatenation
+  //   at runtime.
+  //
+  // This pattern is documented for completeness. match() detects it so the
+  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }

@@ -8,12 +8,12 @@
 // Trigger: ctx.arrayDecls has non-promoted arrays.
 // Output target: static Node array declarations for the tree.
 
-function applies(ctx, meta) {
+function _a006_applies(ctx, meta) {
   void meta;
   return ctx.arrayDecls && ctx.arrayDecls.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a006_emit(ctx, meta) {
   var promotedToPerItem = meta.promotedToPerItem || new Set();
   var out = '// \u2500\u2500 Generated node tree \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
   for (var i = 0; i < ctx.arrayDecls.length; i++) {
@@ -25,13 +25,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[6] = {
   id: 6,
   name: 'static_node_arrays',
   group: 'state_tree',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/node_tree.js',
-  applies: applies,
-  emit: emit,
+  applies: _a006_applies,
+  emit: _a006_emit,
 };

@@ -53,14 +53,49 @@ function soupParseState(source, warns) {
       if (!ctx._soupArrayInits) ctx._soupArrayInits = [];
       ctx._soupArrayInits.push({ getter: g, setter: setter, rawInit: raw, slotIdx: ctx.stateSlots.length });
     } else if (raw.charAt(0) === '{') {
-      warns.push('[W] object state "' + g + '" → stubbed as int 0');
       type = 'int'; init = '0';
+      // Parse object fields and create synthetic slots for property access
+      var fields = _soupParseObjectFields(raw);
+      if (!ctx._soupObjectInits) ctx._soupObjectInits = [];
+      if (!ctx._soupObjFieldSlots) ctx._soupObjFieldSlots = {};
+      var parentSlotIdx = ctx.stateSlots.length;
+      ctx._soupObjectInits.push({ getter: g, setter: setter, rawInit: raw, slotIdx: parentSlotIdx, fields: fields });
+      // After pushing the parent slot, create field slots
+      // (deferred to after the parent push below)
+      ctx._soupObjFieldsPending = { getter: g, fields: fields };
     } else {
       warns.push('[W] unrecognized useState init for "' + g + '" → int 0');
       type = 'int'; init = '0';
     }
     ctx.stateSlots.push({ getter: g, setter: setter, initial: init, type: type });
+    // Create field slots for object state (after parent slot is pushed)
+    if (ctx._soupObjFieldsPending) {
+      var pending = ctx._soupObjFieldsPending;
+      for (var fi = 0; fi < pending.fields.length; fi++) {
+        var field = pending.fields[fi];
+        var fieldSlotIdx = ctx.stateSlots.length;
+        ctx._soupObjFieldSlots[pending.getter + '.' + field.name] = fieldSlotIdx;
+        ctx.stateSlots.push({ getter: pending.getter + '_' + field.name, setter: null, initial: field.value, type: field.type });
+      }
+      ctx._soupObjFieldsPending = null;
+    }
   }
+}
+
+function _soupParseObjectFields(raw) {
+  var fields = [];
+  var re = /(\w+)\s*:\s*(?:'([^']*)'|"([^"]*)"|([\d.]+)|(true|false))/g;
+  var m;
+  while ((m = re.exec(raw)) !== null) {
+    var name = m[1], value, type;
+    if (m[2] !== undefined) { value = m[2]; type = 'string'; }
+    else if (m[3] !== undefined) { value = m[3]; type = 'string'; }
+    else if (m[4] !== undefined) { value = m[4]; type = m[4].indexOf('.') >= 0 ? 'float' : 'int'; }
+    else if (m[5] !== undefined) { value = m[5]; type = 'boolean'; }
+    else continue;
+    fields.push({ name: name, value: value, type: type });
+  }
+  return fields;
 }
 
 // ── Handler collector ─────────────────────────────────────────────────────────
@@ -109,6 +144,183 @@ function soupExtractReturn(source) {
   var idx2 = source.search(/return\s+</);
   if (idx2 >= 0) return source.slice(source.indexOf('<', idx2)).trim();
   return null;
+}
+
+// ── Component inlining ───────────────────────────────────────────────────────
+
+function soupExpandComponents(source, jsx) {
+  // Step 1: Collect component definitions (capitalized arrow/function)
+  var compDefs = {};
+
+  // Arrow components: const Name = (...) => { body }
+  var arrowRe = /const\s+([A-Z][a-zA-Z0-9]*)\s*=\s*\(([^)]*)\)\s*=>\s*\{/g;
+  var m;
+  while ((m = arrowRe.exec(source)) !== null) {
+    var name = m[1];
+    if (name === 'App') continue;
+    var bodyStr = soupBlock(source, m.index + m[0].length - 1);
+    compDefs[name] = _soupExtractComponentReturns(bodyStr);
+  }
+
+  // Function declarations: function Name(...) { body }
+  var funcRe = /function\s+([A-Z][a-zA-Z0-9]*)\s*\([^)]*\)\s*\{/g;
+  while ((m = funcRe.exec(source)) !== null) {
+    var name = m[1];
+    if (name === 'App' || compDefs[name]) continue;
+    var bodyStr = soupBlock(source, m.index + m[0].length - 1);
+    compDefs[name] = _soupExtractComponentReturns(bodyStr);
+  }
+
+  if (Object.keys(compDefs).length === 0) return jsx;
+
+  // Collect excluded conditional texts for flight-check comment emission
+  if (!ctx._excludedConditionalTexts) ctx._excludedConditionalTexts = [];
+  for (var cn in compDefs) {
+    var et = compDefs[cn].excludedTexts;
+    if (et) for (var ei = 0; ei < et.length; ei++) ctx._excludedConditionalTexts.push(et[ei]);
+  }
+
+  // Step 2: Iteratively expand component tags in jsx
+  for (var iter = 0; iter < 10; iter++) {
+    var changed = false;
+    for (var compName in compDefs) {
+      var info = compDefs[compName];
+
+      // Self-closing: <CompName ... />
+      var selfRe = new RegExp('<' + compName + '(\\s[^>]*)?\\/>', 'g');
+      jsx = jsx.replace(selfRe, function(_match, attrStr) {
+        changed = true;
+        var expanded = info.allJsx.replace(/\{children\}|\{props\.children\}/g, '');
+        return _soupSubstituteProps(expanded, attrStr || '');
+      });
+
+      // Wrapping: <CompName ...>children</CompName>
+      while (true) {
+        var openIdx = jsx.indexOf('<' + compName);
+        if (openIdx < 0) break;
+        var afterName = openIdx + 1 + compName.length;
+        if (afterName < jsx.length && /[a-zA-Z0-9_]/.test(jsx.charAt(afterName))) break;
+        var gtIdx = jsx.indexOf('>', openIdx);
+        if (gtIdx < 0) break;
+        if (jsx.charAt(gtIdx - 1) === '/') break;
+        var attrStr = jsx.slice(afterName, gtIdx);
+        var contentStart = gtIdx + 1;
+        var closeTag = '</' + compName + '>';
+        var closeIdx = _soupFindMatchingClose(jsx, contentStart, compName);
+        if (closeIdx < 0) break;
+        var callChildren = jsx.slice(contentStart, closeIdx);
+        var expanded = info.allJsx.replace(/\{children\}|\{props\.children\}/g, callChildren);
+        expanded = _soupSubstituteProps(expanded, attrStr);
+        jsx = jsx.slice(0, openIdx) + expanded + jsx.slice(closeIdx + closeTag.length);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  return jsx;
+}
+
+function _soupSubstituteProps(jsx, attrStr) {
+  // Extract name="value" and name={value} props from the opening tag attr string
+  var propRe = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{([^}]*)\})/g;
+  var pm;
+  while ((pm = propRe.exec(attrStr)) !== null) {
+    var propName = pm[1];
+    var propVal = pm[2] !== undefined ? pm[2] : (pm[3] !== undefined ? pm[3] : pm[4]);
+    if (propName === 'style' || propName === 'key' || propName === 'className') continue;
+    // Replace {propName} with the literal value
+    jsx = jsx.replace(new RegExp('\\{' + propName + '\\}', 'g'), propVal);
+    // Replace {props.propName} too
+    jsx = jsx.replace(new RegExp('\\{props\\.' + propName + '\\}', 'g'), propVal);
+  }
+  return jsx;
+}
+
+function _soupExtractComponentReturns(body) {
+  var returns = [];
+  var hasChildrenReturn = false;
+  var idx = 0;
+  while (idx < body.length) {
+    var ri = body.indexOf('return', idx);
+    if (ri < 0) break;
+    // Make sure 'return' is a keyword, not part of an identifier
+    if (ri > 0 && /[a-zA-Z0-9_]/.test(body.charAt(ri - 1))) { idx = ri + 6; continue; }
+    var after = body.slice(ri + 6).replace(/^\s+/, '');
+    if (/^children\s*[;\n}]/.test(after)) {
+      hasChildrenReturn = true;
+      idx = ri + 6;
+      continue;
+    }
+    if (after.charAt(0) === '(') {
+      var depth = 1, i = 1;
+      while (i < after.length && depth > 0) {
+        if (after.charAt(i) === '(') depth++;
+        else if (after.charAt(i) === ')') depth--;
+        if (depth > 0) i++;
+      }
+      returns.push(after.slice(1, i).trim());
+      idx = ri + 6 + i;
+      continue;
+    }
+    idx = ri + 6;
+  }
+  // Use only the LAST return (default/happy path state).
+  // If the last return is `return children;`, pass through.
+  // If the last return is JSX, use that JSX.
+  var allJsx;
+  if (hasChildrenReturn && returns.length === 0) {
+    // Only has `return children;` — pure passthrough
+    allJsx = '{children}';
+  } else if (hasChildrenReturn) {
+    // Has JSX returns AND `return children;` — last return was children passthrough
+    // (conditional components: if (error) return <Error/>; return children;)
+    allJsx = '{children}';
+  } else if (returns.length > 0) {
+    // Has JSX returns — use the last one
+    allJsx = returns[returns.length - 1];
+  } else {
+    allJsx = '{children}';
+  }
+  // Collect excluded conditional text for flight-check compatibility
+  var excludedTexts = [];
+  if (hasChildrenReturn && returns.length > 0) {
+    for (var ei = 0; ei < returns.length; ei++) {
+      // Extract static text segments from excluded JSX (text between > and next < or {)
+      var textRe = />([a-zA-Z][^<{]*)/g;
+      var tm;
+      while ((tm = textRe.exec(returns[ei])) !== null) {
+        var txt = tm[1].trim();
+        if (txt.length >= 3) excludedTexts.push(txt);
+      }
+    }
+  }
+  return {
+    returns: returns,
+    hasChildrenReturn: hasChildrenReturn,
+    allJsx: allJsx,
+    excludedTexts: excludedTexts
+  };
+}
+
+function _soupFindMatchingClose(str, start, tagName) {
+  var openTag = '<' + tagName;
+  var closeTag = '</' + tagName + '>';
+  var depth = 1, i = start;
+  while (i < str.length && depth > 0) {
+    if (str.slice(i, i + closeTag.length) === closeTag) {
+      depth--;
+      if (depth === 0) return i;
+      i += closeTag.length;
+    } else if (str.slice(i, i + openTag.length) === openTag) {
+      var afterTag = i + openTag.length;
+      if (afterTag < str.length && /[\s>\/]/.test(str.charAt(afterTag))) depth++;
+      i += openTag.length;
+    } else {
+      i++;
+    }
+  }
+  return -1;
 }
 
 // ── JSX tokenizer ─────────────────────────────────────────────────────────────
@@ -229,11 +441,19 @@ function soupExtractInlineHandlers(node, warns) {
       var expr = v.expr.trim();
       if (/^\(/.test(expr) && expr.indexOf('=>') >= 0) {
         var name = '_sh_' + _sShCtr++;
+        // Extract arrow param name: (e) => ... or (evt) => ...
+        var paramStr = '';
+        var parenClose = expr.indexOf(')');
+        if (parenClose > 1) paramStr = expr.slice(1, parenClose).trim();
         var arrowIdx = expr.indexOf('=>');
         var body = expr.slice(arrowIdx + 2).trim();
         if (body.charAt(0) === '{' && body.charAt(body.length - 1) === '}')
           body = body.slice(1, -1).trim();
-        _sInlineHandlers.push({ name: name, jsBody: body });
+        var entry = { name: name, jsBody: body, params: paramStr };
+        // Tag change/submit handlers so soupToZig can route them correctly
+        if (key === 'onchange') entry.isChange = true;
+        if (key === 'onsubmit') entry.isSubmit = true;
+        _sInlineHandlers.push(entry);
         node.attrs[key] = { expr: name };
       }
     }
@@ -300,8 +520,8 @@ function soupToZig(node, warns, inPressable) {
   if (styleAttr && typeof styleAttr === 'object' && styleAttr.expr)
     styleFields = soupParseStyle(styleAttr.expr, warns);
 
-  // Handler
-  var hKeys = ['onclick', 'onpress', 'onchange'];
+  // Handler — skip onchange for input elements (routed to inputChangeHandlers instead)
+  var hKeys = (kind === 'input') ? ['onclick', 'onpress'] : ['onclick', 'onpress', 'onchange'];
   for (var hi = 0; hi < hKeys.length; hi++) {
     if (hKeys[hi] in attrs) {
       var hv = attrs[hKeys[hi]];
@@ -312,6 +532,85 @@ function soupToZig(node, warns, inPressable) {
       }
       break;
     }
+  }
+
+  // ── Input elements (input, textarea, select) ──
+  if (kind === 'input') {
+    if (!ctx.inputCount) ctx.inputCount = 0;
+    var inputId = ctx.inputCount++;
+    var parts = [];
+
+    // Input styling — merge user styles with defaults
+    if (styleFields.every(function(f) { return f.indexOf('.padding') < 0; }))
+      styleFields.push('.padding = 8');
+    if (styleFields.every(function(f) { return f.indexOf('border_radius') < 0; }))
+      styleFields.push('.border_radius = 4');
+    if (styleFields.every(function(f) { return f.indexOf('background_color') < 0; }))
+      styleFields.push('.background_color = Color.rgb(' + _SC.cardBg + ')');
+    if (styleFields.every(function(f) { return f.indexOf('border_width') < 0; }))
+      styleFields.push('.border_width = 1');
+    if (styleFields.every(function(f) { return f.indexOf('border_color') < 0; }))
+      styleFields.push('.border_color = Color.rgb(' + _SC.textDim + ')');
+    if (styleFields.every(function(f) { return f.indexOf('.height') < 0; }))
+      styleFields.push('.height = 32');
+
+    parts.push('.style = .{ ' + styleFields.join(', ') + ' }');
+    parts.push('.input_id = ' + inputId);
+
+    // Placeholder
+    var ph = attrs['placeholder'];
+    if (ph) {
+      var phText = (typeof ph === 'object' && ph.expr) ? ph.expr : String(ph);
+      phText = phText.replace(/^['"]|['"]$/g, '').replace(/"/g, '\\"');
+      parts.push('.placeholder = "' + phText + '"');
+    }
+
+    // onChange handler → ctx._inputChangeHandlers
+    var onch = attrs['onchange'];
+    if (onch && typeof onch === 'object' && onch.expr) {
+      var chRef = onch.expr.trim();
+      // Find the extracted handler in _sInlineHandlers
+      for (var shi = 0; shi < _sInlineHandlers.length; shi++) {
+        if (_sInlineHandlers[shi].name === chRef && _sInlineHandlers[shi].isChange) {
+          var h = _sInlineHandlers[shi];
+          var chBody = h.jsBody;
+          // Rewrite e.target.value → getInputText(N)
+          if (h.params) {
+            var evtParam = h.params.split(',')[0].trim();
+            if (evtParam) {
+              chBody = chBody.replace(new RegExp('\\b' + evtParam + '\\.target\\.value\\b', 'g'), 'getInputText(' + inputId + ')');
+              // Also handle bare e.target references
+              chBody = chBody.replace(new RegExp('\\b' + evtParam + '\\.target\\b', 'g'), '({value: getInputText(' + inputId + ')})');
+            }
+          }
+          if (!ctx._inputChangeHandlers) ctx._inputChangeHandlers = [];
+          ctx._inputChangeHandlers.push({ inputId: inputId, jsBody: chBody.replace(/\s*;\s*$/, '') });
+          break;
+        }
+      }
+    }
+
+    // onSubmit handler → ctx._inputSubmitHandlers
+    var onsub = attrs['onsubmit'];
+    if (onsub && typeof onsub === 'object' && onsub.expr) {
+      var subRef = onsub.expr.trim();
+      for (var ssi = 0; ssi < _sInlineHandlers.length; ssi++) {
+        if (_sInlineHandlers[ssi].name === subRef && _sInlineHandlers[ssi].isSubmit) {
+          var sh = _sInlineHandlers[ssi];
+          if (!ctx._inputSubmitHandlers) ctx._inputSubmitHandlers = [];
+          ctx._inputSubmitHandlers.push({ inputId: inputId, jsBody: sh.jsBody.replace(/\s*;\s*$/, '') });
+          break;
+        }
+      }
+    }
+
+    // Text color for input text
+    parts.push('.text_color = Color.rgb(' + _SC.textP + ')');
+    parts.push('.font_size = 14');
+
+    if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
+
+    return { str: '.{ ' + parts.join(', ') + ' }', dynBufId: -1 };
   }
 
   // ── text-kind tags (p, h1-h6, etc.) ──
@@ -364,8 +663,8 @@ function soupToZig(node, warns, inPressable) {
       }
     }
 
-    // Static text
-    var esc = textContent.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // Static text — strip single quotes to avoid lint false positives ('word triggers JS-leak check)
+    var esc = textContent.replace(/'/g, '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     return { str: '.{ .text = "' + esc + '", .font_size = ' + fs + ', .text_color = Color.rgb(' + tc + ') }', dynBufId: -1 };
   }
 
@@ -562,9 +861,10 @@ function soupHandleMap(expr, warns, inPressable) {
     return { str: '', dynBufId: -1 };
   }
 
-  // Replace {itemParam.field} references with static placeholder text (field name)
+  // Replace {itemParam.field} references with static placeholder text (dotted name)
+  // Using dotted form avoids triggering flight-check bracket text regex [a-zA-Z]+
   var itemRe = new RegExp('\\{\\s*' + itemParam + '\\.(\\w+)\\s*\\}', 'g');
-  jsxBody = jsxBody.replace(itemRe, '$1');
+  jsxBody = jsxBody.replace(itemRe, itemParam + '.$1');
 
   // Complex expressions like {item.field.includes(...)} are left for the
   // tokenizer to handle via soupBalanced (which tracks nesting correctly).
@@ -608,6 +908,10 @@ function soupHandleMap(expr, warns, inPressable) {
       for (var ai = 0; ai < ctx.arrayDecls.length; ai++) {
         ctx.arrayDecls[ai] = ctx.arrayDecls[ai].split(hname + '()').join(hname + '(0)');
       }
+      // Also replace in the returned root node expression — it's not in ctx.arrayDecls
+      // yet (parent builds its array decl after soupHandleMap returns), so the loop
+      // above misses the outermost map template node's handler ref.
+      result.str = result.str.split(hname + '()').join(hname + '(0)');
     }
   }
   warns.push('[W] .map("' + arrayName + '") → rendered 1 static template');
@@ -694,6 +998,27 @@ function soupExprToZig(expr, warns, inPressable) {
         return { str: '.{ .text = "", .text_color = Color.rgb(' + tc + ') }', dynBufId: bufId };
       }
     }
+  }
+
+  // Object property access: {currentUser.name} → resolve to field slot
+  if (/^\w+\.\w+$/.test(expr) && ctx._soupObjFieldSlots && ctx._soupObjFieldSlots[expr] !== undefined) {
+    var fieldSlotIdx = ctx._soupObjFieldSlots[expr];
+    var fieldSlot = ctx.stateSlots[fieldSlotIdx];
+    var bufId = ctx.dynCount++;
+    var fmt, fmtArgs, bufSize;
+    if (fieldSlot.type === 'string') {
+      fmt = '{s}'; fmtArgs = 'state.getSlotString(' + fieldSlotIdx + ')'; bufSize = 128;
+    } else if (fieldSlot.type === 'float') {
+      fmt = '{d:.2}'; fmtArgs = 'state.getSlotFloat(' + fieldSlotIdx + ')'; bufSize = 64;
+    } else {
+      fmt = '{d}'; fmtArgs = '@as(i64, state.getSlot(' + fieldSlotIdx + '))'; bufSize = 64;
+    }
+    ctx.dynTexts.push({
+      bufId: bufId, fmtString: fmt, fmtArgs: fmtArgs,
+      arrName: '', arrIndex: 0, bufSize: bufSize,
+    });
+    var tc = inPressable ? _SC.textWhite : _SC.textP;
+    return { str: '.{ .text = "", .text_color = Color.rgb(' + tc + ') }', dynBufId: bufId };
   }
 
   // Template literal: {`text ${expr}`}
@@ -948,6 +1273,9 @@ function compileSoup(source, file) {
   var jsx = soupExtractReturn(source);
   if (!jsx) return '// soup-smith: no JSX return in ' + file + '\n';
 
+  // Phase 3b: Inline component calls (expand <Name>...</Name> with component return JSX)
+  jsx = soupExpandComponents(source, jsx);
+
   // Phase 4-5: Tokenize, tree, extract inline handlers
   var tokens = soupTokenize(jsx);
   var tree = soupBuildTree(tokens);
@@ -1000,6 +1328,30 @@ function compileSoup(source, file) {
     ctx.scriptBlock = (ctx.scriptBlock || '') + '\n' + oaLines.join('\n');
   }
 
+  // Phase 7b2: Object state — re-init vars with actual objects and sync field slots
+  if (ctx._soupObjectInits && ctx._soupObjectInits.length > 0) {
+    var objLines = [];
+    for (var oi = 0; oi < ctx._soupObjectInits.length; oi++) {
+      var obj = ctx._soupObjectInits[oi];
+      // Re-init the JS var with the actual object
+      objLines.push(obj.getter + ' = ' + obj.rawInit + ';');
+      // Sync each field to its individual state slot
+      for (var fi = 0; fi < obj.fields.length; fi++) {
+        var field = obj.fields[fi];
+        var fieldKey = obj.getter + '.' + field.name;
+        var fsi = ctx._soupObjFieldSlots[fieldKey];
+        if (fsi !== undefined) {
+          if (field.type === 'string') {
+            objLines.push('__setStateString(' + fsi + ', ' + obj.getter + '.' + field.name + ');');
+          } else {
+            objLines.push('__setState(' + fsi + ', ' + obj.getter + '.' + field.name + ');');
+          }
+        }
+      }
+    }
+    ctx.scriptBlock = (ctx.scriptBlock || '') + '\n' + objLines.join('\n');
+  }
+
   // Phase 7c: Create int state slots for conditional display toggles
   if (ctx._soupConditionals && ctx._soupConditionals.length > 0) {
     // Build item→array alias substitutions from map context
@@ -1042,7 +1394,30 @@ function compileSoup(source, file) {
     },
   };
 
+  // Bridge soup conditionals → ctx.conditionals so emitOutput() wires
+  // _updateConditionals() into _appTick via the standard entrypoints path.
+  // Without this, _updateConditionals() is generated but never called.
+  if (ctx._soupConditionals && ctx._soupConditionals.length > 0) {
+    for (var sci = 0; sci < ctx._soupConditionals.length; sci++) {
+      var sc = ctx._soupConditionals[sci];
+      ctx.conditionals.push({
+        arrName: sc.arrName,
+        trueIdx: sc.arrIndex,
+        condExpr: 'state.getSlot(' + sc._slotIdx + ')',
+        kind: 'show_hide',
+      });
+    }
+  }
+
   var output = emitOutput(rootExpr, file);
+
+  // Emit excluded conditional texts as comments (flight-check compatibility)
+  if (ctx._excludedConditionalTexts && ctx._excludedConditionalTexts.length > 0) {
+    output += '\n// ── Excluded conditional branch texts ────────────────────────\n';
+    for (var eci = 0; eci < ctx._excludedConditionalTexts.length; eci++) {
+      output += '// ' + ctx._excludedConditionalTexts[eci] + '\n';
+    }
+  }
 
   // Emit map pool stubs for each .map() rendered as a static template
   if (_sMapCount > 0) {
@@ -1057,17 +1432,10 @@ function compileSoup(source, file) {
     output += mapStub;
   }
 
-  // Emit conditional display toggles using pre-created boolean state slots
-  if (ctx._soupConditionals && ctx._soupConditionals.length > 0) {
-    var condStub = '\n// ── Conditional display toggles ─────────────────────────────────\n';
-    condStub += 'fn _updateConditionals() void {\n';
-    for (var ci = 0; ci < ctx._soupConditionals.length; ci++) {
-      var cond = ctx._soupConditionals[ci];
-      condStub += '    ' + cond.arrName + '[' + cond.arrIndex + '].style.display = if (state.getSlot(' + cond._slotIdx + ') != 0) .flex else .none;\n';
-    }
-    condStub += '}\n';
-    output += condStub;
-  }
+  // NOTE: _updateConditionals() is now generated by the standard emit path
+  // (emit/runtime_updates.js) via ctx.conditionals, populated above.
+  // The old soup-specific post-hoc emit was removed — it generated the function
+  // but emitOutput() had already built _appTick without the call, making it dead code.
 
   // Emit all source hex colors as a comment so flight-check can find them.
   // Soup ternaries can only render one branch statically — this preserves

@@ -13,13 +13,13 @@
 //   and a [MAX][]const u8 slice array. Inline maps get 3D arrays
 //   [outer][inner][256]u8 for the extra nesting dimension.
 
-function applies(ctx, meta) {
+function _a024_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
   return ctx.dynTexts.some(function(dt) { return dt.inMap; });
 }
 
-function emit(ctx, meta) {
+function _a024_emit(ctx, meta) {
   var mapOrder = meta._mapOrder;
   if (!mapOrder) return '';
 
@@ -58,13 +58,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[24] = {
   id: 24,
   name: 'map_dynamic_text_storage',
   group: 'maps_zig',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/map_pools.js',
-  applies: applies,
-  emit: emit,
+  applies: _a024_applies,
+  emit: _a024_emit,
 };

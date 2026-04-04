@@ -46,8 +46,28 @@
 //   map callbacks.
 
 function match(c, ctx) {
-  // Detection: map callback starts with ({ ... }) => or function({ ... })
-  // The map header parser handles this via readMapParamList.
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() !== TK.lparen) break;
+      c.advance(); // skip (
+      // Check if callback param starts with ( then {  — destructured
+      if (c.kind() === TK.lparen) {
+        c.advance(); // skip inner (
+        if (c.kind() === TK.lbrace) { c.restore(saved); return true; }
+      }
+      // Also match ({ directly (arrow fn shorthand)
+      if (c.kind() === TK.lbrace) { c.restore(saved); return true; }
+      break;
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

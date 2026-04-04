@@ -47,14 +47,19 @@
 //   d108_ternary_component_in_map.tsz, d17_map_conditional_card.tsz
 
 function match(c, ctx) {
-  // Inside a map body, the return expression is a ternary.
-  // Detection: after consuming the map header and arrow/return,
-  // the next expression is: expr ? <JSX> : <JSX>
-  //
-  // In practice, parseJSXElement is called for the map body,
-  // and when it encounters a ternary at the top level of a brace
-  // expression inside the map template, brace/ternary.js handles it.
-  // This pattern file documents the structural match.
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  while (c.kind() === TK.dot && c.pos + 1 < c.count) {
+    c.advance(); // skip .
+    if (c.kind() === TK.identifier && c.text() === 'map') {
+      c.advance(); // skip 'map'
+      if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    }
+    if (c.kind() !== TK.identifier) break;
+    c.advance(); // skip field name
+  }
+  c.restore(saved);
   return false;
 }
 

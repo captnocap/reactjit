@@ -17,27 +17,23 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
     const propName = c.text();
     c.advance();
 
-    let colorLhs = null;
-    let colorLhsIsString = false;
-    if (isGetter(propName)) {
-      const slotIndex = findSlot(propName);
-      colorLhs = slotGet(propName);
-      colorLhsIsString = slotIndex >= 0 && ctx.stateSlots[slotIndex].type === 'string';
-    } else if (ctx.currentMap && propName === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+    var colorLhs = null;
+    var colorLhsIsString = false;
+    var _lhsResolved = resolveIdentity(propName, ctx);
+    if (_lhsResolved.kind === 'slot') {
+      colorLhs = _lhsResolved.zigExpr;
+      colorLhsIsString = _lhsResolved.slot && _lhsResolved.slot.type === 'string';
+    } else if (_lhsResolved.kind === 'map_item' && c.kind() === TK.dot) {
       c.advance();
       if (c.kind() === TK.identifier) {
-        const field = c.text();
+        var lhsField = c.text();
         c.advance();
-        const oa = ctx.currentMap.oa;
-        const fieldInfo = oa ? oa.fields.find(f => f.name === field) : null;
-        if (fieldInfo) {
-          colorLhs = `_oa${oa.oaIdx}_${field}[_i]`;
-          colorLhsIsString = fieldInfo.type === 'string';
-          if (colorLhsIsString) colorLhs = `${colorLhs}[0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
-        }
+        var lhsFieldResult = resolveField(_lhsResolved, lhsField, ctx);
+        colorLhs = lhsFieldResult.zigExpr;
+        colorLhsIsString = lhsFieldResult.type === 'string';
       }
-    } else if (ctx.propStack && ctx.propStack[propName] !== undefined) {
-      const propVal = ctx.propStack[propName];
+    } else if (_lhsResolved.kind === 'prop') {
+      var propVal = _lhsResolved.zigExpr;
       if (typeof propVal === 'string') {
         colorLhs = propVal;
         colorLhsIsString = propVal.includes('getSlotString') || (propVal.includes('[0..') && propVal.includes('_lens'));
@@ -49,8 +45,8 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
       c.advance();
       if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
 
-      let rhs = '';
-      let rhsIsString = false;
+      var rhs = '';
+      var rhsIsString = false;
       if (c.kind() === TK.number) {
         rhs = c.text();
         c.advance();
@@ -59,32 +55,26 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
         c.advance();
         rhsIsString = true;
       } else if (c.kind() === TK.identifier) {
-        const name = c.text();
+        var rhsName = c.text();
         c.advance();
-        if (isGetter(name)) {
-          rhs = slotGet(name);
-        } else if (ctx.currentMap && name === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+        var _rhsResolved = resolveIdentity(rhsName, ctx);
+        if (_rhsResolved.kind === 'slot') {
+          rhs = _rhsResolved.zigExpr;
+        } else if (_rhsResolved.kind === 'map_item' && c.kind() === TK.dot) {
           c.advance();
           if (c.kind() === TK.identifier) {
-            const field = c.text();
+            var rhsField = c.text();
             c.advance();
-            const oa = ctx.currentMap.oa;
-            const fieldInfo = oa ? oa.fields.find(f => f.name === field) : null;
-            if (fieldInfo && fieldInfo.type === 'string') {
-              rhs = `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
-              rhsIsString = true;
-            } else if (fieldInfo) {
-              rhs = `_oa${oa.oaIdx}_${field}[_i]`;
-            } else {
-              rhs = name + '.' + field;
-            }
+            var rhsFieldResult = resolveField(_rhsResolved, rhsField, ctx);
+            rhs = rhsFieldResult.zigExpr;
+            rhsIsString = rhsFieldResult.type === 'string';
           }
-        } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-          rhs = '@as(i64, @intCast(_i))';
-        } else if (ctx.propStack && ctx.propStack[name] !== undefined && typeof ctx.propStack[name] === 'string') {
-          rhs = ctx.propStack[name];
+        } else if (_rhsResolved.kind === 'map_index' || _rhsResolved.kind === 'parent_map_index') {
+          rhs = _rhsResolved.zigExpr;
+        } else if (_rhsResolved.kind === 'prop' && typeof _rhsResolved.zigExpr === 'string') {
+          rhs = _rhsResolved.zigExpr;
         } else {
-          rhs = name;
+          rhs = rhsName;
         }
       }
 
@@ -97,10 +87,9 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
         let cond;
         if (rhsIsString || colorLhsIsString) {
           const rhsExpr = (rhs.includes('[_i]') || rhs.includes('_oa') || rhs.includes('state.get') || rhs.includes('getSlot')) ? rhs : `"${rhs}"`;
-          const eql = `std.mem.eql(u8, ${colorLhs}, ${rhsExpr})`;
-          cond = op === '!=' ? `(!${eql})` : `(${eql})`;
+          cond = resolveComparison(colorLhs, op, rhsExpr, ctx);
         } else {
-          cond = `(${colorLhs} ${op} ${rhs})`;
+          cond = resolveComparison(colorLhs, op, rhs, ctx);
         }
 
         const resolveColor = (value) => value.type === 'zig_expr' ? value.zigExpr : value.type === 'string' ? parseColor(value.value) : 'Color{}';

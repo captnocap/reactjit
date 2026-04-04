@@ -8,6 +8,7 @@ pub const layout = @import("layout.zig");
 pub const state_mod = @import("state.zig");
 pub const engine_mod = @import("engine.zig");
 pub const qjs_runtime_mod = @import("qjs_runtime.zig");
+pub const luajit_runtime_mod = @import("luajit_runtime.zig");
 
 // ── State C-ABI exports ─────────────────────────────────────────────
 
@@ -99,6 +100,21 @@ export fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void {
 }
 export fn rjit_qjs_eval_expr(expr: [*:0]const u8) void {
     qjs_runtime_mod.evalExpr(std.mem.span(expr));
+}
+export fn rjit_qjs_eval_to_string(expr: [*]const u8, expr_len: usize, buf: [*]u8, buf_len: usize) usize {
+    var arr: [256]u8 = undefined;
+    const result = qjs_runtime_mod.evalToString(expr[0..expr_len], &arr);
+    const n = @min(result.len, buf_len);
+    @memcpy(buf[0..n], result[0..n]);
+    return n;
+}
+
+// ── LuaJIT Runtime C-ABI exports ────────────────────────────────────
+export fn rjit_lua_call_global(name: [*:0]const u8) void {
+    luajit_runtime_mod.callGlobal(name);
+}
+export fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void {
+    luajit_runtime_mod.setMapWrapper(index, ptr);
 }
 
 // ── Engine C-ABI export ─────────────────────────────────────────────

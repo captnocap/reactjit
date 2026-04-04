@@ -1,7 +1,7 @@
 // ── Pattern 058: Array prop ─────────────────────────────────────
 // Index: 58
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Select options={[1, 2, 3]} />
@@ -47,8 +47,32 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // parseComponentBraceValue() collects array tokens as raw text.
-  // Valid when component inlining doesn't need typed array access.
-  // For typed array data, use OA (object array) data blocks instead.
-  return null;
+  // Array prop: { [elem, elem, ...] }
+  // Collect array elements as raw text. For typed array data, OA data blocks
+  // are the proper path. This collects the literal for component prop inlining.
+  c.advance(); // skip {
+
+  var elements = [];
+  var depth = 0;
+  c.advance(); // skip [
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.rbracket && depth === 0) break;
+    if (c.kind() === TK.lbracket) depth++;
+    if (c.kind() === TK.rbracket) { depth--; continue; }
+    if (c.kind() === TK.comma && depth === 0) { c.advance(); continue; }
+
+    // Resolve element values
+    if (c.kind() === TK.identifier && isGetter(c.text())) {
+      elements.push(slotGet(c.text()));
+    } else if (c.kind() === TK.string) {
+      elements.push(c.text().slice(1, -1));
+    } else {
+      elements.push(c.text());
+    }
+    c.advance();
+  }
+  if (c.kind() === TK.rbracket) c.advance(); // skip ]
+  if (c.kind() === TK.rbrace) c.advance(); // skip }
+
+  return { value: elements, array: true };
 }

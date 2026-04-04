@@ -1,7 +1,7 @@
 // ── Pattern 127: 'prop' in obj ──────────────────────────────────
 // Index: 127
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {'url' in item && <Image source={{uri: item.url}} />}
@@ -48,7 +48,22 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Falls through to QuickJS eval via the conditional parser.
-  // The 'in' operator is evaluated at runtime in the JS context.
-  return null;
+  // The `in` operator is a JavaScript runtime check — no Zig equivalent.
+  // Zig structs have known fields at compile time, so property existence
+  // checks are only meaningful in the JS eval context.
+  //
+  // For OA-backed data, the field always exists (declared OA field), so
+  // the check is always true. We don't optimize that away — correctness
+  // through QuickJS eval is preferred.
+
+  // Collect: 'prop' in obj
+  var parts = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace &&
+         c.kind() !== TK.amp_amp && c.kind() !== TK.question) {
+    parts.push(c.text());
+    c.advance();
+  }
+
+  var expr = parts.join(' ');
+  return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }

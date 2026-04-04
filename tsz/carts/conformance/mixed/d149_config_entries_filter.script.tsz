@@ -1,0 +1,17 @@
+<script>
+setSettingsData({
+  permissions: {
+    defaultMode: 'default'
+  }
+});
+setChanges({
+  defaultPermissionMode: 'default',
+  verbose: true
+});
+setGlobalConfig({
+  autoCompactEnabled: true,
+  terminalProgressBarEnabled: false,
+  showTurnDuration: true,
+  respectGitignore: true
+});
+</script>

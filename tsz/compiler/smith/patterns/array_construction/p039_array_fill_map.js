@@ -1,7 +1,7 @@
 // ── Pattern 039: Array(n).fill().map() ──────────────────────────
 // Index: 39
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Array(5).fill(0).map((_, i) => (
@@ -88,8 +88,24 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. Array(n).fill().map() is a fixed-count
-  // repeat pattern. When inline, needs token-level detection.
-  // When via render local, falls through to _computedExpr path.
+  // Array(n).fill().map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no implementation:
+  //   - Array(n) is a function call, not a property access — the token sequence
+  //     starts as identifier + lparen, not identifier + dot
+  //   - _identifierStartsMapCall (brace.js) requires identifier.dot as the
+  //     first two tokens, so Array(n).fill().map() never enters map detection
+  //   - _cmIsImperative (brace.js:347) checks for 'Array.from' but not 'Array('
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const stars = Array(5).fill(0);
+  //     {stars.map((_, i) => <Star key={i} />)}
+  //   This goes through _tryParseComputedChainMap with the full expression
+  //   as _computedExpr, letting QuickJS handle Array(n).fill() at runtime.
+  //
+  // True compile-time support would extract N from Array(N), skip .fill(),
+  // and emit a simple for(0..N) loop. If N is a state variable, emit
+  // for(0..@intCast(state.getSlot(X))) with a pool size cap.
   return null;
 }

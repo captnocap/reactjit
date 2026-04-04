@@ -1078,6 +1078,7 @@ All comparisons are words. No sigils.
 | `items.where(condition)` | filter — keep items matching condition |
 | `items.without(item)` | remove current item (inside `<for>` scope) |
 | `items.concat(value)` | append, returns new collection |
+| `items.reverse` | reversed copy of the collection (e.g. back-to-front iteration) |
 | `items.length` | count |
 | `items.search(query)` | fuzzy search across all string fields of items |
 | `items.regex(pattern)` | regex match across all string fields of items |

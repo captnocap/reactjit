@@ -8,12 +8,12 @@
 // Trigger: every emitOutput() call.
 // Output target: std/build_options/IS_LIB/layout/Node/Style/Color/core imports.
 
-function applies(ctx, meta) {
+function _a002_applies(ctx, meta) {
   void ctx;
   return typeof meta.prefix === 'string';
 }
 
-function emit(ctx, meta) {
+function _a002_emit(ctx, meta) {
   void ctx;
   var out = 'const std = @import("std");\n';
   if (meta.fastBuild) {
@@ -31,13 +31,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[2] = {
   id: 2,
   name: 'core_imports',
   group: 'preamble',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/preamble.js',
-  applies: applies,
-  emit: emit,
+  applies: _a002_applies,
+  emit: _a002_emit,
 };

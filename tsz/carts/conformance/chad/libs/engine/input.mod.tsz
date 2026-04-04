@@ -10,15 +10,15 @@
     <MouseState>
       x is 0
       y is 0
-      leftDown is false
-      rightDown is false
+      left_down is false
+      right_down is false
     </MouseState>
 
     <KeyState>
       shift is false
       ctrl is false
       alt is false
-      lastKey is ''
+      last_key is ''
     </KeyState>
 
     <TouchState>
@@ -30,16 +30,10 @@
   </types>
 
   <var>
-    mouse is MouseState
-    keys is KeyState
-    touch is TouchState
+    set_mouse is MouseState
+    set_keys is KeyState
+    set_touch is TouchState
   </var>
-
-  <state>
-    set_mouse
-    set_keys
-    set_touch
-  </state>
 
   <functions>
     handleEvent(event):
@@ -49,13 +43,13 @@
           mouse.y is event.y
         </case>
         <case mousedown>
-          mouse.leftDown is true
+          mouse.left_down is true
         </case>
         <case mouseup>
-          mouse.leftDown is false
+          mouse.left_down is false
         </case>
         <case keydown>
-          keys.lastKey is event.key
+          keys.last_key is event.key
           <if event.key exact 'shift'>
             keys.shift is true
           </if>
@@ -83,6 +77,6 @@
       </switch>
 
     isKeyDown(key):
-      keys.lastKey exact key
+      keys.last_key exact key
   </functions>
 </input>

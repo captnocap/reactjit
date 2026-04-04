@@ -49,8 +49,27 @@
 //   collectComponents. The `ref` parameter is ignored.
 
 function match(c, ctx) {
-  // Not applicable — forwardRef is stripped during component collection.
-  // The inner function is parsed as a normal component.
+  // Detect: forwardRef( or React.forwardRef(
+  if (c.kind() !== TK.identifier) return false;
+  var saved = c.save();
+  var name = c.text();
+  if (name === 'forwardRef') {
+    c.advance();
+    if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    c.restore(saved);
+    return false;
+  }
+  if (name === 'React') {
+    c.advance(); // skip React
+    if (c.kind() !== TK.dot) { c.restore(saved); return false; }
+    c.advance(); // skip .
+    if (c.kind() !== TK.identifier || c.text() !== 'forwardRef') { c.restore(saved); return false; }
+    c.advance(); // skip forwardRef
+    if (c.kind() === TK.lparen) { c.restore(saved); return true; }
+    c.restore(saved);
+    return false;
+  }
+  c.restore(saved);
   return false;
 }
 

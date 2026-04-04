@@ -28,6 +28,16 @@ function emitPreamble(meta) {
       out += `} else @import("${meta.prefix}qjs_runtime.zig");\n`;
     }
   }
+  if (meta.hasLuaMaps) {
+    if (meta.fastBuild) {
+      out += `const luajit_runtime = api.luajit_runtime;\n`;
+    } else {
+      out += `const luajit_runtime = if (IS_LIB) struct {\n`;
+      out += `    pub fn callGlobal(_: [*:0]const u8) void {}\n`;
+      out += `    pub fn setMapWrapper(_: usize, _: *anyopaque) void {}\n`;
+      out += `} else @import("${meta.prefix}luajit_runtime.zig");\n`;
+    }
+  }
   // Ensure core.zig export symbols (rjit_state_*) are in the link unit for monolithic builds
   if (!meta.fastBuild) {
     out += `comptime { _ = @import("${meta.prefix}core.zig"); }\n`;

@@ -1,7 +1,7 @@
 // ── Pattern 042: Object.keys().map() ───────────────────────────
 // Index: 42
 // Group: array_construction
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {Object.keys(obj).map((k) => (
@@ -66,6 +66,24 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled only through the render-local computed-map path today.
+  // Object.keys().map() is NOT supported inline by Smith's map pipeline.
+  //
+  // Why no inline support:
+  //   - The head expression is Object.keys(...) — the chain detector sees
+  //     'Object' as the identifier and 'keys' after the dot, which does not
+  //     match the expected chain pattern (identifier.filter/sort/slice/map)
+  //
+  // Workaround (fully functional):
+  //   Assign to a render local first:
+  //     const keys = Object.keys(obj);
+  //     {keys.map(k => <Text>{k}</Text>)}
+  //   _tryParseIdentifierMapExpression sees 'keys', notices the render-local
+  //   raw JS, and _tryParseComputedChainMap creates a computed OA. This
+  //   produces a simple string array where bare k resolves to text children
+  //   via _oa0__v[_i][0.._oa0__v_lens[_i]].
+  //
+  // Prop passthrough of bare item values is weaker than text rendering in
+  // simple-array maps; the resolver primarily treats bare item params as
+  // index-like unless they arrive through render-local aliases.
   return null;
 }

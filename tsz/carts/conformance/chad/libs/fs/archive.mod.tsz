@@ -6,55 +6,47 @@
     files
   </uses>
 
-  <ffi>
-    zip_open    @("libzip.so")
-    zip_close   @("libzip.so")
-    zip_count   @("libzip.so", "zip_get_num_entries")
-    zip_name    @("libzip.so", "zip_get_name")
-    zip_read    @("libzip.so", "zip_fread")
-    zip_add     @("libzip.so", "zip_file_add")
-  </ffi>
-
-  <types>
-    <ArchiveEntry>
-      name exact string
-      size is 0
-      index is 0
-    </ArchiveEntry>
-  </types>
+  <libzip ffi>
+    open
+    close
+    count
+    name
+    read
+    add
+  </libzip>
 
   <functions>
     list(path):
       entries is array
-      <if zip_open(path) as archive>
-        count is zip_count(archive)
-        <for 0..count as i>
-          name is zip_name(archive, i)
-          entries is entries.concat(name)
+      <if libzip.open(path) as archive>
+        total is libzip.count(archive)
+        <for 0..total as i>
+          entry_name is libzip.name(archive, i)
+          entries is entries.concat(entry_name)
         </for>
-        zip_close(archive)
+        libzip.close(archive)
       </if>
       entries
 
-    extract(archivePath, destPath):
-      <if zip_open(archivePath) as archive>
-        count is zip_count(archive)
-        <for 0..count as i>
-          name is zip_name(archive, i)
-          data is zip_read(archive, i)
-          files.write(destPath + '/' + name, data)
+    extract(archive_path, dest_path):
+      <if libzip.open(archive_path) as archive>
+        total is libzip.count(archive)
+        <for 0..total as i>
+          entry_name is libzip.name(archive, i)
+          data is libzip.read(archive, i)
+          files.write(dest_path + '/' + entry_name, data)
         </for>
-        zip_close(archive)
+        libzip.close(archive)
       </if>
 
-    create(archivePath, filePaths):
-      <if zip_open(archivePath) as archive>
-        <for filePaths as path>
+    create(archive_path, file_paths):
+      <if libzip.open(archive_path) as archive>
+        <for file_paths as path>
           <if files.read(path) as data>
-            zip_add(archive, path, data)
+            libzip.add(archive, path, data)
           </if>
         </for>
-        zip_close(archive)
+        libzip.close(archive)
       </if>
   </functions>
 </archive>

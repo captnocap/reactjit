@@ -24,13 +24,13 @@
 //   are promoted to per-item arrays. Map-scoped entries are handled
 //   inside _rebuildMapN() instead.
 
-function applies(ctx, meta) {
+function _a035_applies(ctx, meta) {
   void meta;
   // _updateDynamicTexts is always emitted (even if body is empty)
   return !!ctx;
 }
 
-function emit(ctx, meta) {
+function _a035_emit(ctx, meta) {
   var promotedToPerItem = meta.promotedToPerItem || new Set();
   var mapPoolArrayNames = new Set();
   for (var mi = 0; mi < ctx.maps.length; mi++) {
@@ -98,13 +98,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[35] = {
   id: 35,
   name: 'dynamic_text_updates',
   group: 'logic_runtime',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/runtime_updates.js',
-  applies: applies,
-  emit: emit,
+  applies: _a035_applies,
+  emit: _a035_emit,
 };

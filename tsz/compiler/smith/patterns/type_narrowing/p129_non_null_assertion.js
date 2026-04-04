@@ -38,10 +38,10 @@
 //   that doesn't apply to the .tsz compilation model.
 
 function match(c, ctx) {
-  // Non-null assertion is a TypeScript feature. In Smith's lexer,
-  // ! is TK.bang (logical NOT), so user!.name would be misparse.
-  // This pattern documents why it's not supported.
-  return false;
+  // identifier!.field — TypeScript non-null assertion
+  if (c.kind() !== TK.identifier) return false;
+  if (c.pos + 2 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.bang && c.kindAt(c.pos + 2) === TK.dot;
 }
 
 function compile(c, ctx) {

@@ -28,7 +28,14 @@
 //   Status is "complete" because dropping with a warning is correct.
 
 function match(c, ctx) {
-  return false;
+  // className={[...].join(' ')}
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t !== 'className' && t !== 'class') return false;
+  if (c.pos + 3 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.equals &&
+         c.kindAt(c.pos + 2) === TK.lbrace &&
+         c.kindAt(c.pos + 3) === TK.lbracket;
 }
 
 function compile(c, ctx) {

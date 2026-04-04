@@ -8,7 +8,7 @@
 // Trigger: ctx.dynTexts contains non-map runtime text slots.
 // Output target: _dyn_buf_* and _dyn_text_* declarations.
 
-function applies(ctx, meta) {
+function _a008_applies(ctx, meta) {
   void meta;
   if (!ctx.dynTexts) return false;
   for (var i = 0; i < ctx.dynTexts.length; i++) {
@@ -18,7 +18,7 @@ function applies(ctx, meta) {
   return false;
 }
 
-function emit(ctx, meta) {
+function _a008_emit(ctx, meta) {
   void meta;
   var nonMapDynTexts = ctx.dynTexts.filter(function(dt) { return !dt.inMap; });
   var out = '\n// \u2500\u2500 Dynamic text buffers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
@@ -39,13 +39,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[8] = {
   id: 8,
   name: 'dynamic_text_buffers',
   group: 'state_tree',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/dyn_text.js',
-  applies: applies,
-  emit: emit,
+  applies: _a008_applies,
+  emit: _a008_emit,
 };

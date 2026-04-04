@@ -8,12 +8,12 @@
 // Trigger: every app emit.
 // Output target: _appTick() runtime refresh and Lua/JS tick orchestration.
 
-function applies(ctx, meta) {
+function _a040_applies(ctx, meta) {
   void ctx; void meta;
   return true;
 }
 
-function emit(ctx, meta) {
+function _a040_emit(ctx, meta) {
   var hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 
   var out = 'fn _appTick(now: u32) void {\n    _ = now;\n';
@@ -46,13 +46,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[40] = {
   id: 40,
   name: 'app_tick',
   group: 'entry',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js',
-  applies: applies,
-  emit: emit,
+  applies: _a040_applies,
+  emit: _a040_emit,
 };

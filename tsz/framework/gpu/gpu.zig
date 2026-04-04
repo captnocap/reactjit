@@ -19,13 +19,18 @@ const curves = @import("curves.zig");
 const polys = @import("polys.zig");
 pub const images = @import("images.zig");
 const scene3d = @import("3d.zig");
+const log = @import("../log.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Re-exports — callers use gpu.drawRect(), gpu.RectInstance, etc.
 // ════════════════════════════════════════════════════════════════════════
 
 pub const drawRect = rects.drawRect;
+pub const drawRectCorners = rects.drawRectCorners;
+pub const drawRectCornersTransformed = rects.drawRectCornersTransformed;
 pub const drawRectTransformed = rects.drawRectTransformed;
+pub const drawRectShadow = rects.drawRectShadow;
+pub const drawRectGradient = rects.drawRectGradient;
 pub const drawTextLine = text.drawTextLine;
 pub const drawTextWrapped = text.drawTextWrapped;
 pub const drawSelectionRects = text.drawSelectionRects;
@@ -240,7 +245,7 @@ pub fn getGlobalsBuffer() ?*wgpu.Buffer {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Scissor rect segments — for overflow clipping
+// Draw boundaries — scissor transitions + image/effect z-order breaks
 // ════════════════════════════════════════════════════════════════════════
 
 const ScissorSegment = struct {
@@ -252,9 +257,10 @@ const ScissorSegment = struct {
     glyph_start: u32,
     curve_start: u32,
     poly_start: u32,
+    image_start: u32,
 };
 
-const MAX_SCISSOR_SEGMENTS = 64;
+const MAX_SCISSOR_SEGMENTS = 768;
 var g_scissor_segments: [MAX_SCISSOR_SEGMENTS]ScissorSegment = undefined;
 var g_scissor_count: usize = 0;
 
@@ -262,6 +268,42 @@ var g_scissor_count: usize = 0;
 const MAX_SCISSOR_STACK = 16;
 var g_scissor_stack: [MAX_SCISSOR_STACK]ScissorSegment = undefined;
 var g_scissor_depth: usize = 0;
+
+fn sameBoundary(a: ScissorSegment, b: ScissorSegment) bool {
+    return a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h and
+        a.rect_start == b.rect_start and a.glyph_start == b.glyph_start and
+        a.curve_start == b.curve_start and a.poly_start == b.poly_start and
+        a.image_start == b.image_start;
+}
+
+fn recordBoundary(x: u32, y: u32, w: u32, h: u32, image_start: u32) void {
+    if (g_scissor_count >= MAX_SCISSOR_SEGMENTS) return;
+
+    const seg = ScissorSegment{
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+        .rect_start = @intCast(rects.count()),
+        .glyph_start = @intCast(text.count()),
+        .curve_start = @intCast(curves.count()),
+        .poly_start = @intCast(polys.count()),
+        .image_start = image_start,
+    };
+
+    if (g_scissor_count > 0 and sameBoundary(g_scissor_segments[g_scissor_count - 1], seg)) return;
+    g_scissor_segments[g_scissor_count] = seg;
+    g_scissor_count += 1;
+}
+
+pub fn recordImageBoundary(image_start: u32) void {
+    if (g_scissor_depth > 0) {
+        const clip = g_scissor_stack[g_scissor_depth - 1];
+        recordBoundary(clip.x, clip.y, clip.w, clip.h, image_start);
+    } else {
+        recordBoundary(0, 0, g_width, g_height, image_start);
+    }
+}
 
 pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
     // Floor position, ceil the far edge, so the scissor fully contains the
@@ -298,22 +340,13 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
     if (sy + sh > g_height) sh = g_height - sy;
 
     // Record segment boundary
-    if (g_scissor_count < MAX_SCISSOR_SEGMENTS) {
-        g_scissor_segments[g_scissor_count] = .{
-            .x = sx, .y = sy, .w = sw, .h = sh,
-            .rect_start = @intCast(rects.count()),
-            .glyph_start = @intCast(text.count()),
-            .curve_start = @intCast(curves.count()),
-            .poly_start = @intCast(polys.count()),
-        };
-        g_scissor_count += 1;
-    }
+    recordBoundary(sx, sy, sw, sh, @intCast(images.count()));
 
     // Push to stack
     if (g_scissor_depth < MAX_SCISSOR_STACK) {
         g_scissor_stack[g_scissor_depth] = .{
             .x = sx, .y = sy, .w = sw, .h = sh,
-            .rect_start = 0, .glyph_start = 0, .curve_start = 0, .poly_start = 0,
+            .rect_start = 0, .glyph_start = 0, .curve_start = 0, .poly_start = 0, .image_start = 0,
         };
         g_scissor_depth += 1;
     }
@@ -323,26 +356,11 @@ pub fn popScissor() void {
     if (g_scissor_depth > 0) g_scissor_depth -= 1;
 
     // Record segment boundary for parent scissor (or full viewport)
-    if (g_scissor_count < MAX_SCISSOR_SEGMENTS) {
-        if (g_scissor_depth > 0) {
-            const parent = g_scissor_stack[g_scissor_depth - 1];
-            g_scissor_segments[g_scissor_count] = .{
-                .x = parent.x, .y = parent.y, .w = parent.w, .h = parent.h,
-                .rect_start = @intCast(rects.count()),
-                .glyph_start = @intCast(text.count()),
-                .curve_start = @intCast(curves.count()),
-                .poly_start = @intCast(polys.count()),
-            };
-        } else {
-            g_scissor_segments[g_scissor_count] = .{
-                .x = 0, .y = 0, .w = g_width, .h = g_height,
-                .rect_start = @intCast(rects.count()),
-                .glyph_start = @intCast(text.count()),
-                .curve_start = @intCast(curves.count()),
-                .poly_start = @intCast(polys.count()),
-            };
-        }
-        g_scissor_count += 1;
+    if (g_scissor_depth > 0) {
+        const parent = g_scissor_stack[g_scissor_depth - 1];
+        recordBoundary(parent.x, parent.y, parent.w, parent.h, @intCast(images.count()));
+    } else {
+        recordBoundary(0, 0, g_width, g_height, @intCast(images.count()));
     }
 }
 
@@ -645,16 +663,21 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const total_glyphs: u32 = @intCast(text.count());
     const total_curves: u32 = @intCast(curves.count());
     const total_polys: u32 = @intCast(polys.count());
+    const total_images: u32 = @intCast(images.count());
+    log.info(.gpu, "frame dims={d}x{d} rects={d} glyphs={d} curves={d} polys={d} images={d} boundaries={d}", .{
+        g_width, g_height, total_rects, total_glyphs, total_curves, total_polys, total_images, g_scissor_count,
+    });
 
     if (g_scissor_count == 0) {
-        // Fast path — no clip rects, single draw for all primitives
+        // Fast path — no clip or ordering boundaries, single draw for all primitives
         render_pass.setScissorRect(0, 0, g_width, g_height);
         rects.drawBatch(render_pass, 0, total_rects);
         text.drawBatch(render_pass, 0, total_glyphs);
         curves.drawBatch(render_pass, 0, total_curves);
         polys.drawBatch(render_pass, 0, total_polys);
+        images.drawBatch(render_pass, 0, total_images);
     } else {
-        // Scissor-segmented rendering
+        // Boundary-segmented rendering
         var segments: [MAX_SCISSOR_SEGMENTS + 1]ScissorSegment = undefined;
         const seg_count = g_scissor_count;
         @memcpy(segments[0..seg_count], g_scissor_segments[0..seg_count]);
@@ -663,6 +686,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         var prev_glyph: u32 = 0;
         var prev_curve: u32 = 0;
         var prev_poly: u32 = 0;
+        var prev_image: u32 = 0;
         var prev_sx: u32 = 0;
         var prev_sy: u32 = 0;
         var prev_sw: u32 = g_width;
@@ -674,19 +698,22 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
             const glyph_end = seg.glyph_start;
             const curve_end = seg.curve_start;
             const poly_end = seg.poly_start;
+            const image_end = seg.image_start;
 
-            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve or poly_end > prev_poly) {
+            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve or poly_end > prev_poly or image_end > prev_image) {
                 render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
                 if (rect_end > prev_rect) rects.drawBatch(render_pass, prev_rect, rect_end);
                 if (glyph_end > prev_glyph) text.drawBatch(render_pass, prev_glyph, glyph_end);
                 if (curve_end > prev_curve) curves.drawBatch(render_pass, prev_curve, curve_end);
                 if (poly_end > prev_poly) polys.drawBatch(render_pass, prev_poly, poly_end);
+                if (image_end > prev_image) images.drawBatch(render_pass, prev_image, image_end);
             }
 
             prev_rect = rect_end;
             prev_glyph = glyph_end;
             prev_curve = curve_end;
             prev_poly = poly_end;
+            prev_image = image_end;
             prev_sx = seg.x;
             prev_sy = seg.y;
             prev_sw = seg.w;
@@ -694,20 +721,14 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
 
         // Draw remaining after last segment
-        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve or total_polys > prev_poly) {
+        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve or total_polys > prev_poly or total_images > prev_image) {
             render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
             if (total_rects > prev_rect) rects.drawBatch(render_pass, prev_rect, total_rects);
             if (total_glyphs > prev_glyph) text.drawBatch(render_pass, prev_glyph, total_glyphs);
             if (total_curves > prev_curve) curves.drawBatch(render_pass, prev_curve, total_curves);
             if (total_polys > prev_poly) polys.drawBatch(render_pass, prev_poly, total_polys);
+            if (total_images > prev_image) images.drawBatch(render_pass, prev_image, total_images);
         }
-    }
-
-    // Image/video quads — drawn after rect/text/curve with full viewport scissor.
-    // Not scissor-segmented (v1 limitation — videos ignore overflow:hidden).
-    if (images.count() > 0) {
-        render_pass.setScissorRect(0, 0, g_width, g_height);
-        images.drawAll(render_pass);
     }
 
     render_pass.end();
@@ -731,7 +752,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         _ = device.poll(true, null);
     }
 
-    // Release deferred 3D render targets (must happen after images.drawAll, before reset)
+    // Release deferred 3D render targets after image compositing, before reset
     scene3d.frameCleanup();
 
     // Reset for next frame

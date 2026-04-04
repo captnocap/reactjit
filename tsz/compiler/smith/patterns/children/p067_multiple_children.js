@@ -28,8 +28,51 @@
 //     [_]Node{ .{ .text = "a" }, .{ .text = "b" }, .{ .text = "c" } }
 
 function match(c, ctx) {
-  // Structural pattern decided after parseChildren() returns >1 child.
-  return false;
+  // Peek: <Tag ...> then count top-level children until </
+  if (c.kind() !== TK.lt) return false;
+  var saved = c.save();
+  c.advance(); // skip <
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance(); // skip tag name
+  // Skip attributes until > or />
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.slash_gt) { c.restore(saved); return false; } // self-closing, no children
+    if (c.kind() === TK.gt) { c.advance(); break; }
+    c.advance();
+  }
+  // Count top-level children
+  var childCount = 0;
+  var depth = 1;
+  while (c.kind() !== TK.eof && depth > 0) {
+    if (c.kind() === TK.lt_slash) {
+      depth--;
+      if (depth === 0) break;
+      c.advance();
+      if (c.kind() === TK.identifier) c.advance();
+      if (c.kind() === TK.gt) c.advance();
+      continue;
+    }
+    if (c.kind() === TK.lt && depth === 1) {
+      childCount++;
+      depth++;
+      c.advance();
+      continue;
+    }
+    if (c.kind() === TK.lbrace && depth === 1) {
+      childCount++;
+      var braceDepth = 1;
+      c.advance();
+      while (c.kind() !== TK.eof && braceDepth > 0) {
+        if (c.kind() === TK.lbrace) braceDepth++;
+        if (c.kind() === TK.rbrace) braceDepth--;
+        c.advance();
+      }
+      continue;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return childCount > 1;
 }
 
 function compile(c, ctx) {

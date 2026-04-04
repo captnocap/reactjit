@@ -33,8 +33,52 @@
 //     [_]Node{ .{ .text = "hi" }, .{ .text = "Ada" }, .{ .text = "!" } }
 
 function match(c, ctx) {
-  // Structural pattern decided after parseChildren() returns a mixed child list.
-  return false;
+  // Peek: <Tag ...> then check if children contain BOTH element (<) and brace ({) children
+  if (c.kind() !== TK.lt) return false;
+  var saved = c.save();
+  c.advance(); // skip <
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance(); // skip tag name
+  // Skip attributes until > or />
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.slash_gt) { c.restore(saved); return false; } // self-closing
+    if (c.kind() === TK.gt) { c.advance(); break; }
+    c.advance();
+  }
+  // Track whether we see element children and brace children
+  var hasElement = false;
+  var hasBrace = false;
+  var depth = 1;
+  while (c.kind() !== TK.eof && depth > 0) {
+    if (c.kind() === TK.lt_slash) {
+      depth--;
+      if (depth === 0) break;
+      c.advance();
+      if (c.kind() === TK.identifier) c.advance();
+      if (c.kind() === TK.gt) c.advance();
+      continue;
+    }
+    if (c.kind() === TK.lt && depth === 1) {
+      hasElement = true;
+      depth++;
+      c.advance();
+      continue;
+    }
+    if (c.kind() === TK.lbrace && depth === 1) {
+      hasBrace = true;
+      var braceDepth = 1;
+      c.advance();
+      while (c.kind() !== TK.eof && braceDepth > 0) {
+        if (c.kind() === TK.lbrace) braceDepth++;
+        if (c.kind() === TK.rbrace) braceDepth--;
+        c.advance();
+      }
+      continue;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return hasElement && hasBrace;
 }
 
 function compile(c, ctx) {

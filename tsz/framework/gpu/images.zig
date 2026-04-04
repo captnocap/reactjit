@@ -10,6 +10,7 @@ const std = @import("std");
 const wgpu = @import("wgpu");
 const shaders = @import("shaders.zig");
 const core = @import("gpu.zig");
+const log = @import("../log.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Types
@@ -48,6 +49,7 @@ var g_bind_group_layout: ?*wgpu.BindGroupLayout = null;
 /// bind_group must contain: globals uniform + texture_2d + sampler.
 pub fn queueQuad(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu.BindGroup) void {
     if (g_quad_count >= MAX_IMAGE_QUADS) return;
+    core.recordImageBoundary(@intCast(g_quad_count));
 
     // Apply canvas transform if active
     const transform = core.getTransform();
@@ -64,7 +66,13 @@ pub fn queueQuad(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu
         .opacity = opacity,
     };
     g_bind_groups[g_quad_count] = bind_group;
+    if (log.isEnabled(.gpu)) {
+        log.info(.gpu, "image queue idx={d} rect=({d:.0},{d:.0},{d:.0},{d:.0}) opacity={d:.2}", .{
+            g_quad_count, tx, ty, tw, th, opacity,
+        });
+    }
     g_quad_count += 1;
+    core.recordImageBoundary(@intCast(g_quad_count));
 }
 
 /// Get the bind group layout for creating per-image bind groups.
@@ -218,15 +226,23 @@ pub fn upload(queue: *wgpu.Queue) void {
 
 /// Draw all queued image quads. Each quad uses its own bind group (texture).
 pub fn drawAll(render_pass: *wgpu.RenderPassEncoder) void {
+    drawBatch(render_pass, 0, @intCast(g_quad_count));
+}
+
+/// Draw a contiguous range of queued image quads.
+pub fn drawBatch(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    if (start >= end) return;
     const pipeline = g_pipeline orelse return;
     const buffer = g_buffer orelse return;
 
-    for (0..g_quad_count) |i| {
+    render_pass.setPipeline(pipeline);
+    render_pass.setVertexBuffer(0, buffer, 0, g_quad_count * @sizeOf(ImageQuad));
+
+    var i = start;
+    while (i < end) : (i += 1) {
         const bg = g_bind_groups[i] orelse continue;
-        render_pass.setPipeline(pipeline);
         render_pass.setBindGroup(0, bg, 0, null);
-        render_pass.setVertexBuffer(0, buffer, 0, g_quad_count * @sizeOf(ImageQuad));
-        render_pass.draw(6, 1, 0, @intCast(i));
+        render_pass.draw(6, 1, 0, i);
     }
 }
 

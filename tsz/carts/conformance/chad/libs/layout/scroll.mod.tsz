@@ -4,43 +4,39 @@
 <scroll module>
   <types>
     <ScrollState>
-      offsetY is 0
+      offset_y is 0
       velocity is 0
-      contentHeight is 0
-      viewportHeight is 0
+      content_height is 0
+      viewport_height is 0
       dragging is false
-      lastY is 0
+      last_y is 0
     </ScrollState>
   </types>
 
   <var>
-    active is ScrollState
+    set_active is ScrollState
     friction exact 0.92
     threshold exact 0.5
   </var>
 
-  <state>
-    set_active
-  </state>
-
   <functions>
     maxScroll:
-      math.max(0, active.contentHeight - active.viewportHeight)
+      math.max(0, active.content_height - active.viewport_height)
 
     clampOffset:
-      active.offsetY is math.clamp(active.offsetY, 0, maxScroll)
+      active.offset_y is math.clamp(active.offset_y, 0, maxScroll)
 
     startDrag(y):
       active.dragging is true
-      active.lastY is y
+      active.last_y is y
       active.velocity is 0
 
     moveDrag(y):
       <if active.dragging>
-        delta is y - active.lastY
-        active.offsetY is active.offsetY - delta
-        active.velocity is -delta
-        active.lastY is y
+        delta is y - active.last_y
+        active.offset_y is active.offset_y - delta
+        active.velocity is 0 - delta
+        active.last_y is y
         clampOffset
       </if>
 
@@ -49,7 +45,7 @@
 
     applyInertia:
       <if not active.dragging and math.abs(active.velocity) above threshold>
-        active.offsetY is active.offsetY + active.velocity
+        active.offset_y is active.offset_y + active.velocity
         active.velocity is active.velocity * friction
         clampOffset
       </if>
@@ -58,7 +54,7 @@
       </else>
 
     scrollTo(offset):
-      active.offsetY is offset
+      active.offset_y is offset
       active.velocity is 0
       clampOffset
 
@@ -72,11 +68,11 @@
       applyInertia
 
     setContentHeight(h):
-      active.contentHeight is h
+      active.content_height is h
       clampOffset
 
     setViewportHeight(h):
-      active.viewportHeight is h
+      active.viewport_height is h
       clampOffset
   </functions>
 </scroll>

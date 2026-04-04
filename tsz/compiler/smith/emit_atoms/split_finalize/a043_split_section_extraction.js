@@ -21,11 +21,11 @@
 //   logic.zig    ← JS_LOGIC + LUA_LOGIC
 //   app.zig      ← update fns + init/tick + exports + main + debug
 
-function applies() {
+function _a043_applies() {
   return globalThis.__splitOutput == 1;
 }
 
-function emit(monolith) {
+function _a043_emit(monolith) {
   // ── Find section boundaries via markers + fn signatures ──
   var B = [];
   var patterns = [
@@ -79,13 +79,13 @@ function emit(monolith) {
   return F;
 }
 
-module.exports = {
+_emitAtoms[43] = {
   id: 43,
   name: 'split_section_extraction',
   group: 'split_finalize',
   target: 'split',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a043_applies,
+  emit: _a043_emit,
 };

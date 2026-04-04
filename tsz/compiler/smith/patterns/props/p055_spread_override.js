@@ -1,7 +1,7 @@
 // ── Pattern 055: Spread + override ──────────────────────────────
 // Index: 55
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <UserCard {...user} role="admin" />
@@ -56,8 +56,32 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // No special compile step — spread fills propValues,
-  // then the normal attribute loop overwrites with explicit values.
-  // See component_spread.js for the spread part.
-  return null;
+  // Spread + override is handled by left-to-right attribute parsing:
+  // 1. p054 (spread) runs first, fills propValues with OA fields
+  // 2. Subsequent explicit props overwrite matching keys
+  // No special compile step needed — this is a composition of p054 + normal props.
+  // The caller's attribute loop handles the override semantics naturally.
+  // Delegate to p054 for the spread part.
+  c.advance(); // skip {
+  c.advance(); // skip ...
+  var spreadName = c.text();
+  c.advance(); // skip identifier
+  if (c.kind() === TK.rbrace) c.advance();
+
+  if (ctx.currentMap && spreadName === ctx.currentMap.itemParam) {
+    var oa = ctx.currentMap.oa;
+    var expanded = {};
+    for (var i = 0; i < oa.fields.length; i++) {
+      var field = oa.fields[i];
+      if (field.type === 'nested_array') continue;
+      if (field.type === 'string') {
+        expanded[field.name] = '_oa' + oa.oaIdx + '_' + field.name + '[_i][0.._oa' + oa.oaIdx + '_' + field.name + '_lens[_i]]';
+      } else {
+        expanded[field.name] = '_oa' + oa.oaIdx + '_' + field.name + '[_i]';
+      }
+    }
+    return { spread: true, fields: expanded, hasOverrides: true };
+  }
+
+  return { spread: true, name: spreadName, hasOverrides: true };
 }

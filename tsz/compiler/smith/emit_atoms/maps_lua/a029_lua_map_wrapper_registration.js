@@ -13,11 +13,11 @@
 // for each Lua map rebuilder, then emits a setMapWrapper call
 // with a pointer to that node element.
 
-function applies(ctx) {
+function _a029_applies(ctx) {
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 
-function emit(ctx) {
+function _a029_emit(ctx) {
   var out = '';
   for (var lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
     // Scan arrayDecls to find the wrapper node by __lmw tag
@@ -40,13 +40,13 @@ function emit(ctx) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[29] = {
   id: 29,
   name: 'lua_map_wrapper_registration',
   group: 'maps_lua',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/entrypoints.js',
-  applies: applies,
-  emit: emit,
+  applies: _a029_applies,
+  emit: _a029_emit,
 };

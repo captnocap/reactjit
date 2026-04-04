@@ -59,9 +59,21 @@
 //   with conditional logic (p081). The refactoring is mechanical.
 
 function match(c, ctx) {
-  // Not applicable — HOCs don't exist in our compilation model.
-  // Wrapper components (p086) + conditionals (p081) replace them.
-  return false;
+  // Detect: identifier(Component) where identifier starts lowercase, Component starts uppercase
+  // e.g. withAuth(Dashboard), connect(App)
+  if (c.kind() !== TK.identifier) return false;
+  var name = c.text();
+  if (name.length === 0 || name.charCodeAt(0) < 97 || name.charCodeAt(0) > 122) return false; // must start lowercase
+  var saved = c.save();
+  c.advance(); // skip identifier
+  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.advance(); // skip (
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  var arg = c.text();
+  c.restore(saved);
+  // Argument must start with uppercase (PascalCase component)
+  if (arg.length === 0 || arg.charCodeAt(0) < 65 || arg.charCodeAt(0) > 90) return false;
+  return true;
 }
 
 function compile(c, ctx) {

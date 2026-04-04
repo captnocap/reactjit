@@ -2,14 +2,14 @@
 // Exercises: ffi, boot/shutdown, cleanup pairing, <while>, <switch>/<case else>
 
 <sdl module>
-  <ffi>
-    SDL_Init          @("libSDL3.so")
-    SDL_Quit          @("libSDL3.so")
-    SDL_CreateWindow  @("libSDL3.so")
-    SDL_DestroyWindow @("libSDL3.so")
-    SDL_PollEvent     @("libSDL3.so")
-    SDL_GetTicks      @("libSDL3.so")
-  </ffi>
+  <SDL3 ffi>
+    Init
+    Quit
+    CreateWindow
+    DestroyWindow
+    PollEvent
+    GetTicks
+  </SDL3>
 
   <types>
     <WindowConfig>
@@ -40,37 +40,31 @@
   </types>
 
   <var>
-    window
-    running is false
-    ticks is 0
-  </var>
-
-  <state>
     set_window
-    set_running
-    set_ticks
-  </state>
+    set_running is false
+    set_ticks is 0
+  </var>
 
   <functions>
     boot:
-      SDL_Init('video')
+      SDL3.Init('video')
       set_running is true
 
     boot cleanup:
-      SDL_Quit
+      SDL3.Quit
 
     createWindow(config):
-      <if SDL_CreateWindow(config.title, config.width, config.height, config.flags) as win>
+      <if SDL3.CreateWindow(config.title, config.width, config.height, config.flags) as win>
         set_window is win
       </if>
 
     createWindow cleanup:
       <if window>
-        SDL_DestroyWindow(window)
+        SDL3.DestroyWindow(window)
       </if>
 
     pollEvents(handler):
-      <while SDL_PollEvent() as event>
+      <while SDL3.PollEvent() as event>
         <switch event.type>
           <case quit>
             set_running is false
@@ -82,6 +76,6 @@
       </while>
 
     tick:
-      set_ticks is SDL_GetTicks()
+      set_ticks is SDL3.GetTicks()
   </functions>
 </sdl>

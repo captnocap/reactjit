@@ -1,7 +1,7 @@
 // ── Pattern 136: SVG in JSX ────────────────────────────────────
 // Index: 136
 // Group: misc_jsx
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <svg viewBox="0 0 24 24">

@@ -8,12 +8,12 @@
 // Trigger: ctx.objectArrays.length > 0
 // Output target: _oa_alloc, _oaDupString(), _oaFreeString().
 
-function applies(ctx, meta) {
+function _a013_applies(ctx, meta) {
   void meta;
   return ctx.objectArrays && ctx.objectArrays.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a013_emit(ctx, meta) {
   void ctx; void meta;
   var out = '';
   out += '// ── Object arrays ───────────────────────────────────────────────\n';
@@ -30,13 +30,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[13] = {
   id: 13,
   name: 'oa_string_helpers',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a013_applies,
+  emit: _a013_emit,
 };

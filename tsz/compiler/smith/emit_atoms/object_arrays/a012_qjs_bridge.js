@@ -8,12 +8,12 @@
 // Trigger: ctx.objectArrays.length > 0
 // Output target: qjs import shims and QJS_UNDEFINED sentinel.
 
-function applies(ctx, meta) {
+function _a012_applies(ctx, meta) {
   void meta;
   return ctx.objectArrays && ctx.objectArrays.length > 0;
 }
 
-function emit(ctx, meta) {
+function _a012_emit(ctx, meta) {
   void ctx;
   var out = '';
   if (meta.fastBuild) {
@@ -37,13 +37,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[12] = {
   id: 12,
   name: 'qjs_bridge',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a012_applies,
+  emit: _a012_emit,
 };

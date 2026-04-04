@@ -13,11 +13,11 @@
 // The master dispatch calls each individual __rebuildLuaMapN() in order.
 // It is invoked from Zig via luajit_runtime.callGlobal on state change.
 
-function applies(ctx) {
+function _a032_applies(ctx) {
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 
-function emit(ctx) {
+function _a032_emit(ctx) {
   var lines = [];
   lines.push('function __rebuildLuaMaps()');
   lines.push('  __clearLuaNodes()');
@@ -29,13 +29,13 @@ function emit(ctx) {
   return lines;
 }
 
-module.exports = {
+_emitAtoms[32] = {
   id: 32,
   name: 'lua_map_master_dispatch',
   group: 'maps_lua',
   target: 'lua_in_zig',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a032_applies,
+  emit: _a032_emit,
 };

@@ -39,11 +39,33 @@ function emitRuntimeEntrypoints(ctx, meta) {
     if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
     out += `    _rebuildMap${mi}();\n`;
   }
+  // Register Lua map wrapper pointers with LuaJIT
+  if (ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0) {
+    for (let lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
+      // Scan arrayDecls to find the wrapper node by __lmw tag
+      for (let ai = 0; ai < ctx.arrayDecls.length; ai++) {
+        const decl = ctx.arrayDecls[ai];
+        const tag = '__lmw' + lmi;
+        const tagIdx = decl.indexOf(tag);
+        if (tagIdx >= 0) {
+          const arrMatch = decl.match(/^(?:pub )?var (_arr_\d+)/);
+          if (arrMatch) {
+            // Count which element in the array contains the tag
+            const before = decl.substring(0, tagIdx);
+            const elemIdx = (before.match(/\.{/g) || []).length - 1;
+            out += `    luajit_runtime.setMapWrapper(${lmi}, @ptrCast(&nodes.${arrMatch[1]}[${elemIdx}]));\n`;
+          }
+          break;
+        }
+      }
+    }
+  }
   out += `}\n\n`;
 
+  const hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
   out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
   if (ctx.usesApplescript) out += `    @import("framework/applescript.zig").pollResult();\n`;
-  if (meta.hasState || ctx.objectArrays.length > 0) {
+  if (meta.hasState || ctx.objectArrays.length > 0 || hasLuaMaps) {
     if (meta.hasDynStyles) {
       out += `    if (state.isDirty()) { _updateDynamicTexts();`;
       if (meta.hasConds) out += ` _updateConditionals();`;
@@ -53,8 +75,9 @@ function emitRuntimeEntrypoints(ctx, meta) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
         out += `        _rebuildMap${mi}();\n`;
       }
+      if (hasLuaMaps) out += `        luajit_runtime.callGlobal("__rebuildLuaMaps");\n`;
       out += ` state.clearDirty(); }\n`;
-    } else if (ctx.maps.length > 0) {
+    } else if (ctx.maps.length > 0 || hasLuaMaps) {
       out += `    if (state.isDirty()) { _updateDynamicTexts();`;
       if (meta.hasConds) out += ` _updateConditionals();`;
       out += `\n`;
@@ -63,11 +86,13 @@ function emitRuntimeEntrypoints(ctx, meta) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
         out += `        _rebuildMap${mi}();\n`;
       }
+      if (hasLuaMaps) out += `        luajit_runtime.callGlobal("__rebuildLuaMaps");\n`;
       out += ` state.clearDirty(); }\n`;
     } else {
       out += `    if (state.isDirty()) {`;
       out += ` _updateDynamicTexts();`;
       if (meta.hasConds) out += ` _updateConditionals();`;
+      if (hasLuaMaps) out += ` luajit_runtime.callGlobal("__rebuildLuaMaps");`;
       out += ` state.clearDirty(); }\n`;
     }
   }

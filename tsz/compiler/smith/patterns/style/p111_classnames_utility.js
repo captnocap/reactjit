@@ -33,11 +33,12 @@
 //   supported style patterns.
 
 function match(c, ctx) {
-  // className is detected during attribute parsing. The soup lane
-  // (soup.js ~511) identifies className/class attrs and drops them.
-  // This pattern file exists for documentation — the match/compile
-  // entry point is the attribute dispatcher, not child parsing.
-  return false;
+  // clsx(...) or classnames(...) or cx(...) or cn(...)
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t !== 'clsx' && t !== 'classnames' && t !== 'cx' && t !== 'cn') return false;
+  if (c.pos + 1 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.lparen;
 }
 
 function compile(c, children, ctx) {

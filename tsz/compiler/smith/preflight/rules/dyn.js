@@ -41,7 +41,7 @@ function checkObjectArrayFieldReferences(ctx, scan, warnings) {
         }
       }
       if (oa && !oa.fields.some(function(f) { return f.name === fieldName; })) {
-        oa.fields.push({ name: fieldName, type: 'int' });
+        oa.fields.push({ name: fieldName, type: (typeof _syntheticFieldType === 'function') ? _syntheticFieldType(fieldName) : 'int' });
         warnings.push('F5: auto-added field "' + fieldName + '" to OA[' + oaIdx + '] (referenced in template but missing from useState schema)');
       }
     }

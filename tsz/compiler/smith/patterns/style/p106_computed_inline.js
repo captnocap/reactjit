@@ -1,7 +1,7 @@
 // ── Pattern 106: Computed inline style ──────────────────────────
 // Index: 106
 // Group: style
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Box style={{width: `${percent}px`}} />
@@ -56,13 +56,37 @@
 //     - Prop arithmetic limited to single operation (prop * N)
 
 function match(c, ctx) {
-  // A style value is "computed" when it resolves to a non-literal:
-  // state getter, ternary, map field, render-local, arithmetic.
-  // Detection happens inside parseStyleValue, not here.
-  return false; // Detected within parseStyleBlock flow
+  // A computed style value is an identifier (variable reference) rather
+  // than a simple literal (number or string). Detects non-literal values
+  // in style property value position.
+  return c.kind() === TK.identifier;
 }
 
 function compile(c, ctx) {
-  // Handled by parseStyleValue() + parseTernaryBranch() in attrs.js.
+  // Computed inline styles are resolved during element attribute parsing,
+  // not in child-position brace context. The work happens in:
+  //
+  //   parseStyleValue() — resolves dynamic values in style={{ prop: expr }}:
+  //     1. State getters (isGetter) → slotGet() cast to f32 for layout props,
+  //        or Color conversion for color props. Emits dynStyle for runtime update.
+  //     2. Render-locals → pre-resolved Zig expression inlined into style struct.
+  //     3. Props → propStack value inlined or dynStyle if dynamic.
+  //     4. Map item fields → _oaN_field[_i] cast to @as(f32, @floatFromInt(...))
+  //     5. Map index → @as(f32, @floatFromInt(_i))
+  //     6. Arithmetic → single op (a * N, a + N) resolved with Zig operators.
+  //
+  //   parseTernaryBranch() — resolves ternary expressions in style values:
+  //     - condition ? trueVal : falseVal → if (zigCond) zigTrue else zigFalse
+  //     - String comparisons → std.mem.eql(u8, lhs, rhs)
+  //     - QuickJS eval for unresolvable conditions
+  //     - Recursive for nested ternaries
+  //     - Modulo before comparison: i % 2 == 0 handled
+  //
+  // This pattern cannot self-contain its compile() because style value
+  // resolution requires the style property name (to determine cast type:
+  // f32 for dimensions, Color for colors, enum for display/flex-direction)
+  // and the node fields array to push results into.
+  //
+  // Returning null signals the caller's parseStyleBlock handles it.
   return null;
 }

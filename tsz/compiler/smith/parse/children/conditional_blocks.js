@@ -95,79 +95,61 @@ function parseBlockCondition(c) {
         continue;
       }
 
-      // ── Identifier resolution ──
+      // ── Identifier resolution via resolve layer ──
+      var _ri = resolveIdentity(word, ctx);
 
-      // State getter
-      if (isGetter(word)) {
-        parts.push(slotGet(word));
+      if (_ri.kind === 'slot') {
+        parts.push(_ri.zigExpr);
         c.advance();
         continue;
       }
 
-      // Object array .length
-      var oa = null;
-      for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
-        if (ctx.objectArrays[_oai].getter === word) { oa = ctx.objectArrays[_oai]; break; }
-      }
-      if (oa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
-          c.kindAt(c.pos + 2) === TK.identifier && c.textAt(c.pos + 2) === 'length') {
-        parts.push('_oa' + oa.oaIdx + '_len');
-        c.advance(); c.advance(); c.advance();
-        continue;
+      if (_ri.kind === 'oa') {
+        // OA.length → _oaN_len via resolveField
+        if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
+            c.kindAt(c.pos + 2) === TK.identifier && c.textAt(c.pos + 2) === 'length') {
+          var lenResult = resolveField(_ri, 'length', ctx);
+          parts.push(lenResult.zigExpr);
+          c.advance(); c.advance(); c.advance();
+          continue;
+        }
       }
 
-      // Prop access
-      if (ctx.propStack && ctx.propStack[word] !== undefined) {
-        parts.push(_condPropValue(ctx.propStack[word]));
+      if (_ri.kind === 'prop') {
+        parts.push(_condPropValue(_ri.zigExpr));
         c.advance();
         continue;
       }
 
-      // Render local
-      if (ctx.renderLocals && ctx.renderLocals[word] !== undefined) {
-        parts.push(ctx.renderLocals[word]);
+      if (_ri.kind === 'render_local') {
+        parts.push(_ri.zigExpr);
         c.advance();
         continue;
       }
 
-      // Map item field: item.field
-      if (ctx.currentMap && word === ctx.currentMap.itemParam) {
+      if (_ri.kind === 'map_item') {
         c.advance();
         if (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
           c.advance(); // skip .
           var field = c.text();
           c.advance(); // skip field
-          var mapOa = ctx.currentMap.oa;
-          if (mapOa) {
-            var fieldInfo = null;
-            for (var _fi = 0; _fi < mapOa.fields.length; _fi++) {
-              if (mapOa.fields[_fi].name === field) { fieldInfo = mapOa.fields[_fi]; break; }
-            }
-            var iv = ctx.currentMap.iterVar || '_i';
-            if (fieldInfo && fieldInfo.type === 'string') {
-              parts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iv + '][0.._oa' + mapOa.oaIdx + '_' + field + '_lens[' + iv + ']]');
-            } else {
-              parts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iv + ']');
-            }
-          } else {
-            parts.push('0');
-          }
-          continue;
-        }
-        // Bare item reference — for simple string arrays, resolve to string value
-        var bareOa = ctx.currentMap.oa;
-        var bareIv = ctx.currentMap.iterVar || '_i';
-        if (bareOa && bareOa.isSimpleArray) {
-          parts.push('_oa' + bareOa.oaIdx + '__v[' + bareIv + '][0.._oa' + bareOa.oaIdx + '__v_lens[' + bareIv + ']]');
+          var fieldResult = resolveField(_ri, field, ctx);
+          parts.push(fieldResult.zigExpr);
         } else {
-          parts.push('@as(i64, @intCast(' + bareIv + '))');
+          // Bare item reference — for simple string arrays, resolve to string value
+          var bareOa = _ri.oa;
+          var bareIv = ctx.currentMap ? (ctx.currentMap.iterVar || '_i') : '_i';
+          if (bareOa && bareOa.isSimpleArray) {
+            parts.push('_oa' + bareOa.oaIdx + '__v[' + bareIv + '][0.._oa' + bareOa.oaIdx + '__v_lens[' + bareIv + ']]');
+          } else {
+            parts.push('@as(i64, @intCast(' + bareIv + '))');
+          }
         }
         continue;
       }
 
-      // Map index
-      if (ctx.currentMap && word === ctx.currentMap.indexParam) {
-        parts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
+      if (_ri.kind === 'map_index' || _ri.kind === 'parent_map_index') {
+        parts.push(_ri.zigExpr);
         c.advance();
         continue;
       }
@@ -207,12 +189,12 @@ function parseBlockCondition(c) {
       var sv = c.text().slice(1, -1);
       var lastPart = parts.length > 0 ? parts[parts.length - 1] : '';
       if (lastPart === ' == ' || lastPart === ' != ') {
-        // String comparison → std.mem.eql
+        // String comparison → resolve layer handles std.mem.eql, .len checks, etc.
         parts.pop();
         var lhs = parts.join('');
         parts.length = 0;
-        var eql = 'std.mem.eql(u8, ' + lhs + ', "' + sv + '")';
-        parts.push(lastPart === ' == ' ? eql : '!' + eql);
+        var op = lastPart.trim();
+        parts.push(resolveComparison(lhs, op, '"' + sv + '"', ctx));
       } else {
         parts.push('"' + sv + '"');
       }
@@ -246,8 +228,7 @@ function parseBlockCondition(c) {
     var lhsIsStr = eLhs.includes('[0..') || eLhs.includes('getSlotString');
     var rhsIsStr = eRhs.includes('[0..') || eRhs.includes('getSlotString');
     if (lhsIsStr || rhsIsStr) {
-      var memEql = 'std.mem.eql(u8, ' + eLhs + ', ' + eRhs + ')';
-      expr = eOp === '==' ? memEql : '!' + memEql;
+      expr = resolveComparison(eLhs, eOp, eRhs, ctx);
     }
   }
 

@@ -1,7 +1,7 @@
 // ── Pattern 069: expression children ───────────────────────────
 // Index: 69
 // Group: children
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Text>{count + 1}</Text>
@@ -67,7 +67,75 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to parse/children/brace.js. Behavior is partial because the
-  // no-script path still drops the expression and relies on preflight to stop.
-  return null;
+  // Expression children {expr} where expr is multi-token (not a single
+  // identifier/literal/string). Delegates to the same logic as p010
+  // (expression interpolation):
+  //
+  // 1. With <script> block: expression is stored in ctx._jsDynTexts and
+  //    refreshed through QuickJS into a string state slot. A dynText
+  //    buffer is allocated with {s} format pointing at the JS-backed slot.
+  //
+  // 2. Without <script>: tries to resolve state getter arithmetic
+  //    (count + 1 → getSlot + 1) into a direct dynText buffer. If that
+  //    fails, the expression is recorded in ctx._droppedExpressions and
+  //    preflight blocks the build with F12.
+  //
+  // Collect all tokens until matching }
+  var parts = [];
+  var braceDepth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lbrace) braceDepth++;
+    if (c.kind() === TK.rbrace) {
+      if (braceDepth === 0) break;
+      braceDepth--;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+
+  var expr = parts.join(' ');
+
+  // Try to resolve as state slot expression
+  var hasStateRef = false;
+  var fmtParts = [];
+  var fmtArgs = [];
+  for (var i = 0; i < parts.length; i++) {
+    var slotIdx = findSlot(parts[i]);
+    if (slotIdx >= 0) {
+      hasStateRef = true;
+      var slot = ctx.stateSlots[slotIdx];
+      if (slot.type === 'string') {
+        fmtParts.push('{s}');
+        fmtArgs.push(slotGet(parts[i]));
+      } else {
+        fmtParts.push('{d}');
+        fmtArgs.push(slotGet(parts[i]));
+      }
+    } else if (parts[i] === '+' || parts[i] === '-' || parts[i] === '*' || parts[i] === '/') {
+      if (fmtArgs.length > 0) {
+        fmtArgs[fmtArgs.length - 1] += ' ' + parts[i];
+      }
+    } else if (/^\d+$/.test(parts[i])) {
+      if (fmtArgs.length > 0) {
+        fmtArgs[fmtArgs.length - 1] += ' ' + parts[i];
+      } else {
+        fmtParts.push(parts[i]);
+      }
+    }
+  }
+
+  if (hasStateRef && fmtArgs.length > 0) {
+    return { fmtString: fmtParts.join(''), fmtArgs: fmtArgs.join(', ') };
+  }
+
+  // Script runtime fallback — route to QuickJS eval
+  if (ctx.scriptBlock || ctx.luaBlock) {
+    return { value: buildEval(expr, ctx) };
+  }
+
+  // No runtime — signal as dropped expression
+  if (!ctx._droppedExpressions) ctx._droppedExpressions = [];
+  ctx._droppedExpressions.push({ expr: expr, line: 0 });
+  return { value: '""' };
 }

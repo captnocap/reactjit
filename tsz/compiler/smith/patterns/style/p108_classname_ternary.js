@@ -27,7 +27,27 @@
 //   Status is "complete" because dropping with a warning is correct.
 
 function match(c, ctx) {
-  return false; // Handled by the skip + warn in soup.js
+  // className={expr ? a : b}
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t !== 'className' && t !== 'class') return false;
+  if (c.pos + 2 >= c.count) return false;
+  if (c.kindAt(c.pos + 1) !== TK.equals) return false;
+  if (c.kindAt(c.pos + 2) !== TK.lbrace) return false;
+  // scan inside braces for ? before }
+  var saved = c.save();
+  c.advance(); c.advance(); c.advance(); // skip className = {
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    var k = c.kind();
+    if (k === TK.lbrace) depth++;
+    else if (k === TK.rbrace) depth--;
+    else if (k === TK.question && depth === 1) { c.restore(saved); return true; }
+    if (k === TK.eof) break;
+    c.advance();
+  }
+  c.restore(saved);
+  return false;
 }
 
 function compile(c, ctx) {

@@ -1,7 +1,7 @@
 // ── Pattern 053: Callback with args ─────────────────────────────
 // Index: 53
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Item onClick={() => select(item.id)} />
@@ -76,8 +76,62 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to bindPressHandlerExpression() via
-  // tryParseComponentHandlerProp() or tryParseElementHandlerAttr().
-  // See component_handlers.js and attrs_handlers.js.
-  return null;
+  // Callback with closure args: { () => funcCall(item.field, ...) }
+  // Mirrors bindPressHandlerExpression() — captures map item fields,
+  // state getters, and prop values referenced in the arrow body.
+  c.advance(); // skip {
+
+  // Skip arrow function signature: (params) =>
+  if (c.kind() === TK.lparen) {
+    var pd = 1;
+    c.advance();
+    while (c.kind() !== TK.eof && pd > 0) {
+      if (c.kind() === TK.lparen) pd++;
+      if (c.kind() === TK.rparen) pd--;
+      c.advance();
+    }
+  }
+  if (c.kind() === TK.arrow) c.advance();
+
+  // Collect body tokens, resolving captured variables
+  var bodyParts = [];
+  var bd = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.rbrace && bd === 0) break;
+    if (c.kind() === TK.lbrace) bd++;
+    if (c.kind() === TK.rbrace) bd--;
+
+    if (c.kind() === TK.identifier && isGetter(c.text())) {
+      bodyParts.push(slotGet(c.text()));
+    } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+      // Map item field access: item.field → OA reference
+      if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        c.advance(); // skip item
+        c.advance(); // skip dot
+        var field = c.text();
+        var oa = ctx.currentMap.oa;
+        var fi = oa ? oa.fields.find(function(f) { return f.name === field; }) : null;
+        var iv = ctx.currentMap.iterVar || '_i';
+        if (oa && fi && fi.type === 'string') {
+          bodyParts.push('_oa' + oa.oaIdx + '_' + field + '[' + iv + '][0.._oa' + oa.oaIdx + '_' + field + '_lens[' + iv + ']]');
+        } else if (oa) {
+          bodyParts.push('_oa' + oa.oaIdx + '_' + field + '[' + iv + ']');
+        } else {
+          bodyParts.push('0');
+        }
+      } else {
+        bodyParts.push(c.text());
+      }
+    } else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+      bodyParts.push(ctx.propStack[c.text()]);
+    } else {
+      bodyParts.push(c.text());
+    }
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+
+  var handlerName = '_handler_press_' + ctx.handlerCount;
+  ctx.handlerCount++;
+  return { value: handlerName, handler: true, rawBody: bodyParts.join(' ') };
 }

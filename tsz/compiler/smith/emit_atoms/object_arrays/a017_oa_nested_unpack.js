@@ -39,7 +39,7 @@ function _mergeOas(ctx) {
   return result;
 }
 
-function applies(ctx, meta) {
+function _a017_applies(ctx, meta) {
   void meta;
   if (!ctx.objectArrays || ctx.objectArrays.length === 0) return false;
   var oas = _mergeOas(ctx);
@@ -51,20 +51,20 @@ function applies(ctx, meta) {
   return false;
 }
 
-function emit(ctx, meta) {
+function _a017_emit(ctx, meta) {
   // Nested unpack is emitted inline by a016. This atom is a no-op.
   // See header comment for rationale.
   void ctx; void meta;
   return '';
 }
 
-module.exports = {
+_emitAtoms[17] = {
   id: 17,
   name: 'oa_nested_unpack',
   group: 'object_arrays',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/object_arrays.js',
-  applies: applies,
-  emit: emit,
+  applies: _a017_applies,
+  emit: _a017_emit,
 };

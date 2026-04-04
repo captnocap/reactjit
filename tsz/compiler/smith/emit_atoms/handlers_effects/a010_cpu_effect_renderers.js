@@ -11,12 +11,12 @@
 // Notes:
 //   Uses the shared effect transpilers currently hosted in emit_split.js.
 
-function applies(ctx, meta) {
+function _a010_applies(ctx, meta) {
   void meta;
   return !!(ctx.effectRenders && ctx.effectRenders.length > 0);
 }
 
-function emit(ctx, meta) {
+function _a010_emit(ctx, meta) {
   var prefix = meta && typeof meta.prefix === 'string' ? meta.prefix : 'framework/';
   if (!(ctx.effectRenders && ctx.effectRenders.length > 0)) return '';
 
@@ -32,13 +32,13 @@ function emit(ctx, meta) {
   return out;
 }
 
-module.exports = {
+_emitAtoms[10] = {
   id: 10,
   name: 'cpu_effect_renderers',
   group: 'handlers_effects',
   target: 'zig',
   status: 'complete',
   currentOwner: 'emit/effects.js',
-  applies: applies,
-  emit: emit,
+  applies: _a010_applies,
+  emit: _a010_emit,
 };

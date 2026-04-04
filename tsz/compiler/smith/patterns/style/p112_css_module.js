@@ -28,9 +28,10 @@
 //   See p105_inline_object.js for the supported inline style pattern.
 
 function match(c, ctx) {
-  // CSS module imports are stripped during compilation. className attrs
-  // are dropped with a warning by the soup lane (soup.js ~511).
-  return false;
+  // styles.identifier — dot notation on styles object
+  if (c.kind() !== TK.identifier || c.text() !== 'styles') return false;
+  if (c.pos + 2 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier;
 }
 
 function compile(c, children, ctx) {

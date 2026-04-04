@@ -26,6 +26,14 @@
 //   not currently preserved.
 
 function match(c, ctx) {
+  // aria-* attribute or role attribute
+  if (c.kind() !== TK.identifier) return false;
+  var t = c.text();
+  if (t === 'role') return true;
+  if (t === 'aria') {
+    if (c.pos + 1 >= c.count) return false;
+    return c.kindAt(c.pos + 1) === TK.minus;
+  }
   return false;
 }
 

@@ -26,11 +26,11 @@
 // Final assembly: wraps each file with mkHeader() + content,
 // encodes as __SPLIT_OUTPUT__\n__FILE:name__\ncontent format.
 
-function applies() {
+function _a045_applies() {
   return globalThis.__splitOutput == 1;
 }
 
-function emit(F, basename, appName) {
+function _a045_emit(F, basename, appName) {
   var fastBuild = globalThis.__fastBuild === 1;
   var fwPrefix = 'framework/';
   var allFnames = ['nodes.zig', 'handlers.zig', 'state.zig', 'maps.zig', 'logic.zig', 'app.zig'];
@@ -184,13 +184,13 @@ function emit(F, basename, appName) {
   return encoded;
 }
 
-module.exports = {
+_emitAtoms[45] = {
   id: 45,
   name: 'split_module_headers',
   group: 'split_finalize',
   target: 'split',
   status: 'complete',
   currentOwner: 'emit_split.js',
-  applies: applies,
-  emit: emit,
+  applies: _a045_applies,
+  emit: _a045_emit,
 };

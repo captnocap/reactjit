@@ -1,7 +1,7 @@
 // ── Pattern 128: Optional chaining ──────────────────────────────
 // Index: 128
 // Group: type_narrowing
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Text>{user?.name}</Text>
@@ -65,8 +65,30 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented as a dedicated pattern. Expressions with ?.
-  // fall through to QuickJS eval where they work natively. Module
-  // code handles ?. → .?. conversion in mod.js.
-  return null;
+  // Optional chaining (?.) has no dedicated lexer token — it arrives as
+  // identifier + TK.question + TK.dot + identifier. QuickJS supports ?.
+  // natively, so the expression works correctly via eval.
+  //
+  // For OA field access in maps, ?. could be stripped (fields always exist),
+  // but we'd need to recognize the ? + . sequence as a field access, which
+  // the current token stream doesn't support cleanly.
+  //
+  // Collect the full expression and route through QuickJS eval.
+  var parts = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    // Reconstruct ?. from separate tokens
+    if (c.kind() === TK.question &&
+        c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+      parts.push('?.');
+      c.advance(); // skip ?
+      c.advance(); // skip .
+      continue;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+
+  var expr = parts.join('');
+  return { value: buildEval(expr, ctx) };
 }

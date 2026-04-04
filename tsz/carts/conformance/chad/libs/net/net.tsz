@@ -2,6 +2,8 @@
 // Usage: backend.net.http.get(url), backend.net.socket.connect(url)
 
 <net lib>
-  <http module />
-  <socket module />
+  <script>
+    http
+    socket
+  </script>
 </net>

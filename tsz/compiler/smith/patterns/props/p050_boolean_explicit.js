@@ -1,7 +1,7 @@
 // ── Pattern 050: Boolean explicit ──────────────────────────────
 // Index: 50
 // Group: props
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Button disabled={true} />
@@ -43,6 +43,10 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseComponentBraceProp() / parseComponentBraceValue().
-  return null;
+  // { true } or { false } — consume brace, boolean, brace
+  c.advance(); // skip {
+  var val = c.text(); // "true" or "false"
+  c.advance(); // skip boolean
+  if (c.kind() === TK.rbrace) c.advance(); // skip }
+  return { value: val };
 }

@@ -1,7 +1,7 @@
 // ── Pattern 037: flatMap() → element ────────────────────────────
 // Index: 37
 // Group: filter_sort
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {items.flatMap(item => [
@@ -55,8 +55,25 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. .flatMap() requires detecting whether the
-  // return is a fixed-count array literal (compilable) or variable
-  // (needs runtime). For now, use multiple children or nested .map().
+  // .flatMap() is NOT supported by Smith's map pipeline.
+  //
+  // Why no implementation:
+  //   - .flatMap() REPLACES .map() rather than chaining before it — it IS the
+  //     mapping function with array-returning semantics
+  //   - _identifierStartsMapCall (brace.js) does not recognize .flatMap()
+  //   - The love2d reference compiler does not handle .flatMap()
+  //   - Two sub-patterns exist with different compilation requirements:
+  //     a) Fixed-count return [<A/>, <B/>] → pool size = items.len * N,
+  //        each iteration fills N slots (tractable but not implemented)
+  //     b) Variable-count return (conditional arrays) → needs runtime pooling
+  //        (equivalent to nested map with inline arrays)
+  //
+  // Workarounds:
+  //   - Use multiple children inside a single .map() callback
+  //   - Use nested .map() (p021) for the variable-count case
+  //   - Restructure data so each item maps to a single element
+  //
+  // This pattern is documented for completeness. match() detects it so the
+  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }

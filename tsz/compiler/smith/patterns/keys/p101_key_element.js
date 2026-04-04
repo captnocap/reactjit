@@ -40,10 +40,9 @@
 //   and intentional for this compiler's architecture.
 
 function match(c, ctx) {
-  // key= followed by any value (string, brace expression, etc.)
-  // This is checked by the attribute name, not the value.
-  // The caller has already identified attr === 'key'.
-  return false; // Keys are handled by the skip in the main parse loop
+  if (c.kind() !== TK.identifier || c.text() !== 'key') return false;
+  if (c.pos + 1 >= c.count) return false;
+  return c.kindAt(c.pos + 1) === TK.equals;
 }
 
 function compile(c, ctx) {

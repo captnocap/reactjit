@@ -1005,6 +1005,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const innerH = if (h != null) h.? - pt - pb else @as(f32, 9999);
     const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
     const isReverse = s.flex_direction == .row_reverse or s.flex_direction == .column_reverse;
+    // Vertical scroll containers should preserve child heights and overflow.
+    // If we shrink them to fit the viewport, content_height collapses to the
+    // container height and there is nothing left to scroll.
+    const preserveMainOverflow = !isRow and (s.overflow == .scroll or s.overflow == .auto);
     const gap = s.mainGap();
     const crossGapVal = s.crossGap();
     const justify = s.justify_content;
@@ -1317,7 +1321,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         break;
                     }
                 }
-            } else if (freeSpace < 0) {
+            } else if (freeSpace < 0 and !preserveMainOverflow) {
                 var totalShrinkScaled: f32 = 0;
                 {
                     var i = ls;

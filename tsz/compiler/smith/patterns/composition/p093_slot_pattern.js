@@ -51,9 +51,13 @@
 //   See conformance: d105_shell_slot_filter_pipeline.tsz
 
 function match(c, ctx) {
-  // Slot pattern is a component call with JSX-valued props.
-  // Detected during attribute parsing when prop value starts with <.
-  // Not a separate parse path from normal JSX props.
+  // Detect: { followed by < — JSX element inside prop braces (slot value)
+  // e.g. header={<Header />}  — cursor is at the {
+  if (c.kind() !== TK.lbrace) return false;
+  var saved = c.save();
+  c.advance(); // skip {
+  if (c.kind() === TK.lt) { c.restore(saved); return true; }
+  c.restore(saved);
   return false;
 }
 
