@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 033: reduce() → JSX ─────────────────────────────────
 // Index: 33
 // Group: filter_sort
@@ -73,3 +74,7 @@ function compile(c, ctx) {
   // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }
+
+_patterns[33] = { id: 33, match: match, compile: compile };
+
+})();

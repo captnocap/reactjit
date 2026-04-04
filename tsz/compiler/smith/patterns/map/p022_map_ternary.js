@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 022: .map() with ternary ───────────────────────────
 // Index: 22
 // Group: map
@@ -78,3 +79,7 @@ function compile(c, ctx) {
   // when ternary branches produce elements vs null.
   return null;
 }
+
+_patterns[22] = { id: 22, match: match, compile: compile };
+
+})();

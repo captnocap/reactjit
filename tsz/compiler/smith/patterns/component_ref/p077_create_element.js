@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 077: React.createElement ─────────────────────────────
 // Index: 77
 // Group: component_ref
@@ -71,10 +72,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[77] = {
   id: 77,
   name: 'create_element',
   status: 'complete',
   match,
   compile,
 };
+
+})();

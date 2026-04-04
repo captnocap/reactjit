@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 083: Switch statement return ────────────────────────
 // Index: 83
 // Group: conditional_rendering
@@ -64,3 +65,7 @@ function compile(c, ctx) {
   parseIfBlock(c, children);
   return { children: children };
 }
+
+_patterns[83] = { id: 83, match: match, compile: compile };
+
+})();

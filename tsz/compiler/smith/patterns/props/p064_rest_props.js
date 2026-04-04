@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 064: rest props ────────────────────────────────────
 // Index: 64
 // Group: props
@@ -94,3 +95,7 @@ function compile(c, ctx) {
 
   return { namedProps: namedProps, restName: restName, componentName: componentName };
 }
+
+_patterns[64] = { id: 64, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 138: JSX comment ───────────────────────────────────
 // Index: 138
 // Group: misc_jsx
@@ -34,3 +35,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance();
   return null;
 }
+
+_patterns[138] = { id: 138, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 024: .map() with index as key ──────────────────────
 // Index: 24
 // Group: map
@@ -62,3 +63,7 @@ function compile(c, ctx) {
   // Pool index = item identity. No reconciliation needed.
   return null;
 }
+
+_patterns[24] = { id: 24, match: match, compile: compile };
+
+})();

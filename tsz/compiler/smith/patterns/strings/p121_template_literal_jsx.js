@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 121: Template literal in JSX ────────────────────────
 // Index: 121
 // Group: strings
@@ -61,3 +62,7 @@ function compile(c, ctx) {
   // template literals before reaching pattern dispatch.
   return null;
 }
+
+_patterns[121] = { id: 121, match: match, compile: compile };
+
+})();

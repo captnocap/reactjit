@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 118: preventDefault ─────────────────────────────────
 // Index: 118
 // Group: events
@@ -94,3 +95,7 @@ function compile(c, ctx) {
   // Cannot self-contain: requires element attribute context.
   return null;
 }
+
+_patterns[118] = { id: 118, match: match, compile: compile };
+
+})();

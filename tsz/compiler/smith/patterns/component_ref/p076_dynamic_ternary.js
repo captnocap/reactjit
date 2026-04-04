@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 076: Dynamic component via ternary ───────────────────
 // Index: 76
 // Group: component_ref
@@ -81,10 +82,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[76] = {
   id: 76,
   name: 'dynamic_ternary',
   status: 'complete',
   match,
   compile,
 };
+
+})();

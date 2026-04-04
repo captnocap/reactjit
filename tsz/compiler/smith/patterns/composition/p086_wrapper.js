@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 086: Wrapper component ──────────────────────────────
 // Index: 86
 // Group: composition
@@ -68,3 +69,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return parseJSXElement(c);
 }
+
+_patterns[86] = { id: 86, match: match, compile: compile };
+
+})();

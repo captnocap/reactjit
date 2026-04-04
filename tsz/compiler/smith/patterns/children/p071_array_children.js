@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 071: Array children ─────────────────────────────────
 // Index: 71
 // Group: children
@@ -48,10 +49,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[71] = {
   id: 71,
   name: 'array_children',
   status: 'complete',
   match,
   compile,
 };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 098: useRef current ─────────────────────────────────
 // Index: 98
 // Group: hooks
@@ -118,3 +119,7 @@ function compile(c, ctx) {
 
   return null; // No node emitted — this is a declaration, not JSX.
 }
+
+_patterns[98] = { id: 98, match: match, compile: compile };
+
+})();

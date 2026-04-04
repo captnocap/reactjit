@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 075: Dynamic component variable ──────────────────────
 // Index: 75
 // Group: component_ref
@@ -66,10 +67,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[75] = {
   id: 75,
   name: 'dynamic_variable',
   status: 'complete',
   match,
   compile,
 };
+
+})();

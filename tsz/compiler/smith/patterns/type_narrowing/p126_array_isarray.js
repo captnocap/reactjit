@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 126: Array.isArray gate ─────────────────────────────
 // Index: 126
 // Group: type_narrowing
@@ -81,3 +82,7 @@ function compile(c, ctx) {
   var expr = parts.join('');
   return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }
+
+_patterns[126] = { id: 126, match: match, compile: compile };
+
+})();

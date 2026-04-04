@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 018: ?? nullish fallback ────────────────────────────
 // Index: 18
 // Group: logical
@@ -138,3 +139,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance();
   return { value: buildEval(rawExprFull, ctx) };
 }
+
+_patterns[18] = { id: 18, match: match, compile: compile };
+
+})();

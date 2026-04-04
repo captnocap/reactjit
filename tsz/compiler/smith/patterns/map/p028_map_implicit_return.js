@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 028: .map() with implicit return ───────────────────
 // Index: 28
 // Group: map
@@ -91,3 +92,7 @@ function compile(c, ctx) {
   //   5. Normal map pool emission
   return null;
 }
+
+_patterns[28] = { id: 28, match: match, compile: compile };
+
+})();

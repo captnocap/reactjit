@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 109: className template literal ─────────────────────
 // Index: 109
 // Group: style
@@ -35,3 +36,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[109] = { id: 109, match: match, compile: compile };
+
+})();

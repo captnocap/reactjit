@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 069: expression children ───────────────────────────
 // Index: 69
 // Group: children
@@ -139,3 +140,7 @@ function compile(c, ctx) {
   ctx._droppedExpressions.push({ expr: expr, line: 0 });
   return { value: '""' };
 }
+
+_patterns[69] = { id: 69, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 087: Higher-Order Component (HOC) ──────────────────
 // Index: 87
 // Group: composition
@@ -80,3 +81,7 @@ function compile(c, ctx) {
   // Not applicable — refactored to wrapper + conditional at source level.
   return null;
 }
+
+_patterns[87] = { id: 87, match: match, compile: compile };
+
+})();

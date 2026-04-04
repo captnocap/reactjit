@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 107: className string ───────────────────────────────
 // Index: 107
 // Group: style
@@ -49,3 +50,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[107] = { id: 107, match: match, compile: compile };
+
+})();

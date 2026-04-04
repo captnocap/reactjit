@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 039: Array(n).fill().map() ──────────────────────────
 // Index: 39
 // Group: array_construction
@@ -109,3 +110,7 @@ function compile(c, ctx) {
   // for(0..@intCast(state.getSlot(X))) with a pool size cap.
   return null;
 }
+
+_patterns[39] = { id: 39, match: match, compile: compile };
+
+})();

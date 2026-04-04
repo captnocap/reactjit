@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 003: Boolean render (swallowed) ─────────────────────
 // Index: 3
 // Group: primitives
@@ -38,3 +39,7 @@ function compile(c, ctx) {
   // Swallowed — return null to emit nothing
   return null;
 }
+
+_patterns[3] = { id: 3, match: match, compile: compile };
+
+})();

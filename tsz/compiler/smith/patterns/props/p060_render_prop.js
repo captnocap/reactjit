@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 060: Render prop ────────────────────────────────────
 // Index: 60
 // Group: props
@@ -115,3 +116,7 @@ function compile(c, ctx) {
 
   return { value: null, renderProp: true, params: params, rawBody: bodyParts.join(' ') };
 }
+
+_patterns[60] = { id: 60, match: match, compile: compile };
+
+})();

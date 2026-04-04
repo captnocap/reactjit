@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 129: Non-null assertion ─────────────────────────────
 // Index: 129
 // Group: type_narrowing
@@ -50,3 +51,7 @@ function compile(c, ctx) {
   // use explicit null checks or optional chaining instead.
   return null;
 }
+
+_patterns[129] = { id: 129, match: match, compile: compile };
+
+})();

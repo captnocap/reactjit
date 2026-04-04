@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 102: Key on fragment ─────────────────────────────────
 // Index: 102
 // Group: keys
@@ -67,3 +68,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[102] = { id: 102, match: match, compile: compile };
+
+})();

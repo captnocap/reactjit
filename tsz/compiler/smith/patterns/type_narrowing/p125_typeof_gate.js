@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 125: typeof gate ────────────────────────────────────
 // Index: 125
 // Group: type_narrowing
@@ -71,3 +72,7 @@ function compile(c, ctx) {
   // Return as a condition expression for the caller to use
   return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }
+
+_patterns[125] = { id: 125, match: match, compile: compile };
+
+})();

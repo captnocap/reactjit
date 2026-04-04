@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 108: className ternary ──────────────────────────────
 // Index: 108
 // Group: style
@@ -53,3 +54,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[108] = { id: 108, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 105: Inline style object ────────────────────────────
 // Index: 105
 // Group: style
@@ -75,3 +76,7 @@ function compile(c, ctx) {
   // Returns array of Zig style field strings.
   return null;
 }
+
+_patterns[105] = { id: 105, match: match, compile: compile };
+
+})();

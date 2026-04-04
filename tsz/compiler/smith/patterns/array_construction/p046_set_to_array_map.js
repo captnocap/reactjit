@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 046: Set -> array -> map() ─────────────────────────
 // Index: 46
 // Group: array_construction
@@ -80,3 +81,7 @@ function compile(c, ctx) {
   // limitation as p043 (Object.values).
   return null;
 }
+
+_patterns[46] = { id: 46, match: match, compile: compile };
+
+})();

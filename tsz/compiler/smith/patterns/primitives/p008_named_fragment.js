@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 008: Named/keyed fragment ───────────────────────────
 // Index: 8
 // Group: primitives
@@ -49,3 +50,7 @@ function compile(c, ctx) {
   // Fragment tags — it resolves them through normalizeRawTag/resolveTag.
   return parseJSXElement(c);
 }
+
+_patterns[8] = { id: 8, match: match, compile: compile };
+
+})();

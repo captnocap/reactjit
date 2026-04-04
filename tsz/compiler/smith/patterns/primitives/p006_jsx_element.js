@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 006: JSX element render ─────────────────────────────
 // Index: 6
 // Group: primitives
@@ -44,3 +45,7 @@ function compile(c, ctx) {
   // element lifecycle: tag resolution, attrs, children, closing tag.
   return parseJSXElement(c);
 }
+
+_patterns[6] = { id: 6, match: match, compile: compile };
+
+})();

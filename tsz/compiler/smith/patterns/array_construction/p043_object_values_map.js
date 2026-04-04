@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 043: Object.values().map() ─────────────────────────
 // Index: 43
 // Group: array_construction
@@ -83,3 +84,7 @@ function compile(c, ctx) {
   // depending on how the downstream resolver interprets it.
   return null;
 }
+
+_patterns[43] = { id: 43, match: match, compile: compile };
+
+})();

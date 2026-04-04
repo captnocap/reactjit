@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 010: Expression interpolation in JSX ───────────────
 // Index: 10
 // Group: primitives
@@ -152,3 +153,7 @@ function compile(c, ctx) {
   ctx._droppedExpressions.push({ expr: expr, line: 0 });
   return { nodeExpr: '.{ .text = "" }' };
 }
+
+_patterns[10] = { id: 10, match: match, compile: compile };
+
+})();

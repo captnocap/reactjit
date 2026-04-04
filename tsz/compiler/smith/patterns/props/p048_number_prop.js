@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 048: Number prop ───────────────────────────────────
 // Index: 48
 // Group: props
@@ -43,3 +44,7 @@ function compile(c, ctx) {
   // Delegates to tryParseComponentBraceProp() / parseComponentBraceValue().
   return null;
 }
+
+_patterns[48] = { id: 48, match: match, compile: compile };
+
+})();

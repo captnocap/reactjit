@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 021: nested .map() ─────────────────────────────────
 // Index: 21
 // Group: map
@@ -79,3 +80,7 @@ function compile(c, ctx) {
   //   - rebuild loop nested inside parent's rebuild loop
   return null;
 }
+
+_patterns[21] = { id: 21, match: match, compile: compile };
+
+})();

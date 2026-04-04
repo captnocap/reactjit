@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 127: 'prop' in obj ──────────────────────────────────
 // Index: 127
 // Group: type_narrowing
@@ -67,3 +68,7 @@ function compile(c, ctx) {
   var expr = parts.join(' ');
   return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }
+
+_patterns[127] = { id: 127, match: match, compile: compile };
+
+})();

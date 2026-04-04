@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 056: Computed prop name ─────────────────────────────
 // Index: 56
 // Group: props
@@ -48,3 +49,7 @@ function compile(c, ctx) {
   // Workaround: use explicit conditional props or data-* attributes (p134).
   return null;
 }
+
+_patterns[56] = { id: 56, match: match, compile: compile };
+
+})();

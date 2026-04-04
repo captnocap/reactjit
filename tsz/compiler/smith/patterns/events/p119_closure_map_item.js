@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 119: Closure over map item ──────────────────────────
 // Index: 119
 // Group: events
@@ -84,3 +85,7 @@ function compile(c, children, ctx) {
   if (result === handlerRef) ctx.handlerCount++;
   return { handlerRef: result };
 }
+
+_patterns[119] = { id: 119, match: match, compile: compile };
+
+})();

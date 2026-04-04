@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 025: .map() with stable key ────────────────────────
 // Index: 25
 // Group: map
@@ -60,3 +61,7 @@ function compile(c, ctx) {
   // elsewhere and will be a normal OA field.
   return null;
 }
+
+_patterns[25] = { id: 25, match: match, compile: compile };
+
+})();

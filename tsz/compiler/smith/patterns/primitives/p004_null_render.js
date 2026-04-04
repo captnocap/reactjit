@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 004: Null render (swallowed) ────────────────────────
 // Index: 4
 // Group: primitives
@@ -34,3 +35,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance(); // consume }
   return null;
 }
+
+_patterns[4] = { id: 4, match: match, compile: compile };
+
+})();

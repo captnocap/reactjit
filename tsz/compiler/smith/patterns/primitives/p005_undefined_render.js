@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 005: Undefined render (swallowed) ───────────────────
 // Index: 5
 // Group: primitives
@@ -34,3 +35,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance(); // consume }
   return null;
 }
+
+_patterns[5] = { id: 5, match: match, compile: compile };
+
+})();

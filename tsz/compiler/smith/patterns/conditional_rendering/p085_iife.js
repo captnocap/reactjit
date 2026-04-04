@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 085: IIFE in JSX ────────────────────────────────────
 // Index: 85
 // Group: conditional_rendering
@@ -74,3 +75,7 @@ function compile(c, ctx) {
   // Not applicable — refactored to <if>/<else> blocks at the source level.
   return null;
 }
+
+_patterns[85] = { id: 85, match: match, compile: compile };
+
+})();

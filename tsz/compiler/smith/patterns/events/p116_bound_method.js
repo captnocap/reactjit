@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 116: Bound method reference ─────────────────────────
 // Index: 116
 // Group: events
@@ -64,3 +65,7 @@ function compile(c, children, ctx) {
   if (c.kind() === TK.rbrace) c.advance();
   return { handlerRef: handlerRef };
 }
+
+_patterns[116] = { id: 116, match: match, compile: compile };
+
+})();

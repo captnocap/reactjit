@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 114: CSS-in-JS object ───────────────────────────────
 // Index: 114
 // Group: style
@@ -54,3 +55,7 @@ function compile(c, children, ctx) {
   // Users should use style={{...}} instead.
   return null;
 }
+
+_patterns[114] = { id: 114, match: match, compile: compile };
+
+})();

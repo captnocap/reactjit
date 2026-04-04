@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 130: Type predicate ─────────────────────────────────
 // Index: 130
 // Group: type_narrowing
@@ -89,3 +90,7 @@ function compile(c, ctx) {
   var expr = funcName + '(' + argParts.join(' ') + ')';
   return { condExpr: zigBool(buildEval(expr, ctx), ctx) };
 }
+
+_patterns[130] = { id: 130, match: match, compile: compile };
+
+})();

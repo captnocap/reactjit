@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 014: Nested ternary ─────────────────────────────────
 // Index: 14
 // Group: ternary
@@ -69,3 +70,7 @@ function compile(c, children, ctx) {
   // Each gets its own show_hide conditional + child entry.
   return tryParseTernaryJSX(c, children);
 }
+
+_patterns[14] = { id: 14, match: match, compile: compile };
+
+})();

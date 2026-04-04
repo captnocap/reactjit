@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 123: String concatenation ───────────────────────────
 // Index: 123
 // Group: strings
@@ -157,3 +158,7 @@ function compile(c, ctx) {
 
   return { fmtString: fmt, fmtArgs: args.join(', ') };
 }
+
+_patterns[123] = { id: 123, match: match, compile: compile };
+
+})();

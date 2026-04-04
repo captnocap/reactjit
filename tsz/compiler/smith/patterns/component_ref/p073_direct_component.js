@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 073: Direct component call ───────────────────────────
 // Index: 73
 // Group: component_ref
@@ -63,10 +64,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[73] = {
   id: 73,
   name: 'direct_component',
   status: 'complete',
   match,
   compile,
 };
+
+})();

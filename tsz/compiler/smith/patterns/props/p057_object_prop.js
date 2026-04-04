@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 057: Object prop ────────────────────────────────────
 // Index: 57
 // Group: props
@@ -105,3 +106,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance(); // skip outer }
   return { value: pairs, object: true };
 }
+
+_patterns[57] = { id: 57, match: match, compile: compile };
+
+})();

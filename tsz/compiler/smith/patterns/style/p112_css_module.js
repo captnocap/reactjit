@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 112: CSS module ─────────────────────────────────────
 // Index: 112
 // Group: style
@@ -39,3 +40,7 @@ function compile(c, children, ctx) {
   // with warning "[W] dynamic className dropped". No Zig output.
   return null;
 }
+
+_patterns[112] = { id: 112, match: match, compile: compile };
+
+})();

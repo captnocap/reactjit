@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 140: Adjacent root elements ────────────────────────
 // Index: 140
 // Group: misc_jsx
@@ -112,3 +113,7 @@ function compile(c, children, ctx) {
   children.push({ nodeExpr: wrapperExpr, subChildren: siblings });
   return { nodeExpr: wrapperExpr, subChildren: siblings };
 }
+
+_patterns[140] = { id: 140, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 061: function-as-children ──────────────────────────
 // Index: 61
 // Group: props
@@ -70,3 +71,7 @@ function compile(c, ctx) {
   // No live lowering in the current compile-time component model.
   return null;
 }
+
+_patterns[61] = { id: 61, match: match, compile: compile };
+
+})();

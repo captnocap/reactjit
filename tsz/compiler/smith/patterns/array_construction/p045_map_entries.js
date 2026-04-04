@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 045: Map.entries() via Array.from().map() ──────────
 // Index: 45
 // Group: array_construction
@@ -79,3 +80,7 @@ function compile(c, ctx) {
   //   at runtime. Destructured [k, v] params work the same as p044.
   return null;
 }
+
+_patterns[45] = { id: 45, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 063: default prop values ───────────────────────────
 // Index: 63
 // Group: props
@@ -94,3 +95,7 @@ function compile(c, ctx) {
 
   return { defaults: defaults, componentName: componentName };
 }
+
+_patterns[63] = { id: 63, match: match, compile: compile };
+
+})();

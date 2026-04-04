@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 078: React.cloneElement ──────────────────────────────
 // Index: 78
 // Group: component_ref
@@ -74,10 +75,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[78] = {
   id: 78,
   name: 'clone_element',
   status: 'complete',
   match,
   compile,
 };
+
+})();

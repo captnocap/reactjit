@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 094: useState value in JSX ──────────────────────────
 // Index: 94
 // Group: hooks
@@ -90,3 +91,7 @@ function compile(c, ctx) {
   //   5. Event handlers use state.setSlot(N, value)
   return null;
 }
+
+_patterns[94] = { id: 94, match: match, compile: compile };
+
+})();

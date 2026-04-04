@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 095: useReducer dispatch ────────────────────────────
 // Index: 95
 // Group: hooks
@@ -124,3 +125,7 @@ function compile(c, ctx) {
   //   - Imported → resolved through module system
   return null;
 }
+
+_patterns[95] = { id: 95, match: match, compile: compile };
+
+})();

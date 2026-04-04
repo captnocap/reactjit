@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 030: .filter().map() ────────────────────────────────
 // Index: 30
 // Group: filter_sort
@@ -98,3 +99,7 @@ function compile(c, ctx) {
   //   7. Nodes beyond count get .display = .none
   return null;
 }
+
+_patterns[30] = { id: 30, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 011: Ternary → element ──────────────────────────────
 // Index: 11
 // Group: ternary
@@ -66,3 +67,7 @@ function compile(c, children, ctx) {
   // 7. Pushes both branch nodes to children with ternaryCondIdx/ternaryBranch
   return tryParseTernaryJSX(c, children);
 }
+
+_patterns[11] = { id: 11, match: match, compile: compile };
+
+})();

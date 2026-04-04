@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 093: Slot pattern ───────────────────────────────────
 // Index: 93
 // Group: composition
@@ -69,3 +70,7 @@ function compile(c, ctx) {
   //   4. Slot content becomes children in the flattened tree
   return null;
 }
+
+_patterns[93] = { id: 93, match: match, compile: compile };
+
+})();

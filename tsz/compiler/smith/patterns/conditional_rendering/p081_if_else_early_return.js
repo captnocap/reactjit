@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 081: If/else early return ───────────────────────────
 // Index: 81
 // Group: conditional_rendering
@@ -53,3 +54,7 @@ function compile(c, ctx) {
   parseIfBlock(c, children);
   return { children: children };
 }
+
+_patterns[81] = { id: 81, match: match, compile: compile };
+
+})();

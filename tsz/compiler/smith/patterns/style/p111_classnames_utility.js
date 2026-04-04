@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 111: classnames/clsx utility ────────────────────────
 // Index: 111
 // Group: style
@@ -47,3 +48,7 @@ function compile(c, children, ctx) {
   // Warnings: "[W] dynamic className dropped" or "[W] className=... dropped"
   return null;
 }
+
+_patterns[111] = { id: 111, match: match, compile: compile };
+
+})();

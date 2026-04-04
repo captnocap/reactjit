@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 090: Context consumer (useContext) ──────────────────
 // Index: 90
 // Group: composition
@@ -75,3 +76,7 @@ function compile(c, ctx) {
   // render local that attribute/child resolution uses directly.
   return null;
 }
+
+_patterns[90] = { id: 90, match: match, compile: compile };
+
+})();

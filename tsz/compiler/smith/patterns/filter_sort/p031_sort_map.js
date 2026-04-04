@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 031: sort().map() ───────────────────────────────────
 // Index: 31
 // Group: filter_sort
@@ -80,3 +81,7 @@ function compile(c, ctx) {
   // No compile action needed — the map pipeline owns this end-to-end.
   return null;
 }
+
+_patterns[31] = { id: 31, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 068: string children ───────────────────────────────
 // Index: 68
 // Group: children
@@ -45,3 +46,7 @@ function compile(c, ctx) {
   if (!text) return null;
   return { nodeExpr: '.{ .text = "' + text.replace(/"/g, '\\"') + '" }' };
 }
+
+_patterns[68] = { id: 68, match: match, compile: compile };
+
+})();

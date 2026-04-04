@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 113: CSS-in-JS template literal ─────────────────────
 // Index: 113
 // Group: style
@@ -59,3 +60,7 @@ function compile(c, children, ctx) {
   // The CSS string it produces has no effect — no DOM to inject into.
   return null;
 }
+
+_patterns[113] = { id: 113, match: match, compile: compile };
+
+})();

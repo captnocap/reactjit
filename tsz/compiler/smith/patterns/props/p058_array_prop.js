@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 058: Array prop ─────────────────────────────────────
 // Index: 58
 // Group: props
@@ -76,3 +77,7 @@ function compile(c, ctx) {
 
   return { value: elements, array: true };
 }
+
+_patterns[58] = { id: 58, match: match, compile: compile };
+
+})();

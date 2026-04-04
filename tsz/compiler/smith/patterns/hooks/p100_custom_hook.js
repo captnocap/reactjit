@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 100: Custom hook ────────────────────────────────────
 // Index: 100
 // Group: hooks
@@ -137,3 +138,7 @@ function compile(c, ctx) {
   //  11. Exit hook scope, merge into parent context
   return null;
 }
+
+_patterns[100] = { id: 100, match: match, compile: compile };
+
+})();

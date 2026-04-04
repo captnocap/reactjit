@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 026: .map() with compound key ──────────────────────
 // Index: 26
 // Group: map
@@ -59,3 +60,7 @@ function compile(c, ctx) {
   // Template literal in key position is never emitted.
   return null;
 }
+
+_patterns[26] = { id: 26, match: match, compile: compile };
+
+})();

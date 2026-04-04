@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 072: Self-closing element (no children) ──────────────
 // Index: 72
 // Group: children
@@ -57,10 +58,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[72] = {
   id: 72,
   name: 'no_children',
   status: 'complete',
   match,
   compile,
 };
+
+})();

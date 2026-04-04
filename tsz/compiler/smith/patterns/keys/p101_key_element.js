@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 101: Key on element ─────────────────────────────────
 // Index: 101
 // Group: keys
@@ -49,3 +50,7 @@ function compile(c, ctx) {
   // No compilation — key is skipped.
   return null;
 }
+
+_patterns[101] = { id: 101, match: match, compile: compile };
+
+})();

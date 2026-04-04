@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 029: .map() with explicit return ───────────────────
 // Index: 29
 // Group: map
@@ -108,3 +109,7 @@ function compile(c, ctx) {
   //   6. Zig output identical to implicit return
   return null;
 }
+
+_patterns[29] = { id: 29, match: match, compile: compile };
+
+})();

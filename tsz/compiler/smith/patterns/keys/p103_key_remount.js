@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 103: Key to force remount ───────────────────────────
 // Index: 103
 // Group: keys
@@ -44,3 +45,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[103] = { id: 103, match: match, compile: compile };
+
+})();

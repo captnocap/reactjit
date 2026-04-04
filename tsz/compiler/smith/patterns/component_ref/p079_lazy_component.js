@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 079: React.lazy component ────────────────────────────
 // Index: 79
 // Group: component_ref
@@ -92,10 +93,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[79] = {
   id: 79,
   name: 'lazy_component',
   status: 'complete',
   match,
   compile,
 };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 097: useCallback handler ────────────────────────────
 // Index: 97
 // Group: hooks
@@ -99,3 +100,7 @@ function compile(c, ctx) {
   //   8. Produces identical output to onPress={() => { body }}
   return null;
 }
+
+_patterns[97] = { id: 97, match: match, compile: compile };
+
+})();

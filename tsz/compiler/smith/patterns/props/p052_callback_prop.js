@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 052: Callback prop ──────────────────────────────────
 // Index: 52
 // Group: props
@@ -122,3 +123,7 @@ function compile(c, ctx) {
 
   return null;
 }
+
+_patterns[52] = { id: 52, match: match, compile: compile };
+
+})();

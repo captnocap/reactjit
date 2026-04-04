@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 035: slice + show more ──────────────────────────────
 // Index: 35
 // Group: filter_sort
@@ -95,3 +96,7 @@ function compile(c, ctx) {
   // 3. Emit button visibility tied to same slot vs OA length
   return null;
 }
+
+_patterns[35] = { id: 35, match: match, compile: compile };
+
+})();

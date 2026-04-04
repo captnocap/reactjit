@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 012: Ternary → null (conditional render) ────────────
 // Index: 12
 // Group: ternary
@@ -60,3 +61,7 @@ function compile(c, children, ctx) {
   // allBranches.length === 1 → condIdx on the single child node.
   return tryParseTernaryJSX(c, children);
 }
+
+_patterns[12] = { id: 12, match: match, compile: compile };
+
+})();

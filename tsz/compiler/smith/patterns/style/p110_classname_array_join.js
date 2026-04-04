@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 110: className array join ───────────────────────────
 // Index: 110
 // Group: style
@@ -41,3 +42,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[110] = { id: 110, match: match, compile: compile };
+
+})();

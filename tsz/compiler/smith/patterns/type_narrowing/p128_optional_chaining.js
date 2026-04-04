@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 128: Optional chaining ──────────────────────────────
 // Index: 128
 // Group: type_narrowing
@@ -92,3 +93,7 @@ function compile(c, ctx) {
   var expr = parts.join('');
   return { value: buildEval(expr, ctx) };
 }
+
+_patterns[128] = { id: 128, match: match, compile: compile };
+
+})();

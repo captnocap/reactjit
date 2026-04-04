@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 131: Discriminated union render ────────────────────
 // Index: 131
 // Group: type_narrowing
@@ -57,3 +58,7 @@ function compile(c, children, ctx) {
   // Delegates to the existing ternary JSX compiler.
   return tryParseTernaryJSX(c, children);
 }
+
+_patterns[131] = { id: 131, match: match, compile: compile };
+
+})();

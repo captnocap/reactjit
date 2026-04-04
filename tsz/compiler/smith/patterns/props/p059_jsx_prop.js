@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 059: JSX as prop ────────────────────────────────────
 // Index: 59
 // Group: props
@@ -61,3 +62,7 @@ function compile(c, ctx) {
   // See component_brace_values.js lines 7-11.
   return null;
 }
+
+_patterns[59] = { id: 59, match: match, compile: compile };
+
+})();

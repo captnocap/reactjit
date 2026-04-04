@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 135: ARIA / role attrs ─────────────────────────────
 // Index: 135
 // Group: misc_jsx
@@ -41,3 +42,7 @@ function compile(c, ctx) {
   // Intentionally outside the current node-field model.
   return null;
 }
+
+_patterns[135] = { id: 135, match: match, compile: compile };
+
+})();

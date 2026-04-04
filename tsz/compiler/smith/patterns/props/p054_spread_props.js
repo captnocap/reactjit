@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 054: Spread props ───────────────────────────────────
 // Index: 54
 // Group: props
@@ -78,3 +79,7 @@ function compile(c, ctx) {
 
   return { spread: true, name: spreadName };
 }
+
+_patterns[54] = { id: 54, match: match, compile: compile };
+
+})();

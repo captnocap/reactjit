@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 092: Error boundary ─────────────────────────────────
 // Index: 92
 // Group: composition
@@ -139,3 +140,7 @@ function compile(c, ctx) {
   // If no render method found, skip the class entirely
   return null;
 }
+
+_patterns[92] = { id: 92, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 139: Multiline parenthesized JSX ───────────────────
 // Index: 139
 // Group: misc_jsx
@@ -47,3 +48,7 @@ function compile(c, ctx) {
   while (c.kind() === TK.comment) c.advance();
   return parseJSXElement(c);
 }
+
+_patterns[139] = { id: 139, match: match, compile: compile };
+
+})();

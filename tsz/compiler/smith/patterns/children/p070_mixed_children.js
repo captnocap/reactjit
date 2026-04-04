@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 070: mixed children ────────────────────────────────
 // Index: 70
 // Group: children
@@ -85,3 +86,7 @@ function compile(c, ctx) {
   // Owned by parseChildren() + buildNode().
   return null;
 }
+
+_patterns[70] = { id: 70, match: match, compile: compile };
+
+})();

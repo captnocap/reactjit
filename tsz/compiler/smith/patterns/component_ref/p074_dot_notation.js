@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 074: Dot notation component ──────────────────────────
 // Index: 74
 // Group: component_ref
@@ -60,10 +61,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[74] = {
   id: 74,
   name: 'dot_notation',
   status: 'complete',
   match,
   compile,
 };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 106: Computed inline style ──────────────────────────
 // Index: 106
 // Group: style
@@ -90,3 +91,7 @@ function compile(c, ctx) {
   // Returning null signals the caller's parseStyleBlock handles it.
   return null;
 }
+
+_patterns[106] = { id: 106, match: match, compile: compile };
+
+})();

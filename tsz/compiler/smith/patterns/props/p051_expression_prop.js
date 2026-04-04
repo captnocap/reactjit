@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 051: Expression prop ────────────────────────────────
 // Index: 51
 // Group: props
@@ -171,3 +172,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance();
   return { value: val };
 }
+
+_patterns[51] = { id: 51, match: match, compile: compile };
+
+})();

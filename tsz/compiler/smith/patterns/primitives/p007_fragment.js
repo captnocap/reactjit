@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 007: Fragment render ────────────────────────────────
 // Index: 7
 // Group: primitives
@@ -38,3 +39,7 @@ function compile(c, ctx) {
   // Now cursor is on > — tryParseFragmentElement expects cursor on >
   return tryParseFragmentElement(c);
 }
+
+_patterns[7] = { id: 7, match: match, compile: compile };
+
+})();

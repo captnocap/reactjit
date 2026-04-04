@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 132: dangerouslySetInnerHTML ───────────────────────
 // Index: 132
 // Group: misc_jsx
@@ -34,3 +35,7 @@ function compile(c, ctx) {
   // Intentionally not compiled in this runtime model.
   return null;
 }
+
+_patterns[132] = { id: 132, match: match, compile: compile };
+
+})();

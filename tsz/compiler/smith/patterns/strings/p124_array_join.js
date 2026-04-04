@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 124: Array join ─────────────────────────────────────
 // Index: 124
 // Group: strings
@@ -104,3 +105,7 @@ function compile(c, ctx) {
   // Fallback: route through QuickJS eval
   return { value: buildEval(arrName + '.join("' + separator + '")', ctx) };
 }
+
+_patterns[124] = { id: 124, match: match, compile: compile };
+
+})();

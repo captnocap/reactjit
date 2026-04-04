@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 091: Portal ─────────────────────────────────────────
 // Index: 91
 // Group: composition
@@ -91,3 +92,7 @@ function compile(c, ctx) {
   // 5. Return the compiled child node as-is — it renders in place.
   return childNode;
 }
+
+_patterns[91] = { id: 91, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 009: Variable interpolation in JSX ─────────────────
 // Index: 9
 // Group: primitives
@@ -109,3 +110,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance();
   return { nodeExpr: '.{ .text = "" }' };
 }
+
+_patterns[9] = { id: 9, match: match, compile: compile };
+
+})();

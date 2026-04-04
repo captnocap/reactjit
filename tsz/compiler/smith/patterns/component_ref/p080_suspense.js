@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 080: Suspense boundary ───────────────────────────────
 // Index: 80
 // Group: component_ref
@@ -67,10 +68,12 @@ function compile(c, ctx) {
   return null;
 }
 
-module.exports = {
+_patterns[80] = {
   id: 80,
   name: 'suspense',
   status: 'complete',
   match,
   compile,
 };
+
+})();

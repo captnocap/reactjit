@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 034: slice().map() ──────────────────────────────────
 // Index: 34
 // Group: filter_sort
@@ -89,3 +90,7 @@ function compile(c, ctx) {
   // No compile action needed — the map pipeline owns this end-to-end.
   return null;
 }
+
+_patterns[34] = { id: 34, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 013: Ternary → string ───────────────────────────────
 // Index: 13
 // Group: ternary
@@ -76,3 +77,7 @@ function compile(c, children, ctx) {
   // Inside map: uses mapDynCount and __mtN__ format.
   return tryParseTernaryText(c, children);
 }
+
+_patterns[13] = { id: 13, match: match, compile: compile };
+
+})();

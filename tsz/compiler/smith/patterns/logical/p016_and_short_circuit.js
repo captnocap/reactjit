@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 016: && short-circuit ───────────────────────────────
 // Index: 16
 // Group: logical
@@ -77,3 +78,7 @@ function compile(c, children, ctx) {
   // 7. Pushes node to children with condIdx
   return tryParseConditional(c, children);
 }
+
+_patterns[16] = { id: 16, match: match, compile: compile };
+
+})();

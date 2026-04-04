@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 117: Event parameter ────────────────────────────────
 // Index: 117
 // Group: events
@@ -84,3 +85,7 @@ function compile(c, ctx) {
   // Returning null signals that the caller's attribute parsing path handles it.
   return null;
 }
+
+_patterns[117] = { id: 117, match: match, compile: compile };
+
+})();

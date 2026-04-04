@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 027: .map() with destructured params ───────────────
 // Index: 27
 // Group: map
@@ -81,3 +82,7 @@ function compile(c, ctx) {
   //   6. No runtime destructuring — compile-time field mapping
   return null;
 }
+
+_patterns[27] = { id: 27, match: match, compile: compile };
+
+})();

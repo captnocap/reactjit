@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 037: flatMap() → element ────────────────────────────
 // Index: 37
 // Group: filter_sort
@@ -77,3 +78,7 @@ function compile(c, ctx) {
   // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }
+
+_patterns[37] = { id: 37, match: match, compile: compile };
+
+})();

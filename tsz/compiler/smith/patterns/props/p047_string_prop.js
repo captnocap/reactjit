@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 047: String prop ───────────────────────────────────
 // Index: 47
 // Group: props
@@ -38,3 +39,7 @@ function compile(c, ctx) {
   // Delegates to collectComponentPropValues() in component_props.js.
   return null;
 }
+
+_patterns[47] = { id: 47, match: match, compile: compile };
+
+})();

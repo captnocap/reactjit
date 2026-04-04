@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 041: [...Array(n)].map() ───────────────────────────
 // Index: 41
 // Group: array_construction
@@ -91,3 +92,7 @@ function compile(c, ctx) {
   // JS_ToCString, so the index is the reliable piece of data.
   return null;
 }
+
+_patterns[41] = { id: 41, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 122: Template literal as prop ───────────────────────
 // Index: 122
 // Group: strings
@@ -46,3 +47,7 @@ function compile(c, ctx) {
   // flows through propStack into the inlined component.
   return null;
 }
+
+_patterns[122] = { id: 122, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 089: Context provider ───────────────────────────────
 // Index: 89
 // Group: composition
@@ -66,3 +67,7 @@ function compile(c, ctx) {
   // handles X.Provider as a transparent wrapper. Children render normally.
   return parseJSXElement(c);
 }
+
+_patterns[89] = { id: 89, match: match, compile: compile };
+
+})();

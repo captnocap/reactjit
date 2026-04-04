@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 104: Missing key ────────────────────────────────────
 // Index: 104
 // Group: keys
@@ -62,3 +63,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns[104] = { id: 104, match: match, compile: compile };
+
+})();

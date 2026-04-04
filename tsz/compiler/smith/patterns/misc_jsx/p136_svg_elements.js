@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 136: SVG in JSX ────────────────────────────────────
 // Index: 136
 // Group: misc_jsx
@@ -44,3 +45,7 @@ function compile(c, ctx) {
   // Delegates to parseJSXElement() for the currently-supported generic parse.
   return parseJSXElement(c);
 }
+
+_patterns[136] = { id: 136, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 096: useMemo computed value ─────────────────────────
 // Index: 96
 // Group: hooks
@@ -101,3 +102,7 @@ function compile(c, ctx) {
   //   8. If EXPR produces a scalar, it's a direct expression
   return null;
 }
+
+_patterns[96] = { id: 96, match: match, compile: compile };
+
+})();

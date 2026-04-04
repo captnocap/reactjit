@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 001: String literal render ──────────────────────────
 // Index: 1
 // Group: primitives
@@ -44,3 +45,7 @@ function compile(c, ctx) {
   var escaped = text.replace(/"/g, '\\"');
   return { nodeExpr: '.{ .text = "' + escaped + '" }' };
 }
+
+_patterns[1] = { id: 1, match: match, compile: compile };
+
+})();

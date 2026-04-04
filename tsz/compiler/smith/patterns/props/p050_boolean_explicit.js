@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 050: Boolean explicit ──────────────────────────────
 // Index: 50
 // Group: props
@@ -50,3 +51,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance(); // skip }
   return { value: val };
 }
+
+_patterns[50] = { id: 50, match: match, compile: compile };
+
+})();

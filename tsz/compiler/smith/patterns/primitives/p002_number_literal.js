@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 002: Number literal render ──────────────────────────
 // Index: 2
 // Group: primitives
@@ -36,3 +37,7 @@ function compile(c, ctx) {
   if (c.kind() === TK.rbrace) c.advance(); // consume }
   return { nodeExpr: '.{ .text = "' + value + '" }' };
 }
+
+_patterns[2] = { id: 2, match: match, compile: compile };
+
+})();

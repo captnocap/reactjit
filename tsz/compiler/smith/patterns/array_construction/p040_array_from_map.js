@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 040: Array.from().map() ─────────────────────────────
 // Index: 40
 // Group: array_construction
@@ -95,3 +96,7 @@ function compile(c, ctx) {
   // Functionally identical to p039 (Array(n).fill().map()) for rendering.
   return null;
 }
+
+_patterns[40] = { id: 40, match: match, compile: compile };
+
+})();

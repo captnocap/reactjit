@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 044: Object.entries().map() ────────────────────────
 // Index: 44
 // Group: array_construction
@@ -84,3 +85,7 @@ function compile(c, ctx) {
   // shape with no direct key/value fields.
   return null;
 }
+
+_patterns[44] = { id: 44, match: match, compile: compile };
+
+})();

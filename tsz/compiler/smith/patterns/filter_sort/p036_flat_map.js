@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 036: flat().map() ───────────────────────────────────
 // Index: 36
 // Group: filter_sort
@@ -90,3 +91,7 @@ function compile(c, ctx) {
   // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }
+
+_patterns[36] = { id: 36, match: match, compile: compile };
+
+})();

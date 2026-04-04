@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 133: Spread on native element ──────────────────────
 // Index: 133
 // Group: misc_jsx
@@ -71,3 +72,7 @@ function compile(c, ctx) {
 
   return null;
 }
+
+_patterns[133] = { id: 133, match: match, compile: compile };
+
+})();

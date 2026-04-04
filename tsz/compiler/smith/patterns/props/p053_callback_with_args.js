@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 053: Callback with args ─────────────────────────────
 // Index: 53
 // Group: props
@@ -135,3 +136,7 @@ function compile(c, ctx) {
   ctx.handlerCount++;
   return { value: handlerName, handler: true, rawBody: bodyParts.join(' ') };
 }
+
+_patterns[53] = { id: 53, match: match, compile: compile };
+
+})();

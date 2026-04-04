@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 019: .map() → element ───────────────────────────────
 // Index: 19
 // Group: map
@@ -103,3 +104,7 @@ function compile(c, children, ctx) {
   //   - Per-item dynamic text buffers
   return null; // Handled by brace.js map dispatcher
 }
+
+_patterns[19] = { id: 19, match: match, compile: compile };
+
+})();

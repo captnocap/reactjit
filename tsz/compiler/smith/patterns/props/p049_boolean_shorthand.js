@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 049: Boolean shorthand ─────────────────────────────
 // Index: 49
 // Group: props
@@ -45,3 +46,7 @@ function compile(c, ctx) {
   c.advance();
   return { value: 'true', attr: name };
 }
+
+_patterns[49] = { id: 49, match: match, compile: compile };
+
+})();

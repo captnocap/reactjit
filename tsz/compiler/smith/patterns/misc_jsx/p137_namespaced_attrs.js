@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 137: Namespaced attrs ──────────────────────────────
 // Index: 137
 // Group: misc_jsx
@@ -35,3 +36,7 @@ function compile(c, ctx) {
   // Blocked on first-class SVG support; intentionally not compiled today.
   return null;
 }
+
+_patterns[137] = { id: 137, match: match, compile: compile };
+
+})();

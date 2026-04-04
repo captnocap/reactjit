@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 088: forwardRef ─────────────────────────────────────
 // Index: 88
 // Group: composition
@@ -77,3 +78,7 @@ function compile(c, ctx) {
   // Not applicable — no ref concept in our compilation model.
   return null;
 }
+
+_patterns[88] = { id: 88, match: match, compile: compile };
+
+})();

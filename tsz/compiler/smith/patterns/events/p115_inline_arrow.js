@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 115: Inline arrow handler ───────────────────────────
 // Index: 115
 // Group: events
@@ -80,3 +81,7 @@ function compile(c, children, ctx) {
   if (result === handlerRef) ctx.handlerCount++;
   return { handlerRef: result };
 }
+
+_patterns[115] = { id: 115, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 066: single child ──────────────────────────────────
 // Index: 66
 // Group: children
@@ -81,3 +82,7 @@ function compile(c, ctx) {
   // Owned by parseChildren() + buildNode().
   return null;
 }
+
+_patterns[66] = { id: 66, match: match, compile: compile };
+
+})();

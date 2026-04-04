@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 084: Object lookup rendering ────────────────────────
 // Index: 84
 // Group: conditional_rendering
@@ -60,3 +61,7 @@ function compile(c, ctx) {
   parseIfBlock(c, children);
   return { children: children };
 }
+
+_patterns[84] = { id: 84, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 065: forwarded ref prop ────────────────────────────
 // Index: 65
 // Group: props
@@ -58,3 +59,7 @@ function compile(c, ctx) {
   // No live lowering in the current compile-time component model.
   return null;
 }
+
+_patterns[65] = { id: 65, match: match, compile: compile };
+
+})();

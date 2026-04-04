@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 099: useId generated ─────────────────────────────────
 // Index: 99
 // Group: hooks
@@ -94,3 +95,7 @@ function compile(c, ctx) {
 
   return null; // Declaration, not JSX — no node emitted.
 }
+
+_patterns[99] = { id: 99, match: match, compile: compile };
+
+})();

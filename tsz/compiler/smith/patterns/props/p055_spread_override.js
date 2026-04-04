@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 055: Spread + override ──────────────────────────────
 // Index: 55
 // Group: props
@@ -85,3 +86,7 @@ function compile(c, ctx) {
 
   return { spread: true, name: spreadName, hasOverrides: true };
 }
+
+_patterns[55] = { id: 55, match: match, compile: compile };
+
+})();

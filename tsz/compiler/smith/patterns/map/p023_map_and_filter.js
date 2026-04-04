@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 023: .map() with && short-circuit ──────────────────
 // Index: 23
 // Group: map
@@ -71,3 +72,7 @@ function compile(c, ctx) {
   //   7. Nodes after the conditional count are .display = .none
   return null;
 }
+
+_patterns[23] = { id: 23, match: match, compile: compile };
+
+})();

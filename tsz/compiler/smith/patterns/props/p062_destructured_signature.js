@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 062: destructured params ───────────────────────────
 // Index: 62
 // Group: props
@@ -66,3 +67,7 @@ function compile(c, ctx) {
   // Signature collection happens in collect/components.js, not inline here.
   return null;
 }
+
+_patterns[62] = { id: 62, match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 082: Guard clause (return null) ────────────────────
 // Index: 82
 // Group: conditional_rendering
@@ -51,3 +52,7 @@ function compile(c, ctx) {
   parseIfBlock(c, children);
   return { children: children };
 }
+
+_patterns[82] = { id: 82, match: match, compile: compile };
+
+})();

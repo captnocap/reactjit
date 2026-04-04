@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 038: [...a, ...b].map() ─────────────────────────────
 // Index: 38
 // Group: filter_sort
@@ -95,3 +96,7 @@ function compile(c, ctx) {
   // compiler can produce a meaningful diagnostic rather than a cryptic failure.
   return null;
 }
+
+_patterns[38] = { id: 38, match: match, compile: compile };
+
+})();

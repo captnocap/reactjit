@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 042: Object.keys().map() ───────────────────────────
 // Index: 42
 // Group: array_construction
@@ -87,3 +88,7 @@ function compile(c, ctx) {
   // index-like unless they arrive through render-local aliases.
   return null;
 }
+
+_patterns[42] = { id: 42, match: match, compile: compile };
+
+})();

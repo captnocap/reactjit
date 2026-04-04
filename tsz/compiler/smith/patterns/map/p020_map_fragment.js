@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 020: .map() → fragment ──────────────────────────────
 // Index: 20
 // Group: map
@@ -81,3 +82,7 @@ function compile(c, children, ctx) {
   // The map emitter sizes pools based on actual children count per item.
   return null; // Handled by brace.js map dispatcher
 }
+
+_patterns[20] = { id: 20, match: match, compile: compile };
+
+})();

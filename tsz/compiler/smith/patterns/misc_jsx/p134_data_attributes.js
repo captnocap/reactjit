@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 134: data-* attributes ─────────────────────────────
 // Index: 134
 // Group: misc_jsx
@@ -39,3 +40,7 @@ function compile(c, ctx) {
   // Intentionally not preserved in the current native node model.
   return null;
 }
+
+_patterns[134] = { id: 134, match: match, compile: compile };
+
+})();

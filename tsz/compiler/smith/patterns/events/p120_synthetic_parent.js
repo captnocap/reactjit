@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 120: Pass handler to parent ─────────────────────────
 // Index: 120
 // Group: events
@@ -88,3 +89,7 @@ function compile(c, children, ctx) {
   if (result === handlerRef) ctx.handlerCount++;
   return { handlerRef: result };
 }
+
+_patterns[120] = { id: 120, match: match, compile: compile };
+
+})();

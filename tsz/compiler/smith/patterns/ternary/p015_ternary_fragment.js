@@ -1,3 +1,4 @@
+(function() {
 // ── Pattern 015: Ternary → fragment ─────────────────────────────
 // Index: 15
 // Group: ternary
@@ -61,3 +62,7 @@ function compile(c, children, ctx) {
   // transparently — the returned node wraps fragment children.
   return tryParseTernaryJSX(c, children);
 }
+
+_patterns[15] = { id: 15, match: match, compile: compile };
+
+})();

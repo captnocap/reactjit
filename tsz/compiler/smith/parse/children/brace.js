@@ -716,17 +716,11 @@ function tryParseBraceChild(c, children) {
         _luaItemParam = c.text(); c.advance();
       }
       if (c.kind() === TK.arrow) c.advance(); // =>
-      // Now c is at the map body JSX — emit Lua
-      // Lua walker disabled pending fix — use placeholder
-      var _luaCode = '-- lua map placeholder\nfunction __rebuildLuaMap' + _luaMapIdx + '() end\n';
-      // Consume remaining tokens until closing }
-      var _lmDepth = 0;
-      while (c.pos < c.count) {
-        if (c.kind() === TK.lparen) _lmDepth++;
-        if (c.kind() === TK.rparen) { _lmDepth--; if (_lmDepth < 0) { c.advance(); break; } }
-        c.advance();
-      }
-      if (c.kind() === TK.rparen) c.advance(); // outer )
+      // Now c is at the map body JSX — emit real Lua via emitLuaRebuildList
+      var _luaCode = emitLuaRebuildList(_luaMapIdx, c, _luaItemParam, 'Box');
+      // emitLuaRebuildList walks the JSX and advances cursor past it.
+      // Consume any remaining parens/braces from the .map() wrapper
+      while (c.kind() === TK.rparen) c.advance();
       if (c.kind() === TK.rbrace) c.advance(); // }
       // Store the Lua rebuilder and raw JS for the source array computation
       var _luaRawSource = ctx._renderLocalRaw && ctx._renderLocalRaw[_brRlName] || _brRlName;
