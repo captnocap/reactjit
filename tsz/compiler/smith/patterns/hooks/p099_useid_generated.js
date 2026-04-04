@@ -1,7 +1,7 @@
 // ── Pattern 099: useId generated ─────────────────────────────────
 // Index: 99
 // Group: hooks
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const id = useId();
@@ -11,6 +11,7 @@
 //       <Box>
 //         <Text>{id}</Text>
 //         <TextInput id={id} />
+//         <Text aria-describedby={id}>Help text</Text>
 //       </Box>
 //     );
 //   }
@@ -19,36 +20,77 @@
 //   Same as soup for this pattern.
 //
 // Zig output target:
-//   N/A — useId generates unique IDs for accessibility, which has
-//   no equivalent in our rendering model.
+//   // useId() → comptime-generated unique string render local.
+//   //
+//   // const id = useId()
+//   //   → render local: id = "__uid_0"
+//   //
+//   // {id} in JSX text:
+//   //   .{ .text = "__uid_0" }
+//   //
+//   // id={id} as prop:
+//   //   Stripped or passed as string prop depending on element type.
+//   //
+//   // aria-describedby={id}:
+//   //   Compiled as accessibility attribute with the unique string.
 //
 // Notes:
-//   useId generates a unique string ID that's stable across server
-//   and client renders. It's primarily used for:
-//     1. HTML id/htmlFor attribute pairing (accessibility)
-//     2. Generating unique keys for dynamic content
-//     3. ARIA attributes (aria-describedby, etc.)
+//   useId generates a stable unique string in React, primarily for
+//   HTML id/htmlFor pairing and ARIA attributes. In our model:
 //
-//   In our compiled model:
-//     - There is no HTML. No id attribute. No htmlFor.
-//     - Node identity is positional (array index), not string-based.
-//     - Accessibility is handled by the framework's accessibility
-//       layer, not by HTML semantics.
-//     - If a unique string is needed in render output, it can be
-//       a comptime-generated constant.
+//   - No HTML means no id/htmlFor pairing needed
+//   - Node identity is positional (array index), not string-based
+//   - But the unique string may be used in text display or as a
+//     prop value, so we still need to generate one
 //
-//   If useId is encountered:
-//     - Strip the call and register as a render local with a
-//       comptime-generated unique string (e.g., "__uid_0")
-//     - Or treat as opaque and eval in QuickJS
+//   Compilation: generate a comptime unique string "__uid_N" where N
+//   is a monotonically increasing counter per compilation unit. This
+//   is deterministic and stable across rebuilds (same source → same
+//   IDs). The string is registered as a render local.
 
 function match(c, ctx) {
-  // const id = useId()
-  return false;
+  // const X = useId()
+  var saved = c.save();
+  if (c.kind() !== 6) { c.restore(saved); return false; }
+  var kw = c.text();
+  if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== 6) { c.restore(saved); return false; }
+  c.advance(); // variable name
+  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  c.advance();
+  var isUseId = c.kind() === 6 && c.text() === 'useId';
+  c.restore(saved);
+  return isUseId;
 }
 
 function compile(c, ctx) {
-  // Not applicable. Could be compiled to a comptime unique string
-  // if needed. Currently no use case in the framework.
-  return null;
+  // 1. Parse: const varName = useId()
+  c.advance(); // const/let
+  var varName = c.text();
+  c.advance(); // variable name
+  c.advance(); // =
+  c.advance(); // useId
+  c.advance(); // (
+  if (c.kind() === 9 /* TK.rparen */) c.advance(); // )
+
+  // 2. Generate a unique ID string for this compilation unit.
+  if (!ctx._useIdCounter) ctx._useIdCounter = 0;
+  var uid = '__uid_' + ctx._useIdCounter;
+  ctx._useIdCounter++;
+
+  // 3. Register as a render local with the generated string.
+  //    Any reference to {varName} in JSX resolves to this string.
+  ctx.renderLocals[varName] = '"' + uid + '"';
+
+  // 4. In text nodes: {id} → .{ .text = "__uid_0" }
+  //    Static text, no dynamic buffer needed.
+
+  // 5. As prop value: id={id} → attribute with string value "__uid_0"
+  //    Most id/htmlFor/aria props compile to string props on the node.
+
+  // 6. In template literals: {`label-${id}`} → bufPrint with the
+  //    render local, which resolves to the static string.
+
+  return null; // Declaration, not JSX — no node emitted.
 }
