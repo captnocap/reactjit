@@ -391,7 +391,7 @@ function parseStyleBlock(c) {
           if (typeof resolved === 'number') fields.push(`.${styleKeys[key]} = ${resolved}`);
         } else if (val.type === 'string' && val.value.endsWith('%')) {
           const pct = parseFloat(val.value);
-          fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
+          fields.push(`.${styleKeys[key]} = ${-(pct / 100)}`);
         } else if (val.type === 'number') {
           fields.push(`.${styleKeys[key]} = ${val.value}`);
         }

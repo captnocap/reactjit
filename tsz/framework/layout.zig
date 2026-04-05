@@ -645,7 +645,7 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
 
 fn estimateIntrinsicWidthUncached(node: *Node) f32 {
     const s = node.style;
-    if (s.width != null) {
+    if (s.width != null and s.width.? >= 0) {
         return s.width.?;
     }
     const pl = padLeft(s);
@@ -700,7 +700,7 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
 
 fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     const s = node.style;
-    if (s.height != null) {
+    if (s.height != null and s.height.? >= 0) {
         return s.height.?;
     }
     if (s.aspect_ratio != null and s.aspect_ratio.? > 0 and s.width != null) {
@@ -1551,15 +1551,24 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         }
                         if (child.style.height == null and effAlign == .stretch) {
                             child._stretch_h = chFinal;
+                        } else if (child.style.height != null and child.style.height.? < 0) {
+                            // Percentage height already resolved — prevent double-resolution
+                            child._stretch_h = chFinal;
                         }
                     } else {
                         if (child.style.height == null and child.style.flex_grow > 0) {
+                            child._stretch_h = chFinal;
+                        } else if (child.style.height != null and child.style.height.? < 0) {
+                            // Percentage height already resolved — prevent double-resolution
                             child._stretch_h = chFinal;
                         } else if (child.style.height != null and chFinal < (resolveMaybePct(child.style.height, innerH) orelse chFinal)) {
                             // Flex shrink: child was compressed below its explicit height
                             child._stretch_h = chFinal;
                         }
                         if (child.style.width == null and effAlign == .stretch) {
+                            child._flex_w = cwFinal;
+                        } else if (child.style.width != null and child.style.width.? < 0) {
+                            // Percentage width already resolved — prevent double-resolution
                             child._flex_w = cwFinal;
                         }
                     }
