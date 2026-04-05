@@ -243,6 +243,78 @@ function emitLuaElement(c, itemParam, indent) {
   var tagName = c.text();
   c.advance(); // skip tag name
 
+  // Component inlining: if tag is a user-defined component, collect its props,
+  // then walk the component's JSX body with prop values substituted.
+  var _primitives = { Box: 1, Text: 1, Pressable: 1, ScrollView: 1, Image: 1, TextInput: 1, Cartridge: 1, Effect: 1, Glyph: 1, Graph: 1 };
+  if (!_primitives[tagName] && ctx && ctx.components) {
+    var _comp = null;
+    for (var _ci = 0; _ci < ctx.components.length; _ci++) {
+      if (ctx.components[_ci].name === tagName) { _comp = ctx.components[_ci]; break; }
+    }
+    if (_comp && _comp.bodyPos >= 0) {
+      // Collect props from the component call: <Comp prop1={expr} prop2={expr} />
+      var _compProps = {};
+      while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash && c.kind() !== TK.slash_gt) {
+        if (c.kind() === TK.identifier) {
+          var _pName = c.text(); c.advance();
+          if (c.kind() === TK.equals) {
+            c.advance();
+            var _pParts = [];
+            if (c.kind() === TK.lbrace) {
+              c.advance();
+              var _pd = 0;
+              while (c.pos < c.count && !(_pd === 0 && c.kind() === TK.rbrace)) {
+                if (c.kind() === TK.lbrace) _pd++;
+                if (c.kind() === TK.rbrace) _pd--;
+                _pParts.push(c.text());
+                c.advance();
+              }
+              if (c.kind() === TK.rbrace) c.advance();
+            } else if (c.kind() === TK.string) {
+              _pParts.push(c.text()); c.advance();
+            } else if (c.kind() === TK.number) {
+              _pParts.push(c.text()); c.advance();
+            }
+            _compProps[_pName] = _pParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+          }
+        } else { c.advance(); }
+      }
+      // Skip past closing > or />
+      if (c.kind() === TK.slash_gt) { c.advance(); }
+      else if (c.kind() === TK.slash) { c.advance(); if (c.kind() === TK.gt) c.advance(); }
+      else if (c.kind() === TK.gt) {
+        c.advance();
+        // Skip to closing tag </CompName>
+        var _skipD = 1;
+        while (c.pos < c.count && _skipD > 0) {
+          if (c.kind() === TK.lt_slash) {
+            _skipD--;
+            if (_skipD === 0) { c.advance(); if (c.kind() === TK.identifier) c.advance(); if (c.kind() === TK.gt) c.advance(); break; }
+          } else if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+            _skipD++;
+          }
+          c.advance();
+        }
+      }
+      // Walk the component's JSX body with prop substitution
+      var _compSaved = c.save();
+      c.restore(_comp.bodyPos);
+      // Build a modified itemParam that includes prop substitution
+      var _compResult = emitLuaElement(c, itemParam, indent);
+      c.restore(_compSaved);
+      // Substitute prop references in the emitted Lua
+      for (var _pk in _compProps) {
+        _compResult = _compResult.replace(new RegExp('_item\\.' + _pk + '\\b', 'g'), _compProps[_pk]);
+        // Also replace bare prop names for bare-param components
+        if (_comp.isBareParams) {
+          _compResult = _compResult.replace(new RegExp('\\b' + _pk + '\\b', 'g'), _compProps[_pk]);
+        }
+      }
+      _luaEmitDepth--;
+      return _compResult;
+    }
+  }
+
   var node = { style: null, fontSize: null, color: null, children: [], text: null, handler: null };
 
   // Parse attributes

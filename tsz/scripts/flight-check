@@ -620,7 +620,8 @@ for comp in $COMPONENT_DEFS; do
             [ -z "$cc" ] && continue
             COMP_TOTAL=$((COMP_TOTAL + 1))
             cc_rgb=$(hex_to_rgb "$cc")
-            if ! grep -q "Color\.rgb($cc_rgb)" <<< "$GEN_BLOB"; then
+            cc_bare="${cc#\#}"
+            if ! grep -q "Color\.rgb($cc_rgb)" <<< "$GEN_BLOB" && ! grep -qi "0x${cc_bare}" <<< "$GEN_BLOB"; then
                 COMP_MISSING=$((COMP_MISSING + 1))
             fi
         done
