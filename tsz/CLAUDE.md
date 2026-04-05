@@ -18,12 +18,34 @@
 ## THE ONLY BUILD COMMAND
 
 ```bash
-tsz-build carts/conformance/CART.tsz
+./scripts/build carts/conformance/CART.tsz
 ```
 
-That is it. If you are typing `zig build forge`, `./zig-out/bin/forge`, `cp generated_`, `zig build app`, or ANY combination of those manually — you are doing it wrong. Use `tsz-build`. It does all of that for you.
+That is it. If you are typing `zig build core-so`, `zig build core`, `zig build app`, or ANY raw zig build command — you are **bypassing the engine tracking system** and you will be caught. The build script auto-detects untracked engines and forces a clean rebuild.
 
-If `tsz-build` isn't in your PATH: `./scripts/build carts/conformance/CART.tsz`
+**NEVER run `zig build core-so` or `zig build core` directly.** The build script handles engine rebuilds automatically. It detects framework/ changes, nukes the Zig cache, and force-rebuilds when needed.
+
+### Engine builds — blessed vs dirty
+
+Two engines exist: a **blessed** engine (human-verified, no pre-existing bugs) and a **dirty** engine (whatever you just built).
+
+```bash
+# Normal build — auto-detects if framework/ changed, rebuilds engine if needed
+./scripts/build carts/conformance/CART.tsz
+
+# Build against the blessed engine — proves bugs are in your compiler/cart code
+./scripts/build carts/conformance/CART.tsz --proveIBrokeIt
+
+# If you touched framework/ code and want to be explicit about it:
+./scripts/buildFromMyShittyNewCode carts/conformance/CART.tsz
+
+# If you only touched compiler/ or cart code:
+./scripts/ICantCallPreExistingOnThisOne carts/conformance/CART.tsz
+```
+
+**DO NOT run `./scripts/bless-engine`.** Only the human promotes engines to blessed.
+
+If a conformance build fails, the build script prints a **failure receipt** showing: the test source hash, the engine hash, the framework source hash diff between your code and the last working build, human verification status, and how many engines this test has passed on. If the source is unchanged and the framework changed — it's your code.
 
 ---
 

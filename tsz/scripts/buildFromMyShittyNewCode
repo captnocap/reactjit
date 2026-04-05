@@ -39,14 +39,6 @@ SO_HASH_BEFORE=$(sha256sum "$DIRTY_SO" 2>/dev/null | cut -c1-16 || echo "none")
 echo "[dirty] framework source hash: $SRC_HASH_BEFORE"
 echo "[dirty] engine .so hash before: $SO_HASH_BEFORE"
 
-# ── Nuke engine cache — no stale builds ─────────────────────────
-# .zig-cache/h/ has hash manifests — Zig's "is this up to date?" decisions.
-# Deleting these forces Zig to re-hash all inputs and recompile.
-# .zig-cache/o/ has the build runner (compiled build.zig) — leave it alone.
-rm -f "$DIRTY_SO"
-rm -rf .zig-cache/h   # hash manifests — the "nothing changed" decisions
-echo "[dirty] cleared engine cache (hash manifests + output)"
-
 # ── Rebuild engine from current (dirty) source ──────────────────
 echo "[dirty] rebuilding engine .so from framework/..."
 zig build core-so -Doptimize=ReleaseFast 2>&1 || {
@@ -64,10 +56,16 @@ SO_HASH_AFTER=$(sha256sum "$DIRTY_SO" 2>/dev/null | cut -c1-16 || echo "MISSING"
 echo "[dirty] engine .so hash after:  $SO_HASH_AFTER"
 
 if [ "$SO_HASH_BEFORE" != "none" ] && [ "$SO_HASH_BEFORE" = "$SO_HASH_AFTER" ]; then
-    echo ""
-    echo "  WARNING: engine hash unchanged despite cache nuke."
-    echo "  Source may not have actually changed, or Zig reproduced identical output."
-    echo ""
+    echo "[dirty] !! CACHE LIED: framework changed but .so hash unchanged"
+    echo "[dirty] !! Nuking engine cache and retrying..."
+    rm -rf .zig-cache/h
+    rm -f "$DIRTY_SO"
+    zig build core-so -Doptimize=ReleaseFast 2>&1 || {
+        echo "[dirty] engine rebuild failed on retry"
+        exit 1
+    }
+    SO_HASH_AFTER=$(sha256sum "$DIRTY_SO" 2>/dev/null | cut -c1-16 || echo "MISSING")
+    echo "[dirty] engine .so hash after retry: $SO_HASH_AFTER"
 fi
 
 # Stamp the dirty build

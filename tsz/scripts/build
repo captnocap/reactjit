@@ -8,6 +8,7 @@
 # First run builds the engine .a (~24s one-time). Every build after: ~6s.
 
 set -euo pipefail
+BUILD_T0=$(date +%s%N)
 cd "$(dirname "$0")/.."
 
 # ── Parse flags ──────────────────────────────────────────────────────
@@ -36,6 +37,13 @@ done
 if [ "${#POSITIONAL[@]}" -eq 0 ]; then
     echo "Usage: scripts/build <cart.tsz> [--debug] [--proveIBrokeIt]"
     exit 1
+fi
+
+# ── Startup latency ─────────────────────────────────────────────────
+BUILD_T1=$(date +%s%N)
+STARTUP_MS=$(( (BUILD_T1 - BUILD_T0) / 1000000 ))
+if [ "$STARTUP_MS" -gt 500 ]; then
+    echo "[$NAME] !! STARTUP LATENCY: ${STARTUP_MS}ms before build began"
 fi
 
 # Auto-rebuild vello if stripped lib is missing (happens after fresh clone or git filter-repo)
@@ -315,10 +323,19 @@ report_failure() {
     fi
 
     echo "║"
-    echo "║  Human has verified this source code works. It has built"
-    echo "║  successfully against $engine_count engine(s). The framework"
-    echo "║  source you are running is DIFFERENT from the last working"
-    echo "║  build. This is an error in YOUR CODE."
+    if [ -n "$verified_info" ]; then
+        echo "║  Human has verified this source code works. It has built"
+        echo "║  successfully against $engine_count engine(s). The framework"
+        echo "║  source you are running is DIFFERENT from the last working"
+        echo "║  build. This is an error in YOUR CODE."
+    elif [ "$engine_count" -gt 0 ] 2>/dev/null; then
+        echo "║  This test has compiled successfully against $engine_count"
+        echo "║  engine(s) in the past. The framework source you are running"
+        echo "║  is DIFFERENT from the last working build."
+        echo "║  This is an error in YOUR CODE."
+    else
+        echo "║  This is an error in YOUR CODE."
+    fi
     echo "║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo ""
@@ -364,15 +381,15 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
 fi
 
 # ── Step 0: ensure forge + engine are up to date ───────────────────
-# Smith JS is embedded at compile time. If any smith_*.js file changed
-# since the last forge build, the binary is stale. zig build is
-# incremental — no-op when nothing changed (~200ms), rebundle when
-# JS changed (~2s). Cheaper than debugging stale output.
+PHASE_T=$(date +%s%N)
 zig build forge 2>/dev/null || {
     echo "[$NAME] WARNING: zig build forge failed — using existing binary"
 }
+FORGE_REBUILD_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
+[ "$FORGE_REBUILD_MS" -gt 500 ] && echo "[$NAME] forge rebuild: ${FORGE_REBUILD_MS}ms"
 
 # ── Engine routing ──────────────────────────────────────────────────
+PHASE_T=$(date +%s%N)
 # Three modes:
 #   1. REACTJIT_SKIP_ENGINE_BUILD=1 → blessed engine already swapped in, don't touch
 #   2. --proveIBrokeIt → swap blessed engine in for this build
@@ -410,14 +427,27 @@ else
         fi
     fi
 
+    # Detect untracked engine builds (someone ran zig build core-so directly)
+    if [ -f "$ENGINE_SO" ] && [ -f "conformance.db" ] && [ -z "$LAST_ENGINE_SRC" ]; then
+        echo ""
+        echo "  !! UNTRACKED ENGINE DETECTED"
+        echo "  !! The current engine .so (${CUR_ENG_SHA:0:16}...) is not in the DB."
+        echo "  !! Someone ran 'zig build core-so' directly, bypassing the build system."
+        echo "  !! Forcing clean rebuild to get back on track."
+        echo ""
+    fi
+
     if [ -n "$LAST_ENGINE_SRC" ] && [ "$FW_HASH_NOW" = "$LAST_ENGINE_SRC" ]; then
         # Framework unchanged — use existing engine
         echo "[$NAME] engine up to date (framework/ unchanged)"
     else
-        # Framework changed or unknown engine — force dirty rebuild
-        echo "[$NAME] framework/ changed since last engine build — forcing clean rebuild"
-        rm -f "$ENGINE_SO"
-        rm -rf .zig-cache/h
+        # Framework changed, unknown engine, or untracked build — force dirty rebuild
+        if [ -n "$LAST_ENGINE_SRC" ]; then
+            echo "[$NAME] framework/ changed since last engine build — forcing clean rebuild"
+        else
+            echo "[$NAME] engine not registered — forcing clean rebuild"
+        fi
+        SO_HASH_BEFORE=$(sha256sum "$ENGINE_SO" 2>/dev/null | cut -c1-16 || echo "none")
         zig build core-so -Doptimize=ReleaseFast 2>&1 || {
             echo ""
             echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -440,9 +470,23 @@ else
                 "INSERT OR REPLACE INTO engine_builds (engine_sha, commit_sha, source_hash)
                  VALUES ('$NEW_ENG_SHA', '$COMMIT', '$FW_HASH_NOW');" 2>/dev/null || true
         fi
+        # Verify the rebuild actually produced a different binary
+        if [ "$SO_HASH_BEFORE" != "none" ] && [ "$SO_HASH_BEFORE" = "${NEW_ENG_SHA:0:16}" ]; then
+            echo "[$NAME] !! ENGINE CACHE LIED: framework changed but .so hash unchanged"
+            echo "[$NAME] !! Nuking cache and retrying..."
+            rm -rf .zig-cache/h
+            rm -f "$ENGINE_SO"
+            zig build core-so -Doptimize=ReleaseFast 2>&1 || {
+                echo "[$NAME] engine rebuild failed on retry"
+                exit 1
+            }
+            NEW_ENG_SHA=$(sha256sum "$ENGINE_SO" | awk '{print $1}')
+        fi
         echo "[$NAME] engine rebuilt: ${NEW_ENG_SHA:0:16}..."
     fi
 fi
+ENGINE_ROUTE_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
+[ "$ENGINE_ROUTE_MS" -gt 500 ] && echo "[$NAME] engine routing: ${ENGINE_ROUTE_MS}ms"
 
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
 # Clean stale outputs so preflight check doesn't read old monolith errors

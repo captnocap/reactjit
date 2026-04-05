@@ -47,11 +47,6 @@ fi
 
 # ── Promote ─────────────────────────────────────────────────────────
 
-# Nuke cache — blessed builds must be from-scratch, no stale artifacts
-rm -f "$DIRTY_SO"
-rm -rf .zig-cache/h
-echo "[bless] cleared engine cache"
-
 # Build fresh from current source
 echo "[bless] building engine from current framework/ source..."
 zig build core-so -Doptimize=ReleaseFast || {
