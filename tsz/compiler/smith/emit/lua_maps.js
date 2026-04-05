@@ -383,6 +383,26 @@ function emitLuaChildren(c, itemParam, indent) {
         if (c.kind() === TK.amp_amp) {
           c.advance(); // skip &&
           var condExpr = condParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+          // Handle chained &&: a && b && c && <JSX> → (a) and (b) and (c) and element
+          while (c.kind() !== TK.lt && c.kind() !== TK.lparen && c.kind() !== TK.rbrace && c.pos < c.count) {
+            var chainParts = [];
+            while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace && c.kind() !== TK.lt && c.kind() !== TK.lparen) {
+              chainParts.push(c.text());
+              c.advance();
+            }
+            if (c.kind() === TK.amp_amp) {
+              c.advance();
+              var chainExpr = chainParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+              condExpr = '(' + condExpr + ') and (' + chainExpr + ')';
+            } else {
+              // Not another &&, push parts back conceptually — we're at < or ) or }
+              if (chainParts.length > 0) {
+                var chainExpr2 = chainParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+                condExpr = '(' + condExpr + ') and (' + chainExpr2 + ')';
+              }
+              break;
+            }
+          }
           // Check if next is JSX
           if (c.kind() === TK.lt || c.kind() === TK.lparen) {
             if (c.kind() === TK.lparen) c.advance(); // skip optional (
