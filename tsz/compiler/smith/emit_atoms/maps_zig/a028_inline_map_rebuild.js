@@ -37,12 +37,7 @@ function _a028_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return m.isInline; });
 }
 
-function _a028_emit(ctx, meta) {
-  void ctx; void meta;
-  // Inline rebuilds are emitted inline by atom 026 (flat_map_rebuild).
-  // This atom is a reference/documentation placeholder.
-  return '';
-}
+function _a028_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[28] = {
   id: 28,

@@ -30,12 +30,7 @@ function _a027_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return m.isNested; });
 }
 
-function _a027_emit(ctx, meta) {
-  void ctx; void meta;
-  // Nested rebuilds are emitted inline by atom 026 (flat_map_rebuild).
-  // This atom is a reference/documentation placeholder.
-  return '';
-}
+function _a027_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[27] = {
   id: 27,

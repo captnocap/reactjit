@@ -49,7 +49,7 @@ function buildRoutePlan(source) {
 function finishParsedLane(nodeExpr, file, opts) {
   opts = opts || {};
 
-  var pf = preflight(ctx);
+  var pf = validate(ctx);
   if (opts.logPreflight) {
     LOG_EMIT('L092', { lane: pf.lane, summary: Object.keys(pf.intents).filter(function(k) { return pf.intents[k]; }).join(',') });
     for (var wi = 0; wi < pf.warnings.length; wi++) LOG_EMIT('L091', { id: 'WARN', msg: pf.warnings[wi] });
@@ -61,7 +61,7 @@ function finishParsedLane(nodeExpr, file, opts) {
     print('[preflight] lane=' + pf.lane + ' ok=' + pf.ok);
   }
   if (!pf.ok) {
-    return stampIntegrity(preflightErrorZig(pf, file));
+    return stampIntegrity(validateErrorZig(pf, file));
   }
 
   ctx._preflight = pf;

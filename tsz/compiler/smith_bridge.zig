@@ -126,6 +126,41 @@ pub fn callCompile(alloc: std.mem.Allocator) ?[]const u8 {
     return result;
 }
 
+/// Call the global smithCheck() function and return the report string.
+/// Returns null on error.
+pub fn callCheck(alloc: std.mem.Allocator) ?[]const u8 {
+    const ctx = g_ctx orelse return null;
+
+    const code = "smithCheck()";
+    const val = qjs.JS_Eval(ctx, code.ptr, code.len, "<forge>", qjs.JS_EVAL_TYPE_GLOBAL);
+    if (qjs.JS_IsException(val)) {
+        dumpException(ctx);
+        return null;
+    }
+    defer qjs.JS_FreeValue(ctx, val);
+
+    var len: usize = 0;
+    const ptr = qjs.JS_ToCStringLen(ctx, &len, val);
+    if (ptr == null) return null;
+    defer qjs.JS_FreeCString(ctx, ptr);
+
+    const result = alloc.alloc(u8, len) catch return null;
+    @memcpy(result, ptr[0..len]);
+    return result;
+}
+
+/// Get a global integer variable from the JS context.
+pub fn getGlobalInt(name: [*:0]const u8) i64 {
+    const ctx = g_ctx orelse return 0;
+    const global = qjs.JS_GetGlobalObject(ctx);
+    defer qjs.JS_FreeValue(ctx, global);
+    const val = qjs.JS_GetPropertyStr(ctx, global, name);
+    defer qjs.JS_FreeValue(ctx, val);
+    var pres: i64 = 0;
+    _ = qjs.JS_ToInt64(ctx, &pres, val);
+    return pres;
+}
+
 fn dumpException(ctx: *qjs.JSContext) void {
     const ex = qjs.JS_GetException(ctx);
     defer qjs.JS_FreeValue(ctx, ex);

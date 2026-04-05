@@ -225,8 +225,10 @@ pub fn main() !void {
         return;
     };
 
-    if (!std.mem.eql(u8, cmd, "build")) {
-        std.debug.print("Unknown command: {s}\nUsage: forge build <file.tsz>\n", .{cmd});
+    const is_check = std.mem.eql(u8, cmd, "check");
+    // forge check runs Smith predict path only (route scan + atoms). NOT the legacy Generator in cli.zig.
+    if (!std.mem.eql(u8, cmd, "build") and !is_check) {
+        std.debug.print("Unknown command: {s}\nUsage: forge build|check <file.tsz>\n", .{cmd});
         return;
     }
 
@@ -334,6 +336,7 @@ pub fn main() !void {
     if (dbg_nodes) smith.setGlobalInt("__DBG_NODES", 1);
     if (dbg_state) smith.setGlobalInt("__DBG_STATE", 1);
     if (dbg_compiler) smith.setGlobalInt("__DBG_COMPILER", 1);
+    if (is_check) smith.setGlobalInt("__CHECK_ONLY", 1);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = Alloc.alloc(u8, lexer.count) catch return;
@@ -353,7 +356,22 @@ pub fn main() !void {
         return;
     }
 
-    // 6. Call compile()
+    // 6. Call compile() or smithCheck()
+    if (is_check) {
+        const report = smith.callCheck(Alloc) orelse {
+            std.debug.print("[forge] Smith smithCheck() failed\n", .{});
+            return;
+        };
+        // Print report
+        std.debug.print("{s}\n", .{report});
+        // Exit non-zero if blocking issues found
+        const blocking = smith.getGlobalInt("__checkBlocking");
+        if (blocking != 0) {
+            std.process.exit(1);
+        }
+        return;
+    }
+
     const zig_output = smith.callCompile(Alloc) orelse {
         std.debug.print("[forge] Smith compile() failed\n", .{});
         return;

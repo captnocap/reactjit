@@ -19,44 +19,7 @@ function _a024_applies(ctx, meta) {
   return ctx.dynTexts.some(function(dt) { return dt.inMap; });
 }
 
-function _a024_emit(ctx, meta) {
-  var mapOrder = meta._mapOrder;
-  if (!mapOrder) return '';
-
-  var out = '';
-  for (var oi = 0; oi < mapOrder.length; oi++) {
-    var mi = mapOrder[oi];
-    var map = ctx.maps[mi];
-
-    var mapDynTexts = ctx.dynTexts.filter(function(dt) {
-      return dt.inMap && dt.mapIdx === mi;
-    });
-    if (mapDynTexts.length === 0) continue;
-
-    var texSizeConst = map.isNested ? 'MAX_FLAT_' + mi : map.isInline ? null : 'MAX_MAP_' + mi;
-    var declaredBufIds = new Set();
-    for (var di = 0; di < mapDynTexts.length; di++) {
-      var dt = mapDynTexts[di];
-      dt._mapTextIdx = dt.bufId;
-      if (declaredBufIds.has(dt.bufId)) continue;
-      declaredBufIds.add(dt.bufId);
-      if (map.isInline) {
-        out += 'var _map_text_bufs_' + mi + '_' + dt.bufId + ': [MAX_INLINE_OUTER_' + mi + '][MAX_MAP_' + mi + '][256]u8 = undefined;\n';
-        out += 'var _map_texts_' + mi + '_' + dt.bufId + ': [MAX_INLINE_OUTER_' + mi + '][MAX_MAP_' + mi + '][]const u8 = undefined;\n';
-      } else {
-        out += 'var _map_text_bufs_' + mi + '_' + dt.bufId + ': [' + texSizeConst + '][256]u8 = undefined;\n';
-        out += 'var _map_texts_' + mi + '_' + dt.bufId + ': [' + texSizeConst + '][]const u8 = undefined;\n';
-      }
-    }
-
-    // Stash mapDynTexts on per-map meta
-    if (meta._perMap && meta._perMap[mi]) {
-      meta._perMap[mi].mapDynTexts = mapDynTexts;
-    }
-  }
-
-  return out;
-}
+function _a024_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[24] = {
   id: 24,

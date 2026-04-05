@@ -1,9 +1,9 @@
-// ── Preflight validation ──
+// ── Post-parse validation ──
 // Pure read-only function. Runs after parseJSXElement (ctx fully populated),
 // before emitOutput. Validates ctx for Class A (detectable) and Class B
 // (silent wrong-output) bugs.
 
-function preflight(ctx) {
+function validate(ctx) {
   const errors = [];
   const warnings = [];
   const intents = derivePreflightIntents(ctx);
@@ -58,15 +58,15 @@ function preflight(ctx) {
   };
 }
 
-// Generate @compileError Zig output for preflight failures
-function preflightErrorZig(result, file) {
-  var out = '//! PREFLIGHT BLOCKED: tsz compiler detected errors in ' + file + '\n';
+// Generate @compileError Zig output for validation failures
+function validateErrorZig(result, file) {
+  var out = '//! VALIDATE BLOCKED: tsz compiler detected errors in ' + file + '\n';
   for (var i = 0; i < result.errors.length; i++) {
     out += '//! FATAL: ' + result.errors[i] + '\n';
   }
   for (var i = 0; i < result.warnings.length; i++) {
     out += '//! WARN: ' + result.warnings[i] + '\n';
   }
-  out += 'comptime { @compileError("Smith preflight failed — ' + result.errors.length + ' error(s). See diagnostics above."); }\n';
+  out += 'comptime { @compileError("Smith validate failed — ' + result.errors.length + ' error(s). See diagnostics above."); }\n';
   return out;
 }

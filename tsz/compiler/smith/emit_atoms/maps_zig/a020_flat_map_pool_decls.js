@@ -18,34 +18,7 @@ function _a020_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
 }
 
-function _a020_emit(ctx, meta) {
-  var mapOrder = meta._mapOrder;
-  if (!mapOrder) return '';
-
-  var out = '';
-  var hasFlatMaps = ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
-  if (hasFlatMaps) {
-    out += 'var _pool_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);\n';
-  }
-
-  for (var oi = 0; oi < mapOrder.length; oi++) {
-    var mi = mapOrder[oi];
-    var map = ctx.maps[mi];
-    if (map.isNested || map.isInline) continue;
-
-    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
-      out += '// computed-map colors: ' + map.oa._computedColors.join(' ') + '\n';
-    }
-    if (map.oa && map.oa._computedHasTernary) {
-      out += '// .none else .flex\n';
-    }
-    out += 'const MAX_MAP_' + mi + ': usize = 4096;\n';
-    out += 'var _map_pool_' + mi + ': []Node = undefined;\n';
-    out += 'var _map_count_' + mi + ': usize = 0;\n';
-  }
-
-  return out;
-}
+function _a020_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[20] = {
   id: 20,

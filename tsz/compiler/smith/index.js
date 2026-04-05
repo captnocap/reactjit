@@ -30,6 +30,244 @@ function compile() {
   return compileLane(source, tokens, file);
 }
 
+// ── Predict-only check (forge check) ─────────────────────────────────
+// Runs lane detection + pre-parse setup + route scan WITHOUT parse/emit.
+// Returns a structured report with execution path trace.
+function smithCheck() {
+  var source = globalThis.__source;
+  var tokens = globalThis.__tokens;
+  var file = globalThis.__file || 'unknown.tsz';
+  var basename = file.split('/').pop();
+  var stem = basename.replace(/\.tsz$/, '');
+  var lines = [];
+  var path = [];  // execution trace: each step appended as it runs
+  var stopReason = null;
+
+  // Atom name lookup for readable traces
+  var atomNames = {
+    1:'banner', 2:'imports', 3:'runtime', 4:'state_manifest', 5:'init_slots',
+    6:'static_arrays', 7:'root_node', 8:'dyn_text_bufs', 9:'handlers',
+    10:'cpu_effects', 11:'wgsl_effects', 12:'qjs_bridge', 13:'oa_strings',
+    14:'oa_const', 15:'oa_dynamic', 16:'oa_flat_unpack', 17:'oa_nested_unpack',
+    18:'variant_host', 19:'map_meta', 20:'flat_pool', 21:'nested_pool',
+    22:'inline_pool', 23:'per_item', 24:'map_dyn_text', 25:'map_handlers',
+    26:'flat_rebuild', 27:'nested_rebuild', 28:'inline_rebuild',
+    29:'lua_map_reg', 30:'lua_rebuild', 31:'lua_nested', 32:'lua_dispatch',
+    33:'js_logic', 34:'lua_logic', 35:'dyn_updates', 36:'cond_updates',
+    37:'variant_updates', 38:'dirty_tick', 39:'app_init', 40:'app_tick',
+    41:'exports', 42:'main', 43:'split_sections', 44:'split_ns', 45:'split_headers',
+    46:'finalize'
+  };
+
+  lines.push('=== forge check: ' + basename + ' ===');
+
+  // ── Step 1: Lane detection ──
+  var lane = 'unknown';
+  var laneType = 'unknown';
+
+  if (typeof isSoupLaneSource === 'function' && isSoupLaneSource(source, file)) {
+    lane = 'soup'; laneType = 'soup';
+  } else if (globalThis.__modBuild === 1) {
+    lane = 'module'; laneType = 'module';
+  } else if (typeof isPageLaneSource === 'function' && isPageLaneSource(source)) {
+    lane = 'page'; laneType = 'page';
+  } else if (typeof isChadBlockSource === 'function' && isChadBlockSource(source)) {
+    lane = 'chad'; laneType = 'chad';
+  } else {
+    lane = 'app'; laneType = 'mixed';
+  }
+  path.push('detect(' + lane + ')');
+
+  // Module lane — no JSX, no route plan, short path
+  if (lane === 'module') {
+    var hasModBlock = source.indexOf('<module') !== -1;
+    path.push(hasModBlock ? 'compileModBlock' : 'compileMod');
+    path.push('emit(.zig)');
+    lines.push('Lane: module' + (hasModBlock ? ' (block syntax)' : ' (line-by-line)'));
+    lines.push('Path: ' + path.join(' > '));
+    lines.push('Output: generated_' + stem + '.zig (single)');
+    lines.push('Verdict: CLEAR');
+    globalThis.__checkBlocking = 0;
+    return lines.join('\n');
+  }
+
+  // ── Step 2: Pre-parse setup ──
+  var c = typeof mkCursor === 'function' ? mkCursor(tokens, source) : null;
+  resetCtx();
+  ctx._source = source;
+  path.push('resetCtx');
+
+  assignSurfaceTier(source, file);
+  path.push('tier(' + (ctx._sourceTier || laneType) + ')');
+
+  // ── Step 3: Lane-specific collection ──
+  if (lane === 'app' && c) {
+    collectCompilerInputs(c);
+    path.push('collectInputs');
+    var appStart = findAppStart(c);
+    if (appStart >= 0) {
+      path.push('findApp(found)');
+      collectRenderLocals(c, appStart);
+      path.push('collectRenderLocals');
+    } else {
+      path.push('findApp(MISSING)');
+      stopReason = 'no App function found';
+    }
+  }
+
+  if (lane === 'soup') {
+    var warns = [];
+    soupParseState(source, warns);
+    path.push('soupParseState(' + ctx.stateSlots.length + ' slots)');
+    soupCollectHandlers(source, warns);
+    path.push('soupCollectHandlers');
+  }
+
+  if (lane === 'chad') {
+    path.push('detectChadBlock');
+    path.push('chadSourcePreflight');
+    path.push('extractBlocks(var,state,functions,timer,types)');
+  }
+
+  if (lane === 'page') {
+    path.push('compilePage');
+  }
+
+  // ── Step 4: Route plan ──
+  var plan = null;
+  if (!stopReason && typeof buildRoutePlan === 'function') {
+    buildRoutePlan(source);
+    plan = ctx._routePlan;
+    if (plan) {
+      var mapCount = plan.mapRoutes ? plan.mapRoutes.length : 0;
+      path.push('routeScan(' + mapCount + ' maps)');
+      path.push('predictAtoms(' + (plan.predictedAtoms ? plan.predictedAtoms.length : 0) + ')');
+      if (plan.ambiguous && plan.ambiguous.length > 0) {
+        path.push('AMBIGUOUS(' + plan.ambiguous.length + ')');
+        stopReason = plan.ambiguous.length + ' ambiguous construct(s)';
+      }
+    }
+  }
+
+  // ── Step 5: Predicted compile path (what WOULD run next) ──
+  if (!stopReason) {
+    if (lane === 'soup') {
+      path.push('[would: soupTokenize > soupBuildTree > soupToZig > emitOutput]');
+    } else {
+      path.push('[would: parseJSXElement > validate > emitOutput]');
+    }
+  } else {
+    path.push('[STOP: ' + stopReason + ']');
+  }
+
+  // ── Step 6: Predicted emit atom chain ──
+  var atomChain = [];
+  if (plan && plan.predictedAtoms && plan.predictedAtoms.length > 0) {
+    for (var ai = 0; ai < plan.predictedAtoms.length; ai++) {
+      var aid = plan.predictedAtoms[ai];
+      var aname = atomNames[aid] || ('a' + aid);
+      atomChain.push(aname);
+    }
+  }
+
+  // ── Build report ──
+  var tier = ctx._sourceTier || laneType;
+  lines.push('Lane: ' + tier + ' (' + lane + ')');
+  lines.push('');
+
+  // Execution path — the main event
+  lines.push('Path:');
+  // Show steps as a numbered chain
+  for (var pi = 0; pi < path.length; pi++) {
+    var arrow = pi < path.length - 1 ? ' >' : '';
+    lines.push('  ' + (pi + 1) + '. ' + path[pi] + arrow);
+  }
+
+  // Emit chain
+  if (atomChain.length > 0) {
+    lines.push('');
+    lines.push('Emit chain:');
+    // Group atoms by phase for readability
+    var phases = {
+      preamble: [], state: [], handlers: [], oa: [],
+      maps_zig: [], maps_lua: [], logic: [], app: [], split: []
+    };
+    for (var ei = 0; ei < plan.predictedAtoms.length; ei++) {
+      var eid = plan.predictedAtoms[ei];
+      var ename = atomNames[eid] || ('a' + eid);
+      if (eid <= 3) phases.preamble.push(ename);
+      else if (eid <= 8) phases.state.push(ename);
+      else if (eid <= 11) phases.handlers.push(ename);
+      else if (eid <= 18) phases.oa.push(ename);
+      else if (eid <= 28) phases.maps_zig.push(ename);
+      else if (eid <= 32) phases.maps_lua.push(ename);
+      else if (eid <= 38) phases.logic.push(ename);
+      else if (eid <= 42) phases.app.push(ename);
+      else phases.split.push(ename);
+    }
+    var phaseOrder = ['preamble', 'state', 'handlers', 'oa', 'maps_zig', 'maps_lua', 'logic', 'app', 'split'];
+    for (var phi = 0; phi < phaseOrder.length; phi++) {
+      var pn = phaseOrder[phi];
+      if (phases[pn].length > 0) {
+        lines.push('  ' + pn + ': ' + phases[pn].join(' > '));
+      }
+    }
+  }
+
+  lines.push('');
+
+  // State slots
+  if (ctx.stateSlots && ctx.stateSlots.length > 0) {
+    var slotDescs = [];
+    for (var si = 0; si < ctx.stateSlots.length; si++) {
+      var s = ctx.stateSlots[si];
+      slotDescs.push(s.getter + ': ' + (s.type || '?'));
+    }
+    lines.push('State: [' + slotDescs.join(', ') + ']');
+  } else {
+    lines.push('State: none');
+  }
+
+  // Maps
+  if (plan && plan.mapRoutes && plan.mapRoutes.length > 0) {
+    for (var mi = 0; mi < plan.mapRoutes.length; mi++) {
+      var mr = plan.mapRoutes[mi];
+      var mtype = mr.nested ? 'nested' : mr.inline ? 'inline' : 'flat';
+      var mdesc = 'Map ' + mi + ': ' + mtype;
+      if (mr.source) mdesc += ' (' + mr.source + ')';
+      if (mr.oa) mdesc += ' → OA';
+      if (mr.handler) mdesc += ' +handler';
+      lines.push('  ' + mdesc);
+    }
+  }
+
+  // Handlers
+  if (ctx.handlers && ctx.handlers.length > 0) {
+    lines.push('Handlers: ' + ctx.handlers.length + ' (' + (ctx.handlerDispatch || 'lua') + ')');
+  }
+
+  // Output prediction
+  var hasSplit = plan && plan.features && plan.features.has_split_output;
+  lines.push('Output: ' + (hasSplit ? 'generated_' + stem + '/ (split)' : 'generated_' + stem + '.zig (single)'));
+
+  // Ambiguities
+  var blocking = 0;
+  if (plan && plan.ambiguous && plan.ambiguous.length > 0) {
+    lines.push('');
+    lines.push('AMBIGUOUS:');
+    for (var abi = 0; abi < plan.ambiguous.length; abi++) {
+      lines.push('  ! ' + plan.ambiguous[abi]);
+    }
+    blocking = plan.ambiguous.length;
+  }
+
+  lines.push('');
+  lines.push('Verdict: ' + (blocking > 0 ? 'BLOCKED (' + blocking + ')' : 'CLEAR'));
+
+  globalThis.__checkBlocking = blocking;
+  return lines.join('\n');
+}
+
 // ── Module compilation: .mod.tsz → .zig ─────────────────────────────
 // Transpiles TypeScript-like imperative code to Zig.
 // No JSX, no components, no app scaffolding.

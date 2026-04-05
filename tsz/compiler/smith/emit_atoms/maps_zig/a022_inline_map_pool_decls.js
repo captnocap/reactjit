@@ -20,34 +20,7 @@ function _a022_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return m.isInline; });
 }
 
-function _a022_emit(ctx, meta) {
-  var mapOrder = meta._mapOrder;
-  if (!mapOrder) return '';
-
-  var out = '';
-  for (var oi = 0; oi < mapOrder.length; oi++) {
-    var mi = mapOrder[oi];
-    var map = ctx.maps[mi];
-    if (!map.isInline) continue;
-
-    var parentMi = ctx.maps.indexOf(map.parentMap);
-    map._parentMi = parentMi;
-
-    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
-      out += '// computed-map colors: ' + map.oa._computedColors.join(' ') + '\n';
-    }
-    if (map.oa && map.oa._computedHasTernary) {
-      out += '// .none else .flex\n';
-    }
-
-    out += 'const MAX_MAP_' + mi + ': usize = 16;\n';
-    out += 'const MAX_INLINE_OUTER_' + mi + ': usize = 8;\n';
-    out += 'var _map_pool_' + mi + ': [MAX_INLINE_OUTER_' + mi + '][MAX_MAP_' + mi + ']Node = undefined;\n';
-    out += 'var _map_count_' + mi + ': [MAX_INLINE_OUTER_' + mi + ']usize = undefined;\n';
-  }
-
-  return out;
-}
+function _a022_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[22] = {
   id: 22,

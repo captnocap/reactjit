@@ -207,7 +207,9 @@ smith/mod/types.js
 smith/mod/state.js
 smith/mod/params.js
 smith/mod/statements.js
-smith/mod.js
+smith/mod/expr.js
+smith/mod/functions.js
+smith/mod/helpers.js
 smith/mod/index.js
 smith/page.js
 smith/attrs.js
@@ -227,6 +229,10 @@ smith/parse/map/nested.js
 smith/parse/children/inline_glyph.js
 smith/parse/children/conditional_blocks.js
 smith/parse/children/elements.js
+smith/parse/children/brace_util.js
+smith/parse/children/brace_computed.js
+smith/parse/children/brace_maps.js
+smith/parse/children/brace_render_local.js
 smith/parse/children/brace.js
 smith/parse/children/text.js
 smith/parse/element/flow.js
@@ -260,8 +266,11 @@ smith/preflight/rules/state.js
 smith/preflight/rules/classifiers.js
 smith/preflight/rules/js_logic.js
 smith/preflight/rules/unimplemented.js
-smith/preflight.js
+smith/validate.js
 
+smith/emit/effect_transpile.js
+smith/emit/effect_wgsl.js
+smith/emit/transforms.js
 smith/emit/preamble.js
 smith/emit/state_manifest.js
 smith/emit/node_tree.js
@@ -273,8 +282,9 @@ smith/emit/map_pools.js
 smith/emit/lua_maps.js
 smith/emit/runtime_updates.js
 smith/emit/entrypoints.js
+smith/emit/logic_blocks.js
+smith/emit/split.js
 smith/emit/finalize.js
-smith/emit_split.js
 smith/emit.js
 
 smith/emit_atoms/index.js
@@ -325,7 +335,6 @@ smith/emit_atoms/split_finalize/a044_split_namespace_prefixing.js
 smith/emit_atoms/split_finalize/a045_split_module_headers.js
 smith/emit_atoms/split_finalize/a046_finalize_postpass.js
 
-smith/soup.js
 smith/lanes/soup/detect.js
 smith/lanes/soup/parse.js
 smith/lanes/soup/state.js

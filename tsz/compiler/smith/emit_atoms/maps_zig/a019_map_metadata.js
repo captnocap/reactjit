@@ -158,19 +158,7 @@ function _a019_applies(ctx, meta) {
   return ctx.maps && ctx.maps.length > 0;
 }
 
-function _a019_emit(ctx, meta) {
-  // Compute and stash metadata — no Zig output
-  var promotedToPerItem = computePromotedMapArrays(ctx);
-  var mapOrder = buildMapEmitOrder(ctx);
-  ensureMapHandlerFieldRefs(ctx);
-
-  // Store on meta for downstream atoms
-  meta._mapOrder = mapOrder;
-  meta._promotedToPerItem = promotedToPerItem;
-  meta._wrapMapCondition = _wrapMapCondition;
-  meta._countTopLevelNodeDeclEntries = countTopLevelNodeDeclEntries;
-  return '';
-}
+function _a019_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
 
 _emitAtoms[19] = {
   id: 19,
