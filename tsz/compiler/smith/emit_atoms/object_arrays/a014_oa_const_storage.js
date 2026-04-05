@@ -53,7 +53,7 @@ function _a014_emit(ctx, meta) {
     for (var fi = 0; fi < flatFields.length; fi++) {
       var f = flatFields[fi];
       if (f.type === 'string') {
-        var vals = oa.constData.map(function(item) { return '"' + (item[f.name] || '').replace(/"/g, '\\"') + '"'; });
+        var vals = oa.constData.map(function(item) { return '"' + (item[f.name] || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; });
         out += 'var _oa' + idx + '_' + f.name + ' = [_][]const u8{ ' + vals.join(', ') + ' };\n';
         out += 'var _oa' + idx + '_' + f.name + '_lens = [_]usize{ ' + oa.constData.map(function(item) { return (item[f.name] || '').length; }).join(', ') + ' };\n';
       } else {

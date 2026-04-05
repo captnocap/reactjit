@@ -64,7 +64,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       const len = oa.constLen;
       for (const f of flatFields) {
         if (f.type === 'string') {
-          const vals = oa.constData.map(function(item) { return `"${(item[f.name] || '').replace(/"/g, '\\"')}"`; });
+          const vals = oa.constData.map(function(item) { return `"${(item[f.name] || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`; });
           out += `var _oa${idx}_${f.name} = [_][]const u8{ ${vals.join(', ')} };\n`;
           out += `var _oa${idx}_${f.name}_lens = [_]usize{ ${oa.constData.map(function(item) { return (item[f.name] || '').length; }).join(', ')} };\n`;
         } else {
