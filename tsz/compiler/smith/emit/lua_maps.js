@@ -443,14 +443,42 @@ function emitLuaChildren(c, itemParam, indent) {
     if (c.kind() === TK.lbrace) {
       c.advance();
 
-      // Conditional: cond && <Element/>
+      // Conditional: cond && <Element/> or ternary: cond ? <A/> : <B/>
       if (c.kind() === TK.identifier) {
         var saved = c.save();
         var condParts = [];
-        // Collect tokens until && or until we know it's not a conditional
-        while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace && c.kind() !== TK.lt) {
+        // Collect tokens until &&, ?, or until we know it's not a conditional
+        while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.question && c.kind() !== TK.rbrace && c.kind() !== TK.lt) {
           condParts.push(c.text());
           c.advance();
+        }
+        // Ternary JSX: cond ? <TrueJSX> : <FalseJSX>
+        if (c.kind() === TK.question) {
+          c.advance(); // skip ?
+          var _ternCond = condParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+          // Convert === to ==, !== to ~=
+          _ternCond = _ternCond.replace(/===/g, '==').replace(/!==/g, '~=');
+          // Parse true branch
+          if (c.kind() === TK.lparen) c.advance();
+          var _trueBranch = '';
+          if (c.kind() === TK.lt) {
+            _trueBranch = emitLuaElement(c, itemParam, indent);
+          }
+          if (c.kind() === TK.rparen) c.advance();
+          // Skip : (colon token)
+          if (c.kind() === TK.colon) c.advance();
+          // Parse false branch
+          if (c.kind() === TK.lparen) c.advance();
+          var _falseBranch = '';
+          if (c.kind() === TK.lt) {
+            _falseBranch = emitLuaElement(c, itemParam, indent);
+          }
+          if (c.kind() === TK.rparen) c.advance();
+          // Emit both branches with conditions (love2d pattern)
+          if (_trueBranch) children.push('(' + _ternCond + ') and ' + _trueBranch + ' or nil');
+          if (_falseBranch) children.push('(not (' + _ternCond + ')) and ' + _falseBranch + ' or nil');
+          if (c.kind() === TK.rbrace) c.advance();
+          continue;
         }
         if (c.kind() === TK.amp_amp) {
           c.advance(); // skip &&
