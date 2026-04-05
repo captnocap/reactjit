@@ -157,9 +157,13 @@ for hex in $SOURCE_COLORS; do
     rgb=$(hex_to_rgb "$hex")
     if ! grep -q "Color\.rgb($rgb)" <<< "$GEN_BLOB"; then
         hex_lower=$(echo "$hex" | tr '[:upper:]' '[:lower:]')
+        hex_bare="${hex_lower#\#}"
+        # Check for #hex (Zig), 0xhex (Lua map templates), or raw hex
         if ! grep -qi -- "$hex_lower" <<< "$GEN_BLOB"; then
-            DROPPED=$((DROPPED + 1))
-            DROPPED_LIST="$DROPPED_LIST $hex"
+            if ! grep -qi -- "0x${hex_bare}" <<< "$GEN_BLOB"; then
+                DROPPED=$((DROPPED + 1))
+                DROPPED_LIST="$DROPPED_LIST $hex"
+            fi
         fi
     fi
 done
@@ -392,6 +396,35 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
     done <<< "$CALLBACK_TEXT_MATCHES"
     if [ "$CALLBACK_TEXTS" -gt 0 ]; then
         fail "$CALLBACK_TEXTS callback fragment text node(s) in generated output — callback syntax leaked into UI:$CALLBACK_SAMPLES"
+    fi
+fi
+
+# ── 6a2. Raw JSX leaked into Lua map templates ──────────────
+# If a Lua map rebuilder (__rebuildLuaMap) contains literal JSX tags
+# (< Box, < Text, < /Box, etc.), the nested map content was not
+# decomposed — the compiler stringified JSX instead of emitting
+# node construction. This produces garbage text at runtime.
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    # Only check Lua map rebuilders in logic.zig
+    if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
+        LOGIC_BLOB=$(cat "$GEN/logic.zig" 2>/dev/null)
+        # Extract Lua rebuilder bodies only (between __rebuildLuaMap and end of function)
+        LUA_REBUILDERS=$(sed -n '/__rebuildLuaMap[0-9]/,/^\\\\end/p' <<< "$LOGIC_BLOB" 2>/dev/null || true)
+        if [ -z "$LUA_REBUILDERS" ]; then
+            # Fallback: grep for the pattern in the whole Lua logic block
+            LUA_REBUILDERS=$(sed -n '/LUA_LOGIC/,/^;/p' <<< "$LOGIC_BLOB" 2>/dev/null || true)
+        fi
+        JSX_IN_LUA=0
+        JSX_IN_LUA_SAMPLES=""
+        # Look for JSX open/close tags inside Lua string content
+        # These patterns cannot legitimately appear in Lua code
+        JSX_OPEN=$(echo "$LUA_REBUILDERS" | grep -oE '< (Box|Text|Pressable|ScrollView|Image|Cartridge|Graph) ' 2>/dev/null | wc -l | tr -d ' ')
+        JSX_CLOSE=$(echo "$LUA_REBUILDERS" | grep -oE '</ (Box|Text|Pressable|ScrollView|Image|Cartridge|Graph) >' 2>/dev/null | wc -l | tr -d ' ')
+        JSX_SELF=$(echo "$LUA_REBUILDERS" | grep -oE '< [A-Z][a-zA-Z]+ [^>]*/>' 2>/dev/null | wc -l | tr -d ' ')
+        JSX_IN_LUA=$((JSX_OPEN + JSX_CLOSE + JSX_SELF))
+        if [ "$JSX_IN_LUA" -gt 0 ]; then
+            fail "$JSX_IN_LUA raw JSX tag(s) in Lua map rebuilder — nested map content not decomposed into node construction"
+        fi
     fi
 fi
 

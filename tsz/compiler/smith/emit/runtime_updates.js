@@ -76,11 +76,16 @@ function emitRuntimeSupportSections(ctx, meta) {
       if (cond.inMap) continue;
       if (mapPoolArrayNames.has(cond.arrName)) continue;
       if (cond.condExpr.includes('[_i]') || cond.condExpr.includes('(_i)') || cond.condExpr.includes('task.') || cond.condExpr.includes('tag.') || cond.condExpr.includes(' ci') || cond.condExpr.includes(' ti')) continue;
-      const isComparison = cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
+      // evalToString as the outermost call returns []const u8 — needs .len > 0
+      // But evalToString INSIDE std.mem.eql() already produces bool — don't double-wrap.
+      // Also: JS inside eval strings contains > < == which false-positive isComparison.
+      const isOuterEval = cond.condExpr.includes('evalToString') && !cond.condExpr.includes('std.mem.eql') && !cond.condExpr.includes('.len > 0');
+      const isComparison = !isOuterEval && (cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
         cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
         cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
-        cond.condExpr.includes('getBool') || cond.condExpr.includes('getSlotBool') || cond.condExpr.includes('std.mem.eql');
-      const wrapped = isComparison ? `((${cond.condExpr}))` : `((${cond.condExpr}) != 0)`;
+        cond.condExpr.includes('getBool') || cond.condExpr.includes('getSlotBool') || cond.condExpr.includes('std.mem.eql'));
+      const wrapped = isOuterEval ? `((${cond.condExpr}).len > 0)` :
+        isComparison ? `((${cond.condExpr}))` : `((${cond.condExpr}) != 0)`;
       if (cond.kind === 'show_hide') {
         out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
       } else if (cond.kind === 'ternary_jsx') {

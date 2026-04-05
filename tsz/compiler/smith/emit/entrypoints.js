@@ -53,7 +53,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
           var arrMatch = decl.match(/^(?:pub )?var (_arr_\d+)/);
           if (arrMatch) {
             var before = decl.substring(0, tagIdx);
-            var elemIdx = (before.match(/\.{/g) || []).length - 1;
+            var elemIdx = (before.match(/}, \.\{/g) || []).length;
             // Use bare array ref — works in both monolith (var _arr_N) and split (nodes._arr_N)
             var arrRef = meta.isSplit ? 'nodes.' + arrMatch[1] : arrMatch[1];
             out += `    luajit_runtime.setMapWrapper(${lmi}, @ptrCast(&${arrRef}[${elemIdx}]));\n`;

@@ -57,9 +57,9 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
   const mapExpr = (baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText;
 
   // ── Lua detour: if the source is render-local/computed, route to LuaJIT ──
-  // Let the normal parser handle the JSX (it handles block bodies, destructuring,
-  // nested maps, ternaries — everything). Then convert the parsed result to Lua.
-  // Do NOT walk raw tokens — that's what caused the infinite loop.
+  // .map() content ALWAYS goes to Lua. Use the normal parser for Zig side
+  // effects (OA registration, map context), then use the token-walking
+  // emitLuaRebuildList for the Lua template (it handles nested JSX trees).
   var _isRenderLocal = ctx._renderLocalRaw && ctx._renderLocalRaw[baseName] !== undefined;
   var _isStateOa = false;
   for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
@@ -68,12 +68,17 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     }
   }
   if (_isRenderLocal && !_isStateOa) {
+    // Save cursor at JSX body start for the token-walking Lua emitter
+    var _luaJsxPos = c.save();
+
     // Let the normal Zig path parse the JSX and create the OA.
-    // But tag the resulting map as lua_runtime so emit skips Zig pool/rebuild.
     var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
     c.restore(mapPos);
     var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
     if (!mapResult) { c.restore(saved); return false; }
+
+    // Save where the cursor ended up after parse (past the map body)
+    var _afterParsePos = c.save();
 
     // Tag the map for Lua routing — emit will skip Zig rebuild, use evalLuaMapData instead
     var mapIdx = -1;
@@ -82,12 +87,16 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     }
     if (mapIdx >= 0) ctx.maps[mapIdx].mapBackend = 'lua_runtime';
 
-    // Register as a Lua map rebuilder with a parsed-node Lua template
+    // Build the Lua template by token-walking the JSX body
+    // (emitLuaRebuildList handles nested elements, children, colors, text)
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _luaIdx = ctx._luaMapRebuilders.length;
     var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
-    // Convert the parsed nodeExpr tree to a Lua template
-    var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, mapResult, oa);
+    // Restore cursor to JSX body start for token walking
+    c.restore(_luaJsxPos);
+    var _luaBody = emitLuaRebuildList(_luaIdx, c, header.itemParam || '_item', null);
+    // Restore cursor to after the parse so the rest of compilation continues
+    c.restore(_afterParsePos);
     ctx._luaMapRebuilders.push({
       index: _luaIdx,
       luaCode: _luaBody,

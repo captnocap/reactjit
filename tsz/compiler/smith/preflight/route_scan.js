@@ -89,6 +89,19 @@ function routeScan(ctx, source) {
   var exprStats = scanExpressionResolution(source, ctx);
   plan.expressionStats = exprStats;
 
+  // ╔════════════════════════════════════════════════════════════════════╗
+  // ║  .map() CONTENT ALWAYS GOES TO LUA. ALWAYS. NO EXCEPTIONS.       ║
+  // ║                                                                    ║
+  // ║  Zig cannot handle dynamic mapped JSX. It can do static maps but  ║
+  // ║  even that is more than it needs to. LuaJIT handles all map       ║
+  // ║  content — nested maps, conditionals in maps, JSX templates,      ║
+  // ║  everything. lua_maps.js emitLuaRebuildList() does the work.      ║
+  // ║                                                                    ║
+  // ║  If you are reading this and thinking "maybe I can route map       ║
+  // ║  content to Zig" — NO. You will eat shit. Every time it has been  ║
+  // ║  tried it has failed. Lua handles maps. That is final.            ║
+  // ╚════════════════════════════════════════════════════════════════════╝
+
   // ── Build summary ──
   var activeFeatures = [];
   for (var key in f) {
@@ -179,6 +192,9 @@ function scanForMaps(source, ctx) {
       }
     }
 
+    // Extract map body content expectations
+    route.content = scanMapBody(source, match.index + match[0].length);
+
     result.routes.push(route);
     result.total++;
   }
@@ -266,4 +282,61 @@ function scanExpressionResolution(source, ctx) {
   }
 
   return { resolved: resolved, needs_qjs: needs_qjs };
+}
+
+// Extract map callback body and scan for content that must survive emit.
+// startPos is right after the .map( callback opening.
+function scanMapBody(source, startPos) {
+  var content = { colors: [], jsxElements: 0, line: 0 };
+
+  // Find the line number
+  var before = source.slice(0, startPos);
+  content.line = before.split('\n').length;
+
+  // Walk forward from startPos, tracking parens to find the map callback body.
+  // We need balanced parens to find the closing ) of .map(...)
+  var depth = 1; // we're already inside the (
+  var end = startPos;
+  for (var i = startPos; i < source.length && depth > 0; i++) {
+    if (source[i] === '(') depth++;
+    else if (source[i] === ')') depth--;
+    end = i;
+  }
+
+  var body = source.slice(startPos, end);
+
+  // Scan for color hex literals
+  var colorRe = /#[0-9a-fA-F]{3,8}\b/g;
+  var cm;
+  var seen = {};
+  while ((cm = colorRe.exec(body)) !== null) {
+    if (!seen[cm[0]]) {
+      content.colors.push(cm[0]);
+      seen[cm[0]] = true;
+    }
+  }
+
+  // Count JSX elements in the body
+  var jsxRe = /<[A-Z]\w*/g;
+  while (jsxRe.exec(body) !== null) {
+    content.jsxElements++;
+  }
+
+  return content;
+}
+
+function scanForZigUnsafeStrings(source) {
+  var hits = [];
+  // Single-quoted multi-char strings: valid JS, invalid Zig.
+  // Zig only allows single quotes for single characters ('a').
+  // Match 'xx' or longer — skip escaped quotes and single-char.
+  var sqRe = /'([^'\\]{2,}|[^']*\\.[^']*)'/g;
+  var match;
+  while ((match = sqRe.exec(source)) !== null) {
+    // Find which line this is on
+    var before = source.slice(0, match.index);
+    var line = before.split('\n').length;
+    hits.push('L' + line + ': JS single-quoted string \'' + match[1] + '\' will leak into Zig (use double quotes)');
+  }
+  return hits;
 }

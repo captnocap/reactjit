@@ -30,7 +30,7 @@ function _a029_emit(ctx) {
         if (arrMatch) {
           // Count which element in the array contains the tag
           var before = decl.substring(0, tagIdx);
-          var elemIdx = (before.match(/\.{/g) || []).length - 1;
+          var elemIdx = (before.match(/}, \.\{/g) || []).length;
           out += `    luajit_runtime.setMapWrapper(${lmi}, @ptrCast(&nodes.${arrMatch[1]}[${elemIdx}]));\n`;
         }
         break;

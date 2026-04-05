@@ -81,7 +81,7 @@ function emitLuaTextContent(c, itemParam) {
   while (c.pos < c.count) {
     if (c.pos === _tcLastPos) { c.advance(); continue; }
     _tcLastPos = c.pos;
-    if (c.kind() === TK.lt) break; // closing tag
+    if (c.kind() === TK.lt || c.kind() === TK.lt_slash) break; // closing tag
     if (c.kind() === TK.lbrace) {
       c.advance();
       if (c.kind() === TK.template_literal) {
@@ -151,8 +151,8 @@ function emitLuaElement(c, itemParam, indent) {
     // Skip to closing tag or end
     while (c.pos < c.count && _luaEmitIter < _LUA_EMIT_MAX_ITER + 500) {
       _luaEmitIter++;
-      if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.slash) {
-        c.advance(); c.advance();
+      if (c.kind() === TK.lt_slash) {
+        c.advance(); // </
         if (c.kind() === TK.identifier) c.advance();
         if (c.kind() === TK.gt) c.advance();
         break;
@@ -241,9 +241,9 @@ function emitLuaElement(c, itemParam, indent) {
       // Container: collect children
       node.children = emitLuaChildren(c, itemParam, indent + '  ');
     }
-    // Skip closing tag </TagName>
-    if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.slash) {
-      c.advance(); c.advance(); // < /
+    // Skip closing tag </TagName> — lexer emits </ as single TK.lt_slash token
+    if (c.kind() === TK.lt_slash) {
+      c.advance(); // </
       if (c.kind() === TK.identifier) c.advance(); // TagName
       if (c.kind() === TK.gt) c.advance(); // >
     }
@@ -269,8 +269,8 @@ function emitLuaChildren(c, itemParam, indent) {
     _luaEmitIter++;
     if (c.pos === _chLastPos) { c.advance(); continue; }
     _chLastPos = c.pos;
-    // Stop at closing tag
-    if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.slash) break;
+    // Stop at closing tag — lexer emits </ as single TK.lt_slash token
+    if (c.kind() === TK.lt_slash) break;
 
     // Child element
     if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
@@ -439,7 +439,9 @@ function _zigNodeExprToLua(nodeExpr) {
 }
 
 function _nodeResultToLuaRebuilder(mapIdx, nodeResult, oa) {
-  var templateLua = _zigNodeExprToLua(nodeResult.nodeExpr || '.{}');
+  // templateNodeExpr has the actual parsed JSX template — nodeExpr is always '.{}'
+  // because finalizeMapNode stubs the wrapper node. Use the real template.
+  var templateLua = _zigNodeExprToLua(nodeResult.templateNodeExpr || nodeResult.nodeExpr || '.{}');
   var fn = '';
   fn += 'function __rebuildLuaMap' + mapIdx + '()\n';
   fn += '  __clearLuaNodes()\n';

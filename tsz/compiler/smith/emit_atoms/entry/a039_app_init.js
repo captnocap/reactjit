@@ -74,7 +74,7 @@ function _a039_emit(ctx, meta) {
           var arrMatch = decl.match(/^(?:pub )?var (_arr_\d+)/);
           if (arrMatch) {
             var before = decl.substring(0, tagIdx);
-            var elemIdx = (before.match(/\.{/g) || []).length - 1;
+            var elemIdx = (before.match(/}, \.\{/g) || []).length;
             out += '    luajit_runtime.setMapWrapper(' + lmi + ', @ptrCast(&nodes.' + arrMatch[1] + '[' + elemIdx + ']));\n';
           }
           break;
