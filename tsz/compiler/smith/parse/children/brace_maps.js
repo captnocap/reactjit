@@ -212,6 +212,60 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
 
   if (!_identifierStartsMapCall(c)) return false;
 
+  // Nested map on item field: itemParam.field.map((x) => <JSX>)
+  // The item param isn't an OA — the field is a nested array on the parent item.
+  // Route directly to Lua: build a Lua rebuilder using the token walker.
+  if (ctx.currentMap && maybeArr === ctx.currentMap.itemParam) {
+    var _savedNested = c.save();
+    // Walk past item.field chain to find .map(
+    c.advance(); // skip item param
+    while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+      c.advance(); // .
+      if (c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) break;
+      c.advance(); // field
+    }
+    if (c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+      c.advance(); // skip 'map'
+      c.advance(); // skip (
+      // Parse the callback header: (param) => or (param, idx) =>
+      if (c.kind() === TK.lparen) c.advance(); // skip inner ( for destructured params
+      var _nmParam = c.kind() === TK.identifier ? c.text() : '_item';
+      c.advance(); // skip param
+      if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) c.advance(); } // skip optional index param
+      if (c.kind() === TK.rparen) c.advance(); // )
+      if (c.kind() === TK.arrow) c.advance(); // =>
+      // Now at the JSX body — use the token walker for Lua template
+      if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+      var _nmIdx = ctx._luaMapRebuilders.length;
+      // Build raw JS expression for the nested array data source
+      var _nmParts = [];
+      for (var _ri = _savedNested; _ri < c.pos; _ri++) _nmParts.push(c.textAt(_ri));
+      // Reconstruct: itemParam.field (the array source, without .map(...))
+      var _rawTokens = [];
+      var _rSaved = c.save();
+      c.restore(_savedNested);
+      while (c.pos < c.count && !(c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen)) {
+        _rawTokens.push(c.text());
+        c.advance();
+      }
+      c.restore(_rSaved);
+      var _nmRawSource = _rawTokens.join(' ').replace(/\s*\.\s*$/, '');
+      var _nmLuaBody = emitLuaRebuildList(_nmIdx, c, _nmParam, null);
+      // Consume closing parens/braces from the .map() call
+      while (c.kind() === TK.rparen) c.advance();
+      if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+      ctx._luaMapRebuilders.push({
+        index: _nmIdx,
+        luaCode: _nmLuaBody,
+        rawSource: _nmRawSource,
+        varName: maybeArr
+      });
+      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _nmIdx + '" }', _luaMapWrapper: _nmIdx });
+      return true;
+    }
+    c.restore(_savedNested);
+  }
+
   let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
   if (!oa) oa = inferOaFromSource(c, maybeArr);
   if (!oa) return false;
