@@ -11,6 +11,7 @@ function isChadBlockSource(source) {
 function compilePageLane(source, tokens, file) {
   var c = mkCursor(tokens, source);
   resetCtx();
+  ctx._source = source;
   assignSurfaceTier(source, file);
   return compilePage(source, c, file);
 }

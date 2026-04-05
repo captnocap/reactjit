@@ -201,7 +201,14 @@ smith/lanes/soup.js
 smith/lanes/dispatcher.js
 
 smith/index.js
+smith/mod/imports.js
+smith/mod/ffi.js
+smith/mod/types.js
+smith/mod/state.js
+smith/mod/params.js
+smith/mod/statements.js
 smith/mod.js
+smith/mod/index.js
 smith/page.js
 smith/attrs.js
 
@@ -243,6 +250,9 @@ smith/parse_map.js
 smith/parse.js
 
 smith/preflight/context.js
+smith/preflight/pattern_atoms.js
+smith/preflight/route_scan.js
+smith/preflight/flight_check.js
 smith/preflight/rules/handlers.js
 smith/preflight/rules/maps.js
 smith/preflight/rules/dyn.js
@@ -316,5 +326,14 @@ smith/emit_atoms/split_finalize/a045_split_module_headers.js
 smith/emit_atoms/split_finalize/a046_finalize_postpass.js
 
 smith/soup.js
+smith/lanes/soup/detect.js
+smith/lanes/soup/parse.js
+smith/lanes/soup/state.js
+smith/lanes/soup/components.js
+smith/lanes/soup/handlers.js
+smith/lanes/soup/style.js
+smith/lanes/soup/codegen.js
+smith/lanes/soup/maps.js
+smith/lanes/soup/index.js
 
 smith/debug.js

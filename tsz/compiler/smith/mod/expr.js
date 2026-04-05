@@ -154,7 +154,7 @@ function transpileStringConcat(expr) {
   for (var c = 0; c < expr.length; c++) {
     if (expr[c] === "'" && !inStr) { inStr = true; cur += expr[c]; continue; }
     if (expr[c] === "'" && inStr) { inStr = false; cur += expr[c]; continue; }
-    if (!inStr && expr[c] === '+' && (c === 0 || expr[c - 1] === ' ') && (c + 1 >= expr.length || expr[c + 1] === ' ')) {
+    if (!inStr && expr[c] === '+' && (c === 0 || expr[c-1] === ' ') && (c + 1 >= expr.length || expr[c+1] === ' ')) {
       parts.push(cur.trim());
       cur = '';
       continue;
@@ -192,7 +192,6 @@ function isComparison(lhs) {
   const t = lhs.trim();
   return t.endsWith('>') || t.endsWith('<') || t.endsWith('!') || t.endsWith('=');
 }
-
 function inferTypeFromValue(val) {
   const v = val.trim();
   if (v === '0' || /^-?\d+$/.test(v)) return 'i32';
@@ -201,7 +200,6 @@ function inferTypeFromValue(val) {
   if (v.startsWith('"') || v.startsWith("'")) return '[]const u8';
   return null; // can't infer — don't declare as var
 }
-
 // Split struct literal fields respecting brace nesting, then transpile each
 function transpileStructLiteral(inner) {
   // Split by commas that aren't inside nested { }

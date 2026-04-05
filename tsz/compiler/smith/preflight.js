@@ -32,6 +32,15 @@ function preflight(ctx) {
   checkDuplicateJSVars(ctx, errors);
   checkUnimplementedJSXBlocks(errors);
 
+  // ── Route plan validation ──
+  // The route plan was built BEFORE parse (in the lane compiler).
+  // Here we just check if it flagged any ambiguities.
+  if (ctx._routePlan && ctx._routePlan.ambiguous.length > 0) {
+    for (var ai = 0; ai < ctx._routePlan.ambiguous.length; ai++) {
+      errors.push('ROUTE: ' + ctx._routePlan.ambiguous[ai]);
+    }
+  }
+
   // --strict: promote all warnings to errors
   if (globalThis.__strict === 1 && warnings.length > 0) {
     for (var wi = 0; wi < warnings.length; wi++) {
@@ -45,6 +54,7 @@ function preflight(ctx) {
     warnings: warnings,
     lane: scan.lane,
     intents: intents,
+    plan: ctx._routePlan || null,
   };
 }
 

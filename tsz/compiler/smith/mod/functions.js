@@ -51,7 +51,6 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   out += '}\n\n';
   return out;
 }
-
 function prescanModFunctionSigs(content) {
   _modFnPtrParams = {};
   const lines = content.split('\n');
@@ -361,7 +360,6 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, ct
   }
   return out;
 }
-
 function emitArmBodyV2(lines, typeNames, depth, ctx) {
   let out = ''; const ind = '    '.repeat(depth);
   // Multi-line ternary: condition \n ? true-expr \n : false-expr

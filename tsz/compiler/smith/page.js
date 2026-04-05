@@ -681,6 +681,10 @@ function compilePage(source, c, file) {
   collectConstArrays(c);
   collectClassifiers();
 
+  // ── Route plan — scan source, build plan, hard stop on ambiguity ──
+  var routeErr = buildRoutePlan(source);
+  if (routeErr) return routeErr;
+
   // ── Find return( in tokens → start JSX parse ──
   c.pos = 0;
   var foundReturn = false;

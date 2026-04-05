@@ -22,6 +22,30 @@ function assignSurfaceTier(source, file) {
   return tier;
 }
 
+// ── Build route plan ──
+// Called by lane compilers AFTER collect, BEFORE parse.
+// Scans source + partially-populated ctx to build the immutable route plan.
+// If ambiguity is found, returns an error string (compileError Zig).
+// Otherwise stores plan on ctx._routePlan and returns null (continue).
+function buildRoutePlan(source) {
+  if (typeof routeScan !== 'function') return null;
+  var plan = routeScan(ctx, source);
+  ctx._routePlan = plan;
+  if (plan.ambiguous.length > 0) {
+    var msg = 'ROUTE STOP: ' + plan.ambiguous.length + ' ambiguous construct(s):\n';
+    for (var i = 0; i < plan.ambiguous.length; i++) {
+      msg += '  ' + plan.ambiguous[i] + '\n';
+    }
+    print('[route-scan] ' + msg);
+    return '// Smith error: route scan found ambiguous constructs\n' +
+           'comptime { @compileError("Route scan: ' + plan.ambiguous.length + ' ambiguous construct(s)"); }\n';
+  }
+  if (globalThis.__SMITH_DEBUG) {
+    print('[route-plan] ' + plan.summary);
+  }
+  return null;
+}
+
 function finishParsedLane(nodeExpr, file, opts) {
   opts = opts || {};
 
@@ -59,6 +83,26 @@ function finishParsedLane(nodeExpr, file, opts) {
   }
 
   var zigOut = emitOutput(nodeExpr, file);
+
+  // ── Flight check — verify output matches route plan ──
+  if (ctx._routePlan && typeof flightCheck === 'function') {
+    var fc = flightCheck(ctx, zigOut);
+    if (!fc.ok) {
+      for (var fci = 0; fci < fc.mismatches.length; fci++) {
+        print('[flight-check] ' + fc.mismatches[fci]);
+      }
+    }
+    if (ctx._routePlan && globalThis.__SMITH_DEBUG) {
+      print('[route-plan] ' + ctx._routePlan.summary);
+      print('[route-plan] atoms: ' + ctx._routePlan.predictedAtoms.join(','));
+      if (fc.mismatches.length > 0) {
+        print('[flight-check] MISMATCHES: ' + fc.mismatches.length);
+      } else {
+        print('[flight-check] OK — output matches plan');
+      }
+    }
+  }
+
   if (opts.logEmit) {
     LOG_EMIT('L003', { bytes: zigOut.length });
     LOG_EMIT('L004', { file: file });

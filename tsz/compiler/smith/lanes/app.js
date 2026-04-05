@@ -51,6 +51,7 @@ function compileAppLane(source, tokens, file) {
   var c = mkCursor(tokens, source);
 
   resetCtx();
+  ctx._source = source;
   assignSurfaceTier(source, file);
   collectCompilerInputs(c);
 
@@ -58,6 +59,11 @@ function compileAppLane(source, tokens, file) {
   if (appStart < 0) return '// Smith error: no App function found\n';
 
   collectRenderLocals(c, appStart);
+
+  // ── Route plan — scan source, build plan, hard stop on ambiguity ──
+  var routeErr = buildRoutePlan(source);
+  if (routeErr) return routeErr;
+
   moveToAppReturn(c, appStart);
 
   var root = parseJSXElement(c);

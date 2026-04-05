@@ -165,6 +165,9 @@ function resetCtx() {
     _patternTrace: [],
     _patternDepth: 0,
     _patternTraceEnabled: !!globalThis.__DBG_COMPILER,
+    // Route plan — built by preflight route scan, read by emit + flight check
+    _source: null,
+    _routePlan: null,
   };
 }
 

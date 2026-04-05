@@ -8,7 +8,12 @@ function compileSoup(source, file) {
   _sMapCount = 0;
 
   resetCtx();
+  ctx._source = source;
   assignSurfaceTier(source, file);
+
+  // ── Route plan — scan source, build plan, hard stop on ambiguity ──
+  var routeErr = buildRoutePlan(source);
+  if (routeErr) return routeErr;
 
   // Phase 1: State
   soupParseState(source, warns);
