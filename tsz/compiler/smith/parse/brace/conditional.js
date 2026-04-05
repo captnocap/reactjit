@@ -112,6 +112,44 @@ function tryParseConditional(c, children) {
           return true;
         }
       }
+      // {cond && expr.map((item) => (<JSX>))} — conditional map
+      // The condition controls visibility, the map goes to Lua.
+      if (c.kind() === TK.identifier) {
+        // Peek ahead for .map( in the token stream
+        var _cmPeek = c.save();
+        var _cmHasMap = false;
+        var _cmDepth = 0;
+        while (c.pos < c.count && c.kind() !== TK.rbrace) {
+          if (_cmDepth === 0 && c.kind() === TK.identifier && c.text() === 'map' &&
+              c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+            _cmHasMap = true;
+            break;
+          }
+          if (c.kind() === TK.lparen) _cmDepth++;
+          if (c.kind() === TK.rparen) { if (_cmDepth > 0) _cmDepth--; else break; }
+          c.advance();
+        }
+        c.restore(_cmPeek);
+        if (_cmHasMap) {
+          // Restore to after && and let the normal brace child parser handle the map
+          // Wrap in a conditional show/hide
+          var condExpr = condParts.join('');
+          var condIdx = ctx.conditionals.length;
+          ctx.conditionals.push({ condExpr: condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+          // Parse the map expression as a child — the map parser will route to Lua
+          var mapChildren = [];
+          if (_tryParseIdentifierMapExpression(c, mapChildren, false)) {
+            if (parenWrapped && c.kind() === TK.rparen) c.advance();
+            if (c.kind() === TK.rbrace) c.advance();
+            // Wrap the map result in a conditional Box
+            var mapChild = mapChildren[0] || { nodeExpr: '.{}' };
+            children.push({ nodeExpr: mapChild.nodeExpr, condIdx: condIdx, mapIdx: mapChild.mapIdx, _luaMapWrapper: mapChild._luaMapWrapper });
+            return true;
+          }
+          // Map parse failed — undo conditional registration
+          ctx.conditionals.pop();
+        }
+      }
       // Restore paren if we consumed it but didn't find JSX or children
       if (parenWrapped && savedBeforeParen) {
         c.restore(savedBeforeParen);

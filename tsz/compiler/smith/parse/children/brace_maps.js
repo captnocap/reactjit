@@ -124,6 +124,12 @@ function _identifierStartsMapCall(c) {
   const savedPeek = c.save();
   c.advance();
   c.advance();
+  // Skip through field access chains: item.field1.field2.map(...)
+  while (c.kind() === TK.identifier && !c.isIdent('map') && !c.isIdent('slice') && !c.isIdent('filter') && !c.isIdent('sort') &&
+         c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+    c.advance(); // field
+    c.advance(); // .
+  }
   let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
   while (!isMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
     c.advance();
