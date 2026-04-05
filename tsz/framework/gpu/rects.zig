@@ -90,7 +90,8 @@ pub fn drawRect(
     bb: f32,
     ba: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
 
     // Apply canvas transform if active
     const transform = core.getTransform();
@@ -129,7 +130,8 @@ pub fn drawRectCorners(
     border_width: f32,
     br: f32, bg: f32, bb: f32, ba: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const transform = core.getTransform();
     const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
     const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
@@ -155,7 +157,8 @@ pub fn drawRectCornersTransformed(
     br: f32, bg: f32, bb: f32, ba: f32,
     rotation_deg: f32, sx: f32, sy: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const transform = core.getTransform();
     const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
     const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
@@ -183,7 +186,8 @@ pub fn drawRectTransformed(
     br: f32, bg: f32, bb: f32, ba: f32,
     rotation_deg: f32, sx: f32, sy: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const transform = core.getTransform();
     const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
     const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
@@ -212,7 +216,8 @@ pub fn drawRectShadow(
     rtl: f32, rtr: f32, rbr: f32, rbl: f32,
     blur: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const transform = core.getTransform();
     const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
     const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
@@ -241,7 +246,8 @@ pub fn drawRectGradient(
     gr: f32, gg: f32, gb: f32, ga: f32,
     dir: f32,
 ) void {
-    if (g_rect_count >= MAX_RECTS) return;
+    if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const transform = core.getTransform();
     const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
     const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;

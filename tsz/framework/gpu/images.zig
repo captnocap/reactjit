@@ -48,7 +48,8 @@ var g_bind_group_layout: ?*wgpu.BindGroupLayout = null;
 /// Queue a textured quad for drawing this frame.
 /// bind_group must contain: globals uniform + texture_2d + sampler.
 pub fn queueQuad(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu.BindGroup) void {
-    if (g_quad_count >= MAX_IMAGE_QUADS) return;
+    if (g_quad_count >= MAX_IMAGE_QUADS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     core.recordImageBoundary(@intCast(g_quad_count));
 
     // Apply canvas transform if active

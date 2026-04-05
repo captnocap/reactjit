@@ -56,6 +56,13 @@ pub const GlyphInstance = text.GlyphInstance;
 pub const CurveInstance = curves.CurveInstance;
 
 // ════════════════════════════════════════════════════════════════════════
+// GPU operations budget — cross-pipeline per-frame safety limit
+// ═══════════════════════════════════════════════════════════��════════════
+
+pub const GPU_OPS_BUDGET: u32 = 100_000;
+pub var g_gpu_ops: u32 = 0;
+
+// ════════════════════════════════════════════════════════════════════════
 // Core GPU state
 // ════════════════════════════════════════════════════════════════════════
 
@@ -756,8 +763,6 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
 
     if (!is_web) {
         _ = surface.present();
-        // Blocking poll — reclaim all staging buffers
-        _ = device.poll(true, null);
     }
 
     // Release deferred 3D render targets after image compositing, before reset
@@ -771,6 +776,10 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     images.reset();
     g_scissor_count = 0;
     g_scissor_depth = 0;
+    if (g_gpu_ops >= GPU_OPS_BUDGET) {
+        @import("std").debug.print("[BUDGET] GPU ops hit {d}/{d} this frame\n", .{ g_gpu_ops, GPU_OPS_BUDGET });
+    }
+    g_gpu_ops = 0;
 }
 
 // ════════════════════════════════════════════════════════════════════════

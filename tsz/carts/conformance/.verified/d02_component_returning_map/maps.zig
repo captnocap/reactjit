@@ -35,7 +35,7 @@ pub fn _rebuildMap0() void {
         _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "{s}", .{ st._oa0_name[_i][0..st._oa0_name_lens[_i]] }) catch "";
         const _inner_0 = _pool_arena.allocator().alloc(Node, 1) catch unreachable;
         @memcpy(_inner_0, &[_]Node{ .{ .text = _map_texts_0_0[_i], .font_size = 11, .text_color = Color.rgb(255, 255, 255) } });
-        _map_pool_0[_i] = .{ .style = .{ .background_color = Color.rgb(@intCast((st._oa0_color[_i] >> 16) & 0xFF), @intCast((st._oa0_color[_i] >> 8) & 0xFF), @intCast(st._oa0_color[_i] & 0xFF)), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4, .margin = 2 }, .handlers = .{ .js_on_press = _map_lua_ptrs_0_0[_i] }, .children = _inner_0 };
+        _map_pool_0[_i] = .{ .style = .{ .background_color = Color.rgb(@intCast((st._oa0_color[_i] >> 16) & 0xFF), @intCast((st._oa0_color[_i] >> 8) & 0xFF), @intCast(st._oa0_color[_i] & 0xFF)), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4, .margin = 2 }, .handlers = .{ .lua_on_press = _map_lua_ptrs_0_0[_i] }, .children = _inner_0 };
     }
     nodes._arr_1[0].children = _map_pool_0[0.._map_count_0];
 }

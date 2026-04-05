@@ -14,6 +14,11 @@ comptime { if (1 != 1) @compileError("state slot count mismatch"); }
 // ── Dynamic text buffers ─────────────────────────────────────────
 pub var _dyn_buf_0: [64]u8 = std.mem.zeroes([64]u8);
 pub var _dyn_text_0: []const u8 = "";
+
+// [origin:d01_nested_maps:state]
+// ── JS eval buffers (runtime expression results) ─────────────────
+pub var _eval_buf_0: [256]u8 = std.mem.zeroes([256]u8);
+pub var _eval_buf_1: [256]u8 = std.mem.zeroes([256]u8);
 pub const qjs = @cImport({ @cDefine("_GNU_SOURCE", "1"); @cDefine("QUICKJS_NG_BUILD", "1"); @cInclude("quickjs.h"); });
 pub const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };
 
@@ -35,6 +40,8 @@ pub fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 pub var _oa0_name: [][]const u8 = &[_][]const u8{};
 pub var _oa0_name_lens: []usize = &[_]usize{};
 pub var _oa0_name_cap: usize = 0;
+pub var _oa0_items: []i64 = &[_]i64{};
+pub var _oa0_items_cap: usize = 0;
 pub var _oa0_len: usize = 0;
 pub var _oa0_dirty: bool = false;
 
@@ -64,6 +71,14 @@ pub fn _oa0_ensureCapacity(needed: usize) void {
         @memset(_oa0_name_lens[_old_cap..new_cap], 0);
     }
     _oa0_name_cap = new_cap;
+    if (_oa0_items_cap == 0) {
+        _oa0_items = _oa_alloc.alloc(i64, new_cap) catch return;
+        @memset(_oa0_items, 0);
+    } else {
+        _oa0_items = _oa_alloc.realloc(_oa0_items.ptr[0.._oa0_items_cap], new_cap) catch return;
+        @memset(_oa0_items[_oa0_items_cap..new_cap], 0);
+    }
+    _oa0_items_cap = new_cap;
 }
 
 pub fn _oa1_ensureCapacity(needed: usize) void {
@@ -125,6 +140,7 @@ pub fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs
         _ = qjs.JS_ToInt32(c2, &_nested_len, _nested_len_val);
         qjs.JS_FreeValue(c2, _nested_len_val);
         const _ncount: usize = @intCast(@max(0, _nested_len));
+        _oa0_items[_i] = @intCast(_ncount);
         _oa1_ensureCapacity(_nested_total_1 + _ncount);
         for (0.._ncount) |_j| {
             const _nelem = qjs.JS_GetPropertyUint32(c2, _nested_arr, @intCast(_j));

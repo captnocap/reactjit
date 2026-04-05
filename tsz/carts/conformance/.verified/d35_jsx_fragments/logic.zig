@@ -5,12 +5,55 @@
 // [origin:d35_jsx_fragments:logic]
 // ── Embedded JS logic ────────────────────────────────────────
 pub const JS_LOGIC =
+    \\// Ambient namespaces
+    \\var time = {
+    \\  get hour() { return new Date().getHours(); },
+    \\  get minute() { return String(new Date().getMinutes()).padStart(2, "0"); },
+    \\  get second() { return String(new Date().getSeconds()).padStart(2, "0"); },
+    \\  get year() { return new Date().getFullYear(); },
+    \\  get month() { return new Date().getMonth() + 1; },
+    \\  get day() { return new Date().getDate(); },
+    \\  get fps() { return typeof getFps === "function" ? getFps() : 0; },
+    \\  get delta() { return 16; },
+    \\  get elapsed() { return Date.now(); },
+    \\  get timestamp() { return Date.now(); },
+    \\};
+    \\var sys = {
+    \\  get user() { return typeof __os_user !== "undefined" ? __os_user : "user"; },
+    \\  get uptime() { return Math.floor(Date.now() / 1000); },
+    \\  get os() { return "linux"; },
+    \\  get host() { return "localhost"; },
+    \\  get kernel() { return "unknown"; },
+    \\};
+    \\var device = {
+    \\  get width() { return 1280; },
+    \\  get height() { return 800; },
+    \\  get battery() { return 100; },
+    \\  get online() { return true; },
+    \\  get dpi() { return 96; },
+    \\};
+    \\var input = {
+    \\  mouse: {
+    \\    get x() { return typeof getMouseX === "function" ? getMouseX() : 0; },
+    \\    get y() { return typeof getMouseY === "function" ? getMouseY() : 0; },
+    \\  },
+    \\  keys: { shift: false, ctrl: false, alt: false },
+    \\  touch: { count: 0 },
+    \\};
+    \\
     \\
 ;
 
 // [origin:d35_jsx_fragments:logic]
 // ── Embedded Lua logic ───────────────────────────────────────
 pub const LUA_LOGIC =
+    \\-- State variables (mirroring Zig state slots)
+    \\showExtras = 1
+    \\counter = 0
+    \\
+    \\function setShowExtras(v) showExtras = v; __setState(0, v) end
+    \\function setCounter(v) counter = v; __setState(1, v) end
+    \\
     \\
 ;
 

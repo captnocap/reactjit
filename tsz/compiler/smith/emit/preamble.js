@@ -36,6 +36,7 @@ function emitPreamble(meta) {
       out += `const luajit_runtime = if (IS_LIB) struct {\n`;
       out += `    pub fn callGlobal(_: [*:0]const u8) void {}\n`;
       out += `    pub fn setMapWrapper(_: usize, _: *anyopaque) void {}\n`;
+      out += `    pub fn registerHostFn(_: [*:0]const u8, _: ?*const anyopaque, _: c_int) void {}\n`;
       out += `} else @import("${meta.prefix}luajit_runtime.zig");\n`;
     }
   }

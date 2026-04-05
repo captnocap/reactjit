@@ -5,12 +5,77 @@
 // [origin:d14_multiple_instances:logic]
 // ── Embedded JS logic ────────────────────────────────────────
 pub const JS_LOGIC =
+    \\// Ambient namespaces
+    \\var time = {
+    \\  get hour() { return new Date().getHours(); },
+    \\  get minute() { return String(new Date().getMinutes()).padStart(2, "0"); },
+    \\  get second() { return String(new Date().getSeconds()).padStart(2, "0"); },
+    \\  get year() { return new Date().getFullYear(); },
+    \\  get month() { return new Date().getMonth() + 1; },
+    \\  get day() { return new Date().getDate(); },
+    \\  get fps() { return typeof getFps === "function" ? getFps() : 0; },
+    \\  get delta() { return 16; },
+    \\  get elapsed() { return Date.now(); },
+    \\  get timestamp() { return Date.now(); },
+    \\};
+    \\var sys = {
+    \\  get user() { return typeof __os_user !== "undefined" ? __os_user : "user"; },
+    \\  get uptime() { return Math.floor(Date.now() / 1000); },
+    \\  get os() { return "linux"; },
+    \\  get host() { return "localhost"; },
+    \\  get kernel() { return "unknown"; },
+    \\};
+    \\var device = {
+    \\  get width() { return 1280; },
+    \\  get height() { return 800; },
+    \\  get battery() { return 100; },
+    \\  get online() { return true; },
+    \\  get dpi() { return 96; },
+    \\};
+    \\var input = {
+    \\  mouse: {
+    \\    get x() { return typeof getMouseX === "function" ? getMouseX() : 0; },
+    \\    get y() { return typeof getMouseY === "function" ? getMouseY() : 0; },
+    \\  },
+    \\  keys: { shift: false, ctrl: false, alt: false },
+    \\  touch: { count: 0 },
+    \\};
+    \\
     \\
 ;
 
 // [origin:d14_multiple_instances:logic]
 // ── Embedded Lua logic ───────────────────────────────────────
 pub const LUA_LOGIC =
+    \\-- State variables (mirroring Zig state slots)
+    \\globalClicks = 0
+    \\count = 0
+    \\dismissed = 0
+    \\count_3 = 0
+    \\count_4 = 0
+    \\count_5 = 0
+    \\dismissed_6 = 0
+    \\dismissed_7 = 0
+    \\dismissed_8 = 0
+    \\dismissed_9 = 0
+    \\dismissed_10 = 0
+    \\count_11 = 0
+    \\count_12 = 0
+    \\
+    \\function setGlobalClicks(v) globalClicks = v; __setState(0, v) end
+    \\function setCount(v) count = v; __setState(1, v) end
+    \\function setDismissed(v) dismissed = v; __setState(2, v) end
+    \\function setCount_3(v) count_3 = v; __setState(3, v) end
+    \\function setCount_4(v) count_4 = v; __setState(4, v) end
+    \\function setCount_5(v) count_5 = v; __setState(5, v) end
+    \\function setDismissed_6(v) dismissed_6 = v; __setState(6, v) end
+    \\function setDismissed_7(v) dismissed_7 = v; __setState(7, v) end
+    \\function setDismissed_8(v) dismissed_8 = v; __setState(8, v) end
+    \\function setDismissed_9(v) dismissed_9 = v; __setState(9, v) end
+    \\function setDismissed_10(v) dismissed_10 = v; __setState(10, v) end
+    \\function setCount_11(v) count_11 = v; __setState(11, v) end
+    \\function setCount_12(v) count_12 = v; __setState(12, v) end
+    \\
     \\
 ;
 

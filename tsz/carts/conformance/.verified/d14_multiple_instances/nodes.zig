@@ -7,7 +7,6 @@ const layout = api;
 const Node = api.Node;
 const Style = api.Style;
 const Color = api.Color;
-const handlers = @import("handlers.zig");
 
 // [origin:d14_multiple_instances:nodes]
 // ── Generated node tree ─────────────────────────────────────────
@@ -16,19 +15,19 @@ pub var _arr_0 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.
 // tsz:d14_multiple_instances.tsz:18 — <Pressable>
 pub var _arr_1 = [_]Node{ .{ .text = "Reset", .font_size = 10, .text_color = Color.rgb(100, 116, 139) } }; // Counter
 // tsz:d14_multiple_instances.tsz:12 — <Box>
-pub var _arr_2 = [_]Node{ .{ .text = "Counter A", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = handlers._handler_press_0 }, .children = &_arr_0 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .on_press = handlers._handler_press_1 }, .children = &_arr_1 } }; // Counter
+pub var _arr_2 = [_]Node{ .{ .text = "Counter A", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCount_3(count_3 + 1); setGlobalClicks(globalClicks + 1)" }, .children = &_arr_0 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .lua_on_press = "setCount_3(0)" }, .children = &_arr_1 } }; // Counter
 // tsz:d14_multiple_instances.tsz:15 — <Pressable>
 pub var _arr_3 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } }; // Counter
 // tsz:d14_multiple_instances.tsz:18 — <Pressable>
 pub var _arr_4 = [_]Node{ .{ .text = "Reset", .font_size = 10, .text_color = Color.rgb(100, 116, 139) } }; // Counter
 // tsz:d14_multiple_instances.tsz:12 — <Box>
-pub var _arr_5 = [_]Node{ .{ .text = "Counter B", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = handlers._handler_press_2 }, .children = &_arr_3 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .on_press = handlers._handler_press_3 }, .children = &_arr_4 } }; // Counter
+pub var _arr_5 = [_]Node{ .{ .text = "Counter B", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCount_4(count_4 + 1); setGlobalClicks(globalClicks + 1)" }, .children = &_arr_3 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .lua_on_press = "setCount_4(0)" }, .children = &_arr_4 } }; // Counter
 // tsz:d14_multiple_instances.tsz:15 — <Pressable>
 pub var _arr_6 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } }; // Counter
 // tsz:d14_multiple_instances.tsz:18 — <Pressable>
 pub var _arr_7 = [_]Node{ .{ .text = "Reset", .font_size = 10, .text_color = Color.rgb(100, 116, 139) } }; // Counter
 // tsz:d14_multiple_instances.tsz:12 — <Box>
-pub var _arr_8 = [_]Node{ .{ .text = "Counter C", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = handlers._handler_press_4 }, .children = &_arr_6 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .on_press = handlers._handler_press_5 }, .children = &_arr_7 } }; // Counter
+pub var _arr_8 = [_]Node{ .{ .text = "Counter C", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCount_5(count_5 + 1); setGlobalClicks(globalClicks + 1)" }, .children = &_arr_6 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .lua_on_press = "setCount_5(0)" }, .children = &_arr_7 } }; // Counter
 // tsz:d14_multiple_instances.tsz:46 — <Box>
 pub var _arr_9 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8, .flex_grow = 1, .overflow = .auto }, .children = &_arr_2 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8, .flex_grow = 1, .overflow = .auto }, .children = &_arr_5 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8, .flex_grow = 1, .overflow = .auto }, .children = &_arr_8 } };
 // tsz:d14_multiple_instances.tsz:29 — <Pressable>
@@ -36,31 +35,31 @@ pub var _arr_10 = [_]Node{ .{ .text = "Info", .font_size = 10, .text_color = Col
 // tsz:d14_multiple_instances.tsz:32 — <Box>
 pub var _arr_11 = [_]Node{ .{ .text = "dismissed", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // Badge
 // tsz:d14_multiple_instances.tsz:28 — <Box>
-pub var _arr_12 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .on_press = handlers._handler_press_6 }, .children = &_arr_10 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_11 } }; // Badge
+pub var _arr_12 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(59, 130, 246), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .lua_on_press = "setDismissed_6(1)" }, .children = &_arr_10 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_11 } }; // Badge
 // tsz:d14_multiple_instances.tsz:29 — <Pressable>
 pub var _arr_13 = [_]Node{ .{ .text = "Success", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // Badge
 // tsz:d14_multiple_instances.tsz:32 — <Box>
 pub var _arr_14 = [_]Node{ .{ .text = "dismissed", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // Badge
 // tsz:d14_multiple_instances.tsz:28 — <Box>
-pub var _arr_15 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(34, 197, 94), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .on_press = handlers._handler_press_7 }, .children = &_arr_13 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_14 } }; // Badge
+pub var _arr_15 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(34, 197, 94), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .lua_on_press = "setDismissed_7(1)" }, .children = &_arr_13 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_14 } }; // Badge
 // tsz:d14_multiple_instances.tsz:29 — <Pressable>
 pub var _arr_16 = [_]Node{ .{ .text = "Warning", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // Badge
 // tsz:d14_multiple_instances.tsz:32 — <Box>
 pub var _arr_17 = [_]Node{ .{ .text = "dismissed", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // Badge
 // tsz:d14_multiple_instances.tsz:28 — <Box>
-pub var _arr_18 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(245, 158, 11), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .on_press = handlers._handler_press_8 }, .children = &_arr_16 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_17 } }; // Badge
+pub var _arr_18 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(245, 158, 11), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .lua_on_press = "setDismissed_8(1)" }, .children = &_arr_16 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_17 } }; // Badge
 // tsz:d14_multiple_instances.tsz:29 — <Pressable>
 pub var _arr_19 = [_]Node{ .{ .text = "Error", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // Badge
 // tsz:d14_multiple_instances.tsz:32 — <Box>
 pub var _arr_20 = [_]Node{ .{ .text = "dismissed", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // Badge
 // tsz:d14_multiple_instances.tsz:28 — <Box>
-pub var _arr_21 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(239, 68, 68), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .on_press = handlers._handler_press_9 }, .children = &_arr_19 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_20 } }; // Badge
+pub var _arr_21 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(239, 68, 68), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .lua_on_press = "setDismissed_9(1)" }, .children = &_arr_19 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_20 } }; // Badge
 // tsz:d14_multiple_instances.tsz:29 — <Pressable>
 pub var _arr_22 = [_]Node{ .{ .text = "Debug", .font_size = 10, .text_color = Color.rgb(255, 255, 255) } }; // Badge
 // tsz:d14_multiple_instances.tsz:32 — <Box>
 pub var _arr_23 = [_]Node{ .{ .text = "dismissed", .font_size = 10, .text_color = Color.rgb(71, 85, 105) } }; // Badge
 // tsz:d14_multiple_instances.tsz:28 — <Box>
-pub var _arr_24 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(139, 92, 246), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .on_press = handlers._handler_press_10 }, .children = &_arr_22 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_23 } }; // Badge
+pub var _arr_24 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(139, 92, 246), .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .handlers = .{ .lua_on_press = "setDismissed_10(1)" }, .children = &_arr_22 }, .{ .style = .{ .border_color = Color.rgb(51, 65, 85), .border_width = 1, .border_radius = 12, .padding_left = 10, .padding_right = 10, .padding_top = 4, .padding_bottom = 4 }, .children = &_arr_23 } }; // Badge
 // tsz:d14_multiple_instances.tsz:53 — <Box>
 pub var _arr_25 = [_]Node{ .{ .children = &_arr_12 }, .{ .children = &_arr_15 }, .{ .children = &_arr_18 }, .{ .children = &_arr_21 }, .{ .children = &_arr_24 } };
 // tsz:d14_multiple_instances.tsz:15 — <Pressable>
@@ -68,13 +67,13 @@ pub var _arr_26 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color
 // tsz:d14_multiple_instances.tsz:18 — <Pressable>
 pub var _arr_27 = [_]Node{ .{ .text = "Reset", .font_size = 10, .text_color = Color.rgb(100, 116, 139) } }; // Counter
 // tsz:d14_multiple_instances.tsz:12 — <Box>
-pub var _arr_28 = [_]Node{ .{ .text = "Outer Left", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = handlers._handler_press_11 }, .children = &_arr_26 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .on_press = handlers._handler_press_12 }, .children = &_arr_27 } }; // Counter
+pub var _arr_28 = [_]Node{ .{ .text = "Outer Left", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCount_11(count_11 + 1); setGlobalClicks(globalClicks + 1)" }, .children = &_arr_26 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .lua_on_press = "setCount_11(0)" }, .children = &_arr_27 } }; // Counter
 // tsz:d14_multiple_instances.tsz:15 — <Pressable>
 pub var _arr_29 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } }; // Counter
 // tsz:d14_multiple_instances.tsz:18 — <Pressable>
 pub var _arr_30 = [_]Node{ .{ .text = "Reset", .font_size = 10, .text_color = Color.rgb(100, 116, 139) } }; // Counter
 // tsz:d14_multiple_instances.tsz:12 — <Box>
-pub var _arr_31 = [_]Node{ .{ .text = "Outer Right", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = handlers._handler_press_13 }, .children = &_arr_29 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .on_press = handlers._handler_press_14 }, .children = &_arr_30 } }; // Counter
+pub var _arr_31 = [_]Node{ .{ .text = "Outer Right", .font_size = 12, .text_color = Color.rgb(148, 163, 184) }, .{ .text = "", .font_size = 32, .text_color = Color.rgb(0, 0, 0) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCount_12(count_12 + 1); setGlobalClicks(globalClicks + 1)" }, .children = &_arr_29 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .padding = 6, .align_items = .center, .border_color = Color.rgb(51, 65, 85), .border_width = 1 }, .handlers = .{ .lua_on_press = "setCount_12(0)" }, .children = &_arr_30 } }; // Counter
 // tsz:d14_multiple_instances.tsz:62 — <Box>
 pub var _arr_32 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8, .flex_grow = 1, .overflow = .auto }, .children = &_arr_28 }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8, .flex_grow = 1, .overflow = .auto }, .children = &_arr_31 } };
 // tsz:d14_multiple_instances.tsz:41 — <Box>

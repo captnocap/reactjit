@@ -66,9 +66,11 @@ const termCellSelected = engine.termCellSelected;
 const offsetDescendants = engine.offsetDescendants;
 const measureWidthOnly = engine.measureWidthOnly;
 
+pub const PAINT_BUDGET: u32 = 50_000;
 pub var g_paint_count: u32 = 0;
 pub var g_hidden_count: u32 = 0;
 pub var g_zero_count: u32 = 0;
+pub var g_budget_exceeded: bool = false;
 pub var g_dt_sec: f32 = 0;
 pub var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 pub var g_flow_enabled: bool = true; // per-child flow override for hover mode
@@ -90,6 +92,13 @@ pub var input_drag_font_size: u16 = 0;
 pub fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; log.info(.render, "hidden {s}", .{node.debug_name orelse "?"}); return; }
     g_paint_count += 1;
+    if (g_paint_count > PAINT_BUDGET) {
+        if (!g_budget_exceeded) {
+            g_budget_exceeded = true;
+            std.debug.print("[BUDGET] Paint pass exceeded {d} nodes — bailing (likely infinite loop)\n", .{PAINT_BUDGET});
+        }
+        return;
+    }
 
     // Canvas.Path: draw before size check
     if (node.canvas_path or node.canvas_path_d != null) { paintCanvasPath(node); return; }

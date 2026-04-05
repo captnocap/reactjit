@@ -494,7 +494,7 @@ function parseHandler(c) {
           } else if (/^-?\d+$/.test(args)) {
             body += `    qjs_runtime.callGlobalInt("${setter}", ${args});\n`;
           } else {
-            const jsCall = `${setter}(${args.replace(/'/g, '\\"')})`;
+            const jsCall = `${setter}(${args.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, '\\"')})`;
             body += `    qjs_runtime.evalExpr("${jsCall}");\n`;
           }
         }
@@ -534,7 +534,7 @@ function parseHandler(c) {
           } else if (/^-?\d+$/.test(args)) {
             body += `    qjs_runtime.callGlobalInt("${fname}", ${args});\n`;
           } else {
-            const jsCall = `${fname}(${args.replace(/'/g, '\\"')})`;
+            const jsCall = `${fname}(${args.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, '\\"')})`;
             body += `    qjs_runtime.evalExpr("${jsCall}");\n`;
           }
         }
@@ -583,7 +583,7 @@ function parseHandler(c) {
       } else if (/^-?\d+$/.test(args)) {
         body = `    qjs_runtime.callGlobalInt("${setter}", ${args});\n`;
       } else {
-        const jsCall = `${setter}(${args.replace(/'/g, '\\"')})`;
+        const jsCall = `${setter}(${args.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, '\\"')})`;
         body = `    qjs_runtime.evalExpr("${jsCall}");\n`;
       }
     }

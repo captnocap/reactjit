@@ -3,89 +3,89 @@
 
 const std = @import("std");
 const api = @import("framework/api.zig");
-const state = api.state;
+const qjs_runtime = api.qjs_runtime;
 
 // [origin:d16_state_stress:handlers]
 // ── Event handlers ──────────────────────────────────────────────
 // [origin:d16_state_stress:handler:_handler_press_0]
 pub fn _handler_press_0() void {
-    state.setSlot(0, (state.getSlot(0) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setA(a+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_1]
 pub fn _handler_press_1() void {
-    state.setSlot(1, (state.getSlot(1) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setB(b+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_2]
 pub fn _handler_press_2() void {
-    state.setSlot(2, (state.getSlot(2) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setC(c+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_3]
 pub fn _handler_press_3() void {
-    state.setSlot(3, (state.getSlot(3) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setD(d+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_4]
 pub fn _handler_press_4() void {
-    state.setSlot(4, (state.getSlot(4) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setE(e+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_5]
 pub fn _handler_press_5() void {
-    state.setSlot(5, (state.getSlot(5) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setF(f+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_6]
 pub fn _handler_press_6() void {
-    state.setSlot(6, (state.getSlot(6) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setG(g+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_7]
 pub fn _handler_press_7() void {
-    state.setSlot(7, (state.getSlot(7) + 1));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setH(h+1)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_8]
 pub fn _handler_press_8() void {
-    state.setSlot(11, (if ((state.getSlot(11) > 10)) (state.getSlot(11) - 10) else @as(i32, 10)));
+    qjs_runtime.evalExpr("setBarWidth(barWidth>10?barWidth-10:10)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_9]
 pub fn _handler_press_9() void {
-    state.setSlot(11, (if ((state.getSlot(11) < 300)) (state.getSlot(11) + 10) else @as(i32, 300)));
+    qjs_runtime.evalExpr("setBarWidth(barWidth<300?barWidth+10:300)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_10]
 pub fn _handler_press_10() void {
-    state.setSlot(9, (state.getSlot(9) + 1));
-    state.setSlot(10, (state.getSlot(10) + state.getSlot(9)));
-    state.setSlot(8, (state.getSlot(8) + 1));
+    qjs_runtime.evalExpr("setPhase(phase+1)");
+    qjs_runtime.evalExpr("setHistory(history+phase)");
+    qjs_runtime.evalExpr("setTotal(total+1)");
 }
 
 // [origin:d16_state_stress:handler:_handler_press_11]
 pub fn _handler_press_11() void {
-    state.setSlot(0, 0);
-    state.setSlot(1, 0);
-    state.setSlot(2, 0);
-    state.setSlot(3, 0);
-    state.setSlot(4, 0);
-    state.setSlot(5, 0);
-    state.setSlot(6, 0);
-    state.setSlot(7, 0);
-    state.setSlot(8, 0);
-    state.setSlot(9, 0);
-    state.setSlot(10, 0);
-    state.setSlot(11, 50);
+    qjs_runtime.callGlobalInt("setA", 0);
+    qjs_runtime.callGlobalInt("setB", 0);
+    qjs_runtime.callGlobalInt("setC", 0);
+    qjs_runtime.callGlobalInt("setD", 0);
+    qjs_runtime.callGlobalInt("setE", 0);
+    qjs_runtime.callGlobalInt("setF", 0);
+    qjs_runtime.callGlobalInt("setG", 0);
+    qjs_runtime.callGlobalInt("setH", 0);
+    qjs_runtime.callGlobalInt("setTotal", 0);
+    qjs_runtime.callGlobalInt("setPhase", 0);
+    qjs_runtime.callGlobalInt("setHistory", 0);
+    qjs_runtime.callGlobalInt("setBarWidth", 50);
 }
 
 

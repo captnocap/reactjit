@@ -5,6 +5,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
   for (const oa of ctx.objectArrays) {
     if (oa.isNested || oa.isConst) continue;
     out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
+    out += `    luajit_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
   }
   if (meta.hasVariants) {
     out += `    qjs_runtime.registerHostFn("__setVariant", @ptrCast(&_setVariantHost), 1);\n`;
@@ -25,6 +26,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
   if (meta.hasVariants) out += `    _updateVariants();\n`;
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+    if (ctx.maps[mi].mapBackend === 'lua_runtime') continue;
     const mapHandlers = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === mi; });
     const fieldRefsMap = ctx.maps[mi]._handlerFieldRefsMap || {};
     for (let hi = 0; hi < mapHandlers.length; hi++) {

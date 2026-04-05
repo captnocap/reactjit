@@ -106,8 +106,38 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (handlerRef) {
     const handler = ctx.handlers.find(h => h.name === handlerRef);
     if (handler && handler.luaBody) {
-      const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
+      // Route decision: js_on_press vs lua_on_press
+      // If the app has JS script functions (scriptBlock or scriptContent),
+      // ALL handlers use js_on_press to keep JS variables in sync.
+      // Otherwise, detect if handler calls non-setter functions → js_on_press.
+      // Default: lua_on_press (state setters exist in both runtimes).
+      var _useJs = !!(ctx.scriptBlock || globalThis.__scriptContent);
+      if (!_useJs) {
+        var _luaBodyCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+        for (var _ci = 0; _ci < _luaBodyCalls.length; _ci++) {
+          var _fname = _luaBodyCalls[_ci].replace(/\s*\($/, '');
+          var _isLuaAvail = false;
+          if (ctx.stateSlots) {
+            for (var _si = 0; _si < ctx.stateSlots.length; _si++) {
+              if (ctx.stateSlots[_si].setter === _fname) { _isLuaAvail = true; break; }
+            }
+          }
+          if (!_isLuaAvail && ctx.objectArrays) {
+            for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
+              if (ctx.objectArrays[_oi].setter === _fname) { _isLuaAvail = true; break; }
+            }
+          }
+          if (!_isLuaAvail && /^(print|tostring|tonumber|pcall|setVariant)$/.test(_fname)) _isLuaAvail = true;
+          if (!_isLuaAvail) { _useJs = true; break; }
+        }
+      }
+      if (_useJs && handler.jsBody) {
+        const jsEscaped = handler.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        parts.push(`.handlers = .{ .js_on_press = "${jsEscaped}" }`);
+      } else {
+        const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
+      }
     } else {
       parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
     }

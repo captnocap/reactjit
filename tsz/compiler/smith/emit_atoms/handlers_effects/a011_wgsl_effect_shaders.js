@@ -22,14 +22,18 @@ function _a011_emit(ctx, meta) {
 
   var out = '';
   ctx.effectRenders.forEach(function(effectRender) {
-    var wgsl = transpileEffectToWGSL(effectRender.body, effectRender.param);
-    var wgslLines = wgsl.split('\n');
-    out += 'pub const _effect_wgsl_' + effectRender.id + ': []const u8 =\n';
-    wgslLines.forEach(function(wgslLine) {
-      out += '    \\\\' + wgslLine + '\n';
-    });
-    out += ';\n';
-    out += 'pub const _effect_shader_' + effectRender.id + ' = api.GpuShaderDesc{ .wgsl = _effect_wgsl_' + effectRender.id + ' };\n\n';
+    var result = transpileEffectToWGSL(effectRender.body, effectRender.param);
+    if (result && result.wgsl) {
+      var wgslLines = result.wgsl.split('\n');
+      out += 'pub const _effect_wgsl_' + effectRender.id + ': []const u8 =\n';
+      wgslLines.forEach(function(wgslLine) {
+        out += '    \\\\' + wgslLine + '\n';
+      });
+      out += ';\n';
+      out += 'pub const _effect_shader_' + effectRender.id + ' = api.GpuShaderDesc{ .wgsl = _effect_wgsl_' + effectRender.id + ' };\n\n';
+    } else {
+      out += 'pub const _effect_shader_' + effectRender.id + ': ?api.GpuShaderDesc = null;  // CPU-only effect\n\n';
+    }
   });
   return out;
 }

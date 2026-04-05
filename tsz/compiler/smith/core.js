@@ -77,8 +77,17 @@ function mkCursor(raw, source) {
   return {
     kinds, starts, ends, count, source, pos: 0,
     kind()      { return this.kinds[this.pos]; },
-    text()      { return this._byteSlice(this.starts[this.pos], this.ends[this.pos]); },
-    textAt(i)   { return this._byteSlice(this.starts[i], this.ends[i]); },
+    text()      { return this._normStr(this.pos, this._byteSlice(this.starts[this.pos], this.ends[this.pos])); },
+    textAt(i)   { return this._normStr(i, this._byteSlice(this.starts[i], this.ends[i])); },
+    // Normalize single-quoted JS strings to double-quoted for Zig output.
+    // 'hello' → "hello", 'it\'s' → "it's", 'say "hi"' → "say \"hi\""
+    _normStr(i, raw) {
+      if (this.kinds[i] !== TK.string || raw.length < 2 || raw[0] !== "'") return raw;
+      var inner = raw.slice(1, -1);
+      inner = inner.replace(/\\'/g, "'");       // unescape \'  → '
+      inner = inner.replace(/"/g, '\\"');        // escape   "   → \"
+      return '"' + inner + '"';
+    },
     _byteSlice(start, end) {
       if (this._isAscii === undefined) {
         this._isAscii = true;

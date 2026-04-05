@@ -1,0 +1,35 @@
+#!/bin/bash
+# Run build against all d01-d152 mixed conformance tests.
+# Usage: ./scripts/conformance-build
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+PASS=0; FAIL=0; TIMEOUT=0; FAILS=""; TIMEOUTS=""
+TOTAL=$(ls carts/conformance/mixed/d*.tsz 2>/dev/null | grep -v '\.script\.tsz' | grep -v '\.cls\.tsz' | wc -l)
+COUNT=0
+
+for f in $(ls carts/conformance/mixed/d*.tsz | grep -v '\.script\.tsz' | grep -v '\.cls\.tsz' | sort -V); do
+    name=$(basename "$f" .tsz)
+    COUNT=$((COUNT+1))
+    if timeout 30 ./scripts/build "$f" > /tmp/conformance_build.log 2>&1; then
+        PASS=$((PASS+1))
+        printf "\033[32m.\033[0m"
+    elif [ $? -eq 124 ]; then
+        TIMEOUT=$((TIMEOUT+1))
+        TIMEOUTS="$TIMEOUTS\n  $name"
+        printf "\033[33mT\033[0m"
+    else
+        FAIL=$((FAIL+1))
+        FAILS="$FAILS\n  $name"
+        printf "\033[31mX\033[0m"
+    fi
+done
+
+echo ""
+echo "─────────────────────────────"
+echo "PASS:    $PASS / $TOTAL"
+echo "FAIL:    $FAIL"
+echo "TIMEOUT: $TIMEOUT"
+echo "─────────────────────────────"
+if [ -n "$FAILS" ]; then echo -e "\nFailed:$FAILS"; fi
+if [ -n "$TIMEOUTS" ]; then echo -e "\nTimed out:$TIMEOUTS"; fi

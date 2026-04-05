@@ -45,14 +45,14 @@ pub fn _rebuildMap0() void {
                 const _jj = _map_count_1[_i];
                 if (_jj >= MAX_MAP_1) break;
                 _map_texts_1_1[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_1_1[_flat_j], "{s}", .{ st._oa1_label[_flat_j][0..st._oa1_label_lens[_flat_j]] }) catch "";
-                _map_texts_1_2[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_1_2[_flat_j], "{d} [{d},{d}]", .{ st._oa1_value[_flat_j], @as(i64, @intCast(_i)), @as(i64, @intCast(_i)) }) catch "";
+                _map_texts_1_2[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_1_2[_flat_j], "{d} [{d},{d}]", .{ st._oa1_value[_flat_j], @as(i64, @intCast(_i)), @as(i64, @intCast(_flat_j)) }) catch "";
                 _map_inner_1[_flat_j] = [2]Node{ .{ .text = _map_texts_1_1[_flat_j], .font_size = 12, .text_color = Color.rgb(226, 226, 226) }, .{ .text = _map_texts_1_2[_flat_j], .font_size = 12, .text_color = Color.rgb(233, 69, 96) } };
                 {
                     const _n = std.fmt.bufPrint(_map_lua_bufs_1_0[_flat_j][0..47], "__mapPress_1_0({d},{d})", .{_i, _jj}) catch "";
                     _map_lua_bufs_1_0[_flat_j][_n.len] = 0;
                     _map_lua_ptrs_1_0[_flat_j] = @ptrCast(_map_lua_bufs_1_0[_flat_j][0.._n.len :0]);
                 }
-                _map_pool_1[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .js_on_press = _map_lua_ptrs_1_0[_flat_j] }, .children = &_map_inner_1[_flat_j] };
+                _map_pool_1[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .lua_on_press = _map_lua_ptrs_1_0[_flat_j] }, .children = &_map_inner_1[_flat_j] };
                 _map_count_1[_i] += 1;
             }
         }

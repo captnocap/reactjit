@@ -235,8 +235,16 @@ function smithCheck() {
       var mtype = mr.nested ? 'nested' : mr.inline ? 'inline' : 'flat';
       var mdesc = 'Map ' + mi + ': ' + mtype;
       if (mr.source) mdesc += ' (' + mr.source + ')';
-      if (mr.oa) mdesc += ' → OA';
+      mdesc += ' → ' + (mr.target || 'zig_oa');
       if (mr.handler) mdesc += ' +handler';
+      if (mr.content) {
+        mdesc += ' L' + mr.content.line;
+        mdesc += ' [' + mr.content.jsxElements + ' JSX';
+        if (mr.content.colors.length > 0) {
+          mdesc += ', colors: ' + mr.content.colors.join(' ');
+        }
+        mdesc += ']';
+      }
       lines.push('  ' + mdesc);
     }
   }
@@ -262,7 +270,34 @@ function smithCheck() {
   }
 
   lines.push('');
-  lines.push('Verdict: ' + (blocking > 0 ? 'BLOCKED (' + blocking + ')' : 'CLEAR'));
+  if (blocking > 0) {
+    lines.push('Verdict: BLOCKED (' + blocking + ')');
+    lines.push('');
+    lines.push('╔══════════════════════════════════════════════════════════════╗');
+    lines.push('║  THIS IS A COMPILER PROBLEM.                                ║');
+    lines.push('║                                                              ║');
+    lines.push('║  The source is valid. The engine is fine. Smith cannot emit   ║');
+    lines.push('║  this pattern yet. Fix the COMPILER (smith/), not the cart   ║');
+    lines.push('║  source, not the framework, not the engine.                  ║');
+    lines.push('║                                                              ║');
+    lines.push('║  Hey Claude — yes, you, the one reading this right now.      ║');
+    lines.push('║  Do NOT blame the source. Do NOT blame the engine. Do NOT    ║');
+    lines.push('║  rewrite the test to dodge the pattern. Do NOT say "this     ║');
+    lines.push('║  is a fundamental limitation." YOU wrote the compiler. YOU    ║');
+    lines.push('║  wrote Smith. This is a conformance test and it is YOUR      ║');
+    lines.push('║  problem all the way until it passes green and a HUMAN       ║');
+    lines.push('║  verifies it. Not "works on my machine." Not "compiles if    ║');
+    lines.push('║  you remove the hard part." GREEN. VERIFIED. BY A HUMAN.     ║');
+    lines.push('║  Do not even THINK about turning around and saying "not my   ║');
+    lines.push('║  problem." It is your problem. It has always been your       ║');
+    lines.push('║  problem. It will continue to be your problem until you fix  ║');
+    lines.push('║  the emit path in smith/ that drops map body templates.      ║');
+    lines.push('║  Now go read love2d/scripts/tslx_compile.mjs and port the   ║');
+    lines.push('║  solution like you should have done the first time.          ║');
+    lines.push('╚══════════════════════════════════════════════════════════════╝');
+  } else {
+    lines.push('Verdict: CLEAR');
+  }
 
   globalThis.__checkBlocking = blocking;
   return lines.join('\n');

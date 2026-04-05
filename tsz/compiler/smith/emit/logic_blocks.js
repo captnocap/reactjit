@@ -47,6 +47,18 @@ function emitLogicBlocks(ctx) {
     jsLines.push('};');
     jsLines.push('');
 
+    // State variable declarations + setter functions in JS
+    // Always emit so js_on_press handlers can call setters from QJS.
+    // (Previously only emitted for scriptBlock/scriptContent mode.)
+    if (!ctx.scriptBlock && !globalThis.__scriptContent) {
+      for (const s of ctx.stateSlots) {
+        const idx = ctx.stateSlots.indexOf(s);
+        jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
+        const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
+        jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
+      }
+    }
+
     // Object array JS var declarations + setters
     // For page mode (scriptBlock): var declarations here, setter functions AFTER scriptBlock
     //   so they override page.js setters that lack __setObjArr calls.
@@ -294,13 +306,14 @@ function emitLogicBlocks(ctx) {
       for (const oa of ctx.objectArrays) {
         if (oa.isNested || oa.isConst) continue;
         luaLines.push(`${oa.getter} = {}`);
-        luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v end`);
+        luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
       }
     }
     // Map handler functions in Lua — MUST come before script content
     // (script may call OA setters that fail in Lua, aborting the rest of the script)
     // (script may call OA setters that fail in Lua, aborting the rest of the script)
     for (let mi = 0; mi < ctx.maps.length; mi++) {
+      if (ctx.maps[mi].mapBackend === 'lua_runtime') continue; // handlers wired via lua_on_press in Lua template
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
       for (let hi = 0; hi < mapHandlers.length; hi++) {
         const mh = mapHandlers[hi];

@@ -23,6 +23,7 @@ const classifier = @import("classifier.zig");
 const semantic = @import("semantic.zig");
 const pty_remote = @import("pty_remote.zig");
 const crashlog = @import("crashlog.zig");
+const watchdog = @import("watchdog.zig");
 const cart = @import("cartridge.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
@@ -668,9 +669,11 @@ fn positionCanvasNodes(parent: *Node) void {
     }
 }
 
+const PAINT_BUDGET: u32 = 50_000;
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
+var g_budget_exceeded: bool = false;
 var g_dt_sec: f32 = 0;
 var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
@@ -692,6 +695,13 @@ var input_drag_font_size: u16 = 0;
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; return; }
     g_paint_count += 1;
+    if (g_paint_count > PAINT_BUDGET) {
+        if (!g_budget_exceeded) {
+            g_budget_exceeded = true;
+            std.debug.print("[BUDGET] Paint pass exceeded {d} nodes — bailing (likely infinite loop)\n", .{PAINT_BUDGET});
+        }
+        return;
+    }
 
     // Canvas.Path: draw before size check
     if (node.canvas_path) { paintCanvasPath(node); return; }
@@ -1435,6 +1445,9 @@ pub fn run(config_in: AppConfig) !void {
     crashlog.ignoreSignal(15); // SIGTERM (catch and log instead of die)
     crashlog.ignoreSignal(20); // SIGTSTP
 
+    // External watchdog: monitors RSS spikes + heartbeat from a separate process
+    watchdog.init();
+
     // Debug server — auto-start if TSZ_DEBUG=1 (before SDL so it works headless)
     debug_server.init(config.title);
     defer debug_server.deinit();
@@ -1442,6 +1455,7 @@ pub fn run(config_in: AppConfig) !void {
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
     defer {
         c.SDL_Quit();
+        watchdog.markCleanExit();
         crashlog.markCleanShutdown();
     }
     log.info(.engine, "SDL initialized", .{});
@@ -2293,17 +2307,19 @@ pub fn run(config_in: AppConfig) !void {
             const ppf = g_paint_count / @max(fps_frames, 1);
             const hpf = g_hidden_count / @max(fps_frames, 1);
             const zpf = g_zero_count / @max(fps_frames, 1);
-            std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
-                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
+            std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
+                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
-            log.writeLine("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d} | hidden: {d} | zero: {d} | bridge: {d}/s", .{
-                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, hpf, zpf, qjs_runtime.bridge_calls_this_second,
+            log.writeLine("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s", .{
+                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
             qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;
             qjs_runtime.bridge_calls_this_second = 0;
             @import("luajit_worker.zig").logTelemetry();
             @import("audio.zig").logTelemetry();
+            watchdog.heartbeat();
             g_paint_count = 0;
+            g_budget_exceeded = false;
             g_hover_changed = false;
             g_hidden_count = 0;
             g_zero_count = 0;

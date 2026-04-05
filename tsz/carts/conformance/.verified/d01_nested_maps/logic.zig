@@ -5,6 +5,42 @@
 // [origin:d01_nested_maps:logic]
 // ── Embedded JS logic ────────────────────────────────────────
 pub const JS_LOGIC =
+    \\// Ambient namespaces
+    \\var time = {
+    \\  get hour() { return new Date().getHours(); },
+    \\  get minute() { return String(new Date().getMinutes()).padStart(2, "0"); },
+    \\  get second() { return String(new Date().getSeconds()).padStart(2, "0"); },
+    \\  get year() { return new Date().getFullYear(); },
+    \\  get month() { return new Date().getMonth() + 1; },
+    \\  get day() { return new Date().getDate(); },
+    \\  get fps() { return typeof getFps === "function" ? getFps() : 0; },
+    \\  get delta() { return 16; },
+    \\  get elapsed() { return Date.now(); },
+    \\  get timestamp() { return Date.now(); },
+    \\};
+    \\var sys = {
+    \\  get user() { return typeof __os_user !== "undefined" ? __os_user : "user"; },
+    \\  get uptime() { return Math.floor(Date.now() / 1000); },
+    \\  get os() { return "linux"; },
+    \\  get host() { return "localhost"; },
+    \\  get kernel() { return "unknown"; },
+    \\};
+    \\var device = {
+    \\  get width() { return 1280; },
+    \\  get height() { return 800; },
+    \\  get battery() { return 100; },
+    \\  get online() { return true; },
+    \\  get dpi() { return 96; },
+    \\};
+    \\var input = {
+    \\  mouse: {
+    \\    get x() { return typeof getMouseX === "function" ? getMouseX() : 0; },
+    \\    get y() { return typeof getMouseY === "function" ? getMouseY() : 0; },
+    \\  },
+    \\  keys: { shift: false, ctrl: false, alt: false },
+    \\  touch: { count: 0 },
+    \\};
+    \\
     \\var groups = [];
     \\// OA initial data
     \\setGroups([ { name : "" , items : [ { label : "" , value : 0 } ] } ]);
@@ -21,15 +57,23 @@ pub const JS_LOGIC =
     \\
     \\function setGroups(v) { groups = v; __setObjArr0(v); }
     \\if (groups && groups.length > 0) setGroups(groups);
-    \\function __mapPress_1_0(gi, ii) {
-    \\  setSelected(gi * 100 + ii);
-    \\}
     \\
 ;
 
 // [origin:d01_nested_maps:logic]
 // ── Embedded Lua logic ───────────────────────────────────────
 pub const LUA_LOGIC =
+    \\-- State variables (mirroring Zig state slots)
+    \\selected = 0
+    \\
+    \\function setSelected(v) selected = v; __setState(0, v) end
+    \\
+    \\groups = {}
+    \\function setGroups(v) groups = v end
+    \\function __mapPress_1_0(gi, ii)
+    \\  setSelected(gi * 100 + ii)
+    \\end
+    \\
     \\
 ;
 

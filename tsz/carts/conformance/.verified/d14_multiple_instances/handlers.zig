@@ -3,88 +3,88 @@
 
 const std = @import("std");
 const api = @import("framework/api.zig");
-const state = api.state;
+const qjs_runtime = api.qjs_runtime;
 
 // [origin:d14_multiple_instances:handlers]
 // ── Event handlers ──────────────────────────────────────────────
 // [origin:d14_multiple_instances:handler:_handler_press_0]
 pub fn _handler_press_0() void {
-    state.setSlot(3, (state.getSlot(3) + 1));
-    state.setSlot(0, (state.getSlot(0) + 1));
+    qjs_runtime.evalExpr("setCount(count+1)");
+    qjs_runtime.evalExpr("setGlobalClicks(globalClicks+1)");
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_1]
 pub fn _handler_press_1() void {
-    state.setSlot(3, 0);
+    qjs_runtime.callGlobalInt("setCount", 0);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_2]
 pub fn _handler_press_2() void {
-    state.setSlot(4, (state.getSlot(4) + 1));
-    state.setSlot(0, (state.getSlot(0) + 1));
+    qjs_runtime.evalExpr("setCount(count+1)");
+    qjs_runtime.evalExpr("setGlobalClicks(globalClicks+1)");
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_3]
 pub fn _handler_press_3() void {
-    state.setSlot(4, 0);
+    qjs_runtime.callGlobalInt("setCount", 0);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_4]
 pub fn _handler_press_4() void {
-    state.setSlot(5, (state.getSlot(5) + 1));
-    state.setSlot(0, (state.getSlot(0) + 1));
+    qjs_runtime.evalExpr("setCount(count+1)");
+    qjs_runtime.evalExpr("setGlobalClicks(globalClicks+1)");
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_5]
 pub fn _handler_press_5() void {
-    state.setSlot(5, 0);
+    qjs_runtime.callGlobalInt("setCount", 0);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_6]
 pub fn _handler_press_6() void {
-    state.setSlot(6, 1);
+    qjs_runtime.callGlobalInt("setDismissed", 1);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_7]
 pub fn _handler_press_7() void {
-    state.setSlot(7, 1);
+    qjs_runtime.callGlobalInt("setDismissed", 1);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_8]
 pub fn _handler_press_8() void {
-    state.setSlot(8, 1);
+    qjs_runtime.callGlobalInt("setDismissed", 1);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_9]
 pub fn _handler_press_9() void {
-    state.setSlot(9, 1);
+    qjs_runtime.callGlobalInt("setDismissed", 1);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_10]
 pub fn _handler_press_10() void {
-    state.setSlot(10, 1);
+    qjs_runtime.callGlobalInt("setDismissed", 1);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_11]
 pub fn _handler_press_11() void {
-    state.setSlot(11, (state.getSlot(11) + 1));
-    state.setSlot(0, (state.getSlot(0) + 1));
+    qjs_runtime.evalExpr("setCount(count+1)");
+    qjs_runtime.evalExpr("setGlobalClicks(globalClicks+1)");
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_12]
 pub fn _handler_press_12() void {
-    state.setSlot(11, 0);
+    qjs_runtime.callGlobalInt("setCount", 0);
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_13]
 pub fn _handler_press_13() void {
-    state.setSlot(12, (state.getSlot(12) + 1));
-    state.setSlot(0, (state.getSlot(0) + 1));
+    qjs_runtime.evalExpr("setCount(count+1)");
+    qjs_runtime.evalExpr("setGlobalClicks(globalClicks+1)");
 }
 
 // [origin:d14_multiple_instances:handler:_handler_press_14]
 pub fn _handler_press_14() void {
-    state.setSlot(12, 0);
+    qjs_runtime.callGlobalInt("setCount", 0);
 }
 
 

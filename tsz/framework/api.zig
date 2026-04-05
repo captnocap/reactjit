@@ -492,7 +492,9 @@ pub const qjs_runtime = struct {
 pub const luajit_runtime = struct {
     pub extern fn rjit_lua_call_global(name: [*:0]const u8) void;
     pub extern fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void;
+    pub extern fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void;
 
     pub fn callGlobal(name: [*:0]const u8) void { rjit_lua_call_global(name); }
     pub fn setMapWrapper(index: usize, ptr: *anyopaque) void { rjit_lua_set_map_wrapper(index, ptr); }
+    pub fn registerHostFn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void { rjit_lua_register_host_fn(name, func, argc); }
 };

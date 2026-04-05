@@ -67,7 +67,8 @@ pub fn drawCurve(
     a: f32,
     stroke_width: f32,
 ) void {
-    if (g_curve_count >= MAX_CURVES) return;
+    if (g_curve_count >= MAX_CURVES or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
 
     // Apply canvas transform if active
     const transform = core.getTransform();

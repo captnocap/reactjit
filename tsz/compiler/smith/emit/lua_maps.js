@@ -11,6 +11,50 @@ function hexToLuaColor(hex) {
   return '0x000000';
 }
 
+// Convert JS ternary expr to Lua: cond ? a : b → (cond) and (a) or (b)
+// Also converts color hex strings to Lua hex numbers.
+function _jsExprToLua(expr, itemParam) {
+  // Replace item param references
+  expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+  // Convert === to ==, !== to ~=
+  expr = expr.replace(/===/g, '==').replace(/!==/g, '~=');
+  // Handle ternary: cond ? trueVal : falseVal
+  var qIdx = expr.indexOf(' ? ');
+  if (qIdx >= 0) {
+    var cond = expr.slice(0, qIdx).trim();
+    var rest = expr.slice(qIdx + 3);
+    // Find the matching : (handle nested ternaries by tracking ? depth)
+    var depth = 0;
+    var cIdx = -1;
+    for (var ci = 0; ci < rest.length; ci++) {
+      if (rest[ci] === '?' && rest[ci + 1] === ' ') depth++;
+      else if (rest[ci] === ':' && rest[ci - 1] === ' ' && rest[ci + 1] === ' ') {
+        if (depth === 0) { cIdx = ci; break; }
+        depth--;
+      }
+    }
+    if (cIdx >= 0) {
+      var trueVal = rest.slice(0, cIdx).trim();
+      var falseVal = rest.slice(cIdx + 1).trim();
+      // Recursively convert nested ternaries
+      trueVal = _jsExprToLua(trueVal, '_item');
+      falseVal = _jsExprToLua(falseVal, '_item');
+      // Convert color string literals to hex
+      trueVal = _luaColorOrPassthrough(trueVal);
+      falseVal = _luaColorOrPassthrough(falseVal);
+      return '(' + cond + ') and (' + trueVal + ') or (' + falseVal + ')';
+    }
+  }
+  return _luaColorOrPassthrough(expr);
+}
+
+function _luaColorOrPassthrough(val) {
+  // '#rrggbb' or "#rrggbb" → 0xrrggbb
+  var m = val.match(/^['"]#([0-9a-fA-F]{3,8})['"]$/);
+  if (m) return '0x' + m[1];
+  return val;
+}
+
 function emitLuaStyle(c, itemParam) {
   // Cursor is at {{ — skip to inner object, collect key:value pairs
   var parts = [];
@@ -61,8 +105,23 @@ function emitLuaStyle(c, itemParam) {
         }
         if (c.kind() === TK.rbrace) c.advance();
         var expr = exprParts.join(' ');
-        // Replace item param references
-        expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+        // Convert JS expressions (ternaries, comparisons, colors) to Lua
+        expr = _jsExprToLua(expr, itemParam);
+        parts.push(zigKey + ' = ' + expr);
+      } else if (c.kind() === TK.identifier) {
+        // Bare expression value: ident ? trueVal : falseVal (ternary), or ident
+        var exprParts = [];
+        var depth = 0;
+        while (c.pos < c.count) {
+          // Stop at comma (next property) or closing brace (end of style)
+          if (depth === 0 && (c.kind() === TK.comma || c.kind() === TK.rbrace)) break;
+          if (c.kind() === TK.lparen || c.kind() === TK.lbrace || c.kind() === TK.lbracket) depth++;
+          if (c.kind() === TK.rparen || c.kind() === TK.rbrace || c.kind() === TK.rbracket) depth--;
+          exprParts.push(c.text());
+          c.advance();
+        }
+        var expr = exprParts.join(' ');
+        expr = _jsExprToLua(expr, itemParam);
         parts.push(zigKey + ' = ' + expr);
       }
     } else {
@@ -184,7 +243,7 @@ function emitLuaElement(c, itemParam, indent) {
   var tagName = c.text();
   c.advance(); // skip tag name
 
-  var node = { style: null, fontSize: null, color: null, children: [], text: null };
+  var node = { style: null, fontSize: null, color: null, children: [], text: null, handler: null };
 
   // Parse attributes
   var _attrLastPos = -1;
@@ -209,13 +268,19 @@ function emitLuaElement(c, itemParam, indent) {
             var colorExpr = [];
             while (c.kind() !== TK.rbrace && c.pos < c.count) { colorExpr.push(c.text()); c.advance(); }
             if (c.kind() === TK.rbrace) c.advance();
-            var ce = colorExpr.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
-            node.color = ce;
+            var ce = colorExpr.join(' ');
+            node.color = _jsExprToLua(ce, itemParam);
           }
         } else if (attrName === 'key') {
           // Skip key attribute
           if (c.kind() === TK.lbrace) { c.advance(); var kd = 0; while (c.pos < c.count && !(c.kind() === TK.rbrace && kd === 0)) { if (c.kind() === TK.lbrace) kd++; if (c.kind() === TK.rbrace) kd--; c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.string) c.advance();
+        } else if (/^on(Press|Click)$/.test(attrName)) {
+          // Handler: onPress={...} → lua_on_press = "__mapHandler(_i)"
+          // Skip the handler body tokens
+          if (c.kind() === TK.lbrace) { c.advance(); var hd = 0; while (c.pos < c.count && !(c.kind() === TK.rbrace && hd === 0)) { if (c.kind() === TK.lbrace) hd++; if (c.kind() === TK.rbrace) hd--; c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          // Mark as pressable — Lua template will emit lua_on_press
+          node.handler = true;
         } else {
           // Skip unknown attribute value
           if (c.kind() === TK.string) c.advance();
@@ -255,6 +320,7 @@ function emitLuaElement(c, itemParam, indent) {
   if (node.text) fields.push('text = ' + node.text);
   if (node.fontSize) fields.push('font_size = ' + node.fontSize);
   if (node.color) fields.push('text_color = ' + node.color);
+  if (node.handler) fields.push('lua_on_press = "__luaMapPress(" .. _i .. ")"');
   if (node.children.length > 0) {
     fields.push('children = {\n' + node.children.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }

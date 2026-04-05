@@ -214,6 +214,7 @@ function splitOutput(monolith, file) {
         h += 'const luajit_runtime = if (IS_LIB) struct {\n';
         h += '    pub fn callGlobal(_: [*:0]const u8) void {}\n';
         h += '    pub fn setMapWrapper(_: usize, _: *anyopaque) void {}\n';
+        h += '    pub fn registerHostFn(_: [*:0]const u8, _: ?*const anyopaque, _: c_int) void {}\n';
         h += '} else @import("' + fwPrefix + 'luajit_runtime.zig");\n';
       }
     }

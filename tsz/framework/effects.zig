@@ -84,6 +84,17 @@ pub fn isEffect(name: []const u8) bool {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// Safety budgets — prevent runaway effects from crashing the GPU
+// ════════════════════════════════════════════════════════════════════════
+
+const MAX_EFFECT_PIXELS: u32 = 2_000_000; // ~1920x1040 total per frame
+const MAX_EFFECT_DIM: u32 = 2048; // no single dimension > 2048
+const MAX_UPLOAD_BYTES: u32 = 8 * 1024 * 1024; // 8MB texture uploads per frame
+var g_frame_effect_pixels: u32 = 0;
+var g_frame_upload_bytes: u32 = 0;
+var g_effect_budget_logged: bool = false;
+
+// ════════════════════════════════════════════════════════════════════════
 // Instances — shared between registry and custom render paths
 // ════════════════════════════════════════════════════════════════════════
 
@@ -298,6 +309,15 @@ const Instance = struct {
         const queue = gpu_core.getQueue() orelse return;
         const w = self.width;
         const h = self.height;
+        const upload_size = @as(u32, w) * @as(u32, h) * 4;
+        if (g_frame_upload_bytes + upload_size > MAX_UPLOAD_BYTES) {
+            if (!g_effect_budget_logged) {
+                g_effect_budget_logged = true;
+                std.debug.print("[BUDGET] Texture upload budget exceeded {d} bytes/frame — skipping upload\n", .{MAX_UPLOAD_BYTES});
+            }
+            return;
+        }
+        g_frame_upload_bytes += upload_size;
         const row_bytes = w * 4;
 
         // Flip rows for the shared image shader, then restore the CPU buffer so
@@ -595,6 +615,9 @@ pub fn deinit() void {
 /// Called every frame: update registry-based effect instances and store dt.
 pub fn update(dt: f32) void {
     g_dt = dt;
+    g_frame_effect_pixels = 0;
+    g_frame_upload_bytes = 0;
+    g_effect_budget_logged = false;
 
     for (instances[0..instance_count]) |*inst| {
         if (!inst.active) continue;
@@ -643,8 +666,17 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     i.screen_y = y;
     i.backend = .cpu;
 
-    const iw: u32 = @intFromFloat(@max(1, w));
-    const ih: u32 = @intFromFloat(@max(1, h));
+    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
+    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
+    const pixels = iw * ih;
+    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
+        if (!g_effect_budget_logged) {
+            g_effect_budget_logged = true;
+            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
+        }
+        return false;
+    }
+    g_frame_effect_pixels += pixels;
     i.ensureCpuSize(iw, ih);
 
     const bg = i.bind_group orelse return false;
@@ -669,8 +701,17 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     i.screen_x = x;
     i.screen_y = y;
 
-    const iw: u32 = @intFromFloat(@max(1, w));
-    const ih: u32 = @intFromFloat(@max(1, h));
+    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
+    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
+    const pixels = iw * ih;
+    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
+        if (!g_effect_budget_logged) {
+            g_effect_budget_logged = true;
+            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
+        }
+        return false;
+    }
+    g_frame_effect_pixels += pixels;
     const node_name = node.debug_name orelse "?";
     log.info(.render, "custom effect node={s} ptr=0x{x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) gpu_try={} gpu_failed={} shader={} background={}", .{
         node_name, @intFromPtr(node), x, y, w, h, shouldTryGpu(node), i.gpu_failed, node.effect_shader != null, node.effect_background,
@@ -851,8 +892,17 @@ pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f
     i.screen_x = x;
     i.screen_y = y;
 
-    const iw: u32 = @intFromFloat(@max(1, w));
-    const ih: u32 = @intFromFloat(@max(1, h));
+    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
+    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
+    const pixels = iw * ih;
+    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
+        if (!g_effect_budget_logged) {
+            g_effect_budget_logged = true;
+            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
+        }
+        return false;
+    }
+    g_frame_effect_pixels += pixels;
     i.ensureCpuSize(iw, ih);
 
     if (i.width == 0 or i.height == 0) return false;

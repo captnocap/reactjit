@@ -119,8 +119,11 @@ export fn rjit_lua_call_global(name: [*:0]const u8) void {
 export fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void {
     luajit_runtime_mod.setMapWrapper(index, ptr);
 }
+export fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void {
+    luajit_runtime_mod.registerHostFn(name, func orelse return, argc);
+}
 
-// ── Engine C-ABI export ─────────────────────────────────────────────
+// ── Engine C-ABI export ──────��────────────────────────────────────���─
 
 const api = @import("api.zig");
 

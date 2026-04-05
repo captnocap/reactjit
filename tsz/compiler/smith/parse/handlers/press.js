@@ -49,6 +49,27 @@ function pushInlinePressHandler(c, handlerName) {
   const saved = c.save();
   const luaBody = luaParseHandler(c);
   c.restore(saved);
+  // Capture raw JS handler body (for js_on_press dispatch via QJS)
+  var _jsBodyParts = [];
+  var _jsStart = c.save();
+  // Skip arrow function prefix: () => or (params) =>
+  if (c.kind() === TK.lbrace) c.advance(); // skip { wrapping the handler value
+  while (c.pos < c.count && c.kind() !== TK.arrow) c.advance();
+  if (c.kind() === TK.arrow) c.advance(); // skip =>
+  var _jsHasBlock = c.kind() === TK.lbrace;
+  if (_jsHasBlock) c.advance(); // skip {
+  var _jsd = 0;
+  while (c.pos < c.count) {
+    if (c.kind() === TK.lbrace || c.kind() === TK.lparen || c.kind() === TK.lbracket) _jsd++;
+    if (c.kind() === TK.rbrace || c.kind() === TK.rparen || c.kind() === TK.rbracket) {
+      if (_jsd === 0) break;
+      _jsd--;
+    }
+    _jsBodyParts.push(c.text());
+    c.advance();
+  }
+  var jsBody = _jsBodyParts.join(' ').replace(/\s*;\s*$/, '').trim();
+  c.restore(_jsStart);
   const body = parseHandler(c);
   const isMapHandler = !!ctx.currentMap;
   const closureParams = ctx._lastClosureParams || [];
@@ -66,6 +87,7 @@ function pushInlinePressHandler(c, handlerName) {
     name: handlerName,
     body: finalBody,
     luaBody,
+    jsBody,
     inMap: isMapHandler,
     mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1,
     zigProps: collectHandlerZigProps(),

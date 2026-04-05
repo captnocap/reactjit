@@ -96,7 +96,7 @@ else
     table.insert(include_flags, "-I /usr/include/x86_64-linux-gnu")
 end
 table.insert(include_flags, "-lc")
-table.insert(include_flags, "-ODebug")
+table.insert(include_flags, "-OReleaseFast")
 if not os.getenv("TSZ_GDB") then table.insert(include_flags, "-fstrip") end
 local compile_cmd = table.concat(include_flags, " ")
 

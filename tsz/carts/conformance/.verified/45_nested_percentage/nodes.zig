@@ -11,33 +11,33 @@ const Color = api.Color;
 // [origin:45_nested_percentage:nodes]
 // ── Generated node tree ─────────────────────────────────────────
 // tsz:45_nested_percentage.tsz:9 — <Box>
-pub var _arr_0 = [_]Node{ .{ .text = "50% = 200" } };
+pub var _arr_0 = [_]Node{ .{ .text = "50% = 200", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:8 — <Box>
-pub var _arr_1 = [_]Node{ .{ .style = .{ .width = 0.5, .height = 40, .background_color = Color.rgb(76, 175, 80), .overflow = .auto }, .children = &_arr_0 } };
+pub var _arr_1 = [_]Node{ .{ .style = .{ .width = -0.5, .height = 40, .background_color = Color.rgb(76, 175, 80), .overflow = .auto }, .children = &_arr_0 } };
 // tsz:45_nested_percentage.tsz:17 — <Box>
-pub var _arr_2 = [_]Node{ .{ .text = "100px" } };
+pub var _arr_2 = [_]Node{ .{ .text = "100px", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:16 — <Box>
-pub var _arr_3 = [_]Node{ .{ .style = .{ .width = 0.5, .height = 40, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_2 } };
+pub var _arr_3 = [_]Node{ .{ .style = .{ .width = -0.5, .height = 40, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_2 } };
 // tsz:45_nested_percentage.tsz:15 — <Box>
-pub var _arr_4 = [_]Node{ .{ .style = .{ .width = 0.5, .height = 50, .background_color = Color.rgb(76, 175, 80), .padding = 2, .overflow = .auto }, .children = &_arr_3 } };
+pub var _arr_4 = [_]Node{ .{ .style = .{ .width = -0.5, .height = 50, .background_color = Color.rgb(76, 175, 80), .padding = 2, .overflow = .auto }, .children = &_arr_3 } };
 // tsz:45_nested_percentage.tsz:27 — <Box>
-pub var _arr_5 = [_]Node{ .{ .text = "50% of grown" } };
+pub var _arr_5 = [_]Node{ .{ .text = "50% of grown", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:26 — <Box>
-pub var _arr_6 = [_]Node{ .{ .style = .{ .width = 0.5, .height = 40, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_5 } };
+pub var _arr_6 = [_]Node{ .{ .style = .{ .width = -0.5, .height = 40, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_5 } };
 // tsz:45_nested_percentage.tsz:24 — <Box>
 pub var _arr_7 = [_]Node{ .{ .style = .{ .width = 100, .height = 50, .background_color = Color.rgb(156, 39, 176) } }, .{ .style = .{ .flex_grow = 1, .height = 50, .background_color = Color.rgb(76, 175, 80), .overflow = .auto }, .children = &_arr_6 } };
 // tsz:45_nested_percentage.tsz:35 — <Box>
-pub var _arr_8 = [_]Node{ .{ .text = "25%=50" } };
+pub var _arr_8 = [_]Node{ .{ .text = "25%=50", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:38 — <Box>
-pub var _arr_9 = [_]Node{ .{ .text = "50%=100" } };
+pub var _arr_9 = [_]Node{ .{ .text = "50%=100", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:41 — <Box>
-pub var _arr_10 = [_]Node{ .{ .text = "25%=50" } };
+pub var _arr_10 = [_]Node{ .{ .text = "25%=50", .text_color = Color.rgb(255, 255, 255), .font_size = 10 } };
 // tsz:45_nested_percentage.tsz:34 — <Box>
-pub var _arr_11 = [_]Node{ .{ .style = .{ .height = 0.25, .background_color = Color.rgb(76, 175, 80), .overflow = .auto }, .children = &_arr_8 }, .{ .style = .{ .height = 0.5, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_9 }, .{ .style = .{ .height = 0.25, .background_color = Color.rgb(255, 152, 0), .overflow = .auto }, .children = &_arr_10 } };
+pub var _arr_11 = [_]Node{ .{ .style = .{ .height = -0.25, .background_color = Color.rgb(76, 175, 80), .overflow = .auto }, .children = &_arr_8 }, .{ .style = .{ .height = -0.5, .background_color = Color.rgb(33, 150, 243), .overflow = .auto }, .children = &_arr_9 }, .{ .style = .{ .height = -0.25, .background_color = Color.rgb(255, 152, 0), .overflow = .auto }, .children = &_arr_10 } };
 // tsz:45_nested_percentage.tsz:47 — <Box>
-pub var _arr_12 = [_]Node{ .{ .style = .{ .width = 0.2, .height = 40, .background_color = Color.rgb(76, 175, 80) } }, .{ .style = .{ .width = 0.3, .height = 40, .background_color = Color.rgb(33, 150, 243) } }, .{ .style = .{ .width = 0.5, .height = 40, .background_color = Color.rgb(255, 152, 0) } } };
+pub var _arr_12 = [_]Node{ .{ .style = .{ .width = -0.2, .height = 40, .background_color = Color.rgb(76, 175, 80) } }, .{ .style = .{ .width = -0.3, .height = 40, .background_color = Color.rgb(33, 150, 243) } }, .{ .style = .{ .width = -0.5, .height = 40, .background_color = Color.rgb(255, 152, 0) } } };
 // tsz:45_nested_percentage.tsz:3 — <Box>
-pub var _arr_13 = [_]Node{ .{ .text = "WPT: percentage width in nested flex" }, .{ .text = "VERIFY: 50% of 50% = 25%, % inside grow parent, column height %", .font_size = 10, .text_color = Color.rgb(136, 136, 136) }, .{ .text = "50% of parent — parent is 400px, child is 200px" }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 40, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_1 }, .{ .text = "Nested: 50% of 50% — 400 → 200 → 100" }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 50, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_4 }, .{ .text = "% inside flex-grow parent — % of grown size" }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 50, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_7 }, .{ .text = "Column: height % resolves against parent height" }, .{ .style = .{ .flex_direction = .column, .width = 120, .height = 200, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_11 }, .{ .text = "Multiple % children totaling 100%" }, .{ .style = .{ .flex_direction = .row, .width = 300, .height = 40, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_12 } };
+pub var _arr_13 = [_]Node{ .{ .text = "WPT: percentage width in nested flex", .font_size = 18 }, .{ .text = "VERIFY: 50% of 50% = 25%, % inside grow parent, column height %", .font_size = 10, .text_color = Color.rgb(136, 136, 136) }, .{ .text = "50% of parent — parent is 400px, child is 200px", .font_size = 11 }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 40, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_1 }, .{ .text = "Nested: 50% of 50% — 400 → 200 → 100", .font_size = 11 }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 50, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_4 }, .{ .text = "% inside flex-grow parent — % of grown size", .font_size = 11 }, .{ .style = .{ .flex_direction = .row, .width = 400, .height = 50, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_7 }, .{ .text = "Column: height % resolves against parent height", .font_size = 11 }, .{ .style = .{ .flex_direction = .column, .width = 120, .height = 200, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_11 }, .{ .text = "Multiple % children totaling 100%", .font_size = 11 }, .{ .style = .{ .flex_direction = .row, .width = 300, .height = 40, .background_color = Color.rgb(51, 51, 51), .overflow = .auto }, .children = &_arr_12 } };
 // [origin:45_nested_percentage:root]
 pub var _root = Node{ .style = .{ .width = -1, .height = -1, .flex_direction = .column, .padding = 10, .gap = 8, .overflow = .hidden }, .children = &_arr_13 };
 

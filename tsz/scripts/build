@@ -380,15 +380,27 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
     fi
 fi
 
-# ── Step 0: ensure forge + engine are up to date ───────────────────
+# ── Step 1/3: Compiler (forge + smith JS) ───────────────────────────
+# Hash smith JS to detect compiler changes. Forge embeds these at compile
+# time — if they changed, forge needs a real rebuild (~22s).
+SMITH_HASH_NOW=$(find compiler/ -name '*.js' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-16)
+FORGE_BIN="zig-out/bin/forge"
+FORGE_HASH_BEFORE=$(sha256sum "$FORGE_BIN" 2>/dev/null | cut -c1-16 || echo "none")
+
 PHASE_T=$(date +%s%N)
 zig build forge 2>/dev/null || {
     echo "[$NAME] WARNING: zig build forge failed — using existing binary"
 }
-FORGE_REBUILD_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
-[ "$FORGE_REBUILD_MS" -gt 500 ] && echo "[$NAME] forge rebuild: ${FORGE_REBUILD_MS}ms"
+FORGE_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
 
-# ── Engine routing ──────────────────────────────────────────────────
+FORGE_HASH_AFTER=$(sha256sum "$FORGE_BIN" 2>/dev/null | cut -c1-16 || echo "none")
+if [ "$FORGE_HASH_BEFORE" != "$FORGE_HASH_AFTER" ]; then
+    echo "[$NAME] 1/3 compiler rebuilt (smith JS changed): ${FORGE_MS}ms"
+else
+    echo "[$NAME] 1/3 compiler up to date (${FORGE_MS}ms)"
+fi
+
+# ── Step 2/3: Engine (.so from framework/) ──────────────────────────
 PHASE_T=$(date +%s%N)
 # Three modes:
 #   1. REACTJIT_SKIP_ENGINE_BUILD=1 → blessed engine already swapped in, don't touch
@@ -398,7 +410,7 @@ PHASE_T=$(date +%s%N)
 BLESSED_SO="zig-out/lib/libreactjit-core-blessed.so"
 
 if [ "${REACTJIT_SKIP_ENGINE_BUILD:-0}" = "1" ]; then
-    echo "[$NAME] using blessed engine (skip engine rebuild)"
+    echo "[$NAME] 2/3 engine: blessed (skip rebuild)"
 
 elif [ "$PROVE_I_BROKE_IT" -eq 1 ]; then
     # --proveIBrokeIt: use the blessed engine, lock its hash
@@ -409,7 +421,7 @@ elif [ "$PROVE_I_BROKE_IT" -eq 1 ]; then
     fi
     cp "$BLESSED_SO" "zig-out/lib/libreactjit-core.so"
     export REACTJIT_ENGINE_SHA=$(sha256sum "$BLESSED_SO" | awk '{print $1}')
-    echo "[$NAME] using blessed engine (--proveIBrokeIt): ${REACTJIT_ENGINE_SHA:0:16}..."
+    echo "[$NAME] 2/3 engine: blessed (--proveIBrokeIt): ${REACTJIT_ENGINE_SHA:0:16}..."
 
 else
     # Auto-detect: has framework/ changed since last engine build?
@@ -439,13 +451,13 @@ else
 
     if [ -n "$LAST_ENGINE_SRC" ] && [ "$FW_HASH_NOW" = "$LAST_ENGINE_SRC" ]; then
         # Framework unchanged — use existing engine
-        echo "[$NAME] engine up to date (framework/ unchanged)"
+        echo "[$NAME] 2/3 engine up to date (framework/ unchanged)"
     else
         # Framework changed, unknown engine, or untracked build — force dirty rebuild
         if [ -n "$LAST_ENGINE_SRC" ]; then
-            echo "[$NAME] framework/ changed since last engine build — forcing clean rebuild"
+            echo "[$NAME] 2/3 engine: framework/ changed — rebuilding"
         else
-            echo "[$NAME] engine not registered — forcing clean rebuild"
+            echo "[$NAME] 2/3 engine: not registered — rebuilding"
         fi
         SO_HASH_BEFORE=$(sha256sum "$ENGINE_SO" 2>/dev/null | cut -c1-16 || echo "none")
         zig build core-so -Doptimize=ReleaseFast 2>&1 || {
@@ -482,17 +494,16 @@ else
             }
             NEW_ENG_SHA=$(sha256sum "$ENGINE_SO" | awk '{print $1}')
         fi
-        echo "[$NAME] engine rebuilt: ${NEW_ENG_SHA:0:16}..."
+        echo "[$NAME] 2/3 engine rebuilt: ${NEW_ENG_SHA:0:16}..."
     fi
 fi
 ENGINE_ROUTE_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
-[ "$ENGINE_ROUTE_MS" -gt 500 ] && echo "[$NAME] engine routing: ${ENGINE_ROUTE_MS}ms"
+[ "$ENGINE_ROUTE_MS" -gt 500 ] && echo "[$NAME] 2/3 engine: ${ENGINE_ROUTE_MS}ms"
 
-# ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
-# Clean stale outputs so preflight check doesn't read old monolith errors
+# ── Step 3/3: Cart (.tsz → .zig → binary) ──────────────────────────
 rm -f "$GEN"
 rm -rf "$GEN_DIR"
-echo "[$NAME] forge..."
+echo "[$NAME] 3/3 forge..."
 FORGE_START=$(date +%s%N)
 FORGE_OUT=$(./zig-out/bin/forge build --fast $DBG_FLAGS "$CART" 2>&1) || {
     echo "$FORGE_OUT"

@@ -11,15 +11,19 @@ function emitEffectRenders(ctx, prefix) {
     out += transpileEffectBody(er.body, er.param);
     out += `}\n\n`;
     // GPU shader (WGSL) — compiled from the same onRender body
-    const wgsl = transpileEffectToWGSL(er.body, er.param);
-    // Emit as a Zig string literal (multiline \\)
-    const wgslLines = wgsl.split('\n');
-    out += `pub const _effect_wgsl_${er.id}: []const u8 =\n`;
-    for (const wl of wgslLines) {
-      out += `    \\\\${wl}\n`;
+    // Returns { wgsl, fade } object or null
+    const result = transpileEffectToWGSL(er.body, er.param);
+    if (result && result.wgsl) {
+      const wgslLines = result.wgsl.split('\n');
+      out += `pub const _effect_wgsl_${er.id}: []const u8 =\n`;
+      for (const wl of wgslLines) {
+        out += `    \\\\${wl}\n`;
+      }
+      out += `;\n`;
+      out += `pub const _effect_shader_${er.id} = api.GpuShaderDesc{ .wgsl = _effect_wgsl_${er.id} };\n\n`;
+    } else {
+      out += `pub const _effect_shader_${er.id}: ?api.GpuShaderDesc = null;  // CPU-only effect\n\n`;
     }
-    out += `;\n`;
-    out += `pub const _effect_shader_${er.id} = api.GpuShaderDesc{ .wgsl = _effect_wgsl_${er.id} };\n\n`;
   }
   return out;
 }

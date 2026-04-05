@@ -199,7 +199,8 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
 
 /// Draw a single line of text at (x, y) with the given font size and color.
 pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg: f32, cb: f32, ca: f32) void {
-    if (g_ft_face == null) return;
+    if (g_ft_face == null or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
 
     const transform = core.getTransform();
     const s = transform.scale;
@@ -282,7 +283,8 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
 
 /// Draw text with word-wrapping at max_width. Returns total height drawn.
 pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32, max_lines: u16) f32 {
-    if (g_ft_face == null) return 0;
+    if (g_ft_face == null or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return 0;
+    core.g_gpu_ops += 1;
     if (max_width <= 0) {
         drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
         return @as(f32, @floatFromInt(size_px));

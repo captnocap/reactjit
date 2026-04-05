@@ -3,18 +3,18 @@
 
 const std = @import("std");
 const api = @import("framework/api.zig");
-const state = api.state;
+const qjs_runtime = api.qjs_runtime;
 
 // [origin:d35_jsx_fragments:handlers]
 // ── Event handlers ──────────────────────────────────────────────
 // [origin:d35_jsx_fragments:handler:_handler_press_0]
 pub fn _handler_press_0() void {
-    state.setSlot(0, (if ((state.getSlot(0) == 1)) @as(i32, 0) else @as(i32, 1)));
+    qjs_runtime.evalExpr("setShowExtras(showExtras==1?0:1)");
 }
 
 // [origin:d35_jsx_fragments:handler:_handler_press_1]
 pub fn _handler_press_1() void {
-    state.setSlot(1, (state.getSlot(1) + 1));
+    qjs_runtime.evalExpr("setCounter(counter+1)");
 }
 
 

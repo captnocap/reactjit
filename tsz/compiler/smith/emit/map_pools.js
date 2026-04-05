@@ -320,7 +320,7 @@ function emitMapPoolDeclarations(ctx, promotedToPerItem) {
     const mapHandlers = ctx.handlers.filter(function(handler) {
       return handler.inMap && handler.mapIdx === mi;
     });
-    if (mapHandlers.length > 0) {
+    if (mapHandlers.length > 0 && map.mapBackend !== 'lua_runtime') {
       const luaSizeConst = map.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
       for (let hi = 0; hi < mapHandlers.length; hi++) {
         const refsMap = map._handlerFieldRefsMap || {};

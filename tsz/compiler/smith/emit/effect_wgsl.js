@@ -59,6 +59,8 @@ function _effectMathWGSL() {
   '  if (s <= 0.0) { return vec3f(l, l, l); }\n' +
   '  let h = fract(h_in); let q = select(l + s - l * s, l * (1.0 + s), l < 0.5); let p = 2.0 * l - q;\n' +
   '  return vec3f(_hue2rgb(p, q, h + 1.0/3.0), _hue2rgb(p, q, h), _hue2rgb(p, q, h - 1.0/3.0));\n}\n' +
+  // Mod helper (WGSL has no mod() builtin for floats — use % or this)
+  'fn _mod(a: f32, b: f32) -> f32 { return a - b * floor(a / b); }\n' +
   // Distance / interpolation
   'fn _dist(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 { return length(vec2f(x1 - x2, y1 - y2)); }\n' +
   'fn _lerp(a: f32, b: f32, t: f32) -> f32 { return a + (b - a) * t; }\n' +
@@ -68,74 +70,192 @@ function _effectMathWGSL() {
 
 // ── WGSL transpiler for GPU effects ──────────────────────────────────
 // Converts JS onRender body to a complete WGSL shader string.
-// The fragment shader runs per-pixel — no loops needed (global_invocation = pixel coord).
-// Uses a render pipeline: vs_main outputs a fullscreen triangle, fs_main does the math.
+// The fragment shader runs per-pixel. Pixel-iteration loops (for x/y over width/height)
+// are stripped since the GPU handles per-pixel dispatch. All other loops become WGSL loops.
+//
+// setPixel(x, computedY, r,g,b,a) in a loop becomes a proximity test:
+//   if the fragment's y is within 0.5 of computedY, set the color.
+//
+// e.clearColor(r,g,b,a) sets the initial out_color.
+// e.fade(factor) sets a flag for the runtime to preserve the previous frame.
+//
+// Returns an object { wgsl, fade } or null if truly impossible to GPU-ify.
 
 function transpileEffectToWGSL(jsBody, param) {
   const p = param || 'e';
   const lines = jsBody.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Collect variable declarations and the setPixel call
-  const vars = [];
-  let setPixelArgs = null;
+  // Track state
   const bodyLines = [];
+  let clearColor = null;      // initial out_color from e.clearColor()
+  let fadeAmount = null;       // e.fade() amount for runtime blending
+  let setPixelCount = 0;       // how many setPixel calls we've seen
+  let depth = 0;               // brace depth for indentation
+  const colorVars = new Set(); // vars holding vec3f (hsv/hsl results)
+
+  // Indent helper
+  const ind = () => '  ' + '  '.repeat(depth);
 
   for (let li = 0; li < lines.length; li++) {
     let line = lines[li];
-    // Skip pure braces, for loops (x/y iteration handled by GPU dispatch)
-    if (line === '{' || line === '}' || line === '};') continue;
-    if (/^for\s*\(/.test(line)) continue;
+
+    // Skip pure braces — but track depth
+    if (line === '{') { depth++; continue; }
+    if (line === '}' || line === '};') {
+      if (depth > 0) { depth--; bodyLines.push(ind() + '}'); }
+      continue;
+    }
+
+    // e.clearColor(r, g, b, a) → initial out_color
+    const clearMatch = line.match(new RegExp(`^${p}\\.clearColor\\((.*)\\);?\\s*$`));
+    if (clearMatch) {
+      const args = splitArgs(clearMatch[1]).map(a => a.trim());
+      clearColor = args;
+      continue;
+    }
+
+    // e.clear() → black initial color
+    if (new RegExp(`^${p}\\.clear\\(\\)\\s*;?\\s*$`).test(line)) {
+      clearColor = ['0.0', '0.0', '0.0', '0.0'];
+      continue;
+    }
+
+    // e.fade(amount) → flag for runtime, skip in shader
+    const fadeMatch = line.match(new RegExp(`^${p}\\.fade\\((.*)\\);?\\s*$`));
+    if (fadeMatch) {
+      fadeAmount = fadeMatch[1].trim();
+      continue;
+    }
+
+    // for (let v = start; v < end; v++) { ... }
+    const forMatch = line.match(/^for\s*\(\s*(?:let|var|const)\s+(\w+)\s*=\s*([^;]+);\s*(\w+)\s*(<|<=|>|>=)\s*([^;]+);\s*(\w+)\+\+\s*\)\s*\{?\s*$/);
+    if (forMatch) {
+      const [, vname, init, , op, bound] = forMatch;
+      const wgslBound = transpileExprWGSL(bound.trim(), p);
+      // Check if this is a pixel-iteration loop:
+      // 1. Direct: for (let x = 0; x < e.width; x++) or for (let y = 0; y < e.height; y++)
+      const isPixelX = (vname === 'x' && new RegExp(`\\b${p}\\.width\\b`).test(bound));
+      const isPixelY = (vname === 'y' && new RegExp(`\\b${p}\\.height\\b`).test(bound));
+      if (isPixelX || isPixelY) {
+        // Strip pixel loops — GPU handles per-pixel dispatch
+        continue;
+      }
+      // 2. Disguised: for (let column = 0; column < fieldWidth; column++) followed by
+      //    const x = column - offset; → the loop iterates x-pixels, just with an offset.
+      //    Strip the loop and compute the loop var from the fragment's known x.
+      //    Same for y-axis variants.
+      let isDisguisedPixelLoop = false;
+      if (li + 1 < lines.length) {
+        const nextLine = lines[li + 1].trim();
+        // Pattern: const x = loopVar - expr  OR  const x = loopVar + expr  OR  const x = loopVar
+        const xyFromLoop = nextLine.match(/^(?:const|let|var)\s+(x|y)\s*=\s*(\w+)\s*([+\-])\s*(.+?)\s*;?\s*$/);
+        if (xyFromLoop && xyFromLoop[2] === vname) {
+          // This loop var maps to x or y. Compute loop var from fragment coordinate.
+          const coord = xyFromLoop[1]; // 'x' or 'y'
+          const oper = xyFromLoop[3];  // '+' or '-'
+          const offset = xyFromLoop[4];
+          const wgslOffset = transpileExprWGSL(offset, p);
+          // If x = column - bleedX, then column = x + bleedX
+          const inverseOp = oper === '-' ? '+' : '-';
+          bodyLines.push(ind() + `let ${vname} = ${coord} ${inverseOp} ${wgslOffset};`);
+          // Skip the next line (the const x = ... declaration) since x is already defined
+          li++;
+          isDisguisedPixelLoop = true;
+          // Don't increment depth — we're not opening a block
+          // But the source has a { after the for, so we need to consume braces
+          // The closing } will be consumed by the brace tracking above
+        }
+        // Also handle: const x = loopVar (no offset)
+        if (!isDisguisedPixelLoop) {
+          const xyDirect = nextLine.match(/^(?:const|let|var)\s+(x|y)\s*=\s*(\w+)\s*;?\s*$/);
+          if (xyDirect && xyDirect[2] === vname) {
+            bodyLines.push(ind() + `let ${vname} = ${xyDirect[1]};`);
+            li++;
+            isDisguisedPixelLoop = true;
+          }
+        }
+      }
+      if (isDisguisedPixelLoop) continue;
+      // Algorithmic loop — emit as WGSL for loop
+      const wgslInit = transpileExprWGSL(init.trim(), p);
+      bodyLines.push(ind() + `for (var ${vname}: f32 = ${wgslInit}; ${vname} ${op} ${wgslBound}; ${vname} = ${vname} + 1.0) {`);
+      depth++;
+      continue;
+    }
+
+    // } else if (...) {
+    const bElseIf = line.match(/^}\s*else\s+if\s*\((.+)\)\s*\{?\s*$/);
+    if (bElseIf) {
+      if (depth > 0) depth--;
+      bodyLines.push(ind() + `} else if (${transpileExprWGSL(bElseIf[1], p)}) {`);
+      depth++;
+      continue;
+    }
+
+    // } else {
+    if (/^}\s*else\s*\{?\s*$/.test(line)) {
+      if (depth > 0) depth--;
+      bodyLines.push(ind() + '} else {');
+      depth++;
+      continue;
+    }
 
     // const/let/var declaration
     const declMatch = line.match(/^(?:const|let|var)\s+(\w+)\s*=\s*(.+?);?\s*$/);
     if (declMatch) {
       const [, vname, expr] = declMatch;
-      // Skip x/y/fx/fy if they're just scaled coords — we compute those from frag coord
-      if (vname === 'x' || vname === 'y') continue;
       const wgslExpr = transpileExprWGSL(expr, p);
-      // Detect hsv/hsl → vec3f
+      // Detect hsv/hsl → vec3f return type
       const isColor = new RegExp(`\\b${p}\\.(hsv|hsl)\\(`).test(expr);
-      bodyLines.push(`  let ${vname} = ${wgslExpr};`);
+      if (isColor) colorVars.add(vname);
+      bodyLines.push(ind() + `let ${vname} = ${wgslExpr};`);
       continue;
     }
 
     // e.setPixel(x, y, r, g, b, a)
     const spMatch = line.match(new RegExp(`^${p}\\.setPixel\\((.*)\\);?\\s*$`));
     if (spMatch) {
-      const args = splitArgs(spMatch[1]).map(a => transpileExprWGSL(a.trim(), p));
-      // In fragment shader, we don't need x,y — we return the color
-      setPixelArgs = { r: args[2], g: args[3], b: args[4], a: args[5] };
+      const rawArgs = splitArgs(spMatch[1]);
+      const args = rawArgs.map(a => transpileExprWGSL(a.trim(), p));
+      setPixelCount++;
+
+      // Check if setPixel targets a computed y (not the loop variable y)
+      // If the y argument is not just 'y', it's a scatter-write to a computed position.
+      // In a fragment shader, we check if our pixel y is close to the target y.
+      const yArg = rawArgs[1].trim();
+      const isDirectY = (yArg === 'y');
+      const xArg = rawArgs[0].trim();
+      const isDirectX = (xArg === 'x');
+
+      if (isDirectX && isDirectY) {
+        // Direct pixel write — just set out_color
+        bodyLines.push(ind() + `out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]});`);
+      } else if (isDirectX && !isDirectY) {
+        // x is direct, y is computed — only test y proximity
+        bodyLines.push(ind() + `if (abs(y - (${args[1]})) < 0.5) { out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]}); }`);
+      } else if (!isDirectX && isDirectY) {
+        // y is direct, x is computed — only test x proximity
+        bodyLines.push(ind() + `if (abs(x - (${args[0]})) < 0.5) { out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]}); }`);
+      } else {
+        // Both computed — test both x and y proximity
+        bodyLines.push(ind() + `if (abs(x - (${args[0]})) < 0.5 && abs(y - (${args[1]})) < 0.5) { out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]}); }`);
+      }
       continue;
     }
 
-    // if/else if/else
+    // if statement
     const ifMatch = line.match(/^if\s*\((.+)\)\s*\{?\s*$/);
     if (ifMatch) {
-      bodyLines.push(`  if (${transpileExprWGSL(ifMatch[1], p)}) {`);
-      continue;
-    }
-    const elseIfMatch = line.match(/^}\s*else\s+if\s*\((.+)\)\s*\{?\s*$/);
-    if (elseIfMatch) {
-      bodyLines.push(`  } else if (${transpileExprWGSL(elseIfMatch[1], p)}) {`);
-      continue;
-    }
-    if (/^}\s*else\s*\{?\s*$/.test(line)) {
-      bodyLines.push('  } else {');
-      continue;
-    }
-    if (line === '}' || line === '};') {
-      bodyLines.push('  }');
+      bodyLines.push(ind() + `if (${transpileExprWGSL(ifMatch[1], p)}) {`);
+      depth++;
       continue;
     }
 
-    // Another setPixel inside a branch
-    const spMatch2 = line.match(new RegExp(`^${p}\\.setPixel\\((.*)\\);?\\s*$`));
-    if (spMatch2) {
-      const args = splitArgs(spMatch2[1]).map(a => transpileExprWGSL(a.trim(), p));
-      bodyLines.push(`    out_color = vec4f(${args[2]}, ${args[3]}, ${args[4]}, ${args[5]});`);
-      continue;
-    }
+    // Fallback: skip unknown lines (comments etc.)
   }
+
+  // Close any remaining open blocks
+  while (depth > 0) { depth--; bodyLines.push(ind() + '}'); }
 
   // Build the full WGSL shader
   let wgsl = '';
@@ -145,10 +265,9 @@ function transpileEffectToWGSL(jsBody, param) {
   wgsl += '};\n\n';
   wgsl += '@group(0) @binding(0) var<uniform> u: Uniforms;\n\n';
 
-  // Vertex shader — fullscreen triangle (3 vertices cover the screen)
+  // Vertex shader — fullscreen quad (6 vertices = 2 triangles)
   wgsl += 'struct VsOut {\n  @builtin(position) pos: vec4f,\n  @location(0) uv: vec2f,\n};\n\n';
   wgsl += '@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {\n';
-  wgsl += '  // 6 vertices = 2 triangles covering [0,0]-[1,1]\n';
   wgsl += '  var pos = array<vec2f, 6>(\n';
   wgsl += '    vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0),\n';
   wgsl += '    vec2f(1.0, 0.0), vec2f(1.0, 1.0), vec2f(0.0, 1.0),\n';
@@ -160,26 +279,30 @@ function transpileEffectToWGSL(jsBody, param) {
   wgsl += '  return out;\n';
   wgsl += '}\n\n';
 
-  // Include shared math library — all effect helper functions
-  // Source of truth: framework/gpu/effect_math.wgsl
-  // Any new math functions go there + here simultaneously
+  // Include shared math library
   wgsl += _effectMathWGSL();
 
   // Fragment shader
   wgsl += '@fragment fn fs_main(in: VsOut) -> @location(0) vec4f {\n';
   wgsl += '  let x = in.uv.x * u.size_w;\n';
-  wgsl += '  let y = in.uv.y * u.size_h;\n';
-  wgsl += '  var out_color = vec4f(0.0, 0.0, 0.0, 1.0);\n';
+  wgsl += '  let y = (1.0 - in.uv.y) * u.size_h;\n';
+
+  // Initial color from clearColor or default black
+  if (clearColor) {
+    wgsl += `  var out_color = vec4f(${clearColor[0]}, ${clearColor[1]}, ${clearColor[2]}, ${clearColor[3]});\n`;
+  } else {
+    wgsl += '  var out_color = vec4f(0.0, 0.0, 0.0, 1.0);\n';
+  }
+
   for (const bl of bodyLines) {
     wgsl += bl + '\n';
   }
-  if (setPixelArgs) {
-    wgsl += `  out_color = vec4f(${setPixelArgs.r}, ${setPixelArgs.g}, ${setPixelArgs.b}, ${setPixelArgs.a});\n`;
-  }
+
   wgsl += '  return out_color;\n';
   wgsl += '}\n';
 
-  return wgsl;
+  // Return object with wgsl and metadata
+  return { wgsl: wgsl, fade: fadeAmount };
 }
 
 // Transpile a JS expression to WGSL
@@ -197,13 +320,19 @@ function transpileExprWGSL(expr, p) {
   e = e.replace(new RegExp(`\\b${p}\\.mouseX\\b`, 'g'), 'u.mouse_x');
   e = e.replace(new RegExp(`\\b${p}\\.mouseY\\b`, 'g'), 'u.mouse_y');
   e = e.replace(new RegExp(`\\b${p}\\.mouseInside\\b`, 'g'), 'u.mouse_inside');
-  // Color helpers
+  // Color helpers — return vec3f
   e = e.replace(new RegExp(`\\b${p}\\.hsv\\(`, 'g'), 'hsv2rgb(');
   e = e.replace(new RegExp(`\\b${p}\\.hsl\\(`, 'g'), 'hsl2rgb(');
+  // Array indexing on vec3f: rgb[0] → rgb.x, rgb[1] → rgb.y, rgb[2] → rgb.z
+  e = e.replace(/\[0\]/g, '.x');
+  e = e.replace(/\[1\]/g, '.y');
+  e = e.replace(/\[2\]/g, '.z');
+  e = e.replace(/\[3\]/g, '.w');
   // Math builtins — direct WGSL equivalents
   e = e.replace(new RegExp(`\\b${p}\\.(sin|cos|sqrt|abs|floor|ceil|exp|exp2|log|log2)\\(`, 'g'), '$1(');
   e = e.replace(new RegExp(`\\b${p}\\.pow\\(`, 'g'), 'pow(');
-  e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), 'fract(');
+  e = e.replace(new RegExp(`\\b${p}\\.mod\\(`, 'g'), '_mod(');
+  e = e.replace(new RegExp(`\\b${p}\\.fmod\\(`, 'g'), '_mod(');
   e = e.replace(new RegExp(`\\b${p}\\.fract\\(`, 'g'), 'fract(');
   e = e.replace(new RegExp(`\\b${p}\\.mix\\(`, 'g'), 'mix(');
   e = e.replace(new RegExp(`\\b${p}\\.clamp\\(`, 'g'), 'clamp(');

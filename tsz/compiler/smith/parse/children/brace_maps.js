@@ -198,6 +198,56 @@ function _identifierMapHasBlockBody(c) {
   return false;
 }
 
+// ── Peek at map body to detect dynamic content that Zig can't resolve ──
+// Returns true if the map body contains ternaries (?:), handlers (onPress=),
+// or nested .map() calls. These patterns MUST go to Lua.
+function _peekMapBodyHasDynamicContent(c) {
+  var saved = c.save();
+  // Walk from identifier to .map(
+  var foundMap = false;
+  while (c.pos < c.count) {
+    if (c.kind() === TK.dot && c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      c.advance(); c.advance(); c.advance(); // . map (
+      foundMap = true;
+      break;
+    }
+    c.advance();
+  }
+  if (!foundMap) { c.restore(saved); return false; }
+  // Skip callback header to =>
+  while (c.pos < c.count && c.kind() !== TK.arrow) c.advance();
+  if (c.kind() !== TK.arrow) { c.restore(saved); return false; }
+  c.advance(); // skip =>
+  // Scan body — depth 1 because we're inside .map(
+  var depth = 1;
+  var hasDynamic = false;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbrace || c.kind() === TK.lbracket) depth++;
+    else if (c.kind() === TK.rparen || c.kind() === TK.rbrace || c.kind() === TK.rbracket) {
+      depth--;
+      if (depth === 0) break;
+    }
+    // Ternary
+    if (c.kind() === TK.question) { hasDynamic = true; break; }
+    // Handler attributes: onPress=, onClick=, onChange=, onSubmit=, etc.
+    if (c.kind() === TK.identifier && /^on[A-Z]/.test(c.text()) &&
+        c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.equals) {
+      hasDynamic = true; break;
+    }
+    // Nested .map(
+    if (c.kind() === TK.dot && c.pos + 2 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'map' &&
+        c.kindAt(c.pos + 2) === TK.lparen) {
+      hasDynamic = true; break;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+  return hasDynamic;
+}
+
 function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
   if (consumeClosingBrace === undefined) consumeClosingBrace = true;
   if (c.kind() !== TK.identifier) return false;
@@ -270,9 +320,86 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
   if (!oa) oa = inferOaFromSource(c, maybeArr);
   if (!oa) return false;
 
-  const mapResult = tryParseMap(c, oa);
-  if (!mapResult) return false;
-  children.push(mapResult);
-  if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
-  return true;
+  // ── ALL OA maps route to Lua. No exceptions. ──
+  // Zig cannot handle mapped content. LuaJIT handles all map templates.
+  // Token-walk the JSX body to build a Lua template (handles ternaries,
+  // colors, conditionals natively). Also run the Zig parser for OA
+  // bookkeeping (field registration, map count tracking).
+  {
+    // Step 1: Walk to map callback body to get itemParam and JSX start pos
+    var _dynSaved = c.save();
+    c.advance(); // skip identifier
+    while (c.pos < c.count) {
+      if (c.kind() === TK.dot && c.pos + 2 < c.count &&
+          c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'map' &&
+          c.kindAt(c.pos + 2) === TK.lparen) {
+        c.advance(); c.advance(); c.advance(); // . map (
+        break;
+      }
+      c.advance();
+    }
+    if (c.kind() === TK.lparen) c.advance();
+    var _dynItemParam = c.kind() === TK.identifier ? c.text() : '_item';
+    c.advance();
+    if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) c.advance(); }
+    if (c.kind() === TK.rparen) c.advance();
+    if (c.kind() === TK.arrow) c.advance();
+    // Skip block body to find 'return' before JSX
+    if (c.kind() === TK.lbrace) {
+      c.advance();
+      var _blockDepth = 0;
+      while (c.pos < c.count) {
+        if (c.kind() === TK.lbrace) _blockDepth++;
+        else if (c.kind() === TK.rbrace) {
+          if (_blockDepth === 0) break;
+          _blockDepth--;
+        }
+        if (_blockDepth === 0 &&
+            ((c.kind() === TK.identifier && c.text() === 'return') ||
+             (c.kind() === TK.keyword && c.text() === 'return'))) {
+          c.advance();
+          break;
+        }
+        c.advance();
+      }
+    }
+    var _luaJsxPos = c.save();
+
+    // Step 2: Run Zig parser for OA bookkeeping (map registration, field tracking)
+    c.restore(_dynSaved);
+    var _zigMapResult = tryParseMap(c, oa);
+    if (!_zigMapResult) return false;
+    var _afterParsePos = c.save();
+
+    // Step 3: Tag map as lua_runtime
+    var _dynMapIdx = -1;
+    for (var _dmi = 0; _dmi < ctx.maps.length; _dmi++) {
+      if (ctx.maps[_dmi].oa === oa) _dynMapIdx = _dmi;
+    }
+    if (_dynMapIdx >= 0) ctx.maps[_dynMapIdx].mapBackend = 'lua_runtime';
+
+    for (var _dhi = 0; _dhi < ctx.handlers.length; _dhi++) {
+      if (ctx.handlers[_dhi].inMap && ctx.handlers[_dhi].mapIdx === _dynMapIdx) {
+        ctx.handlers[_dhi].luaMapRouted = true;
+      }
+    }
+
+    // Step 4: Token-walk JSX body for Lua template
+    if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+    var _dynLuaIdx = ctx._luaMapRebuilders.length;
+    c.restore(_luaJsxPos);
+    var _dynLuaBody = emitLuaRebuildList(_dynLuaIdx, c, _dynItemParam, null);
+    c.restore(_afterParsePos);
+
+    // Step 5: Register Lua rebuilder and push wrapper placeholder
+    ctx._luaMapRebuilders.push({
+      index: _dynLuaIdx,
+      luaCode: _dynLuaBody,
+      rawSource: maybeArr,
+      varName: maybeArr
+    });
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _dynLuaIdx + '" }', _luaMapWrapper: _dynLuaIdx });
+    if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+    return true;
+  }
 }

@@ -86,7 +86,8 @@ pub fn drawTriColored(
     bx: f32, by: f32, r1: f32, g1: f32, b1: f32, a1: f32,
     cx: f32, cy: f32, r2: f32, g2: f32, b2: f32, a2: f32,
 ) void {
-    if (g_tri_count >= MAX_TRIS) return;
+    if (g_tri_count >= MAX_TRIS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    core.g_gpu_ops += 1;
     const ta = applyTransform(ax, ay);
     const tb = applyTransform(bx, by);
     const tc = applyTransform(cx, cy);

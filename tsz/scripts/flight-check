@@ -441,7 +441,10 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
     SRC_MAP_CONDS2=$(gocount_file '\{[^}]*\.[a-zA-Z]+\s*==\s*[0-9]+\s*&&' "$SOURCE")
     SRC_MAP_CONDS=$((SRC_MAP_CONDS + SRC_MAP_CONDS2))
     GEN_DISPLAY_TOGGLES=$(gcount 'style\.display = if' "$GEN_BLOB")
-    if [ "$SRC_MAP_CONDS" -gt 0 ] && [ "$GEN_DISPLAY_TOGGLES" -eq 0 ]; then
+    # Also count Lua-style conditionals in map templates: (cond) and element or nil
+    GEN_LUA_CONDS=$(gcount ') and .* or nil' "$GEN_BLOB")
+    GEN_ALL_CONDS=$((GEN_DISPLAY_TOGGLES + GEN_LUA_CONDS))
+    if [ "$SRC_MAP_CONDS" -gt 0 ] && [ "$GEN_ALL_CONDS" -eq 0 ]; then
         fail "$SRC_MAP_CONDS conditional(s) in map body but 0 display toggles in generated — conditionals not compiled"
     fi
 fi
