@@ -604,12 +604,11 @@ fn hostDeclareChildren(L: ?*lua.lua_State) callconv(.c) c_int {
         lua.lua_pop(L, 1);
     }
     wrapper.children = kids;
-    std.debug.print("[lua-tree] declareChildren: {d} top-level → stamped\n", .{count});
     return 0;
 }
 
 fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
-    std.debug.print("[lua-tree] clearLuaNodes\n", .{});
+    // debug logging removed
     // Clear any wrapper nodes' children before resetting arena
     // (prevents dangling pointers during re-stamp)
     for (0..16) |i| {
