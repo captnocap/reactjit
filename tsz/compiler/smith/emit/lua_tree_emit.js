@@ -107,9 +107,47 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   zig += '// ── Generated node tree ──\n';
   zig += 'var _root = Node{ .style = .{ .width = -1, .height = -1 } };\n\n';
 
-  // JS_LOGIC
+  // JS_LOGIC — script block content runs in QJS, called via __eval
   zig += '// ── Embedded JS logic ──\n';
-  zig += 'const JS_LOGIC = "";\n\n';
+  // Build JS state bindings so script functions can read/write state
+  var jsStateBindings = '';
+  if (ctx.stateSlots && ctx.stateSlots.length > 0) {
+    for (var jsi = 0; jsi < ctx.stateSlots.length; jsi++) {
+      var js = ctx.stateSlots[jsi];
+      if (js.getter.indexOf('__') === 0) continue; // skip internal slots
+      var jsInit = js.initial !== undefined ? JSON.stringify(js.initial) : '0';
+      jsStateBindings += 'var ' + js.getter + ' = ' + jsInit + ';\n';
+      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; }\n';
+    }
+  }
+  // OA getters in JS
+  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
+    for (var joi = 0; joi < ctx.objectArrays.length; joi++) {
+      var joa = ctx.objectArrays[joi];
+      jsStateBindings += 'var ' + joa.getter + ' = [];\n';
+      if (joa.setter) {
+        jsStateBindings += 'function ' + joa.setter + '(v) { ' + joa.getter + ' = v; }\n';
+      }
+    }
+  }
+
+  var jsContent = jsStateBindings;
+  if (ctx.scriptBlock) {
+    jsContent += ctx.scriptBlock;
+  }
+  if (globalThis.__scriptContent) {
+    jsContent += (jsContent ? '\n' : '') + globalThis.__scriptContent;
+  }
+  if (jsContent) {
+    zig += 'const JS_LOGIC =\n';
+    var jsLines = jsContent.split('\n');
+    for (var ji = 0; ji < jsLines.length; ji++) {
+      zig += '    \\\\' + jsLines[ji] + '\n';
+    }
+    zig += ';\n\n';
+  } else {
+    zig += 'const JS_LOGIC = "";\n\n';
+  }
 
   // LUA_LOGIC
   zig += '// ── Embedded Lua logic ──\n';

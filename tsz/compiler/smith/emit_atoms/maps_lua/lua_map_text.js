@@ -56,6 +56,22 @@ function _textToLua(text, itemParam, indexParam) {
     return tParts.join(' .. ');
   }
 
+  // "label: expr" pattern — template literal was unwrapped, label text + expression mashed together
+  // e.g. "id: _item.children[subMapIndex].id" → "id: " .. tostring(__eval("_item.children[subMapIndex].id"))
+  if (typeof text === 'string' && /^\w+:\s+/.test(text) && (text.indexOf('_item') >= 0 || text.indexOf('[') >= 0 || text.indexOf('.') >= 0)) {
+    var _colonIdx = text.indexOf(': ');
+    var _label = text.slice(0, _colonIdx + 2);
+    var _expr = text.slice(_colonIdx + 2).trim();
+    // Clean up Zig artifacts
+    _expr = _expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+    _expr = _expr.replace(/\.length\b/g, '.length');
+    // If expr has brackets or dots, use __eval for safety
+    if (/[\[\].]/.test(_expr)) {
+      return '"' + _label + '" .. tostring(__eval("' + _expr.replace(/"/g, '\\"') + '"))';
+    }
+    return '"' + _label + '" .. tostring(' + _expr + ')';
+  }
+
   // Plain string with no dynamic refs
   if (typeof text === 'string' && text.indexOf(itemParam) < 0 && (!indexParam || text.indexOf(indexParam) < 0)) {
     return '"' + text.replace(/"/g, '\\"') + '"';

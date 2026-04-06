@@ -5,6 +5,23 @@
 // Uses _handlerToLua from lua_map_handler.js.
 // Uses _hexToLua, _jsExprToLua from lua_map_subs.js.
 
+// If a condition contains function calls that aren't Lua builtins, wrap in __eval
+var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1 };
+function _wrapCondEval(cond) {
+  // Check for function calls: word( where word isn't a Lua builtin
+  var m = cond.match(/\b([a-zA-Z_]\w*)\s*\(/g);
+  if (m) {
+    for (var i = 0; i < m.length; i++) {
+      var fname = m[i].replace(/\s*\($/, '');
+      if (!_luaBuiltins[fname]) {
+        // Has a non-Lua function call — use __eval
+        return '__eval("' + cond.replace(/"/g, '\\"') + '")';
+      }
+    }
+  }
+  return cond;
+}
+
 function _nodeToLua(node, itemParam, indexParam, indent) {
   if (!node) return '{}';
   if (!indent) indent = '      ';
@@ -55,10 +72,12 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
       var child = node.children[ci];
       if (child.condition) {
         var cond = _jsExprToLua(child.condition, itemParam, indexParam);
+        cond = _wrapCondEval(cond);
         var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ');
         childLua.push('(' + cond + ') and ' + body + ' or nil');
       } else if (child.ternaryCondition) {
         var tcond = _jsExprToLua(child.ternaryCondition, itemParam, indexParam);
+        tcond = _wrapCondEval(tcond);
         var trueBranch = _nodeToLua(child.trueNode, itemParam, indexParam, indent + '  ');
         var falseBranch = _nodeToLua(child.falseNode, itemParam, indexParam, indent + '  ');
         childLua.push('(' + tcond + ') and ' + trueBranch + ' or nil');
