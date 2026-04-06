@@ -38,28 +38,22 @@ function _styleToLua(style, itemParam, indexParam) {
     // Skip overflow (Zig-only layout concern)
     if (luaKey === 'overflow') continue;
 
-    // Zig if/else ternary → Lua (cond) and val or val
-    if (typeof val === 'string' && val.indexOf('if ') === 0) {
-      var _ifm = val.match(/^if\s+(.+?)\s+(@as\([^)]+,\s*)?(\S+)\)?\s+else\s+(@as\([^)]+,\s*)?(\S+)\)?$/);
-      if (_ifm) {
-        var _cond = _ifm[1].replace(/\(([^)]+)\)/, '$1');
-        // Convert Zig cond syntax: OA refs → _item.field, slotGet → var name
-        _cond = _cond.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-        _cond = _cond.replace(/state\.getSlotInt\(\d+\)/g, function(m) { return m; }); // TODO: resolve
-        var _tv = _ifm[3];
-        var _fv = _ifm[5];
-        // Convert Color values
-        var _tvc = _zigColorToLuaHex(_tv);
-        var _fvc = _zigColorToLuaHex(_fv);
-        parts.push(luaKey + ' = (' + _cond + ') and ' + (_tvc || _tv) + ' or ' + (_fvc || _fv));
-        continue;
-      }
-      // Fallback: run luaTransform on the whole expression
-      if (typeof luaTransform === 'function') {
-        var _ltVal = luaTransform(val.replace(/^if\s+/, '').replace(/@as\([^)]+,\s*/g, '').replace(/\)\s*$/g, ''));
-        parts.push(luaKey + ' = ' + _ltVal);
-        continue;
-      }
+    // Zig if/else or any complex expression → __eval() escape hatch
+    // If the value contains Zig syntax, it came from a ternary or complex expression.
+    // Store the original .tsz expression on the style field (via _luaRawExpr) and __eval it.
+    // For now: detect Zig patterns and use __eval with a cleaned-up version.
+    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0)) {
+      // Try to extract a clean JS expression from the Zig
+      var _jsExpr = val;
+      _jsExpr = _jsExpr.replace(/^if\s+\((.+?)\)\s+/, '$1 ? ');
+      _jsExpr = _jsExpr.replace(/\s+else\s+/, ' : ');
+      _jsExpr = _jsExpr.replace(/@as\([^,]+,\s*/g, '');
+      _jsExpr = _jsExpr.replace(/@intCast\(/g, '(');
+      _jsExpr = _jsExpr.replace(/\)\s*$/g, '');
+      // OA refs → item field access
+      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
+      continue;
     }
 
     // Zig OA field reference → _item.field

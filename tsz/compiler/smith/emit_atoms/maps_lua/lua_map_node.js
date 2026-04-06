@@ -24,22 +24,20 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
 
   if (node.color) {
     var _cv = node.color;
-    // Zig if/else color ternary → Lua (cond) and hex or hex
-    if (typeof _cv === 'string' && _cv.indexOf('if ') === 0) {
-      var _cm = _cv.match(/^if\s+\((.+?)\)\s+Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)\s+else\s+Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-      if (_cm) {
-        var _cc = _cm[1].replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1').replace(/state\.getSlotInt\(\d+\)/g, '0');
-        var _th = '0x' + ((+_cm[2] << 16) | (+_cm[3] << 8) | +_cm[4]).toString(16).padStart(6, '0');
-        var _fh = '0x' + ((+_cm[5] << 16) | (+_cm[6] << 8) | +_cm[7]).toString(16).padStart(6, '0');
-        fields.push('text_color = (' + _cc + ') and ' + _th + ' or ' + _fh);
+    // Complex Zig expression → __eval
+    if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0)) {
+      // OA ref in color → _item.field
+      var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
+      if (_oaColor) {
+        fields.push('text_color = _item.' + _oaColor[1]);
       } else {
-        // OA ref in color
-        var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
-        if (_oaColor) {
-          fields.push('text_color = _item.' + _oaColor[1]);
-        } else {
-          fields.push('text_color = 0x000000');
-        }
+        // Clean up and send to __eval
+        var _jsColor = _cv.replace(/^if\s+\((.+?)\)\s+/, '$1 ? ').replace(/\s+else\s+/, ' : ');
+        _jsColor = _jsColor.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+          return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+        });
+        _jsColor = _jsColor.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(');
+        fields.push('text_color = __eval("' + _jsColor.replace(/"/g, '\\"') + '")');
       }
     } else {
       var _colorLua = _zigColorToLuaHex(_cv) || _hexToLua(_cv);

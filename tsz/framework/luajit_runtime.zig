@@ -15,6 +15,7 @@
 const std = @import("std");
 const state = @import("state.zig");
 const input_mod = @import("input.zig");
+const qjs_runtime = @import("qjs_runtime.zig");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 const Style = layout.Style;
@@ -553,6 +554,48 @@ fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
     return 0;
 }
 
+/// __eval(jsExpr) → evaluates JS expression in QJS, returns result as string/number to Lua
+fn hostEval(L: ?*lua.lua_State) callconv(.c) c_int {
+    var len: usize = 0;
+    const ptr = lua.lua_tolstring(L, 1, &len);
+    if (ptr == null or len == 0) {
+        lua.lua_pushnil(L);
+        return 1;
+    }
+    const code: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+    var buf: [256]u8 = undefined;
+    const result = qjs_runtime.evalToString(code, &buf);
+    if (result.len == 0) {
+        lua.lua_pushnil(L);
+    } else {
+        // Try to push as number if it looks like one
+        var is_num = true;
+        var has_dot = false;
+        for (result) |ch| {
+            if (ch == '.') { has_dot = true; continue; }
+            if (ch == '-' or (ch >= '0' and ch <= '9')) continue;
+            is_num = false;
+            break;
+        }
+        if (is_num and result.len > 0) {
+            if (has_dot) {
+                const f = std.fmt.parseFloat(f64, result) catch 0.0;
+                lua.lua_pushnumber(L, f);
+            } else {
+                const i = std.fmt.parseInt(i64, result, 10) catch 0;
+                lua.lua_pushinteger(L, @intCast(i));
+            }
+        } else if (std.mem.eql(u8, result, "true")) {
+            lua.lua_pushboolean(L, 1);
+        } else if (std.mem.eql(u8, result, "false")) {
+            lua.lua_pushboolean(L, 0);
+        } else {
+            lua.lua_pushlstring(L, result.ptr, result.len);
+        }
+    }
+    return 1;
+}
+
 /// Set a map wrapper node as a Lua global lightuserdata (__mw0, __mw1, etc.)
 pub fn setMapWrapper(index: usize, ptr: *anyopaque) void {
     const L = g_lua orelse return;
@@ -594,6 +637,7 @@ pub fn initVM() void {
         .{ .name = "__applescript_file", .func = &hostApplescriptFile },
         .{ .name = "__declareChildren", .func = &hostDeclareChildren },
         .{ .name = "__clearLuaNodes", .func = &hostClearLuaNodes },
+        .{ .name = "__eval", .func = &hostEval },
     };
 
     for (funcs) |f| {
