@@ -455,6 +455,7 @@ function emitLogicBlocks(ctx) {
       luaLines.push('function __rebuildLuaMaps()');
       luaLines.push('  __clearLuaNodes()');
       for (var lmi2 = 0; lmi2 < ctx._luaMapRebuilders.length; lmi2++) {
+        if (ctx._luaMapRebuilders[lmi2].isNested) continue;
         luaLines.push('  __rebuildLuaMap' + lmi2 + '()');
       }
       luaLines.push('end');

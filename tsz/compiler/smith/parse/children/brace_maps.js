@@ -101,10 +101,13 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
       index: _luaIdx,
       luaCode: _luaBody,
       rawSource: _luaRaw,
-      varName: baseName
+      varName: baseName,
+      isNested: !!ctx.currentMap
     });
-    // Replace the Zig node with a Lua wrapper placeholder
-    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
+    // Replace the Zig node with a Lua wrapper placeholder (only for top-level maps)
+    if (!ctx.currentMap) {
+      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
+    }
     if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
     return true;
   }
@@ -134,9 +137,12 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     index: _ccLuaIdx,
     luaCode: _ccLuaBody,
     rawSource: _ccRawSource,
-    varName: baseName
+    varName: baseName,
+    isNested: !!ctx.currentMap
   });
-  children.push({ nodeExpr: '.{ .test_id = "__lmw' + _ccLuaIdx + '" }', _luaMapWrapper: _ccLuaIdx });
+  if (!ctx.currentMap) {
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _ccLuaIdx + '" }', _luaMapWrapper: _ccLuaIdx });
+  }
   if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
   return true;
 }
@@ -331,9 +337,12 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
         index: _nmIdx,
         luaCode: _nmLuaBody,
         rawSource: _nmRawSource,
-        varName: maybeArr
+        varName: maybeArr,
+        isNested: !!ctx.currentMap
       });
-      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _nmIdx + '" }', _luaMapWrapper: _nmIdx });
+      if (!ctx.currentMap) {
+        children.push({ nodeExpr: '.{ .test_id = "__lmw' + _nmIdx + '" }', _luaMapWrapper: _nmIdx });
+      }
       return true;
     }
     c.restore(_savedNested);
@@ -420,9 +429,12 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       index: _dynLuaIdx,
       luaCode: _dynLuaBody,
       rawSource: maybeArr,
-      varName: maybeArr
+      varName: maybeArr,
+      isNested: !!ctx.currentMap
     });
-    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _dynLuaIdx + '" }', _luaMapWrapper: _dynLuaIdx });
+    if (!ctx.currentMap) {
+      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _dynLuaIdx + '" }', _luaMapWrapper: _dynLuaIdx });
+    }
     if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
     return true;
   }

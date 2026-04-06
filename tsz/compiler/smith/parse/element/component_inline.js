@@ -269,7 +269,8 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
           index: _ciLuaIdx,
           luaCode: _ciLuaBody,
           rawSource: maybeArr,
-          varName: maybeArr
+          varName: maybeArr,
+          isNested: !!ctx.currentMap
         });
         result = { nodeExpr: '.{ .test_id = "__lmw' + _ciLuaIdx + '" }', _luaMapWrapper: _ciLuaIdx };
       }

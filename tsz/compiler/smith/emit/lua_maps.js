@@ -430,7 +430,27 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
   if (node.color) fields.push('text_color = ' + node.color);
   if (node.handler) {
     var _hp = typeof node.handler === 'string' ? node.handler : '__luaMapPress(" .. _i .. ")';
-    fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+    // If handler references loop vars, values must be baked in at loop time
+    // e.g., "setSelected((_i - 1) * 100)" → "setSelected(" .. ((_i - 1) * 100) .. ")"
+    var _hasDynamic = _hp.indexOf('_item') >= 0 || _hp.indexOf('_nitem') >= 0 ||
+                      _hp.indexOf('(_i - 1)') >= 0 || _hp.indexOf('(_ni - 1)') >= 0;
+    if (_hasDynamic) {
+      // Pattern: funcName(args) — extract, evaluate args at loop time
+      var _hMatch = _hp.match(/^(\w+)\s*\(\s*([\s\S]*)\s*\)\s*$/);
+      if (_hMatch) {
+        var _fname = _hMatch[1];
+        var _fargs = _hMatch[2].trim();
+        // If args contain _item/_nitem field access, interpolate as tostring
+        _fargs = _fargs.replace(/_nitem\s*\.\s*(\w+)/g, '" .. tostring(_nitem.$1) .. "');
+        _fargs = _fargs.replace(/_item\s*\.\s*(\w+)/g, '" .. tostring(_item.$1) .. "');
+        fields.push('lua_on_press = "' + _fname + '(" .. (' + _fargs + ') .. ")"');
+      } else {
+        // Fallback: static string
+        fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+      }
+    } else {
+      fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+    }
   }
   if (node.children.length > 0) {
     fields.push('children = {\n' + node.children.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');

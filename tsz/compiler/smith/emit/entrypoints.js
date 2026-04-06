@@ -46,6 +46,8 @@ function emitRuntimeEntrypoints(ctx, meta) {
   if (ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0) {
     for (let lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
       var lmr = ctx._luaMapRebuilders[lmi];
+      // Skip nested maps — their data comes from the outer map's Lua callback
+      if (lmr.isNested) continue;
       // Scan arrayDecls to find the wrapper node by __lmw tag
       for (let ai = 0; ai < ctx.arrayDecls.length; ai++) {
         var decl = ctx.arrayDecls[ai];
@@ -86,6 +88,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
   if (hasLuaMaps) {
     for (var _ldi = 0; _ldi < ctx._luaMapRebuilders.length; _ldi++) {
       var _ldr = ctx._luaMapRebuilders[_ldi];
+      if (_ldr.isNested) continue; // nested map data comes from outer map's Lua callback
       var _ldSrc = (_ldr.rawSource || _ldr.varName).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t').replace(/\0/g, '');
       _luaDataEvalBlock += `        qjs_runtime.evalLuaMapData(${_ldi}, "` + _ldSrc + `");\n`;
     }
