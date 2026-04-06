@@ -112,6 +112,16 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               var _s = ctx.stateSlots[+idx];
               return _s ? _s.getter : '__slot' + idx;
             });
+            // OA string field refs: _oa0_name[_i][0.._oa0_name_lens[_i]] → _item.name
+            _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+            // OA int/float field refs: _oa0_field[_i] → _item.field
+            _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+            // Zig casts
+            _fmtExpr = _fmtExpr.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+            // Clean orphan parens
+            var _fOpen = (_fmtExpr.match(/\(/g) || []).length;
+            var _fClose = (_fmtExpr.match(/\)/g) || []).length;
+            while (_fClose > _fOpen && _fmtExpr.indexOf(')') >= 0) { _fmtExpr = _fmtExpr.replace(/\)/, ''); _fClose--; }
             // If it has a format string with interpolation, build template
             if (_dt.fmtString && _dt.fmtString !== '{s}' && _dt.fmtString !== '{d}') {
               // Multi-part format: "total:{d} phase:{d}" + args

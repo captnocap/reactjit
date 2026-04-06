@@ -179,6 +179,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   }
   if (globalThis.__scriptContent) {
     var _scriptCleaned = globalThis.__scriptContent;
+    _scriptCleaned = _scriptCleaned.replace(/^<\/?script>$/gm, ''); // strip <script> tags
     _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
     _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
     _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');
