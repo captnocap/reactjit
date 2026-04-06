@@ -52,6 +52,14 @@ function _styleToLua(style, itemParam, indexParam) {
       _jsExpr = _jsExpr.replace(/\)\s*$/g, '');
       // OA refs → item field access
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // Color.rgb(R,G,B) → 0xRRGGBB (QJS doesn't know Color.rgb)
+      _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+        return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+      });
+      // State slot refs → getter names
+      _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+        return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+      });
       parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
       continue;
     }
@@ -106,7 +114,7 @@ function _styleToLua(style, itemParam, indexParam) {
 
     // Bare variable reference (state getter resolved by buildNode)
     // A single identifier like "barWidth" should be emitted bare, not quoted
-    if (typeof val === 'string' && /^[a-zA-Z_]\w*$/.test(val) && !/^(center|row|column|start|end|stretch|baseline|wrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround)$/.test(val)) {
+    if (typeof val === 'string' && /^[a-zA-Z_]\w*$/.test(val) && !/^(center|row|column|start|end|stretch|baseline|wrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end)$/.test(val)) {
       parts.push(luaKey + ' = ' + val);
       continue;
     }
