@@ -343,11 +343,18 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
       _ln.text = _hoistedStaticText;
     }
-    // Handler — apply luaTransform to convert JS→Lua syntax
+    // Handler — route to Lua or JS based on script block presence
     if (handlerRef) {
       var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
-      if (_handler && _handler.luaBody) {
-        _ln.handler = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+      if (_handler) {
+        var _useJsHandler = !!(ctx.scriptBlock || globalThis.__scriptContent);
+        if (_useJsHandler && _handler.jsBody) {
+          // JS handler — will be emitted as js_on_press
+          _ln.handler = _handler.jsBody;
+          _ln.handlerIsJs = true;
+        } else if (_handler.luaBody) {
+          _ln.handler = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+        }
       }
     }
     // Children: collect luaNodes from child results

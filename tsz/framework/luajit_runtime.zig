@@ -506,6 +506,22 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
+    // js_on_press handler (string → null-terminated copy for Zig)
+    lua.lua_getfield(L, idx, "js_on_press");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and len > 0) {
+            const copy = alloc.alloc(u8, len + 1) catch {
+                lua.lua_pop(L, 1);
+                return node;
+            };
+            @memcpy(copy[0..len], @as([*]const u8, @ptrCast(ptr))[0..len]);
+            copy[len] = 0;
+            node.handlers.js_on_press = @ptrCast(copy[0..len :0]);
+        }
+    }
+    lua.lua_pop(L, 1);
     // children (recursive) — handles __isMapResult expansion
     lua.lua_getfield(L, idx, "children");
     if (lua.lua_istable(L, -1)) {

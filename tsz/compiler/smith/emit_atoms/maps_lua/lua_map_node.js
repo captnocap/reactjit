@@ -63,7 +63,12 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
   }
 
   if (node.handler) {
-    fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam));
+    if (node.handlerIsJs) {
+      var _jh = node.handler.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      fields.push('js_on_press = "' + _jh + '"');
+    } else {
+      fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam));
+    }
   }
 
   if (node.children && node.children.length > 0) {
