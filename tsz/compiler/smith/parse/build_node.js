@@ -272,5 +272,73 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   const allDynIds = [...(styleFields._dynStyleIds || []), ...((nodeFields && nodeFields._dynStyleIds) || [])];
   if (allDynIds.length > 0) nodeResult.dynStyleIds = allDynIds;
   if (styleFields._variantBindingId !== undefined) nodeResult.variantBindingId = styleFields._variantBindingId;
+
+  // ── Lua node: structured data for lua map emit atoms ──────────────
+  // When inside a map context, attach a luaNode so a030 can emit Lua
+  // from the parsed tree instead of re-walking tokens.
+  if (ctx.currentMap) {
+    var _ln = {};
+    // Style: parse Zig style fields back to key/value pairs
+    if (styleFields.length > 0) {
+      _ln.style = {};
+      for (var _si = 0; _si < styleFields.length; _si++) {
+        var _sf = styleFields[_si];
+        // ".key = value" → key, value
+        var _eqIdx = _sf.indexOf(' = ');
+        if (_eqIdx < 0) continue;
+        var _sk = _sf.slice(1, _eqIdx); // strip leading .
+        var _sv = _sf.slice(_eqIdx + 3);
+        // Color.rgb(r,g,b) → keep as-is for lua_map_style to handle
+        // .enum_value → strip leading dot
+        if (_sv.charAt(0) === '.') _sv = _sv.slice(1);
+        _ln.style[_sk] = _sv;
+      }
+    }
+    // Text: extract from nodeFields or children
+    if (nodeFields) {
+      for (var _ni = 0; _ni < nodeFields.length; _ni++) {
+        var _nf = nodeFields[_ni];
+        if (typeof _nf === 'string') {
+          if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
+          if (_nf.startsWith('.text_color = ')) _ln.color = _nf.slice(14);
+          if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
+        }
+      }
+    }
+    // Handler
+    if (handlerRef) {
+      var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
+      if (_handler && _handler.luaBody) _ln.handler = _handler.luaBody;
+    }
+    // Children: collect luaNodes from child results
+    if (children.length > 0) {
+      _ln.children = [];
+      for (var _ci = 0; _ci < children.length; _ci++) {
+        var _ch = children[_ci];
+        if (_ch.luaNode) {
+          // Conditionals
+          if (_ch.condIdx !== undefined && ctx.conditionals[_ch.condIdx]) {
+            _ln.children.push({ condition: ctx.conditionals[_ch.condIdx].condExpr, node: _ch.luaNode });
+          } else if (_ch.ternaryCondIdx !== undefined && ctx.conditionals[_ch.ternaryCondIdx]) {
+            var _tc = ctx.conditionals[_ch.ternaryCondIdx];
+            if (_ch.ternaryBranch === 'true') {
+              _ln.children.push({ ternaryCondition: _tc.condExpr, trueNode: _ch.luaNode, falseNode: null });
+            }
+            // false branch gets merged into existing ternary entry
+          } else {
+            _ln.children.push(_ch.luaNode);
+          }
+        } else if (_ch.mapIdx !== undefined) {
+          // Nested map
+          var _m = ctx.maps[_ch.mapIdx];
+          if (_m) {
+            _ln.children.push({ nestedMap: { field: _m.oa ? _m.oa.getter : '', itemParam: _m.itemParam, indexParam: _m.indexParam, bodyNode: _m._luaBodyNode || null } });
+          }
+        }
+      }
+    }
+    nodeResult.luaNode = _ln;
+  }
+
   return nodeResult;
 }

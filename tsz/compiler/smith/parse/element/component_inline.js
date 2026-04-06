@@ -259,15 +259,17 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
         }
         if (_ciMapIdx >= 0) ctx.maps[_ciMapIdx].mapBackend = 'lua_runtime';
 
-        // Build Lua rebuilder from the token-walked JSX body
+        // Use parsed result — convert Zig template → Lua table
         if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
         var _ciLuaIdx = ctx._luaMapRebuilders.length;
-        c.restore(_ciLuaJsxPos);
-        var _ciLuaBody = emitLuaRebuildList(_ciLuaIdx, c, _ciItemParam, null, _ciIdxParam);
-        c.restore(_ciAfterPos);
+        var _ciTemplateExpr = (_ciMapIdx >= 0 && ctx.maps[_ciMapIdx].templateExpr) || result.templateNodeExpr || '.{}';
+        var _ciLuaBody = _nodeResultToLuaRebuilder(_ciLuaIdx, { templateNodeExpr: _ciTemplateExpr }, oa);
         ctx._luaMapRebuilders.push({
           index: _ciLuaIdx,
           luaCode: _ciLuaBody,
+          bodyNode: result.luaNode || null,
+          itemParam: _ciItemParam || '_item',
+          indexParam: _ciIdxParam || null,
           rawSource: maybeArr,
           varName: maybeArr,
           isNested: !!ctx.currentMap

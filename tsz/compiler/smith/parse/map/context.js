@@ -41,5 +41,6 @@ function consumeMapClose(c) {
 
 function finalizeMapNode(mapInfo, templateNode) {
   mapInfo.templateExpr = templateNode.nodeExpr;
-  return { nodeExpr: '.{}', mapIdx: mapInfo.mapIdx, templateNodeExpr: templateNode.nodeExpr };
+  if (templateNode.luaNode) mapInfo._luaBodyNode = templateNode.luaNode;
+  return { nodeExpr: '.{}', mapIdx: mapInfo.mapIdx, templateNodeExpr: templateNode.nodeExpr, luaNode: templateNode.luaNode || null };
 }

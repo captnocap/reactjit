@@ -87,19 +87,18 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     }
     if (mapIdx >= 0) ctx.maps[mapIdx].mapBackend = 'lua_runtime';
 
-    // Build the Lua template by token-walking the JSX body
-    // (emitLuaRebuildList handles nested elements, children, colors, text)
+    // Use the PARSED node result — convert Zig template → Lua table
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _luaIdx = ctx._luaMapRebuilders.length;
     var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
-    // Restore cursor to JSX body start for token walking
-    c.restore(_luaJsxPos);
-    var _luaBody = emitLuaRebuildList(_luaIdx, c, header.itemParam || '_item', null, header.indexParam);
-    // Restore cursor to after the parse so the rest of compilation continues
-    c.restore(_afterParsePos);
+    var _luaTemplateExpr = (mapIdx >= 0 && ctx.maps[mapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
+    var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, { templateNodeExpr: _luaTemplateExpr }, oa);
     ctx._luaMapRebuilders.push({
       index: _luaIdx,
       luaCode: _luaBody,
+      bodyNode: mapResult.luaNode || null,
+      itemParam: header.itemParam || '_item',
+      indexParam: header.indexParam || null,
       rawSource: _luaRaw,
       varName: baseName,
       isNested: !!ctx.currentMap
@@ -130,12 +129,17 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
   if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
   var _ccLuaIdx = ctx._luaMapRebuilders.length;
   var _ccRawSource = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
-  c.restore(_ccLuaJsxPos);
-  var _ccLuaBody = emitLuaRebuildList(_ccLuaIdx, c, header.itemParam || '_item', null, header.indexParam);
+  // Use the PARSED node result — the parser already walked the JSX and built the
+  // template node expression. Just convert Zig syntax → Lua table syntax.
+  var _ccTemplateExpr = (_ccMapIdx >= 0 && ctx.maps[_ccMapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
+  var _ccLuaBody = _nodeResultToLuaRebuilder(_ccLuaIdx, { templateNodeExpr: _ccTemplateExpr }, oa);
   c.restore(_ccAfterPos);
   ctx._luaMapRebuilders.push({
     index: _ccLuaIdx,
     luaCode: _ccLuaBody,
+    bodyNode: mapResult.luaNode || null,
+    itemParam: header.itemParam || '_item',
+    indexParam: header.indexParam || null,
     rawSource: _ccRawSource,
     varName: baseName,
     isNested: !!ctx.currentMap
@@ -336,6 +340,9 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       ctx._luaMapRebuilders.push({
         index: _nmIdx,
         luaCode: _nmLuaBody,
+        bodyNode: null, // nested maps still use token walker for now
+        itemParam: _nmParam || '_item',
+        indexParam: _nmIdxParam || null,
         rawSource: _nmRawSource,
         varName: maybeArr,
         isNested: !!ctx.currentMap
@@ -417,17 +424,20 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       }
     }
 
-    // Step 4: Token-walk JSX body for Lua template
+    // Step 4: Use parsed result — convert Zig template → Lua table
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _dynLuaIdx = ctx._luaMapRebuilders.length;
-    c.restore(_luaJsxPos);
-    var _dynLuaBody = emitLuaRebuildList(_dynLuaIdx, c, _dynItemParam, null, _dynIdxParam);
-    c.restore(_afterParsePos);
+    var _dynTemplateExpr = (_dynMapIdx >= 0 && ctx.maps[_dynMapIdx].templateExpr) || _zigMapResult.templateNodeExpr || '.{}';
+    if (_dynTemplateExpr === '.{}') throw new Error('[luaMap] EMPTY TEMPLATE: _dynMapIdx=' + _dynMapIdx + ' maps.len=' + ctx.maps.length + ' zigResult=' + JSON.stringify(Object.keys(_zigMapResult || {})));
+    var _dynLuaBody = _nodeResultToLuaRebuilder(_dynLuaIdx, { templateNodeExpr: _dynTemplateExpr }, oa);
 
     // Step 5: Register Lua rebuilder and push wrapper placeholder
     ctx._luaMapRebuilders.push({
       index: _dynLuaIdx,
       luaCode: _dynLuaBody,
+      bodyNode: _zigMapResult.luaNode || null,
+      itemParam: _dynItemParam || '_item',
+      indexParam: _dynIdxParam || null,
       rawSource: maybeArr,
       varName: maybeArr,
       isNested: !!ctx.currentMap
