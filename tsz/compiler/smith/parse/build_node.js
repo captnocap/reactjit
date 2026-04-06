@@ -128,6 +128,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             }
           }
         }
+        // DynColor overlay for early-return Text path
+        if (result.dynColorId !== undefined && ctx.dynColors) {
+          var _edc = ctx.dynColors[result.dynColorId];
+          var _edcExpr = _edc && (_edc.expression || _edc.colorExpr);
+          if (_edcExpr) _dln.color = _edcExpr;
+        }
         result.luaNode = _dln;
       }
       return result;
@@ -421,8 +427,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     // DynColor overlay — resolve Color{} placeholders to actual expressions
     if (nodeResult.dynColorId !== undefined && ctx.dynColors) {
       var _dc = ctx.dynColors[nodeResult.dynColorId];
-      if (_dc && _dc.expression) {
-        _ln.color = _cleanZigExpr(_dc.expression);
+      var _dcExpr = _dc && (_dc.expression || _dc.colorExpr);
+      if (_dcExpr) {
+        _ln.color = _cleanZigExpr(_dcExpr);
       }
     }
     // Static text hoisted from single child
