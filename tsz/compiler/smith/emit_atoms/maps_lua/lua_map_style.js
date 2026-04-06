@@ -76,9 +76,9 @@ function _styleToLua(style, itemParam, indexParam) {
       continue;
     }
 
-    // -1 = 100% (Zig encoding for percentage)
+    // -1 = 100% (Zig encoding for percentage — keep as -1 for readLuaStyle)
     if (val === '-1' || val === -1) {
-      parts.push(luaKey + ' = "100%"');
+      parts.push(luaKey + ' = -1');
       continue;
     }
 

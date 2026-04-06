@@ -91,9 +91,7 @@ function emitRuntimeEntrypoints(ctx, opts) {
   out += '}\n\n';
 
   // Exports
-  out += 'export fn app_get_root() *' + prefix + 'layout.Node {\n';
-  out += '    return &_root;\n';
-  out += '}\n\n';
+  out += 'export fn app_get_root() *Node { return &_root; }\n';
 
   out += 'export fn app_get_lua_logic() [*]const u8 { return LUA_LOGIC.ptr; }\n';
   out += 'export fn app_get_lua_logic_len() usize { return LUA_LOGIC.len; }\n';
