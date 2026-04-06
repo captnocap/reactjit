@@ -116,25 +116,52 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
             // OA int/float field refs: _oa0_field[_i] → _item.field
             _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-            // Zig casts
-            _fmtExpr = _fmtExpr.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
-            // Clean orphan parens
-            var _fOpen = (_fmtExpr.match(/\(/g) || []).length;
-            var _fClose = (_fmtExpr.match(/\)/g) || []).length;
-            while (_fClose > _fOpen && _fmtExpr.indexOf(')') >= 0) { _fmtExpr = _fmtExpr.replace(/\)/, ''); _fClose--; }
+            // NOTE: @as stripping moved to per-arg cleanup below (commas in @as break split)
             // If it has a format string with interpolation, build template
             if (_dt.fmtString && _dt.fmtString !== '{s}' && _dt.fmtString !== '{d}') {
               // Multi-part format: "total:{d} phase:{d}" + args
               var _parts = _dt.fmtString.split(/\{[ds](?::\.?\d+)?\}/);
-              var _args = _fmtExpr.split(/,\s*/);
+              // Strip @as wrappers BEFORE splitting (they contain commas)
+              var _cleanedArgs = _fmtExpr;
+              for (var _cai = 0; _cai < 5; _cai++) {
+                _cleanedArgs = _cleanedArgs.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
+              }
+              // Zig if/else → Lua ternary BEFORE splitting
+              _cleanedArgs = _cleanedArgs.replace(/\bif\s+\((.+?)\)\s+("(?:[^"\\]|\\.)*")\s+else\s+("(?:[^"\\]|\\.)*")/g, '($1) and $2 or $3');
+              var _args = _cleanedArgs.split(/,\s*/);
               var _luaParts = [];
               for (var _pi = 0; _pi < _parts.length; _pi++) {
                 if (_parts[_pi]) _luaParts.push('"' + _parts[_pi] + '"');
-                if (_pi < _args.length) _luaParts.push('tostring(' + _args[_pi].trim() + ')');
+                if (_pi < _args.length) {
+                  var _argClean = _args[_pi].trim();
+                  // Strip @as wrappers first (iterate for nesting)
+                  for (var _ai = 0; _ai < 3; _ai++) {
+                    _argClean = _argClean.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]+)\)/g, '$1');
+                    _argClean = _argClean.replace(/@intCast\(([^)]+)\)/g, '$1');
+                    _argClean = _argClean.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+                  }
+                  // Now if/else → Lua (cond) and val or val
+                  _argClean = _argClean.replace(/\bif\s+\((.+?)\)\s+(\S+)\s+else\s+(\S+)/g, '($1) and $2 or $3');
+                  // Clean orphan parens
+                  var _ao = (_argClean.match(/\(/g) || []).length;
+                  var _ac = (_argClean.match(/\)/g) || []).length;
+                  while (_ac > _ao && _argClean.endsWith(')')) { _argClean = _argClean.slice(0, -1); _ac--; }
+                  _luaParts.push('tostring(' + _argClean + ')');
+                }
               }
               _dln.text = { luaExpr: _luaParts.join(' .. ') };
             } else {
-              _dln.text = { stateVar: _fmtExpr };
+              // Single-arg: strip @as/casts
+              var _singleClean = _fmtExpr;
+              for (var _sci = 0; _sci < 3; _sci++) {
+                _singleClean = _singleClean.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
+                _singleClean = _singleClean.replace(/@intCast\(([^)]+)\)/g, '$1');
+                _singleClean = _singleClean.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+              }
+              var _sco = (_singleClean.match(/\(/g) || []).length;
+              var _scc = (_singleClean.match(/\)/g) || []).length;
+              while (_scc > _sco && _singleClean.endsWith(')')) { _singleClean = _singleClean.slice(0, -1); _scc--; }
+              _dln.text = { stateVar: _singleClean };
             }
           }
         }

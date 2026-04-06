@@ -328,6 +328,16 @@ function tryParseTernaryJSX(c, children) {
   c.advance();
 
   var _rawCondStr = condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==').replace(/&&/g, 'and').replace(/\|\|/g, 'or');
+  // Resolve OA refs and state slots in Lua condition
+  _rawCondStr = _rawCondStr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  _rawCondStr = _rawCondStr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  _rawCondStr = _rawCondStr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+    var _s = ctx.stateSlots[+idx]; return _s ? _s.getter : '_slot' + idx;
+  });
+  _rawCondStr = _rawCondStr.replace(/@as\(\w+,\s*/g, '').replace(/@intCast\(/g, '(');
+  var _rco = (_rawCondStr.match(/\(/g) || []).length;
+  var _rcc = (_rawCondStr.match(/\)/g) || []).length;
+  while (_rcc > _rco && _rawCondStr.endsWith(')')) { _rawCondStr = _rawCondStr.slice(0, -1); _rcc--; }
   var allBranches = [{ condExpr: _resolveStringComparison(condParts.join('')), luaCondExpr: _rawCondStr, branch: firstBranch }];
 
   while (true) {
