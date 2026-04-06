@@ -13,9 +13,11 @@ function hexToLuaColor(hex) {
 
 // Convert JS ternary expr to Lua: cond ? a : b → (cond) and (a) or (b)
 // Also converts color hex strings to Lua hex numbers.
-function _jsExprToLua(expr, itemParam) {
+function _jsExprToLua(expr, itemParam, indexParam) {
   // Replace item param references
   expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+  // Replace index param references (Lua _i is 1-based, .tsz idx is 0-based)
+  if (indexParam) expr = expr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
   // Convert === to ==, !== to ~=
   expr = expr.replace(/===/g, '==').replace(/!==/g, '~=');
   // Handle ternary: cond ? trueVal : falseVal
@@ -55,7 +57,7 @@ function _luaColorOrPassthrough(val) {
   return val;
 }
 
-function emitLuaStyle(c, itemParam) {
+function emitLuaStyle(c, itemParam, indexParam) {
   // Cursor is at {{ — skip to inner object, collect key:value pairs
   var parts = [];
   if (c.kind() !== TK.lbrace) return '{}';
@@ -106,22 +108,26 @@ function emitLuaStyle(c, itemParam) {
         if (c.kind() === TK.rbrace) c.advance();
         var expr = exprParts.join(' ');
         // Convert JS expressions (ternaries, comparisons, colors) to Lua
-        expr = _jsExprToLua(expr, itemParam);
+        expr = _jsExprToLua(expr, itemParam, indexParam);
         parts.push(zigKey + ' = ' + expr);
       } else if (c.kind() === TK.identifier) {
         // Bare expression value: ident ? trueVal : falseVal (ternary), or ident
+        // Track both paren/brace depth AND ternary depth (? increments, : decrements)
+        // so chained ternaries like a ? b : c ? d : e don't stop at the first :
         var exprParts = [];
         var depth = 0;
+        var ternDepth = 0;
         while (c.pos < c.count) {
-          // Stop at comma (next property) or closing brace (end of style)
-          if (depth === 0 && (c.kind() === TK.comma || c.kind() === TK.rbrace)) break;
+          if (depth === 0 && ternDepth === 0 && (c.kind() === TK.comma || c.kind() === TK.rbrace)) break;
           if (c.kind() === TK.lparen || c.kind() === TK.lbrace || c.kind() === TK.lbracket) depth++;
           if (c.kind() === TK.rparen || c.kind() === TK.rbrace || c.kind() === TK.rbracket) depth--;
+          if (depth === 0 && c.kind() === TK.question) ternDepth++;
+          if (depth === 0 && c.kind() === TK.colon && ternDepth > 0) ternDepth--;
           exprParts.push(c.text());
           c.advance();
         }
         var expr = exprParts.join(' ');
-        expr = _jsExprToLua(expr, itemParam);
+        expr = _jsExprToLua(expr, itemParam, indexParam);
         parts.push(zigKey + ' = ' + expr);
       }
     } else {
@@ -132,7 +138,7 @@ function emitLuaStyle(c, itemParam) {
   return '{ ' + parts.join(', ') + ' }';
 }
 
-function emitLuaTextContent(c, itemParam) {
+function emitLuaTextContent(c, itemParam, indexParam) {
   // Collect text content until closing tag
   // Handles: plain text, {item.field}, {`template ${item.field}`}
   var parts = [];
@@ -159,6 +165,7 @@ function emitLuaTextContent(c, itemParam) {
             }
             var expr = raw.slice(i + 2, j - 1).trim();
             expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+            if (indexParam) expr = expr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
             luaParts.push('tostring(' + expr + ')');
             i = j;
           } else {
@@ -182,6 +189,7 @@ function emitLuaTextContent(c, itemParam) {
         }
         var expr = exprParts.join(' ');
         expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+        if (indexParam) expr = expr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
         parts.push('tostring(' + expr + ')');
       }
       if (c.kind() === TK.rbrace) c.advance();
@@ -203,7 +211,7 @@ var _luaEmitDepth = 0;
 var _luaEmitIter = 0;
 var _LUA_EMIT_MAX_ITER = 5000; // hard cap — prevents machine freeze
 
-function emitLuaElement(c, itemParam, indent) {
+function emitLuaElement(c, itemParam, indent, indexParam) {
   _luaEmitDepth++;
   if (_luaEmitDepth > 20 || _luaEmitIter > _LUA_EMIT_MAX_ITER) {
     _luaEmitDepth--;
@@ -252,6 +260,7 @@ function emitLuaElement(c, itemParam, indent) {
       if (ctx.components[_ci].name === tagName) { _comp = ctx.components[_ci]; break; }
     }
     if (_comp && _comp.bodyPos >= 0) {
+      // component inlining active
       // Collect props from the component call: <Comp prop1={expr} prop2={expr} />
       var _compProps = {};
       while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash && c.kind() !== TK.slash_gt) {
@@ -284,6 +293,8 @@ function emitLuaElement(c, itemParam, indent) {
       else if (c.kind() === TK.slash) { c.advance(); if (c.kind() === TK.gt) c.advance(); }
       else if (c.kind() === TK.gt) {
         c.advance();
+        // Save children cursor position for {children} prop substitution
+        var _childrenStart = c.save();
         // Skip to closing tag </CompName>
         var _skipD = 1;
         while (c.pos < c.count && _skipD > 0) {
@@ -295,13 +306,17 @@ function emitLuaElement(c, itemParam, indent) {
           }
           c.advance();
         }
+        _compProps['__childrenPos'] = _childrenStart;
       }
       // Walk the component's JSX body with prop substitution
+      // Store children cursor pos so {children} in the body can walk the call-site children
+      var _prevChildrenPos = ctx._compChildrenPos;
+      ctx._compChildrenPos = _compProps['__childrenPos'] || null;
       var _compSaved = c.save();
       c.restore(_comp.bodyPos);
-      // Build a modified itemParam that includes prop substitution
-      var _compResult = emitLuaElement(c, itemParam, indent);
+      var _compResult = emitLuaElement(c, itemParam, indent, indexParam);
       c.restore(_compSaved);
+      ctx._compChildrenPos = _prevChildrenPos;
       // Substitute prop references in the emitted Lua
       for (var _pk in _compProps) {
         _compResult = _compResult.replace(new RegExp('_item\\.' + _pk + '\\b', 'g'), _compProps[_pk]);
@@ -329,7 +344,7 @@ function emitLuaElement(c, itemParam, indent) {
       if (c.kind() === TK.equals) {
         c.advance();
         if (attrName === 'style') {
-          node.style = emitLuaStyle(c, itemParam);
+          node.style = emitLuaStyle(c, itemParam, indexParam);
         } else if (attrName === 'fontSize') {
           if (c.kind() === TK.lbrace) { c.advance(); node.fontSize = c.text(); c.advance(); if (c.kind() === TK.rbrace) c.advance(); }
           else { node.fontSize = c.text(); c.advance(); }
@@ -368,6 +383,7 @@ function emitLuaElement(c, itemParam, indent) {
             if (c.kind() === TK.rbrace) c.advance(); // skip outer }
             var _hBody = _hParts.join(' ').replace(/\s*;\s*$/, '').trim();
             _hBody = _hBody.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+            if (indexParam) _hBody = _hBody.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
             // Convert === to ==, !== to ~=
             _hBody = _hBody.replace(/===/g, '==').replace(/!==/g, '~=');
             node.handler = _hBody || true;
@@ -393,10 +409,10 @@ function emitLuaElement(c, itemParam, indent) {
   if (!selfClosing) {
     if (tagName === 'Text') {
       // Text element: collect text content
-      node.text = emitLuaTextContent(c, itemParam);
+      node.text = emitLuaTextContent(c, itemParam, indexParam);
     } else {
       // Container: collect children
-      node.children = emitLuaChildren(c, itemParam, indent + '  ');
+      node.children = emitLuaChildren(c, itemParam, indent + '  ', indexParam);
     }
     // Skip closing tag </TagName> — lexer emits </ as single TK.lt_slash token
     if (c.kind() === TK.lt_slash) {
@@ -423,7 +439,7 @@ function emitLuaElement(c, itemParam, indent) {
   return '{ ' + fields.join(', ') + ' }';
 }
 
-function emitLuaChildren(c, itemParam, indent) {
+function emitLuaChildren(c, itemParam, indent, indexParam) {
   var children = [];
   var _chLastPos = -1;
   while (c.pos < c.count && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
@@ -435,13 +451,27 @@ function emitLuaChildren(c, itemParam, indent) {
 
     // Child element
     if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
-      children.push(emitLuaElement(c, itemParam, indent));
+      children.push(emitLuaElement(c, itemParam, indent, indexParam));
       continue;
     }
 
     // Brace expression child
     if (c.kind() === TK.lbrace) {
       c.advance();
+
+      // {children} prop: walk call-site children JSX
+      if (c.kind() === TK.identifier && c.text() === 'children' &&
+          c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.rbrace &&
+          ctx._compChildrenPos) {
+        c.advance(); // skip 'children'
+        if (c.kind() === TK.rbrace) c.advance(); // skip }
+        var _chSaved = c.save();
+        c.restore(ctx._compChildrenPos);
+        var _chResult = emitLuaChildren(c, itemParam, indent, indexParam);
+        c.restore(_chSaved);
+        for (var _chi = 0; _chi < _chResult.length; _chi++) children.push(_chResult[_chi]);
+        continue;
+      }
 
       // Conditional: cond && <Element/> or ternary: cond ? <A/> : <B/>
       if (c.kind() === TK.identifier) {
@@ -456,13 +486,14 @@ function emitLuaChildren(c, itemParam, indent) {
         if (c.kind() === TK.question) {
           c.advance(); // skip ?
           var _ternCond = condParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+          if (indexParam) _ternCond = _ternCond.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
           // Convert === to ==, !== to ~=
           _ternCond = _ternCond.replace(/===/g, '==').replace(/!==/g, '~=');
           // Parse true branch
           if (c.kind() === TK.lparen) c.advance();
           var _trueBranch = '';
           if (c.kind() === TK.lt) {
-            _trueBranch = emitLuaElement(c, itemParam, indent);
+            _trueBranch = emitLuaElement(c, itemParam, indent, indexParam);
           }
           if (c.kind() === TK.rparen) c.advance();
           // Skip : (colon token)
@@ -471,7 +502,7 @@ function emitLuaChildren(c, itemParam, indent) {
           if (c.kind() === TK.lparen) c.advance();
           var _falseBranch = '';
           if (c.kind() === TK.lt) {
-            _falseBranch = emitLuaElement(c, itemParam, indent);
+            _falseBranch = emitLuaElement(c, itemParam, indent, indexParam);
           }
           if (c.kind() === TK.rparen) c.advance();
           // Emit both branches with conditions (love2d pattern)
@@ -506,7 +537,7 @@ function emitLuaChildren(c, itemParam, indent) {
           // Check if next is JSX
           if (c.kind() === TK.lt || c.kind() === TK.lparen) {
             if (c.kind() === TK.lparen) c.advance(); // skip optional (
-            var innerEl = emitLuaElement(c, itemParam, indent);
+            var innerEl = emitLuaElement(c, itemParam, indent, indexParam);
             if (c.kind() === TK.rparen) c.advance();
             children.push('(' + condExpr + ') and ' + innerEl + ' or nil');
             if (c.kind() === TK.rbrace) c.advance();
@@ -538,7 +569,7 @@ function emitLuaChildren(c, itemParam, indent) {
               if (c.kind() === TK.rparen) c.advance(); // )
               if (c.kind() === TK.arrow) c.advance(); // =>
               if (c.kind() === TK.lparen) c.advance(); // (
-              var _cmChild = emitLuaElement(c, _cmParam, indent + '  ');
+              var _cmChild = emitLuaElement(c, _cmParam, indent + '  ', indexParam);
               // Consume closing parens/braces
               while (c.kind() === TK.rparen) c.advance();
               if (c.kind() === TK.rbrace) c.advance();
@@ -554,6 +585,7 @@ function emitLuaChildren(c, itemParam, indent) {
       }
 
       // Nested .map(): item.children.map((child) => (...))
+      // or: item.children.map((child, idx) => (...))
       if (c.kind() === TK.identifier) {
         var saved2 = c.save();
         var src = c.text();
@@ -570,17 +602,35 @@ function emitLuaChildren(c, itemParam, indent) {
               if (c.kind() === TK.lparen) c.advance(); // inner (
               var innerParam = c.text();
               c.advance(); // param name
+              // Handle optional index param: (item, idx)
+              var innerIndexParam = null;
+              if (c.kind() === TK.comma) {
+                c.advance(); // ,
+                if (c.kind() === TK.identifier) {
+                  innerIndexParam = c.text();
+                  c.advance(); // index param name
+                }
+              }
               if (c.kind() === TK.rparen) c.advance(); // )
               if (c.kind() === TK.arrow) c.advance(); // =>
               if (c.kind() === TK.lparen) c.advance(); // (
-              var innerChild = emitLuaElement(c, innerParam, indent + '  ');
+              // Inner template: emitLuaElement replaces innerParam→_item, innerIndexParam→(_i - 1).
+              // We post-process to _nitem/(_ni - 1) so the callback doesn't shadow outer _item/_i.
+              var innerChild = emitLuaElement(c, innerParam, indent + '  ', innerIndexParam);
               if (c.kind() === TK.rparen) c.advance();
               if (c.kind() === TK.rparen) c.advance();
               if (c.kind() === TK.rparen) c.advance();
               if (c.kind() === TK.rbrace) c.advance();
-              // Emit nested for loop as inline Lua
+              // Rename inner _item→_nitem and (_i - 1)→(_ni - 1) to avoid shadowing
+              innerChild = innerChild.replace(/_item/g, '_nitem');
+              innerChild = innerChild.replace(/\(_i - 1\)/g, '(_ni - 1)');
+              // Now replace outer index refs (still in source form, e.g. 'gi')
+              if (indexParam) {
+                innerChild = innerChild.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
+              }
               var srcExpr = src === itemParam ? '_item' : src;
-              children.push('__luaNestedMap(' + srcExpr + '.' + field + ', function(' + innerParam + ') return ' + innerChild + ' end)');
+              var _cbParams = innerIndexParam ? '_nitem, _ni' : '_nitem';
+              children.push('__luaNestedMap(' + srcExpr + '.' + field + ', function(' + _cbParams + ') return ' + innerChild + ' end)');
               continue;
             }
           }
@@ -605,7 +655,9 @@ function emitLuaChildren(c, itemParam, indent) {
 }
 
 // Main entry: emit a complete Lua rebuildList function for a map
-function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag) {
+var _luaNestedMapHelperEmitted = false;
+
+function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag, indexParam) {
   // c is positioned at the first child of the map body (after the arrow)
   // Walk the JSX and emit Lua
   _luaEmitIter = 0; // reset iteration counter per map
@@ -613,12 +665,26 @@ function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag) {
   // Skip optional ( wrapper
   if (c.kind() === TK.lparen) c.advance();
 
-  var bodyLua = emitLuaElement(c, itemParam, '      ');
+  var bodyLua = emitLuaElement(c, itemParam, '      ', indexParam);
 
   // Skip optional ) and ))
   while (c.kind() === TK.rparen) c.advance();
 
   var fn = '';
+  // Emit the nested map helper once (before any rebuilder that might use it)
+  if (!_luaNestedMapHelperEmitted) {
+    fn += '-- Nested map helper (uses _ni/_nitem to avoid shadowing outer _i/_item)\n';
+    fn += 'function __luaNestedMap(arr, fn)\n';
+    fn += '  if not arr then return nil end\n';
+    fn += '  local result = {}\n';
+    fn += '  for _ni, _nitem in ipairs(arr) do\n';
+    fn += '    result[#result + 1] = fn(_nitem, _ni)\n';
+    fn += '  end\n';
+    fn += '  return { children = result }\n';
+    fn += 'end\n';
+    fn += '\n';
+    _luaNestedMapHelperEmitted = true;
+  }
   fn += 'function __rebuildLuaMap' + mapIdx + '()\n';
   fn += '  __clearLuaNodes()\n';
   fn += '  local wrapper = __mw' + mapIdx + '\n';
@@ -633,16 +699,6 @@ function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag) {
   fn += '    tmpl[#tmpl + 1] = ' + bodyLua + '\n';
   fn += '  end\n';
   fn += '  __declareChildren(wrapper, tmpl)\n';
-  fn += 'end\n';
-  fn += '\n';
-  fn += '-- Nested map helper\n';
-  fn += 'function __luaNestedMap(arr, fn)\n';
-  fn += '  if not arr then return nil end\n';
-  fn += '  local result = {}\n';
-  fn += '  for _, v in ipairs(arr) do\n';
-  fn += '    result[#result + 1] = fn(v)\n';
-  fn += '  end\n';
-  fn += '  return { children = result }\n';
   fn += 'end\n';
 
   return fn;

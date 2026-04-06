@@ -204,7 +204,75 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     const maybeArr = c.text();
     const oa = ctx.objectArrays.find(o => o.getter === maybeArr);
     if (oa) {
+      // ALL maps route to Lua — walk to callback body for Lua template,
+      // run Zig parser for OA bookkeeping, then register Lua rebuilder.
+      var _ciSaved = c.save();
+      // Walk past identifier.map( to find callback params and JSX body
+      c.advance(); // skip identifier
+      while (c.pos < c.count) {
+        if (c.kind() === TK.dot && c.pos + 2 < c.count &&
+            c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'map' &&
+            c.kindAt(c.pos + 2) === TK.lparen) {
+          c.advance(); c.advance(); c.advance(); // . map (
+          break;
+        }
+        c.advance();
+      }
+      if (c.kind() === TK.lparen) c.advance();
+      var _ciItemParam = c.kind() === TK.identifier ? c.text() : '_item';
+      c.advance();
+      var _ciIdxParam = null;
+      if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { _ciIdxParam = c.text(); c.advance(); } }
+      if (c.kind() === TK.rparen) c.advance();
+      if (c.kind() === TK.arrow) c.advance();
+      // Skip block body to find JSX
+      if (c.kind() === TK.lbrace) {
+        c.advance();
+        var _ciBlockDepth = 0;
+        while (c.pos < c.count) {
+          if (c.kind() === TK.lbrace) _ciBlockDepth++;
+          else if (c.kind() === TK.rbrace) {
+            if (_ciBlockDepth === 0) break;
+            _ciBlockDepth--;
+          }
+          if (_ciBlockDepth === 0 &&
+              ((c.kind() === TK.identifier && c.text() === 'return') ||
+               (c.kind() === TK.keyword && c.text() === 'return'))) {
+            c.advance();
+            break;
+          }
+          c.advance();
+        }
+      }
+      var _ciLuaJsxPos = c.save();
+
+      // Run Zig parser for OA bookkeeping
+      c.restore(_ciSaved);
       result = tryParseMap(c, oa);
+      var _ciAfterPos = c.save();
+
+      if (result) {
+        // Tag the map as lua_runtime
+        var _ciMapIdx = -1;
+        for (var _cimi = 0; _cimi < ctx.maps.length; _cimi++) {
+          if (ctx.maps[_cimi].oa === oa) _ciMapIdx = _cimi;
+        }
+        if (_ciMapIdx >= 0) ctx.maps[_ciMapIdx].mapBackend = 'lua_runtime';
+
+        // Build Lua rebuilder from the token-walked JSX body
+        if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+        var _ciLuaIdx = ctx._luaMapRebuilders.length;
+        c.restore(_ciLuaJsxPos);
+        var _ciLuaBody = emitLuaRebuildList(_ciLuaIdx, c, _ciItemParam, null, _ciIdxParam);
+        c.restore(_ciAfterPos);
+        ctx._luaMapRebuilders.push({
+          index: _ciLuaIdx,
+          luaCode: _ciLuaBody,
+          rawSource: maybeArr,
+          varName: maybeArr
+        });
+        result = { nodeExpr: '.{ .test_id = "__lmw' + _ciLuaIdx + '" }', _luaMapWrapper: _ciLuaIdx };
+      }
       while (c.kind() === TK.rparen || c.kind() === TK.semicolon) c.advance();
     }
     if (!result) result = { nodeExpr: '.{}' };

@@ -94,7 +94,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
     // Restore cursor to JSX body start for token walking
     c.restore(_luaJsxPos);
-    var _luaBody = emitLuaRebuildList(_luaIdx, c, header.itemParam || '_item', null);
+    var _luaBody = emitLuaRebuildList(_luaIdx, c, header.itemParam || '_item', null, header.indexParam);
     // Restore cursor to after the parse so the rest of compilation continues
     c.restore(_afterParsePos);
     ctx._luaMapRebuilders.push({
@@ -109,12 +109,34 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     return true;
   }
 
+  // All computed chain maps go to Lua — same pattern as render-local path above.
+  var _ccLuaJsxPos = c.save();
   var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
 
   c.restore(mapPos);
   var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
   if (!mapResult) { c.restore(saved); return false; }
-  children.push(mapResult);
+  var _ccAfterPos = c.save();
+
+  var _ccMapIdx = -1;
+  for (var _ccmi = 0; _ccmi < ctx.maps.length; _ccmi++) {
+    if (ctx.maps[_ccmi].oa === oa) { _ccMapIdx = _ccmi; break; }
+  }
+  if (_ccMapIdx >= 0) ctx.maps[_ccMapIdx].mapBackend = 'lua_runtime';
+
+  if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+  var _ccLuaIdx = ctx._luaMapRebuilders.length;
+  var _ccRawSource = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
+  c.restore(_ccLuaJsxPos);
+  var _ccLuaBody = emitLuaRebuildList(_ccLuaIdx, c, header.itemParam || '_item', null, header.indexParam);
+  c.restore(_ccAfterPos);
+  ctx._luaMapRebuilders.push({
+    index: _ccLuaIdx,
+    luaCode: _ccLuaBody,
+    rawSource: _ccRawSource,
+    varName: baseName
+  });
+  children.push({ nodeExpr: '.{ .test_id = "__lmw' + _ccLuaIdx + '" }', _luaMapWrapper: _ccLuaIdx });
   if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
   return true;
 }
@@ -281,7 +303,8 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       if (c.kind() === TK.lparen) c.advance(); // skip inner ( for destructured params
       var _nmParam = c.kind() === TK.identifier ? c.text() : '_item';
       c.advance(); // skip param
-      if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) c.advance(); } // skip optional index param
+      var _nmIdxParam = null;
+      if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { _nmIdxParam = c.text(); c.advance(); } } // capture optional index param
       if (c.kind() === TK.rparen) c.advance(); // )
       if (c.kind() === TK.arrow) c.advance(); // =>
       // Now at the JSX body — use the token walker for Lua template
@@ -300,7 +323,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       }
       c.restore(_rSaved);
       var _nmRawSource = _rawTokens.join(' ').replace(/\s*\.\s*$/, '');
-      var _nmLuaBody = emitLuaRebuildList(_nmIdx, c, _nmParam, null);
+      var _nmLuaBody = emitLuaRebuildList(_nmIdx, c, _nmParam, null, _nmIdxParam);
       // Consume closing parens/braces from the .map() call
       while (c.kind() === TK.rparen) c.advance();
       if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
@@ -341,7 +364,8 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     if (c.kind() === TK.lparen) c.advance();
     var _dynItemParam = c.kind() === TK.identifier ? c.text() : '_item';
     c.advance();
-    if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) c.advance(); }
+    var _dynIdxParam = null;
+    if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { _dynIdxParam = c.text(); c.advance(); } }
     if (c.kind() === TK.rparen) c.advance();
     if (c.kind() === TK.arrow) c.advance();
     // Skip block body to find 'return' before JSX
@@ -388,7 +412,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _dynLuaIdx = ctx._luaMapRebuilders.length;
     c.restore(_luaJsxPos);
-    var _dynLuaBody = emitLuaRebuildList(_dynLuaIdx, c, _dynItemParam, null);
+    var _dynLuaBody = emitLuaRebuildList(_dynLuaIdx, c, _dynItemParam, null, _dynIdxParam);
     c.restore(_afterParsePos);
 
     // Step 5: Register Lua rebuilder and push wrapper placeholder
