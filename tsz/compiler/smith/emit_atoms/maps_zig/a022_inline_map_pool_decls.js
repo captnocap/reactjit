@@ -1,4 +1,4 @@
-// ─�� Emit Atom 022: Inline map pool declarations ───��─────────────
+// ── Emit Atom 022: Inline map pool declarations ─────────────────
 // Index: 22
 // Group: maps_zig
 // Target: zig
@@ -20,7 +20,30 @@ function _a022_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return m.isInline; });
 }
 
-function _a022_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
+function _a022_emit(ctx, meta) {
+  void meta;
+  const mapMeta = ctx._mapEmitMeta;
+  if (!mapMeta) return "";
+  const mapOrder = mapMeta.mapOrder;
+
+  let out = '';
+  for (const mi of mapOrder) {
+    const map = ctx.maps[mi];
+    if (!map.isInline) continue;
+    if (map.mapBackend === 'lua_runtime') continue;
+    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
+      out += `// computed-map colors: ${map.oa._computedColors.join(' ')}\n`;
+    }
+    if (map.oa && map.oa._computedHasTernary) {
+      out += `// .none else .flex\n`;
+    }
+    const parentMi = ctx.maps.indexOf(map.parentMap);
+    map._parentMi = parentMi;
+    out += emitMapDecl(mi, 'inline');
+  }
+
+  return out;
+}
 
 _emitAtoms[22] = {
   id: 22,

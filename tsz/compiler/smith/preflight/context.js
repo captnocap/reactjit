@@ -24,41 +24,16 @@ function detectPreflightLane(ctx, intents) {
   return lane;
 }
 
-// Classify each map as 'zig_oa' or 'lua_runtime'.
-// Clean OA-backed structural data → Zig emit.
-// Runtime/computed/chained/render-local sources → LuaJIT emit.
+// Classify each map as 'lua_runtime'.
+// All maps go through LuaJIT — dynamic list rebuild, no fixed-size pools.
+// Ported from love2d/scripts/tslx_compile.mjs rebuildList pattern:
+// Lua iterates items, builds template table, calls __declareChildren.
+// No MAX caps, no arena pools, no 6 copy-pasted Zig variants.
 function classifyMapBackends(ctx) {
   for (var mi = 0; mi < ctx.maps.length; mi++) {
     var map = ctx.maps[mi];
-    var oa = map.oa;
-
-    // Already classified (e.g. by _luaMapRebuilders detection in brace.js)
     if (map.mapBackend) continue;
-
-    // No OA → runtime
-    if (!oa) {
-      map.mapBackend = 'lua_runtime';
-      continue;
-    }
-
-    // OA has _computedExpr → runtime (data comes from JS eval, not registered state)
-    if (oa._computedExpr) {
-      // Exception: _computedExpr that is just a getter name (direct state OA) → zig_oa
-      var isDirectGetter = /^[A-Za-z_]\w*$/.test(oa._computedExpr) && isGetter(oa._computedExpr);
-      if (!isDirectGetter) {
-        map.mapBackend = 'lua_runtime';
-        continue;
-      }
-    }
-
-    // OA source is a render-local → runtime
-    if (oa.getter && ctx.renderLocals && ctx.renderLocals[oa.getter] !== undefined) {
-      map.mapBackend = 'lua_runtime';
-      continue;
-    }
-
-    // Default: clean OA-backed → Zig
-    map.mapBackend = 'zig_oa';
+    map.mapBackend = 'lua_runtime';
   }
 }
 
@@ -84,12 +59,8 @@ function buildPreflightScanState(ctx, intents) {
     handlerNameSet[ctx.handlers[hi].name] = true;
   }
 
-  var luaMapCount = 0;
+  var luaMapCount = ctx.maps.length;
   var zigMapCount = 0;
-  for (var mci = 0; mci < ctx.maps.length; mci++) {
-    if (ctx.maps[mci].mapBackend === 'lua_runtime') luaMapCount++;
-    else zigMapCount++;
-  }
 
   return {
     intents: intents,

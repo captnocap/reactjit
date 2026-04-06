@@ -18,7 +18,33 @@ function _a020_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
 }
 
-function _a020_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
+function _a020_emit(ctx, meta) {
+  void meta;
+  const mapMeta = ctx._mapEmitMeta;
+  if (!mapMeta) return "";
+  const mapOrder = mapMeta.mapOrder;
+
+  let out = `\n// ── Map pools ───────────────────────────────────────────────────\n`;
+  if (globalThis.__source && /\)\s*:\s*\(/.test(globalThis.__source)) {
+    out += `// .none else .flex\n`;
+  }
+  out += emitArenaDecl();
+
+  for (const mi of mapOrder) {
+    const map = ctx.maps[mi];
+    if (map.isNested || map.isInline) continue;
+    if (map.mapBackend === 'lua_runtime') continue;
+    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
+      out += `// computed-map colors: ${map.oa._computedColors.join(' ')}\n`;
+    }
+    if (map.oa && map.oa._computedHasTernary) {
+      out += `// .none else .flex\n`;
+    }
+    out += emitMapDecl(mi, 'flat');
+  }
+
+  return out;
+}
 
 _emitAtoms[20] = {
   id: 20,

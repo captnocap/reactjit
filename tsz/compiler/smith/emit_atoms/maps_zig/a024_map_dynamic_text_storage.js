@@ -19,7 +19,36 @@ function _a024_applies(ctx, meta) {
   return ctx.dynTexts.some(function(dt) { return dt.inMap; });
 }
 
-function _a024_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
+function _a024_emit(ctx, meta) {
+  void meta;
+  const emitMeta = ctx._mapEmitMeta;
+  if (!emitMeta) return "";
+  const mapOrder = emitMeta.mapOrder;
+  const mapMeta = emitMeta.mapMeta || (emitMeta.mapMeta = []);
+
+  let out = '';
+  for (const mi of mapOrder) {
+    const map = ctx.maps[mi];
+    const mapType = map.isInline ? 'inline' : map.isNested ? 'nested' : 'flat';
+    if (map.mapBackend === 'lua_runtime') continue;
+
+    const mapDynTexts = ctx.dynTexts.filter(function(dt) {
+      return dt.inMap && dt.mapIdx === mi;
+    });
+    const declaredBufIds = new Set();
+    for (const dt of mapDynTexts) {
+      dt._mapTextIdx = dt.bufId;
+      if (declaredBufIds.has(dt.bufId)) continue;
+      declaredBufIds.add(dt.bufId);
+      out += emitTextStorage(mi, dt.bufId, mapType);
+    }
+
+    if (!mapMeta[mi]) mapMeta[mi] = {};
+    mapMeta[mi].mapDynTexts = mapDynTexts;
+  }
+
+  return out;
+}
 
 _emitAtoms[24] = {
   id: 24,

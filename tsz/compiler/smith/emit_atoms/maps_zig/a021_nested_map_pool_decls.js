@@ -20,7 +20,34 @@ function _a021_applies(ctx, meta) {
   return ctx.maps.some(function(m) { return m.isNested; });
 }
 
-function _a021_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
+function _a021_emit(ctx, meta) {
+  void meta;
+  const mapMeta = ctx._mapEmitMeta;
+  if (!mapMeta) return "";
+  const mapOrder = mapMeta.mapOrder;
+
+  let out = '';
+  for (const mi of mapOrder) {
+    const map = ctx.maps[mi];
+    if (!map.isNested) continue;
+    if (map.mapBackend === 'lua_runtime') continue;
+    if (map.oa && map.oa._computedColors && map.oa._computedColors.length > 0) {
+      out += `// computed-map colors: ${map.oa._computedColors.join(' ')}\n`;
+    }
+    if (map.oa && map.oa._computedHasTernary) {
+      out += `// .none else .flex\n`;
+    }
+    const parentMap = ctx.maps.find(function(parent) {
+      return parent.oaIdx === map.parentOaIdx && !parent.isNested;
+    });
+    const parentMi = parentMap ? ctx.maps.indexOf(parentMap) : 0;
+    map._parentMi = parentMi;
+    const parentPoolSize = parentMap && !parentMap.isNested ? 128 : 64;
+    out += emitMapDecl(mi, 'nested', parentPoolSize);
+  }
+
+  return out;
+}
 
 _emitAtoms[21] = {
   id: 21,

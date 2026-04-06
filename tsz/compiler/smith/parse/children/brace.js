@@ -120,7 +120,7 @@ function tryParseBraceChild(c, children) {
         const mapBufId = ctx.mapDynCount || 0;
         ctx.mapDynCount = mapBufId + 1;
         ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true, _luaTemplateRaw: raw });
       } else {
         const bufId = ctx.dynCount;
         const staticText = fmt.replace(/\{[ds](?::\.?\d+)?\}/g, '');
@@ -160,7 +160,7 @@ function tryParseBraceChild(c, children) {
           args = `_oa${oaIdx}_${field}[_i]`;
         }
         ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true, _luaTextField: field });
         return true;
       }
     } else if (ctx.currentMap.isSimpleArray && c.kind() === TK.rbrace) {

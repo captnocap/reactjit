@@ -67,13 +67,44 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
       if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
       if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
+      // Attach luaNode for map emit
+      if (ctx.currentMap) {
+        var _dln = {};
+        if (styleFields.length > 0) {
+          _dln.style = {};
+          for (var _dsi = 0; _dsi < styleFields.length; _dsi++) {
+            var _dsf = styleFields[_dsi];
+            var _deq = _dsf.indexOf(' = ');
+            if (_deq < 0) continue;
+            _dln.style[_dsf.slice(1, _deq)] = _dsf.slice(_deq + 3).replace(/^\./, '');
+          }
+        }
+        if (nodeFields) {
+          for (var _dni = 0; _dni < nodeFields.length; _dni++) {
+            var _dnf = nodeFields[_dni];
+            if (typeof _dnf === 'string') {
+              if (_dnf.startsWith('.font_size = ')) _dln.fontSize = _dnf.slice(13);
+              if (_dnf.startsWith('.text_color = ')) _dln.color = _dnf.slice(14);
+            }
+          }
+        }
+        // Text: use raw field or template from brace parser
+        if (dynChild._luaTextField) {
+          _dln.text = { field: dynChild._luaTextField };
+        } else if (dynChild._luaTemplateRaw) {
+          _dln.text = dynChild._luaTemplateRaw;
+        }
+        result.luaNode = _dln;
+      }
       return result;
     }
     // Single static text child — hoist to .text field
+    var _hoistedStaticText = null;
     if (children.length === 1 && !children[0].isGlyph && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
       const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
       if (m) {
         parts.push(`.text = "${m[1]}"`);
+        _hoistedStaticText = m[1];
         children = [];
       }
     }
@@ -294,7 +325,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         _ln.style[_sk] = _sv;
       }
     }
-    // Text: extract from nodeFields or children
+    // Text + nodeFields
     if (nodeFields) {
       for (var _ni = 0; _ni < nodeFields.length; _ni++) {
         var _nf = nodeFields[_ni];
@@ -304,6 +335,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
         }
       }
+    }
+    // Static text hoisted from single child
+    if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
+      _ln.text = _hoistedStaticText;
     }
     // Handler
     if (handlerRef) {
@@ -315,6 +350,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       _ln.children = [];
       for (var _ci = 0; _ci < children.length; _ci++) {
         var _ch = children[_ci];
+        if (!_ch.luaNode) { globalThis.__dbg = globalThis.__dbg || []; globalThis.__dbg.push('[LUA_NODE_MISS] tag=' + tag + ' child=' + _ci + ' keys=' + Object.keys(_ch).join(',') + ' nodeExpr=' + (_ch.nodeExpr || '').substring(0, 60)); }
         if (_ch.luaNode) {
           // Conditionals
           if (_ch.condIdx !== undefined && ctx.conditionals[_ch.condIdx]) {

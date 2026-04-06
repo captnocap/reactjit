@@ -278,6 +278,13 @@ smith/emit/dyn_text.js
 smith/emit/handlers.js
 smith/emit/effects.js
 smith/emit/object_arrays.js
+smith/emit_ops/emit_map_decl.js
+smith/emit_ops/emit_text_storage.js
+smith/emit_ops/emit_handler_storage.js
+smith/emit_ops/emit_per_item_arr.js
+smith/emit_ops/emit_arena.js
+smith/emit_ops/wrap_condition.js
+smith/emit_ops/compute_map_meta.js
 smith/emit/map_pools.js
 smith/emit/lua_maps.js
 smith/emit/runtime_updates.js
@@ -316,6 +323,11 @@ smith/emit_atoms/maps_zig/a025_map_handler_ptrs.js
 smith/emit_atoms/maps_zig/a026_flat_map_rebuild.js
 smith/emit_atoms/maps_zig/a027_nested_map_rebuild.js
 smith/emit_atoms/maps_zig/a028_inline_map_rebuild.js
+smith/emit_atoms/maps_lua/lua_map_subs.js
+smith/emit_atoms/maps_lua/lua_map_style.js
+smith/emit_atoms/maps_lua/lua_map_text.js
+smith/emit_atoms/maps_lua/lua_map_handler.js
+smith/emit_atoms/maps_lua/lua_map_node.js
 smith/emit_atoms/maps_lua/a029_lua_map_wrapper_registration.js
 smith/emit_atoms/maps_lua/a030_lua_map_rebuilder_functions.js
 smith/emit_atoms/maps_lua/a031_lua_nested_helpers.js

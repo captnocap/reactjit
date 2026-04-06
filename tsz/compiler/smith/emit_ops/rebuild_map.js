@@ -1,33 +1,23 @@
-// ── Emit Atom 026: Flat map rebuild ─────────────────────────────
-// Index: 26
-// Group: maps_zig
-// Target: zig
-// Status: complete
-// Current owner: emit/map_pools.js
+// ── Emit Op: rebuild_map — THE recursive map rebuild ────────────
+// Atom 16 from 003-real-atoms.md
 //
-// Trigger: top-level OA-backed maps (not nested, not inline).
-// Output target: _rebuildMapN() function with arena alloc, per-item
-//   text formatting, handler ptr init, per-item array fills, per-item
-//   conditionals, nested/inline sub-rebuilds, inner array construction,
-//   pool node assignment, filter display toggles, variant patches,
-//   deferred canvas attrs, and parent array binding.
+// One function that handles flat, nested, and inline map rebuilds.
+// Replaces a026_flat_map_rebuild + a027_nested_map_rebuild + a028_inline_map_rebuild.
+// Flat/nested/inline are NOT separate concepts — they're the same rebuild at different depths.
 //
-// Notes:
-//   This is the largest single atom — it contains the full flat map
-//   rebuild loop from emitMapPoolRebuilds() lines 359-1166.
-//   Nested and inline rebuilds are emitted INSIDE this loop body
-//   (they run per parent iteration), but are extracted to atoms 027/028
-//   as reference. In the live emitter they remain inlined here.
+// The orchestrator calls rebuildMap() once. It iterates all top-level (non-nested,
+// non-inline) maps and emits _rebuildMapN() functions. Nested and inline sub-rebuilds
+// are emitted INSIDE the parent loop body (they run per parent iteration).
+//
+// Uses: atoms 2 (replace_field_refs), 3 (wire_handler_ptrs), 4 (emit_dyn_text),
+//       5 (emit_handler_fmt), 6 (emit_inner_array), 7 (emit_pool_node),
+//       8 (emit_display_toggle) — composes them.
+//
+// Status: extracted from a026/a027/a028 — byte-identical output.
 
-// wrapCondition is a global function defined in emit_ops/wrap_condition.js
+// _wrapMapCondition is a global function defined in a019_map_metadata.js
 
-function _a026_applies(ctx, meta) {
-  void meta;
-  if (!ctx.maps || ctx.maps.length === 0) return false;
-  return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
-}
-
-function _a026_emit(ctx, meta) {
+function rebuildMap(ctx, meta) {
   var _mapMeta = meta.mapMeta;
   var mapOrder = meta.mapOrder;
   var _promotedToPerItem = meta.promotedToPerItem;
@@ -51,17 +41,14 @@ function _a026_emit(ctx, meta) {
     out += '    _map_pool_' + mi + ' = _pool_arena.allocator().alloc(Node, _map_count_' + mi + ') catch unreachable;\n';
     out += '    for (0.._map_count_' + mi + ') |_i| {\n';
 
-    // Emit per-item text formatting
+    // ── Per-item text formatting ──
     for (var _dti = 0; _dti < mapDynTexts.length; _dti++) {
       var dt = mapDynTexts[_dti];
       var ti = dt._mapTextIdx;
       out += '        _map_texts_' + mi + '_' + ti + '[_i] = std.fmt.bufPrint(&_map_text_bufs_' + mi + '_' + ti + '[_i], "' + dt.fmtString + '", .{ ' + dt.fmtArgs + ' }) catch "";\n';
     }
 
-    // Emit handler ptr init BEFORE per-item arrays that reference them.
-    // When handlers use OA field refs, the ptrs are built inline per-iteration
-    // (not pre-computed in _initMapLuaPtrs). They must be set before @memcpy
-    // copies js_on_press into nodes, otherwise nodes get null pointers.
+    // ── Early handler ptr init (field-ref handlers before @memcpy) ──
     {
       var _earlyFieldRefsMap = m._handlerFieldRefsMap || {};
       for (var _ehi = 0; _ehi < mapHandlers.length; _ehi++) {
@@ -89,8 +76,7 @@ function _a026_emit(ctx, meta) {
       }
     }
 
-    // Pre-count how many .text = "" slots are in inner array vs per-item arrays
-    // so we can assign dynTexts in JSX order (inner first, then per-item)
+    // ── Debug: map text tracking ──
     if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
       ctx._debugLines.push('[MAP_TEXT_DEBUG] map ' + mi + ': ' + mapDynTexts.length + ' dynTexts');
       for (var _dbi = 0; _dbi < mapDynTexts.length; _dbi++) {
@@ -113,9 +99,8 @@ function _a026_emit(ctx, meta) {
       if (innerDecl) innerTextSlots = (innerDecl.match(/\.text = ""/g) || []).length;
     }
 
-    // Fill per-item component arrays
+    // ── Fill per-item component arrays ──
     var dtConsumed = 0;
-    // Per-item child arrays come FIRST in JSX depth-first order, inner array texts come LAST
     var dtSkippedForInner = 0;
     for (var _pidx = 0; _pidx < m._mapPerItemDecls.length; _pidx++) {
       var pid = m._mapPerItemDecls[_pidx];
@@ -135,7 +120,6 @@ function _a026_emit(ctx, meta) {
         }
       }
       // Replace tagged map text refs in this per-item array
-      // Tags are "__mtN__" where N is the specific text buffer index
       var _taggedCount = 0;
       for (var _tdi = 0; _tdi < mapDynTexts.length; _tdi++) {
         dt = mapDynTexts[_tdi];
@@ -145,7 +129,6 @@ function _a026_emit(ctx, meta) {
         if (fixedContent !== before) _taggedCount++;
       }
       // Legacy fallback: replace any remaining untagged .text = "" sequentially
-      // Skip entries already consumed by the tagged replacement above
       var pidDtIdx = dtConsumed + _taggedCount;
       dtConsumed += _taggedCount;
       while (pidDtIdx < mapDynTexts.length) {
@@ -158,7 +141,6 @@ function _a026_emit(ctx, meta) {
         dtConsumed++;
       }
       // Replace handler refs in per-item arrays with per-item handler string pointers
-      // Must check ALL maps' handlers since nested map handlers may appear in parent per-item arrays
       var pidPressField = 'lua_on_press';
       for (mj = 0; mj < ctx.maps.length; mj++) {
         var allMH = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === mj; });
@@ -167,7 +149,6 @@ function _a026_emit(ctx, meta) {
           if (mh.luaBody) {
             var escaped = mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             var escapedRegex = escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            // Match both .lua_on_press and .js_on_press — parse.js emits js_on_press for script blocks
             var ptrReplacement = '.' + pidPressField + ' = _map_lua_ptrs_' + mj + '_' + hi + '[_i]';
             if (globalThis.__SMITH_DEBUG_MAP_PTRS) {
               print('[MAP_PTR_WIRE] map=' + mj + ' handler=' + hi + ' field=' + pidPressField + ' escaped="' + escaped.substring(0,60) + '..." replacing in fixedContent(len=' + fixedContent.length + ')');
@@ -179,7 +160,7 @@ function _a026_emit(ctx, meta) {
           fixedContent = fixedContent.replace(new RegExp('\\.on_press = (?:handlers\\.)?' + mh.name, 'g'), ptrReplacement2);
         }
       }
-      // Replace raw map index param (e.g. 'i') with Zig loop variable in ternary conditions
+      // Replace raw map index param with Zig loop variable in ternary conditions
       var idxParam = m.indexParam || 'i';
       if (idxParam !== '_i') {
         fixedContent = fixedContent.replace(new RegExp('\\b' + idxParam + '\\b', 'g'), '@as(i64, @intCast(_i))');
@@ -188,18 +169,15 @@ function _a026_emit(ctx, meta) {
       out += '        @memcpy(_pi_' + pid.name + '_' + mi + ', &[_]Node{ ' + fixedContent + ' });\n';
     }
 
-    // Per-item conditionals (visibility toggling inside map components)
+    // ── Per-item conditionals (visibility toggling) ──
     for (var _ci = 0; _ci < ctx.conditionals.length; _ci++) {
       var cond = ctx.conditionals[_ci];
       if (!cond.arrName || !m._mapPerItemDecls) continue;
-      // Skip conditionals that belong to a different map
       if (cond.inMap && cond.mapIdx !== undefined && cond.mapIdx !== mi) continue;
       pid = m._mapPerItemDecls.find(function(p) { return p.name === cond.arrName; });
       if (!pid) continue;
       var poolArr = '_pi_' + cond.arrName + '_' + mi;
-      // Resolve item.field references to OA field access
       var resolvedExpr = cond.condExpr;
-      // DEBUG: trace map cond resolution
       if (resolvedExpr.includes('0.0')) ctx._debugLines.push('[MAP_COND_DEBUG] raw=' + resolvedExpr + ' arrName=' + cond.arrName + ' mapIdx=' + mi + ' itemParam=' + (m.itemParam || '?'));
       if (m.oa) {
         var itemParam = m.itemParam || 'item';
@@ -208,9 +186,8 @@ function _a026_emit(ctx, meta) {
           resolvedExpr = resolvedExpr.replace(new RegExp(itemParam + '\\.' + f.name, 'g'), '_oa' + m.oa.oaIdx + '_' + f.name + '[_i]');
         }
       }
-      // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
       if (/\b0\(/.test(resolvedExpr) || /(?<!\()0\b.*@as/.test(resolvedExpr)) continue;
-      var wrapped = wrapCondition(resolvedExpr);
+      var wrapped = _wrapMapCondition(resolvedExpr);
       if (cond.kind === 'show_hide') {
         out += '        ' + poolArr + '[' + cond.trueIdx + '].style.display = if ' + wrapped + ' .flex else .none;\n';
       } else if (cond.kind === 'ternary_jsx') {
@@ -219,10 +196,10 @@ function _a026_emit(ctx, meta) {
       }
     }
 
-    // Per-item dynamic texts (text formatting inside map components)
+    // ── Per-item dynamic texts (non-inMap) ──
     for (_dti = 0; _dti < ctx.dynTexts.length; _dti++) {
       dt = ctx.dynTexts[_dti];
-      if (dt.inMap) continue;  // inMap texts handled separately
+      if (dt.inMap) continue;
       if (!dt.arrName || !m._mapPerItemDecls) continue;
       pid = m._mapPerItemDecls.find(function(p) { return p.name === dt.arrName; });
       if (!pid) continue;
@@ -231,22 +208,19 @@ function _a026_emit(ctx, meta) {
       out += '        ' + poolArr + '[' + dt.arrIndex + '].' + dtF + ' = std.fmt.bufPrint(&_dyn_buf_' + dt.bufId + ', "' + dt.fmtString + '", .{ ' + dt.fmtArgs + ' }) catch "";\n';
     }
 
-    // Inline nested map rebuilds — for each nested map that belongs to this parent
+    // ── Nested map rebuilds (depth+1: parentIdx filtering) ──
     for (var nmi = 0; nmi < ctx.maps.length; nmi++) {
       var nm = ctx.maps[nmi];
       if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
       var nestedOa = nm.oa;
       var cidx = nestedOa.oaIdx;
-      // Build inner pool by filtering nested OA items by parentIdx
       out += '        // Nested map ' + nmi + ': ' + nm.nestedField + '\n';
       out += '        _map_count_' + nmi + '[_i] = 0;\n';
       out += '        for (0.._oa' + cidx + '_len) |_flat_j| {\n';
       out += '            if (_oa' + cidx + '_parentIdx[_flat_j] == _i) {\n';
       out += '                const _jj = _map_count_' + nmi + '[_i];\n';
       out += '                if (_jj >= MAX_MAP_' + nmi + ') break;\n';
-      // Build nested pool node from template, replacing field refs
       var nestedPoolNode = nm.templateExpr;
-      // Replace nested OA field refs: _oaX_field[_i] → _oaX_field[_flat_j]
       for (var _cfi = 0; _cfi < nestedOa.fields.length; _cfi++) {
         var cf = nestedOa.fields[_cfi];
         if (cf.type === 'string') {
@@ -260,12 +234,10 @@ function _a026_emit(ctx, meta) {
           '_oa' + cidx + '_' + cf.name + '[_flat_j]'
         );
       }
-      // Replace nested map dynamic texts — use _flat_j for flat indexing
       var nestedMapDynTexts = ctx.dynTexts.filter(function(ndt) { return ndt.inMap && ndt.mapIdx === nmi; });
       for (var _ndti = 0; _ndti < nestedMapDynTexts.length; _ndti++) {
         dt = nestedMapDynTexts[_ndti];
         ti = dt._mapTextIdx;
-        // Fix fmt args to use _flat_j instead of _i for nested OA access
         var fixedArgs = dt.fmtArgs;
         for (_cfi = 0; _cfi < nestedOa.fields.length; _cfi++) {
           cf = nestedOa.fields[_cfi];
@@ -278,21 +250,17 @@ function _a026_emit(ctx, meta) {
             '_oa' + cidx + '_' + cf.name + '_lens[_flat_j]'
           );
         }
-        // Also replace bare _j refs (from template literal iterVar) with _flat_j
         fixedArgs = fixedArgs.replace(new RegExp('_oa' + cidx + '_(\\w+)\\[_j\\]', 'g'), '_oa' + cidx + '_$1[_flat_j]');
         fixedArgs = fixedArgs.replace(new RegExp('_oa' + cidx + '_(\\w+)_lens\\[_j\\]', 'g'), '_oa' + cidx + '_$1_lens[_flat_j]');
         fixedArgs = fixedArgs.replace(/@intCast\(_j\)/g, '@intCast(_flat_j)');
         out += '                _map_texts_' + nmi + '_' + ti + '[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_' + nmi + '_' + ti + '[_flat_j], "' + dt.fmtString + '", .{ ' + fixedArgs + ' }) catch "";\n';
       }
-      // Build per-item inner array from the shared children template
       var nestedMeta = _mapMeta[nmi];
       if (nestedMeta && nestedMeta.innerArr && nestedMeta.innerCount > 0) {
-        // Find the shared array declaration to get the node template
         var sharedDecl = (nm.mapArrayDecls || []).find(function(d) { return d.startsWith('var ' + nestedMeta.innerArr); }) ||
                          ctx.arrayDecls.find(function(d) { return d.startsWith('var ' + nestedMeta.innerArr); });
         if (sharedDecl) {
           var innerContent = sharedDecl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-          // Replace tagged map text refs, then fallback to sequential for untagged
           for (_ndti = 0; _ndti < nestedMapDynTexts.length; _ndti++) {
             dt = nestedMapDynTexts[_ndti];
             ti = dt._mapTextIdx;
@@ -304,11 +272,9 @@ function _a026_emit(ctx, meta) {
             innerContent = innerContent.replace('.text = ""', '.text = _map_texts_' + nmi + '_' + ti + '[_flat_j]');
           }
           out += '                _map_inner_' + nmi + '[_flat_j] = [' + nestedMeta.innerCount + ']Node{ ' + innerContent + ' };\n';
-          // Replace children ref in pool node to use per-item inner array
           nestedPoolNode = nestedPoolNode.replace('&' + nestedMeta.innerArr, '&_map_inner_' + nmi + '[_flat_j]');
         }
       }
-      // Replace handler refs + build per-item Lua ptrs with (parent_idx, item_idx, ...field_refs)
       var nestedHandlers = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === nmi; });
       for (var nhi = 0; nhi < nestedHandlers.length; nhi++) {
         var _npRefs = (nm._nestedParentFieldRefs && nm._nestedParentFieldRefs[nhi]) || [];
@@ -356,8 +322,7 @@ function _a026_emit(ctx, meta) {
       out += '        }\n';
     }
 
-    // Inline map rebuilds — separate-OA maps inside this map's JSX template
-    // Love2d pattern: inner loop runs per outer iteration, giving each parent independent child nodes
+    // ── Inline map rebuilds (depth+1: separate-OA per parent) ──
     for (var imi = 0; imi < ctx.maps.length; imi++) {
       var im = ctx.maps[imi];
       if (!im.isInline || im._parentMi !== mi) continue;
@@ -382,15 +347,13 @@ function _a026_emit(ctx, meta) {
           args = args.replace(new RegExp('_oa' + im.oaIdx + '_' + f.name + '_lens\\[_i\\]', 'g'), '_oa' + im.oaIdx + '_' + f.name + '_lens[_j]');
           args = args.replace(new RegExp('_oa' + im.oaIdx + '_' + f.name + '\\[_i\\]', 'g'), '_oa' + im.oaIdx + '_' + f.name + '[_j]');
         }
-        // Do not rewrite @as(i64, @intCast(_i)) here — that is the outer map index; inner uses _j from template_literal / props.
         out += '            _map_texts_' + imi + '_' + ti + '[_i][_j] = std.fmt.bufPrint(&_map_text_bufs_' + imi + '_' + ti + '[_i][_j], "' + dt.fmtString + '", .{ ' + args + ' }) catch "";\n';
       }
 
-      // Handler pointers BEFORE node literals that embed .js_on_press / .lua_on_press (otherwise nodes capture null).
+      // Handler pointers BEFORE node literals
       for (hi = 0; hi < imMeta.mapHandlers.length; hi++) {
         out += '            {\n';
         if (im.parentMap) {
-          // Inline map inside another map — pass both outer (_i) and inner (_j) indices
           out += '                const _n = std.fmt.bufPrint(_map_lua_bufs_' + imi + '_' + hi + '[_i][_j][0..47], "__mapPress_' + imi + '_' + hi + '({d},{d})", .{_i, _j}) catch "";\n';
         } else {
           out += '                const _n = std.fmt.bufPrint(_map_lua_bufs_' + imi + '_' + hi + '[_i][_j][0..47], "__mapPress_' + imi + '_' + hi + '({d})", .{_j}) catch "";\n';
@@ -401,13 +364,11 @@ function _a026_emit(ctx, meta) {
       }
 
       // Per-item array fills with content fixup
-      // IMPORTANT: handler replacement FIRST (before _i→_j), since handler body
-      // strings in declarations match the original pre-fixup content
       var imDtConsumed = 0;
       for (_pidx = 0; _pidx < imMeta.mapPerItemDecls.length; _pidx++) {
         pid = imMeta.mapPerItemDecls[_pidx];
         content = pid.decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-        // 1. Wire handler refs FIRST — match original handler body before content changes
+        // 1. Wire handler refs FIRST
         for (hi = 0; hi < imMeta.mapHandlers.length; hi++) {
           mh = imMeta.mapHandlers[hi];
           if (mh.luaBody) {
@@ -425,7 +386,6 @@ function _a026_emit(ctx, meta) {
             '_oa' + im.oaIdx + '_' + f.name + '[_j][0.._oa' + im.oaIdx + '_' + f.name + '_lens[_j]]');
           content = content.replace(new RegExp('_oa' + im.oaIdx + '_' + f.name + '\\[_i\\]', 'g'), '_oa' + im.oaIdx + '_' + f.name + '[_j]');
         }
-        // Preserve outer-section @as(i64, @intCast(_i)) while rewriting inner-index _i→_j elsewhere
         content = content.replace(/@as\(i64, @intCast\(_i\)\)/g, '__SMITH_OUTER_I64_I__');
         content = content.replace(/@intCast\(_i\)/g, '@intCast(_j)');
         content = content.replace(/__SMITH_OUTER_I64_I__/g, '@as(i64, @intCast(_i))');
@@ -514,13 +474,9 @@ function _a026_emit(ctx, meta) {
         imPool = imPool.replace('.on_press = handlers.' + mh.name, '.' + imPressField + ' = _map_lua_ptrs_' + imi + '_' + hi + '[_i][_j]');
         imPool = imPool.replace('.on_press = ' + mh.name, '.' + imPressField + ' = _map_lua_ptrs_' + imi + '_' + hi + '[_i][_j]');
       }
-      // Per-item conditionals for inline map (display:none toggling)
-      // Resolve raw .tsz names in condition expressions:
-      //   item.field → _oaX_field[_j], parentItem.field → _oaY_field[_i]
-      //   innerIdx → @as(i64, @intCast(_j)), outerIdx → @as(i64, @intCast(_i))
+      // Per-item conditionals for inline map
       function resolveInlineCond(expr) {
         var r = expr;
-        // Inner map item.field → _oaX_field[_j]
         if (imOa) {
           var ip = im.itemParam || 'item';
           for (var _rfi = 0; _rfi < imOa.fields.length; _rfi++) {
@@ -529,7 +485,6 @@ function _a026_emit(ctx, meta) {
             r = r.replace(new RegExp('_oa' + im.oaIdx + '_' + rf.name + '\\[_i\\]', 'g'), '_oa' + im.oaIdx + '_' + rf.name + '[_j]');
           }
         }
-        // Outer map item.field → _oaY_field[_i]
         if (m.oa) {
           var op = m.itemParam || 'col';
           for (var _rfi2 = 0; _rfi2 < m.oa.fields.length; _rfi2++) {
@@ -537,15 +492,10 @@ function _a026_emit(ctx, meta) {
             r = r.replace(new RegExp(op + '\\.' + rf2.name, 'g'), '_oa' + m.oa.oaIdx + '_' + rf2.name + '[_i]');
           }
         }
-        // Index params: outer stays _i, inner becomes _j
         var outerIdx = m.indexParam || 'ci';
         var innerIdx = im.indexParam || 'ti';
-        // Use placeholder to prevent overwrite: outer→__OUTER__, then inner→_j, then __OUTER__→_i
         r = r.replace(new RegExp('\\b' + outerIdx + '\\b', 'g'), '@as(i64, @intCast(__OUTER_IDX__))');
         r = r.replace(new RegExp('\\b' + innerIdx + '\\b', 'g'), '@as(i64, @intCast(_j))');
-        // Inner OA _i refs already handled above.
-        // Any remaining @intCast(_i) are outer-scope references — leave as _i.
-        // Restore outer index placeholder
         r = r.replace(/__OUTER_IDX__/g, '_i');
         return r;
       }
@@ -559,12 +509,12 @@ function _a026_emit(ctx, meta) {
         if (cond.kind === 'show_hide') {
           out += '            ' + poolArr + '[' + cond.trueIdx + '].style.display = if ((' + resolvedExpr + ')) .flex else .none;\n';
         } else if (cond.kind === 'ternary_jsx') {
-          var _w = wrapCondition(resolvedExpr);
+          var _w = _wrapMapCondition(resolvedExpr);
           out += '            ' + poolArr + '[' + cond.trueIdx + '].style.display = if ' + _w + ' .flex else .none;\n';
           out += '            ' + poolArr + '[' + cond.falseIdx + '].style.display = if ' + _w + ' .none else .flex;\n';
         }
       }
-      // Inner array conditionals (applied to _map_inner)
+      // Inner array conditionals
       if (imMeta.innerArr && imMeta.innerCount > 0) {
         for (_ci = 0; _ci < ctx.conditionals.length; _ci++) {
           cond = ctx.conditionals[_ci];
@@ -573,14 +523,14 @@ function _a026_emit(ctx, meta) {
           if (cond.kind === 'show_hide') {
             out += '            _map_inner_' + imi + '[_i][_j][' + cond.trueIdx + '].style.display = if ((' + resolvedExpr + ')) .flex else .none;\n';
           } else if (cond.kind === 'ternary_jsx') {
-            var _w2 = wrapCondition(resolvedExpr);
+            var _w2 = _wrapMapCondition(resolvedExpr);
             out += '            _map_inner_' + imi + '[_i][_j][' + cond.trueIdx + '].style.display = if ' + _w2 + ' .flex else .none;\n';
             out += '            _map_inner_' + imi + '[_i][_j][' + cond.falseIdx + '].style.display = if ' + _w2 + ' .none else .flex;\n';
           }
         }
       }
 
-      // If inner node has display conditional and pool node doesn't, hoist display to pool
+      // Hoist display to pool if needed
       var imHadStyle = imPool.includes('.style');
       if (!imHadStyle) {
         imPool = imPool.replace('.{', '.{ .style = .{},');
@@ -601,28 +551,24 @@ function _a026_emit(ctx, meta) {
       }
     }
 
-    // Emit inner array + pool node
+    // ── Inner array + pool node for flat map ──
     if (innerCount > 0) {
-      // Build inner array items, replacing dynamic text refs
       var innerItems = [];
       if (innerArr) {
         var decl = (m.mapArrayDecls || []).find(function(d) { return d.startsWith('var ' + innerArr); }) ||
                    ctx.arrayDecls.find(function(d) { return d.startsWith('var ' + innerArr); });
         if (decl) {
-          // Replace tagged map text refs in inner array — tags "__mtN__" wire precisely
           var inner = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
           for (_dti = 0; _dti < mapDynTexts.length; _dti++) {
             dt = mapDynTexts[_dti];
             ti = dt._mapTextIdx;
             inner = inner.replace('"__mt' + ti + '__"', '_map_texts_' + mi + '_' + ti + '[_i]');
           }
-          // Legacy fallback: replace any remaining untagged .text = "" sequentially
           for (_dti = dtConsumed; _dti < dtConsumed + innerTextSlots && _dti < mapDynTexts.length; _dti++) {
             dt = mapDynTexts[_dti];
             ti = dt._mapTextIdx;
             inner = inner.replace('.text = ""', '.text = _map_texts_' + mi + '_' + ti + '[_i]');
           }
-          // Replace references to per-item arrays from ALL maps
           for (mj = 0; mj < ctx.maps.length; mj++) {
             otherMap = ctx.maps[mj];
             if (!otherMap._mapPerItemDecls) continue;
@@ -635,7 +581,6 @@ function _a026_emit(ctx, meta) {
               }
             }
           }
-          // Replace nested/inline map shared children refs with per-group pool slices
           for (nmi = 0; nmi < ctx.maps.length; nmi++) {
             nm = ctx.maps[nmi];
             var isChildOfThisMap = (nm.isNested && nm.parentOaIdx === m.oaIdx) || (nm.isInline && nm.parentMap === m);
@@ -644,8 +589,6 @@ function _a026_emit(ctx, meta) {
               inner = inner.replace('&' + nm.parentArr, '_map_pool_' + nmi + '[_i][0.._map_count_' + nmi + '[_i]]');
             }
           }
-          // Replace handler refs in inner array items with per-item handler string pointers
-          // Must check ALL maps' handlers since nested map handlers may appear in parent inner arrays
           var innerPressField = 'lua_on_press';
           for (mj = 0; mj < ctx.maps.length; mj++) {
             allMH = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === mj; });
@@ -661,7 +604,6 @@ function _a026_emit(ctx, meta) {
               inner = inner.replace(new RegExp('\\.on_press = (?:handlers\\.)?' + mh.name, 'g'), '.' + innerPressField + ' = _map_lua_ptrs_' + mj + '_' + hi + '[_i]');
             }
           }
-          // Replace raw map index param with Zig loop variable in inner node ternaries
           var innerIdxParam = m.indexParam || 'i';
           if (innerIdxParam !== '_i') {
             inner = inner.replace(new RegExp('\\b' + innerIdxParam + '\\b', 'g'), '@as(i64, @intCast(_i))');
@@ -671,15 +613,12 @@ function _a026_emit(ctx, meta) {
         }
       }
 
-      // Inner array conditionals (display toggling for conditionals on inner array children)
-      // These are conditionals like {filter == 0 && <Box>...} inside a map template,
-      // where the conditional target is a child of the inner array, not a per-item sub-array.
+      // Inner array conditionals
       if (innerArr) {
         for (_ci = 0; _ci < ctx.conditionals.length; _ci++) {
           cond = ctx.conditionals[_ci];
           if (!cond.arrName || cond.arrName !== innerArr) continue;
           resolvedExpr = cond.condExpr;
-          // Resolve any remaining item.field references to OA field access
           if (m.oa) {
             itemParam = m.itemParam || 'item';
             for (_fi = 0; _fi < m.oa.fields.length; _fi++) {
@@ -687,9 +626,8 @@ function _a026_emit(ctx, meta) {
               resolvedExpr = resolvedExpr.replace(new RegExp(itemParam + '\\.' + f.name, 'g'), '_oa' + m.oa.oaIdx + '_' + f.name + '[_i]');
             }
           }
-          // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
           if (/\b0\(/.test(resolvedExpr) || /(?<!\()0\b.*@as/.test(resolvedExpr)) continue;
-          var _wc = wrapCondition(resolvedExpr);
+          var _wc = _wrapMapCondition(resolvedExpr);
           if (cond.kind === 'show_hide') {
             out += '        _inner_' + mi + '[' + cond.trueIdx + '].style.display = if ' + _wc + ' .flex else .none;\n';
           } else if (cond.kind === 'ternary_jsx') {
@@ -705,9 +643,6 @@ function _a026_emit(ctx, meta) {
         isChildOfThisMap = (nm.isNested && nm.parentOaIdx === m.oaIdx) || (nm.isInline && nm.parentMap === m);
         if (!isChildOfThisMap) continue;
         if (nm.parentArr) {
-          // Find which inner array slot this nested map targets
-          // nm.parentArr is the array name, nm.childIdx is the slot index
-          // Check if parentArr is in the inner array
           var isInnerChild = innerArr && nm.parentArr === innerArr;
           if (isInnerChild) {
             out += '        _inner_' + mi + '[' + nm.childIdx + '].children = _map_pool_' + nmi + '[_i][0.._map_count_' + nmi + '[_i]];\n';
@@ -719,12 +654,11 @@ function _a026_emit(ctx, meta) {
         }
       }
 
-      // Build pool node from template, replacing children ref + handler refs
+      // Build pool node from template
       var poolNode = m.templateExpr;
       if (innerArr) {
         poolNode = poolNode.replace('&' + innerArr, '_inner_' + mi);
       }
-      // Replace per-item array refs in pool node from ALL maps
       for (mj = 0; mj < ctx.maps.length; mj++) {
         otherMap = ctx.maps[mj];
         if (!otherMap._mapPerItemDecls) continue;
@@ -737,8 +671,6 @@ function _a026_emit(ctx, meta) {
           }
         }
       }
-      // Replace handler refs with per-item handler string pointers
-      // Use js_on_press when there's a <script> block (QuickJS dispatch)
       var pressField = 'lua_on_press';
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_POOL_NODE] mi=' + mi + ' pressField=' + pressField + ' poolNode=' + poolNode.substring(0, 300));
@@ -750,20 +682,16 @@ function _a026_emit(ctx, meta) {
         if (globalThis.__SMITH_DEBUG_MAP_PTRS) {
           print('[MAP_PTR_WIRE_POOL] map=' + mi + ' handler=' + hi + ' field=' + pressField + ' escaped="' + escaped.substring(0,60) + '..." poolNode has lua_on_press=' + poolNode.includes('.lua_on_press') + ' js_on_press=' + poolNode.includes('.js_on_press'));
         }
-        // Match both .lua_on_press and .js_on_press — parse.js emits js_on_press for script blocks
         poolNode = poolNode.replace('.lua_on_press = "' + escaped + '"', ptrReplacement);
         poolNode = poolNode.replace('.js_on_press = "' + escaped + '"', ptrReplacement);
         poolNode = poolNode.replace('.on_press = handlers.' + mh.name, ptrReplacement);
         poolNode = poolNode.replace('.on_press = ' + mh.name, ptrReplacement);
       }
-      // Swap field order: .children before .handlers in map pool nodes (matches reference)
       var hm = poolNode.match(/\.handlers = \.{[^}]+\}/);
       var cm = poolNode.match(/\.children = &[\w\[\]_]+/);
       if (hm && cm) {
         poolNode = poolNode.replace(hm[0] + ', ' + cm[0], cm[0] + ', ' + hm[0]);
       }
-      // Handler ptr init moved to top of loop body (before @memcpy reads them).
-      // Debug logging kept here for reference.
       var fieldRefsMap = m._handlerFieldRefsMap || {};
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_HANDLER_DEBUG] map=' + mi + ' fieldRefsMap keys=' + JSON.stringify(Object.keys(fieldRefsMap)) + ' mapHandlers.length=' + mapHandlers.length);
@@ -772,13 +700,10 @@ function _a026_emit(ctx, meta) {
           ctx._debugLines.push('[MAP_HANDLER_DEBUG]   handler[' + _dhi + '] name=' + _dmh.name + ' luaBody=' + (_dmh.luaBody || '').substring(0, 100) + ' fieldRefs=' + JSON.stringify(fieldRefsMap[_dhi] || []));
         }
       }
-      // Replace raw map index param (e.g. 'i') with Zig loop variable in pool node ternary conditions
       var poolIdxParam = m.indexParam || 'i';
       if (poolIdxParam !== '_i') {
         poolNode = poolNode.replace(new RegExp('\\b' + poolIdxParam + '\\b', 'g'), '@as(i64, @intCast(_i))');
       }
-      // If inner node has display conditional and pool node doesn't, hoist display to pool
-      // so hidden items don't occupy gap space in the parent container
       if (innerCount === 1 && !poolNode.includes('.display') && !poolNode.includes('.style')) {
         poolNode = poolNode.replace('.{', '.{ .style = .{},');
         out += '        _map_pool_' + mi + '[_i] = ' + poolNode + ';\n';
@@ -786,25 +711,22 @@ function _a026_emit(ctx, meta) {
       } else {
         out += '        _map_pool_' + mi + '[_i] = ' + poolNode + ';\n';
       }
-      // .filter() display toggles — hide items that don't match filter conditions
+      // .filter() display toggles
       if (m.filterConditions && m.filterConditions.length > 0) {
         var filterParts = [];
         for (var fi = 0; fi < m.filterConditions.length; fi++) {
           var fc = m.filterConditions[fi];
           var fcCond = fc.raw;
-          // Resolve: param.field → OA field access (handle optional spaces around dot from tokenizer)
           if (m.oa) {
             for (var ffi = 0; ffi < m.oa.fields.length; ffi++) {
               f = m.oa.fields[ffi];
               fcCond = fcCond.replace(new RegExp('\\b' + fc.param + '\\s*\\.\\s*' + f.name + '\\b', 'g'), '_oa' + m.oaIdx + '_' + f.name + '[_i]');
             }
           }
-          // Resolve: state getters
           for (var si = 0; si < ctx.stateSlots.length; si++) {
             var s = ctx.stateSlots[si];
             fcCond = fcCond.replace(new RegExp('\\b' + s.getter + '\\b', 'g'), 'state.getSlot(' + si + ')');
           }
-          // JS → Zig operators
           fcCond = fcCond.replace(/\|\|/g, ' or ');
           fcCond = fcCond.replace(/&&/g, ' and ');
           fcCond = fcCond.replace(/===/g, '==');
@@ -815,7 +737,7 @@ function _a026_emit(ctx, meta) {
         out += '        _map_pool_' + mi + '[_i].style.display = if (' + filterExpr + ') .flex else .none;\n';
       }
     } else {
-      // Single-node map template (no inner array) — wire dynamic text refs
+      // Single-node map template (no inner array)
       var tExpr = m.templateExpr;
       for (_dti = 0; _dti < mapDynTexts.length; _dti++) {
         dt = mapDynTexts[_dti];
@@ -826,15 +748,12 @@ function _a026_emit(ctx, meta) {
       out += '        _map_pool_' + mi + '[_i] = ' + tExpr + ';\n';
     }
 
-    // Deferred canvas attributes — dynamic gx/gy/d from map item fields
+    // ── Deferred canvas attributes ──
     if (m._deferredCanvasAttrs) {
       for (var _dai = 0; _dai < m._deferredCanvasAttrs.length; _dai++) {
         var da = m._deferredCanvasAttrs[_dai];
         var oaIdx = m.oaIdx;
         var oaField = '_oa' + oaIdx + '_' + da.oaField;
-        // Find the correct target node — canvas_path attrs go on the per-item
-        // node that has .canvas_path = true, not on the pool root.
-        // canvas_view_zoom goes on the graph_container node (parent of path).
         var target = '_map_pool_' + mi + '[_i]';
         var isPathAttr = da.zigField === 'canvas_path_d' || da.zigField === 'canvas_fill_effect' ||
             da.zigField === 'canvas_fill_color' || da.zigField === 'canvas_stroke_width' ||
@@ -850,7 +769,6 @@ function _a026_emit(ctx, meta) {
               }
             }
           } else if (isGraphAttr) {
-            // Graph attrs go on the inner node (graph_container), not the pool root
             target = '_inner_' + mi + '[0]';
           }
         }
@@ -861,7 +779,8 @@ function _a026_emit(ctx, meta) {
         }
       }
     }
-    // Variant patches for classifier nodes inside this map (must be in-loop where _pi_ locals are in scope)
+
+    // ── Variant patches for classifier nodes inside this map ──
     var mapVBs = ctx.variantBindings.filter(function(vb) { return vb.inMap; });
     if (mapVBs.length > 0 && ctx.variantNames.length > 0) {
       out += '        {\n';

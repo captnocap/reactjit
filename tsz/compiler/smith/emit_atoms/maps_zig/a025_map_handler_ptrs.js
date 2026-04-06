@@ -22,7 +22,38 @@ function _a025_applies(ctx, meta) {
   return ctx.handlers.some(function(h) { return h.inMap; });
 }
 
-function _a025_emit(ctx, meta) { return ""; /* live emit in map_pools.js */ }
+function _a025_emit(ctx, meta) {
+  void meta;
+  const emitMeta = ctx._mapEmitMeta;
+  if (!emitMeta) return "";
+  const mapOrder = emitMeta.mapOrder;
+  const mapMeta = emitMeta.mapMeta || (emitMeta.mapMeta = []);
+
+  let out = '';
+  ensureMapHandlerFieldRefs(ctx);
+
+  for (const mi of mapOrder) {
+    const map = ctx.maps[mi];
+    const mapType = map.isInline ? 'inline' : map.isNested ? 'nested' : 'flat';
+    if (map.mapBackend === 'lua_runtime') continue;
+
+    const mapHandlers = ctx.handlers.filter(function(handler) {
+      return handler.inMap && handler.mapIdx === mi;
+    });
+    if (mapHandlers.length > 0 && map.mapBackend !== 'lua_runtime') {
+      for (let hi = 0; hi < mapHandlers.length; hi++) {
+        const refsMap = map._handlerFieldRefsMap || {};
+        const bufSize = refsMap[hi] && refsMap[hi].length > 0 ? 128 : 48;
+        out += emitHandlerStorage(mi, hi, bufSize, mapType);
+      }
+    }
+
+    if (!mapMeta[mi]) mapMeta[mi] = {};
+    mapMeta[mi].mapHandlers = mapHandlers;
+  }
+
+  return out;
+}
 
 _emitAtoms[25] = {
   id: 25,

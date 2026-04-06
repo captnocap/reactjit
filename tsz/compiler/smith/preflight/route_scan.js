@@ -168,7 +168,7 @@ function scanForMaps(source, ctx) {
       pos: match.index,
       sourceVar: sourceVar,
       type: 'flat',
-      target: 'zig_oa',
+      target: 'lua_runtime',
     };
 
     // Detect nested: .map inside .map
@@ -180,17 +180,7 @@ function scanForMaps(source, ctx) {
       result.flat++;
     }
 
-    // Predict backend: if source var is a known OA getter → zig_oa, else lua_runtime
-    if (ctx.objectArrays) {
-      var isOA = false;
-      for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
-        if (ctx.objectArrays[oi].getter === sourceVar) { isOA = true; break; }
-      }
-      if (!isOA) {
-        route.target = 'lua_runtime';
-        result.lua++;
-      }
-    }
+    result.lua++;
 
     // Extract map body content expectations
     route.content = scanMapBody(source, match.index + match[0].length);
@@ -206,9 +196,10 @@ function scanForMaps(source, ctx) {
       pos: match.index,
       sourceVar: null,
       type: 'flat',
-      target: 'zig_oa',
+      target: 'lua_runtime',
     });
     result.flat++;
+    result.lua++;
     result.total++;
   }
 
