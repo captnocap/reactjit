@@ -150,5 +150,8 @@ function _styleToLua(style, itemParam, indexParam) {
       continue;
     }
   }
-  return '{ ' + parts.join(', ') + ' }';
+  // Post-process: quote any bare enum values that slipped through
+  var result = '{ ' + parts.join(', ') + ' }';
+  result = result.replace(/= (center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|nowrap|hidden|visible|scroll|auto|absolute|relative|none)([,} ])/g, '= "$1"$2');
+  return result;
 }
