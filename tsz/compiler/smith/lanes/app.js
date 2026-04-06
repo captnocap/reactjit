@@ -67,6 +67,7 @@ function compileAppLane(source, tokens, file) {
   moveToAppReturn(c, appStart);
 
   var root = parseJSXElement(c);
+  if (root.luaNode) ctx._luaRootNode = root.luaNode;
 
   flushInlineDebugLogs();
 

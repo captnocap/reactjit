@@ -579,7 +579,7 @@ function tryParseBraceChild(c, children) {
         ctx._droppedExpressions.push({ expr: getter + ' ' + tailTokens.join(' '), line: 0 });
         children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
       } else {
-        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, _luaStateGetter: getter });
       }
       return true;
     }

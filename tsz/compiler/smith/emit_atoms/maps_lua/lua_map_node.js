@@ -23,7 +23,8 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
   }
 
   if (node.color) {
-    fields.push('text_color = ' + _hexToLua(node.color));
+    var _colorLua = _zigColorToLuaHex(node.color) || _hexToLua(node.color);
+    fields.push('text_color = ' + _colorLua);
   }
 
   if (node.handler) {
@@ -50,6 +51,17 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
         childLua.push('__luaNestedMap(_item.' + nm.field + ', function(_nitem, _ni)\n' +
           indent + '    return ' + innerBody + '\n' +
           indent + '  end)');
+      } else if (child.luaMapLoop) {
+        // Inline map loop — emits as a Lua function call that returns children
+        var ml = child.luaMapLoop;
+        var loopBody = ml.bodyNode ? _nodeToLua(ml.bodyNode, ml.itemParam, ml.indexParam, indent + '    ') : '{}';
+        childLua.push('unpack((function()\n' +
+          indent + '    local _r = {}\n' +
+          indent + '    for _i, _item in ipairs(' + ml.dataVar + ') do\n' +
+          indent + '      _r[#_r + 1] = ' + loopBody + '\n' +
+          indent + '    end\n' +
+          indent + '    return _r\n' +
+          indent + '  end)())');
       } else {
         childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  '));
       }

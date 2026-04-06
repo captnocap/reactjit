@@ -318,7 +318,6 @@ smith/emit/entrypoints.js
 smith/emit/logic_blocks.js
 smith/emit/split.js
 smith/emit/finalize.js
-smith/emit/lua_tree_emit.js
 smith/emit.js
 
 smith/emit_atoms/index.js

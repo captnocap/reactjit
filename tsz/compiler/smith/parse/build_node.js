@@ -67,8 +67,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
       if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
       if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
-      // Attach luaNode for map emit
-      if (ctx.currentMap) {
+      // Attach luaNode for lua tree emit
+      {
         var _dln = {};
         if (styleFields.length > 0) {
           _dln.style = {};
@@ -88,11 +88,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             }
           }
         }
-        // Text: use raw field or template from brace parser
+        // Text: use raw field, template, or state getter from brace parser
         if (dynChild._luaTextField) {
           _dln.text = { field: dynChild._luaTextField };
         } else if (dynChild._luaTemplateRaw) {
           _dln.text = dynChild._luaTemplateRaw;
+        } else if (dynChild._luaStateGetter) {
+          _dln.text = { stateVar: dynChild._luaStateGetter };
         }
         result.luaNode = _dln;
       }
@@ -304,10 +306,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (allDynIds.length > 0) nodeResult.dynStyleIds = allDynIds;
   if (styleFields._variantBindingId !== undefined) nodeResult.variantBindingId = styleFields._variantBindingId;
 
-  // ── Lua node: structured data for lua map emit atoms ──────────────
-  // When inside a map context, attach a luaNode so a030 can emit Lua
-  // from the parsed tree instead of re-walking tokens.
-  if (ctx.currentMap) {
+  // ── Lua node: structured data for lua tree emit ────────────────────
+  // Attach luaNode to every node so the lua-tree emitter can walk the
+  // parsed tree and produce Lua tables. Used by both map emit and
+  // full lua-tree mode.
+  {
     var _ln = {};
     // Style: parse Zig style fields back to key/value pairs
     if (styleFields.length > 0) {
@@ -365,10 +368,23 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _ln.children.push(_ch.luaNode);
           }
         } else if (_ch.mapIdx !== undefined) {
-          // Nested map
+          // Nested map (from Zig parse path)
           var _m = ctx.maps[_ch.mapIdx];
           if (_m) {
             _ln.children.push({ nestedMap: { field: _m.oa ? _m.oa.getter : '', itemParam: _m.itemParam, indexParam: _m.indexParam, bodyNode: _m._luaBodyNode || null } });
+          }
+        } else if (_ch._luaMapWrapper !== undefined) {
+          // Lua map wrapper — inline the map as a loop in the tree
+          var _lmr = ctx._luaMapRebuilders && ctx._luaMapRebuilders[_ch._luaMapWrapper];
+          if (_lmr) {
+            _ln.children.push({
+              luaMapLoop: {
+                dataVar: _lmr.rawSource || _lmr.varName,
+                itemParam: _lmr.itemParam || '_item',
+                indexParam: _lmr.indexParam || null,
+                bodyNode: _lmr.bodyNode || null
+              }
+            });
           }
         }
       }

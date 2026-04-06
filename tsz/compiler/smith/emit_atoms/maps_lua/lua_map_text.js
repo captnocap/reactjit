@@ -10,6 +10,11 @@ function _textToLua(text, itemParam, indexParam) {
     return 'tostring(_item.' + text.field + ')';
   }
 
+  // State variable: { stateVar: "count" } → tostring(count)
+  if (typeof text === 'object' && text.stateVar) {
+    return 'tostring(' + text.stateVar + ')';
+  }
+
   // Template literal: { parts: [{literal: "hi "}, {expr: "item.x"}] }
   if (typeof text === 'object' && text.parts) {
     var luaParts = [];
@@ -22,6 +27,33 @@ function _textToLua(text, itemParam, indexParam) {
       }
     }
     return luaParts.join(' .. ');
+  }
+
+  // Template literal string containing ${...} interpolation
+  if (typeof text === 'string' && text.indexOf('${') >= 0) {
+    var tParts = [];
+    var ti = 0;
+    while (ti < text.length) {
+      if (text[ti] === '$' && ti + 1 < text.length && text[ti + 1] === '{') {
+        var tj = ti + 2;
+        var tDepth = 1;
+        while (tj < text.length && tDepth > 0) {
+          if (text[tj] === '{') tDepth++;
+          if (text[tj] === '}') tDepth--;
+          tj++;
+        }
+        var tExpr = text.slice(ti + 2, tj - 1).trim();
+        tExpr = _jsExprToLua(tExpr, itemParam, indexParam);
+        tParts.push('tostring(' + tExpr + ')');
+        ti = tj;
+      } else {
+        var tStart = ti;
+        while (ti < text.length && !(text[ti] === '$' && ti + 1 < text.length && text[ti + 1] === '{')) ti++;
+        var tLit = text.slice(tStart, ti).replace(/"/g, '\\"');
+        if (tLit.length > 0) tParts.push('"' + tLit + '"');
+      }
+    }
+    return tParts.join(' .. ');
   }
 
   // Plain string with no dynamic refs
