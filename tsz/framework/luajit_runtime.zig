@@ -592,6 +592,23 @@ fn hostDeclareChildren(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
+    // Clear any wrapper nodes' children before resetting arena
+    // (prevents dangling pointers during re-stamp)
+    for (0..16) |i| {
+        var buf: [16]u8 = undefined;
+        const name = std.fmt.bufPrint(&buf, "__mw{d}", .{i}) catch break;
+        buf[name.len] = 0;
+        const L = g_lua orelse break;
+        lua.lua_getglobal(L, @as([*:0]const u8, @ptrCast(buf[0..name.len :0])));
+        if (lua.lua_isuserdata(L, -1) != 0) {
+            const ptr = lua.lua_touserdata(L, -1);
+            if (ptr) |p| {
+                const node: *Node = @ptrCast(@alignCast(p));
+                node.children = &.{};
+            }
+        }
+        lua.lua_pop(L, 1);
+    }
     _ = lua_node_arena.reset(.retain_capacity);
     return 0;
 }

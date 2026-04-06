@@ -170,10 +170,21 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
 
   var jsContent = jsStateBindings;
   if (ctx.scriptBlock) {
-    jsContent += ctx.scriptBlock;
+    // Strip TypeScript syntax: declare statements, type annotations, generics
+    var _jsBlock = ctx.scriptBlock;
+    _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
+    _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
+    _jsBlock = _jsBlock.replace(/:\s*(string|number|boolean|any|void|never|object)\b/g, ''); // strip param type annotations
+    _jsBlock = _jsBlock.replace(/<[^>]+>/g, ''); // strip generics
+    jsContent += _jsBlock;
   }
   if (globalThis.__scriptContent) {
-    jsContent += (jsContent ? '\n' : '') + globalThis.__scriptContent;
+    var _scriptCleaned = globalThis.__scriptContent;
+    _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
+    _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
+    _scriptCleaned = _scriptCleaned.replace(/:\s*(string|number|boolean|any|void|never|object)\b/g, '');
+    _scriptCleaned = _scriptCleaned.replace(/<[^>]+>/g, '');
+    jsContent += (jsContent ? '\n' : '') + _scriptCleaned;
   }
   if (jsContent) {
     zig += 'const JS_LOGIC =\n';
