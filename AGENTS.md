@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Context for AI agents (Codex, etc.) working in this repository. Last updated: 2026-04-02.
+Context for AI agents (Codex, etc.) working in this repository. Last updated: 2026-04-06.
 
 ## What This Is
 
-ReactJIT is a `.tsz`-to-native compiler and UI framework. `.tsz` source (TypeScript + JSX dialect) compiles to Zig, which links against the framework runtime (SDL3 + wgpu + FreeType + QuickJS) to produce native binaries.
+ReactJIT is a `.tsz`-to-native compiler and UI framework. `.tsz` compiles via **Forge + Smith** to **generated Zig** plus embedded **`LUA_LOGIC`** (current default — lua-tree UI + handlers in LuaJIT). **`JS_LOGIC`** is added when `<script>` / script imports exist. The runtime is **Zig** (layout, GPU, stamping) + **LuaJIT** (`LUA_LOGIC`) + **QuickJS** (scripts + `__eval` / `evalLuaMapData`). Read [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) and [tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md](tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
 
 ## Repository Layout
 
@@ -58,8 +58,8 @@ bin/tsz dev carts/path/to/app.tsz
 ## Build Pipeline (3 stages)
 
 1. **Forge** (Zig binary) hosts Smith via QuickJS
-2. **Smith** (JS) compiles `.tsz` source into `generated_*.zig`
-3. **Zig build** compiles generated Zig into a native binary
+2. **Smith** (JS) compiles `.tsz` → **`generated_*.zig`** and **`LUA_LOGIC`** (default); **`JS_LOGIC`** when the cart has script blocks
+3. **Zig build** links generated output + `tsz/framework` into a native binary
 
 ## Compiler Structure
 

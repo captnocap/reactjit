@@ -71,7 +71,7 @@ It lexes, bridges, and writes. Smith knows everything else.
 
 ### 1c. Smith Zoom
 
-What lives inside Smith — the JS compiler brain (~1,640 lines, 5 files).
+What lives inside Smith — the JS compiler brain (**many modules** under `tsz/compiler/smith_*` and `smith_*` subdirs; exact size changes — use `zig build smith-sync` / bundle, not a fixed line count). For **current** architecture and lua-tree, see [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md).
 
 ```
   ┌────────────────────────────────────────────────────────┐
@@ -108,12 +108,10 @@ What lives inside Smith — the JS compiler brain (~1,640 lines, 5 files).
   │  │  Phase 3 — EMIT                                 │   │
   │  │  emit.js + rules.js                             │   │
   │  │                                                 │   │
-  │  │  assemble .zig source:                          │   │
-  │  │    imports, state slots, node pool              │   │
-  │  │    Zig handler fns  (static body → Zig)         │   │
-  │  │    LUA_LOGIC block  (captured body → LuaJIT)    │   │
-  │  │    rebuild() fn     (maps, conditionals)        │   │
-  │  │    appTick()        (script runtime setup)      │   │
+  │  │  assemble output:                               │   │
+  │  │    generated_*.zig (glue, root, handlers)       │   │
+  │  │    LUA_LOGIC (default lua-tree + handlers)      │   │
+  │  │    JS_LOGIC (<script>, when present)            │   │
   │  └─────────────────────────────────────────────────┘   │
   │                         │                              │
   │                         ▼                              │

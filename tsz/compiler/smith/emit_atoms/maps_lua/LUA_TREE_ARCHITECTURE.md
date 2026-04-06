@@ -1,5 +1,7 @@
 # Lua Tree Architecture
 
+**This is Smith’s current default for app UI:** Lua owns the tree and state; Zig paints (stamps Lua tables into `layout.Node`).
+
 Lua owns the tree and state. Zig paints.
 
 ## Three layers
@@ -48,8 +50,8 @@ function getState(key)
 end
 ```
 
-Zig reads state via zluajit FFI when resolving dynamic text/style/conditionals.
-No serialization. No JSON bridge. Direct memory.
+Zig reads Lua state through **`luajit_runtime`** (Lua C API today; optional **zluajit** wrapper per [ZLUAJIT_EVALUATION.md](../../../../docs/ZLUAJIT_EVALUATION.md)) when resolving dynamic text/style/conditionals after stamping.
+No JSON bridge for the hot path — host functions and stamping own the boundary.
 
 ## Tree: Lua tables → Zig Node pointers
 

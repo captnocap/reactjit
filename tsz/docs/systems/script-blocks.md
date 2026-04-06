@@ -4,7 +4,11 @@ JavaScript logic via QuickJS, running alongside the compiled Zig UI.
 
 ## Overview
 
-Script blocks provide runtime JavaScript execution for logic that doesn't need to be compiled to Zig — data fetching, timers, complex business logic, and dynamic state updates. The JS runs in an embedded QuickJS VM while the UI remains native Zig.
+Script blocks provide runtime JavaScript execution for logic that doesn't need to be compiled to Zig — data fetching, timers, complex business logic, and dynamic state updates. The JS runs in an embedded QuickJS VM. **Layout and paint stay in Zig** (`layout.zig`, `gpu/`); the UI *structure* may be static Zig nodes or a **lua-tree** stamped from Lua — see [ARCHITECTURE.md](../ARCHITECTURE.md).
+
+### Default lua-tree and QuickJS
+
+**`LUA_LOGIC`** is the normal app emit; **LuaJIT** owns the tree. **QuickJS** still loads when the cart has **`JS_LOGIC`** from `<script>`, and the engine uses QuickJS for **`__eval(jsExpr)`** (Lua → `qjs_runtime.evalToString`) and **`evalLuaMapData`** (JS expressions feeding Lua). Script blocks and lua-tree are **not** mutually exclusive.
 
 There are two ways to add JS logic to a cart:
 
@@ -87,7 +91,7 @@ These are always available in script blocks:
 | Data transformation, math | Script |
 | API calls (when networking lands) | Script |
 | State initialization | Zig (useState) |
-| Event handlers (onPress) | Zig (compiled) |
+| Event handlers (onPress) | Zig and/or Lua strings (`lua_on_*` / `js_on_*`) depending on emit |
 | Layout, rendering | Zig (framework) |
 | Performance-critical loops | Zig (useFFI or _zscript.tsz) |
 

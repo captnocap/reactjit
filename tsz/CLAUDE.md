@@ -55,17 +55,17 @@ This is the active engine. When the user says "the compiler", "the runtime", "la
 
 ```
 compiler/
-  smith_*.js        — Smith root JS compiler files (.tsz → .zig codegen)
+  smith_*.js        — Smith root JS compiler files (orchestration; heavy logic in subdirs)
   smith_collect/    — Collection pass
-  smith_lanes/      — Entry lanes + surface tiering
+  smith_lanes/      — Entry lanes + surface tiering (chad, mixed, soup, …)
   smith_parse/      — JSX/map/element parsing
-  smith_preflight/  — Validation rules
-  smith_emit/       — Emit helpers
+  smith_preflight/  — Validation rules (preflight checks)
+  smith_emit/       — Emit helpers + atoms (incl. lua-tree under emit_atoms/maps_lua/)
   smith_DICTIONARY.md — Live map of the active Smith layout
   forge.zig         — Forge: Zig binary that hosts Smith via QuickJS
   smith_bridge.zig  — QuickJS bridge (init, eval, pass tokens, get result)
   lexer.zig         — Tokenizer (shared, stays in Zig for speed)
-  cli.zig           — CLI interface (used by bin/tsz, will be replaced by forge CLI)
+  cli.zig           — CLI interface
 framework/          — Engine core: layout, GPU, events, state, text, windows, canvas
 carts/              — Apps built with the framework
   conformance/      — Conformance test carts (d01-d104, verify against bin/tsz)
@@ -77,8 +77,8 @@ carts/              — Apps built with the framework
 The build has 3 stages. Understand this or you will waste everyone's time:
 
 1. **Forge** (Zig binary) — runs Smith (the JS compiler)
-2. **Smith** (JS) — compiles `.tsz` source → `generated_*.zig`
-3. **Zig build** — compiles generated Zig → native binary
+2. **Smith** (JS) — compiles `.tsz` → `generated_*.zig` plus **`LUA_LOGIC`** (default); **`JS_LOGIC`** when the cart has script blocks
+3. **Zig build** — compiles generated Zig + links `framework/` → native binary
 
 ### Commands
 

@@ -1,7 +1,7 @@
 # ReactJIT
 its react! (kinda) its fast! (really fast) hi. all the code in this project is an accident from a bad joke. the code is not a joke, how it came to be was though. also, i didnt write a single line of code in here, and this readme is also ai generated after i finish my brief intro. this is really now just one big experiment that started from asking how i could put the react based game i was making, inside of a monitor in cs_office, things really got out of hand after that. this is a series of fortunate (or unfortunate) events that all came from asking 'how' and then following with 'if that worked, what about this'. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
 ---
-Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
+Write React. Get a native binary. **No virtual DOM, no reconciler.** Layout and painting are **native Zig** (flex + wgpu). **Smith currently emits `LUA_LOGIC` by default** — a **lua-tree** where LuaJIT builds the UI as tables and Zig stamps them into `Node`. **QuickJS** runs `<script>` / `JS_LOGIC` when present and powers **`__eval`** / **`evalLuaMapData`** bridges from Lua — see [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md).
 
 ```
 app.tsz (TypeScript + JSX)
@@ -10,10 +10,10 @@ app.tsz (TypeScript + JSX)
 Forge (Zig kernel) + Smith (JS compiler brain, runs in QuickJS)
    |
    v
-generated Zig source (layout + GPU paint + events + state)
+generated Zig glue + LUA_LOGIC (+ JS_LOGIC if script)
    |        \
    v         v
-native      LuaJIT (runtime logic: handlers, closures, dynamic dispatch)
+native      LuaJIT + QuickJS (lua-tree + handlers + script + eval bridges)
 binary
 (SDL3 + wgpu + FreeType + QuickJS + LuaJIT)
 ```
@@ -80,9 +80,7 @@ The compiler is split into two parts:
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
 ```
 
-Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Zig has no closures, so each map item can't carry its own handler with a captured index. Smith's solution — emit a `LUA_LOGIC` block of Lua functions (`__mapPress_0_0(idx)`) and during the rebuild loop, pre-format a `lua_on_press` string per item with the index baked in (`"__mapPress_0_0(3)"`). LuaJIT executes the function string at runtime. The Zig side only stores the string — no closure needed.
-
-This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
+Smith emits **`LUA_LOGIC` by default** for app UI and handlers (lua-tree): `.map()`, closures, and per-item dispatch live in LuaJIT. Example: `.map()` handlers become Lua functions like `__mapPress_0_0(idx)` with `lua_on_press` strings baked per item — no Zig closures. **`<script>`** blocks add **`JS_LOGIC`** on QuickJS; **`__eval`** / **`evalLuaMapData`** also use QuickJS from Lua. The author writes plain `.tsz`; the stack is **Lua-first for UI logic**, Zig for layout/paint/stamping.
 
 - **Compiler** — 5 Zig modules + 276 JS modules (Smith, ~33,300 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
@@ -94,7 +92,7 @@ This is the general routing rule: statically-bound logic compiles to Zig; logic 
 - **Audio** — SDL3 audio subsystem with modular DSP engine, delay, sequencer, LuaJIT DSP bridge
 - **Terminal** — PTY terminal emulator with cell-grid rendering, scrollback, text selection, copy/paste (Ctrl+Shift+C/V), semantic classifiers
 - **Canvas** — Infinite canvas with zoom/pan/drift, SVG path nodes, graph visualization
-- **Inspector** — Built-in devtools: element tree, style inspector, performance profiler, constraint graph
+- **Inspector** — Tools cart + **IPC** to running apps (tree, styles, perf); embedded `devtools.zig` is a thin/no-op stub when using standalone tools
 - **Transitions** — CSS-style animations with timing and spring physics
 - **Themes** — 19 built-in themes: Dracula, Catppuccin, Nord, Gruvbox, Solarized, Tokyo Night, One Dark, Monokai, GitHub, Rosé Pine, Everforest, Kanagawa, Ayu, Synthwave, Palenight, Material, Night Owl + custom BIOS and Win95 themes
 

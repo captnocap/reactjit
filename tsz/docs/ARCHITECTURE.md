@@ -1,101 +1,88 @@
 # Architecture Overview
 
-How all the pieces of tsz fit together.
+How all the pieces of tsz fit together. **Today’s Smith path is lua-tree:** it emits **`LUA_LOGIC`** (Lua source embedded in generated Zig) so **LuaJIT owns the UI tree** at runtime; Zig **stamps** it into `layout.Node` for layout and paint. Do not assume a flat static Zig `Node` array is still the default.
 
 ## The Big Picture
 
+**Compile time:** **Forge** (Zig) lexes `.tsz` and hosts **Smith** (JavaScript) inside **QuickJS**. Smith emits **generated Zig glue** and, **by default, `LUA_LOGIC`** for the cart’s Lua tree and handlers. **`JS_LOGIC`** is added when `<script>` / `_script.tsz` (or similar) is present — it is optional relative to `LUA_LOGIC`, not the other way around.
+
+**Runtime:** The native binary links **Zig** (engine, flex layout, wgpu, input), **LuaJIT** (`luajit_runtime.zig` — loads `LUA_LOGIC`, stamping, handlers), and **QuickJS** (`qjs_runtime.zig` — runs `JS_LOGIC` when present, plus **`__eval`** / **`evalLuaMapData`** bridges from Lua).
+
+```mermaid
+flowchart TB
+  subgraph compile [Compile_time]
+    tsz[".tsz source"]
+    forge["Forge_Zig lexer_IO"]
+    smith["Smith_JS in_QJS"]
+    tsz --> forge --> smith
+    smith --> zigOut["generated_Zig glue_root_handlers"]
+    smith --> luaOut["LUA_LOGIC default"]
+    smith --> jsStr["JS_LOGIC if_script"]
+  end
+  subgraph runtime [Runtime]
+    lj["LuaJIT luajit_runtime"]
+    qjs["QuickJS qjs_runtime"]
+    zigRT["Zig engine layout_paint_input"]
+    luaOut --> lj
+    jsStr --> qjs
+    zigOut --> zigRT
+    lj -->|"__declareChildren_stampLuaNode"| zigRT
+    lj -->|"__eval"| qjs
+    qjs -->|"evalLuaMapData"| lj
+  end
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              .tsz Source Files               │
-                    │  app.tsz  _c.tsz  _cls.tsz  _script.tsz    │
-                    └──────────────────┬──────────────────────────┘
-                                       │
-                              ┌────────▼────────┐
-                              │    Compiler      │
-                              │  (28 Zig files)  │
-                              │  9-phase pipeline│
-                              └───┬─────────┬───┘
-                                  │         │
-                    ┌─────────────▼──┐  ┌───▼──────────────┐
-                    │ generated_app  │  │   JS_LOGIC       │
-                    │    .zig        │  │ (embedded string) │
-                    └───────┬────────┘  └───────┬──────────┘
-                            │                   │
-                    ┌───────▼───────────────────▼──────────┐
-                    │           Framework Runtime           │
-                    │                                       │
-                    │  engine.zig ── main loop              │
-                    │  layout.zig ── flex layout             │
-                    │  state.zig ── slot-based state         │
-                    │  gpu/     ── wgpu rendering            │
-                    │  text.zig ── FreeType text             │
-                    │  qjs_runtime.zig ── QuickJS VM         │
-                    │  vterm.zig ── terminal emulation       │
-                    │  cartridge.zig ── .so loading          │
-                    │  + 50 more modules                    │
-                    └───────────────┬───────────────────────┘
-                                    │
-                    ┌───────────────▼───────────────────────┐
-                    │         Native Dependencies           │
-                    │  SDL3 · wgpu · FreeType · libvterm    │
-                    │  QuickJS · zlib · Bullet3D (optional) │
-                    └───────────────────────────────────────┘
-```
+
+Deep dive for the lua-tree model: [LUA_TREE_ARCHITECTURE.md](../compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md) (under `tsz/compiler/…`).
+
+## Emit backends (current vs legacy)
+
+| Backend | Status | Who owns the UI tree at runtime | Compiler output (simplified) |
+|--------|--------|----------------------------------|------------------------------|
+| **Lua-tree** | **Current (Smith / Forge)** | Lua: tables from emitted Lua (`.map()` → loops, components → functions); Zig **stamps** into `Node` via `__declareChildren` / `stampLuaNode` | **`LUA_LOGIC`** + generated Zig bootstrap in `generated_*.zig` |
+| **Zig-tree** | Legacy / older path | Zig: static `layout.Node` arrays, comptime pools, Zig handler fns | `generated_*.zig` with `var root = Node{…}` (little or no `LUA_LOGIC`) |
+
+A cart may also embed **`JS_LOGIC`** for `<script>` blocks alongside **`LUA_LOGIC`**. **QuickJS** is still required for **`__eval`** and **`evalLuaMapData`** even when `JS_LOGIC` is empty:
+
+- **`__eval(jsExpr)`** — Lua calls into `qjs_runtime.evalToString` for expressions not emitted as pure Lua ([`luajit_runtime.zig`](../framework/luajit_runtime.zig) `hostEval`).
+- **`evalLuaMapData`** — evaluates JS expressions and feeds map/OA data into Lua ([`qjs_runtime.zig`](../framework/qjs_runtime.zig)).
+
+Layout and painting remain **Zig** (`layout.zig`, `gpu/`) in both backends.
 
 ## Layer Breakdown
 
 ### 1. Source Layer (`.tsz` files)
 
-The input. TypeScript + JSX syntax that describes UI structure, state, event handlers, styles, and JavaScript logic. Organized as "carts" — self-contained app directories.
+The input. TypeScript + JSX syntax that describes UI structure, state, event handlers, styles, and script logic. Organized as **carts** — self-contained app directories.
 
-**Key insight**: `.tsz` is NOT TypeScript. It's a custom language that borrows TS/JSX syntax but compiles to Zig, not JavaScript. There is no `tsc`, no `node_modules`, no npm.
+**Key insight**: `.tsz` is NOT stock TypeScript. It is a custom language that borrows TS/JSX syntax. There is no `tsc`, no `node_modules`, no npm. **Smith’s current app emit centers on `LUA_LOGIC` + lua-tree**; extra **JS** is for scripts and bridges, not a separate “default UI language.”
 
 See: [Cart Structure](systems/cart-structure.md)
 
 ### 2. Compiler (`tsz/compiler/`)
 
-A single-pass, ahead-of-time compiler written in Zig. 28 source files, ~15,000 lines.
+**Forge + Smith** (not the legacy monolithic `codegen.zig`-only story):
 
-```
-cli.zig          Entry point, subcommand routing, import resolution
-lexer.zig        Tokenizer (TS/JSX tokens)
-codegen.zig      Pipeline orchestrator, Generator struct, types/constants
-collect.zig      Phases 1-7.5: token scanning, declaration collection
-validate.zig     Phase 7.9: pre-emission error checking
-jsx.zig          Phase 8: recursive-descent JSX → Zig node tree
-components.zig   Component inlining (called from jsx.zig)
-attrs.zig        Attribute/style parsing
-handlers.zig     Event handler and expression compilation
-emit.zig         Phase 9: final Zig source assembly
-modulegen.zig    Imperative mode (_zscript.tsz → .zig)
-stmtgen.zig      Statement codegen (if/for/switch → Zig)
-exprgen.zig      Expression codegen (arithmetic, comparisons, calls)
-typegen.zig      Type declarations (enum, interface, type alias)
-lint.zig         Structural linter
-html_tags.zig    HTML → primitive mapping
-tailwind.zig     Tailwind class → style resolution
-```
+- **`forge.zig`** — tokenize, QuickJS bridge, pass tokens + source to Smith, write emitted files.
+- **`smith_bridge.zig`** — embed QuickJS; load Smith bundle at startup.
+- **`smith/`** — collection, parse, preflight, lanes, emit (Zig, Lua tree, soup, etc.). See [Compiler Pipeline](systems/compiler-pipeline.md) and `smith_DICTIONARY.md` in `compiler/`.
 
-**Two output modes**:
-- **App mode**: Full `generated_app.zig` with main(), lifecycle, state, handlers
-- **Module mode**: Fragment `.gen.zig` with `pub fn render() Node`
-
-See: [Compiler Pipeline](systems/compiler-pipeline.md)
+Legacy Zig-only pipeline files (`codegen.zig`, `collect.zig`, …) may still exist for reference or hybrid paths; **authoritative behavior** is Smith-driven when using Forge.
 
 ### 3. Framework Runtime (`tsz/framework/`)
 
-The engine that makes compiled apps run. ~60 Zig source files. The generated app imports and calls into this layer.
+The engine that runs compiled apps. Generated code imports and calls into this layer.
 
 #### Core modules
 
 | Module | Role |
 |--------|------|
-| `engine.zig` | Main loop: SDL3 init, event dispatch, layout, paint, tick |
-| `layout.zig` | Pixel-perfect flex layout engine (ported from Love2D) |
+| `engine.zig` | Main loop: SDL3 init, event dispatch, layout, paint, tick; initializes **both** `qjs_runtime` and `luajit_runtime` when enabled |
+| `layout.zig` | Pixel-perfect flex layout (ported from Love2D) |
 | `state.zig` | Global state slot array with dirty flags |
+| `luajit_runtime.zig` | LuaJIT VM: `LUA_LOGIC`, `stampLuaNode`, host fns (`__declareChildren`, `__eval`, …) |
 | `text.zig` | FreeType font rendering and text measurement |
 | `events.zig` | Input event handling and dispatch |
-| `input.zig` | Keyboard/mouse state tracking |
+| `input.zig` | Keyboard/mouse state |
 | `windows.zig` | SDL3 window management |
 
 #### GPU pipeline (`framework/gpu/`)
@@ -113,13 +100,14 @@ The engine that makes compiled apps run. ~60 Zig source files. The generated app
 
 | Module | Build flag | Role |
 |--------|-----------|------|
-| `qjs_runtime.zig` | `HAS_QUICKJS` | QuickJS VM + JS↔Zig bridge |
-| `vterm.zig` | `HAS_TERMINAL` | libvterm FFI for terminal emulation |
-| `classifier.zig` | `HAS_TERMINAL` | Semantic terminal token classification |
-| `physics2d.zig` | `HAS_PHYSICS` | 2D rigid body physics |
-| `physics3d.zig` | `HAS_PHYSICS3D` | Bullet3D physics (optional) |
-| `canvas.zig` | `HAS_CANVAS` | Interactive node graph canvas |
-| `effects.zig` | `HAS_EFFECTS` | useEffect lifecycle system |
+| `qjs_runtime.zig` | `HAS_QUICKJS` | QuickJS VM + JS↔Zig bridge; `evalLuaMapData`, script tick |
+| `luajit_worker.zig` | (linked) | Off-thread LuaJIT workers (compute-only) |
+| `vterm.zig` | `HAS_TERMINAL` | libvterm FFI |
+| `classifier.zig` | `HAS_TERMINAL` | Semantic terminal classification |
+| `physics2d.zig` | `HAS_PHYSICS` | 2D physics |
+| `physics3d.zig` | `HAS_PHYSICS3D` | Bullet3D (optional) |
+| `canvas.zig` | `HAS_CANVAS` | Node graph canvas |
+| `effects.zig` | `HAS_EFFECTS` | useEffect lifecycle |
 | `transition.zig` | `HAS_TRANSITIONS` | CSS-like transitions |
 | `videos.zig` | `HAS_VIDEO` | Video playback |
 | `crypto.zig` | `HAS_CRYPTO` | Cryptographic primitives |
@@ -129,111 +117,77 @@ The engine that makes compiled apps run. ~60 Zig source files. The generated app
 
 | Binary | Includes | Use case |
 |--------|----------|----------|
-| `bin/tsz` (lean) | Layout + GPU + SDL3 | Fast builds, simple apps |
-| `bin/tsz-full` (full) | + QuickJS, terminal, physics, 3D, video, crypto | Full-featured apps |
+| Lean `tsz` | Layout + GPU + SDL3 | Fast builds, minimal apps |
+| Full | + QuickJS, LuaJIT, terminal, physics, … | Full-featured carts |
+
+(Exact flags vary; see `build.zig` / `build_options`.)
 
 ### 4. Generated Code Bridge
 
-The compiler's output (`generated_app.zig`) is the bridge between source and runtime:
+**Lua-tree (current):** generated Zig calls `luajit_runtime.evalScript(LUA_LOGIC)`, registers map wrappers, and drives **`__declareChildren`** so Lua tables become **`layout.Node`** for layout/paint. See [LUA_TREE_ARCHITECTURE.md](../compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
+
+**Zig-tree (legacy sketch):** static root and Zig handlers only — useful to recognize in old carts or special lanes, not the default mental model:
 
 ```zig
-// generated_app.zig (simplified)
 const engine = @import("engine.zig");
 const state = @import("state.zig");
 const Node = @import("layout.zig").Node;
 
-// Node tree (from JSX)
 var root = Node{ .style = .{...}, .children = &_arr_0 };
-
-// State init
-fn _initState() void { state.setSlot(0, 42); }
-
-// Per-frame tick
-fn _appTick() void { _updateDynamicTexts(); _updateConditionals(); }
-
-// Event handlers
-fn _handler_press_0() void { state.setSlot(0, state.getSlot(0) + 1); }
-
-// Entry point
+// … _handler_press_N in Zig, etc.
 pub fn main() !void { engine.run(&root, _appInit, _appTick); }
 ```
 
 ### 5. Cartridge System
 
-Apps can be loaded dynamically as `.so` shared libraries:
-
-```
-┌─────────────────────────────────────────────┐
-│               Dev Shell (tsz-dev)           │
-│                                             │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐    │
-│  │ Cart A   │ │ Cart B   │ │ Cart C   │    │
-│  │ (.so)    │ │ (.so)    │ │ (.so)    │    │
-│  └──────────┘ └──────────┘ └──────────┘    │
-│                                             │
-│  Shared: state slots, event loop, GPU       │
-│  Independent: node trees, tick callbacks    │
-└─────────────────────────────────────────────┘
-```
-
-**Cartridge ABI**: 6 C-exported functions (`app_get_root`, `app_get_init`, `app_get_tick`, `app_get_title`, `app_state_count`, `app_state_*`). Any language that produces a `.so` with these exports works.
+Apps can load as `.so` shared libraries (dev shell, `<Cartridge>`). **Cartridge ABI**: C exports (`app_get_root`, `app_get_init`, `app_get_tick`, …).
 
 See: [Dev Mode](systems/dev-mode.md)
 
-### 6. Dev Tools (`tsz/carts/inspector/`, `.claude/hooks/`)
+### 6. Dev Tools
 
-Two categories:
+- **Inspector / tools carts** — connect over **IPC** (debug protocol) to a running app; not necessarily embedded in every binary. [`devtools.zig`](../framework/devtools.zig) is a stub when the full UI lives in tools.
+- **`.claude/hooks/`** — session coordination scripts.
 
-**Inspector app**: A tsz cart that connects to running apps via IPC for live inspection — element tree, performance, console, network, wireframe overlay.
-
-**Claude Code hooks**: Shell scripts that fire on every tool call for multi-session coordination:
-- `session-ping.sh` — session awareness + file collision prevention
-- `edit-log.sh` — audit trail of all edits
-- `auto-commit.sh` — every edit auto-committed to `edit-trail` branch
-
-See: [Hook System](systems/hook-system.md)
+See: [Hook System](systems/hook-system.md), [TSZ_TOOLS_SPEC.md](TSZ_TOOLS_SPEC.md)
 
 ## Data Flow
 
 ### Compile time
+
 ```
-.tsz → lexer → tokens → collect phases → validate → JSX parse → emit → generated_app.zig
-                                                                         ↓
-_script.tsz → JS concatenation ──────────────────────────────→ JS_LOGIC string (embedded)
-_cls.tsz → classifier collection ─────────────────────────────→ inline style expansion
-_c.tsz → component collection ────────────────────────────────→ compile-time inlining
+.tsz → Forge (lex) → Smith (collect / preflight / parse / emit)
+                         → generated_*.zig + LUA_LOGIC (+ JS_LOGIC if script)
 ```
 
-### Runtime (per frame)
+Imports (`_script.tsz`, components, classifiers) merge or concatenate per Smith rules.
+
+### Runtime (per frame, typical)
+
 ```
-SDL3 event poll → input.zig → events.zig → handler dispatch → state.setSlot()
-                                                                    ↓
-state dirty? → _appTick() → _updateDynamicTexts() → _updateConditionals()
-                                                                    ↓
-layout.zig (flex) → gpu paint (rects, text, 3d) → wgpu present
-                                                                    ↓
-QuickJS tick → setInterval callbacks → __setState() → state dirty
+SDL3 events → input / events → handler dispatch (Zig and/or Lua expr strings)
+     → state dirty → _appTick / Lua tick / QJS tick
+     → layout.zig (flex) → gpu paint → present
 ```
+
+Lua-tree: dirty callbacks re-run Lua subtrees → `__declareChildren` → Zig `Node` layout.
 
 ### Hot-reload (dev mode)
+
 ```
-file change detected (500ms poll) → recompile .tsz → rebuild .so
-                                                        ↓
-dev shell detects .so mtime change → dlclose → dlopen → re-resolve ABI
-                                                        ↓
-call app_get_init() → new node tree ← state slots preserved
+file change → recompile .tsz → rebuild .so → dev shell dlopen → app_get_init()
 ```
 
 ## Key Design Decisions
 
-1. **No runtime component concept**: Components are compile-time macros. Zero overhead at runtime.
+1. **Slot-based state**: O(1) slots and dirty flags; used across Zig and bridges.
 
-2. **Slot-based state**: Fixed-size array of typed slots, not a key-value store. Enables O(1) access and dirty-flag tracking.
+2. **Three-language runtime (full app build)**: **Zig** = loop, layout, GPU, stamping; **LuaJIT** = **`LUA_LOGIC`** (tree + handlers); **QuickJS** = **`JS_LOGIC`** when present + **`__eval`** / **`evalLuaMapData`** — QuickJS is not “only for timers.”
 
-3. **Zig all the way down**: Layout, rendering, state, events — all Zig. JS (QuickJS) is only for business logic that doesn't need to be fast.
+3. **Lua-tree first**: Expressive UI logic lives in emitted Lua (Love2D-shaped loops, tables, functions); Zig remains authoritative for **pixels and flex**. Legacy Zig-tree is the exception, not the rule.
 
-4. **Build-option gating**: Features are `comptime` eliminated. Lean builds don't pay for unused features — no dead code, no unused dependencies.
+4. **Build-option gating**: Unused features `comptime` out of lean binaries.
 
-5. **Self-extracting binaries**: Production builds are single-file executables with zero system dependencies.
+5. **Two worlds**: App (`.tsz`) vs module (`.mod.tsz`) import rules stay isolated.
 
-6. **Two worlds**: App (`.tsz`) and module (`.mod.tsz`) file systems are isolated to prevent circular dependencies between application code and framework runtime.
+6. **zluajit (optional)**: Future Zig↔Lua ergonomics; today `luajit_runtime` uses the **Lua C API**. See [ZLUAJIT_EVALUATION.md](ZLUAJIT_EVALUATION.md).
