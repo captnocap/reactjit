@@ -359,6 +359,34 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
         if (ctx.currentMap && ctx.currentMap.indexParam) {
           _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b' + ctx.currentMap.indexParam + '\\b', 'g'), '(_i - 1)');
         }
+        // Splice dynamic handler args: lua_on_press = "fn(expr)" → "fn(" .. (expr) .. ")"
+        // Loop vars (_i, _ni, _nitem) in handler strings must be evaluated at render time
+        _nmBodyLua = _nmBodyLua.replace(/lua_on_press = "([^"]+)"/g, function(match, body) {
+          if (/\b(_i|_ni|_nitem|_item)\b/.test(body)) {
+            // Find the function name and extract args with balanced parens
+            var fnMatch = body.match(/^(\w+)\s*\(/);
+            if (fnMatch) {
+              var fn = fnMatch[1];
+              var argsStart = body.indexOf('(', fn.length) + 1;
+              // Find matching close paren (handle nested parens)
+              var depth = 1;
+              var argsEnd = argsStart;
+              while (argsEnd < body.length && depth > 0) {
+                if (body[argsEnd] === '(') depth++;
+                if (body[argsEnd] === ')') depth--;
+                if (depth > 0) argsEnd++;
+              }
+              var args = body.substring(argsStart, argsEnd).trim();
+              var rest = body.substring(argsEnd + 1).trim();
+              // Multiple statements separated by ;
+              if (rest) {
+                return 'lua_on_press = "' + fn + '(" .. (' + args + ') .. ")' + rest + '"';
+              }
+              return 'lua_on_press = "' + fn + '(" .. (' + args + ') .. ")"';
+            }
+          }
+          return match;
+        });
       }
       // Consume closing parens/braces from the .map() call
       while (c.kind() === TK.rparen) c.advance();
