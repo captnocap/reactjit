@@ -392,6 +392,60 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     lua.lua_getfield(L, idx, "border_color");
     if (readLuaColor(L, -1)) |c| s.border_color = c;
     lua.lua_pop(L, 1);
+    // align_items
+    lua.lua_getfield(L, idx, "align_items");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, v, "center")) s.align_items = .center
+            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start")) s.align_items = .start
+            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end")) s.align_items = .end;
+        }
+    }
+    lua.lua_pop(L, 1);
+    // align_self
+    lua.lua_getfield(L, idx, "align_self");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, v, "center")) s.align_self = .center
+            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start")) s.align_self = .start
+            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end")) s.align_self = .end;
+        }
+    }
+    lua.lua_pop(L, 1);
+    // flex_wrap
+    lua.lua_getfield(L, idx, "flex_wrap");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and std.mem.eql(u8, @as([*]const u8, @ptrCast(ptr))[0..len], "wrap")) {
+            s.flex_wrap = .wrap;
+        }
+    }
+    lua.lua_pop(L, 1);
+    // flex_shrink
+    if (readLuaOptFloat(L, idx, "flex_shrink")) |v| s.flex_shrink = v;
+    // max_width / max_height
+    if (readLuaOptFloat(L, idx, "max_width")) |v| s.max_width = v;
+    if (readLuaOptFloat(L, idx, "max_height")) |v| s.max_height = v;
+    // overflow
+    lua.lua_getfield(L, idx, "overflow");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, v, "scroll")) s.overflow = .scroll
+            else if (std.mem.eql(u8, v, "hidden")) s.overflow = .hidden
+            else if (std.mem.eql(u8, v, "auto")) s.overflow = .auto;
+        }
+    }
+    lua.lua_pop(L, 1);
     // display: "none"
     lua.lua_getfield(L, idx, "display");
     if (lua.lua_isstring(L, -1) != 0) {
