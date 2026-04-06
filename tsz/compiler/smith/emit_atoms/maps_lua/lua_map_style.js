@@ -52,15 +52,31 @@ function _styleToLua(style, itemParam, indexParam) {
       _jsExpr = _jsExpr.replace(/\)\s*$/g, '');
       // OA refs → item field access
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-      // Color.rgb(R,G,B) → 0xRRGGBB (QJS doesn't know Color.rgb)
+      // Color.rgb with literal args → 0xRRGGBB
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
       });
+      // Color.rgb with bit-shift extraction from _item.field → just _item.field
+      if (_jsExpr.indexOf('Color.rgb(') >= 0 && _jsExpr.indexOf('_item.') >= 0 && _jsExpr.indexOf('>> 16') >= 0) {
+        var _colorFieldMatch = _jsExpr.match(/_item\.(\w+)/);
+        if (_colorFieldMatch) _jsExpr = '_item.' + _colorFieldMatch[1];
+      }
       // State slot refs → getter names
       _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
         return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
       });
-      parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
+      // @as/@intCast → strip
+      _jsExpr = _jsExpr.replace(/@as\(\w+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+      // Clean orphan closing parens
+      var _eo = (_jsExpr.match(/\(/g) || []).length;
+      var _ec = (_jsExpr.match(/\)/g) || []).length;
+      while (_ec > _eo && _jsExpr.endsWith(')')) { _jsExpr = _jsExpr.slice(0, -1); _ec--; }
+      // If the cleaned expression is a pure Lua reference (no JS syntax), emit bare
+      if (/^[a-zA-Z_][\w.]*$/.test(_jsExpr) || /^_item\.\w+$/.test(_jsExpr)) {
+        parts.push(luaKey + ' = ' + _jsExpr);
+      } else {
+        parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
+      }
       continue;
     }
 

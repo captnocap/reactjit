@@ -446,13 +446,27 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
       _ln.text = _hoistedStaticText;
     }
-    // Handler — route to Lua or JS based on script block presence
+    // Handler — route to Lua or JS
+    // Prefer lua_on_press (works with Lua loop vars like _item, _i).
+    // Only use js_on_press when the handler calls script functions that
+    // don't exist in Lua.
     if (handlerRef) {
       var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
       if (_handler) {
-        var _useJsHandler = !!(ctx.scriptBlock || globalThis.__scriptContent);
-        if (_useJsHandler && _handler.jsBody) {
-          // JS handler — will be emitted as js_on_press
+        var _hasScriptBlock = !!(ctx.scriptBlock || globalThis.__scriptContent);
+        var _needsJs = false;
+        if (_hasScriptBlock && _handler.luaBody) {
+          // Check if handler calls any non-setter functions
+          var _hCalls = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+          for (var _hci = 0; _hci < _hCalls.length; _hci++) {
+            var _hfn = _hCalls[_hci].replace(/\s*\($/, '');
+            var _isLua = false;
+            if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
+            if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
+            if (!_isLua) { _needsJs = true; break; }
+          }
+        }
+        if (_needsJs && _handler.jsBody) {
           _ln.handler = _handler.jsBody;
           _ln.handlerIsJs = true;
         } else if (_handler.luaBody) {

@@ -7,6 +7,27 @@
 
 // If a condition contains function calls that aren't Lua builtins, wrap in __eval
 var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1 };
+function _cleanCondForEval(expr) {
+  // State slot refs → getter names
+  expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+    return (typeof ctx !== 'undefined' && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+  });
+  // Zig casts
+  for (var _ci = 0; _ci < 3; _ci++) {
+    expr = expr.replace(/@as\(\w+,\s*([^)]+)\)/g, '$1');
+    expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
+    expr = expr.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+  }
+  // OA refs
+  expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  // Clean orphan parens
+  var _o = (expr.match(/\(/g) || []).length;
+  var _c = (expr.match(/\)/g) || []).length;
+  while (_c > _o && expr.endsWith(')')) { expr = expr.slice(0, -1); _c--; }
+  return expr;
+}
+
 function _wrapCondEval(cond) {
   // Check for function calls: word( where word isn't a Lua builtin
   var m = cond.match(/\b([a-zA-Z_]\w*)\s*\(/g);
@@ -14,10 +35,23 @@ function _wrapCondEval(cond) {
     for (var i = 0; i < m.length; i++) {
       var fname = m[i].replace(/\s*\($/, '');
       if (!_luaBuiltins[fname]) {
-        // Has a non-Lua function call — use __eval
-        return '__eval("' + cond.replace(/"/g, '\\"') + '")';
+        // Has a non-Lua function call — clean and check if result is valid Lua
+        var cleaned = _cleanCondForEval(cond);
+        // If cleaning removed all non-Lua syntax, return as bare Lua
+        var _stillNeedsEval = false;
+        var _cm = cleaned.match(/\b([a-zA-Z_]\w*)\s*\(/g);
+        if (_cm) { for (var _ci = 0; _ci < _cm.length; _ci++) { var _cfn = _cm[_ci].replace(/\s*\($/, ''); if (!_luaBuiltins[_cfn]) { _stillNeedsEval = true; break; } } }
+        if (_stillNeedsEval) return '__eval("' + cleaned.replace(/"/g, '\\"') + '")';
+        return cleaned;
       }
     }
+  }
+  // Also check for Zig syntax that needs cleaning even without function calls
+  if (/@|state\.getSlot/.test(cond)) {
+    var cleaned = _cleanCondForEval(cond);
+    // If cleaning removed all Zig, it's now valid Lua
+    if (!/@/.test(cleaned) && !/state\.getSlot/.test(cleaned)) return cleaned;
+    return '__eval("' + cleaned.replace(/"/g, '\\"') + '")';
   }
   return cond;
 }
