@@ -37,6 +37,22 @@ FAILS=0
 fail() { echo "[flight] FAIL: $1"; FAILS=$((FAILS + 1)); }
 warn() { echo "[flight] WARN: $1"; }
 
+# Detect lua-tree mode (LUA_LOGIC with __render = lua-tree architecture)
+IS_LUA_TREE=0
+if grep -q '__render' <<< "$GEN_BLOB" 2>/dev/null && grep -q 'LUA_LOGIC' <<< "$GEN_BLOB" 2>/dev/null; then
+    IS_LUA_TREE=1
+fi
+
+# Extract LUA_LOGIC block for lua-tree checks
+LUA_BLOB=""
+if [ "$IS_LUA_TREE" -eq 1 ]; then
+    if [ -d "$GEN" ]; then
+        LUA_BLOB=$(sed -n '/^pub const LUA_LOGIC/,/^;$/p' "$GEN/logic.zig" 2>/dev/null)
+    else
+        LUA_BLOB=$(sed -n '/^pub const LUA_LOGIC/,/^;$/p' "$GEN" 2>/dev/null)
+    fi
+fi
+
 # Safe grep count — always returns a clean number, never fails
 gcount() { local n; n=$(grep -cE "$1" <<< "$2" 2>/dev/null) || n=0; echo "$n"; }
 gcount_file() { local n; n=$(grep -cE "$1" "$2" 2>/dev/null) || n=0; echo "$n"; }
@@ -188,6 +204,11 @@ if [ "$EMPTY_COLORS" -gt 0 ]; then
     fi
 fi
 fi # IS_CLASSIFIER Color{} skip
+
+# ── Sections 3-16: Zig-mode checks (skip for lua-tree) ───────
+# These check Zig node arrays, _rebuildMap, createSlot, etc.
+# Lua-tree has its own checks in the LT section below.
+if [ "$IS_LUA_TREE" -eq 0 ]; then
 
 # ── 3. Handler balance ────────────────────────────────────────
 # Count unique handler patterns — avoid double-counting onChange
@@ -831,6 +852,167 @@ if [ "$DUPE_COUNT" -gt 0 ]; then
         warn "$DUPE_COUNT map text buffer(s) shared by multiple nodes — different text nodes get same value:$DUPE_LIST"
 fi
 fi
+
+fi # IS_LUA_TREE == 0 (end of Zig-mode checks sections 3-16)
+
+# ══════════════════════════════════════════════════════════════
+# ── LUA-TREE FLIGHT CHECKS ───────────────────────────────────
+# These run on lua-tree mode carts (LUA_LOGIC with __render)
+# ══════════════════════════════════════════════════════════════
+if [ "$IS_LUA_TREE" -eq 1 ] && [ -n "$LUA_BLOB" ]; then
+
+# ── LT1. Zig syntax leaked into LUA_LOGIC ────────────────────
+# These are Zig constructs that should never appear in Lua code
+ZIG_LEAK=0
+ZIG_LEAK_DETAILS=""
+
+# @as() / @intCast() / @floatFromInt() — Zig builtins
+n=$(gocount '@as\(|@intCast\(|@floatFromInt\(|@floatCast\(' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS @as/$n"; fi
+
+# &_eval_buf / &_map_texts — Zig pointer syntax
+n=$(gocount '&_eval_buf|&_map_texts|&_map_lua' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS &ptr/$n"; fi
+
+# qjs_runtime. / luajit_runtime. / state.getSlot — Zig runtime calls
+n=$(gocount 'qjs_runtime\.|luajit_runtime\.|state\.getSlot' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS zig_runtime/$n"; fi
+
+# Zig if/else ternary: if (cond) val else val — should be (cond) and val or val
+n=$(gocount '\bif\s+\(' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS zig_if/$n"; fi
+
+# _oa0_ refs — OA array refs not resolved to _item.field
+n=$(gocount '_oa[0-9]+_' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS oa_ref/$n"; fi
+
+# __eval("...") — Zig bridge call that should be a Lua ternary
+n=$(gocount '__eval\(' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS __eval/$n"; fi
+
+# Color.rgb(...) — Zig Color type leaked into Lua (should be 0xHEXHEX)
+n=$(gocount 'Color\.rgb\(' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS Color.rgb/$n"; fi
+
+if [ "$ZIG_LEAK" -gt 0 ]; then
+    fail "$ZIG_LEAK Zig syntax leaked into LUA_LOGIC:$ZIG_LEAK_DETAILS"
+fi
+
+# ── LT2. Unquoted enum values in Lua tables ──────────────────
+# Lua table values like align_items = center crash — must be "center"
+UNQUOTED=0
+UNQUOTED_LIST=""
+for kw in center flex_start flex_end space_between space_around space_evenly stretch baseline row column row_reverse column_reverse wrap nowrap hidden visible scroll absolute relative; do
+    n=$(grep -cE "= ${kw}([, }]|$)" <<< "$LUA_BLOB" 2>/dev/null) || n=0
+    if [ "$n" -gt 0 ]; then
+        UNQUOTED=$((UNQUOTED + n))
+        UNQUOTED_LIST="$UNQUOTED_LIST $kw($n)"
+    fi
+done
+if [ "$UNQUOTED" -gt 0 ]; then
+    fail "$UNQUOTED unquoted enum value(s) in LUA_LOGIC (must be strings):$UNQUOTED_LIST"
+fi
+
+# ── LT3. <script> tags in JS_LOGIC ───────────────────────────
+# Script content should be extracted, not passed with tags
+JS_BLOB=""
+if [ -d "$GEN" ]; then
+    JS_BLOB=$(sed -n '/^pub const JS_LOGIC/,/^;$/p' "$GEN/logic.zig" 2>/dev/null)
+else
+    JS_BLOB=$(sed -n '/^pub const JS_LOGIC/,/^;$/p' "$GEN" 2>/dev/null)
+fi
+if [ -n "$JS_BLOB" ]; then
+    n=$(gocount '<script>|</script>' "$JS_BLOB")
+    if [ "$n" -gt 0 ]; then
+        fail "$n <script> tag(s) leaked into JS_LOGIC — content should be extracted without tags"
+    fi
+fi
+
+# ── LT4. Broken string literals in handlers ──────────────────
+# Unescaped quotes inside handler strings break Lua parsing
+# e.g. lua_on_press = "setAction("inspect")" — inner quotes kill outer
+BROKEN_HANDLERS=0
+while IFS= read -r hline; do
+    [ -z "$hline" ] && continue
+    # Skip handlers that use .. concatenation — those are intentionally spliced strings
+    echo "$hline" | grep -q '\.\.' && continue
+    # Extract the handler value between the first pair of quotes
+    # If there's an unescaped " inside, the string has 3+ quote-delimited segments
+    hval=$(echo "$hline" | sed 's/.*lua_on_press = "//;s/.*js_on_press = "//')
+    # Count unescaped quotes (not preceded by \)
+    qcount=$(echo "$hval" | grep -oE '[^\\]"' | wc -l | tr -d ' ')
+    if [ "$qcount" -gt 1 ]; then
+        BROKEN_HANDLERS=$((BROKEN_HANDLERS + 1))
+    fi
+done < <(grep -E '(lua_on_press|js_on_press) = "' <<< "$LUA_BLOB" 2>/dev/null || true)
+if [ "$BROKEN_HANDLERS" -gt 0 ]; then
+    fail "$BROKEN_HANDLERS handler(s) with unescaped quotes — string literal is broken"
+fi
+
+# ── LT4c. State key mismatch — setter writes to wrong key ────
+# Pattern: function setFoo(v) _state["setFoo"] = v  (WRONG — should be _state["foo"])
+# The setter name "setFoo" is used as the key instead of the variable name "foo"
+STATE_KEY_BAD=0
+while IFS= read -r sline; do
+    [ -z "$sline" ] && continue
+    # Extract: function setXxx(v) _state["setXxx"]
+    setter_name=$(echo "$sline" | grep -oE 'function (set[A-Za-z0-9_]+)' | sed 's/function //')
+    stored_key=$(echo "$sline" | grep -oE '_state\["[^"]+"\]' | head -1 | sed 's/_state\["//;s/"\]//')
+    if [ -n "$setter_name" ] && [ -n "$stored_key" ] && [ "$setter_name" = "$stored_key" ]; then
+        STATE_KEY_BAD=$((STATE_KEY_BAD + 1))
+    fi
+done < <(grep -E 'function set[A-Z].*_state\[' <<< "$LUA_BLOB" 2>/dev/null || true)
+if [ "$STATE_KEY_BAD" -gt 0 ]; then
+    fail "$STATE_KEY_BAD setter(s) write to wrong state key (setFoo stores to _state[\"setFoo\"] instead of _state[\"foo\"])"
+fi
+
+# ── LT4d. Dropped conditional branches ───────────────────────
+# Source has {expr && <JSX>} or {expr ? <A> : <B>} but generated tree has fewer
+# conditional patterns — content was silently dropped during compilation.
+SRC_SHORT_COND=$(grep -cE '&&\s*<' "$SOURCE" 2>/dev/null) || SRC_SHORT_COND=0
+SRC_TERNARY_COND=$(grep -cE '\?\s*<' "$SOURCE" 2>/dev/null) || SRC_TERNARY_COND=0
+SRC_TOTAL_COND=$((SRC_SHORT_COND + SRC_TERNARY_COND))
+if [ "$SRC_TOTAL_COND" -gt 0 ]; then
+    GEN_LUA_COND=$(grep -cE '\) and \{' <<< "$LUA_BLOB" 2>/dev/null) || GEN_LUA_COND=0
+    if [ "$GEN_LUA_COND" -eq 0 ]; then
+        fail "$SRC_TOTAL_COND conditional branch(es) in source (&&/$SRC_SHORT_COND ?/$SRC_TERNARY_COND) but 0 in generated — content dropped"
+    fi
+fi
+
+# ── LT4e. Dropped children — source elements compiled to empty nodes ──
+# Nodes with style but no text/children in Lua tree when source has content inside
+# Pattern in lua: { style = { ... } } with NO children = {} and NO text =
+# This catches <Box>..content..</Box> compiling to just { style = { ... } }
+if [ -n "$LUA_BLOB" ]; then
+    # Count nodes in source that have children (opening + closing tag with stuff between)
+    SRC_ELEMENTS=$(grep -cE '<(Box|Pressable|ScrollView)[^/]*>' "$SOURCE" 2>/dev/null) || SRC_ELEMENTS=0
+    # Count empty style-only nodes in generated (style but no children, no text)
+    GEN_EMPTY_STYLED=$(grep -oE '\{ style = \{[^}]+\} \}[,)]' <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
+    # Only flag if there are many empty nodes relative to source elements
+    if [ "$GEN_EMPTY_STYLED" -gt 3 ] && [ "$SRC_ELEMENTS" -gt 0 ]; then
+        EMPTY_RATIO=$((GEN_EMPTY_STYLED * 100 / SRC_ELEMENTS))
+        if [ "$EMPTY_RATIO" -gt 30 ]; then
+            warn "$GEN_EMPTY_STYLED empty styled node(s) in generated ($EMPTY_RATIO% of $SRC_ELEMENTS source elements) — possible dropped children"
+        fi
+    fi
+fi
+
+# ── LT4f. Color integrity — handled by check 1 above (works for both modes)
+
+# ── LT5. Map variable leakage in handlers ────────────────────
+# Inside __mapLoop bodies, handler strings should use _item not source vars
+# Detect: map source var (from .map((x, ...) in source) appearing raw in handlers
+MAP_VARS=$(grep -oE '\.map\(\s*\(\s*([a-zA-Z_]\w*)' "$SOURCE" 2>/dev/null | sed 's/.*(\s*//' || true)
+for mv in $MAP_VARS; do
+    # Check if the source map var name appears in handler strings inside LUA_LOGIC
+    # Pattern: js_on_press = "... mv . field ..." (should be _item.field)
+    n=$(grep -oE "js_on_press = \"[^\"]*\b${mv}\s*\.\s*\w+" <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$n" -gt 0 ]; then
+        fail "$n handler(s) reference map var '$mv' instead of '_item' inside __mapLoop"
+    fi
+done
+
+fi # IS_LUA_TREE
 
 # ── Summary ───────────────────────────────────────────────────
 if [ "$FAILS" -gt 0 ]; then

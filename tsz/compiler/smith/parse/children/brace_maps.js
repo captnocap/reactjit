@@ -103,10 +103,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
       varName: baseName,
       isNested: !!ctx.currentMap
     });
-    // Replace the Zig node with a Lua wrapper placeholder (only for top-level maps)
-    if (!ctx.currentMap) {
-      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
-    }
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
     if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
     return true;
   }
@@ -144,9 +141,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     varName: baseName,
     isNested: !!ctx.currentMap
   });
-  if (!ctx.currentMap) {
-    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _ccLuaIdx + '" }', _luaMapWrapper: _ccLuaIdx });
-  }
+  children.push({ nodeExpr: '.{ .test_id = "__lmw' + _ccLuaIdx + '" }', _luaMapWrapper: _ccLuaIdx });
   if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
   return true;
 }
@@ -333,23 +328,53 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       }
       c.restore(_rSaved);
       var _nmRawSource = _rawTokens.join(' ').replace(/\s*\.\s*$/, '');
-      var _nmLuaBody = emitLuaRebuildList(_nmIdx, c, _nmParam, null, _nmIdxParam);
+      // Replace outer map item param with _item (e.g. "group . items" → "_item.items")
+      if (ctx.currentMap && ctx.currentMap.itemParam) {
+        _nmRawSource = _nmRawSource.replace(new RegExp('\\b' + ctx.currentMap.itemParam + '\\b', 'g'), '_item');
+      }
+      // Clean spaces around dots: "_item . items" → "_item.items"
+      _nmRawSource = _nmRawSource.replace(/\s*\.\s*/g, '.');
+      // Build inner map body via token walker (emitLuaElement)
+      // This avoids parser scoping issues with nested map variable shadowing
+      var _nmBodyLua = null;
+      if (c.kind() === TK.lt || c.kind() === TK.lparen) {
+        if (c.kind() === TK.lparen) c.advance(); // skip ( wrapping JSX
+        _luaEmitIter = 0;
+        _luaEmitDepth = 0;
+        _nmBodyLua = emitLuaElement(c, _nmParam, '          ', _nmIdxParam);
+        if (c.kind() === TK.rparen) c.advance(); // close ( wrapper
+      }
+      // Substitute source param names → Lua param names
+      if (_nmBodyLua) {
+        // Inner item param: item → _nitem (or whatever source param was)
+        if (_nmParam && _nmParam !== '_item') {
+          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b_item \\. ' + '(\\w+)', 'g'), '_nitem.$1');
+          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b_item\\.(\\w+)', 'g'), '_nitem.$1');
+        }
+        // Inner index: ii → (_ni - 1)
+        if (_nmIdxParam) {
+          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b' + _nmIdxParam + '\\b', 'g'), '(_ni - 1)');
+        }
+        // Outer index: gi → (_i - 1)
+        if (ctx.currentMap && ctx.currentMap.indexParam) {
+          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b' + ctx.currentMap.indexParam + '\\b', 'g'), '(_i - 1)');
+        }
+      }
       // Consume closing parens/braces from the .map() call
       while (c.kind() === TK.rparen) c.advance();
       if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
       ctx._luaMapRebuilders.push({
         index: _nmIdx,
-        luaCode: _nmLuaBody,
-        bodyNode: null, // nested maps still use token walker for now
+        luaCode: '',
+        bodyNode: null,
+        bodyLua: _nmBodyLua,
         itemParam: _nmParam || '_item',
         indexParam: _nmIdxParam || null,
         rawSource: _nmRawSource,
         varName: maybeArr,
         isNested: !!ctx.currentMap
       });
-      if (!ctx.currentMap) {
-        children.push({ nodeExpr: '.{ .test_id = "__lmw' + _nmIdx + '" }', _luaMapWrapper: _nmIdx });
-      }
+      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _nmIdx + '" }', _luaMapWrapper: _nmIdx });
       return true;
     }
     c.restore(_savedNested);
@@ -442,9 +467,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       varName: maybeArr,
       isNested: !!ctx.currentMap
     });
-    if (!ctx.currentMap) {
-      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _dynLuaIdx + '" }', _luaMapWrapper: _dynLuaIdx });
-    }
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _dynLuaIdx + '" }', _luaMapWrapper: _dynLuaIdx });
     if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
     return true;
   }

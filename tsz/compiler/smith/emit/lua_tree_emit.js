@@ -59,7 +59,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       // Getter as global variable (read from state pool)
       lua.push(getter + ' = _state["' + getter + '"]');
       // Setter function
-      lua.push('function ' + setter + '(v) _state["' + setter + '"] = v; ' + getter + ' = v; __markDirty() end');
+      lua.push('function ' + setter + '(v) _state["' + getter + '"] = v; ' + getter + ' = v; __markDirty() end');
     }
     lua.push('');
   }

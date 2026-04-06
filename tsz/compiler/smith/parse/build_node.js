@@ -544,7 +544,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 dataVar: _lmr.rawSource || _lmr.varName,
                 itemParam: _lmr.itemParam || '_item',
                 indexParam: _lmr.indexParam || null,
-                bodyNode: _lmr.bodyNode || null
+                bodyNode: _lmr.bodyNode || null,
+                bodyLua: _lmr.bodyLua || null
               }
             });
           }

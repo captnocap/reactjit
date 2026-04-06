@@ -130,11 +130,25 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
       } else if (child.luaMapLoop) {
         // Inline map loop — emits as a Lua function call that returns children
         var ml = child.luaMapLoop;
-        // Map loops can't use unpack() mid-table (Lua only takes first result).
-        // Instead, emit the loop BEFORE the children table and splice the results.
-        // Use __mapLoop helper that returns the array directly.
-        var loopBody = ml.bodyNode ? _nodeToLua(ml.bodyNode, ml.itemParam, ml.indexParam, indent + '    ') : '{}';
-        childLua.push('__mapLoop(' + ml.dataVar + ', function(_item, _i)\n' +
+        // Nested maps use _nitem/_ni to avoid shadowing outer _item/_i
+        var _isNested = !!itemParam;
+        var _innerFnItem = _isNested ? '_nitem' : '_item';
+        var _innerFnIdx = _isNested ? '_ni' : '_i';
+        var _innerIdxP = ml.indexParam || null;
+        var loopBody;
+        if (ml.bodyLua) {
+          // Pre-built Lua from token walker (nested maps)
+          loopBody = ml.bodyLua;
+        } else if (ml.bodyNode) {
+          loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, _innerIdxP, indent + '    ');
+          // For nested maps: _nodeToLua always emits _item — replace with _nitem
+          if (_isNested) {
+            loopBody = loopBody.replace(/\b_item\b/g, _innerFnItem);
+          }
+        } else {
+          loopBody = '{}';
+        }
+        childLua.push('__mapLoop(' + ml.dataVar + ', function(' + _innerFnItem + ', ' + _innerFnIdx + ')\n' +
           indent + '    return ' + loopBody + '\n' +
           indent + '  end)');
       } else {

@@ -38,7 +38,9 @@ function _spliceDynamicHandler(h) {
     if (argDyn && fnName) {
       out += fnName + '(" .. (' + args + ') .. ")';
     } else {
-      out += fnName + '(' + args + ')';
+      // Escape string args so inner quotes don't break the outer lua_on_press = "..." wrapper
+      var escapedArgs = args.replace(/"/g, '\\"');
+      out += fnName + '(' + escapedArgs + ')';
     }
     i = argEnd;
   }
