@@ -75,20 +75,57 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
 
   if (node.color) {
     var _cv = node.color;
-    // Complex Zig expression → __eval
     if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0)) {
       // OA ref in color → _item.field
       var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
       if (_oaColor) {
         fields.push('text_color = _item.' + _oaColor[1]);
       } else {
-        // Clean up and send to __eval
-        var _jsColor = _cv.replace(/^if\s+\((.+?)\)\s+/, '$1 ? ').replace(/\s+else\s+/, ' : ');
+        var _jsColor = _cv;
+        // Color.rgb → hex FIRST
         _jsColor = _jsColor.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
           return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
         });
-        _jsColor = _jsColor.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(');
-        fields.push('text_color = __eval("' + _jsColor.replace(/"/g, '\\"') + '")');
+        // @as strip
+        for (var _cai = 0; _cai < 5; _cai++) {
+          _jsColor = _jsColor.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
+        }
+        _jsColor = _jsColor.replace(/@intCast\(/g, '(');
+        // State slots → getter names
+        _jsColor = _jsColor.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
+          return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+        });
+        // OA refs
+        _jsColor = _jsColor.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+        // Zig if/else → Lua and/or (balanced paren match)
+        var _ifColorMatch = _jsColor.match(/^if\s*\(/);
+        if (_ifColorMatch) {
+          var _cd = 0, _cci = 3;
+          for (; _cci < _jsColor.length; _cci++) {
+            if (_jsColor[_cci] === '(') _cd++;
+            if (_jsColor[_cci] === ')') { _cd--; if (_cd === 0) break; }
+          }
+          if (_cd === 0) {
+            var _ccond = _jsColor.substring(4, _cci);
+            var _crest = _jsColor.substring(_cci + 1).trim();
+            var _celse = _crest.split(/\s+else\s+/);
+            if (_celse.length === 2) {
+              _jsColor = '(' + _ccond + ') and ' + _celse[0].trim() + ' or ' + _celse[1].trim();
+            }
+          }
+        }
+        // Clean orphan parens
+        var _co = (_jsColor.match(/\(/g) || []).length;
+        var _cc2 = (_jsColor.match(/\)/g) || []).length;
+        while (_cc2 > _co && _jsColor.endsWith(')')) { _jsColor = _jsColor.slice(0, -1); _cc2--; }
+        // Emit as bare Lua if clean, otherwise __eval
+        if (/\band\b/.test(_jsColor) && !/[?:]/.test(_jsColor) && !/\bif\b/.test(_jsColor)) {
+          fields.push('text_color = ' + _jsColor);
+        } else if (/^0x[0-9a-f]+$/i.test(_jsColor) || /^_item\.\w+$/.test(_jsColor)) {
+          fields.push('text_color = ' + _jsColor);
+        } else {
+          fields.push('text_color = __eval("' + _jsColor.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
+        }
       }
     } else {
       var _colorLua = _zigColorToLuaHex(_cv) || _hexToLua(_cv);

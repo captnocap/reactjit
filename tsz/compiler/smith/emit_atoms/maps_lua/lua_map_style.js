@@ -45,43 +45,60 @@ function _styleToLua(style, itemParam, indexParam) {
     // Store the original .tsz expression on the style field (via _luaRawExpr) and __eval it.
     // For now: detect Zig patterns and use __eval with a cleaned-up version.
     if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0)) {
-      // Try to extract a clean JS expression from the Zig
       var _jsExpr = val;
-      _jsExpr = _jsExpr.replace(/^if\s+\((.+?)\)\s+/, '$1 ? ');
-      _jsExpr = _jsExpr.replace(/\s+else\s+/, ' : ');
-      _jsExpr = _jsExpr.replace(/@as\([^,]+,\s*/g, '');
-      _jsExpr = _jsExpr.replace(/@intCast\(/g, '(');
-      _jsExpr = _jsExpr.replace(/\)\s*$/g, '');
-      // OA refs → item field access
-      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-      // Color.rgb with literal args → 0xRRGGBB
+      // 1. Color.rgb → 0xRRGGBB FIRST (before paren stripping mangles them)
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
       });
-      // Color.rgb with bit-shift extraction from _item.field → just _item.field
+      // 2. @as wrappers — iterate to handle nesting
+      for (var _ai = 0; _ai < 5; _ai++) {
+        _jsExpr = _jsExpr.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
+      }
+      _jsExpr = _jsExpr.replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+      // 3. State slot refs → getter names
+      _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
+        return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+      });
+      // 4. OA refs → _item.field
+      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // 5. Zig if/else → Lua (cond) and val or val
+      // Match: if (COND) TRUE_VAL else FALSE_VAL
+      // Use greedy match for cond by counting parens
+      var _ifMatch = _jsExpr.match(/^if\s*\(/);
+      if (_ifMatch) {
+        // Find matching close paren for the condition
+        var _depth = 0, _ci = 3; // start after "if "
+        for (; _ci < _jsExpr.length; _ci++) {
+          if (_jsExpr[_ci] === '(') _depth++;
+          if (_jsExpr[_ci] === ')') { _depth--; if (_depth === 0) break; }
+        }
+        if (_depth === 0) {
+          var _cond = _jsExpr.substring(4, _ci); // between ( and )
+          var _rest = _jsExpr.substring(_ci + 1).trim();
+          var _elseParts = _rest.split(/\s+else\s+/);
+          if (_elseParts.length === 2) {
+            var _trueVal = _elseParts[0].trim();
+            var _falseVal = _elseParts[1].trim();
+            _jsExpr = '(' + _cond + ') and ' + _trueVal + ' or ' + _falseVal;
+          }
+        }
+      }
+      // 6. Color.rgb with bit-shift extraction → _item.field
       if (_jsExpr.indexOf('Color.rgb(') >= 0 && _jsExpr.indexOf('_item.') >= 0 && _jsExpr.indexOf('>> 16') >= 0) {
         var _colorFieldMatch = _jsExpr.match(/_item\.(\w+)/);
         if (_colorFieldMatch) _jsExpr = '_item.' + _colorFieldMatch[1];
       }
-      // State slot refs → getter names
-      _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
-        return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
-      });
-      // @as/@intCast → strip
-      _jsExpr = _jsExpr.replace(/@as\(\w+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
-      // Clean orphan closing parens
+      // 7. Clean orphan closing parens
       var _eo = (_jsExpr.match(/\(/g) || []).length;
       var _ec = (_jsExpr.match(/\)/g) || []).length;
       while (_ec > _eo && _jsExpr.endsWith(')')) { _jsExpr = _jsExpr.slice(0, -1); _ec--; }
-      // If the cleaned expression is valid Lua (no JS syntax left), emit bare
-      // Covers: _item.field, _item.field * N, var, var + N, ternary with and/or
+      // 8. Emit — check if result is valid Lua
       if (/^[a-zA-Z_][\w.]*$/.test(_jsExpr) || /^_item\.\w+$/.test(_jsExpr)) {
         parts.push(luaKey + ' = ' + _jsExpr);
       } else if (/^[\w._\s+\-*/%()]+$/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
-        // Pure arithmetic/field expression — safe as bare Lua
         parts.push(luaKey + ' = ' + _jsExpr);
-      } else if (/and|or/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
-        // Lua ternary (cond) and val or val — safe as bare Lua
+      } else if (/\band\b/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
         parts.push(luaKey + ' = ' + _jsExpr);
       } else {
         parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');

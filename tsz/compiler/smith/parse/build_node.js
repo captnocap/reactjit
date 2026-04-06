@@ -433,20 +433,21 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         }
         _ln.style[_sk] = _sv;
       }
-      // Overlay dynStyle expressions — these replace placeholder values (0, Color{})
-      // Overlay dynStyle expressions (uses _cleanZigExpr from outer scope)
-      if (nodeResult.dynStyleId !== undefined && ctx.dynStyles) {
-        var _ds = ctx.dynStyles[nodeResult.dynStyleId];
-        if (_ds && _ds.expression) {
-          _ln.style[_ds.field] = _cleanZigExpr(_ds.expression);
-        }
+    }
+    // Overlay dynStyle expressions — these replace placeholder values (0, Color{})
+    // Must run OUTSIDE the styleFields block — text_color ternaries have no style fields
+    if (!_ln.style) _ln.style = {};
+    if (nodeResult.dynStyleId !== undefined && ctx.dynStyles) {
+      var _ds = ctx.dynStyles[nodeResult.dynStyleId];
+      if (_ds && _ds.expression) {
+        _ln.style[_ds.field] = _cleanZigExpr(_ds.expression);
       }
-      if (nodeResult.dynStyleIds) {
-        for (var _dsi = 0; _dsi < nodeResult.dynStyleIds.length; _dsi++) {
-          var _ds2 = ctx.dynStyles[nodeResult.dynStyleIds[_dsi]];
-          if (_ds2 && _ds2.expression) {
-            _ln.style[_ds2.field] = _cleanZigExpr(_ds2.expression);
-          }
+    }
+    if (nodeResult.dynStyleIds) {
+      for (var _dsi = 0; _dsi < nodeResult.dynStyleIds.length; _dsi++) {
+        var _ds2 = ctx.dynStyles[nodeResult.dynStyleIds[_dsi]];
+        if (_ds2 && _ds2.expression) {
+          _ln.style[_ds2.field] = _cleanZigExpr(_ds2.expression);
         }
       }
     }
@@ -456,7 +457,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         var _nf = nodeFields[_ni];
         if (typeof _nf === 'string') {
           if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
-          if (_nf.startsWith('.text_color = ')) _ln.color = _nf.slice(14);
+          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _nf.slice(14);
           if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
         }
       }
@@ -468,6 +469,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       if (_dcExpr) {
         _ln.color = _cleanZigExpr(_dcExpr);
       }
+    }
+    // Promote dynStyle text_color to node.color (text_color is a node field, not style)
+    if (_ln.style && _ln.style.text_color && (!_ln.color || _ln.color === 'Color{}' || _ln.color === '0x000000' || _ln.color === 0)) {
+      _ln.color = _ln.style.text_color;
+      delete _ln.style.text_color;
     }
     // Static text hoisted from single child
     if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
