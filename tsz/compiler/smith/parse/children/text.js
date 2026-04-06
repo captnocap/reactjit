@@ -103,7 +103,7 @@ function tryParseTextChild(c, children) {
       if (!ctx._literalTextMode && ctx._glyphRegistry && Object.keys(ctx._glyphRegistry).length > 0 && /:([a-zA-Z]\w*):/.test(trimText)) {
         _resolveGlyphShortcodes(trimText, children);
       } else {
-        children.push({ nodeExpr: `.{ .text = "${trimText.replace(/"/g, '\\"')}" }` });
+        children.push({ nodeExpr: `.{ .text = "${trimText.replace(/"/g, '\\"')}" }`, luaNode: { text: trimText.replace(/"/g, '\\"') } });
       }
     }
     return true;

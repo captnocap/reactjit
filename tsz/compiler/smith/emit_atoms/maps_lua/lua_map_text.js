@@ -15,6 +15,11 @@ function _textToLua(text, itemParam, indexParam) {
     return 'tostring(' + text.stateVar + ')';
   }
 
+  // Lua expression: { luaExpr: "(mode == 0) and \"A\" or \"B\"" }
+  if (typeof text === 'object' && text.luaExpr) {
+    return text.luaExpr;
+  }
+
   // Template literal: { parts: [{literal: "hi "}, {expr: "item.x"}] }
   if (typeof text === 'object' && text.parts) {
     var luaParts = [];

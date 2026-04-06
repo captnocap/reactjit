@@ -5,7 +5,7 @@ function _buildLuaCondFromTokens(c, savedStart) {
   var _cur = c.save();
   c.restore(savedStart);
   var parts = [];
-  while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace) {
+  while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace && c.kind() !== TK.question) {
     if (c.kind() === TK.eq_eq) { parts.push('=='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.not_eq) { parts.push('~='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.bang) { parts.push('not'); c.advance(); continue; }

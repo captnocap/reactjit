@@ -88,13 +88,45 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             }
           }
         }
-        // Text: use raw field, template, or state getter from brace parser
+        // Text: use raw field, template, state getter, or ternary from brace parser
         if (dynChild._luaTextField) {
           _dln.text = { field: dynChild._luaTextField };
         } else if (dynChild._luaTemplateRaw) {
           _dln.text = dynChild._luaTemplateRaw;
         } else if (dynChild._luaStateGetter) {
           _dln.text = { stateVar: dynChild._luaStateGetter };
+        } else if (dynChild._luaTernaryText) {
+          _dln.text = { luaExpr: dynChild._luaTernaryText };
+        } else if (dynChild.dynBufId !== undefined) {
+          // Fallback: find the dynText entry and use __eval with the Zig fmtArgs
+          var _dt = ctx.dynTexts.find(function(d) { return d.bufId === dynChild.dynBufId && !!d.inMap === !!dynChild.inMap; });
+          if (_dt && _dt.fmtArgs) {
+            // Try to convert Zig fmtArgs to a Lua/JS expression
+            var _fmtExpr = _dt.fmtArgs;
+            // state.getSlotInt(N) → find getter name
+            _fmtExpr = _fmtExpr.replace(/state\.getSlot(?:Int|Float)?\((\d+)\)/g, function(_, idx) {
+              var _s = ctx.stateSlots[+idx];
+              return _s ? _s.getter : '__slot' + idx;
+            });
+            _fmtExpr = _fmtExpr.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+              var _s = ctx.stateSlots[+idx];
+              return _s ? _s.getter : '__slot' + idx;
+            });
+            // If it has a format string with interpolation, build template
+            if (_dt.fmtString && _dt.fmtString !== '{s}' && _dt.fmtString !== '{d}') {
+              // Multi-part format: "total:{d} phase:{d}" + args
+              var _parts = _dt.fmtString.split(/\{[ds](?::\.?\d+)?\}/);
+              var _args = _fmtExpr.split(/,\s*/);
+              var _luaParts = [];
+              for (var _pi = 0; _pi < _parts.length; _pi++) {
+                if (_parts[_pi]) _luaParts.push('"' + _parts[_pi] + '"');
+                if (_pi < _args.length) _luaParts.push('tostring(' + _args[_pi].trim() + ')');
+              }
+              _dln.text = { luaExpr: _luaParts.join(' .. ') };
+            } else {
+              _dln.text = { stateVar: _fmtExpr };
+            }
+          }
         }
         result.luaNode = _dln;
       }

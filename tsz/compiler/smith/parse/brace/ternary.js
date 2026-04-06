@@ -415,6 +415,7 @@ function tryParseTernaryJSX(c, children) {
 // Try to parse {expr == val ? "a" : "b"} ternary text
 function tryParseTernaryText(c, children) {
   const saved = c.save();
+  const _luaTernSaved = c.save(); // for building Lua condition from raw tokens
   let condParts = [];
   let foundQuestion = false;
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
@@ -612,7 +613,11 @@ function tryParseTernaryText(c, children) {
     const bufId = ctx.dynCount;
     ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
     ctx.dynCount++;
-    children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+    // Build Lua ternary from raw tokens (avoids Zig-ified condParts)
+    var _luaTernCond = (typeof _buildLuaCondFromTokens === 'function')
+      ? _buildLuaCondFromTokens(c, _luaTernSaved)
+      : condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==');
+    children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId, _luaTernaryText: '(' + _luaTernCond + ') and "' + trueVal + '" or "' + falseVal + '"' });
   }
   return true;
 }
