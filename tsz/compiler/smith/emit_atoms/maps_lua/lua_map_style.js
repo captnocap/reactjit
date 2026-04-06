@@ -104,6 +104,13 @@ function _styleToLua(style, itemParam, indexParam) {
       continue;
     }
 
+    // Bare variable reference (state getter resolved by buildNode)
+    // A single identifier like "barWidth" should be emitted bare, not quoted
+    if (typeof val === 'string' && /^[a-zA-Z_]\w*$/.test(val) && !/^(center|row|column|start|end|stretch|baseline|wrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround)$/.test(val)) {
+      parts.push(luaKey + ' = ' + val);
+      continue;
+    }
+
     // String keyword (center, row, flexStart, etc.)
     if (typeof val === 'string') {
       parts.push(luaKey + ' = "' + val + '"');

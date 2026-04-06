@@ -344,6 +344,26 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   // full lua-tree mode.
   {
     var _ln = {};
+    // Helper: clean Zig expressions to Lua-friendly form
+    var _cleanZigExpr = function(expr) {
+      expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+        var _s = ctx.stateSlots[+idx]; return _s ? _s.getter : '_slot' + idx;
+      });
+      expr = expr.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+        var _s = ctx.stateSlots[+idx]; return _s ? _s.getter : '_slot' + idx;
+      });
+      for (var _zi = 0; _zi < 3; _zi++) {
+        expr = expr.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+        expr = expr.replace(/@intFromFloat\(([^)]+)\)/g, '$1');
+        expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
+        expr = expr.replace(/@as\(\w+,\s*([^)]+)\)/g, '$1');
+      }
+      var _openCount = (expr.match(/\(/g) || []).length;
+      var _closeCount = (expr.match(/\)/g) || []).length;
+      while (_closeCount > _openCount && expr.endsWith(')')) { expr = expr.slice(0, -1); _closeCount--; }
+      expr = expr.replace(/\bif\s+\((.+?)\)\s+(\S+)\s+else\s+(\S+)/g, '($1) and $2 or $3');
+      return expr;
+    };
     // Style: parse Zig style fields back to key/value pairs
     if (styleFields.length > 0) {
       _ln.style = {};
@@ -357,7 +377,34 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         // Color.rgb(r,g,b) → keep as-is for lua_map_style to handle
         // .enum_value → strip leading dot
         if (_sv.charAt(0) === '.') _sv = _sv.slice(1);
+        // Resolve state.getSlot references to getter names
+        if (_sv.indexOf('state.getSlot') >= 0) {
+          _sv = _sv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+            var _s = ctx.stateSlots[+idx];
+            return _s ? _s.getter : '_slot' + idx;
+          });
+          _sv = _sv.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+            var _s = ctx.stateSlots[+idx];
+            return _s ? _s.getter : '_slot' + idx;
+          });
+        }
         _ln.style[_sk] = _sv;
+      }
+      // Overlay dynStyle expressions — these replace placeholder values (0, Color{})
+      // Overlay dynStyle expressions (uses _cleanZigExpr from outer scope)
+      if (nodeResult.dynStyleId !== undefined && ctx.dynStyles) {
+        var _ds = ctx.dynStyles[nodeResult.dynStyleId];
+        if (_ds && _ds.expression) {
+          _ln.style[_ds.field] = _cleanZigExpr(_ds.expression);
+        }
+      }
+      if (nodeResult.dynStyleIds) {
+        for (var _dsi = 0; _dsi < nodeResult.dynStyleIds.length; _dsi++) {
+          var _ds2 = ctx.dynStyles[nodeResult.dynStyleIds[_dsi]];
+          if (_ds2 && _ds2.expression) {
+            _ln.style[_ds2.field] = _cleanZigExpr(_ds2.expression);
+          }
+        }
       }
     }
     // Text + nodeFields
@@ -369,6 +416,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           if (_nf.startsWith('.text_color = ')) _ln.color = _nf.slice(14);
           if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
         }
+      }
+    }
+    // DynColor overlay — resolve Color{} placeholders to actual expressions
+    if (nodeResult.dynColorId !== undefined && ctx.dynColors) {
+      var _dc = ctx.dynColors[nodeResult.dynColorId];
+      if (_dc && _dc.expression) {
+        _ln.color = _cleanZigExpr(_dc.expression);
       }
     }
     // Static text hoisted from single child
