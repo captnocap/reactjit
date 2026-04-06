@@ -66,6 +66,16 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   // Render function — called on init and on every state change
   lua.push('function __render()');
   lua.push('  __clearLuaNodes()');
+  // Sync OA data from __luaMapDataN globals (set by evalLuaMapData)
+  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
+    var _oaSyncIdx = 0;
+    for (var _oasi = 0; _oasi < ctx.objectArrays.length; _oasi++) {
+      var _oaSync = ctx.objectArrays[_oasi];
+      if (_oaSync.isConst || _oaSync.isNested) continue;
+      lua.push('  if __luaMapData' + _oaSyncIdx + ' then ' + _oaSync.getter + ' = __luaMapData' + _oaSyncIdx + ' end');
+      _oaSyncIdx++;
+    }
+  }
   lua.push('  local tree = App()');
   lua.push('  if __mw0 then __declareChildren(__mw0, { tree }) end');
   lua.push('end');
@@ -161,12 +171,34 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   // Init + tick functions (v4 pattern)
   zig += 'fn _appInit() void {\n';
   zig += '    luajit_runtime.setMapWrapper(0, @ptrCast(&_root));\n';
+  // Sync OA data from QJS → Lua after script init
+  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
+    var _oaInitIdx = 0;
+    for (var oai = 0; oai < ctx.objectArrays.length; oai++) {
+      var oa = ctx.objectArrays[oai];
+      if (oa.isConst || oa.isNested) continue;
+      var oaGetter = oa.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      zig += '    qjs_runtime.evalLuaMapData(' + _oaInitIdx + ', "' + oaGetter + '");\n';
+      _oaInitIdx++;
+    }
+  }
   zig += '    luajit_runtime.callGlobal("__render");\n';
   zig += '}\n\n';
 
   zig += 'fn _appTick(now: u32) void {\n';
   zig += '    _ = now;\n';
   zig += '    if (state.isDirty()) {\n';
+  // Re-sync OA data on dirty tick
+  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
+    var _oaTickIdx = 0;
+    for (var oai2 = 0; oai2 < ctx.objectArrays.length; oai2++) {
+      var oa2 = ctx.objectArrays[oai2];
+      if (oa2.isConst || oa2.isNested) continue;
+      var oaGetter2 = oa2.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaGetter2 + '");\n';
+      _oaTickIdx++;
+    }
+  }
   zig += '        luajit_runtime.callGlobal("__render");\n';
   zig += '        state.clearDirty();\n';
   zig += '    }\n';
