@@ -430,23 +430,49 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
   if (node.color) fields.push('text_color = ' + node.color);
   if (node.handler) {
     var _hp = typeof node.handler === 'string' ? node.handler : '__luaMapPress(" .. _i .. ")';
-    // If handler references loop vars, values must be baked in at loop time
-    // e.g., "setSelected((_i - 1) * 100)" → "setSelected(" .. ((_i - 1) * 100) .. ")"
+    // If handler references loop vars, values must be baked in at loop time.
+    // Multi-statement handlers: "setFoo(x); setBar(y)" — each call with
+    // dynamic args gets its args spliced via .. concat into one string expr.
+    // Result: "setFoo(" .. (x) .. "); setBar(y)"
     var _hasDynamic = _hp.indexOf('_item') >= 0 || _hp.indexOf('_nitem') >= 0 ||
                       _hp.indexOf('(_i - 1)') >= 0 || _hp.indexOf('(_ni - 1)') >= 0;
     if (_hasDynamic) {
-      // Pattern: funcName(args) — extract, evaluate args at loop time
-      var _hMatch = _hp.match(/^(\w+)\s*\(\s*([\s\S]*)\s*\)\s*$/);
-      if (_hMatch) {
-        var _fname = _hMatch[1];
-        var _fargs = _hMatch[2].trim();
-        // The entire args expression evaluates at loop time — _item.field, (_i - 1), etc.
-        // are all valid Lua. Lua auto-coerces numbers for .. concat.
-        fields.push('lua_on_press = "' + _fname + '(" .. (' + _fargs + ') .. ")"');
-      } else {
-        // Fallback: static string
-        fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+      // Parse handler into statements, find balanced funcName(...) calls,
+      // splice dynamic args with .. concat. Handles nested parens.
+      var _out = '';
+      var _hi = 0;
+      while (_hi < _hp.length) {
+        // Look for funcName( pattern
+        var _fnStart = _hp.indexOf('(', _hi);
+        if (_fnStart < 0) { _out += _hp.slice(_hi); break; }
+        // Find the function name before the (
+        var _fnNameEnd = _fnStart;
+        while (_fnNameEnd > _hi && _hp[_fnNameEnd - 1] === ' ') _fnNameEnd--;
+        var _fnNameStart = _fnNameEnd;
+        while (_fnNameStart > _hi && /\w/.test(_hp[_fnNameStart - 1])) _fnNameStart--;
+        var _fnName = _hp.slice(_fnNameStart, _fnNameEnd);
+        // Find matching ) with balanced depth
+        var _depth = 1;
+        var _argStart = _fnStart + 1;
+        var _argEnd = _argStart;
+        while (_argEnd < _hp.length && _depth > 0) {
+          if (_hp[_argEnd] === '(') _depth++;
+          if (_hp[_argEnd] === ')') _depth--;
+          _argEnd++;
+        }
+        var _args = _hp.slice(_argStart, _argEnd - 1).trim();
+        var _argDyn = _args.indexOf('_item') >= 0 || _args.indexOf('_nitem') >= 0 ||
+                      _args.indexOf('(_i - 1)') >= 0 || _args.indexOf('(_ni - 1)') >= 0;
+        // Emit everything before the func name as static
+        _out += _hp.slice(_hi, _fnNameStart);
+        if (_argDyn && _fnName) {
+          _out += _fnName + '(" .. (' + _args + ') .. ")';
+        } else {
+          _out += _fnName + '(' + _args + ')';
+        }
+        _hi = _argEnd;
       }
+      fields.push('lua_on_press = "' + _out + '"');
     } else {
       fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
     }
