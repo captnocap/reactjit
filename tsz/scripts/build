@@ -599,7 +599,15 @@ if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
 # ── Step 2b: flight check (source↔generated integrity) ─────────
 FLIGHT_GEN="$GEN_DIR"
 [ ! -d "$FLIGHT_GEN" ] && FLIGHT_GEN="$GEN_ROOT/generated_${NAME}.zig"
-if [ -e "$FLIGHT_GEN" ]; then
+# Skip flight checks for lua-tree mode (state/maps/conditionals are in Lua, not Zig)
+IS_LUA_TREE=0
+if [ -d "$GEN_DIR" ] && grep -q '__render' "$GEN_DIR/logic.zig" 2>/dev/null; then
+    IS_LUA_TREE=1
+fi
+if [ -f "$FLIGHT_GEN" ] && grep -q '__render' "$FLIGHT_GEN" 2>/dev/null; then
+    IS_LUA_TREE=1
+fi
+if [ "$IS_LUA_TREE" -eq 0 ] && [ -e "$FLIGHT_GEN" ]; then
     FLIGHT_EXIT=0
     FLIGHT_OUT=$(./scripts/flight-check "$CART" "$FLIGHT_GEN" 2>&1) || FLIGHT_EXIT=$?
     if [ "$FLIGHT_EXIT" -ne 0 ]; then
