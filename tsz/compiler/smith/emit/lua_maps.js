@@ -440,9 +440,8 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
       if (_hMatch) {
         var _fname = _hMatch[1];
         var _fargs = _hMatch[2].trim();
-        // If args contain _item/_nitem field access, interpolate as tostring
-        _fargs = _fargs.replace(/_nitem\s*\.\s*(\w+)/g, '" .. tostring(_nitem.$1) .. "');
-        _fargs = _fargs.replace(/_item\s*\.\s*(\w+)/g, '" .. tostring(_item.$1) .. "');
+        // The entire args expression evaluates at loop time — _item.field, (_i - 1), etc.
+        // are all valid Lua. Lua auto-coerces numbers for .. concat.
         fields.push('lua_on_press = "' + _fname + '(" .. (' + _fargs + ') .. ")"');
       } else {
         // Fallback: static string
@@ -534,6 +533,8 @@ function emitLuaChildren(c, itemParam, indent, indexParam) {
         if (c.kind() === TK.amp_amp) {
           c.advance(); // skip &&
           var condExpr = condParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+          if (indexParam) condExpr = condExpr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
+          condExpr = condExpr.replace(/===/g, '==').replace(/!==/g, '~=');
           // Handle chained &&: a && b && c && <JSX> → (a) and (b) and (c) and element
           while (c.kind() !== TK.lt && c.kind() !== TK.lparen && c.kind() !== TK.rbrace && c.pos < c.count) {
             var chainParts = [];
@@ -544,11 +545,13 @@ function emitLuaChildren(c, itemParam, indent, indexParam) {
             if (c.kind() === TK.amp_amp) {
               c.advance();
               var chainExpr = chainParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+              if (indexParam) chainExpr = chainExpr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
               condExpr = '(' + condExpr + ') and (' + chainExpr + ')';
             } else {
               // Not another &&, push parts back conceptually — we're at < or ) or }
               if (chainParts.length > 0) {
                 var chainExpr2 = chainParts.join(' ').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+                if (indexParam) chainExpr2 = chainExpr2.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), '(_i - 1)');
                 condExpr = '(' + condExpr + ') and (' + chainExpr2 + ')';
               }
               break;
