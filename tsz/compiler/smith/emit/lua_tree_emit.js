@@ -206,11 +206,13 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       if (js.getter.indexOf('__') === 0) continue; // skip internal slots
       var jsInit = js.initial !== undefined ? JSON.stringify(js.initial) : '0';
       jsStateBindings += 'var ' + js.getter + ' = ' + jsInit + ';\n';
-      // JS setter updates local var then calls Lua setter (Lua owns state)
+      // JS setter updates local var then calls Lua setter (Lua owns state).
+      // Guard: at init time Lua setters aren't defined yet (JS_LOGIC loads
+      // before LUA_LOGIC). __luaReady is set by engine after LUA_LOGIC loads.
       var _luaSetCall = js.type === 'string'
         ? '__luaEval("' + js.setter + '(\\\'" + v + "\\\')")'
         : '__luaEval("' + js.setter + '(" + v + ")")';
-      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; ' + _luaSetCall + '; }\n';
+      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; if (__luaReady) ' + _luaSetCall + '; else __markDirty(); }\n';
     }
   }
   // OA getters in JS — reconstruct initial data from token range
@@ -239,7 +241,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
     }
   }
 
-  var jsContent = jsStateBindings;
+  var jsContent = 'var __luaReady = false;\n' + jsStateBindings;
   // When FFI decls are present the script block is routed to LUA_LOGIC instead
   if (!ctx._scriptBlockIsLua) {
     if (ctx.scriptBlock) {

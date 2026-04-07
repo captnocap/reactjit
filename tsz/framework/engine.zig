@@ -1584,6 +1584,7 @@ pub fn run(config_in: AppConfig) !void {
     // then mark dirty so first tick re-evaluates conditionals with scripts available.
     if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
     if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
+    if (config.js_logic.len > 0) qjs_runtime.evalExpr("__luaReady = true;");
     if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
@@ -1625,6 +1626,7 @@ pub fn run(config_in: AppConfig) !void {
                 if (config.init) |initFn| initFn();
                 if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
                 if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
+                if (config.js_logic.len > 0) qjs_runtime.evalExpr("__luaReady = true;");
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
@@ -2043,7 +2045,6 @@ pub fn run(config_in: AppConfig) !void {
                     // SDL3: mouse_x/mouse_y are in the wheel event itself
                     const mx: f32 = event.wheel.mouse_x;
                     const my: f32 = event.wheel.mouse_y;
-                    if (witness.isActive()) std.debug.print("[scroll-debug] wheel at ({d:.0},{d:.0}) delta=({d:.1},{d:.1})\n", .{ mx, my, event.wheel.x, event.wheel.y });
                     witness.recordScroll(mx, my, event.wheel.x, event.wheel.y);
                     const events = @import("events.zig");
                     // Terminal scrollback — mouse wheel scrolls history (check all terminals)
@@ -2098,7 +2099,6 @@ pub fn run(config_in: AppConfig) !void {
                             canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                         }
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
-                        if (witness.isActive()) std.debug.print("[scroll-debug] found scroll container, scroll_y={d:.0} content_h={d:.0} h={d:.0}\n", .{ scroll_node.scroll_y, scroll_node.content_height, scroll_node.computed.h });
                         if (event.wheel.y != 0) {
                             // macOS trackpad: SDL3 gives pixel-precise fractional deltas
                             // Mouse wheel: SDL3 gives ±1.0 per notch
@@ -2217,10 +2217,7 @@ pub fn run(config_in: AppConfig) !void {
         // Layout (main window) — skip full flex pass when nothing invalidated geometry
         const t2 = std.time.microTimestamp();
         const app_h = win_h;
-        if (layout.isLayoutDirty()) {
-            layout.layout(config.root, 0, 0, win_w, app_h);
-            layout.clearLayoutDirty();
-        }
+        layout.layout(config.root, 0, 0, win_w, app_h);
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
 
@@ -2342,9 +2339,10 @@ pub fn run(config_in: AppConfig) !void {
         if (now -% fps_last >= 1000) {
             qjs_runtime.telemetry_fps = fps_frames;
             luajit_runtime.telemetry_fps = fps_frames;
-            const ppf = g_paint_count / @max(fps_frames, 1);
-            const hpf = g_hidden_count / @max(fps_frames, 1);
-            const zpf = g_zero_count / @max(fps_frames, 1);
+            // Use last frame's counts directly (counters reset per-frame for budget checks)
+            const ppf = g_paint_count;
+            const hpf = g_hidden_count;
+            const zpf = g_zero_count;
             std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
                 fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });
@@ -2356,7 +2354,6 @@ pub fn run(config_in: AppConfig) !void {
             @import("luajit_worker.zig").logTelemetry();
             @import("audio.zig").logTelemetry();
             watchdog.heartbeat();
-            g_paint_count = 0;
             g_budget_exceeded = false;
             g_hover_changed = false;
             g_hidden_count = 0;

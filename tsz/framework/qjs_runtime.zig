@@ -130,6 +130,13 @@ fn hostLog(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVa
     return QJS_UNDEFINED;
 }
 
+/// __markDirty() — mark state dirty from QJS. Used by OA setters (setItems etc.)
+/// that update JS-side data without going through Lua setters.
+fn hostMarkDirty(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    state.markDirty();
+    return QJS_UNDEFINED;
+}
+
 /// __luaEval(code) — evaluate a Lua expression from QJS. Used by JS setters
 /// to call Lua setters directly so Lua owns state.
 fn hostLuaEval(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -1867,6 +1874,7 @@ pub fn initVM() void {
 
     const global = qjs.JS_GetGlobalObject(ctx);
     defer qjs.JS_FreeValue(ctx, global);
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__markDirty", qjs.JS_NewCFunction(ctx, hostMarkDirty, "__markDirty", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__luaEval", qjs.JS_NewCFunction(ctx, hostLuaEval, "__luaEval", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setState", qjs.JS_NewCFunction(ctx, hostSetState, "__setState", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setStateString", qjs.JS_NewCFunction(ctx, hostSetStateString, "__setStateString", 2));
