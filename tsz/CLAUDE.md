@@ -51,6 +51,8 @@ If a conformance build fails, the build script prints a **failure receipt** show
 
 This is the active engine. When the user says "the compiler", "the runtime", "layout", "the inspector" — this is it.
 
+**Zig vs Lua vs QJS at runtime:** read `docs/ARCHITECTURE.md` § *Where runtime work actually happens* before assuming all state is Zig slots or a single QJS→Zig→Lua chain.
+
 ## Structure
 
 ```
@@ -77,7 +79,7 @@ carts/              — Apps built with the framework
 The build has 3 stages. Understand this or you will waste everyone's time:
 
 1. **Forge** (Zig binary) — runs Smith (the JS compiler)
-2. **Smith** (JS) — compiles `.tsz` → `generated_*.zig` plus **`LUA_LOGIC`** (default); **`JS_LOGIC`** when the cart has script blocks
+2. **Smith** (JS) — compiles `.tsz` → `generated_*.zig` plus **`LUA_LOGIC`** (default); **`JS_LOGIC`** when emitted (script imports / `<script>`); QJS still used for `__eval` / `evalLuaMapData` / `js_on_press` on many carts
 3. **Zig build** — compiles generated Zig + links `framework/` → native binary
 
 ### Commands

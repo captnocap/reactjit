@@ -16,7 +16,7 @@ React is a party where one guest invites another who invites another — the com
 
 Intent syntax is a party where everyone arrives at the same time. The compiler does **preflight** — scans all files, reads every block header, knows the full guest list before compilation starts. You're in or you're not. No discovery chain. No cascade.
 
-**Native stack note:** Forge + Smith’s **current** app path is **lua-tree** with embedded **`LUA_LOGIC`** (LuaJIT); Zig stamps tables to `Node`. Static Zig-only trees are legacy. See [ARCHITECTURE.md](ARCHITECTURE.md).
+**Native stack note:** Forge + Smith’s **current** app path is **lua-tree** with **`LUA_LOGIC`**; Zig stamps to `Node` and runs layout/paint. **State** may live in **Lua**, **`JS_LOGIC`**, and/or **Zig slots** — see [ARCHITECTURE.md](ARCHITECTURE.md) § *Where runtime work actually happens*. Static Zig-only trees are legacy.
 
 **Preflight steps:**
 

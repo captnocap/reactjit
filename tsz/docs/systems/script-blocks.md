@@ -4,11 +4,11 @@ JavaScript logic via QuickJS, running alongside the compiled Zig UI.
 
 ## Overview
 
-Script blocks provide runtime JavaScript execution for logic that doesn't need to be compiled to Zig — data fetching, timers, complex business logic, and dynamic state updates. The JS runs in an embedded QuickJS VM. **Layout and paint stay in Zig** (`layout.zig`, `gpu/`); the UI *structure* may be static Zig nodes or a **lua-tree** stamped from Lua — see [ARCHITECTURE.md](../ARCHITECTURE.md).
+Script blocks provide runtime JavaScript execution for logic that doesn't need to be compiled to Zig — data fetching, timers, complex business logic, and dynamic state updates. The JS runs in an embedded QuickJS VM. **Layout and paint stay in Zig** (`layout.zig`, `gpu/`); UI *structure* on the default path is a **lua-tree** stamped from Lua — see [ARCHITECTURE.md](../ARCHITECTURE.md) § *Where runtime work actually happens*.
 
-### Default lua-tree and QuickJS
+### Lua-tree and QuickJS
 
-**`LUA_LOGIC`** is the normal app emit; **LuaJIT** owns the tree. **QuickJS** still loads when the cart has **`JS_LOGIC`** from `<script>`, and the engine uses QuickJS for **`__eval(jsExpr)`** (Lua → `qjs_runtime.evalToString`) and **`evalLuaMapData`** (JS expressions feeding Lua). Script blocks and lua-tree are **not** mutually exclusive.
+**`LUA_LOGIC`** is the normal app emit; **LuaJIT** builds the tree and often holds **Lua-local state**. **QuickJS** runs **`JS_LOGIC`** from `<script>` when emitted, and is also used for **`__eval`**, **`evalLuaMapData`**, and **`js_on_press`** even when the script body is minimal. **JS** and **Lua** can both hold app data in the same cart (e.g. init in `JS_LOGIC`, `__luaMapData*` into Lua).
 
 There are two ways to add JS logic to a cart:
 

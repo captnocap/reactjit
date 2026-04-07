@@ -4,7 +4,7 @@ Context for AI agents (Codex, etc.) working in this repository. Last updated: 20
 
 ## What This Is
 
-ReactJIT is a `.tsz`-to-native compiler and UI framework. `.tsz` compiles via **Forge + Smith** to **generated Zig** plus embedded **`LUA_LOGIC`** (current default — lua-tree UI + handlers in LuaJIT). **`JS_LOGIC`** is added when `<script>` / script imports exist. The runtime is **Zig** (layout, GPU, stamping) + **LuaJIT** (`LUA_LOGIC`) + **QuickJS** (scripts + `__eval` / `evalLuaMapData`). Read [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) and [tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md](tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
+ReactJIT is a `.tsz`-to-native compiler and UI framework. `.tsz` compiles via **Forge + Smith** to **generated Zig** plus **`LUA_LOGIC`** (default lua-tree) and often **`JS_LOGIC`**. **Before reasoning about “where state lives,”** read [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) § **Where runtime work actually happens**: **Zig** hosts the process (loop, hit-test, layout, paint, dirty bit, stamped `Node`s, optional slots); **LuaJIT** holds much **Lua heap** UI state and tree code; **QuickJS** holds **`JS_LOGIC`** vars and runs **`__eval`** / **`evalLuaMapData`** / **`js_on_press`**. These are **not** a single linear “QJS→Zig→Lua” pipeline. Also see [tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md](tsz/compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
 
 ## Repository Layout
 

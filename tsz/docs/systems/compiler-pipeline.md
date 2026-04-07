@@ -12,7 +12,7 @@ The **active** compiler is **Forge** (Zig) + **Smith** (JavaScript running insid
 - **`LUA_LOGIC`** — embedded Lua for **LuaJIT**; **current default** for app UI (lua-tree: Lua builds tables, Zig stamps `layout.Node`).
 - **`JS_LOGIC`** — embedded string for **QuickJS** when `<script>` / `_script.tsz` is present (optional alongside `LUA_LOGIC`).
 
-See [ARCHITECTURE.md](../ARCHITECTURE.md) and [LUA_TREE_ARCHITECTURE.md](../../compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
+See [ARCHITECTURE.md](../ARCHITECTURE.md) (especially **Where runtime work actually happens**) and [LUA_TREE_ARCHITECTURE.md](../../compiler/smith/emit_atoms/maps_lua/LUA_TREE_ARCHITECTURE.md).
 
 ```
 .tsz → Forge (lex) → Smith (collect, preflight, parse, emit) → generated Zig + LUA_LOGIC (+ JS_LOGIC if script) → zig build → native binary

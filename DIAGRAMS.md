@@ -203,6 +203,8 @@ What happens after Smith emits `generated.zig`.
   Zig:     native speed, no runtime overhead
 ```
 
+**Canonical detail:** Zig vs LuaJIT vs QuickJS responsibilities, **multiple state locations** (Lua heap, `JS_LOGIC`, Zig slots), and **`__eval` / `evalLuaMapData`** — see [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) § *Where runtime work actually happens*. This diagram is routing intuition only.
+
 ---
 
 ## MAP HANDLER ROUTING

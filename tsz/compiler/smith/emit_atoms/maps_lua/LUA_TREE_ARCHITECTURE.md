@@ -1,28 +1,33 @@
 # Lua Tree Architecture
 
-**This is Smith’s current default for app UI:** Lua owns the tree and state; Zig paints (stamps Lua tables into `layout.Node`).
+**Smith’s default app emit:** `**LUA_LOGIC`** builds the UI as **Lua tables**; `**__declareChildren`** stamps them into Zig `**layout.Node**`; **layout and paint** run in Zig.
 
-Lua owns the tree and state. Zig paints.
+**Important:** “State” is **not** only Zig `state.zig` slots. Carts often have **Lua-local** `_state` / globals, **and** `**JS_LOGIC`** vars in QuickJS, **and** Zig slots when bridged. See [ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md) § *Where runtime work actually happens*.
 
-## Three layers
+## Three layers (compile → runtime)
 
 ```
 ┌─────────────────────────────────────┐
 │  .tsz source (author writes this)   │
 │  Box, Text, Pressable, .map(), etc  │
 └──────────────┬──────────────────────┘
-               │ compile
+               │ Forge + Smith
                ▼
 ┌─────────────────────────────────────┐
-│  Lua runtime (owns tree + state)    │
-│  declareChildren, setState, atoms   │
-│  recursive components, .map(), all  │
+│  LuaJIT — LUA_LOGIC                 │
+│  Tree tables, lua_on_press, __render│
+│  Lua heap state + __markDirty → Zig │
 └──────────────┬──────────────────────┘
-               │ shared memory / FFI
+               │ host FFI (stamp, dirty)
                ▼
 ┌─────────────────────────────────────┐
-│  Zig paint (reads tree, draws)      │
-│  layout.zig, wgpu, SDL3, FreeType   │
+│  Zig — Node graph, layout, paint    │
+│  engine, layout.zig, gpu, SDL3      │
+└─────────────────────────────────────┘
+         ▲
+         │ __eval, evalLuaMapData, JS_LOGIC
+┌────────┴────────────────────────────┐
+│  QuickJS — JS_LOGIC + eval harness    │
 └─────────────────────────────────────┘
 ```
 
@@ -31,31 +36,40 @@ Lua owns the tree and state. Zig paints.
 One Lua file per .tsz app. The Lua file contains:
 
 1. **Component functions** — each component is a Lua function that returns a node table
-2. **State atoms** — `_state = {}` shared pool, Lua owns, Zig reads via FFI
-3. **Root render** — calls App(), stamps the tree, registers handlers
-4. **Dirty callback** — on state change, re-render affected subtree, call declareChildren
+2. **State in Lua** — `_state = {}` and/or globals the emitter mirrors; values live in the **Lua VM** until restamp
+3. **Optional `JS_LOGIC`** — parallel **QuickJS** vars/setters; map data may flow **QJS → Lua** via `__luaMapData*` / `evalLuaMapData`
+4. **Root render** — `__render` clears/stamps, may pull `__luaMapData*` before `App()`
+5. **Dirty** — `__markDirty()` calls into **Zig** so the engine re-layouts after Lua/JS updates
 
-## State: shared atom pool
+## State: where values actually live
+
+Emitters may combine **all** of the following in one cart:
+
+
+| Location                  | Example                                                          | Notes                                                                     |
+| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Lua heap**              | `local _state = {}`, `expandedProject`, `projects = {}`          | Primary for many lua-tree UIs; `setX(v)` updates Lua then `__markDirty()` |
+| **QJS heap**              | `var projects = []; function setProjects(v) { … }` in `JS_LOGIC` | Init / script-side data; may feed Lua through eval bridges                |
+| **Zig `state.zig` slots** | `__setState(slot, n)` from JS/Lua when wired                     | O(1) bridge when the compiler emits slot IDs                              |
+
+
+Zig does **not** automatically mirror every Lua key into slots — **read the generated `logic.zig`** for the cart. Stamping reads **Lua tables** to build **Zig `Node`** fields (text, style, handler strings).
+
+Host access uses `**luajit_runtime**` (Lua C API; optional **zluajit** per [ZLUAJIT_EVALUATION.md](../../../../docs/ZLUAJIT_EVALUATION.md)).
 
 ```lua
 local _state = {}
-
-function setState(key, value)
-  _state[key] = value
-  _markDirty()
-end
-
-function getState(key)
-  return _state[key]
+function setExpandedProject(v)
+  _state["expandedProject"] = v
+  expandedProject = v
+  __markDirty()  -- → Zig
 end
 ```
-
-Zig reads Lua state through **`luajit_runtime`** (Lua C API today; optional **zluajit** wrapper per [ZLUAJIT_EVALUATION.md](../../../../docs/ZLUAJIT_EVALUATION.md)) when resolving dynamic text/style/conditionals after stamping.
-No JSON bridge for the hot path — host functions and stamping own the boundary.
 
 ## Tree: Lua tables → Zig Node pointers
 
 Lua builds a tree of tables:
+
 ```lua
 { style = { ... }, text = "hello", children = { ... } }
 ```
@@ -146,15 +160,17 @@ end
 
 ## What changes from current architecture
 
-| Current | New |
-|---------|-----|
-| State in Zig (`state.zig` slots) | State in Lua (`_state = {}`) |
-| Static node tree in Zig | Lua builds tree, stamps to Zig Nodes |
-| Map content: complex OA/pool/rebuild | Map content: Lua loop |
-| Conditionals: Zig display toggle | Conditionals: Lua if/else, re-stamp |
-| Dynamic text: Zig bufPrint | Dynamic text: Lua tostring |
-| Handlers: Zig fn ptrs or eval | Handlers: Lua closures |
-| 800-line lua_maps.js | Lua loop with substitution table |
+
+| Current                              | New                                  |
+| ------------------------------------ | ------------------------------------ |
+| State in Zig (`state.zig` slots)     | State in Lua (`_state = {}`)         |
+| Static node tree in Zig              | Lua builds tree, stamps to Zig Nodes |
+| Map content: complex OA/pool/rebuild | Map content: Lua loop                |
+| Conditionals: Zig display toggle     | Conditionals: Lua if/else, re-stamp  |
+| Dynamic text: Zig bufPrint           | Dynamic text: Lua tostring           |
+| Handlers: Zig fn ptrs or eval        | Handlers: Lua closures               |
+| 800-line lua_maps.js                 | Lua loop with substitution table     |
+
 
 ## What stays the same
 
@@ -164,3 +180,4 @@ end
 - FreeType (text measurement)
 - .tsz syntax (author-facing)
 - Substitution rules (the napkin)
+
