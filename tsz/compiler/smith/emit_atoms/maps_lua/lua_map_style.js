@@ -63,26 +63,28 @@ function _styleToLua(style, itemParam, indexParam) {
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
       // 5. Zig if/else → Lua (cond) and val or val
-      // Match: if (COND) TRUE_VAL else FALSE_VAL
-      // Use greedy match for cond by counting parens
-      var _ifMatch = _jsExpr.match(/^if\s*\(/);
-      if (_ifMatch) {
-        // Find matching close paren for the condition
-        var _depth = 0, _ci = 3; // start after "if "
+      // Handles chained: if (a) X else if (b) Y else Z
+      // → (a) and X or (b) and Y or Z
+      // Iterate: find each "if (" with balanced parens, convert to "(cond) and val or"
+      for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
+        var _ifPos = _jsExpr.indexOf('if (');
+        if (_ifPos < 0) break;
+        // Find balanced close paren
+        var _depth = 0, _ci = _ifPos + 3;
         for (; _ci < _jsExpr.length; _ci++) {
           if (_jsExpr[_ci] === '(') _depth++;
           if (_jsExpr[_ci] === ')') { _depth--; if (_depth === 0) break; }
         }
-        if (_depth === 0) {
-          var _cond = _jsExpr.substring(4, _ci); // between ( and )
-          var _rest = _jsExpr.substring(_ci + 1).trim();
-          var _elseParts = _rest.split(/\s+else\s+/);
-          if (_elseParts.length === 2) {
-            var _trueVal = _elseParts[0].trim();
-            var _falseVal = _elseParts[1].trim();
-            _jsExpr = '(' + _cond + ') and ' + _trueVal + ' or ' + _falseVal;
-          }
-        }
+        if (_depth !== 0) break;
+        var _cond = _jsExpr.substring(_ifPos + 4, _ci);
+        var _after = _jsExpr.substring(_ci + 1).trim();
+        // Find " else " — the true value is between ) and else
+        var _elseIdx = _after.indexOf(' else ');
+        if (_elseIdx < 0) break;
+        var _trueVal = _after.substring(0, _elseIdx).trim();
+        var _prefix = _jsExpr.substring(0, _ifPos);
+        var _suffix = _after.substring(_elseIdx + 6).trim();
+        _jsExpr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
       }
       // 6. Color.rgb with bit-shift extraction → _item.field
       if (_jsExpr.indexOf('Color.rgb(') >= 0 && _jsExpr.indexOf('_item.') >= 0 && _jsExpr.indexOf('>> 16') >= 0) {
