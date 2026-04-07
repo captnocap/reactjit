@@ -28,6 +28,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
+const luajit_runtime = @import("luajit_runtime.zig");
 const text_mod = @import("text.zig");
 const events = @import("events.zig");
 const log = @import("log.zig");
@@ -346,6 +347,7 @@ fn handleWheel(idx: usize, mx: f32, my: f32, dy: f32) void {
             scroll_node.scroll_y -= dy * 30.0;
             const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
             scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+            luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
         }
     }
 }

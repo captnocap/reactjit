@@ -195,5 +195,17 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
     fields.push('children = {\n' + childLua.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
 
+  // Root-level scroll containers (e.g. <ScrollView>): persist offset in global _scrollY across __render.
+  // Skip inside .map() bodies (itemParam set) — each row would need a composite key (not emitted yet).
+  var _ovf = node.style && node.style.overflow;
+  if (typeof _ovf === 'string' && _ovf.charAt(0) === '.') _ovf = _ovf.slice(1);
+  var _isScrollContainer = _ovf === 'scroll';
+  if (_isScrollContainer && !itemParam && typeof ctx !== 'undefined' && ctx.nextScrollPersistSlot !== undefined) {
+    ctx.nextScrollPersistSlot += 1;
+    var _sid = ctx.nextScrollPersistSlot;
+    fields.push('scroll_y = ((_scrollY and _scrollY[' + _sid + ']) or 0)');
+    fields.push('scroll_persist_slot = ' + _sid);
+  }
+
   return '{ ' + fields.join(', ') + ' }';
 }

@@ -222,6 +222,7 @@ pub const Node = struct {
     handlers: EventHandler = .{},
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,
+    scroll_persist_slot: u32 = 0,
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,

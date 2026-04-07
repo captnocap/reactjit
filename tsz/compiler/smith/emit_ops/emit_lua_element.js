@@ -231,6 +231,13 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
   if (node.children.length > 0) {
     fields.push('children = {\n' + node.children.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
+  // Token-walker Lua emit: same scroll persistence as _nodeToLua (root ScrollView only).
+  if (tagName === 'ScrollView' && !itemParam && ctx && ctx.nextScrollPersistSlot !== undefined) {
+    ctx.nextScrollPersistSlot += 1;
+    var _sid2 = ctx.nextScrollPersistSlot;
+    fields.push('scroll_y = ((_scrollY and _scrollY[' + _sid2 + ']) or 0)');
+    fields.push('scroll_persist_slot = ' + _sid2);
+  }
   _luaEmitDepth--;
   return '{ ' + fields.join(', ') + ' }';
 }

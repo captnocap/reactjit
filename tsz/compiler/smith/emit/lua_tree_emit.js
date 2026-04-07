@@ -228,21 +228,37 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       _oaTickIdx++;
     }
   }
-  // Sync scalar state from QJS → Lua on FIRST RENDER only
-  // JS_LOGIC initializes state (from <script> block). After that, Lua setters
-  // own state via lua_on_press. js_on_press handlers update JS directly,
-  // then syncScalarToLua on subsequent ticks would stomp Lua updates.
-  // Solution: sync once at init, then let each runtime own its updates.
+  // Sync scalar state from QJS → Lua
+  // JS_LOGIC initializes state (from <script> block). If the cart uses
+  // js_on_press handlers, JS setters update QJS but never reach Lua —
+  // sync must run every dirty frame. If the cart is pure lua_on_press,
+  // Lua setters own state and we only need the first-render init sync
+  // (syncing every frame would stomp Lua-side updates).
   if (ctx.scriptBlock || globalThis.__scriptContent) {
     if (ctx.stateSlots && ctx.stateSlots.length > 0) {
-      zig += '        if (_first_render) {\n';
-      for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
-        var ss = ctx.stateSlots[ssi];
-        if (ss.getter.indexOf('__') === 0) continue;
-        var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        zig += '            qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
+      // Check if the Lua tree has js_on_press handlers (needs every-frame sync).
+      // js_on_press runs in QuickJS — JS setters update JS vars but never
+      // reach Lua. Must sync scalars every dirty frame so Lua tree sees changes.
+      var _hasJsOnPress = luaStr.indexOf('js_on_press') >= 0;
+      if (_hasJsOnPress) {
+        // js_on_press handlers update JS — sync to Lua every dirty frame
+        for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
+          var ss = ctx.stateSlots[ssi];
+          if (ss.getter.indexOf('__') === 0) continue;
+          var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          zig += '        qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
+        }
+      } else {
+        // Pure lua_on_press — only sync on first render (JS init values)
+        zig += '        if (_first_render) {\n';
+        for (var ssi2 = 0; ssi2 < ctx.stateSlots.length; ssi2++) {
+          var ss2 = ctx.stateSlots[ssi2];
+          if (ss2.getter.indexOf('__') === 0) continue;
+          var ssGetter2 = ss2.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          zig += '            qjs_runtime.syncScalarToLua("' + ssGetter2 + '");\n';
+        }
+        zig += '        }\n';
       }
-      zig += '        }\n';
     }
   }
   zig += '        luajit_runtime.callGlobal("__render");\n';

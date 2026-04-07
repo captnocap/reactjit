@@ -2082,6 +2082,7 @@ pub fn run(config_in: AppConfig) !void {
                             if (event.wheel.x != 0) scroll_node.scroll_y -= event.wheel.x * sc;
                             const max_s = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                             scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_s));
+                            luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
                         } else {
                             const delta: f32 = event.wheel.y;
                             canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
@@ -2099,6 +2100,7 @@ pub fn run(config_in: AppConfig) !void {
                         }
                         const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+                        luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
                     }
                 },
                 c.SDL_EVENT_DROP_FILE => {

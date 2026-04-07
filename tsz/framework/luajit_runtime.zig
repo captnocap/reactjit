@@ -493,6 +493,18 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     lua.lua_getfield(L, idx, "style");
     if (lua.lua_istable(L, -1)) node.style = readLuaStyle(L, -1);
     lua.lua_pop(L, 1);
+    // scroll_y / scroll_persist_slot — restored from global `_scrollY` in emitted Lua
+    lua.lua_getfield(L, idx, "scroll_y");
+    if (lua.lua_isnumber(L, -1) != 0) {
+        node.scroll_y = @floatCast(lua.lua_tonumber(L, -1));
+    }
+    lua.lua_pop(L, 1);
+    lua.lua_getfield(L, idx, "scroll_persist_slot");
+    if (lua.lua_isnumber(L, -1) != 0) {
+        const si = lua.lua_tointeger(L, -1);
+        if (si > 0) node.scroll_persist_slot = @intCast(si);
+    }
+    lua.lua_pop(L, 1);
     // lua_on_press handler (string → null-terminated copy for Zig)
     lua.lua_getfield(L, idx, "lua_on_press");
     if (lua.lua_isstring(L, -1) != 0) {
@@ -723,6 +735,24 @@ pub fn setMapWrapper(index: usize, ptr: *anyopaque) void {
     lua.lua_setglobal(L, @as([*:0]const u8, @ptrCast(buf[0..name_slice.len :0])));
 }
 
+/// Store scroll offset in Lua global `_scrollY[slot]` for the next Lua-tree stamp.
+/// Does not mark app dirty (avoids full `__render` on every wheel tick).
+pub fn persistScrollSlot(slot: u32, scroll_y: f32) void {
+    if (slot == 0) return;
+    const L = g_lua orelse return;
+    _ = lua.lua_getglobal(L, "_scrollY");
+    if (lua.lua_isnil(L, -1)) {
+        lua.lua_pop(L, 1);
+        lua.lua_newtable(L);
+        lua.lua_pushvalue(L, -1);
+        lua.lua_setglobal(L, "_scrollY");
+    }
+    lua.lua_pushinteger(L, @intCast(slot));
+    lua.lua_pushnumber(L, scroll_y);
+    lua.lua_settable(L, -3);
+    lua.lua_pop(L, 1);
+}
+
 // ── Init / Deinit ───────────────────────────────────────────────────────
 
 pub fn initVM() void {
@@ -762,6 +792,10 @@ pub fn initVM() void {
         lua.lua_pushcclosure(L, f.func, 0);
         lua.lua_setglobal(L, f.name);
     }
+
+    // Scroll offset persistence for Lua-tree apps (see persistScrollSlot / compiler emit)
+    lua.lua_newtable(L);
+    lua.lua_setglobal(L, "_scrollY");
 
     // Load tsl_stdlib
     if (lua.luaL_loadstring(L, TSL_STDLIB) == 0) {

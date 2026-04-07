@@ -177,6 +177,8 @@ function resetCtx() {
     // Route plan — built by preflight route scan, read by emit + routing check
     _source: null,
     _routePlan: null,
+    // Monotonic id for Lua-tree ScrollView scroll offset persistence (_scrollY[id])
+    nextScrollPersistSlot: 0,
   };
 }
 
