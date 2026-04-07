@@ -61,7 +61,7 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
   if (!indent) indent = '      ';
   var fields = [];
 
-  if (node.style) {
+  if (node.style && Object.keys(node.style).length > 0) {
     fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam));
   }
 

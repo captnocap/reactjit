@@ -228,17 +228,21 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       _oaTickIdx++;
     }
   }
-  // Sync scalar state from QJS → Lua before render
-  // Only needed when there's a script block (js_on_press handlers update JS vars)
+  // Sync scalar state from QJS → Lua on FIRST RENDER only
+  // JS_LOGIC initializes state (from <script> block). After that, Lua setters
+  // own state via lua_on_press. js_on_press handlers update JS directly,
+  // then syncScalarToLua on subsequent ticks would stomp Lua updates.
+  // Solution: sync once at init, then let each runtime own its updates.
   if (ctx.scriptBlock || globalThis.__scriptContent) {
     if (ctx.stateSlots && ctx.stateSlots.length > 0) {
+      zig += '        if (_first_render) {\n';
       for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
         var ss = ctx.stateSlots[ssi];
-        if (ss.getter.indexOf('__') === 0) continue; // skip internal
+        if (ss.getter.indexOf('__') === 0) continue;
         var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        // Read JS value and set Lua global
-        zig += '        qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
+        zig += '            qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
       }
+      zig += '        }\n';
     }
   }
   zig += '        luajit_runtime.callGlobal("__render");\n';

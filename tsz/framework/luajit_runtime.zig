@@ -631,6 +631,41 @@ fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 /// __eval(jsExpr) → evaluates JS expression in QJS, returns result as string/number to Lua
+/// __syncToJS(name, value) — sync a Lua state variable back to QJS
+/// Called by Lua setters when a <script> block is present, so JS and Lua stay in sync.
+fn hostSyncToJS(L: ?*lua.lua_State) callconv(.c) c_int {
+    var name_len: usize = 0;
+    const name_ptr = lua.lua_tolstring(L, 1, &name_len);
+    if (name_ptr == null or name_len == 0) return 0;
+    const name: []const u8 = @as([*]const u8, @ptrCast(name_ptr))[0..name_len];
+
+    // Sync Lua value to JS global via evalExpr("name = value;")
+    var buf: [512]u8 = undefined;
+    if (lua.lua_isnumber(L, 2) != 0) {
+        const v = lua.lua_tonumber(L, 2);
+        const iv: i64 = @intFromFloat(v);
+        const is_int = @as(f64, @floatFromInt(iv)) == v;
+        const js = if (is_int)
+            std.fmt.bufPrint(&buf, "{s} = {d};", .{ name, iv }) catch return 0
+        else
+            std.fmt.bufPrint(&buf, "{s} = {d:.10};", .{ name, v }) catch return 0;
+        qjs_runtime.evalExpr(js);
+    } else if (lua.lua_isstring(L, 2) != 0) {
+        var val_len: usize = 0;
+        const val_ptr = lua.lua_tolstring(L, 2, &val_len);
+        if (val_ptr != null) {
+            const val: []const u8 = @as([*]const u8, @ptrCast(val_ptr))[0..val_len];
+            const js = std.fmt.bufPrint(&buf, "{s} = '{s}';", .{ name, val }) catch return 0;
+            qjs_runtime.evalExpr(js);
+        }
+    } else if (lua.lua_isboolean(L, 2)) {
+        const bval = lua.lua_toboolean(L, 2);
+        const js = std.fmt.bufPrint(&buf, "{s} = {s};", .{ name, if (bval != 0) "true" else "false" }) catch return 0;
+        qjs_runtime.evalExpr(js);
+    }
+    return 0;
+}
+
 fn hostEval(L: ?*lua.lua_State) callconv(.c) c_int {
     var len: usize = 0;
     const ptr = lua.lua_tolstring(L, 1, &len);
@@ -714,6 +749,7 @@ pub fn initVM() void {
         .{ .name = "__declareChildren", .func = &hostDeclareChildren },
         .{ .name = "__clearLuaNodes", .func = &hostClearLuaNodes },
         .{ .name = "__eval", .func = &hostEval },
+        .{ .name = "__syncToJS", .func = &hostSyncToJS },
     };
 
     for (funcs) |f| {
