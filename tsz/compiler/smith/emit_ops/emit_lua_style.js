@@ -73,6 +73,21 @@ function emitLuaStyle(c, itemParam) {
         }
         var expr = exprParts.join(' ');
         expr = _jsExprToLua(expr, itemParam);
+        // Convert JS ternary ? : → Lua and/or
+        // Simple: cond ? trueVal : falseVal → (cond) and trueVal or falseVal
+        if (expr.indexOf(' ? ') >= 0) {
+          var _qPos = expr.indexOf(' ? ');
+          var _cPos = expr.lastIndexOf(' : ');
+          if (_qPos >= 0 && _cPos > _qPos) {
+            var _tCond = expr.substring(0, _qPos).trim();
+            var _tTrue = expr.substring(_qPos + 3, _cPos).trim();
+            var _tFalse = expr.substring(_cPos + 3).trim();
+            // Convert hex color strings to 0xHEX
+            if (_tTrue.charAt(0) === '"' && _tTrue.charAt(1) === '#') _tTrue = hexToLuaColor(_tTrue.slice(2, -1));
+            if (_tFalse.charAt(0) === '"' && _tFalse.charAt(1) === '#') _tFalse = hexToLuaColor(_tFalse.slice(2, -1));
+            expr = '(' + _tCond + ') and ' + _tTrue + ' or ' + _tFalse;
+          }
+        }
         parts.push(zigKey + ' = ' + expr);
       }
     } else {

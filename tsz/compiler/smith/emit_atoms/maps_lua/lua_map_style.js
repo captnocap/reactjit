@@ -171,6 +171,13 @@ function _styleToLua(style, itemParam, indexParam) {
       continue;
     }
 
+    // String keyword BEFORE dynamic item ref check — prevents "row" item param collision
+    var _enumPattern = /^(center|row|column|start|end|stretch|baseline|wrap|nowrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end|row_reverse|column_reverse|space_evenly)$/;
+    if (typeof val === 'string' && _enumPattern.test(val)) {
+      parts.push(luaKey + ' = "' + val + '"');
+      continue;
+    }
+
     // Dynamic item reference
     if (typeof val === 'string' && itemParam && val.indexOf(itemParam) >= 0) {
       parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam));
@@ -182,13 +189,12 @@ function _styleToLua(style, itemParam, indexParam) {
     }
 
     // Bare variable reference (state getter resolved by buildNode)
-    // A single identifier like "barWidth" should be emitted bare, not quoted
-    if (typeof val === 'string' && /^[a-zA-Z_]\w*$/.test(val) && !/^(center|row|column|start|end|stretch|baseline|wrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end)$/.test(val)) {
+    if (typeof val === 'string' && /^[a-zA-Z_]\w*$/.test(val)) {
       parts.push(luaKey + ' = ' + val);
       continue;
     }
 
-    // String keyword (center, row, flexStart, etc.)
+    // String fallback
     if (typeof val === 'string') {
       parts.push(luaKey + ' = "' + val + '"');
       continue;
