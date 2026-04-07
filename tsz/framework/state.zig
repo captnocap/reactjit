@@ -9,6 +9,7 @@
 
 const std = @import("std");
 const log = @import("log.zig");
+const layout = @import("layout.zig");
 
 pub const MAX_SLOTS = 512;
 
@@ -211,6 +212,7 @@ pub fn setSlotString(id: usize, val: []const u8) void {
         slots[id].value = .{ .string = .{ .buf = dupString(val) } };
         slots[id].dirty = true;
         _dirty = true;
+        layout.markLayoutDirty();
     }
 }
 
@@ -253,6 +255,7 @@ pub fn setSlot(id: usize, val: i64) void {
         slots[id].value = .{ .int = val };
         slots[id].dirty = true;
         _dirty = true;
+        layout.markLayoutDirty();
     }
 }
 
@@ -265,6 +268,7 @@ pub fn setSlotFloat(id: usize, val: f64) void {
         slots[id].value = .{ .float = val };
         slots[id].dirty = true;
         _dirty = true;
+        layout.markLayoutDirty();
     }
 }
 
@@ -277,6 +281,7 @@ pub fn setSlotBool(id: usize, val: bool) void {
         slots[id].value = .{ .boolean = val };
         slots[id].dirty = true;
         _dirty = true;
+        layout.markLayoutDirty();
     }
 }
 
@@ -294,6 +299,7 @@ pub fn isDirty() bool {
 /// Mark state as dirty (used by generated object array unpack functions).
 pub fn markDirty() void {
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Clear the dirty flag after rebuilding the tree.
@@ -319,6 +325,7 @@ pub fn reset() void {
     array_slot_count = 0;
     str_array_slot_count = 0;
     _dirty = false;
+    layout.markLayoutDirty();
 }
 
 /// Get current slot count (for debugging).
@@ -379,6 +386,7 @@ pub fn setArraySlot(id: usize, values: []const i64) void {
     array_slots[id].count = new_count;
     array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Append a value to an array slot.
@@ -390,6 +398,7 @@ pub fn pushArraySlot(id: usize, value: i64) void {
     array_slots[id].count = new_count;
     array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Remove the last element from an array slot. Returns the removed value (0 if empty).
@@ -400,6 +409,7 @@ pub fn popArraySlot(id: usize) i64 {
         log.info(.state, "arr[{d}] pop {d} (count={d})", .{ id, val, array_slots[id].count });
         array_slots[id].dirty = true;
         _dirty = true;
+        layout.markLayoutDirty();
         return val;
     }
     return 0;
@@ -423,6 +433,7 @@ pub fn setArrayElement(id: usize, index: usize, value: i64) void {
     array_slots[id].values[index] = value;
     array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 // ── State persistence for dev mode hot reload ────────────────────────────
@@ -518,6 +529,7 @@ pub fn loadState() bool {
 
     if (restore_count > 0) {
         _dirty = true;
+        layout.markLayoutDirty();
         std.debug.print("[state] Restored {d} slots from previous session\n", .{restore_count});
     }
     return restore_count > 0;
@@ -584,6 +596,7 @@ pub fn setStringArraySlot(id: usize, count: usize, ptrs: []const [*]const u8, le
     str_array_slots[id].count = count;
     str_array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Set a single element in a string array (for incremental updates).
@@ -598,6 +611,7 @@ pub fn setStringArrayElement(id: usize, index: usize, val: []const u8) void {
     }
     str_array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Resize the string array (set count, zeroing new elements if grown).
@@ -611,6 +625,7 @@ pub fn resizeStringArray(id: usize, new_count: usize) void {
     str_array_slots[id].count = new_count;
     str_array_slots[id].dirty = true;
     _dirty = true;
+    layout.markLayoutDirty();
 }
 
 // ── Telemetry ────────────────────────────────────────────────────────────

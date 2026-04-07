@@ -147,10 +147,19 @@ export fn web_frame() void {
 
     // Get root node and compute layout
     const root = app_get_root();
-    if (root.style.width == null or root.style.width.? < 0) root.style.width = @floatFromInt(g_width);
-    if (root.style.height == null or root.style.height.? < 0) root.style.height = @floatFromInt(g_height);
+    if (root.style.width == null or root.style.width.? < 0) {
+        root.style.width = @floatFromInt(g_width);
+        layout.markLayoutDirty();
+    }
+    if (root.style.height == null or root.style.height.? < 0) {
+        root.style.height = @floatFromInt(g_height);
+        layout.markLayoutDirty();
+    }
 
-    layout.layout(root, 0, 0, w_f, h_f);
+    if (layout.isLayoutDirty()) {
+        layout.layout(root, 0, 0, w_f, h_f);
+        layout.clearLayoutDirty();
+    }
 
     // Render the node tree through GPU
     renderNode(root);
@@ -163,6 +172,7 @@ export fn web_resize(width: u32, height: u32) void {
     g_width = width;
     g_height = height;
     gpu.resize(width, height);
+    layout.markLayoutDirty();
 }
 
 export fn web_serial_char(byte: u32) void {

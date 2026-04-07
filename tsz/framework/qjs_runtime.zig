@@ -2463,6 +2463,7 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
                     _ = c.SDL_GetWindowSize(window, &ww, &wh);
                     win_w = @floatFromInt(ww);
                     win_h = @floatFromInt(wh);
+                    layout.markLayoutDirty();
                 },
                 c.SDL_EVENT_KEY_DOWN => {
                     if (event.key.key == c.SDLK_ESCAPE) running = false;
@@ -2485,7 +2486,10 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
         _ = c.SDL_RenderClear(renderer);
 
         const t2 = std.time.microTimestamp();
-        layout.layout(root, 0, 0, win_w, win_h);
+        if (layout.isLayoutDirty()) {
+            layout.layout(root, 0, 0, win_w, win_h);
+            layout.clearLayoutDirty();
+        }
         const t3 = std.time.microTimestamp();
         layout_us = @intCast(@max(0, t3 - t2));
 

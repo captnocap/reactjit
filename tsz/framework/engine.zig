@@ -171,7 +171,12 @@ const r3d = if (HAS_3D) @import("gpu/3d.zig") else struct {
     pub fn update(_: f32) void {}
 };
 const transition = if (HAS_TRANSITIONS) @import("transition.zig") else struct {
-    pub fn tick(_: f32) bool { return false; }
+    pub fn tick(_: f32) bool {
+        return false;
+    }
+    pub fn needsRelayout() bool {
+        return false;
+    }
 };
 const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else VtermStub;
 const VtermStub = struct {
@@ -1619,6 +1624,7 @@ pub fn run(config_in: AppConfig) !void {
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
+                layout.markLayoutDirty();
                 std.debug.print("[hot-reload] App reloaded\n", .{});
             }
         }
@@ -1646,6 +1652,7 @@ pub fn run(config_in: AppConfig) !void {
                     gpu.resize(@intCast(ww), @intCast(wh));
                     breakpoint.update(win_w);
                     geometry.save(window);
+                    layout.markLayoutDirty();
                 },
                 c.SDL_EVENT_WINDOW_MOVED => {
                     geometry.save(window);
@@ -2137,6 +2144,7 @@ pub fn run(config_in: AppConfig) !void {
             const dt_t = now_t -% g_prev_tick;
             const dt_t_sec = @as(f32, @floatFromInt(dt_t)) / 1000.0;
             _ = transition.tick(dt_t_sec);
+            if (transition.needsRelayout()) layout.markLayoutDirty();
         }
 
         // Physics 2D init — create world and bodies on first frame (before layout)
@@ -2162,6 +2170,7 @@ pub fn run(config_in: AppConfig) !void {
                 crashlog.log("tick:poll");
                 if (vterm_mod.pollPtyIdx(ti)) {
                     classifier.markDirtyIdx(ti);
+                    layout.markLayoutDirty();
                 }
                 // Auto-detect CLI from banner text (first 6 rows)
                 if (!g_semantic_detected_flags[ti]) {
@@ -2192,10 +2201,13 @@ pub fn run(config_in: AppConfig) !void {
             }
         }
 
-        // Layout (main window)
+        // Layout (main window) — skip full flex pass when nothing invalidated geometry
         const t2 = std.time.microTimestamp();
         const app_h = win_h;
-        layout.layout(config.root, 0, 0, win_w, app_h);
+        if (layout.isLayoutDirty()) {
+            layout.layout(config.root, 0, 0, win_w, app_h);
+            layout.clearLayoutDirty();
+        }
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
 

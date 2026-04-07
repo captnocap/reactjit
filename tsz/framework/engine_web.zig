@@ -240,9 +240,18 @@ fn webFrame() callconv(.c) void {
     if (g_config.tick) |tick_fn| tick_fn(g_frame_count);
 
     const root = g_config.root;
-    if (root.style.width == null or root.style.width.? < 0) root.style.width = w_f;
-    if (root.style.height == null or root.style.height.? < 0) root.style.height = h_f;
-    layout.layout(root, 0, 0, w_f, h_f);
+    if (root.style.width == null or root.style.width.? < 0) {
+        root.style.width = w_f;
+        layout.markLayoutDirty();
+    }
+    if (root.style.height == null or root.style.height.? < 0) {
+        root.style.height = h_f;
+        layout.markLayoutDirty();
+    }
+    if (layout.isLayoutDirty()) {
+        layout.layout(root, 0, 0, w_f, h_f);
+        layout.clearLayoutDirty();
+    }
 
     paintNode(root);
     gpu.frame(0.051, 0.067, 0.090);

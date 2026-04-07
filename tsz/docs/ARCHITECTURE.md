@@ -51,7 +51,8 @@ All of this is **one native process**. **Zig** is the host executable. **LuaJIT*
 | Input **device** poll, hit test, which handler fires | Zig (`layout.hitTest`, branches on `on_press` / `lua_on_press` / `js_on_press`)          |
 | Flex layout, computed geometry                       | `layout.zig`                                                                             |
 | GPU / paint                                          | `gpu/`, paint path                                                                       |
-| **Dirty flag** (“re-layout / re-stamp needed”)       | Zig — Lua calls `__markDirty()` → host → `state.markDirty()`                             |
+| **State dirty** (“re-run tick updates / maps”)       | Zig — Lua calls `__markDirty()` → host → `state.markDirty()` (also marks layout dirty)    |
+| **Layout dirty** (“run flex `layout.layout`”)        | Zig — `layout.markLayoutDirty()` from state, Lua `__declareChildren` / `__clearLuaNodes`, resize, transitions (`needsRelayout`), terminal PTY input, etc.; main loop skips full flex when clear for idle frames |
 | **Stamped scene graph**                              | Zig `layout.Node` after `__declareChildren` / `stampLuaNode`                             |
 | **Typed state slots**                                | `state.zig` **when the compiler emits slot bridges** (`__setState(slot, …)` from JS/Lua) |
 | Hosting both VMs, registering host functions         | `luajit_runtime.zig`, `qjs_runtime.zig`                                                  |

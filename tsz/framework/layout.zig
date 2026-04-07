@@ -404,6 +404,22 @@ var measureImageFn: ?MeasureImageFn = null;
 const LAYOUT_BUDGET: usize = 100000;
 var layoutCount: usize = 0;
 
+/// When false, the main loop may skip `layout.layout(root)` until something calls `markLayoutDirty`.
+/// Starts true so the first frame always runs flex layout after app init.
+var g_layout_dirty: bool = true;
+
+pub fn markLayoutDirty() void {
+    g_layout_dirty = true;
+}
+
+pub fn isLayoutDirty() bool {
+    return g_layout_dirty;
+}
+
+pub fn clearLayoutDirty() void {
+    g_layout_dirty = false;
+}
+
 // ── Functions ──────────────────────────────────────
 
 pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {

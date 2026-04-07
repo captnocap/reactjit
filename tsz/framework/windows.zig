@@ -201,6 +201,7 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
         opts.title,
         if (is_notif) "notification" else "in_process",
     });
+    layout.markLayoutDirty();
     return idx;
 }
 
@@ -250,6 +251,7 @@ pub fn deinitAll() void {
 pub fn setRoot(idx: usize, root: *Node) void {
     if (idx >= MAX_WINDOWS or !slots[idx].active) return;
     slots[idx].root = root;
+    layout.markLayoutDirty();
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -284,6 +286,7 @@ pub fn routeEvent(event: *c.SDL_Event) bool {
                 _ = c.SDL_GetWindowSize(w, &ww, &wh);
                 slots[idx].win_w = @floatFromInt(ww);
                 slots[idx].win_h = @floatFromInt(wh);
+                layout.markLayoutDirty();
             }
             return true;
         },

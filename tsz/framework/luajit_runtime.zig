@@ -597,6 +597,7 @@ fn hostDeclareChildren(L: ?*lua.lua_State) callconv(.c) c_int {
     const count: usize = @intCast(lua.lua_objlen(L, 2));
     if (count == 0) {
         wrapper.children = &.{};
+        layout.markLayoutDirty();
         return 0;
     }
     const alloc = lua_node_arena.allocator();
@@ -607,6 +608,7 @@ fn hostDeclareChildren(L: ?*lua.lua_State) callconv(.c) c_int {
         lua.lua_pop(L, 1);
     }
     wrapper.children = kids;
+    layout.markLayoutDirty();
     return 0;
 }
 
@@ -630,6 +632,7 @@ fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
         lua.lua_pop(L, 1);
     }
     _ = lua_node_arena.reset(.retain_capacity);
+    layout.markLayoutDirty();
     return 0;
 }
 

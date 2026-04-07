@@ -10,6 +10,7 @@
 //!   breakpoint.setThresholds(480, 800, 1200); // custom md/lg/xl thresholds
 
 const std = @import("std");
+const layout = @import("layout.zig");
 
 pub const Breakpoint = enum(u8) {
     sm = 0, // below md threshold (mobile)
@@ -34,6 +35,7 @@ pub fn setThresholds(md: f32, lg: f32, xl: f32) void {
     threshold_lg = lg;
     threshold_xl = xl;
     dirty = true;
+    layout.markLayoutDirty();
 }
 
 /// Update breakpoint from window width. Call on resize.
@@ -42,6 +44,7 @@ pub fn update(w: f32) void {
     const new_bp: Breakpoint = if (w >= threshold_xl) .xl else if (w >= threshold_lg) .lg else if (w >= threshold_md) .md else .sm;
     if (new_bp != current_bp) {
         dirty = true;
+        layout.markLayoutDirty();
     }
     current_bp = new_bp;
 }

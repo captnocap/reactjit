@@ -86,6 +86,7 @@ test "small centered text in a fixed-width box does not expand parent row height
         .children = &root_children,
     };
 
+    layout.markLayoutDirty();
     layout.layout(&root, 0, 0, 220, 720);
 
     const first_row = &root.children[0];
@@ -130,6 +131,7 @@ test "centered auto-height fixed-width box shrink-wraps to its text" {
         .children = &leading_group,
     };
 
+    layout.markLayoutDirty();
     layout.layout(&root, 0, 0, 220, 720);
 
     const centered_box = &root.children[0].children[0];
@@ -188,6 +190,7 @@ test "empty centered fixed-width box stays shrink-wrapped" {
         .children = &root_children,
     };
 
+    layout.markLayoutDirty();
     layout.layout(&root, 0, 0, 220, 720);
 
     try testing.expectApproxEqAbs(@as(f32, 11), root.children[0].computed.h, 0.01);
@@ -232,6 +235,7 @@ test "text in centered flex detail region wraps to the detail width" {
         .children = &row_children,
     };
 
+    layout.markLayoutDirty();
     layout.layout(&root, 0, 0, 160, 52);
 
     const detail = &root.children[1];
@@ -280,6 +284,7 @@ test "text in stretch flex detail region wraps as a control" {
         .children = &row_children,
     };
 
+    layout.markLayoutDirty();
     layout.layout(&root, 0, 0, 160, 52);
 
     const detail = &root.children[1];
