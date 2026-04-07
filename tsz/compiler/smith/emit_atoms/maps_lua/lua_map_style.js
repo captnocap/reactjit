@@ -54,9 +54,27 @@ function _styleToLua(style, itemParam, indexParam) {
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
       });
-      // 2. @as wrappers — iterate to handle nesting
+      // 2. @as wrappers — balanced paren strip
       for (var _ai = 0; _ai < 5; _ai++) {
-        _jsExpr = _jsExpr.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
+        var _asPos = _jsExpr.indexOf('@as(');
+        if (_asPos < 0) { _asPos = _jsExpr.indexOf('@intCast('); }
+        if (_asPos < 0) { _asPos = _jsExpr.indexOf('@floatFromInt('); }
+        if (_asPos < 0) break;
+        var _fnEnd = _jsExpr.indexOf('(', _asPos);
+        var _ad = 1, _aIdx = _fnEnd + 1, _commaPos = -1;
+        while (_aIdx < _jsExpr.length && _ad > 0) {
+          if (_jsExpr[_aIdx] === '(') _ad++;
+          if (_jsExpr[_aIdx] === ')') { _ad--; if (_ad === 0) break; }
+          if (_ad === 1 && _commaPos < 0 && _jsExpr[_aIdx] === ',') _commaPos = _aIdx;
+          _aIdx++;
+        }
+        if (_ad === 0) {
+          // @as(TYPE, VAL) → VAL, @intCast(VAL) → VAL
+          var _stripVal = _commaPos >= 0
+            ? _jsExpr.substring(_commaPos + 1, _aIdx).trim()
+            : _jsExpr.substring(_fnEnd + 1, _aIdx).trim();
+          _jsExpr = _jsExpr.substring(0, _asPos) + _stripVal + _jsExpr.substring(_aIdx + 1);
+        } else break;
       }
       _jsExpr = _jsExpr.replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
       // 2b. JS logical operators → Lua
