@@ -1078,16 +1078,85 @@ if [ "$HAS_MAP_LOOP" -gt 0 ]; then
     fi
 fi
 
-# ── LT5. Map variable leakage in handlers ────────────────────
-# Inside __mapLoop bodies, handler strings should use _item not source vars
-# Detect: map source var (from .map((x, ...) in source) appearing raw in handlers
-MAP_VARS=$(grep -oE '\.map\(\s*\(\s*([a-zA-Z_]\w*)' "$SOURCE" 2>/dev/null | sed 's/.*(\s*//' || true)
-for mv in $MAP_VARS; do
+# ── LT4i. Undefined map index variables ──────────────────────
+# The compiler emits _i (outer) and _ni (inner) as map index variables.
+# If the compiler emits _j, _k, or other undefined index vars, the Lua
+# references a nil global — comparisons silently fail, all rows render
+# or none render.
+if [ -n "$LUA_BLOB" ]; then
+    MAP_BODY_ALL=$(sed -n '/__mapLoop/,/end)/p' <<< "$LUA_BLOB" 2>/dev/null || true)
+    if [ -n "$MAP_BODY_ALL" ]; then
+        # _j is never a valid map variable — compiler uses _i (outer) and _ni (inner)
+        BAD_J=$(echo "$MAP_BODY_ALL" | grep -oE '\b_j\b' 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$BAD_J" -gt 0 ]; then
+            fail "$BAD_J reference(s) to undefined map index '_j' — should be _ni (inner) or _i (outer)"
+        fi
+        # _k is also never valid
+        BAD_K=$(echo "$MAP_BODY_ALL" | grep -oE '\b_k\b' 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$BAD_K" -gt 0 ]; then
+            fail "$BAD_K reference(s) to undefined map index '_k' — should be _ni (inner) or _i (outer)"
+        fi
+    fi
+fi
+
+# ── LT4j. Unresolved component props in handler strings ──────
+# When a component is inlined into a map, its props (e.g. fieldIdx, sectionIdx)
+# must be substituted in lua_on_press strings too. If they remain as bare names,
+# Lua reads a nil global — the handler silently does nothing useful.
+if [ "$HAS_MAP_LOOP" -gt 0 ] && [ -n "$COMP_PARAMS" ]; then
+    HANDLER_BODY=$(grep -E 'lua_on_press = "' <<< "$LUA_BLOB" 2>/dev/null || true)
+    if [ -n "$HANDLER_BODY" ]; then
+        BARE_HANDLER_PROPS=""
+        BARE_HANDLER_COUNT=0
+        for prop in $COMP_PARAMS; do
+            # Check if prop appears bare inside handler strings (not as _item.prop or _nitem.prop)
+            n=$(echo "$HANDLER_BODY" | grep -oE "lua_on_press = \"[^\"]*\b${prop}\b" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$n" -gt 0 ]; then
+                BARE_HANDLER_PROPS="$BARE_HANDLER_PROPS $prop($n)"
+                BARE_HANDLER_COUNT=$((BARE_HANDLER_COUNT + n))
+            fi
+        done
+        if [ "$BARE_HANDLER_COUNT" -gt 0 ]; then
+            fail "$BARE_HANDLER_COUNT unresolved component prop(s) in handler strings:$BARE_HANDLER_PROPS — should be substituted with map index expression"
+        fi
+    fi
+fi
+
+# ── LT4k. Double 'or nil or nil' in conditionals ─────────────
+# Nested conditionals inside map rows sometimes emit:
+#   (cond1) and (cond2) and { ... } or nil or nil
+# The double 'or nil' is a compiler bug — the inner conditional wraps
+# 'or nil' and the outer adds another. It's semantically harmless but
+# signals the compiler isn't unwrapping nested conditionals correctly.
+if [ -n "$LUA_BLOB" ]; then
+    DOUBLE_NIL=$(grep -c 'or nil or nil' <<< "$LUA_BLOB" 2>/dev/null) || DOUBLE_NIL=0
+    if [ "$DOUBLE_NIL" -gt 0 ]; then
+        fail "$DOUBLE_NIL instance(s) of 'or nil or nil' — nested conditional not unwrapped"
+    fi
+fi
+
+# ── LT5. Map variable leakage in handlers and conditionals ───
+# Inside __mapLoop bodies, handler strings should use _item not source vars.
+# Also check for source map INDEX vars (si, fi, idx, etc.) leaking into
+# the Lua body as bare references — they should be (_i - 1) or (_ni - 1).
+MAP_ITEM_VARS=$(grep -oE '\.map\(\s*\(\s*([a-zA-Z_]\w*)' "$SOURCE" 2>/dev/null | sed 's/.*(\s*//' || true)
+MAP_INDEX_VARS=$(grep -oE '\.map\(\s*\(\s*[a-zA-Z_]\w*\s*,\s*([a-zA-Z_]\w*)' "$SOURCE" 2>/dev/null | sed 's/.*,\s*//' || true)
+for mv in $MAP_ITEM_VARS; do
     # Check if the source map var name appears in handler strings inside LUA_LOGIC
     # Pattern: js_on_press = "... mv . field ..." (should be _item.field)
     n=$(grep -oE "js_on_press = \"[^\"]*\b${mv}\s*\.\s*\w+" <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$n" -gt 0 ]; then
         fail "$n handler(s) reference map var '$mv' instead of '_item' inside __mapLoop"
+    fi
+done
+for mv in $MAP_INDEX_VARS; do
+    # Skip very short var names that could cause false positives (i, j, k are too common)
+    [ ${#mv} -le 1 ] && continue
+    # Check if the source index var appears bare in the Lua map body
+    MAP_BODY_ALL=$(sed -n '/__mapLoop/,/end)/p' <<< "$LUA_BLOB" 2>/dev/null || true)
+    n=$(echo "$MAP_BODY_ALL" | grep -oE "\b${mv}\b" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$n" -gt 0 ]; then
+        fail "$n reference(s) to source map index var '$mv' leaked into Lua — should be (_i - 1) or (_ni - 1)"
     fi
 done
 
