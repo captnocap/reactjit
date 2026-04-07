@@ -44,7 +44,11 @@ function _styleToLua(style, itemParam, indexParam) {
     // If the value contains Zig syntax, it came from a ternary or complex expression.
     // Store the original .tsz expression on the style field (via _luaRawExpr) and __eval it.
     // For now: detect Zig patterns and use __eval with a cleaned-up version.
-    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0)) {
+    // Color{} placeholder → 0x000000 (dynStyle should have replaced this)
+    if (typeof val === 'string' && val === 'Color{}') val = '0x000000';
+    // 0 placeholder from numeric dynStyle → keep as 0 (but dynStyle should override)
+
+    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0)) {
       var _jsExpr = val;
       // 1. Color.rgb → 0xRRGGBB FIRST (before paren stripping mangles them)
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
