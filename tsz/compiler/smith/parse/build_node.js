@@ -401,6 +401,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     var _ln = {};
     // Helper: clean Zig expressions to Lua-friendly form
     var _cleanZigExpr = function(expr) {
+      // JS logical operators → Lua
+      expr = expr.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
+      expr = expr.replace(/===/g, '==').replace(/!==/g, '~=');
       expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
         var _s = ctx.stateSlots[+idx]; return _s ? _s.getter : '_slot' + idx;
       });

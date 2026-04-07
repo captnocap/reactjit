@@ -55,6 +55,9 @@ function _styleToLua(style, itemParam, indexParam) {
         _jsExpr = _jsExpr.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
       }
       _jsExpr = _jsExpr.replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+      // 2b. JS logical operators → Lua
+      _jsExpr = _jsExpr.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
+      _jsExpr = _jsExpr.replace(/===/g, '==').replace(/!==/g, '~=');
       // 3. State slot refs → getter names
       _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
         return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;

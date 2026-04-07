@@ -882,6 +882,10 @@ if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_
 n=$(gocount '\bif\s+\(' "$LUA_BLOB")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS zig_if/$n"; fi
 
+# && / || — JS logical operators (should be and/or in Lua)
+n=$(gocount '&&|\|\|' "$LUA_BLOB")
+if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS js_logical/$n"; fi
+
 # _oa0_ refs — OA array refs not resolved to _item.field
 n=$(gocount '_oa[0-9]+_' "$LUA_BLOB")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS oa_ref/$n"; fi
