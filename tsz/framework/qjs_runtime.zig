@@ -2202,7 +2202,7 @@ pub fn syncLuaToQjs(var_name: [*:0]const u8) void {
     const global = qjs.JS_GetGlobalObject(ctx);
     defer qjs.JS_FreeValue(ctx, global);
 
-    if (lua.lua_isnumber(L, -1) != 0) {
+    if (lua.lua_type(L, -1) == 3) { // LUA_TNUMBER — exact type check, not coercible
         const val = lua.lua_tonumber(L, -1);
         const js_val = qjs.JS_NewFloat64(ctx, val);
         _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
