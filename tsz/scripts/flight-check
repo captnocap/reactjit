@@ -1011,6 +1011,32 @@ fi
 
 # ── LT4f. Color integrity — handled by check 1 above (works for both modes)
 
+# ── LT4g. js_on_press with first-render-only scalar sync ─────
+# If handlers use js_on_press (runs in QuickJS), the JS setter updates
+# the JS variable but doesn't sync to Lua. syncScalarToLua bridges this,
+# but if it only runs on _first_render, state changes after frame 1
+# never reach the Lua tree — the UI shows stale values forever.
+HAS_JS_ON_PRESS=$(gcount 'js_on_press' "$LUA_BLOB")
+if [ "$HAS_JS_ON_PRESS" -gt 0 ]; then
+    # Check app.zig for syncScalarToLua inside _first_render guard
+    APP_ZIG=""
+    if [ -d "$GEN" ]; then
+        APP_ZIG=$(cat "$GEN/app.zig" 2>/dev/null)
+    else
+        APP_ZIG="$GEN_BLOB"
+    fi
+    HAS_SYNC=$(gcount 'syncScalarToLua' "$APP_ZIG")
+    if [ "$HAS_SYNC" -gt 0 ]; then
+        # Check if ALL syncScalarToLua calls are inside _first_render block
+        # Pattern: if (_first_render) { ... syncScalarToLua ... }
+        # If there's sync outside _first_render, it's fine
+        SYNC_OUTSIDE_FIRST=$(echo "$APP_ZIG" | sed -n '/fn _appTick/,/^}/p' | sed '/_first_render/,/}/d' | grep -c 'syncScalarToLua' 2>/dev/null) || SYNC_OUTSIDE_FIRST=0
+        if [ "$SYNC_OUTSIDE_FIRST" -eq 0 ]; then
+            fail "$HAS_JS_ON_PRESS js_on_press handler(s) but syncScalarToLua only runs on first render — state changes after frame 1 never reach Lua tree"
+        fi
+    fi
+fi
+
 # ── LT5. Map variable leakage in handlers ────────────────────
 # Inside __mapLoop bodies, handler strings should use _item not source vars
 # Detect: map source var (from .map((x, ...) in source) appearing raw in handlers
