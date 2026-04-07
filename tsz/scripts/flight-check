@@ -1027,12 +1027,18 @@ if [ "$HAS_JS_ON_PRESS" -gt 0 ]; then
     fi
     HAS_SYNC=$(gcount 'syncScalarToLua' "$APP_ZIG")
     if [ "$HAS_SYNC" -gt 0 ]; then
-        # Check if ALL syncScalarToLua calls are inside _first_render block
-        # Pattern: if (_first_render) { ... syncScalarToLua ... }
-        # If there's sync outside _first_render, it's fine
-        SYNC_OUTSIDE_FIRST=$(echo "$APP_ZIG" | sed -n '/fn _appTick/,/^}/p' | sed '/_first_render/,/}/d' | grep -c 'syncScalarToLua' 2>/dev/null) || SYNC_OUTSIDE_FIRST=0
-        if [ "$SYNC_OUTSIDE_FIRST" -eq 0 ]; then
-            fail "$HAS_JS_ON_PRESS js_on_press handler(s) but syncScalarToLua only runs on first render — state changes after frame 1 never reach Lua tree"
+        # Check if syncScalarToLua is gated behind a standalone if (_first_render) block.
+        # Pattern: "if (_first_render) {" on its own line, with sync calls inside.
+        # If sync is in the main dirty block (no _first_render guard), that's correct.
+        TICK_BODY=$(echo "$APP_ZIG" | sed -n '/fn _appTick/,/^}/p')
+        FIRST_RENDER_GUARD=$(echo "$TICK_BODY" | grep -c 'if (_first_render) {' 2>/dev/null) || FIRST_RENDER_GUARD=0
+        if [ "$FIRST_RENDER_GUARD" -gt 0 ]; then
+            # There's a _first_render guard — check if ALL sync calls are inside it
+            # by checking if any sync call exists OUTSIDE the guard
+            SYNC_OUTSIDE=$(echo "$TICK_BODY" | sed '/if (_first_render) {/,/}/d' | grep -c 'syncScalarToLua' 2>/dev/null) || SYNC_OUTSIDE=0
+            if [ "$SYNC_OUTSIDE" -eq 0 ]; then
+                fail "$HAS_JS_ON_PRESS js_on_press handler(s) but syncScalarToLua only runs on first render — state changes after frame 1 never reach Lua tree"
+            fi
         fi
     fi
 fi
