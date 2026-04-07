@@ -36,6 +36,12 @@ Two engines exist: a **blessed** engine (human-verified, no pre-existing bugs) a
 # Build against the blessed engine — proves bugs are in your compiler/cart code
 ./scripts/build carts/conformance/CART.tsz --proveIBrokeIt
 
+# Build against the blessed compiler — proves bugs are in your engine/cart code
+./scripts/build carts/conformance/CART.tsz --proveMyCompilerBrokeIt
+
+# Both blessed — isolates to cart code only
+./scripts/build carts/conformance/CART.tsz --proveIBrokeIt --proveMyCompilerBrokeIt
+
 # If you touched framework/ code and want to be explicit about it:
 ./scripts/buildFromMyShittyNewCode carts/conformance/CART.tsz
 
@@ -43,9 +49,9 @@ Two engines exist: a **blessed** engine (human-verified, no pre-existing bugs) a
 ./scripts/ICantCallPreExistingOnThisOne carts/conformance/CART.tsz
 ```
 
-**DO NOT run `./scripts/bless-engine`.** Only the human promotes engines to blessed.
+**DO NOT run `./scripts/bless-engine` or `./scripts/bless-compiler`.** Only the human promotes engines/compilers to blessed.
 
-If a conformance build fails, the build script prints a **failure receipt** showing: the test source hash, the engine hash, the framework source hash diff between your code and the last working build, human verification status, and how many engines this test has passed on. If the source is unchanged and the framework changed — it's your code.
+If a conformance build fails, the build script prints a **failure receipt** showing: the test source hash, the engine hash, the compiler hash, the framework and smith source hash diffs between your code and the last working build, human verification status, and how many engines and compilers this test has passed on. If the source is unchanged and the framework or compiler changed — it's your code.
 
 ---
 

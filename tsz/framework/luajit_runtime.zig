@@ -343,6 +343,43 @@ fn readLuaOptFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
     return result;
 }
 
+fn readLuaFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: f32) f32 {
+    return readLuaOptFloat(L, idx, field) orelse default;
+}
+
+fn readLuaBool(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) bool {
+    lua.lua_getfield(L, idx, field);
+    const result = lua.lua_toboolean(L, -1) != 0;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaU8(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: u8) u8 {
+    lua.lua_getfield(L, idx, field);
+    const result: u8 = if (lua.lua_isnumber(L, -1) != 0) @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1)))) else default;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaOptString(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, alloc: std.mem.Allocator) ?[]const u8 {
+    lua.lua_getfield(L, idx, field);
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and len > 0) {
+            const copy = alloc.alloc(u8, len) catch {
+                lua.lua_pop(L, 1);
+                return null;
+            };
+            @memcpy(copy, @as([*]const u8, @ptrCast(ptr))[0..len]);
+            lua.lua_pop(L, 1);
+            return copy;
+        }
+    }
+    lua.lua_pop(L, 1);
+    return null;
+}
+
 fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     var s = Style{};
     if (!lua.lua_istable(L, idx)) return s;
@@ -537,6 +574,77 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
+    // ── Canvas/Graph fields ──
+    node.graph_container = readLuaBool(L, idx, "graph_container");
+    node.canvas_path = readLuaBool(L, idx, "canvas_path");
+    node.canvas_node = readLuaBool(L, idx, "canvas_node");
+    node.canvas_path_d = readLuaOptString(L, idx, "canvas_path_d", alloc);
+    node.canvas_fill_effect = readLuaOptString(L, idx, "canvas_fill_effect", alloc);
+    node.canvas_stroke_width = readLuaFloat(L, idx, "canvas_stroke_width", 2);
+    node.canvas_flow_speed = readLuaFloat(L, idx, "canvas_flow_speed", 0);
+    node.canvas_view_x = readLuaFloat(L, idx, "canvas_view_x", 0);
+    node.canvas_view_y = readLuaFloat(L, idx, "canvas_view_y", 0);
+    if (readLuaOptFloat(L, idx, "canvas_view_zoom")) |vz| {
+        node.canvas_view_zoom = vz;
+        node.canvas_view_set = true;
+    }
+    node.canvas_view_set = node.canvas_view_set or readLuaBool(L, idx, "canvas_view_set");
+    node.canvas_gx = readLuaFloat(L, idx, "canvas_gx", 0);
+    node.canvas_gy = readLuaFloat(L, idx, "canvas_gy", 0);
+    node.canvas_gw = readLuaFloat(L, idx, "canvas_gw", 0);
+    node.canvas_gh = readLuaFloat(L, idx, "canvas_gh", 0);
+    node.canvas_drift_x = readLuaFloat(L, idx, "canvas_drift_x", 0);
+    node.canvas_drift_y = readLuaFloat(L, idx, "canvas_drift_y", 0);
+    lua.lua_getfield(L, idx, "canvas_fill_color");
+    node.canvas_fill_color = readLuaColor(L, -1);
+    lua.lua_pop(L, 1);
+    // ── 3D fields ──
+    node.scene3d = readLuaBool(L, idx, "scene3d");
+    node.scene3d_mesh = readLuaBool(L, idx, "scene3d_mesh");
+    node.scene3d_camera = readLuaBool(L, idx, "scene3d_camera");
+    node.scene3d_light = readLuaBool(L, idx, "scene3d_light");
+    node.scene3d_group = readLuaBool(L, idx, "scene3d_group");
+    node.scene3d_geometry = readLuaOptString(L, idx, "scene3d_geometry", alloc);
+    node.scene3d_light_type = readLuaOptString(L, idx, "scene3d_light_type", alloc);
+    node.scene3d_color_r = readLuaFloat(L, idx, "scene3d_color_r", 0.8);
+    node.scene3d_color_g = readLuaFloat(L, idx, "scene3d_color_g", 0.8);
+    node.scene3d_color_b = readLuaFloat(L, idx, "scene3d_color_b", 0.8);
+    node.scene3d_pos_x = readLuaFloat(L, idx, "scene3d_pos_x", 0);
+    node.scene3d_pos_y = readLuaFloat(L, idx, "scene3d_pos_y", 0);
+    node.scene3d_pos_z = readLuaFloat(L, idx, "scene3d_pos_z", 0);
+    node.scene3d_rot_x = readLuaFloat(L, idx, "scene3d_rot_x", 0);
+    node.scene3d_rot_y = readLuaFloat(L, idx, "scene3d_rot_y", 0);
+    node.scene3d_rot_z = readLuaFloat(L, idx, "scene3d_rot_z", 0);
+    node.scene3d_scale_x = readLuaFloat(L, idx, "scene3d_scale_x", 1);
+    node.scene3d_scale_y = readLuaFloat(L, idx, "scene3d_scale_y", 1);
+    node.scene3d_scale_z = readLuaFloat(L, idx, "scene3d_scale_z", 1);
+    node.scene3d_look_x = readLuaFloat(L, idx, "scene3d_look_x", 0);
+    node.scene3d_look_y = readLuaFloat(L, idx, "scene3d_look_y", 0);
+    node.scene3d_look_z = readLuaFloat(L, idx, "scene3d_look_z", 0);
+    node.scene3d_dir_x = readLuaFloat(L, idx, "scene3d_dir_x", 0);
+    node.scene3d_dir_y = readLuaFloat(L, idx, "scene3d_dir_y", -1);
+    node.scene3d_dir_z = readLuaFloat(L, idx, "scene3d_dir_z", 0);
+    node.scene3d_fov = readLuaFloat(L, idx, "scene3d_fov", 60);
+    node.scene3d_intensity = readLuaFloat(L, idx, "scene3d_intensity", 1.0);
+    node.scene3d_radius = readLuaFloat(L, idx, "scene3d_radius", 0.5);
+    node.scene3d_size_x = readLuaFloat(L, idx, "scene3d_size_x", 1);
+    node.scene3d_size_y = readLuaFloat(L, idx, "scene3d_size_y", 1);
+    node.scene3d_size_z = readLuaFloat(L, idx, "scene3d_size_z", 1);
+    // ── Physics fields ──
+    node.physics_world = readLuaBool(L, idx, "physics_world");
+    node.physics_body = readLuaBool(L, idx, "physics_body");
+    node.physics_collider = readLuaBool(L, idx, "physics_collider");
+    node.physics_body_type = readLuaU8(L, idx, "physics_body_type", 2);
+    node.physics_x = readLuaFloat(L, idx, "physics_x", 0);
+    node.physics_y = readLuaFloat(L, idx, "physics_y", 0);
+    node.physics_angle = readLuaFloat(L, idx, "physics_angle", 0);
+    node.physics_gravity_x = readLuaFloat(L, idx, "physics_gravity_x", 0);
+    node.physics_gravity_y = readLuaFloat(L, idx, "physics_gravity_y", 980);
+    node.physics_density = readLuaFloat(L, idx, "physics_density", 1.0);
+    node.physics_friction = readLuaFloat(L, idx, "physics_friction", 0.3);
+    node.physics_restitution = readLuaFloat(L, idx, "physics_restitution", 0.1);
+    node.physics_radius = readLuaFloat(L, idx, "physics_radius", 0);
+    node.physics_shape = readLuaU8(L, idx, "physics_shape", 0);
     // children (recursive) — handles __isMapResult expansion
     // NOTE: uses lua_next to find true max index instead of lua_objlen,
     // because LuaJIT's # operator returns 0 on sparse arrays where

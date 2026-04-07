@@ -76,8 +76,13 @@ REL_PATH="${FILE#$REPO/}"
     -d "{\"model\":\"$LLM_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":$JSON_PROMPT}],\"max_tokens\":40,\"temperature\":0.1}" 2>/dev/null \
     | jq -r '.choices[0].message.content // empty' 2>/dev/null)
 
-  if [ -z "$COMMIT_MSG" ]; then
-    COMMIT_MSG="[$SHORT] edit $REL_PATH"
+  # Sanitize: drop useless LLM output (blank, just "REMOVED:", too short)
+  COMMIT_MSG=$(echo "$COMMIT_MSG" | sed 's/^"//;s/"$//' | tr -d '\n')
+  case "$COMMIT_MSG" in
+    ""|REMOVED:|REMOVED:\ |ADDED:|ADDED:\ ) COMMIT_MSG="" ;;
+  esac
+  if [ -z "$COMMIT_MSG" ] || [ ${#COMMIT_MSG} -lt 8 ]; then
+    COMMIT_MSG="[$SHORT] $TOOL $REL_PATH"
   else
     COMMIT_MSG="[$SHORT] $COMMIT_MSG"
   fi
@@ -91,7 +96,7 @@ REL_PATH="${FILE#$REPO/}"
     commit --no-verify -m "$COMMIT_MSG" 2>/dev/null || exit 0
 
   # Push only the edit-trail branch to gitea
-  git push "$REMOTE" "$TRAIL_BRANCH":main 2>/dev/null &
+  git push --force "$REMOTE" "$TRAIL_BRANCH":main 2>/dev/null &
 
   exec 9>&-
 ) &

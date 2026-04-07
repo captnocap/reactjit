@@ -4,6 +4,7 @@ function collectCompilerInputs(c) {
   globalThis.__cursor = c; // save for emit-time token access
   collectScript(c);
   collectLScript(c);
+  collectFfiDecls(c);
   // Canonical dispatch flag — handlers always go through LuaJIT
   ctx.handlerDispatch = 'lua';
   collectComponents(c);

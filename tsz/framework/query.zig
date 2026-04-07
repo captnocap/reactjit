@@ -25,16 +25,16 @@ pub const QueryOpts = struct {
     has_handler: bool = false,
 };
 
-fn resultFromNode(node: *Node) QueryResult {
+fn resultFromNode(node: *Node, scroll_offset_y: f32) QueryResult {
     const r = node.computed;
     return .{
         .node = node,
         .x = r.x,
-        .y = r.y,
+        .y = r.y - scroll_offset_y,
         .w = r.w,
         .h = r.h,
         .cx = r.x + r.w / 2.0,
-        .cy = r.y + r.h / 2.0,
+        .cy = r.y - scroll_offset_y + r.h / 2.0,
     };
 }
 
@@ -65,11 +65,18 @@ fn matches(node: *const Node, opts: QueryOpts) bool {
 }
 
 /// Find the first node matching opts. Returns null if not found.
+/// Coordinates in the result account for parent scroll offsets.
 pub fn find(root: *Node, opts: QueryOpts) ?QueryResult {
-    if (root.style.display == .none) return null;
-    if (matches(root, opts)) return resultFromNode(root);
-    for (root.children) |*child| {
-        if (find(child, opts)) |result| return result;
+    return findWithScroll(root, opts, 0);
+}
+
+fn findWithScroll(node: *Node, opts: QueryOpts, scroll_y: f32) ?QueryResult {
+    if (node.style.display == .none) return null;
+    if (matches(node, opts)) return resultFromNode(node, scroll_y);
+    // Accumulate scroll offset for children
+    const child_scroll = scroll_y + node.scroll_y;
+    for (node.children) |*child| {
+        if (findWithScroll(child, opts, child_scroll)) |result| return result;
     }
     return null;
 }
@@ -77,20 +84,21 @@ pub fn find(root: *Node, opts: QueryOpts) ?QueryResult {
 /// Find all nodes matching opts. Returns the number found.
 pub fn findAll(root: *Node, opts: QueryOpts, out: []QueryResult) usize {
     var found: usize = 0;
-    findAllRecurse(root, opts, out, &found);
+    findAllRecurse(root, opts, out, &found, 0);
     return found;
 }
 
-fn findAllRecurse(node: *Node, opts: QueryOpts, out: []QueryResult, found: *usize) void {
+fn findAllRecurse(node: *Node, opts: QueryOpts, out: []QueryResult, found: *usize, scroll_y: f32) void {
     if (node.style.display == .none) return;
     if (found.* >= out.len) return;
     if (matches(node, opts)) {
-        out[found.*] = resultFromNode(node);
+        out[found.*] = resultFromNode(node, scroll_y);
         found.* += 1;
     }
+    const child_scroll = scroll_y + node.scroll_y;
     for (node.children) |*child| {
         if (found.* >= out.len) return;
-        findAllRecurse(child, opts, out, found);
+        findAllRecurse(child, opts, out, found, child_scroll);
     }
 }
 

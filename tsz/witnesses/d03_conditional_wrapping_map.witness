@@ -1,0 +1,113 @@
+WITNESS v1
+SLOTS 0
+STATE_INIT
+END
+TEXTS_INIT 2
+T 4:Show
+T 7:taps: 0
+END
+TREE 5
+N 0 0 0 1280 800 0 0: 0:
+N 1 0 0 1280 800 0 0: 0:
+N 2 20 20 58 36 1 0: 0:
+N 3 30 30 38 16 0 0: 4:Show
+N 2 20 68 1240 12 0 0: 7:taps: 0
+END
+CLICK 241 0: 4:Show
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 0
+END
+CLICK 1340 0: 4:Hide
+STATE_AFTER
+END
+TEXTS_AFTER 2
+T 4:Show
+T 7:taps: 0
+END
+CLICK 1784 0: 4:Show
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 0
+END
+CLICK 1979 0: 3:[ ]
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 1
+END
+CLICK 2129 0: 3:[ ]
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 2
+END
+CLICK 2243 0: 3:[ ]
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 3
+END
+CLICK 2366 0: 3:[ ]
+STATE_AFTER
+END
+TEXTS_AFTER 10
+T 4:Hide
+T 3:[x]
+T 11:0: Buy milk
+T 3:[ ]
+T 14:1: Write tests
+T 3:[ ]
+T 17:2: Break compiler
+T 3:[ ]
+T 15:3: Fix compiler
+T 7:taps: 4
+END
+DONE

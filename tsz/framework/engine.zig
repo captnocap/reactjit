@@ -252,6 +252,7 @@ const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 const state_mod = @import("state.zig");
+const witness = @import("witness.zig");
 
 // ── Devtools removed — inspector lives in tsz-tools ─────────────────────
 
@@ -1457,6 +1458,9 @@ pub fn run(config_in: AppConfig) !void {
     debug_server.init(config.title);
     defer debug_server.deinit();
 
+    // Witness — record/replay for regression testing
+    witness.init();
+
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
     defer {
         c.SDL_Quit();
@@ -1637,6 +1641,7 @@ pub fn run(config_in: AppConfig) !void {
             switch (event.type) {
                 c.SDL_EVENT_QUIT => {
                     std.debug.print("[engine] SDL_EVENT_QUIT received\n", .{});
+                    witness.flush(); // save recording before exit
                     running = false;
                 },
                 c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
@@ -1752,6 +1757,8 @@ pub fn run(config_in: AppConfig) !void {
                             } else if (h.href) |url| {
                                 openUrl(url);
                             }
+                            // Witness: record the click with semantic target
+                            witness.recordClick(h);
                         } else if (events.findCanvasNode(config.root, mx, my)) |cn| {
                             // Canvas click — check for interactive elements inside Canvas.Nodes
                             // Convert screen coords to graph space for canvas-child hit testing
@@ -1809,6 +1816,7 @@ pub fn run(config_in: AppConfig) !void {
                                     openUrl(url);
                                     handled_interactive = true;
                                 }
+                                if (handled_interactive) witness.recordClick(h);
                             }
                             if (!handled_interactive) {
                                 // Background click — select/deselect canvas node and start drag
@@ -2035,6 +2043,8 @@ pub fn run(config_in: AppConfig) !void {
                     // SDL3: mouse_x/mouse_y are in the wheel event itself
                     const mx: f32 = event.wheel.mouse_x;
                     const my: f32 = event.wheel.mouse_y;
+                    if (witness.isActive()) std.debug.print("[scroll-debug] wheel at ({d:.0},{d:.0}) delta=({d:.1},{d:.1})\n", .{ mx, my, event.wheel.x, event.wheel.y });
+                    witness.recordScroll(mx, my, event.wheel.x, event.wheel.y);
                     const events = @import("events.zig");
                     // Terminal scrollback — mouse wheel scrolls history (check all terminals)
                     {
@@ -2088,6 +2098,7 @@ pub fn run(config_in: AppConfig) !void {
                             canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                         }
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
+                        if (witness.isActive()) std.debug.print("[scroll-debug] found scroll container, scroll_y={d:.0} content_h={d:.0} h={d:.0}\n", .{ scroll_node.scroll_y, scroll_node.content_height, scroll_node.computed.h });
                         if (event.wheel.y != 0) {
                             // macOS trackpad: SDL3 gives pixel-precise fractional deltas
                             // Mouse wheel: SDL3 gives ±1.0 per notch
@@ -2297,6 +2308,12 @@ pub fn run(config_in: AppConfig) !void {
         if (testharness.tick()) {
             const exit_code = testharness.runAll(config.root);
             std.process.exit(exit_code);
+        }
+
+        // Witness — record tree snapshots / replay actions
+        if (witness.tick(config.root)) {
+            witness.flush();
+            std.process.exit(witness.exitCode());
         }
 
         // Unified telemetry snapshot

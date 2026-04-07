@@ -128,7 +128,20 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
     }
   }
 
-  var node = { style: null, fontSize: null, color: null, children: [], text: null, handler: null };
+  var node = { style: null, fontSize: null, color: null, children: [], text: null, handler: null, _nodeFields: {} };
+
+  // Tag-based flags for canvas/graph/3D/physics subsystems
+  if (tagName === 'Graph.Path' || tagName === 'Canvas.Path') node._nodeFields.canvas_path = 'true';
+  if (tagName === 'Graph.Node' || tagName === 'Canvas.Node') node._nodeFields.canvas_node = 'true';
+  if (tagName === 'Graph' || tagName === 'Canvas') { node._nodeFields.graph_container = 'true'; node._nodeFields.canvas_type = '"' + tagName.toLowerCase() + '"'; }
+  if (tagName === 'Scene3D' || tagName === '3D.View') node._nodeFields.scene3d = 'true';
+  if (tagName === '3D.Mesh') { node._nodeFields.scene3d = 'true'; node._nodeFields.scene3d_mesh = 'true'; }
+  if (tagName === '3D.Camera') { node._nodeFields.scene3d = 'true'; node._nodeFields.scene3d_camera = 'true'; }
+  if (tagName === '3D.Light') { node._nodeFields.scene3d = 'true'; node._nodeFields.scene3d_light = 'true'; }
+  if (tagName === '3D.Group') { node._nodeFields.scene3d = 'true'; node._nodeFields.scene3d_group = 'true'; }
+  if (tagName === 'Physics.World') node._nodeFields.physics_world = 'true';
+  if (tagName === 'Physics.Body') node._nodeFields.physics_body = 'true';
+  if (tagName === 'Physics.Collider') node._nodeFields.physics_collider = 'true';
 
   // Parse attributes
   var _attrLastPos = -1;
@@ -185,6 +198,111 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
             _hBody = _hBody.replace(/===/g, '==').replace(/!==/g, '~=');
             node.handler = _hBody || true;
           }
+        } else if (attrName === 'd' || attrName === 'fillEffect' || attrName === 'stroke' ||
+                   attrName === 'strokeWidth' || attrName === 'flowSpeed' ||
+                   attrName === 'viewX' || attrName === 'viewY' || attrName === 'viewZoom' ||
+                   attrName === 'gx' || attrName === 'gy' || attrName === 'x' || attrName === 'y' ||
+                   attrName === 'gw' || attrName === 'gh' || attrName === 'w' || attrName === 'h' ||
+                   attrName === 'driftX' || attrName === 'driftY' || attrName === 'fill') {
+          // Canvas/Graph attribute → map to Zig field name
+          var _canvasFieldMap = { d:'canvas_path_d', fill:'canvas_fill_color', fillEffect:'canvas_fill_effect',
+            stroke:'text_color', strokeWidth:'canvas_stroke_width', flowSpeed:'canvas_flow_speed',
+            viewX:'canvas_view_x', viewY:'canvas_view_y', viewZoom:'canvas_view_zoom',
+            gx:'canvas_gx', gy:'canvas_gy', x:'canvas_gx', y:'canvas_gy',
+            gw:'canvas_gw', gh:'canvas_gh', w:'canvas_gw', h:'canvas_gh',
+            driftX:'canvas_drift_x', driftY:'canvas_drift_y' };
+          var _zigField = _canvasFieldMap[attrName];
+          if (_zigField) {
+            if (c.kind() === TK.string) {
+              var _sv = c.text().slice(1, -1);
+              if (_zigField === 'text_color' || _zigField === 'canvas_fill_color') {
+                node._nodeFields[_zigField] = hexToLuaColor(_sv);
+              } else {
+                node._nodeFields[_zigField] = '"' + _sv + '"';
+              }
+              c.advance();
+            } else if (c.kind() === TK.lbrace) {
+              c.advance();
+              var _cvParts = [];
+              var _cvd = 0;
+              while (c.pos < c.count && !(_cvd === 0 && c.kind() === TK.rbrace)) {
+                if (c.kind() === TK.lbrace) _cvd++;
+                if (c.kind() === TK.rbrace) _cvd--;
+                _cvParts.push(c.text());
+                c.advance();
+              }
+              if (c.kind() === TK.rbrace) c.advance();
+              var _cvExpr = _cvParts.join('').replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+              node._nodeFields[_zigField] = _cvExpr;
+            } else if (c.kind() === TK.number) {
+              node._nodeFields[_zigField] = c.text();
+              c.advance();
+            }
+          }
+        } else if (attrName === 'position' || attrName === 'scale' || attrName === 'lookAt' ||
+                   attrName === 'rotate' || attrName === 'direction' || attrName === 'fov' ||
+                   attrName === 'intensity' || attrName === 'shape' || attrName === 'at' ||
+                   attrName === 'size' || attrName === 'radius' || attrName === 'height' ||
+                   attrName === 'bounce' || attrName === 'mass' || attrName === 'gravity' ||
+                   attrName === 'paused' || attrName === 'type') {
+          // 3D/Physics vector or scalar attribute
+          if (c.kind() === TK.string) {
+            // String attrs: shape="box", type="ambient"
+            var _3dStr = c.text().slice(1, -1);
+            if (attrName === 'shape') node._nodeFields.scene3d_geometry = '"' + _3dStr + '"';
+            else if (attrName === 'type') node._nodeFields.scene3d_light_type = '"' + _3dStr + '"';
+            c.advance();
+          } else if (c.kind() === TK.lbrace) {
+            c.advance();
+            var _spParts = [];
+            var _spd = 0;
+            while (c.pos < c.count && !(_spd === 0 && c.kind() === TK.rbrace)) {
+              if (c.kind() === TK.lbrace) _spd++;
+              if (c.kind() === TK.rbrace) _spd--;
+              _spParts.push(c.text());
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance();
+            var _spVal = _spParts.join(' ').trim();
+            // Vector attrs: [x, y, z] → individual fields
+            var _vecMatch = _spVal.match(/^\[?\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)(?:\s*,\s*(-?[\d.]+))?\s*\]?$/);
+            if (_vecMatch) {
+              var _prefixMap = { position:'scene3d_pos', scale:'scene3d_scale', lookAt:'scene3d_look',
+                rotate:'scene3d_rot', direction:'scene3d_dir', at:'physics', gravity:'physics_gravity', size:'scene3d_size' };
+              var _axes3d = ['x','y','z'];
+              if (attrName === 'at' && tagName.indexOf('Physics') === 0) { _prefixMap.at = 'physics'; _axes3d = ['x','y']; }
+              if (attrName === 'gravity') _axes3d = ['x','y'];
+              if (attrName === 'size' && tagName.indexOf('Physics') === 0) {
+                if (_vecMatch[1]) node._nodeFields['width'] = _vecMatch[1];
+                if (_vecMatch[2]) node._nodeFields['height'] = _vecMatch[2];
+              } else {
+                var _vPrefix = _prefixMap[attrName];
+                if (_vPrefix) {
+                  if (_vecMatch[1]) node._nodeFields[_vPrefix + '_x'] = _vecMatch[1];
+                  if (_vecMatch[2]) node._nodeFields[_vPrefix + '_y'] = _vecMatch[2];
+                  if (_vecMatch[3] && _axes3d.length === 3) node._nodeFields[_vPrefix + '_z'] = _vecMatch[3];
+                }
+              }
+            } else {
+              // Scalar expression
+              var _scalarMap = { fov:'scene3d_fov', intensity:'scene3d_intensity', radius:null, height:'scene3d_size_y',
+                bounce:'physics_restitution', mass:'physics_density' };
+              if (attrName === 'radius') {
+                _scalarMap.radius = tagName.indexOf('Physics') === 0 ? 'physics_radius' : 'scene3d_radius';
+              }
+              var _scField = _scalarMap[attrName];
+              if (_scField) node._nodeFields[_scField] = _spVal;
+            }
+          } else if (c.kind() === TK.number) {
+            var _numMap = { fov:'scene3d_fov', intensity:'scene3d_intensity', height:'scene3d_size_y',
+              bounce:'physics_restitution', mass:'physics_density', radius:null };
+            if (attrName === 'radius') _numMap.radius = tagName.indexOf('Physics') === 0 ? 'physics_radius' : 'scene3d_radius';
+            var _numField = _numMap[attrName];
+            if (_numField) node._nodeFields[_numField] = c.text();
+            c.advance();
+          }
+        } else if (attrName === 'bold') {
+          node._nodeFields.bold = 'true';
         } else {
           // Skip unknown attribute value
           if (c.kind() === TK.string) c.advance();
@@ -228,6 +346,10 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
   if (node.handler) {
     var _hp = typeof node.handler === 'string' ? node.handler : '__luaMapPress(" .. _i .. ")';
     fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+  }
+  // Canvas/Graph/3D/Physics node fields
+  for (var _nfk in node._nodeFields) {
+    fields.push(_nfk + ' = ' + node._nodeFields[_nfk]);
   }
   if (node.children.length > 0) {
     // Track children block metadata for manifest

@@ -213,13 +213,28 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; ' + _luaSetCall + '; }\n';
     }
   }
-  // OA getters in JS
+  // OA getters in JS — reconstruct initial data from token range
   if (ctx.objectArrays && ctx.objectArrays.length > 0) {
+    var _tc = globalThis.__cursor;
     for (var joi = 0; joi < ctx.objectArrays.length; joi++) {
       var joa = ctx.objectArrays[joi];
-      jsStateBindings += 'var ' + joa.getter + ' = [];\n';
+      var _jsInit = '[]';
+      if (!joa.isNested && _tc && joa.initDataStartPos !== undefined && joa.initDataEndPos !== undefined) {
+        var _parts = [];
+        for (var _ti = joa.initDataStartPos; _ti < joa.initDataEndPos; _ti++) {
+          _parts.push(_tc.textAt(_ti));
+        }
+        var _raw = _parts.join(' ').trim();
+        // Strip wrapping parens from useState(...)
+        while (_raw.startsWith('(')) _raw = _raw.slice(1).trim();
+        while (_raw.endsWith(')')) _raw = _raw.slice(0, -1).trim();
+        // Strip trailing semicolons
+        while (_raw.endsWith(';')) _raw = _raw.slice(0, -1).trim();
+        if (_raw.length > 2) _jsInit = _raw;
+      }
+      jsStateBindings += 'var ' + joa.getter + ' = ' + _jsInit + ';\n';
       if (joa.setter) {
-        jsStateBindings += 'function ' + joa.setter + '(v) { ' + joa.getter + ' = v; }\n';
+        jsStateBindings += 'function ' + joa.setter + '(v) { ' + joa.getter + ' = v; __markDirty(); }\n';
       }
     }
   }

@@ -522,7 +522,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           var _nfEq = _nf.indexOf(' = ');
           if (_nfEq > 1) {
             var _nfKey = _nf.slice(1, _nfEq);
-            if (_nfKey.indexOf('canvas_') === 0 || _nfKey.indexOf('scene3d_') === 0 || _nfKey.indexOf('physics_') === 0) {
+            if (_nfKey.indexOf('canvas_') === 0 || _nfKey.indexOf('scene3d_') === 0 || _nfKey.indexOf('physics_') === 0 || _nfKey === 'graph_container' || _nfKey === 'bold') {
               if (!_ln._nodeFields) _ln._nodeFields = {};
               _ln._nodeFields[_nfKey] = _nf.slice(_nfEq + 3);
             }

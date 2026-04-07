@@ -98,3 +98,92 @@ function scanScriptFunctionNames(scriptText, dedupeOnly) {
 function isScriptFunc(name) {
   return ctx.scriptFuncs.includes(name);
 }
+
+// ── Collection: declare function / @ffi FFI declarations ─────────
+// Parses top-level `// @ffi <header>` pragma tokens and
+// `declare function name(params): returnType` statements.
+// Sets ctx._ffiDecls and ctx._scriptBlockIsLua when found.
+
+function _tsToCType(tsType) {
+  switch (tsType) {
+    case 'string':  return 'const char*';
+    case 'boolean': return 'int';
+    case 'void':    return 'void';
+    default:        return 'double'; // number and unknowns
+  }
+}
+
+function collectFfiDecls(c) {
+  var decls = [];
+  var saved = c.save();
+  c.pos = 0;
+  while (c.pos < c.count) {
+    // @ffi pragma token — extract header text
+    if (c.kind() === TK.ffi_pragma) {
+      c.advance();
+      continue;
+    }
+    // declare function name(params): returnType
+    if (c.kind() === TK.identifier && c.text() === 'declare') {
+      var _declPos = c.pos;
+      c.advance();
+      if (c.kind() === TK.identifier && c.text() === 'function') {
+        c.advance();
+        if (c.kind() === TK.identifier) {
+          var fname = c.text();
+          c.advance();
+          var params = [];
+          if (c.kind() === TK.lparen) {
+            c.advance();
+            while (c.pos < c.count && c.kind() !== TK.rparen) {
+              if (c.kind() === TK.identifier) {
+                var pname = c.text();
+                c.advance();
+                var ptype = 'number';
+                if (c.kind() === TK.colon) {
+                  c.advance();
+                  ptype = '';
+                  while (c.pos < c.count && c.kind() !== TK.comma && c.kind() !== TK.rparen) {
+                    ptype += c.text();
+                    c.advance();
+                  }
+                  ptype = ptype.trim() || 'number';
+                }
+                params.push({ name: pname, type: ptype });
+              } else if (c.kind() === TK.comma) {
+                c.advance();
+              } else {
+                c.advance();
+              }
+            }
+            if (c.kind() === TK.rparen) c.advance();
+          }
+          var returnType = 'void';
+          if (c.kind() === TK.colon) {
+            c.advance();
+            returnType = '';
+            while (c.pos < c.count && c.kind() !== TK.semicolon && c.kind() !== TK.lbrace && c.kind() !== TK.lt) {
+              returnType += c.text();
+              c.advance();
+            }
+            if (c.kind() === TK.semicolon) c.advance();
+            returnType = returnType.trim() || 'void';
+          }
+          decls.push({ name: fname, params: params, returnType: returnType });
+          continue;
+        }
+      }
+      // Not a declare function — rewind
+      c.pos = _declPos;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+
+  if (decls.length > 0) {
+    ctx._ffiDecls = decls;
+    if (ctx.scriptBlock || globalThis.__scriptContent) {
+      ctx._scriptBlockIsLua = true;
+    }
+  }
+}

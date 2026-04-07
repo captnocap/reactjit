@@ -27,6 +27,7 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
           c.advance();
           if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
           ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_stroke_width', oaField: fieldName, type: 'number' });
+          nodeFields.push('.canvas_stroke_width = _item.' + fieldName);
         }
       }
       if (c.kind() === TK.rbrace) c.advance();
@@ -57,6 +58,7 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
           c.advance();
           if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
           ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_fill_effect', oaField: fieldName, type: 'string' });
+          nodeFields.push('.canvas_fill_effect = _item.' + fieldName);
         }
       }
       if (c.kind() === TK.rbrace) c.advance();
@@ -75,6 +77,7 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
           c.advance();
           if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
           ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_view_zoom', oaField: fieldName, type: 'number' });
+          nodeFields.push('.canvas_view_zoom = _item.' + fieldName);
           nodeFields.push('.canvas_view_set = true');
         }
       }
@@ -178,6 +181,7 @@ function parseCanvasPathDataAttr(c, nodeFields) {
       c.advance();
       if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
       ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_path_d', oaField: fieldName, type: 'string' });
+      nodeFields.push('.canvas_path_d = _item.' + fieldName);
     }
   } else {
     const dTokens = [];
@@ -210,7 +214,20 @@ function parseCanvasColorAttr(c, nodeFields, zigField) {
     nodeFields.push(`.${zigField} = ${parseColor(c.text().slice(1, -1))}`);
     c.advance();
   } else if (c.kind() === TK.lbrace) {
-    skipBraces(c);
+    // Check for map item expression: {itemParam.field}
+    if (ctx.currentMap && c.pos + 3 < c.count &&
+        c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === ctx.currentMap.itemParam &&
+        c.kindAt(c.pos + 2) === TK.dot && c.kindAt(c.pos + 3) === TK.identifier) {
+      c.advance(); // {
+      c.advance(); // itemParam
+      c.advance(); // .
+      const fieldName = c.text();
+      c.advance(); // field
+      nodeFields.push('.' + zigField + ' = _item.' + fieldName);
+      if (c.kind() === TK.rbrace) c.advance();
+    } else {
+      skipBraces(c);
+    }
   }
 }
 
@@ -273,6 +290,7 @@ function parseLegacyCanvasNodeAxisAttr(c, nodeFields, zigField) {
         c.advance();
         if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
         ctx.currentMap._deferredCanvasAttrs.push({ zigField, oaField: fieldName });
+        nodeFields.push('.' + zigField + ' = _item.' + fieldName);
       }
     }
     if (c.kind() === TK.rbrace) c.advance();

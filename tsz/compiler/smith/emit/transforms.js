@@ -52,10 +52,16 @@ function luaTransform(code) {
   s = s.replace(/\bfor\s*\(\s*(?:const|let|var)\s+(\w+)\s+of\s+(\w+)\)\s*\{/g, 'for _, $1 in ipairs($2) do ');
   // for (const/let x in obj) { → for x, _ in pairs(obj) do
   s = s.replace(/\bfor\s*\(\s*(?:const|let|var)\s+(\w+)\s+in\s+(\w+)\)\s*\{/g, 'for $1, _ in pairs($2) do ');
+  // JS function declarations: function name(params) { → function name(params)
+  s = s.replace(/\bfunction\s+(\w+)\s*\(([^)]*)\)\s*\{/g, 'function $1($2)');
+  // Standalone } on its own line → end
+  s = s.replace(/^(\s*)\}\s*$/gm, '$1end');
   // Standalone } → end (block closers)
   s = s.replace(/;\s*\}/g, '; end ');
   s = s.replace(/\}\s*$/g, ' end');
   s = s.replace(/\bthen\s+end\b/g, 'then'); // undo false "end" after empty then
+  // String literal + expr → string literal .. expr (Lua concat; .. auto-coerces numbers)
+  s = s.replace(/(["'][^"']*["'])\s*\+\s*/g, '$1 .. ');
   // const/let/var → local
   s = s.replace(/\b(const|let|var)\s+/g, 'local ');
   // null/undefined → nil

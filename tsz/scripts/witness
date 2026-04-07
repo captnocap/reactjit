@@ -1,0 +1,286 @@
+#!/bin/bash
+# Witness — record and replay human-verified interactions for regression testing.
+#
+# Usage:
+#   ./scripts/witness record carts/my-cart.tsz     # build + run, record interactions
+#   ./scripts/witness replay carts/my-cart.tsz     # build + run, replay and verify
+#   ./scripts/witness replay-all                   # replay entire witness catalog
+#   ./scripts/witness list                         # list all witness files
+#   ./scripts/witness status                       # show pass/fail for each witness
+#
+# Record mode: builds the cart normally, runs with ZIGOS_WITNESS=record.
+# You interact with the app — every click is recorded with its semantic target
+# and state snapshot. Close the window to save.
+#
+# Replay mode: builds the cart, runs with ZIGOS_WITNESS=replay.
+# The witness file drives the app — clicks are replayed by finding the same
+# nodes semantically, state is compared at each step. Exits 0/1.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+WITNESS_DIR="witnesses"
+
+usage() {
+    echo "Usage: scripts/witness <command> [cart.tsz]"
+    echo ""
+    echo "Commands:"
+    echo "  record <cart.tsz>   Build and run, recording interactions"
+    echo "  replay <cart.tsz>   Build and replay witness, verify state"
+    echo "  replay-all          Replay all witnesses in the catalog"
+    echo "  list                List all witness files"
+    echo "  status              Show pass/fail status for each witness"
+    exit 1
+}
+
+if [ $# -lt 1 ]; then usage; fi
+
+CMD="$1"
+shift
+
+cart_name() {
+    basename "$1" .tsz
+}
+
+witness_file() {
+    local name
+    name=$(cart_name "$1")
+    echo "$WITNESS_DIR/${name}.witness"
+}
+
+# ── Record ──────────────────────────────────────────────────────────────
+
+do_record() {
+    if [ $# -lt 1 ]; then
+        echo "Usage: scripts/witness record <cart.tsz>"
+        exit 1
+    fi
+    local cart="$1"
+    local name
+    name=$(cart_name "$cart")
+    local wfile
+    wfile=$(witness_file "$cart")
+
+    echo "[witness] building $name..."
+    ./scripts/build "$cart" 2>&1 | tail -3
+
+    local binary="zig-out/bin/$name"
+    if [ ! -x "$binary" ]; then
+        echo "[witness] ERROR: binary not found at $binary"
+        exit 1
+    fi
+
+    echo "[witness] recording — interact with the app, close window to save"
+    echo ""
+
+    ZIGOS_WITNESS=record \
+    ZIGOS_WITNESS_FILE="$wfile" \
+    "$binary" 2>&1
+
+    if [ -f "$wfile" ]; then
+        local actions
+        actions=$(grep -c '^CLICK' "$wfile" 2>/dev/null || echo "0")
+        local nodes
+        nodes=$(head -1 <(grep '^TREE' "$wfile") 2>/dev/null | awk '{print $2}' || echo "?")
+        echo ""
+        echo "[witness] saved: $wfile ($actions actions, $nodes tree nodes)"
+    else
+        echo "[witness] WARNING: no witness file created (no interactions recorded?)"
+    fi
+}
+
+# ── Replay ──────────────────────────────────────────────────────────────
+
+do_replay() {
+    if [ $# -lt 1 ]; then
+        echo "Usage: scripts/witness replay <cart.tsz>"
+        exit 1
+    fi
+    local cart="$1"
+    local name
+    name=$(cart_name "$cart")
+    local wfile
+    wfile=$(witness_file "$cart")
+
+    if [ ! -f "$wfile" ]; then
+        echo "[witness] no witness file for $name ($wfile)"
+        return 1
+    fi
+
+    echo -n "[$name] building... "
+    if ! ./scripts/build "$cart" >/dev/null 2>&1; then
+        echo "BUILD_FAIL"
+        return 1
+    fi
+
+    local binary="zig-out/bin/$name"
+    if [ ! -x "$binary" ]; then
+        echo "NO_BINARY"
+        return 1
+    fi
+
+    echo "replaying..."
+    echo ""
+
+    # Run and capture output + exit code
+    local tmpout="/tmp/witness_replay_$$"
+    ZIGOS_WITNESS=replay \
+    ZIGOS_WITNESS_FILE="$wfile" \
+    timeout 30 "$binary" >"$tmpout" 2>&1 || true
+
+    # Show the witness replay section (everything between REPLAY and end)
+    sed -n '/WITNESS REPLAY/,/WITNESS RESULT/p' "$tmpout"
+
+    # Get pass/fail from result
+    local exit_code=0
+    local passed=0
+    local total=0
+    local status="crash"
+    if grep -q "WITNESS RESULT" "$tmpout"; then
+        passed=$(grep "WITNESS RESULT" "$tmpout" | grep -oP '\d+(?=/)')
+        total=$(grep "WITNESS RESULT" "$tmpout" | grep -oP '(?<=/)\d+')
+        if [ "$passed" = "$total" ]; then
+            status="pass"
+        else
+            status="fail"
+            exit_code=1
+        fi
+    else
+        echo "[witness] no result — app may have crashed"
+        tail -5 "$tmpout"
+        exit_code=1
+    fi
+
+    # Record in conformance.db
+    local CONF_DB="conformance.db"
+    if [ -f "$CONF_DB" ]; then
+        local safe_name
+        safe_name=$(printf '%s' "$name" | sed "s/'/''/g")
+        local NOW
+        NOW=$(date '+%Y-%m-%d %I:%M:%S %p')
+        local source_sha
+        source_sha=$(sha256sum "$cart" 2>/dev/null | cut -c1-64 || echo "unknown")
+        sqlite3 "$CONF_DB" ".timeout 5000" \
+            "CREATE TABLE IF NOT EXISTS witness_replays (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_name   TEXT    NOT NULL,
+                replayed_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')),
+                status      TEXT    NOT NULL,
+                passed      INTEGER NOT NULL,
+                total       INTEGER NOT NULL,
+                source_sha  TEXT
+            );
+            INSERT INTO witness_replays (test_name, replayed_at, status, passed, total, source_sha)
+            VALUES ('$safe_name', '$NOW', '$status', $passed, $total, '$source_sha');"
+    fi
+
+    rm -f "$tmpout"
+    echo ""
+    return $exit_code
+}
+
+# ── Replay all ──────────────────────────────────────────────────────────
+
+do_replay_all() {
+    echo "=== Witness Replay All ==="
+    echo ""
+
+    local pass=0 fail=0 total=0 build_fail=0
+
+    for wfile in "$WITNESS_DIR"/*.witness; do
+        [ -f "$wfile" ] || continue
+        total=$((total + 1))
+
+        local name
+        name=$(basename "$wfile" .witness)
+
+        # Find the cart .tsz
+        local cart
+        cart=$(find carts/ -name "${name}.tsz" -not -name "*.script.tsz" -not -name "*.cls.tsz" 2>/dev/null | head -1)
+        if [ -z "$cart" ]; then
+            echo "[$name] SKIP — no matching .tsz"
+            continue
+        fi
+
+        if do_replay "$cart"; then
+            pass=$((pass + 1))
+        else
+            fail=$((fail + 1))
+        fi
+    done
+
+    echo ""
+    echo "=== Summary ==="
+    echo "Total: $total | Pass: $pass | Fail: $fail"
+    echo ""
+
+    if [ "$fail" -gt 0 ]; then
+        exit 1
+    fi
+}
+
+# ── List ────────────────────────────────────────────────────────────────
+
+do_list() {
+    echo "=== Witness Catalog ==="
+    echo ""
+    local count=0
+    for wfile in "$WITNESS_DIR"/*.witness; do
+        [ -f "$wfile" ] || continue
+        count=$((count + 1))
+        local name
+        name=$(basename "$wfile" .witness)
+        local actions
+        actions=$(grep -c '^CLICK' "$wfile" 2>/dev/null || echo "0")
+        local slots
+        slots=$(grep '^SLOTS' "$wfile" 2>/dev/null | awk '{print $2}' || echo "?")
+        printf "  %-40s %3s actions  %3s slots\n" "$name" "$actions" "$slots"
+    done
+
+    if [ "$count" -eq 0 ]; then
+        echo "  (no witnesses recorded yet)"
+        echo ""
+        echo "  Record one:  ./scripts/witness record carts/conformance/d01.tsz"
+    fi
+    echo ""
+    echo "Total: $count witnesses"
+}
+
+# ── Status ──────────────────────────────────────────────────────────────
+
+do_status() {
+    echo "=== Witness Status ==="
+    echo ""
+    printf "%-40s %-10s %s\n" "Cart" "Status" "Details"
+    printf "%-40s %-10s %s\n" "----" "------" "-------"
+
+    for wfile in "$WITNESS_DIR"/*.witness; do
+        [ -f "$wfile" ] || continue
+        local name
+        name=$(basename "$wfile" .witness)
+        local actions
+        actions=$(grep -c '^CLICK' "$wfile" 2>/dev/null || echo "0")
+
+        # Check if cart exists
+        local cart
+        cart=$(find carts/ -name "${name}.tsz" -not -name "*.script.tsz" -not -name "*.cls.tsz" 2>/dev/null | head -1)
+        if [ -z "$cart" ]; then
+            printf "%-40s %-10s %s\n" "$name" "ORPHAN" "no .tsz found"
+            continue
+        fi
+
+        printf "%-40s %-10s %s\n" "$name" "RECORDED" "${actions} actions"
+    done
+    echo ""
+}
+
+# ── Dispatch ────────────────────────────────────────────────────────────
+
+case "$CMD" in
+    record)     do_record "$@" ;;
+    replay)     do_replay "$@" ;;
+    replay-all) do_replay_all ;;
+    list)       do_list ;;
+    status)     do_status ;;
+    *)          usage ;;
+esac

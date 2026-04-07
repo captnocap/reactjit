@@ -93,10 +93,17 @@ pub fn resize(w: c_int, h: c_int) void {
 
 /// Simulate a mouse wheel scroll.
 pub fn scroll(x_val: f32, y_val: f32) void {
+    scrollAt(x_val, y_val, 0, 0);
+}
+
+/// Simulate a mouse wheel scroll at a specific position.
+pub fn scrollAt(x_val: f32, y_val: f32, mx: f32, my: f32) void {
     var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
     event.type = c.SDL_EVENT_MOUSE_WHEEL;
     event.wheel.x = x_val;
     event.wheel.y = y_val;
+    event.wheel.mouse_x = mx;
+    event.wheel.mouse_y = my;
     _ = c.SDL_PushEvent(&event);
 }
 

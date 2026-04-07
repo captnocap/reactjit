@@ -16,10 +16,12 @@ POSITIONAL=()
 DBG_FLAGS=""
 GDB_MODE=0
 PROVE_I_BROKE_IT=0
+PROVE_COMPILER_BROKE_IT=0
 for arg in "$@"; do
     case "$arg" in
         --fast) ;; # ignored, fast is always on
         --proveIBrokeIt) PROVE_I_BROKE_IT=1 ;;
+        --proveMyCompilerBrokeIt) PROVE_COMPILER_BROKE_IT=1 ;;
         -n) DBG_FLAGS="$DBG_FLAGS --dbg-nodes" ;;
         -s) DBG_FLAGS="$DBG_FLAGS --dbg-state" ;;
         -c) DBG_FLAGS="$DBG_FLAGS --dbg-compiler" ;;
@@ -136,6 +138,16 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
         last_good_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_engine_sha ON engine_builds(engine_sha);
+    CREATE TABLE IF NOT EXISTS compiler_builds (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        compiler_sha  TEXT    NOT NULL UNIQUE,
+        built_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')),
+        blessed_at    TEXT,
+        commit_sha    TEXT,
+        source_hash   TEXT,
+        last_good_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_compiler_sha ON compiler_builds(compiler_sha);
     CREATE TABLE IF NOT EXISTS build_perf (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
         test_name      TEXT    NOT NULL,
@@ -155,6 +167,8 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
     cdb "ALTER TABLE builds ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
     cdb "ALTER TABLE verified_sources ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
     cdb "ALTER TABLE engine_builds ADD COLUMN last_good_at TEXT;" 2>/dev/null || true
+    cdb "ALTER TABLE builds ADD COLUMN compiler_sha TEXT;" 2>/dev/null || true
+    cdb "ALTER TABLE verified_sources ADD COLUMN compiler_sha TEXT;" 2>/dev/null || true
 fi
 
 record_build() {
@@ -195,6 +209,30 @@ record_build() {
             WHERE engine_sha = '$safe_eng2';"
     fi
 
+    # Hash the compiler (forge binary) that was used.
+    # Prefer REACTJIT_COMPILER_SHA if set (locked by --proveMyCompilerBrokeIt).
+    local comp_sha="${REACTJIT_COMPILER_SHA:-}"
+    if [ -z "$comp_sha" ]; then
+        local forge_bin="zig-out/bin/forge"
+        [ -f "$forge_bin" ] && comp_sha=$(sha256sum "$forge_bin" | awk '{print $1}')
+    fi
+
+    # Register this compiler in compiler_builds if not already known
+    local smith_hash_now=$(find compiler/ -name '*.js' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-64)
+    if [ -n "$comp_sha" ]; then
+        local safe_comp=$(printf '%s' "$comp_sha" | sed "s/'/''/g")
+        local commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        cdb "INSERT OR IGNORE INTO compiler_builds (compiler_sha, commit_sha, source_hash)
+            VALUES ('$safe_comp', '$commit', '$smith_hash_now');"
+    fi
+
+    # On success: update this compiler as "last known good"
+    if [ "$status" = "compiled" ] && [ -n "$comp_sha" ]; then
+        local safe_comp2=$(printf '%s' "$comp_sha" | sed "s/'/''/g")
+        cdb "UPDATE compiler_builds SET last_good_at = strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')
+            WHERE compiler_sha = '$safe_comp2';"
+    fi
+
     # Truncate error log to 500 chars, escape single quotes for SQL
     error_log=$(printf '%s' "$error_log" | head -c 500 | sed "s/'/''/g")
     # Escape all values for SQL safety
@@ -203,9 +241,10 @@ record_build() {
     local safe_sha=$(printf '%s' "$bin_sha" | sed "s/'/''/g")
     local safe_src_sha=$(printf '%s' "$SOURCE_HASH" | sed "s/'/''/g")
     local safe_eng_sha=$(printf '%s' "$eng_sha" | sed "s/'/''/g")
+    local safe_comp_sha=$(printf '%s' "$comp_sha" | sed "s/'/''/g")
 
-    cdb "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log, source_sha, engine_sha)
-        VALUES ('$safe_name', '$safe_lane', '$status', '$safe_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log', '$safe_src_sha', '$safe_eng_sha');"
+    cdb "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log, source_sha, engine_sha, compiler_sha)
+        VALUES ('$safe_name', '$safe_lane', '$status', '$safe_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log', '$safe_src_sha', '$safe_eng_sha', '$safe_comp_sha');"
 
     # On failure, print the full receipt so Claude can't claim pre-existing
     if [ "$status" != "compiled" ]; then
@@ -226,42 +265,73 @@ report_failure() {
     fi
     local fw_hash_now=$(find framework/ -name '*.zig' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-16)
 
-    # Last good build for this test
-    local last_good=$(cdb "SELECT built_at, engine_sha, source_sha
+    # Current compiler state
+    local cur_comp="${REACTJIT_COMPILER_SHA:-}"
+    if [ -z "$cur_comp" ]; then
+        local forge_bin="zig-out/bin/forge"
+        [ -f "$forge_bin" ] && cur_comp=$(sha256sum "$forge_bin" | awk '{print $1}')
+    fi
+    local smith_hash_now=$(find compiler/ -name '*.js' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-16)
+
+    # Last good build for this test (now includes compiler_sha)
+    local last_good=$(cdb "SELECT built_at, engine_sha, source_sha, compiler_sha
         FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
         ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
 
     # Last good engine's framework source hash
     local lg_fw_hash=""
+    local lg_comp_hash=""
     if [ -n "$last_good" ]; then
         local lg_eng_full=$(echo "$last_good" | cut -d'|' -f2)
+        local lg_comp_full=$(echo "$last_good" | cut -d'|' -f4)
         if [ -n "$lg_eng_full" ]; then
             local safe_lg_eng=$(printf '%s' "$lg_eng_full" | sed "s/'/''/g")
             lg_fw_hash=$(cdb "SELECT substr(source_hash,1,16) FROM engine_builds
                 WHERE engine_sha = '$safe_lg_eng';" 2>/dev/null || true)
         fi
+        if [ -n "$lg_comp_full" ]; then
+            local safe_lg_comp=$(printf '%s' "$lg_comp_full" | sed "s/'/''/g")
+            lg_comp_hash=$(cdb "SELECT substr(source_hash,1,16) FROM compiler_builds
+                WHERE compiler_sha = '$safe_lg_comp';" 2>/dev/null || true)
+        fi
     fi
 
-    # How many distinct engines this test has passed on
+    # How many distinct engines and compilers this test has passed on
     local engine_count=$(cdb "SELECT COUNT(DISTINCT engine_sha)
         FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
         AND engine_sha IS NOT NULL AND engine_sha != '';" 2>/dev/null || echo "0")
+    local compiler_count=$(cdb "SELECT COUNT(DISTINCT compiler_sha)
+        FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
+        AND compiler_sha IS NOT NULL AND compiler_sha != '';" 2>/dev/null || echo "0")
 
     # Human verification info
     local verified_info=$(cdb "SELECT verified_at, substr(engine_sha,1,16)
         FROM verified_sources WHERE test_name = '$safe_name';" 2>/dev/null || true)
 
     # Is current engine blessed?
-    local is_blessed=""
+    local is_eng_blessed=""
     if [ -n "$cur_eng" ]; then
         local safe_cur_eng=$(printf '%s' "$cur_eng" | sed "s/'/''/g")
-        is_blessed=$(cdb "SELECT blessed_at FROM engine_builds
+        is_eng_blessed=$(cdb "SELECT blessed_at FROM engine_builds
             WHERE engine_sha = '$safe_cur_eng' AND blessed_at IS NOT NULL;" 2>/dev/null || true)
+    fi
+
+    # Is current compiler blessed?
+    local is_comp_blessed=""
+    if [ -n "$cur_comp" ]; then
+        local safe_cur_comp=$(printf '%s' "$cur_comp" | sed "s/'/''/g")
+        is_comp_blessed=$(cdb "SELECT blessed_at FROM compiler_builds
+            WHERE compiler_sha = '$safe_cur_comp' AND blessed_at IS NOT NULL;" 2>/dev/null || true)
     fi
 
     # Last engine that compiled ANYTHING successfully
     local last_any_good=$(cdb "SELECT substr(engine_sha,1,16), last_good_at, substr(source_hash,1,16)
         FROM engine_builds WHERE last_good_at IS NOT NULL
+        ORDER BY last_good_at DESC LIMIT 1;" 2>/dev/null || true)
+
+    # Last compiler that compiled ANYTHING successfully
+    local last_any_good_comp=$(cdb "SELECT substr(compiler_sha,1,16), last_good_at, substr(source_hash,1,16)
+        FROM compiler_builds WHERE last_good_at IS NOT NULL
         ORDER BY last_good_at DESC LIMIT 1;" 2>/dev/null || true)
 
     echo ""
@@ -271,18 +341,23 @@ report_failure() {
     echo "║"
     echo "║  Failed stage:    $fail_status"
     echo "║  Test source:     ${SOURCE_HASH:0:16}..."
-    echo "║  Your engine:     ${cur_eng:0:16}...$([ -n "$is_blessed" ] && echo " (BLESSED)" || echo " (NOT BLESSED)")"
+    echo "║  Your engine:     ${cur_eng:0:16}...$([ -n "$is_eng_blessed" ] && echo " (BLESSED)" || echo " (NOT BLESSED)")"
     echo "║  Your framework:  ${fw_hash_now}..."
+    echo "║  Your compiler:   ${cur_comp:0:16}...$([ -n "$is_comp_blessed" ] && echo " (BLESSED)" || echo " (NOT BLESSED)")"
+    echo "║  Your smith src:  ${smith_hash_now}..."
     echo "║"
 
     if [ -n "$last_good" ]; then
         local lg_time=$(echo "$last_good" | cut -d'|' -f1)
         local lg_eng=$(echo "$last_good" | cut -d'|' -f2)
         local lg_src=$(echo "$last_good" | cut -d'|' -f3)
+        local lg_comp=$(echo "$last_good" | cut -d'|' -f4)
         echo "║  ── LAST KNOWN GOOD (this test) ──"
         echo "║  Built at:        $lg_time"
         echo "║  Engine:          ${lg_eng:0:16}..."
         echo "║  Framework src:   ${lg_fw_hash:-unknown}..."
+        echo "║  Compiler:        ${lg_comp:0:16}..."
+        echo "║  Smith src:       ${lg_comp_hash:-unknown}..."
         if [ "$lg_src" = "$SOURCE_HASH" ]; then
             echo "║  Test source:     UNCHANGED (same hash)"
         else
@@ -292,6 +367,11 @@ report_failure() {
             echo "║  Framework src:   UNCHANGED (same hash)"
         elif [ -n "$lg_fw_hash" ]; then
             echo "║  Framework src:   CHANGED ← YOU changed the engine code"
+        fi
+        if [ -n "$lg_comp_hash" ] && [ "$lg_comp_hash" = "$smith_hash_now" ]; then
+            echo "║  Smith src:       UNCHANGED (same hash)"
+        elif [ -n "$lg_comp_hash" ]; then
+            echo "║  Smith src:       CHANGED ← YOU changed the compiler code"
         fi
     else
         echo "║  Last good build:  NEVER (no successful build on record)"
@@ -311,9 +391,23 @@ report_failure() {
         fi
     fi
 
+    if [ -n "$last_any_good_comp" ]; then
+        local lac_comp=$(echo "$last_any_good_comp" | cut -d'|' -f1)
+        local lac_time=$(echo "$last_any_good_comp" | cut -d'|' -f2)
+        local lac_smith=$(echo "$last_any_good_comp" | cut -d'|' -f3)
+        echo "║  ── LAST COMPILER THAT COMPILED ANYTHING ──"
+        echo "║  Compiler:        ${lac_comp}..."
+        echo "║  Compiled at:     $lac_time"
+        echo "║  Smith src:       ${lac_smith}..."
+        if [ "$lac_smith" != "$smith_hash_now" ]; then
+            echo "║  vs your code:    DIFFERENT ← your compiler/ changes broke it"
+        fi
+    fi
+
     echo "║"
     echo "║  ── HISTORY ──"
-    echo "║  Engines this test has passed on: $engine_count"
+    echo "║  Engines this test has passed on:   $engine_count"
+    echo "║  Compilers this test has passed on: $compiler_count"
     if [ -n "$verified_info" ]; then
         local v_time=$(echo "$verified_info" | cut -d'|' -f1)
         local v_eng=$(echo "$verified_info" | cut -d'|' -f2)
@@ -385,19 +479,59 @@ fi
 # time — if they changed, forge needs a real rebuild (~22s).
 SMITH_HASH_NOW=$(find compiler/ -name '*.js' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-16)
 FORGE_BIN="zig-out/bin/forge"
+BLESSED_FORGE="zig-out/bin/forge-blessed"
 FORGE_HASH_BEFORE=$(sha256sum "$FORGE_BIN" 2>/dev/null | cut -c1-16 || echo "none")
 
-PHASE_T=$(date +%s%N)
-zig build forge 2>/dev/null || {
-    echo "[$NAME] WARNING: zig build forge failed — using existing binary"
-}
-FORGE_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
+# Three modes for compiler:
+#   1. --proveMyCompilerBrokeIt → use blessed compiler, lock its hash
+#   2. Normal → rebuild forge from current compiler/ source
+if [ "$PROVE_COMPILER_BROKE_IT" -eq 1 ]; then
+    if [ ! -f "$BLESSED_FORGE" ]; then
+        echo "[$NAME] ERROR: --proveMyCompilerBrokeIt requires a blessed compiler."
+        echo "  Ask the human to run: ./scripts/bless-compiler"
+        exit 1
+    fi
+    # Back up the dirty forge, swap blessed in
+    FORGE_BACKUP=""
+    if [ -f "$FORGE_BIN" ]; then
+        FORGE_BACKUP=$(mktemp /tmp/rjit-dirty-forge.XXXXXX)
+        cp "$FORGE_BIN" "$FORGE_BACKUP"
+    fi
+    cp "$BLESSED_FORGE" "$FORGE_BIN"
+    export REACTJIT_COMPILER_SHA=$(sha256sum "$BLESSED_FORGE" | awk '{print $1}')
+    FORGE_MS=0
 
-FORGE_HASH_AFTER=$(sha256sum "$FORGE_BIN" 2>/dev/null | cut -c1-16 || echo "none")
-if [ "$FORGE_HASH_BEFORE" != "$FORGE_HASH_AFTER" ]; then
-    echo "[$NAME] 1/3 compiler rebuilt (smith JS changed): ${FORGE_MS}ms"
+    # Trap: restore dirty forge on ANY exit (success or failure)
+    _restore_forge() {
+        if [ -n "${FORGE_BACKUP:-}" ] && [ -f "${FORGE_BACKUP:-}" ]; then
+            cp "$FORGE_BACKUP" "$FORGE_BIN"
+            rm -f "$FORGE_BACKUP"
+        fi
+    }
+    trap _restore_forge EXIT
+
+    BLESSED_COMP_STAMP="zig-out/bin/.compiler-blessed-stamp"
+    if [ -f "$BLESSED_COMP_STAMP" ]; then
+        BLESSED_COMP_COMMIT=$(grep '^commit:' "$BLESSED_COMP_STAMP" | cut -d' ' -f2)
+        BLESSED_COMP_DATE=$(grep '^date:' "$BLESSED_COMP_STAMP" | cut -d' ' -f2-)
+        echo "[$NAME] 1/3 compiler: blessed from ${BLESSED_COMP_COMMIT:0:7} ($BLESSED_COMP_DATE)"
+    else
+        echo "[$NAME] 1/3 compiler: blessed"
+    fi
+    echo "[$NAME] 1/3 compiler hash locked: ${REACTJIT_COMPILER_SHA:0:16}..."
 else
-    echo "[$NAME] 1/3 compiler up to date (${FORGE_MS}ms)"
+    PHASE_T=$(date +%s%N)
+    zig build forge 2>/dev/null || {
+        echo "[$NAME] WARNING: zig build forge failed — using existing binary"
+    }
+    FORGE_MS=$(( ($(date +%s%N) - PHASE_T) / 1000000 ))
+
+    FORGE_HASH_AFTER=$(sha256sum "$FORGE_BIN" 2>/dev/null | cut -c1-16 || echo "none")
+    if [ "$FORGE_HASH_BEFORE" != "$FORGE_HASH_AFTER" ]; then
+        echo "[$NAME] 1/3 compiler rebuilt (smith JS changed): ${FORGE_MS}ms"
+    else
+        echo "[$NAME] 1/3 compiler up to date (${FORGE_MS}ms)"
+    fi
 fi
 
 # ── Step 2/3: Engine (.so from framework/) ──────────────────────────

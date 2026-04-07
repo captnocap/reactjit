@@ -37,7 +37,12 @@ function _spliceDynamicHandler(h, _ixStr) {
     var argDyn = args.indexOf('_item') >= 0 || args.indexOf('(_i - 1)') >= 0 || (_ixStr && args.indexOf(_ixStr) >= 0);
     out += h.slice(i, fnNameStart);
     if (argDyn && fnName) {
-      out += fnName + '(" .. (' + args + ') .. ")';
+      // If the arg is a bare _item.field (no arithmetic), wrap in quotes for string safety
+      if (/^_item\.\w+$/.test(args) || /^_nitem\.\w+$/.test(args)) {
+        out += fnName + '(\'" .. (' + args + ') .. "\')';
+      } else {
+        out += fnName + '(" .. (' + args + ') .. ")';
+      }
     } else {
       // Escape string args so inner quotes don't break the outer lua_on_press = "..." wrapper
       var escapedArgs = args.replace(/"/g, '\\"');
