@@ -518,6 +518,15 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
           if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _nf.slice(14);
           if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
+          // Canvas/Graph/3D/Physics node fields → forward to luaNode
+          var _nfEq = _nf.indexOf(' = ');
+          if (_nfEq > 1) {
+            var _nfKey = _nf.slice(1, _nfEq);
+            if (_nfKey.indexOf('canvas_') === 0 || _nfKey.indexOf('scene3d_') === 0 || _nfKey.indexOf('physics_') === 0) {
+              if (!_ln._nodeFields) _ln._nodeFields = {};
+              _ln._nodeFields[_nfKey] = _nf.slice(_nfEq + 3);
+            }
+          }
         }
       }
     }
@@ -555,11 +564,27 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _isLua = false;
             if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
             if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
+            // Script block routed to Lua (FFI decls present) — all script funcs are Lua-safe
+            if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
+            // FFI-declared functions live in Lua (LuaJIT FFI wrappers)
+            if (!_isLua && ctx._ffiDecls) { for (var _fdi = 0; _fdi < ctx._ffiDecls.length; _fdi++) { if (ctx._ffiDecls[_fdi].name === _hfn) { _isLua = true; break; } } }
             if (!_isLua) { _needsJs = true; break; }
           }
         }
         if (_needsJs && _handler.jsBody) {
-          _ln.handler = _handler.jsBody;
+          var _jsBody = _handler.jsBody;
+          // Resolve prop references while propStack is still populated (parse time).
+          // Index props (e.g. idx={i} from a map) need to be embedded as
+          // @as(i64, @intCast(_i)) so _nodeToLua can splice them into the string.
+          if (ctx.propStack) {
+            for (var _pbk in ctx.propStack) {
+              var _pbv = ctx.propStack[_pbk];
+              if (typeof _pbv === 'string' && new RegExp('\\b' + _pbk + '\\b').test(_jsBody)) {
+                _jsBody = _jsBody.replace(new RegExp('\\b' + _pbk + '\\b', 'g'), _pbv);
+              }
+            }
+          }
+          _ln.handler = _jsBody;
           _ln.handlerIsJs = true;
         } else if (_handler.luaBody) {
           _ln.handler = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;

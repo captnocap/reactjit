@@ -82,8 +82,8 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         fields.push('text_color = _item.' + _oaColor[1]);
       } else {
         var _jsColor = _cv;
-        // Color.rgb → hex FIRST
-        _jsColor = _jsColor.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+        // Color.rgb/rgba → hex FIRST
+        _jsColor = _jsColor.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
           return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
         });
         // @as strip
@@ -135,10 +135,39 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
 
   if (node.handler) {
     if (node.handlerIsJs) {
-      var _jh = node.handler.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      fields.push('js_on_press = "' + _jh + '"');
+      // Apply same prop/index substitution as lua_on_press so map index props
+      // (e.g. idx={i}) get resolved to the correct 0-based value in the string.
+      var _jh = _jsExprToLua(node.handler, itemParam, indexParam, _luaIdxExpr);
+      // Resolve Zig index casts embedded at parse time into 0-based Lua expressions
+      var _ixStr = _luaIdxExpr || '(_i - 1)';
+      _jh = _jh.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
+        return v === '_i' ? _ixStr : '(' + v + ' - 1)';
+      });
+      var _jhDyn = _jh.indexOf('_item') >= 0 || _jh.indexOf(_ixStr) >= 0 || _jh.indexOf('(_i - 1)') >= 0;
+      if (_jhDyn) {
+        fields.push('js_on_press = "' + _spliceDynamicHandler(_jh, _ixStr) + '"');
+      } else {
+        fields.push('js_on_press = "' + _jh.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+      }
     } else {
       fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam, _luaIdxExpr));
+    }
+  }
+
+  // Canvas/Graph/3D/Physics node fields
+  if (node._nodeFields) {
+    for (var _nk in node._nodeFields) {
+      var _nv = node._nodeFields[_nk];
+      if (typeof _nv === 'string') {
+        // Zig Color.rgb/rgba → Lua 0xRRGGBB hex
+        _nv = _nv.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
+          return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+        });
+        // OA refs: _oaN_field[_i] → _item.field
+        _nv = _nv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+        _nv = _nv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      }
+      fields.push(_nk + ' = ' + _nv);
     }
   }
 
@@ -151,7 +180,7 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         cond = _wrapCondEval(cond);
         var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ', _luaIdxExpr);
         // If body is already a conditional ending with 'or nil' (from unwrap), don't double-wrap
-        if (body.indexOf(' or nil') === body.length - 7) {
+        if (body.lastIndexOf(' or nil') === body.length - 7) {
           childLua.push('(' + cond + ') and ' + body);
         } else {
           childLua.push('(' + cond + ') and ' + body + ' or nil');

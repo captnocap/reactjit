@@ -11,7 +11,8 @@
 
 function _zigColorToLuaHex(val) {
   // Color.rgb(30, 30, 30) → 0x1e1e1e
-  var m = val.match(/^Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  // Color.rgba(255, 255, 255, 64) → 0xffffff (alpha dropped — Lua nodes don't carry alpha yet)
+  var m = val.match(/^Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)$/);
   if (m) {
     var hex = ((+m[1] << 16) | (+m[2] << 8) | +m[3]).toString(16).padStart(6, '0');
     return '0x' + hex;
@@ -63,6 +64,11 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
       // 1. Color.rgb → 0xRRGGBB FIRST (before paren stripping mangles them)
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+      });
+      // 2a. Index cast → 0-based Lua index (must run before generic @as stripping
+      //     so _i doesn't leak as a raw 1-based variable into comparisons)
+      _jsExpr = _jsExpr.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
+        return '(' + v + ' - 1)';
       });
       // 2. @as wrappers — balanced paren strip
       for (var _ai = 0; _ai < 5; _ai++) {
