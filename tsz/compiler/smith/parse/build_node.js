@@ -121,8 +121,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             if (_dt.fmtString && _dt.fmtString !== '{s}' && _dt.fmtString !== '{d}') {
               // Multi-part format: "total:{d} phase:{d}" + args
               var _parts = _dt.fmtString.split(/\{[ds](?::\.?\d+)?\}/);
-              // Strip @as wrappers BEFORE splitting (they contain commas)
+              // Strip Zig runtime calls BEFORE splitting (they contain commas)
               var _cleanedArgs = _fmtExpr;
+              // qjs_runtime.evalToString("String(expr)", &buf) → expr
+              _cleanedArgs = _cleanedArgs.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+              _cleanedArgs = _cleanedArgs.replace(/&_eval_buf_\d+/g, '');
               for (var _cai = 0; _cai < 5; _cai++) {
                 _cleanedArgs = _cleanedArgs.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
               }
@@ -134,6 +137,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 if (_parts[_pi]) _luaParts.push('"' + _parts[_pi] + '"');
                 if (_pi < _args.length) {
                   var _argClean = _args[_pi].trim();
+                  // Strip qjs_runtime.evalToString → bare expression
+                  _argClean = _argClean.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+                  _argClean = _argClean.replace(/,\s*&_eval_buf_\d+/g, '');
+                  _argClean = _argClean.replace(/&_eval_buf_\d+/g, '');
                   // Strip @as wrappers first (iterate for nesting)
                   for (var _ai = 0; _ai < 3; _ai++) {
                     _argClean = _argClean.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]+)\)/g, '$1');
@@ -151,8 +158,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               }
               _dln.text = { luaExpr: _luaParts.join(' .. ') };
             } else {
-              // Single-arg: strip @as/casts
+              // Single-arg: strip Zig runtime calls and casts
               var _singleClean = _fmtExpr;
+              // qjs_runtime.evalToString("String(expr)", &buf) → expr
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+              // &_eval_buf_N leftover
+              _singleClean = _singleClean.replace(/,\s*&_eval_buf_\d+/g, '');
+              _singleClean = _singleClean.replace(/&_eval_buf_\d+/g, '');
               for (var _sci = 0; _sci < 3; _sci++) {
                 _singleClean = _singleClean.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
                 _singleClean = _singleClean.replace(/@intCast\(([^)]+)\)/g, '$1');
