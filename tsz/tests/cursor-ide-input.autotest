@@ -1,0 +1,110 @@
+# Cursor IDE — Input & Agent Integration Test
+# Exercises: type, key, focus, clear commands
+# Tests: TextInput, IFTTT key bindings, chat agent flow, terminal, search
+
+# === BASELINE — verify initial render ===
+expect "Agent"
+expect "Sidebar.tsx"
+expect "Send"
+expect "Ask"
+
+# === CHAT INPUT — type into the chat composer ===
+# The chat input has a multiline TextInput with placeholder text
+# Focus the chat input field and type a message
+focus "Ask anything"
+type "hello world"
+
+# Verify the typed text shows up (or at minimum, the input accepted it)
+# The Send button should now be active (canSend = true)
+expect "Send"
+
+# Clear the input
+clear
+# Send button should still show (disabled variant) since we cleared
+expect "Send"
+
+# === AGENT MODE SWITCHING + INPUT ===
+# Switch to Task mode, verify hint appears
+click "Task"
+expect "Task mode"
+expect "Run Task"
+
+# Type a task prompt
+focus "Describe the task"
+type "fix the bug in Sidebar.tsx"
+
+# Verify send is active
+expect "Run Task"
+
+# Switch back to Ask mode
+click "Ask"
+reject "Task mode"
+reject "Run Task"
+
+# === IFTTT KEY BINDINGS ===
+# F3 should toggle search panel
+key "f3"
+# Search panel should appear
+expect "Project Search"
+
+# Escape should close panels
+key "escape"
+reject "Project Search"
+
+# === TERMINAL TOGGLE ===
+# Click the Terminal toggle in the top bar to open terminal
+click "Terminal"
+# Terminal panel should appear with the bash tab
+expect "bash"
+
+# === SEARCH PANEL INTERACTION ===
+# Open search via F3
+key "f3"
+expect "Project Search"
+
+# === FILE SWITCHING ===
+# Click a different file in the sidebar
+click "Editor.tsx"
+expect "Editor Component"
+
+# Click another file
+click "package.json"
+expect "0.1.0"
+
+# === MODEL CYCLING ===
+expect "Opus 4"
+click "Opus 4"
+expect "Sonnet 4"
+click "Sonnet 4"
+expect "GPT-4o"
+
+# === TOOL TOGGLES ===
+styles before "Web"
+click "Web"
+styles after "Web"
+
+styles before "Term"
+click "Term"
+styles after "Term"
+
+# === ATTACHMENT FLOW ===
+reject "Clear all"
+click "Attach"
+expect "Clear all"
+click "Clear all"
+reject "Clear all"
+
+# === NEW CONVERSATION ===
+expect "I have analyzed the codebase"
+click "+ New"
+reject "I have analyzed the codebase"
+
+# === AGENT MODE — Launch background agent ===
+click "Agent"
+expect "Launch"
+focus "What should the background agent do"
+type "analyze all imports"
+
+# Switch back for clean exit
+click "Ask"
+expect "Send"

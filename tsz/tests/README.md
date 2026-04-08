@@ -46,6 +46,11 @@ expect "B:1"
 | `bg "text" #rrggbb` | PASS if the node's background_color matches the hex value. |
 | `styles before` | Take a full style snapshot of every node (padding, radius, gap, dimensions, colors). |
 | `styles after` | Take another snapshot and diff against `before`. FAIL if 0 style changes detected. |
+| `focus "placeholder"` | Click a TextInput node matching the placeholder/text. PASS if found. |
+| `type "text"` | Type text into the currently focused TextInput. PASS if an input is focused. |
+| `type "text" into "target"` | Focus the TextInput matching "target", then type "text" into it. |
+| `key "ctrl+s"` | Send a key event with optional modifiers. Supports `ctrl`, `shift`, `alt` combos. |
+| `clear` | Clear the currently focused TextInput. PASS if an input is focused. |
 | `# comment` | Ignored. Use freely. |
 
 ### How clicks work

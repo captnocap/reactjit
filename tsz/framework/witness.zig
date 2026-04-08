@@ -23,6 +23,7 @@ const state_mod = @import("state.zig");
 const testdriver = @import("testdriver.zig");
 const query = @import("query.zig");
 const gpu = @import("gpu/gpu.zig");
+const input_mod = @import("input.zig");
 
 const page_alloc = std.heap.page_allocator;
 
@@ -132,11 +133,19 @@ var replay_waiting_settle: bool = false; // true = next frame is a settle frame 
 
 // Autotest state
 const AutoStep = struct {
-    kind: enum { click, expect, reject, color, bg, border, styles } = .click,
+    kind: enum { click, expect, reject, color, bg, border, styles, type_text, key_press, focus, clear } = .click,
     text: [TEXT_LEN]u8 = undefined,
     text_len: u16 = 0,
     occurrence: u16 = 1, // 1-based: which occurrence (#1, #2, etc.)
     expected_color: layout.Color = .{}, // for color/bg checks
+    // For 'type "text" into "target"': target identifies the TextInput
+    target: [TEXT_LEN]u8 = undefined,
+    target_len: u16 = 0,
+    // For 'key': modifier flags
+    key_ctrl: bool = false,
+    key_shift: bool = false,
+    key_alt: bool = false,
+    key_code: c_int = 0, // SDL keycode
 };
 const MAX_AUTO_STEPS = 256;
 var auto_steps: [MAX_AUTO_STEPS]AutoStep = undefined;
@@ -819,6 +828,20 @@ fn loadAutotest() void {
             const copy_len = @min(label.len, TEXT_LEN);
             @memcpy(auto_steps[idx].text[0..copy_len], label[0..copy_len]);
             auto_steps[idx].text_len = @intCast(copy_len);
+        } else if (std.mem.startsWith(u8, line, "type ")) {
+            auto_steps[idx].kind = .type_text;
+            parseTypeCommand(line[5..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "key ")) {
+            auto_steps[idx].kind = .key_press;
+            parseKeyCommand(line[4..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "focus ")) {
+            auto_steps[idx].kind = .focus;
+            parseAutoText(line[6..], &auto_steps[idx]);
+        } else if (std.mem.eql(u8, line, "clear")) {
+            auto_steps[idx].kind = .clear;
+            // No text needed — operates on focused input
+            auto_steps[idx].text_len = 5;
+            @memcpy(auto_steps[idx].text[0..5], "clear");
         } else {
             continue; // unknown line, skip
         }
@@ -871,15 +894,176 @@ fn parseAutoTextWithColor(rest: []const u8, step: *AutoStep) void {
     }
 }
 
-fn colorToHex(c: layout.Color, buf: *[7]u8) []const u8 {
+/// Parse: type "text to type" [into "placeholder"]
+fn parseTypeCommand(rest: []const u8, step: *AutoStep) void {
+    // First quoted string = text to type
+    parseAutoText(rest, step);
+    // Look for 'into "target"'
+    const q1 = std.mem.indexOfScalar(u8, rest, '"') orelse return;
+    const after_q1 = rest[q1 + 1 ..];
+    const q2 = std.mem.indexOfScalar(u8, after_q1, '"') orelse return;
+    const after_first = after_q1[q2 + 1 ..];
+    if (std.mem.indexOf(u8, after_first, "into ")) |into_pos| {
+        const target_rest = after_first[into_pos + 5 ..];
+        const tq1 = std.mem.indexOfScalar(u8, target_rest, '"') orelse return;
+        const target_after = target_rest[tq1 + 1 ..];
+        const tq2 = std.mem.indexOfScalar(u8, target_after, '"') orelse return;
+        const target = target_after[0..tq2];
+        const tlen = @min(target.len, TEXT_LEN);
+        @memcpy(step.target[0..tlen], target[0..tlen]);
+        step.target_len = @intCast(tlen);
+    }
+}
+
+/// Parse: key "ctrl+s", key "escape", key "enter", key "f3"
+/// Resolves to SDL keycodes + modifier flags
+fn parseKeyCommand(rest: []const u8, step: *AutoStep) void {
+    parseAutoText(rest, step);
+    const text = step.text[0..step.text_len];
+
+    // Split on + and resolve modifiers + key
+    var remaining: []const u8 = text;
+    step.key_code = 0;
+    step.key_ctrl = false;
+    step.key_shift = false;
+    step.key_alt = false;
+
+    while (remaining.len > 0) {
+        const plus = std.mem.indexOfScalar(u8, remaining, '+');
+        const part = if (plus) |p| remaining[0..p] else remaining;
+        remaining = if (plus) |p| remaining[p + 1 ..] else "";
+
+        if (std.mem.eql(u8, part, "ctrl") or std.mem.eql(u8, part, "control")) {
+            step.key_ctrl = true;
+        } else if (std.mem.eql(u8, part, "shift")) {
+            step.key_shift = true;
+        } else if (std.mem.eql(u8, part, "alt")) {
+            step.key_alt = true;
+        } else {
+            step.key_code = resolveKeyName(part);
+        }
+    }
+}
+
+/// Map key names to SDL keycodes (SDLK_*)
+fn resolveKeyName(name: []const u8) c_int {
+    const ci = @import("c.zig").imports;
+    if (name.len == 1) {
+        // Single character: a-z maps to SDLK_a..SDLK_z
+        const ch = name[0];
+        if (ch >= 'a' and ch <= 'z') return @as(c_int, ch);
+        if (ch >= '0' and ch <= '9') return @as(c_int, ch);
+    }
+    if (std.mem.eql(u8, name, "enter") or std.mem.eql(u8, name, "return")) return ci.SDLK_RETURN;
+    if (std.mem.eql(u8, name, "escape") or std.mem.eql(u8, name, "esc")) return ci.SDLK_ESCAPE;
+    if (std.mem.eql(u8, name, "backspace")) return ci.SDLK_BACKSPACE;
+    if (std.mem.eql(u8, name, "tab")) return ci.SDLK_TAB;
+    if (std.mem.eql(u8, name, "space")) return ci.SDLK_SPACE;
+    if (std.mem.eql(u8, name, "delete") or std.mem.eql(u8, name, "del")) return ci.SDLK_DELETE;
+    if (std.mem.eql(u8, name, "up")) return ci.SDLK_UP;
+    if (std.mem.eql(u8, name, "down")) return ci.SDLK_DOWN;
+    if (std.mem.eql(u8, name, "left")) return ci.SDLK_LEFT;
+    if (std.mem.eql(u8, name, "right")) return ci.SDLK_RIGHT;
+    if (std.mem.eql(u8, name, "home")) return ci.SDLK_HOME;
+    if (std.mem.eql(u8, name, "end")) return ci.SDLK_END;
+    if (std.mem.eql(u8, name, "f1")) return ci.SDLK_F1;
+    if (std.mem.eql(u8, name, "f2")) return ci.SDLK_F2;
+    if (std.mem.eql(u8, name, "f3")) return ci.SDLK_F3;
+    if (std.mem.eql(u8, name, "f4")) return ci.SDLK_F4;
+    if (std.mem.eql(u8, name, "f5")) return ci.SDLK_F5;
+    if (std.mem.eql(u8, name, "f6")) return ci.SDLK_F6;
+    if (std.mem.eql(u8, name, "f7")) return ci.SDLK_F7;
+    if (std.mem.eql(u8, name, "f8")) return ci.SDLK_F8;
+    if (std.mem.eql(u8, name, "f9")) return ci.SDLK_F9;
+    if (std.mem.eql(u8, name, "f10")) return ci.SDLK_F10;
+    if (std.mem.eql(u8, name, "f11")) return ci.SDLK_F11;
+    if (std.mem.eql(u8, name, "f12")) return ci.SDLK_F12;
+    if (std.mem.eql(u8, name, "grave") or std.mem.eql(u8, name, "`")) return ci.SDLK_GRAVE;
+    return 0;
+}
+
+/// Find a TextInput node by matching its placeholder text, current text content,
+/// or a text node nearby (e.g., a sibling label). Returns a clickable QueryResult.
+fn findTextInput(root: *Node, search_text: []const u8) ?query.QueryResult {
+    return findTextInputWalk(root, search_text, 0);
+}
+
+fn findTextInputWalk(node: *Node, search_text: []const u8, scroll_y: f32) ?query.QueryResult {
+    if (node.style.display == .none) return null;
+
+    // Check if this node IS a TextInput and matches the search text
+    if (node.input_id != null) {
+        // Match against the node's text content (placeholder or typed text)
+        if (node.text) |txt| {
+            if (txt.len > 0 and std.mem.indexOf(u8, txt, search_text) != null) {
+                return query.QueryResult{
+                    .node = node,
+                    .x = node.computed.x,
+                    .y = node.computed.y - scroll_y,
+                    .w = node.computed.w,
+                    .h = node.computed.h,
+                    .cx = node.computed.x + node.computed.w / 2.0,
+                    .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+                };
+            }
+        }
+        // Also match against the debug_name
+        if (node.debug_name) |dn| {
+            if (std.mem.indexOf(u8, dn, search_text) != null) {
+                return query.QueryResult{
+                    .node = node,
+                    .x = node.computed.x,
+                    .y = node.computed.y - scroll_y,
+                    .w = node.computed.w,
+                    .h = node.computed.h,
+                    .cx = node.computed.x + node.computed.w / 2.0,
+                    .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+                };
+            }
+        }
+    }
+
+    const child_scroll = scroll_y + node.scroll_y;
+    for (node.children) |*child| {
+        if (findTextInputWalk(child, search_text, child_scroll)) |result| return result;
+    }
+    return null;
+}
+
+/// Find the first TextInput node in the tree (any input_id).
+fn findFirstTextInput(root: *Node) ?query.QueryResult {
+    return findFirstTextInputWalk(root, 0);
+}
+
+fn findFirstTextInputWalk(node: *Node, scroll_y: f32) ?query.QueryResult {
+    if (node.style.display == .none) return null;
+    if (node.input_id != null) {
+        return query.QueryResult{
+            .node = node,
+            .x = node.computed.x,
+            .y = node.computed.y - scroll_y,
+            .w = node.computed.w,
+            .h = node.computed.h,
+            .cx = node.computed.x + node.computed.w / 2.0,
+            .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+        };
+    }
+    const child_scroll = scroll_y + node.scroll_y;
+    for (node.children) |*child| {
+        if (findFirstTextInputWalk(child, child_scroll)) |result| return result;
+    }
+    return null;
+}
+
+fn colorToHex(col: layout.Color, buf: *[7]u8) []const u8 {
     const hex_chars = "0123456789abcdef";
     buf[0] = '#';
-    buf[1] = hex_chars[c.r >> 4];
-    buf[2] = hex_chars[c.r & 0xf];
-    buf[3] = hex_chars[c.g >> 4];
-    buf[4] = hex_chars[c.g & 0xf];
-    buf[5] = hex_chars[c.b >> 4];
-    buf[6] = hex_chars[c.b & 0xf];
+    buf[1] = hex_chars[col.r >> 4];
+    buf[2] = hex_chars[col.r & 0xf];
+    buf[3] = hex_chars[col.g >> 4];
+    buf[4] = hex_chars[col.g & 0xf];
+    buf[5] = hex_chars[col.b >> 4];
+    buf[6] = hex_chars[col.b & 0xf];
     return buf[0..7];
 }
 
@@ -1106,6 +1290,150 @@ fn autotestTick(root: *Node) bool {
                 std.debug.print(" ... FAIL (not found)\n", .{});
             }
         },
+
+        // ── Input-based commands ──────────────────────────────────────
+
+        .focus => {
+            // Click a TextInput node to focus it. Finds by placeholder or visible text.
+            std.debug.print("  [{d}/{d}] focus \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (findTextInput(root, text)) |result| {
+                hit_result = result;
+                testdriver.click(result.cx, result.cy);
+                std.debug.print(" ... OK (input_id={d})\n", .{result.node.input_id orelse 255});
+                passed = true;
+            } else {
+                std.debug.print(" ... FAIL (no TextInput found)\n", .{});
+            }
+        },
+
+        .type_text => {
+            // Type text into a TextInput. If 'into "target"' specified, focus that
+            // input first. Otherwise type into whatever is focused (or first input).
+            const target = step.target[0..step.target_len];
+            if (target.len > 0) {
+                std.debug.print("  [{d}/{d}] type \"{s}\" into \"{s}\"", .{ auto_idx + 1, auto_step_count, text, target });
+                if (findTextInput(root, target)) |result| {
+                    hit_result = result;
+                    testdriver.click(result.cx, result.cy);
+                } else {
+                    std.debug.print(" ... FAIL (target \"{s}\" not found)\n", .{target});
+                    // still record failure
+                }
+            } else {
+                std.debug.print("  [{d}/{d}] type \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+                // If nothing focused, try to find the first TextInput
+                if (input_mod.getFocusedId() == null) {
+                    if (findFirstTextInput(root)) |result| {
+                        hit_result = result;
+                        testdriver.click(result.cx, result.cy);
+                    }
+                }
+            }
+            // Actually type the text
+            if (input_mod.getFocusedId() != null) {
+                testdriver.typeText(text);
+                std.debug.print(" ... OK ({d} chars)\n", .{step.text_len});
+                passed = true;
+            } else {
+                std.debug.print(" ... FAIL (no input focused)\n", .{});
+            }
+        },
+
+        .key_press => {
+            // Send a key event, optionally with modifiers.
+            // For combos (ctrl+s), pushes modifier down, key down/up, modifier up.
+            std.debug.print("  [{d}/{d}] key \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            const ci = @import("c.zig").imports;
+
+            if (step.key_code == 0) {
+                std.debug.print(" ... FAIL (unknown key)\n", .{});
+            } else {
+                // Push modifier key-down events
+                if (step.key_ctrl) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_DOWN;
+                    ev.key.key = ci.SDLK_LCTRL;
+                    ev.key.mod = ci.SDL_KMOD_LCTRL;
+                    ev.key.down = true;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+                if (step.key_shift) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_DOWN;
+                    ev.key.key = ci.SDLK_LSHIFT;
+                    ev.key.mod = ci.SDL_KMOD_LSHIFT;
+                    ev.key.down = true;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+                if (step.key_alt) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_DOWN;
+                    ev.key.key = ci.SDLK_LALT;
+                    ev.key.mod = ci.SDL_KMOD_LALT;
+                    ev.key.down = true;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+
+                // Build combined modifier mask
+                var mod: u16 = 0;
+                if (step.key_ctrl) mod |= @as(u16, ci.SDL_KMOD_LCTRL);
+                if (step.key_shift) mod |= @as(u16, ci.SDL_KMOD_LSHIFT);
+                if (step.key_alt) mod |= @as(u16, ci.SDL_KMOD_LALT);
+
+                // Key down + up with modifier mask
+                var down: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                down.type = ci.SDL_EVENT_KEY_DOWN;
+                down.key.key = @intCast(step.key_code);
+                down.key.mod = @intCast(mod);
+                down.key.down = true;
+                _ = ci.SDL_PushEvent(&down);
+
+                var up: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                up.type = ci.SDL_EVENT_KEY_UP;
+                up.key.key = @intCast(step.key_code);
+                up.key.mod = @intCast(mod);
+                up.key.down = false;
+                _ = ci.SDL_PushEvent(&up);
+
+                // Release modifiers
+                if (step.key_ctrl) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_UP;
+                    ev.key.key = ci.SDLK_LCTRL;
+                    ev.key.down = false;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+                if (step.key_shift) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_UP;
+                    ev.key.key = ci.SDLK_LSHIFT;
+                    ev.key.down = false;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+                if (step.key_alt) {
+                    var ev: ci.SDL_Event = std.mem.zeroes(ci.SDL_Event);
+                    ev.type = ci.SDL_EVENT_KEY_UP;
+                    ev.key.key = ci.SDLK_LALT;
+                    ev.key.down = false;
+                    _ = ci.SDL_PushEvent(&ev);
+                }
+
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            }
+        },
+
+        .clear => {
+            // Clear the currently focused TextInput
+            std.debug.print("  [{d}/{d}] clear", .{ auto_idx + 1, auto_step_count });
+            if (input_mod.getFocusedId()) |fid| {
+                input_mod.clear(fid);
+                std.debug.print(" ... OK (input {d})\n", .{fid});
+                passed = true;
+            } else {
+                std.debug.print(" ... FAIL (no input focused)\n", .{});
+            }
+        },
     }
 
     if (passed) auto_passed += 1 else auto_failed += 1;
@@ -1190,6 +1518,10 @@ fn appendManifest(idx: u16, step: *const AutoStep, passed: bool, node_result: ?q
         .bg => "bg",
         .border => "border",
         .styles => "styles",
+        .type_text => "type",
+        .key_press => "key",
+        .focus => "focus",
+        .clear => "clear",
     };
     const result_str: []const u8 = if (passed) "PASS" else "FAIL";
     const remaining = auto_manifest_buf[auto_manifest_len..];
