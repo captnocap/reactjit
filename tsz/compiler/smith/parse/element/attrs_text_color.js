@@ -128,6 +128,23 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
       } else {
         nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
       }
+    } else if (colorLhs && c.kind() === TK.question) {
+      // Bare truthiness ternary: expr ? color1 : color2 (no comparison operator)
+      c.advance();
+      const truthyValue = parseTernaryBranch(c, 'color');
+      if (c.kind() === TK.colon) c.advance();
+      const falsyValue = parseTernaryBranch(c, 'color');
+      const resolveColor = (value) => value.type === 'zig_expr' ? value.zigExpr : value.type === 'string' ? parseColor(value.value) : 'Color{}';
+      // For bare truthiness, condition is just the expression itself (non-zero/non-nil)
+      const colorExpr = `if (${colorLhs} != 0) ${resolveColor(truthyValue)} else ${resolveColor(falsyValue)}`;
+      nodeFields.push(`.text_color = ${colorExpr}`);
+      if (!ctx.currentMap && !(colorLhs && colorLhs.includes('_oa'))) {
+        if (!ctx.dynStyles) ctx.dynStyles = [];
+        const dynStyleId = ctx.dynStyles.length;
+        ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+        if (!nodeFields._dynStyleIds) nodeFields._dynStyleIds = [];
+        nodeFields._dynStyleIds.push(dynStyleId);
+      }
     } else {
       nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
       const propValue = ctx.propStack && ctx.propStack[propName];
