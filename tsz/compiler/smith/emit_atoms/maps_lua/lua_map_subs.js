@@ -72,9 +72,13 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
       return _oa ? '#' + _oa.getter : '#_oa' + oaIdx;
     });
   }
-  // OA field refs that leaked through: _oa0_field[_i] → _item.field
+  // OA field refs that leaked through: _oa0_field[_i] → _item.field, _oa0_field[_j] → _nitem.field
   expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  expr = expr.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+  expr = expr.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
+  // Zig inner map iterator _j → Lua _ni (nested index)
+  expr = expr.replace(/\b_j\b/g, '_ni');
   // Zig state.getSlot* → Lua getter name
   if (typeof ctx !== 'undefined' && ctx.stateSlots) {
     expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {

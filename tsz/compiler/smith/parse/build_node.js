@@ -95,6 +95,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 });
                 _tcv = _tcv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
                 _tcv = _tcv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+                _tcv = _tcv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+                _tcv = _tcv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
+                _tcv = _tcv.replace(/\b_j\b/g, '_ni');
                 _tcv = _tcv.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
                   return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
                 });
