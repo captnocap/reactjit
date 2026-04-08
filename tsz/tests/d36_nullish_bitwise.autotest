@@ -1,0 +1,37 @@
+# d36: Bitwise operators — bit.band/bor/bxor/bnot/lshift/rshift
+# Verifies bitwise flag toggling and conditional rendering via bit.band
+
+# Initial state
+expect "Bitwise Operators"
+expect "Toggle bit 0"
+expect "Extract RGB"
+
+# Toggle bit 0 — BIT 0 badge should appear
+click "Toggle bit 0"
+expect "BIT 0"
+
+# Toggle bit 1 — BIT 1 badge should appear
+click "Toggle bit 1"
+expect "BIT 1"
+
+# Toggle bit 2 — BIT 2 badge should appear
+click "Toggle bit 2"
+expect "BIT 2"
+
+# Toggle bit 0 again — BIT 0 badge should disappear
+click "Toggle bit 0"
+reject "BIT 0"
+expect "BIT 1"
+expect "BIT 2"
+
+# Extract RGB channels
+click "Extract RGB"
+expect "R:"
+
+# XOR invert
+click "XOR Invert"
+expect "inverted color"
+
+# Shift test
+click "Shift Test"
+expect "1 << 4"

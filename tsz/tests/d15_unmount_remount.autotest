@@ -1,0 +1,53 @@
+# d15: unmount/remount — toggle panels, verify state persistence
+
+# Initial state: A and B visible, C hidden
+expect "Panel A"
+expect "Panel B"
+reject "Panel C"
+expect "cycles: 0 | A:0 B:0 C:0"
+
+# Increment A three times
+click "+1"
+click "+1"
+click "+1"
+expect "cycles: 0 | A:3 B:0 C:0"
+
+# Increment B twice (2nd "+1" button)
+click "+1" #2
+click "+1" #2
+expect "cycles: 0 | A:3 B:2 C:0"
+
+# Hide A — B should be unaffected
+click "Hide A"
+reject "Panel A"
+expect "Panel B"
+expect "cycles: 1 | A:3 B:2 C:0"
+
+# Show A — counter should persist at 3
+click "Show A"
+expect "Panel A"
+expect "cycles: 2 | A:3 B:2 C:0"
+
+# Show C — starts at 0
+click "Show C"
+expect "Panel C"
+expect "cycles: 3 | A:3 B:2 C:0"
+
+# Increment C
+click "+1" #3
+click "+1" #3
+expect "cycles: 3 | A:3 B:2 C:2"
+
+# Hide All
+click "Hide All"
+reject "Panel A"
+reject "Panel B"
+reject "Panel C"
+expect "cycles: 4 | A:3 B:2 C:2"
+
+# Show All — all counters should persist
+click "Show All"
+expect "Panel A"
+expect "Panel B"
+expect "Panel C"
+expect "cycles: 5 | A:3 B:2 C:2"

@@ -1,0 +1,26 @@
+# s04b_dashboard: Analytics dashboard with stats and transactions
+
+# Dashboard title and stats
+expect "Analytics Dashboard"
+expect "Revenue"
+expect "10000"
+expect "+25%"
+expect "Users"
+expect "5000"
+expect "-10%"
+expect "Orders"
+expect "6000"
+expect "+30%"
+expect "Conversion"
+expect "80"
+
+# Recent transactions
+expect "Recent Transactions"
+expect "Order A"
+expect "$1500"
+expect "Pending"
+expect "Order B"
+expect "$3000"
+expect "Completed"
+expect "Order C"
+expect "$750"

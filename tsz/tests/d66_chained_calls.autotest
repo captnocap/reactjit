@@ -1,0 +1,15 @@
+# d66: Chained function calls — upper/prefix/truncate pipeline
+# Verifies multi-step function composition and map rendering
+
+# Initial state
+expect "Chained Calls"
+expect "Results"
+
+# Process All — should add 5 entries through the pipeline
+click "Process All"
+expect "Alpha"
+expect "Bravo"
+expect "Charlie"
+expect "upper"
+expect "prefix"
+expect "truncate"

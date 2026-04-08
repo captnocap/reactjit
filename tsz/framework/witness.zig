@@ -22,6 +22,12 @@ const Node = layout.Node;
 const state_mod = @import("state.zig");
 const testdriver = @import("testdriver.zig");
 const query = @import("query.zig");
+const gpu = @import("gpu/gpu.zig");
+
+const page_alloc = std.heap.page_allocator;
+
+// stbi_write_png — compiled via stb_image_write_impl.c, linked in build.zig
+extern fn stbi_write_png(filename: [*:0]const u8, w: c_int, h: c_int, comp: c_int, data: ?*const anyopaque, stride: c_int) c_int;
 
 const MAX_ACTIONS = 256;
 const MAX_TREE_NODES = 2048;
@@ -32,7 +38,7 @@ const TEXT_LEN = 256;
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-const Mode = enum { off, record, replay };
+const Mode = enum { off, record, replay, autotest };
 
 const SlotSnapshot = struct {
     kind: state_mod.SlotKind = .int,
@@ -81,6 +87,8 @@ const Action = struct {
     target_name_len: u8 = 0,
     target_text: [TEXT_LEN]u8 = undefined,
     target_text_len: u16 = 0,
+    target_x: f32 = 0, // position of clicked node — disambiguates duplicate text
+    target_y: f32 = 0,
     // Scroll data
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,
@@ -122,6 +130,54 @@ var replay_settle_frame: u32 = 8;
 var replay_waiting_verify: bool = false; // true = next frame should verify, not click
 var replay_waiting_settle: bool = false; // true = next frame is a settle frame (scroll)
 
+// Autotest state
+const AutoStep = struct {
+    kind: enum { click, expect, reject, color, bg, border, styles } = .click,
+    text: [TEXT_LEN]u8 = undefined,
+    text_len: u16 = 0,
+    occurrence: u16 = 1, // 1-based: which occurrence (#1, #2, etc.)
+    expected_color: layout.Color = .{}, // for color/bg checks
+};
+const MAX_AUTO_STEPS = 256;
+var auto_steps: [MAX_AUTO_STEPS]AutoStep = undefined;
+var auto_step_count: u16 = 0;
+var auto_idx: u16 = 0;
+var auto_started: bool = false;
+var auto_passed: u16 = 0;
+var auto_failed: u16 = 0;
+var auto_settle_frames: u8 = 0; // frames to wait before next action (settle + render)
+var auto_capture_pending: bool = false; // waiting for GPU readback callback
+
+// Track all texts ever seen during the test run (for source audit)
+var auto_seen_texts: [512][64]u8 = undefined;
+var auto_seen_lens: [512]u8 = undefined;
+var auto_seen_count: u16 = 0;
+
+// Style snapshot for before/after comparison
+const StyleEntry = struct {
+    // Node identity
+    text: [64]u8 = undefined,
+    text_len: u8 = 0,
+    depth: u8 = 0,
+    // Computed layout
+    x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0,
+    // Style properties
+    padding_top: f32 = 0, padding_bottom: f32 = 0,
+    padding_left: f32 = 0, padding_right: f32 = 0,
+    border_radius: f32 = 0,
+    border_width: f32 = 0,
+    gap: f32 = 0,
+    font_size: u16 = 0,
+    bg_r: u8 = 0, bg_g: u8 = 0, bg_b: u8 = 0, has_bg: bool = false,
+    tc_r: u8 = 0, tc_g: u8 = 0, tc_b: u8 = 0, has_tc: bool = false,
+};
+const MAX_STYLE_ENTRIES = 256;
+var style_snap_before: [MAX_STYLE_ENTRIES]StyleEntry = undefined;
+var style_snap_before_count: u16 = 0;
+var style_snap_has_before: bool = false;
+var auto_manifest_buf: [16384]u8 = undefined; // manifest for grid composer
+var auto_manifest_len: usize = 0;
+
 // File path
 var witness_path_buf: [512]u8 = undefined;
 var witness_path: ?[]const u8 = null;
@@ -137,6 +193,9 @@ pub fn init() void {
     } else if (std.mem.eql(u8, env, "replay")) {
         mode = .replay;
         std.debug.print("[witness] REPLAY mode — verifying against witness file\n", .{});
+    } else if (std.mem.eql(u8, env, "autotest")) {
+        mode = .autotest;
+        std.debug.print("[witness] AUTOTEST mode — discovering and clicking all interactive nodes\n", .{});
     }
 
     // Witness file path
@@ -149,6 +208,8 @@ pub fn init() void {
 
     if (mode == .replay) {
         loadWitness();
+    } else if (mode == .autotest) {
+        loadAutotest();
     }
 }
 
@@ -161,12 +222,13 @@ pub fn isRecording() bool {
 }
 
 pub fn isReplaying() bool {
-    return mode == .replay;
+    return mode == .replay or mode == .autotest;
 }
 
-/// Exit code: 0 if recording or all replay checks passed, 1 if any failed.
+/// Exit code: 0 if recording or all checks passed, 1 if any failed.
 pub fn exitCode() u8 {
     if (mode == .replay and replay_failed > 0) return 1;
+    if (mode == .autotest and auto_failed > 0) return 1;
     return 0;
 }
 
@@ -329,7 +391,9 @@ pub fn recordClick(hit_node: *Node) void {
     actions[idx] = .{};
     actions[idx].frame = frame_count;
 
-    // Capture semantic target
+    // Capture semantic target + position for disambiguation
+    actions[idx].target_x = hit_node.computed.x;
+    actions[idx].target_y = hit_node.computed.y;
     if (hit_node.debug_name) |name| {
         const len = @min(name.len, NAME_LEN);
         @memcpy(actions[idx].target_name[0..len], name[0..len]);
@@ -512,6 +576,10 @@ pub fn tick(root: *Node) bool {
         return replayTick(root);
     }
 
+    if (mode == .autotest) {
+        return autotestTick(root);
+    }
+
     return false;
 }
 
@@ -616,6 +684,10 @@ fn replayTick(root: *Node) bool {
     // Wait for scroll to settle (SDL event queue needs a frame to process)
     if (replay_waiting_settle) {
         replay_waiting_settle = false;
+        // If that was the last action, finish
+        if (replay_idx >= replay_action_count) {
+            return finishReplay();
+        }
         return false;
     }
 
@@ -646,11 +718,25 @@ fn replayTick(root: *Node) bool {
             clicked = testdriver.clickNode(root, .{ .debug_name = target_name });
         }
         if (!clicked and target_text.len > 0) {
-            clicked = testdriver.clickNode(root, .{ .text_contains = target_text, .has_handler = true });
-        }
-        if (!clicked and target_text.len > 0) {
-            if (query.findByText(root, target_text)) |result| {
-                testdriver.click(result.cx, result.cy);
+            // Find all text matches and use position to disambiguate.
+            // Text nodes don't have handlers — clicking their coordinates
+            // lets the engine hit-test up to the Pressable parent.
+            var results: [32]query.QueryResult = undefined;
+            const found = query.findAll(root, .{ .text_contains = target_text }, &results);
+            if (found > 1 and (action.target_x != 0 or action.target_y != 0)) {
+                var best: usize = 0;
+                var best_dist = dist2d(results[0].x, results[0].y, action.target_x, action.target_y);
+                for (1..found) |fi| {
+                    const d = dist2d(results[fi].x, results[fi].y, action.target_x, action.target_y);
+                    if (d < best_dist) {
+                        best_dist = d;
+                        best = fi;
+                    }
+                }
+                testdriver.click(results[best].cx, results[best].cy);
+                clicked = true;
+            } else if (found > 0) {
+                testdriver.click(results[0].cx, results[0].cy);
                 clicked = true;
             }
         }
@@ -674,6 +760,799 @@ fn countLiveNodes(node: *Node, count: *u16) void {
     for (node.children) |*child| {
         countLiveNodes(child, count);
     }
+}
+
+// ── Autotest logic ─────────────────────────────────────────────────────
+
+fn loadAutotest() void {
+    const path = witness_path orelse {
+        std.debug.print("[autotest] ERROR: no test file (set ZIGOS_WITNESS_FILE)\n", .{});
+        return;
+    };
+    const file = std.fs.cwd().openFile(path, .{}) catch {
+        std.debug.print("[autotest] ERROR: cannot open {s}\n", .{path});
+        return;
+    };
+    defer file.close();
+
+    var buf: [4096]u8 = undefined;
+    const len = file.readAll(&buf) catch return;
+    const content = buf[0..len];
+
+    var lines = std.mem.splitScalar(u8, content, '\n');
+    while (lines.next()) |raw_line| {
+        if (auto_step_count >= MAX_AUTO_STEPS) break;
+        // Trim carriage return
+        const line = if (raw_line.len > 0 and raw_line[raw_line.len - 1] == '\r') raw_line[0 .. raw_line.len - 1] else raw_line;
+        // Skip empty lines and comments
+        if (line.len == 0) continue;
+        if (line[0] == '#') continue;
+
+        const idx = auto_step_count;
+        auto_steps[idx] = .{};
+
+        // Parse: click "text" [#N]
+        //        expect "text"
+        //        reject "text"
+        if (std.mem.startsWith(u8, line, "click ")) {
+            auto_steps[idx].kind = .click;
+            parseAutoText(line[6..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "expect ")) {
+            auto_steps[idx].kind = .expect;
+            parseAutoText(line[7..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "reject ")) {
+            auto_steps[idx].kind = .reject;
+            parseAutoText(line[7..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "color ")) {
+            auto_steps[idx].kind = .color;
+            parseAutoTextWithColor(line[6..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "bg ")) {
+            auto_steps[idx].kind = .bg;
+            parseAutoTextWithColor(line[3..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "border ")) {
+            auto_steps[idx].kind = .border;
+            parseAutoTextWithColor(line[7..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "styles ")) {
+            auto_steps[idx].kind = .styles;
+            // Store "before" or "after" as the text field
+            const label = line[7..];
+            const copy_len = @min(label.len, TEXT_LEN);
+            @memcpy(auto_steps[idx].text[0..copy_len], label[0..copy_len]);
+            auto_steps[idx].text_len = @intCast(copy_len);
+        } else {
+            continue; // unknown line, skip
+        }
+
+        if (auto_steps[idx].text_len > 0) {
+            auto_step_count += 1;
+        }
+    }
+
+    std.debug.print("[autotest] loaded {d} steps from {s}\n", .{ auto_step_count, path });
+}
+
+fn parseAutoText(rest: []const u8, step: *AutoStep) void {
+    // Parse: "text" [#N]
+    // Find opening quote
+    const q1 = std.mem.indexOfScalar(u8, rest, '"') orelse return;
+    const after_q1 = rest[q1 + 1 ..];
+    const q2 = std.mem.indexOfScalar(u8, after_q1, '"') orelse return;
+    const text = after_q1[0..q2];
+    const copy_len = @min(text.len, TEXT_LEN);
+    @memcpy(step.text[0..copy_len], text[0..copy_len]);
+    step.text_len = @intCast(copy_len);
+
+    // Check for #N occurrence after closing quote
+    const after_text = after_q1[q2 + 1 ..];
+    if (std.mem.indexOf(u8, after_text, "#")) |hash| {
+        const num_start = after_text[hash + 1 ..];
+        // Parse digits
+        var end: usize = 0;
+        while (end < num_start.len and num_start[end] >= '0' and num_start[end] <= '9') : (end += 1) {}
+        if (end > 0) {
+            step.occurrence = std.fmt.parseInt(u16, num_start[0..end], 10) catch 1;
+        }
+    }
+}
+
+fn parseAutoTextWithColor(rest: []const u8, step: *AutoStep) void {
+    // Parse: "text" #RRGGBB
+    parseAutoText(rest, step);
+    // Find #RRGGBB after closing quote
+    const q1 = std.mem.indexOfScalar(u8, rest, '"') orelse return;
+    const after_q1 = rest[q1 + 1 ..];
+    const q2 = std.mem.indexOfScalar(u8, after_q1, '"') orelse return;
+    const after_text = after_q1[q2 + 1 ..];
+    if (std.mem.indexOf(u8, after_text, "#")) |hash_pos| {
+        const hex = after_text[hash_pos..];
+        if (hex.len >= 7) {
+            step.expected_color = layout.Color.fromHex(hex[0..7]);
+        }
+    }
+}
+
+fn colorToHex(c: layout.Color, buf: *[7]u8) []const u8 {
+    const hex_chars = "0123456789abcdef";
+    buf[0] = '#';
+    buf[1] = hex_chars[c.r >> 4];
+    buf[2] = hex_chars[c.r & 0xf];
+    buf[3] = hex_chars[c.g >> 4];
+    buf[4] = hex_chars[c.g & 0xf];
+    buf[5] = hex_chars[c.b >> 4];
+    buf[6] = hex_chars[c.b & 0xf];
+    return buf[0..7];
+}
+
+fn colorEql(a: layout.Color, b: layout.Color) bool {
+    return a.r == b.r and a.g == b.g and a.b == b.b;
+}
+
+fn autotestTick(root: *Node) bool {
+    if (frame_count < 8) return false; // wait for settle
+
+    if (!auto_started) {
+        auto_started = true;
+        std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST \xe2\x95\x90\xe2\x95\x90\n\n", .{});
+        std.debug.print("  {d} steps to execute\n\n", .{auto_step_count});
+        // Wait a few frames for initial render, then screenshot
+        auto_settle_frames = 3;
+        return false;
+    }
+
+    // Waiting for GPU readback callback — skip this frame
+    if (auto_capture_pending) return false;
+
+    // Settling: count down frames, then capture screenshot
+    if (auto_settle_frames > 0) {
+        auto_settle_frames -= 1;
+        if (auto_settle_frames == 0) {
+            gpu.captureScreenshot(&onAutotestCapture);
+            auto_capture_pending = true;
+        }
+        return false;
+    }
+
+    if (auto_idx >= auto_step_count) {
+        // Audits: verify source texts render + check colors
+        auditSourceTexts(root);
+        auditColors(root);
+
+        // Write final result to manifest THEN print
+        const total = auto_passed + auto_failed;
+        const remaining = auto_manifest_buf[auto_manifest_len..];
+        const result_str: []const u8 = if (auto_failed == 0) "PASS" else "FAIL";
+        const written = std.fmt.bufPrint(remaining, "RESULT|{d}|{d}|{s}\n", .{ auto_passed, total, result_str }) catch "";
+        auto_manifest_len += written.len;
+
+        finishAutotest();
+        std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST RESULT: {d}/{d} passed \xe2\x95\x90\xe2\x95\x90\n\n", .{ auto_passed, total });
+        return true; // signal exit
+    }
+
+    const step = &auto_steps[auto_idx];
+    const text = step.text[0..step.text_len];
+    var passed = false;
+    var hit_result: ?query.QueryResult = null;
+
+    switch (step.kind) {
+        .click => {
+            var results: [32]query.QueryResult = undefined;
+            const found = query.findAll(root, .{ .text_contains = text }, &results);
+            const nth = step.occurrence;
+            std.debug.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (nth > 0 and nth <= found) {
+                hit_result = results[nth - 1];
+                testdriver.click(results[nth - 1].cx, results[nth - 1].cy);
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            } else {
+                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+            }
+        },
+        .expect => {
+            std.debug.print("  [{d}/{d}] expect \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (query.find(root, .{ .text_contains = text })) |result| {
+                hit_result = result;
+                std.debug.print(" ... PASS\n", .{});
+                passed = true;
+            } else {
+                std.debug.print(" ... FAIL (not found)\n", .{});
+            }
+        },
+        .reject => {
+            std.debug.print("  [{d}/{d}] reject \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (query.find(root, .{ .text_contains = text })) |result| {
+                hit_result = result;
+                std.debug.print(" ... FAIL (still visible)\n", .{});
+            } else {
+                std.debug.print(" ... PASS\n", .{});
+                passed = true;
+            }
+        },
+        .color => {
+            var exp_hex: [7]u8 = undefined;
+            const exp_str = colorToHex(step.expected_color, &exp_hex);
+            std.debug.print("  [{d}/{d}] color \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            if (query.find(root, .{ .text_contains = text })) |result| {
+                hit_result = result;
+                if (result.node.text_color) |tc| {
+                    if (colorEql(tc, step.expected_color)) {
+                        std.debug.print(" ... PASS\n", .{});
+                        passed = true;
+                    } else {
+                        var got_hex: [7]u8 = undefined;
+                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(tc, &got_hex)});
+                    }
+                } else {
+                    std.debug.print(" ... FAIL (no text_color set)\n", .{});
+                }
+            } else {
+                std.debug.print(" ... FAIL (not found)\n", .{});
+            }
+        },
+        .border => {
+            var exp_hex: [7]u8 = undefined;
+            const exp_str = colorToHex(step.expected_color, &exp_hex);
+            std.debug.print("  [{d}/{d}] border \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            var border_node: ?*Node = null;
+            findBorderNode(root, text, &border_node);
+            if (border_node) |bn| {
+                const bw = bn.style.border_width;
+                if (bn.style.border_color) |actual_bc| {
+                    if (bw > 0 and colorEql(actual_bc, step.expected_color)) {
+                        // Data matches — emit BORDER_PIXEL for Python pixel verification
+                        std.debug.print(" ... VERIFY (width={d:.0})\n", .{bw});
+                        const remaining = auto_manifest_buf[auto_manifest_len..];
+                        const written = std.fmt.bufPrint(remaining, "BORDER_PIXEL|{d}|{d:.0},{d:.0},{d:.0},{d:.0}|{d:.0}|{s}\n", .{
+                            auto_idx, bn.computed.x, bn.computed.y, bn.computed.w, bn.computed.h, bw, exp_str,
+                        }) catch "";
+                        auto_manifest_len += written.len;
+                        passed = true; // tentative — Python overrides if pixels fail
+                        hit_result = .{
+                            .node = bn,
+                            .x = bn.computed.x, .y = bn.computed.y,
+                            .w = bn.computed.w, .h = bn.computed.h,
+                            .cx = bn.computed.x + bn.computed.w / 2,
+                            .cy = bn.computed.y + bn.computed.h / 2,
+                        };
+                    } else if (bw == 0) {
+                        std.debug.print(" ... FAIL (borderWidth=0)\n", .{});
+                    } else {
+                        var got_hex: [7]u8 = undefined;
+                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(actual_bc, &got_hex)});
+                    }
+                } else {
+                    std.debug.print(" ... FAIL (no borderColor set)\n", .{});
+                }
+            } else {
+                std.debug.print(" ... FAIL (text not found)\n", .{});
+            }
+        },
+        .styles => {
+            // Parse: "before <target>" or "after <target>" or bare "before"/"after"
+            var mode_str: []const u8 = text;
+            var target: ?[]const u8 = null;
+            if (std.mem.startsWith(u8, text, "before ")) {
+                mode_str = "before";
+                target = text[7..];
+            } else if (std.mem.startsWith(u8, text, "after ")) {
+                mode_str = "after";
+                target = text[6..];
+            }
+
+            if (std.mem.eql(u8, mode_str, "before")) {
+                const label = target orelse "(all)";
+                std.debug.print("  [{d}/{d}] styles before \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
+                // Find the target node and snapshot it + its parent subtree
+                const snap_root = if (target) |t| blk: {
+                    if (query.find(root, .{ .text_contains = t })) |result| {
+                        hit_result = result;
+                        break :blk result.node;
+                    }
+                    break :blk root;
+                } else root;
+                style_snap_before_count = 0;
+                snapshotStyles(snap_root, &style_snap_before, &style_snap_before_count, 0);
+                style_snap_has_before = true;
+                std.debug.print(" ... {d} nodes captured\n", .{style_snap_before_count});
+                passed = true;
+            } else if (std.mem.eql(u8, mode_str, "after")) {
+                const label = target orelse "(all)";
+                std.debug.print("  [{d}/{d}] styles after \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
+                if (!style_snap_has_before) {
+                    std.debug.print(" ... FAIL (no 'before' snapshot)\n", .{});
+                } else {
+                    const snap_root = if (target) |t| blk: {
+                        if (query.find(root, .{ .text_contains = t })) |result| {
+                            hit_result = result;
+                            break :blk result.node;
+                        }
+                        break :blk root;
+                    } else root;
+                    var snap_after: [MAX_STYLE_ENTRIES]StyleEntry = undefined;
+                    var snap_after_count: u16 = 0;
+                    snapshotStyles(snap_root, &snap_after, &snap_after_count, 0);
+                    const diffs = diffStyles(&style_snap_before, style_snap_before_count, &snap_after, snap_after_count);
+                    if (diffs > 0) {
+                        std.debug.print(" ... PASS ({d} property changes)\n", .{diffs});
+                        passed = true;
+                    } else {
+                        std.debug.print(" ... FAIL (0 changes — styles identical)\n", .{});
+                    }
+                    style_snap_has_before = false;
+                }
+            } else {
+                std.debug.print("  [{d}/{d}] styles \"{s}\" ... FAIL (use 'before' or 'after')\n", .{ auto_idx + 1, auto_step_count, text });
+            }
+        },
+        .bg => {
+            var exp_hex: [7]u8 = undefined;
+            const exp_str = colorToHex(step.expected_color, &exp_hex);
+            std.debug.print("  [{d}/{d}] bg \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            if (query.find(root, .{ .text_contains = text })) |result| {
+                hit_result = result;
+                if (result.node.style.background_color) |bg_c| {
+                    if (colorEql(bg_c, step.expected_color)) {
+                        std.debug.print(" ... PASS\n", .{});
+                        passed = true;
+                    } else {
+                        var got_hex: [7]u8 = undefined;
+                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(bg_c, &got_hex)});
+                    }
+                } else {
+                    std.debug.print(" ... FAIL (no background_color set)\n", .{});
+                }
+            } else {
+                std.debug.print(" ... FAIL (not found)\n", .{});
+            }
+        },
+    }
+
+    if (passed) auto_passed += 1 else auto_failed += 1;
+
+    // Record all currently visible text for source audit
+    collectSeenTexts(root);
+
+    appendManifest(auto_idx, step, passed, hit_result);
+
+    auto_idx += 1;
+
+    // Wait 3 frames for tree rebuild + layout + GPU render, then screenshot
+    auto_settle_frames = 3;
+
+    return false;
+}
+
+var auto_capture_idx: u16 = 0;
+
+fn onAutotestCapture(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {
+    // Stop continuous capture — we only want one frame per request
+    gpu.stopCapture();
+
+    // Save into per-test screenshot dir: tests/screenshots/<test_name>/step_NN.png
+    // Derive test name from witness file path (e.g., "tests/d03_foo.autotest" → "d03_foo")
+    const dir_name = blk: {
+        const wp = witness_path orelse break :blk "unknown";
+        // Find filename without extension
+        var start: usize = 0;
+        for (wp, 0..) |ch, i| {
+            if (ch == '/') start = i + 1;
+        }
+        const filename = wp[start..];
+        var end = filename.len;
+        for (filename, 0..) |ch, i| {
+            if (ch == '.') { end = i; break; }
+        }
+        break :blk filename[0..end];
+    };
+
+    var dir_buf: [512]u8 = undefined;
+    const dir_path = std.fmt.bufPrint(&dir_buf, "tests/screenshots/{s}", .{dir_name}) catch return;
+
+    var path_buf: [512]u8 = undefined;
+    const path = std.fmt.bufPrintZ(&path_buf, "tests/screenshots/{s}/step_{d:0>2}.png", .{ dir_name, auto_capture_idx }) catch return;
+
+    // Ensure directory exists
+    if (auto_capture_idx == 0) {
+        std.fs.cwd().makePath(dir_path) catch {};
+    }
+
+    // Convert BGRA → RGBA
+    const size = @as(usize, w) * @as(usize, h) * 4;
+    const rgba = page_alloc.alloc(u8, size) catch return;
+    defer page_alloc.free(rgba);
+
+    var y: u32 = 0;
+    while (y < h) : (y += 1) {
+        var x: u32 = 0;
+        while (x < w) : (x += 1) {
+            const src = @as(usize, y) * @as(usize, stride) + @as(usize, x) * 4;
+            const dst = (@as(usize, y) * @as(usize, w) + @as(usize, x)) * 4;
+            rgba[dst + 0] = pixels[src + 2]; // R ← B
+            rgba[dst + 1] = pixels[src + 1]; // G
+            rgba[dst + 2] = pixels[src + 0]; // B ← R
+            rgba[dst + 3] = pixels[src + 3]; // A
+        }
+    }
+
+    _ = stbi_write_png(path.ptr, @intCast(w), @intCast(h), 4, rgba.ptr, @intCast(w * 4));
+    auto_capture_idx += 1;
+    auto_capture_pending = false;
+}
+
+fn appendManifest(idx: u16, step: *const AutoStep, passed: bool, node_result: ?query.QueryResult) void {
+    const text = step.text[0..step.text_len];
+    const kind_str: []const u8 = switch (step.kind) {
+        .click => "click",
+        .expect => "expect",
+        .reject => "reject",
+        .color => "color",
+        .bg => "bg",
+        .border => "border",
+        .styles => "styles",
+    };
+    const result_str: []const u8 = if (passed) "PASS" else "FAIL";
+    const remaining = auto_manifest_buf[auto_manifest_len..];
+    if (node_result) |nr| {
+        const written = std.fmt.bufPrint(remaining, "{d}|{s}|{s}|{s}|{d:.0},{d:.0},{d:.0},{d:.0}\n", .{
+            idx, kind_str, text, result_str, nr.x, nr.y, nr.w, nr.h,
+        }) catch return;
+        auto_manifest_len += written.len;
+    } else {
+        const written = std.fmt.bufPrint(remaining, "{d}|{s}|{s}|{s}|\n", .{
+            idx, kind_str, text, result_str,
+        }) catch return;
+        auto_manifest_len += written.len;
+    }
+}
+
+fn finishAutotest() void {
+    if (auto_manifest_len == 0) return;
+
+    // Derive dir from witness path
+    const dir_name = blk: {
+        const wp = witness_path orelse break :blk "unknown";
+        var start: usize = 0;
+        for (wp, 0..) |ch, i| {
+            if (ch == '/') start = i + 1;
+        }
+        const filename = wp[start..];
+        var end = filename.len;
+        for (filename, 0..) |ch, i| {
+            if (ch == '.') { end = i; break; }
+        }
+        break :blk filename[0..end];
+    };
+
+    var path_buf: [512]u8 = undefined;
+    const path = std.fmt.bufPrint(&path_buf, "tests/screenshots/{s}/manifest.txt", .{dir_name}) catch return;
+
+    const f = std.fs.cwd().createFile(path, .{}) catch return;
+    defer f.close();
+    _ = f.write(auto_manifest_buf[0..auto_manifest_len]) catch {};
+}
+
+fn collectSeenTexts(node: *Node) void {
+    if (node.style.display == .none) return;
+    if (node.text) |txt| {
+        const trunc = @min(txt.len, @as(usize, 64));
+        // Check if already seen
+        var found = false;
+        for (0..auto_seen_count) |i| {
+            if (auto_seen_lens[i] == trunc and std.mem.eql(u8, auto_seen_texts[i][0..trunc], txt[0..trunc])) {
+                found = true;
+                break;
+            }
+        }
+        if (!found and auto_seen_count < 512) {
+            @memcpy(auto_seen_texts[auto_seen_count][0..trunc], txt[0..trunc]);
+            auto_seen_lens[auto_seen_count] = @intCast(trunc);
+            auto_seen_count += 1;
+        }
+    }
+    for (node.children) |*child| {
+        collectSeenTexts(child);
+    }
+}
+
+fn wasEverSeen(text: []const u8) bool {
+    const trunc = @min(text.len, @as(usize, 64));
+    for (0..auto_seen_count) |i| {
+        const seen = auto_seen_texts[i][0..auto_seen_lens[i]];
+        if (std.mem.indexOf(u8, seen, text[0..trunc]) != null) return true;
+    }
+    return false;
+}
+
+fn findBorderNode(node: *Node, target_text: []const u8, result: *?*Node) void {
+    if (node.style.display == .none) return;
+    if (result.* != null) return;
+
+    if (subtreeContainsText(node, target_text)) {
+        if (node.style.border_width > 0 and node.style.border_color != null) {
+            result.* = node;
+            return;
+        }
+        for (node.children) |*child| {
+            findBorderNode(child, target_text, result);
+            if (result.* != null) return;
+        }
+    }
+}
+
+fn subtreeContainsText(node: *Node, target: []const u8) bool {
+    if (node.text) |txt| {
+        if (std.mem.indexOf(u8, txt, target) != null) return true;
+    }
+    for (node.children) |*child| {
+        if (subtreeContainsText(child, target)) return true;
+    }
+    return false;
+}
+
+fn snapshotStyles(node: *Node, snap: *[MAX_STYLE_ENTRIES]StyleEntry, count: *u16, depth: u8) void {
+    if (node.style.display == .none) return;
+    if (count.* >= MAX_STYLE_ENTRIES) return;
+
+    const idx = count.*;
+    snap[idx] = .{};
+    snap[idx].depth = depth;
+
+    // Capture text identity
+    if (node.text) |txt| {
+        const copy_len = @min(txt.len, @as(usize, 64));
+        @memcpy(snap[idx].text[0..copy_len], txt[0..copy_len]);
+        snap[idx].text_len = @intCast(copy_len);
+    }
+
+    // Computed layout
+    snap[idx].x = node.computed.x;
+    snap[idx].y = node.computed.y;
+    snap[idx].w = node.computed.w;
+    snap[idx].h = node.computed.h;
+
+    // Style properties
+    snap[idx].padding_top = node.style.padding_top orelse 0;
+    snap[idx].padding_bottom = node.style.padding_bottom orelse 0;
+    snap[idx].padding_left = node.style.padding_left orelse 0;
+    snap[idx].padding_right = node.style.padding_right orelse 0;
+    snap[idx].border_radius = node.style.border_radius;
+    snap[idx].border_width = node.style.border_width;
+    snap[idx].gap = node.style.gap;
+    snap[idx].font_size = node.font_size;
+
+    if (node.style.background_color) |bg| {
+        snap[idx].bg_r = bg.r;
+        snap[idx].bg_g = bg.g;
+        snap[idx].bg_b = bg.b;
+        snap[idx].has_bg = true;
+    }
+    if (node.text_color) |tc| {
+        snap[idx].tc_r = tc.r;
+        snap[idx].tc_g = tc.g;
+        snap[idx].tc_b = tc.b;
+        snap[idx].has_tc = true;
+    }
+
+    count.* += 1;
+
+    for (node.children) |*child| {
+        snapshotStyles(child, snap, count, depth + 1);
+    }
+}
+
+fn diffStyles(before: *const [MAX_STYLE_ENTRIES]StyleEntry, before_count: u16, after: *const [MAX_STYLE_ENTRIES]StyleEntry, after_count: u16) u16 {
+    var diffs: u16 = 0;
+    const max = @min(before_count, after_count);
+
+    for (0..max) |i| {
+        const b = &before[i];
+        const a = &after[i];
+        var node_changed = false;
+
+        if (b.w != a.w or b.h != a.h or b.x != a.x or b.y != a.y) node_changed = true;
+        if (b.padding_top != a.padding_top or b.padding_bottom != a.padding_bottom) node_changed = true;
+        if (b.padding_left != a.padding_left or b.padding_right != a.padding_right) node_changed = true;
+        if (b.border_radius != a.border_radius) node_changed = true;
+        if (b.border_width != a.border_width) node_changed = true;
+        if (b.gap != a.gap) node_changed = true;
+        if (b.font_size != a.font_size) node_changed = true;
+        if (b.bg_r != a.bg_r or b.bg_g != a.bg_g or b.bg_b != a.bg_b or b.has_bg != a.has_bg) node_changed = true;
+        if (b.tc_r != a.tc_r or b.tc_g != a.tc_g or b.tc_b != a.tc_b or b.has_tc != a.has_tc) node_changed = true;
+
+        if (node_changed) {
+            diffs += 1;
+            const name = if (b.text_len > 0) b.text[0..b.text_len] else "(box)";
+            std.debug.print("    changed: \"{s}\" d={d}", .{ name, b.depth });
+            if (b.padding_top != a.padding_top) std.debug.print(" pad:{d:.0}→{d:.0}", .{ b.padding_top, a.padding_top });
+            if (b.border_radius != a.border_radius) std.debug.print(" radius:{d:.0}→{d:.0}", .{ b.border_radius, a.border_radius });
+            if (b.gap != a.gap) std.debug.print(" gap:{d:.0}→{d:.0}", .{ b.gap, a.gap });
+            if (b.w != a.w) std.debug.print(" w:{d:.0}→{d:.0}", .{ b.w, a.w });
+            if (b.h != a.h) std.debug.print(" h:{d:.0}→{d:.0}", .{ b.h, a.h });
+            std.debug.print("\n", .{});
+        }
+    }
+
+    // Also flag if node count changed
+    if (before_count != after_count) {
+        std.debug.print("    node count: {d} → {d}\n", .{ before_count, after_count });
+        diffs += 1;
+    }
+
+    return diffs;
+}
+
+fn auditSourceTexts(root: *Node) void {
+    // Read the .tsz source files and extract quoted strings.
+    // Compare against what's actually rendering. Missing text = FAIL.
+    const source_env = std.posix.getenv("ZIGOS_SOURCE") orelse return;
+
+    // Read all source files (colon-separated)
+    var src_buf: [32768]u8 = undefined;
+    var total_len: usize = 0;
+    var paths = std.mem.splitScalar(u8, source_env, ':');
+    while (paths.next()) |source_path| {
+        if (source_path.len == 0) continue;
+        const file = std.fs.cwd().openFile(source_path, .{}) catch continue;
+        defer file.close();
+        const remaining = src_buf[total_len..];
+        const read = file.readAll(remaining) catch 0;
+        total_len += read;
+        if (total_len < src_buf.len) {
+            src_buf[total_len] = '\n';
+            total_len += 1;
+        }
+    }
+    if (total_len == 0) return;
+    const source = src_buf[0..total_len];
+
+    // Extract static strings from: <Text ...>STRING</Text> patterns
+    // and from script data like: { title: 'Revenue', value: '$12.4k' }
+    // Strategy: find all single-quoted and double-quoted string literals that look like content
+    var expected_texts: [128][TEXT_LEN]u8 = undefined;
+    var expected_lens: [128]u16 = undefined;
+    var expected_count: u16 = 0;
+
+    var i: usize = 0;
+    while (i < source.len and expected_count < 128) {
+        // Look for quoted strings that are likely visible text content
+        if (source[i] == '\'' or source[i] == '"') {
+            const quote = source[i];
+            const start = i + 1;
+            i += 1;
+            while (i < source.len and source[i] != quote and source[i] != '\n') : (i += 1) {}
+            if (i < source.len and source[i] == quote) {
+                const text = source[start..i];
+                // Filter: skip short strings, CSS values, hex colors, import paths, etc.
+                if (text.len >= 3 and text.len <= TEXT_LEN and
+                    !std.mem.startsWith(u8, text, "#") and
+                    !std.mem.startsWith(u8, text, "./") and
+                    !std.mem.startsWith(u8, text, "theme-") and
+                    !std.mem.startsWith(u8, text, "100%") and
+                    std.mem.indexOf(u8, text, "backgroundColor") == null and
+                    std.mem.indexOf(u8, text, "flexDirection") == null and
+                    std.mem.indexOf(u8, text, "spaceBetween") == null and
+                    std.mem.indexOf(u8, text, ".tsz") == null and
+                    std.mem.indexOf(u8, text, ".cls") == null and
+                    std.mem.indexOf(u8, text, ".script") == null and
+                    !isStyleValue(text))
+                {
+                    const idx = expected_count;
+                    const copy_len = @min(text.len, TEXT_LEN);
+                    @memcpy(expected_texts[idx][0..copy_len], text[0..copy_len]);
+                    expected_lens[idx] = @intCast(copy_len);
+                    expected_count += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if (expected_count == 0) return;
+
+    // Also collect current frame's texts
+    collectSeenTexts(root);
+
+    std.debug.print("\n  ── Source Text Audit ──\n", .{});
+    var found: u16 = 0;
+    var missing: u16 = 0;
+
+    for (0..expected_count) |si| {
+        const text = expected_texts[si][0..expected_lens[si]];
+        if (wasEverSeen(text)) {
+            found += 1;
+        } else {
+            missing += 1;
+            std.debug.print("    NEVER SEEN: \"{s}\"\n", .{text});
+        }
+    }
+
+    // Append to manifest
+    const remaining = auto_manifest_buf[auto_manifest_len..];
+    const written = std.fmt.bufPrint(remaining, "SOURCE_AUDIT|{d} expected|{d} found|{d} missing\n", .{
+        expected_count, found, missing,
+    }) catch return;
+    auto_manifest_len += written.len;
+
+    if (missing > 0) {
+        std.debug.print("  source audit: {d}/{d} source texts ever appeared ({d} NEVER SEEN)\n", .{ found, expected_count, missing });
+        auto_failed += missing;
+    } else {
+        std.debug.print("  source audit: {d}/{d} source texts appeared during test\n", .{ found, expected_count });
+    }
+}
+
+fn isStyleValue(text: []const u8) bool {
+    // Filter out CSS-like values: "row", "center", "column", etc.
+    const style_words = [_][]const u8{
+        "row",           "column",         "center",       "flex-start",
+        "flex-end",      "stretch",        "wrap",         "nowrap",
+        "absolute",      "relative",       "hidden",       "visible",
+        "none",          "solid",          "dashed",       "init",
+        "spaceBetween",  "spaceAround",    "spaceEvenly",  "flexStart",
+        "flexEnd",       "flexGrow",       "alignItems",   "justifyContent",
+        "borderRadius",  "padding",        "gap",          "width",
+        "height",        "auto",
+    };
+    for (style_words) |w| {
+        if (std.mem.eql(u8, text, w)) return true;
+    }
+    return false;
+}
+
+fn auditColors(root: *Node) void {
+    std.debug.print("\n  ── Color Audit ──\n", .{});
+    var count: u16 = 0;
+    var missing: u16 = 0;
+    auditColorsRecurse(root, &count, &missing);
+
+    // Append summary to manifest
+    const remaining = auto_manifest_buf[auto_manifest_len..];
+    const written = std.fmt.bufPrint(remaining, "COLOR_AUDIT|{d} text nodes|{d} with color|{d} missing\n", .{
+        count, count - missing, missing,
+    }) catch return;
+    auto_manifest_len += written.len;
+
+    if (missing == 0) {
+        std.debug.print("  color audit: {d}/{d} text nodes have color set\n", .{ count, count });
+    } else {
+        std.debug.print("  color audit: {d}/{d} text nodes missing color ({d} unset)\n", .{ count - missing, count, missing });
+    }
+}
+
+fn auditColorsRecurse(node: *Node, count: *u16, missing: *u16) void {
+    if (node.style.display == .none) return;
+    if (node.text) |txt| {
+        count.* += 1;
+        if (node.text_color) |tc| {
+            var hex: [7]u8 = undefined;
+            const hex_str = colorToHex(tc, &hex);
+            // Append each node's color to manifest
+            const remaining = auto_manifest_buf[auto_manifest_len..];
+            const trunc_len = @min(txt.len, @as(usize, 40));
+            const written = std.fmt.bufPrint(remaining, "COLOR|{s}|{s}\n", .{
+                hex_str, txt[0..trunc_len],
+            }) catch return;
+            auto_manifest_len += written.len;
+        } else {
+            missing.* += 1;
+            const remaining = auto_manifest_buf[auto_manifest_len..];
+            const trunc_len = @min(txt.len, @as(usize, 40));
+            const written = std.fmt.bufPrint(remaining, "COLOR|NONE|{s}\n", .{
+                txt[0..trunc_len],
+            }) catch return;
+            auto_manifest_len += written.len;
+        }
+    }
+    for (node.children) |*child| {
+        auditColorsRecurse(child, count, missing);
+    }
+}
+
+fn dist2d(x1: f32, y1: f32, x2: f32, y2: f32) f32 {
+    const dx = x1 - x2;
+    const dy = y1 - y2;
+    return dx * dx + dy * dy; // squared distance is fine for comparison
 }
 
 fn finishReplay() bool {
@@ -775,8 +1654,8 @@ pub fn flush() void {
             .click => {
                 const aname = a.target_name[0..a.target_name_len];
                 const atxt = a.target_text[0..a.target_text_len];
-                emit(file, &buf, "CLICK {d} {d}:{s} {d}:{s}\n", .{
-                    a.frame, aname.len, aname, atxt.len, atxt,
+                emit(file, &buf, "CLICK {d} {d}:{s} {d}:{s} P{d:.0},{d:.0}\n", .{
+                    a.frame, aname.len, aname, atxt.len, atxt, a.target_x, a.target_y,
                 });
                 emit(file, &buf, "STATE_AFTER\n", .{});
                 writeStateToFile(file, &buf, &a.state_after);
@@ -987,34 +1866,50 @@ fn loadWitness() void {
             current_action = &replay_actions[idx];
 
             // Parse "CLICK <frame> <name_len>:<name> <text_len>:<text>"
+            // Use positional parsing — name and text can contain spaces.
             const rest = line[6..];
-            var parts = std.mem.splitScalar(u8, rest, ' ');
-            if (parts.next()) |frame_str| {
-                replay_actions[idx].frame = std.fmt.parseInt(u32, frame_str, 10) catch 0;
+
+            // Frame number ends at first space
+            const frame_end = std.mem.indexOfScalar(u8, rest, ' ') orelse continue;
+            replay_actions[idx].frame = std.fmt.parseInt(u32, rest[0..frame_end], 10) catch 0;
+
+            // Name field: <name_len>:<name>
+            var pos = frame_end + 1;
+            const name_colon = std.mem.indexOfScalarPos(u8, rest, pos, ':') orelse continue;
+            const nlen = std.fmt.parseInt(u8, rest[pos..name_colon], 10) catch 0;
+            if (nlen > 0) {
+                const name_data = rest[name_colon + 1 ..];
+                const copy_len = @min(nlen, @as(u8, @intCast(@min(name_data.len, NAME_LEN))));
+                @memcpy(replay_actions[idx].target_name[0..copy_len], name_data[0..copy_len]);
+                replay_actions[idx].target_name_len = copy_len;
             }
-            // Parse name
-            if (parts.next()) |name_part| {
-                if (std.mem.indexOfScalar(u8, name_part, ':')) |colon| {
-                    const nlen = std.fmt.parseInt(u8, name_part[0..colon], 10) catch 0;
-                    if (nlen > 0) {
-                        // Name might contain spaces, so reconstruct from remaining
-                        const name_start = name_part[colon + 1 ..];
-                        const copy_len = @min(nlen, @as(u8, @intCast(@min(name_start.len, NAME_LEN))));
-                        @memcpy(replay_actions[idx].target_name[0..copy_len], name_start[0..copy_len]);
-                        replay_actions[idx].target_name_len = copy_len;
-                    }
-                }
+            // Advance past name field: colon + nlen + trailing space
+            pos = name_colon + 1 + nlen;
+            if (pos < rest.len and rest[pos] == ' ') pos += 1;
+
+            // Text field: <text_len>:<text>
+            if (pos >= rest.len) continue;
+            const text_colon = std.mem.indexOfScalarPos(u8, rest, pos, ':') orelse continue;
+            const tlen = std.fmt.parseInt(u16, rest[pos..text_colon], 10) catch 0;
+            if (tlen > 0) {
+                const text_data = rest[text_colon + 1 ..];
+                const copy_len = @min(tlen, @as(u16, @intCast(@min(text_data.len, TEXT_LEN))));
+                @memcpy(replay_actions[idx].target_text[0..copy_len], text_data[0..copy_len]);
+                replay_actions[idx].target_text_len = copy_len;
             }
-            // Parse text — rest of line after second length-prefixed field
-            if (parts.next()) |text_part| {
-                if (std.mem.indexOfScalar(u8, text_part, ':')) |colon| {
-                    const tlen = std.fmt.parseInt(u16, text_part[0..colon], 10) catch 0;
-                    if (tlen > 0) {
-                        const text_start = text_part[colon + 1 ..];
-                        const copy_len = @min(tlen, @as(u16, @intCast(@min(text_start.len, TEXT_LEN))));
-                        @memcpy(replay_actions[idx].target_text[0..copy_len], text_start[0..copy_len]);
-                        replay_actions[idx].target_text_len = copy_len;
+
+            // Optional position for disambiguation: " P<x>,<y>" or legacy " Y<y>"
+            const p_pos = text_colon + 1 + tlen;
+            if (p_pos + 2 < rest.len and rest[p_pos] == ' ') {
+                if (rest[p_pos + 1] == 'P') {
+                    const coords = rest[p_pos + 2 ..];
+                    if (std.mem.indexOfScalar(u8, coords, ',')) |comma| {
+                        replay_actions[idx].target_x = std.fmt.parseFloat(f32, coords[0..comma]) catch 0;
+                        replay_actions[idx].target_y = std.fmt.parseFloat(f32, coords[comma + 1 ..]) catch 0;
                     }
+                } else if (rest[p_pos + 1] == 'Y') {
+                    // Legacy format
+                    replay_actions[idx].target_y = std.fmt.parseFloat(f32, rest[p_pos + 2 ..]) catch 0;
                 }
             }
             continue;

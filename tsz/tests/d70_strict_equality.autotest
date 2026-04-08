@@ -1,0 +1,43 @@
+# d70: strict === and !== — filter, find, count, inequality
+# Verifies: === in conditionals, handlers, template literals, and style ternaries
+
+# Initial state — all 6 items shown
+expect "Strict === and !=="
+expect "6 shown"
+expect "Auth flow"
+expect "Dark mode"
+expect "API docs"
+expect "Mobile nav"
+
+# Filter to done only (=== 'done')
+click "Done"
+expect "2 shown"
+expect "Auth flow"
+expect "CI setup"
+reject "Dark mode"
+reject "API docs"
+expect "filtered: done"
+
+# Filter to active (=== 'active')
+click "Active"
+expect "2 shown"
+expect "Dark mode"
+expect "Perf audit"
+reject "Auth flow"
+
+# Back to all
+click "All"
+expect "6 shown"
+expect "showing all"
+
+# Count high priority items (=== 2)
+click "High"
+expect "priority 2: 2 items"
+
+# Find by name (=== exact match)
+click "Find Perf"
+expect "Perf audit [active] p:2"
+
+# Test strict inequality (!== 'done')
+click "!== test"
+expect "4 items are not done"

@@ -1,0 +1,43 @@
+# s05b_settings: Settings page with navigation and toggles
+
+# Initial state - Profile section
+expect "Settings"
+expect "Profile Settings"
+expect "Name"
+expect "Email"
+
+# Navigate to Appearance
+click "Appearance"
+expect "Appearance Settings"
+expect "Dark Mode"
+expect "On"
+
+# Toggle Dark Mode off
+click "On"
+expect "Off"
+
+# Toggle back on
+click "Off"
+expect "On"
+
+# Navigate to Notifications
+click "Notifications"
+expect "Notifications Settings"
+expect "Push Notifications"
+expect "On"
+
+# Toggle Notifications off
+click "On"
+expect "Off"
+
+# Navigate to Security
+click "Security"
+expect "Security Settings"
+expect "Change password and manage 2FA."
+expect "Change Password"
+
+# Back to Profile and save
+click "Profile"
+expect "Profile Settings"
+click "Save"
+expect "Saved."

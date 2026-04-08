@@ -1,0 +1,80 @@
+# d95: Cherry Studio — full desktop app port
+# Verifies: sidebar nav, chat interface, assistant grid, file list, settings, theme toggle
+
+# Initial state — Chat section active
+expect "Chat"
+expect "Conversations"
+expect "Code review help"
+expect "Blog draft"
+expect "Debug session"
+
+# Messages visible
+expect "Can you review this React component"
+expect "GPT-4"
+
+# Model chips visible
+expect "Send"
+
+# Switch to a different conversation
+click "Blog draft"
+expect "Blog draft"
+
+# Navigate to Assistants section
+click "Assist"
+expect "Assistants"
+expect "Code Reviewer"
+expect "Translator"
+expect "Blog Writer"
+expect "Summarizer"
+
+# Filter to dev category
+click "Dev"
+expect "Code Reviewer"
+expect "Data Analyst"
+expect "SQL Helper"
+reject "Translator"
+reject "Blog Writer"
+
+# Filter to writing
+click "Writing"
+expect "Blog Writer"
+expect "Email Drafter"
+expect "UX Writer"
+reject "Code Reviewer"
+
+# Back to all
+click "All"
+expect "Code Reviewer"
+expect "Translator"
+
+# Navigate to Files section
+click "Files"
+expect "Files"
+expect "project-spec.md"
+expect "api-response.json"
+expect "screenshot.png"
+
+# Navigate to Settings
+click "Config"
+expect "Settings"
+expect "Appearance"
+expect "Dark Mode"
+expect "Send on Enter"
+expect "Stream Response"
+expect "Show Timestamps"
+expect "Font Size: 13"
+
+# Toggle theme
+click "Dark Mode"
+
+# Change font size to small
+click "S"
+expect "Font Size: 11"
+
+# Change font size to large
+click "L"
+expect "Font Size: 15"
+
+# Go back to Chat
+click "Chat"
+expect "Conversations"

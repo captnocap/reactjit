@@ -1,0 +1,20 @@
+# d13: schema form — section nav, field widgets, dirty state
+# Only the active section's fields render.
+
+expect "Settings"
+expect "Form Builder"
+
+# Section nav labels
+expect "Personal"
+expect "Work"
+expect "Preferences"
+
+# Personal section fields (active by default)
+expect "Full Name"
+expect "Email"
+expect "Phone"
+
+# Switch to Work section
+click "Work"
+expect "Company"
+expect "Role"

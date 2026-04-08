@@ -1,0 +1,46 @@
+# d88: data table — filter, sort, select rows
+# Verifies: map rendering, filter by role, sort toggle, row selection, computed counts
+
+# Initial state — all 10 rows
+expect "Data Table"
+expect "10 rows"
+expect "Alice Chen"
+expect "Bob Kim"
+expect "Jack Ma"
+expect "Name"
+expect "Email"
+expect "Role"
+expect "Status"
+
+# Filter to admin
+click "Admin"
+expect "3 rows"
+expect "Alice Chen"
+expect "Hank Li"
+reject "Bob Kim"
+reject "Eve Liu"
+
+# Filter to dev
+click "Dev"
+expect "4 rows"
+expect "Bob Kim"
+expect "Dave Park"
+reject "Alice Chen"
+
+# Filter to design
+click "Design"
+expect "3 rows"
+expect "Eve Liu"
+expect "Grace Ho"
+expect "Jack Ma"
+
+# Back to all
+click "All"
+expect "10 rows"
+
+# Sort A-Z
+click "Sort A"
+expect "Sort Z"
+
+# Select a row by clicking it
+click "Carol Wu"

@@ -1,0 +1,16 @@
+# d73: Undefined/null checks — conditional rendering with set/unset values
+# Verifies initial state and button clicks
+
+# Initial state
+expect "Undefined Checks"
+expect "unset"
+
+# Set a config value
+click "Set lang=en"
+expect "en"
+
+# Set another
+click "Set sidebar"
+
+# Clear theme
+click "Clear theme"

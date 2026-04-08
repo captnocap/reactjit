@@ -1,0 +1,22 @@
+# d119: classifier multi variant — 3 cards with 6 classifiers, 4 named variants
+
+# Verify title
+expect "Theme Variant Test"
+
+# Verify all 3 cards render
+expect "Inbox"
+expect "Archive"
+expect "Drafts"
+
+# Verify tag texts
+expect "New"
+expect "Old"
+expect "WIP"
+
+# Verify count values
+expect "Count: 12"
+expect "Count: 340"
+expect "Count: 3"
+
+# Verify footer
+expect "3 cards loaded"

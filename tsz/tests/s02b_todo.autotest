@@ -1,0 +1,47 @@
+# s02b_todo: Todo list with add, toggle, delete, and filters
+
+# Initial state - 2 tasks pre-loaded
+expect "Todo List"
+expect "Task 1"
+expect "Task 2"
+expect "[ ]"  # Task 1 not done
+expect "[x]"  # Task 2 done
+expect "1 items left"
+
+# Click All filter (already selected)
+click "All"
+expect "Task 1"
+expect "Task 2"
+
+# Click Active filter - should only show incomplete task
+click "Active"
+expect "Task 1"
+reject "Task 2"
+
+# Click Done filter - should only show completed task
+click "Done"
+expect "Task 2"
+reject "Task 1"
+
+# Back to All
+click "All"
+expect "Task 1"
+expect "Task 2"
+
+# Toggle Task 1 to done
+click "[ ]"
+expect "[x]"
+expect "0 items left"
+
+# Toggle Task 2 to not done
+click "[x]" #2
+expect "[ ]" #2
+expect "1 items left"
+
+# Add a new task
+click "Add Task"
+expect "Task 3"
+
+# Delete Task 1
+click "X"
+reject "Task 1"

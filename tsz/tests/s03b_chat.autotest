@@ -1,0 +1,31 @@
+# s03b_chat: Chat interface with send/clear and side toggle
+
+# Initial state - 3 messages pre-loaded
+expect "Chat Interface"
+expect "3 messages"
+expect "Hey, how are you?"
+expect "Good! Just testing the chat UI."
+expect "Looks clean."
+
+# Send a message (as Me)
+click "Send"
+expect "4 messages"
+expect "Agreed!"
+
+# Toggle to "Them" and send
+click "Them"
+click "Send"
+expect "5 messages"
+expect "Makes sense."
+
+# Toggle back to "Me"
+click "Me"
+click "Send"
+expect "6 messages"
+expect "Got it."
+
+# Clear chat
+click "Clear"
+expect "0 messages"
+expect "No messages yet."
+reject "Hey, how are you?"

@@ -1,0 +1,50 @@
+# d99: recursive tree component — self-calling component, expand/collapse
+# Verifies: recursive component rendering, depth indentation, folder/file toggle
+
+# Initial state — workspace and src/routes expanded
+expect "Recursive Tree"
+expect "6 files"
+expect "0 toggles"
+expect "workspace"
+expect "src"
+expect "routes"
+expect "home.tsx"
+expect "settings.tsx"
+
+# Initially selected path
+expect "workspace/src/routes/home.tsx"
+
+# File tags visible
+expect "tsx"
+expect "dir"
+expect "root"
+
+# ui folder is collapsed — children not visible
+reject "Button.tsx"
+reject "Drawer.tsx"
+
+# docs folder is collapsed
+reject "readme.md"
+
+# Click to select a file
+click "settings.tsx"
+expect "workspace/src/routes/settings.tsx"
+
+# Collapse routes directory
+click "routes"
+expect "1 toggles"
+reject "home.tsx"
+reject "settings.tsx"
+
+# Expand routes again
+click "routes"
+expect "2 toggles"
+expect "home.tsx"
+
+# Select theme.css
+click "theme.css"
+expect "css"
+
+# Click package.json
+click "package.json"
+expect "json"

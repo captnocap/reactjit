@@ -1,0 +1,44 @@
+# d90: spreadsheet — cell selection, adjustment, totals, zero row
+# Verifies: 2D grid map, bracket notation, computed totals, negative numbers, cell highlight
+
+# Initial state
+expect "Spreadsheet"
+expect "edits: 0"
+expect "Revenue"
+expect "Costs"
+expect "Q1"
+expect "Q2"
+expect "Q3"
+expect "Q4"
+expect "Adj"
+
+# Check initial values visible
+expect "1200"
+expect "1400"
+
+# Select a cell — click Q1 Revenue (1200)
+click "1200"
+expect "Q1:Revenue = 1200"
+
+# Adjust +100
+click "+100"
+expect "1300"
+expect "edits: 1"
+expect "Q1:Revenue = 1300"
+
+# Adjust -10
+click "-10"
+expect "1290"
+expect "edits: 2"
+
+# Select a different cell — Q2 row label to zero it
+click "Q2"
+
+# Select Q3 Revenue
+click "1100"
+expect "Q3:Revenue = 1100"
+
+# Adjust +100
+click "+100"
+expect "1200"
+expect "edits: 3"

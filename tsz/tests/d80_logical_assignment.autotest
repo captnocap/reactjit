@@ -1,0 +1,35 @@
+# d80: logical assignment operators — ||=, ??=, &&=
+
+# Initial state
+expect "Logical Assignment"
+expect "ops: 0"
+
+# Verify initial data values (a=0, b=5, c=0, d=10, e=0)
+expect "0"
+expect "5"
+expect "10"
+
+# Apply ||= defaults (zeros become 99)
+click "||= defaults"
+expect "ops: 1"
+expect "||= applied defaults to zero values"
+expect "99"
+
+# Apply &&= double (all truthy values doubled)
+click "&&= double"
+expect "ops: 2"
+expect "&&= doubled all truthy values"
+
+# Reset
+click "Reset"
+expect "ops: 0"
+expect "reset"
+expect "0"
+expect "5"
+expect "10"
+
+# Apply ??= assign (zeros become 42)
+click "??= assign"
+expect "ops: 1"
+expect "??= assigned 42 to null-like values"
+expect "42"

@@ -1,0 +1,51 @@
+# d91: file explorer — tree view, expand/collapse, file selection
+# Verifies: nested map, conditional children, depth indentation, file type icons
+
+# Initial state — src is expanded, public is collapsed
+expect "File Explorer"
+expect "0 toggles"
+expect "src"
+expect "public"
+expect "package.json"
+expect "tsconfig.json"
+expect "README.md"
+
+# src is expanded — children visible
+expect "index.tsx"
+expect "App.tsx"
+expect "utils.ts"
+
+# File type icons
+expect "TSX"
+expect "TS"
+expect "JSON"
+expect "MD"
+
+# Click a file to select it
+click "index.tsx"
+expect "index.tsx (tsx) 4200 bytes"
+
+# Click App.tsx
+click "App.tsx"
+expect "App.tsx (tsx) 8100 bytes"
+
+# Collapse src directory
+click "src"
+expect "1 toggles"
+reject "index.tsx"
+reject "App.tsx"
+
+# Expand public directory
+click "public"
+expect "2 toggles"
+expect "favicon.ico"
+expect "index.html"
+
+# Select a file in public
+click "index.html"
+expect "index.html (html) 900 bytes"
+
+# Re-expand src
+click "src"
+expect "3 toggles"
+expect "index.tsx"

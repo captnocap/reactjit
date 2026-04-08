@@ -1,0 +1,33 @@
+# d47: Nested ternary — color and text ternaries with 3+ branches
+# Verifies nested ternary text and ternary color expressions
+
+# Initial state — level 0
+expect "Nested Ternary"
+expect "None"
+expect "level: 0"
+
+# Switch to Low
+click "Low"
+expect "Low"
+
+# Switch to Mid
+click "Mid"
+expect "Medium"
+
+# Switch to High
+click "High"
+expect "High"
+
+# Back to None
+click "None"
+expect "None"
+
+# Mode switching
+click "Compact"
+expect "compact"
+
+click "Expanded"
+expect "expanded"
+
+click "Default"
+expect "default"

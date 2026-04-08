@@ -1,0 +1,30 @@
+# d11: map-component-map — org chart with nested maps through components
+
+# Initial render
+expect "Org Chart"
+expect "clicks: 0"
+
+# Verify department headers
+expect "Engineering"
+expect "Design"
+expect "Marketing"
+expect "Sales"
+expect "Operations"
+
+# Verify employees render
+expect "Alice"
+expect "Bob"
+expect "Carol"
+expect "Eve"
+expect "Frank"
+expect "Grace"
+expect "Judy"
+expect "Mike"
+
+# Click Engineering dept header
+click "Engineering"
+expect "clicks: 1"
+
+# Click Alice employee
+click "Alice"
+expect "clicks: 2"

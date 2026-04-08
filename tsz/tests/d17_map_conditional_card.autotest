@@ -1,0 +1,12 @@
+# Conditional cards in a map should preserve alive/offline branching and selection.
+expect "Session Discovery"
+expect "selected: 0"
+expect "Storybook"
+expect "TodoMVC"
+expect "OldApp"
+click "Connect" #2
+expect "selected: 5678"
+expect "TodoMVC"
+click "Connect" #3
+expect "selected: 4242"
+expect "HackerNews"

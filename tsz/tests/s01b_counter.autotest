@@ -1,0 +1,29 @@
+# s01b_counter: Interactive counter with increment/decrement/reset
+
+# Initial state
+expect "Counter"
+expect "Zero"
+expect "0"
+
+# Click increment
+click "+"
+expect "1"
+expect "Positive"
+
+# Click increment again
+click "+"
+expect "2"
+
+# Click decrement
+click "-"
+expect "1"
+
+# Click reset
+click "Reset"
+expect "0"
+expect "Zero"
+
+# Click decrement to negative
+click "-"
+expect "-1"
+expect "Negative"

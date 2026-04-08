@@ -1,0 +1,71 @@
+# d24: chained state — signup wizard with validation
+
+# Step 1: name selection
+expect "Signup Wizard"
+expect "Step 1 of 4"
+expect "Choose your name"
+expect "Next"
+reject "Back"
+
+# Try Next without picking a name — should show error
+click "Next"
+expect "Pick a name first"
+
+# Pick Alice
+click "Alice"
+expect "selected: Alice"
+reject "Pick a name first"
+
+# Go to step 2
+click "Next"
+expect "Step 2 of 4"
+expect "Choose your email"
+expect "Back"
+reject "Choose your name"
+
+# Try Next without email
+click "Next"
+expect "Pick an email first"
+
+# Pick email
+click "b@test.com"
+expect "selected: b@test.com"
+
+# Go to step 3
+click "Next"
+expect "Step 3 of 4"
+expect "Choose plan"
+reject "Choose your email"
+
+# Try Next without plan
+click "Next"
+expect "Pick a plan first"
+
+# Pick Pro
+click "Pro $10/mo"
+
+# Go to step 4 (confirm)
+click "Next"
+expect "Step 4 of 4"
+expect "Confirm"
+expect "Name: Alice"
+expect "Email: b@test.com"
+expect "Submit"
+reject "Next"
+
+# Submit
+click "Submit"
+expect "Account created!"
+
+# Go back, verify state persists
+click "Back"
+expect "Step 3 of 4"
+expect "Choose plan"
+
+click "Back"
+expect "Step 2 of 4"
+expect "selected: b@test.com"
+
+click "Back"
+expect "Step 1 of 4"
+expect "selected: Alice"

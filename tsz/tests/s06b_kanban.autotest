@@ -1,0 +1,34 @@
+# s06b_kanban: Kanban board with cards and columns
+
+# Initial state
+expect "Kanban Board"
+expect "Todo"
+expect "In Progress"
+expect "Done"
+expect "Write tests"
+expect "Fix layout bug"
+expect "Auth flow"
+expect "Setup repo"
+expect "2"  # Todo count
+expect "1"  # In Progress count
+expect "1"  # Done count
+
+# Move "Auth flow" from In Progress to Done
+click "→"
+expect "2" #2  # Done count is now 2
+reject "Auth flow" #2  # No longer in In Progress
+
+# Move "Write tests" from Todo to In Progress
+click "→" #2
+expect "2" #2  # In Progress count is now 2
+expect "1"  # Todo count is now 1
+
+# Add a new card to Todo
+click "+ Add Card"
+expect "2"  # Todo count is now 2
+expect "New task 5"
+
+# Delete "Fix layout bug" from Todo
+click "x" #2
+expect "1"  # Todo count is now 1
+reject "Fix layout bug"

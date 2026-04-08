@@ -1,0 +1,41 @@
+# d98: callback props drilled through component layers
+# Verifies: map → TicketCard → TicketActions → ActionPill, handler captures
+
+# Initial state
+expect "Callback Prop Chain"
+expect "2 pinned"
+expect "0 archived"
+expect "Login loop on Safari"
+expect "Billing webhook retries"
+expect "Dark mode spacing cleanup"
+expect "Import jobs stuck in queue"
+
+# Severity labels
+expect "urgent"
+expect "normal"
+expect "low"
+
+# Focused ticket (first one selected by default)
+expect "Focused ticket"
+expect "Login loop on Safari"
+
+# Open a different ticket
+click "Open" #2
+expect "Billing webhook retries"
+expect "opened Billing webhook retries"
+
+# Pin a ticket (Billing is unpinned)
+click "Pin"
+expect "pinned Billing webhook retries"
+expect "3 pinned"
+
+# Unpin it
+click "Unpin"
+expect "unpinned Billing webhook retries"
+expect "2 pinned"
+
+# Archive a ticket
+click "Archive" #3
+expect "1 archived"
+expect "archived Dark mode spacing cleanup"
+reject "Dark mode spacing cleanup"

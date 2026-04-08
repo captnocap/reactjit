@@ -1,0 +1,31 @@
+# d67: conditional inside component inside map — notification feed
+# Verifies: map → component → conditional badges/type labels, mark-read handler
+
+# Initial state — 7 notifications, 3 already read
+expect "Notifications"
+expect "3/7 read"
+expect "New comment on PR #42"
+expect "Build failed: main"
+expect "Security alert: deps"
+
+# Type labels should render from conditionals inside component
+expect "comment"
+expect "alert"
+expect "system"
+
+# Priority badges — URGENT on severity 2 items
+expect "URGENT"
+
+# Timestamps from data
+expect "2m ago"
+expect "5m ago"
+
+# Click first notification to mark read
+click "New comment on PR #42"
+expect "4/7 read"
+expect "marked New comment on PR #42"
+
+# Click another — Build failed
+click "Build failed: main"
+expect "5/7 read"
+expect "marked Build failed: main"

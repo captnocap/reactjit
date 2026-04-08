@@ -1,0 +1,22 @@
+# d03: conditional wrapping map — toggle list visibility, click items
+expect "Hide"
+expect "0: Buy milk"
+expect "taps: 0"
+
+# Click a checkbox
+click "[x]"
+expect "taps: 1"
+
+# Click another checkbox
+click "[ ]"
+expect "taps: 2"
+
+# Hide the list
+click "Hide"
+reject "Buy milk"
+expect "Show"
+
+# Show it again
+click "Show"
+expect "Buy milk"
+expect "Hide"

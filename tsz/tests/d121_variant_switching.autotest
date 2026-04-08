@@ -1,0 +1,31 @@
+# d121: variant switching — tiles must visually change between variants
+
+# Initial state
+expect "Default"
+expect "variant: 0"
+expect "Revenue"
+expect "$12.4k"
+expect "Users"
+expect "1,247"
+expect "Orders"
+expect "89"
+
+# Snapshot the Revenue tile BEFORE switching
+styles before Revenue
+
+# Switch to compact — tile padding/radius/gap MUST change
+click "Compact"
+expect "variant: 1"
+styles after Revenue
+
+# Snapshot compact, then switch to spacious
+styles before Revenue
+click "Spacious"
+expect "variant: 2"
+styles after Revenue
+
+# Back to default
+styles before Revenue
+click "Default"
+expect "variant: 0"
+styles after Revenue

@@ -1,0 +1,56 @@
+# d92: complex state machine — transitions, validation, history log
+# Verifies: state-dependent styling, transition validation, history append, streak/denied counters
+
+# Initial state — idle
+expect "State Machine"
+expect "IDLE"
+expect "transitions: 0"
+
+# Valid: idle -> loading
+click "loading"
+expect "LOADING"
+expect "transitions: 1"
+expect "streak: 1"
+
+# Valid: loading -> ready
+click "ready"
+expect "READY"
+expect "transitions: 2"
+expect "streak: 2"
+
+# Invalid: ready -> done (not allowed)
+click "done"
+expect "DENIED"
+expect "denied: 1"
+expect "streak: 0"
+
+# Valid: ready -> active
+click "active"
+expect "ACTIVE"
+expect "streak: 1"
+
+# Valid: active -> paused
+click "paused"
+expect "PAUSED"
+
+# Valid: paused -> active
+click "active"
+expect "ACTIVE"
+
+# Valid: active -> done
+click "done"
+expect "DONE"
+
+# Valid: done -> idle (reset path)
+click "idle"
+expect "IDLE"
+
+# History should show entries
+expect "History"
+
+# Reset everything
+click "Reset"
+expect "IDLE"
+expect "transitions: 0"
+expect "denied: 0"
+expect "streak: 0"

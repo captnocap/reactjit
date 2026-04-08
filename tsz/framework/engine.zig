@@ -1479,18 +1479,24 @@ pub fn run(config_in: AppConfig) !void {
     var init_x: c_int = c.SDL_WINDOWPOS_CENTERED;
     var init_y: c_int = c.SDL_WINDOWPOS_CENTERED;
     const explicit_size = config.width != 1280 or config.height != 800;
-    if (geometry.load()) |g| {
-        init_x = g.x;
-        init_y = g.y;
-        if (!explicit_size) {
-            init_w = g.width;
-            init_h = g.height;
+    const headless_skip_geo = std.posix.getenv("ZIGOS_HEADLESS") != null;
+    if (!headless_skip_geo) {
+        if (geometry.load()) |g| {
+            init_x = g.x;
+            init_y = g.y;
+            if (!explicit_size) {
+                init_w = g.width;
+                init_h = g.height;
+            }
+            log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
         }
-        log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
     }
 
     const builtin_os = @import("builtin").os.tag;
-    const window_flags: u64 = c.SDL_WINDOW_RESIZABLE | (if (comptime builtin_os == .macos) c.SDL_WINDOW_METAL else 0);
+    const headless = std.posix.getenv("ZIGOS_HEADLESS") != null;
+    const window_flags: u64 = c.SDL_WINDOW_RESIZABLE |
+        (if (comptime builtin_os == .macos) c.SDL_WINDOW_METAL else @as(u64, 0)) |
+        (if (headless) c.SDL_WINDOW_HIDDEN else @as(u64, 0));
     const window = c.SDL_CreateWindow(
         config.title,
         init_w, init_h,

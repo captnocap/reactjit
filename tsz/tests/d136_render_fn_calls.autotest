@@ -1,0 +1,15 @@
+# d136: render fn calls — JS functions called in template literals at render time
+
+# Title
+expect "Dashboard"
+
+# Derived values from evalToString function calls
+expect "24"
+expect "140"
+
+# Day entries from map
+expect "Day 1"
+expect "Day 2"
+expect "Day 3"
+expect "Day 4"
+expect "Day 5"
