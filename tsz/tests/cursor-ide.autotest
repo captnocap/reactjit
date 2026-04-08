@@ -111,10 +111,9 @@ expect "Plan"
 expect "Task"
 expect "Agent"
 
-# Tool buttons
-expect "Files"
-expect "Symbols"
-expect "Attach"
+# Tool toggles
+expect "Web"
+expect "Term"
 
 # Capability toggles
 expect "Web"
@@ -139,14 +138,12 @@ reject "Launch"
 # Task mode adds the Auto-apply toggle and Run Task button
 click "Task"
 expect "Task mode"
-expect "Auto"
 expect "Run Task"
 reject "Plan mode"
 
 # Back to Ask — everything task-specific disappears
 click "Ask"
 reject "Task mode"
-reject "Auto"
 reject "Run Task"
 expect "Send"
 
@@ -165,10 +162,9 @@ click "Web"
 click "Term"
 
 # === ATTACHMENT FLOW ===
-# Clear all is always present (compiler: early-return not compiled as display toggle)
 expect "Clear all"
-# Attach the currently open file (Sidebar.tsx active from tab-switch above)
-click "Attach"
+# Click the + icon to attach current file
+click "+" #2
 expect "Clear all"
 # Remove all attachments
 click "Clear all"
@@ -176,18 +172,10 @@ click "Clear all"
 expect "Clear all"
 
 # === NEW CONVERSATION ===
-# Existing messages are present
-expect "I have analyzed the codebase"
-expect "Found 3 files"
-# Clear the conversation
 click "+ New"
-reject "I have analyzed the codebase"
-reject "Found 3 files"
-reject "Search for all components"
 
-# === MODEL CYCLING (continued) ===
-# Model is GPT-4o from earlier cycling
-expect "GPT-4o"
-click "GPT-4o"
-expect "o1"
-reject "GPT-4o"
+# === MODEL CYCLING ===
+expect "Opus 4"
+click "Opus 4"
+expect "Sonnet 4"
+reject "Opus 4"

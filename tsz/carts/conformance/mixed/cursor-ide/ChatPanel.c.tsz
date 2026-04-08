@@ -284,7 +284,6 @@ function ChatInput() {
         <C.ChatInputField
           value={currentInput}
           onChange={function(v) { setCurrentInput(v); }}
-          placeholder="Ask anything, # files, @ symbols..."
           multiline={true}
         />
 
@@ -292,41 +291,29 @@ function ChatInput() {
           <C.ChatInputToolsLeft>
             <C.ChatToolBtnCompact onPress={function() { triggerFileMention(); }}>
               <C.ChatToolIconCompact>#</C.ChatToolIconCompact>
-              <C.ChatToolLabelCompact>Files</C.ChatToolLabelCompact>
             </C.ChatToolBtnCompact>
 
             <C.ChatToolBtnCompact onPress={function() { triggerSymbolMention(); }}>
               <C.ChatToolIconCompact>@</C.ChatToolIconCompact>
-              <C.ChatToolLabelCompact>Symbols</C.ChatToolLabelCompact>
             </C.ChatToolBtnCompact>
 
             <C.ChatToolBtnCompact onPress={function() { attachCurrentFile(); }}>
               <C.ChatToolIconCompact>+</C.ChatToolIconCompact>
-              <C.ChatToolLabelCompact>Attach</C.ChatToolLabelCompact>
             </C.ChatToolBtnCompact>
 
             <C.InputToolDivider />
 
             <ToolToggle icon="W" label="Web" active={webSearch} onToggle={function() { toggleWebSearch(); }} />
             <ToolToggle icon=">" label="Term" active={termAccess} onToggle={function() { toggleTermAccess(); }} />
-
-            {agentMode == 'task' && (
-              <ToolToggle icon="A" label="Auto" active={autoApply} onToggle={function() { toggleAutoApply(); }} />
-            )}
           </C.ChatInputToolsLeft>
 
           <C.ChatInputToolsRight>
             <ModelPicker />
-
             <C.ChatSendBtn onPress={function() { sendMessage(); }}>
-              <C.ChatSendIcon>^</C.ChatSendIcon>
               {agentMode == 'ask' && <C.ChatSendLabel>Send</C.ChatSendLabel>}
               {agentMode == 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
               {agentMode == 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
               {agentMode == 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
-              <C.ChatSendShortcut>
-                <C.ChatSendShortcutText>Enter</C.ChatSendShortcutText>
-              </C.ChatSendShortcut>
             </C.ChatSendBtn>
           </C.ChatInputToolsRight>
         </C.ChatInputToolbar>

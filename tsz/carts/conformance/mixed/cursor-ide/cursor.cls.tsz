@@ -103,7 +103,7 @@ classifier({
   // Chat input
   ChatInputArea: { type: 'Box', style: { flexDirection: 'column', paddingLeft: 10, paddingRight: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#1f1f1f' } },
   ChatInputBox: { type: 'Box', style: { flexDirection: 'column', backgroundColor: '#0d0d0d', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', padding: 10 } },
-  ChatInput: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 40 }, placeholder: 'Ask anything, @ to mention...', placeholderColor: '#4a4a4a' },
+  ChatInput: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 40 } },
   ChatInputToolbar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: '#1f1f1f' } },
   ChatInputTools: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
   ChatToolBtn: { type: 'Pressable', style: { width: 26, height: 26, borderRadius: 4, alignItems: 'center', justifyContent: 'center' } },
@@ -144,7 +144,7 @@ classifier({
   // === COMMAND PALETTE (overlay) ===
   CommandOverlay: { type: 'Box', style: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#00000080', alignItems: 'center', justifyContent: 'center' } },
   CommandPalette: { type: 'Box', style: { width: 600, flexDirection: 'column', backgroundColor: '#1a1a1a', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', shadow: { color: '#000000', blur: 20, offset: [0, 10] } } },
-  CommandInput: { type: 'TextInput', fontSize: 16, color: '#e0e0e0', style: { padding: 16 }, placeholder: 'Type a command or search...', placeholderColor: '#6e6e6e' },
+  CommandInput: { type: 'TextInput', fontSize: 16, color: '#e0e0e0', style: { padding: 16 } },
   CommandResults: { type: 'Box', style: { flexDirection: 'column', maxHeight: 300 } },
   CommandSection: { type: 'Box', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 4 } },
   CommandSectionTitle: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
@@ -225,7 +225,7 @@ classifier({
   SearchHeader: { type: 'Box', style: { flexDirection: 'column', gap: 10, padding: 12, borderBottomWidth: 1, borderColor: '#1f1f1f' } },
   SearchTitle: { type: 'Text', fontSize: 12, color: '#e0e0e0', bold: true },
   SearchInputBox: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d0d0d', borderRadius: 6, borderWidth: 1, borderColor: '#2a2a2a', paddingLeft: 10, paddingRight: 10 } },
-  SearchInput: { type: 'TextInput', fontSize: 12, color: '#e0e0e0', style: { flexGrow: 1, height: 32 }, placeholderColor: '#4a4a4a' },
+  SearchInput: { type: 'TextInput', fontSize: 12, color: '#e0e0e0', style: { flexGrow: 1, height: 32 } },
   SearchInputIcon: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
   SearchOptions: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
   SearchOption: { type: 'Pressable', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1a1a1a', borderRadius: 4 } },
@@ -272,11 +272,11 @@ classifier({
   AttachClearLabel: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
 
   // Main text input field (multiline)
-  ChatInputField: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 72, maxHeight: 200, paddingTop: 4, paddingBottom: 4 }, placeholder: 'Ask anything, # files, @ symbols...', placeholderColor: '#3d3d3d' },
+  ChatInputField: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 72, maxHeight: 200, paddingTop: 4, paddingBottom: 4 } },
 
   // Toolbar: left tools + right actions
-  ChatInputToolsLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, flexGrow: 1 } },
-  ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+  ChatInputToolsLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
+  ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' } },
   ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
 
   // Compact labeled tool buttons (#Files, @Symbols, +Attach)

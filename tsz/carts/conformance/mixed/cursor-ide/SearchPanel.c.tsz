@@ -32,7 +32,7 @@ function SearchPanel(props) {
           </Pressable>
         </Box>
         <C.SearchInputBox>
-          <C.SearchInput value={searchQuery} onChange={function(v) { setSearchQuery(v); searchProject(v); }} placeholder="Search files..." />
+          <C.SearchInput value={searchQuery} onChange={function(v) { setSearchQuery(v); searchProject(v); }} />
         </C.SearchInputBox>
         <C.SearchOptions>
           <C.SearchOption><Text fontSize={10} color="#6e6e6e">Aa</Text></C.SearchOption>
