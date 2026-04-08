@@ -550,6 +550,17 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     lua.lua_getfield(L, idx, "text_color");
     node.text_color = readLuaColor(L, -1);
     lua.lua_pop(L, 1);
+    // text_input / input_id — TextInput support from Lua tree
+    lua.lua_getfield(L, idx, "text_input");
+    if (lua.lua_toboolean(L, -1) != 0) {
+        node.text_input = true;
+    }
+    lua.lua_pop(L, 1);
+    lua.lua_getfield(L, idx, "input_id");
+    if (lua.lua_isnumber(L, -1) != 0) {
+        node.input_id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+    }
+    lua.lua_pop(L, 1);
     // style
     lua.lua_getfield(L, idx, "style");
     if (lua.lua_istable(L, -1)) node.style = readLuaStyle(L, -1);

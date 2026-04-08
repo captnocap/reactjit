@@ -710,6 +710,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _isSetterOrOa = false;
             if (ctx.stateSlots) { for (var _s2 = 0; _s2 < ctx.stateSlots.length; _s2++) { if (ctx.stateSlots[_s2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
             if (!_isSetterOrOa && ctx.objectArrays) { for (var _o2 = 0; _o2 < ctx.objectArrays.length; _o2++) { if (ctx.objectArrays[_o2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+            // Handler refs (_handler_press_N) are JS-dispatched handlers
+            if (!_isSetterOrOa && /^_handler_press_\d+$/.test(_hfn2)) { _needsJs = true; break; }
             if (!_isSetterOrOa) { _needsJs = true; break; }
           }
         }
@@ -725,6 +727,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
             // FFI-declared functions live in Lua (LuaJIT FFI wrappers)
             if (!_isLua && ctx._ffiDecls) { for (var _fdi = 0; _fdi < ctx._ffiDecls.length; _fdi++) { if (ctx._ffiDecls[_fdi].name === _hfn) { _isLua = true; break; } } }
+            // Handler refs (_handler_press_N) are JS-dispatched — never Lua
+            if (!_isLua && /^_handler_press_\d+$/.test(_hfn)) { _needsJs = true; break; }
             // Script function NOT routed to Lua → must go through JS
             if (!_isLua && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
             if (!_isLua) { _needsJs = true; break; }
@@ -751,7 +755,34 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           _ln.handler = _jsBody;
           _ln.handlerIsJs = true;
         } else if (_handler.luaBody) {
-          _ln.handler = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+          var _luaH = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+          // Resolve props in Lua handler body
+          if (ctx.propStack) {
+            for (var _lpk in ctx.propStack) {
+              var _lpv = ctx.propStack[_lpk];
+              if (typeof _lpv === 'string' && new RegExp('\\b' + _lpk + '\\b').test(_luaH)) {
+                if (_lpv.charCodeAt(0) === 2) { var _lpp = _lpv.substring(9).split(':'); _lpv = _lpp[2] || '_item'; }
+                _luaH = _luaH.replace(new RegExp('\\b' + _lpk + '\\b', 'g'), _lpv);
+              }
+            }
+          }
+          // If resolved handler calls a JS handler ref, switch to js_on_press
+          if (/_handler_press_\d+/.test(_luaH) && _handler.jsBody) {
+            var _jsH2 = _handler.jsBody;
+            if (ctx.propStack) {
+              for (var _jpk in ctx.propStack) {
+                var _jpv = ctx.propStack[_jpk];
+                if (typeof _jpv === 'string' && new RegExp('\\b' + _jpk + '\\b').test(_jsH2)) {
+                  if (_jpv.charCodeAt(0) === 2) { var _jpp = _jpv.substring(9).split(':'); _jpv = _jpp[2] || '_item'; }
+                  _jsH2 = _jsH2.replace(new RegExp('\\b' + _jpk + '\\b', 'g'), _jpv);
+                }
+              }
+            }
+            _ln.handler = _jsH2;
+            _ln.handlerIsJs = true;
+          } else {
+            _ln.handler = _luaH;
+          }
         }
       }
     }
