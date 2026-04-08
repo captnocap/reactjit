@@ -888,7 +888,9 @@ n=$(gocount 'qjs_runtime\.|luajit_runtime\.|state\.getSlot' "$LUA_BLOB")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS zig_runtime/$n"; fi
 
 # Zig if/else ternary: if (cond) val else val — should be (cond) and val or val
-n=$(gocount '\bif\s+\(' "$LUA_BLOB")
+# Exclude js_on_press strings which legitimately contain JS if/else
+LUA_BLOB_NO_JS=$(echo "$LUA_BLOB" | sed 's/js_on_press = "[^"]*"//g')
+n=$(gocount '\bif\s+\(' "$LUA_BLOB_NO_JS")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS zig_if/$n"; fi
 
 # && / || — JS logical operators (should be and/or in Lua)

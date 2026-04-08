@@ -525,6 +525,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       // OA refs → _item.field
       expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
       expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // std.mem.eql → Lua string compare
+      expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+      expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
       // Clean orphan parens
       var _openCount = (expr.match(/\(/g) || []).length;
       var _closeCount = (expr.match(/\)/g) || []).length;
@@ -578,6 +581,28 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           });
         }
         _ln.style[_sk] = _sv;
+      }
+    }
+    // Variant styles: attach alternative style sets for variant switching in Lua
+    if (styleFields._variantBindingId !== undefined && ctx.variantBindings) {
+      var _vb = ctx.variantBindings[styleFields._variantBindingId];
+      if (_vb && _vb.styles && _vb.styles.length > 1) {
+        _ln._variantStyles = [];
+        for (var _vi = 0; _vi < _vb.styles.length; _vi++) {
+          var _vs = {};
+          var _vParts = _vb.styles[_vi].split(', .');
+          for (var _vpi = 0; _vpi < _vParts.length; _vpi++) {
+            var _vf = _vParts[_vpi];
+            if (_vf.charAt(0) === '.') _vf = _vf.slice(1);
+            var _veq = _vf.indexOf(' = ');
+            if (_veq < 0) continue;
+            var _vk = _vf.slice(0, _veq);
+            var _vv = _vf.slice(_veq + 3);
+            if (_vv.charAt(0) === '.') _vv = _vv.slice(1);
+            _vs[_vk] = _vv;
+          }
+          _ln._variantStyles.push(_vs);
+        }
       }
     }
     // Overlay dynStyle expressions — these replace placeholder values (0, Color{})
@@ -652,8 +677,21 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
       if (_handler) {
         var _hasScriptBlock = !!(ctx.scriptBlock || globalThis.__scriptContent);
+        var _hasScriptFuncs = ctx.scriptFuncs && ctx.scriptFuncs.length > 0;
         var _needsJs = false;
-        if (_hasScriptBlock && _handler.luaBody) {
+        // PROBE: route to JS for handlers calling script functions in JS-mode scripts
+        if (!_hasScriptBlock && !_hasScriptFuncs && _handler.luaBody) {
+          // Neither scriptBlock nor scriptFuncs detected — check handler body for known JS-only patterns
+          var _hCalls2 = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+          for (var _hc2 = 0; _hc2 < _hCalls2.length; _hc2++) {
+            var _hfn2 = _hCalls2[_hc2].replace(/\s*\($/, '');
+            var _isSetterOrOa = false;
+            if (ctx.stateSlots) { for (var _s2 = 0; _s2 < ctx.stateSlots.length; _s2++) { if (ctx.stateSlots[_s2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+            if (!_isSetterOrOa && ctx.objectArrays) { for (var _o2 = 0; _o2 < ctx.objectArrays.length; _o2++) { if (ctx.objectArrays[_o2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+            if (!_isSetterOrOa) { _needsJs = true; break; }
+          }
+        }
+        if ((_hasScriptBlock || _hasScriptFuncs) && _handler.luaBody) {
           // Check if handler calls any non-setter functions
           var _hCalls = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
           for (var _hci = 0; _hci < _hCalls.length; _hci++) {
@@ -665,6 +703,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
             // FFI-declared functions live in Lua (LuaJIT FFI wrappers)
             if (!_isLua && ctx._ffiDecls) { for (var _fdi = 0; _fdi < ctx._ffiDecls.length; _fdi++) { if (ctx._ffiDecls[_fdi].name === _hfn) { _isLua = true; break; } } }
+            // Script function NOT routed to Lua → must go through JS
+            if (!_isLua && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
             if (!_isLua) { _needsJs = true; break; }
           }
         }
@@ -677,6 +717,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             for (var _pbk in ctx.propStack) {
               var _pbv = ctx.propStack[_pbk];
               if (typeof _pbv === 'string' && new RegExp('\\b' + _pbk + '\\b').test(_jsBody)) {
+                // OA item ref marker → resolve to item param name for handler body
+                if (_pbv.charCodeAt(0) === 2) {
+                  var _pbParts = _pbv.substring(9).split(':');
+                  _pbv = _pbParts[2] || '_item'; // item param name
+                }
                 _jsBody = _jsBody.replace(new RegExp('\\b' + _pbk + '\\b', 'g'), _pbv);
               }
             }

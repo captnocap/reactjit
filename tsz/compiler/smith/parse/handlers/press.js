@@ -52,12 +52,41 @@ function pushInlinePressHandler(c, handlerName) {
   // Capture raw JS handler body (for js_on_press dispatch via QJS)
   var _jsBodyParts = [];
   var _jsStart = c.save();
-  // Skip arrow function prefix: () => or (params) =>
+  // Skip to handler body: handles both () => { and (params) { (function keyword already consumed)
   if (c.kind() === TK.lbrace) c.advance(); // skip { wrapping the handler value
-  while (c.pos < c.count && c.kind() !== TK.arrow) c.advance();
-  if (c.kind() === TK.arrow) c.advance(); // skip =>
-  var _jsHasBlock = c.kind() === TK.lbrace;
-  if (_jsHasBlock) c.advance(); // skip {
+  var _jsHasBlock = false;
+  // Check for (params) { pattern — function keyword already consumed by tryParsePressHandler
+  if (c.kind() === TK.lparen) {
+    var _foundArrow = false;
+    var _jsScan = c.save();
+    // Scan past params to check for => or {
+    c.advance(); // skip (
+    var _pd = 1;
+    while (c.pos < c.count && _pd > 0) {
+      if (c.kind() === TK.lparen) _pd++;
+      if (c.kind() === TK.rparen) _pd--;
+      if (_pd > 0) c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance(); // skip )
+    if (c.kind() === TK.arrow) {
+      // Arrow function: () => { ... }
+      c.advance(); // skip =>
+      _jsHasBlock = c.kind() === TK.lbrace;
+      if (_jsHasBlock) c.advance();
+    } else if (c.kind() === TK.lbrace) {
+      // function() { ... } (function keyword already consumed)
+      _jsHasBlock = true;
+      c.advance(); // skip {
+    } else {
+      c.restore(_jsScan);
+    }
+  } else {
+    // Fallback: scan for arrow
+    while (c.pos < c.count && c.kind() !== TK.arrow && c.kind() !== TK.rbrace) c.advance();
+    if (c.kind() === TK.arrow) c.advance();
+    _jsHasBlock = c.kind() === TK.lbrace;
+    if (_jsHasBlock) c.advance();
+  }
   var _jsd = 0;
   while (c.pos < c.count) {
     if (c.kind() === TK.lbrace || c.kind() === TK.lparen || c.kind() === TK.lbracket) _jsd++;
