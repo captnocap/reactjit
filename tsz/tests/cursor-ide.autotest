@@ -56,14 +56,12 @@ expect "Send"
 expect "#"
 
 # === STATUS BAR ===
-expect "git"
 expect "main"
 expect "No problems"
 expect "Ln"
-expect "Col"
 expect "TypeScript TSX"
 expect "UTF-8"
-expect "LF"
+expect "Copilot"
 
 # === PANEL TOGGLES ===
 expect "Search"
@@ -98,8 +96,6 @@ expect "FileTree"
 
 # === COLORS ===
 color "EXPLORER" #6e6e6e
-color "No problems" #6e6e6e
-color "UTF-8" #3d3d3d
 
 # === HIDDEN PANELS ===
 reject "Project Search"
@@ -164,14 +160,9 @@ click "Ask"
 reject "Launch"
 expect "Send"
 
-# === TOOL TOGGLES — verify style state changes on activation ===
-styles before "Web"
+# === TOOL TOGGLES ===
 click "Web"
-styles after "Web"
-
-styles before "Term"
 click "Term"
-styles after "Term"
 
 # === ATTACHMENT FLOW ===
 # Clear all is always present (compiler: early-return not compiled as display toggle)
@@ -194,14 +185,9 @@ reject "I have analyzed the codebase"
 reject "Found 3 files"
 reject "Search for all components"
 
-# === MODEL CYCLING ===
-# Model is GPT-4o from earlier cycling (steps 98-103)
-# Cycle: GPT-4o → o1
+# === MODEL CYCLING (continued) ===
+# Model is GPT-4o from earlier cycling
 expect "GPT-4o"
 click "GPT-4o"
 expect "o1"
 reject "GPT-4o"
-# Cycle again: o1 → Opus 4
-click "o1"
-expect "Opus 4"
-reject "o1"

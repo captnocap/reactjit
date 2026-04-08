@@ -1,4 +1,4 @@
-// Search Panel — Full-text search using SQLite FTS
+// SearchPanel — ripgrep results with file grouping, match count, search options
 
 function SearchResult(props) {
   var result = props.result;
@@ -8,9 +8,15 @@ function SearchResult(props) {
       <C.SearchResultHeader>
         <C.SearchResultFile>{result.file}</C.SearchResultFile>
         <C.SearchResultLine>:{result.line}</C.SearchResultLine>
+        <Box style={{ flexGrow: 1 }} />
+        <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1a1a1a' }}>
+          <Text fontSize={9} color="#4a4a4a">{result.matches}</Text>
+        </Box>
       </C.SearchResultHeader>
-      <C.SearchResultText>{result.text}</C.SearchResultText>
-      <C.SearchResultMatches>{result.matches} matches</C.SearchResultMatches>
+      <Box style={{ flexDirection: 'row', paddingTop: 2 }}>
+        <Text fontSize={10} color="#3d3d3d" style={{ width: 32 }}>{result.line}</Text>
+        <C.SearchResultText>{result.text}</C.SearchResultText>
+      </Box>
     </C.SearchResult>
   );
 }
@@ -19,15 +25,19 @@ function SearchPanel(props) {
   return (
     <C.SearchPanel>
       <C.SearchHeader>
-        <C.SearchTitle>Project Search</C.SearchTitle>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <C.SearchTitle>Project Search</C.SearchTitle>
+          <Pressable onPress={function() { setShowSearch(0); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+            <Text fontSize={12} color="#6e6e6e">x</Text>
+          </Pressable>
+        </Box>
         <C.SearchInputBox>
-          <C.SearchInput value={props.query} onChange={function(v) { setSearchQuery(v); }} placeholder="Search files, symbols..." />
-          <C.SearchInputIcon>Q</C.SearchInputIcon>
+          <C.SearchInput value={searchQuery} onChange={function(v) { setSearchQuery(v); searchProject(v); }} placeholder="Search files..." />
         </C.SearchInputBox>
         <C.SearchOptions>
-          <C.SearchOption>Case</C.SearchOption>
-          <C.SearchOption>Regex</C.SearchOption>
-          <C.SearchOption>Words</C.SearchOption>
+          <C.SearchOption><Text fontSize={10} color="#6e6e6e">Aa</Text></C.SearchOption>
+          <C.SearchOption><Text fontSize={10} color="#6e6e6e">.*</Text></C.SearchOption>
+          <C.SearchOption><Text fontSize={10} color="#6e6e6e">W</Text></C.SearchOption>
         </C.SearchOptions>
       </C.SearchHeader>
 
@@ -40,8 +50,10 @@ function SearchPanel(props) {
       </C.SearchResults>
 
       <C.SearchFooter>
-        <C.SearchFooterText>3 results</C.SearchFooterText>
-        <C.SearchActionBtn onPress={function() { searchProject(searchQuery); }}>Refresh</C.SearchActionBtn>
+        <C.SearchFooterText>{props.results.length} result(s)</C.SearchFooterText>
+        <C.SearchActionBtn onPress={function() { searchProject(searchQuery); }}>
+          <Text fontSize={10} color="#6e6e6e">Refresh</Text>
+        </C.SearchActionBtn>
       </C.SearchFooter>
     </C.SearchPanel>
   );

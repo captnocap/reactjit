@@ -1,19 +1,29 @@
-// TopBar Component
+// TopBar — Window chrome with traffic lights, title, panel toggles with shortcut hints
 
 function TopBar(props) {
   return (
     <C.TopBar>
       <C.TopBarLeft>
+        {/* Traffic lights */}
+        <Box style={{ flexDirection: 'row', gap: 6, marginRight: 12 }}>
+          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff5f57' }} />
+          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#febc2e' }} />
+          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#28c840' }} />
+        </Box>
         <C.WindowTitle>{props.title}</C.WindowTitle>
       </C.TopBarLeft>
       <C.TopBarRight>
-        <Pressable onPress={props.onToggleSearch} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+        <Pressable onPress={props.onToggleSearch} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
           <Text fontSize={11} color="#b0b0b0">Search</Text>
+          <Text fontSize={9} color="#4a4a4a">F3</Text>
         </Pressable>
-        <Pressable onPress={props.onToggleTerminal} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+        <C.ToolbarDivider />
+        <Pressable onPress={props.onToggleTerminal} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
           <Text fontSize={11} color="#b0b0b0">Terminal</Text>
+          <Text fontSize={9} color="#4a4a4a">~</Text>
         </Pressable>
-        <Pressable onPress={props.onToggleChat} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+        <C.ToolbarDivider />
+        <Pressable onPress={props.onToggleChat} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
           <Text fontSize={11} color="#b0b0b0">Chat</Text>
         </Pressable>
       </C.TopBarRight>

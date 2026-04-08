@@ -1,4 +1,4 @@
-// Sidebar Component — File explorer with type icons
+// Sidebar — File explorer with type icons, section headers
 
 function Sidebar(props) {
   return (
@@ -6,11 +6,26 @@ function Sidebar(props) {
       <C.SidebarHeader>
         <C.SidebarTitle>EXPLORER</C.SidebarTitle>
         <C.SidebarActions>
-          <C.SidebarActionBtn>
+          <C.SidebarActionBtn onPress={function() { createNewFile('untitled.ts'); }}>
             <C.SidebarActionIcon>+</C.SidebarActionIcon>
           </C.SidebarActionBtn>
         </C.SidebarActions>
       </C.SidebarHeader>
+
+      {/* Section headers */}
+      <C.SidebarSection>
+        <C.SidebarSectionHeader>
+          <C.SidebarChevron>v</C.SidebarChevron>
+          <C.SidebarSectionTitle>OPEN EDITORS</C.SidebarSectionTitle>
+        </C.SidebarSectionHeader>
+      </C.SidebarSection>
+
+      <C.SidebarSection>
+        <C.SidebarSectionHeader>
+          <C.SidebarChevron>v</C.SidebarChevron>
+          <C.SidebarSectionTitle>CURSOR-IDE</C.SidebarSectionTitle>
+        </C.SidebarSectionHeader>
+      </C.SidebarSection>
 
       <C.FileTree>
         <C.FileTreeStack>
@@ -18,12 +33,12 @@ function Sidebar(props) {
             return (
               <Pressable onPress={function() { props.onSelectFile(idx); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12 + file.indent * 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3, backgroundColor: file.selected == 1 ? '#1f1f1f' : '#00000000' }}>
                 {file.type == 'dir' && <Text fontSize={10} color="#6e6e6e">{file.expanded == 1 ? 'v' : '>'}</Text>}
-                {file.type == 'tsx' && <Text fontSize={9} color="#3b82f6">TS</Text>}
-                {file.type == 'ts' && <Text fontSize={9} color="#3b82f6">TS</Text>}
-                {file.type == 'js' && <Text fontSize={9} color="#eab308">JS</Text>}
-                {file.type == 'css' && <Text fontSize={9} color="#a855f7">CS</Text>}
-                {file.type == 'json' && <Text fontSize={9} color="#22c55e">{ }</Text>}
-                {file.type == 'md' && <Text fontSize={9} color="#6e6e6e">MD</Text>}
+                {file.type == 'tsx' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1e3a5f' }}><Text fontSize={8} color="#3b82f6">TS</Text></Box>}
+                {file.type == 'ts' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1e3a5f' }}><Text fontSize={8} color="#3b82f6">TS</Text></Box>}
+                {file.type == 'js' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#3a3000' }}><Text fontSize={8} color="#eab308">JS</Text></Box>}
+                {file.type == 'css' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#2a1040' }}><Text fontSize={8} color="#a855f7">CS</Text></Box>}
+                {file.type == 'json' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#0a2a10' }}><Text fontSize={8} color="#22c55e">{ }</Text></Box>}
+                {file.type == 'md' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1a1a1a' }}><Text fontSize={8} color="#6e6e6e">MD</Text></Box>}
                 <Text fontSize={12} color={file.selected == 1 ? '#ffffff' : '#9ca3af'}>{file.name}</Text>
               </Pressable>
             );

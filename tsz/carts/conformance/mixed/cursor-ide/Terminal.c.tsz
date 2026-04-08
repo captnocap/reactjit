@@ -1,19 +1,4 @@
-// Terminal Panel — PTY integration
-
-function TerminalLine(props) {
-  var line = props.line;
-  var color = '#b0b0b0';
-  if (line.type == 'command') color = '#79c0ff';
-  if (line.type == 'error') color = '#ff7b72';
-  if (line.type == 'info') color = '#7ee787';
-  if (line.type == 'prompt') color = '#d2a8ff';
-
-  return (
-    <C.TerminalLine>
-      <C.TerminalLineText style={{ color: color }}>{line.text}</C.TerminalLineText>
-    </C.TerminalLine>
-  );
-}
+// Terminal Panel — real PTY terminal via vterm
 
 function TerminalPanel(props) {
   return (
@@ -22,29 +7,15 @@ function TerminalPanel(props) {
         <C.TerminalTitle>Terminal</C.TerminalTitle>
         <C.TerminalTabs>
           <C.TerminalTabActive>bash</C.TerminalTabActive>
-          <C.TerminalTab>node</C.TerminalTab>
-          <C.TerminalTab>sqlite</C.TerminalTab>
         </C.TerminalTabs>
         <C.TerminalActions>
-          <C.TerminalActionBtn onPress={function() { openTerminal(); }}>+</C.TerminalActionBtn>
           <C.TerminalActionBtn>x</C.TerminalActionBtn>
         </C.TerminalActions>
       </C.TerminalHeader>
 
-      <C.TerminalContent>
-        <C.TerminalScroll>
-          <C.TerminalStack>
-            {props.lines.map(function(line, idx) {
-              return <TerminalLine line={line} />;
-            })}
-          </C.TerminalStack>
-        </C.TerminalScroll>
-      </C.TerminalContent>
-
-      <C.TerminalInputBar>
-        <C.TerminalPrompt>$</C.TerminalPrompt>
-        <C.TerminalInput value="" onChange={function(v) { if (v.indexOf('\n') >= 0) execCommand(v.trim()); }} />
-      </C.TerminalInputBar>
+      <Box style={{ flexGrow: 1, flexBasis: 0, backgroundColor: '#0d0d0d', padding: 4 }}>
+        <Terminal style={{ flexGrow: 1, flexBasis: 0 }} fontSize={13} />
+      </Box>
     </C.TerminalPanel>
   );
 }
