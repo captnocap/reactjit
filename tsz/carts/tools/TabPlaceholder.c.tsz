@@ -1,0 +1,10 @@
+import { TabPlaceholderSurface, PlaceholderTitle, PlaceholderCopy } from './style_cls';
+
+function TabPlaceholder({ title, copy }) {
+  return (
+    <C.TabPlaceholderSurface>
+      <C.PlaceholderTitle>{title}</C.PlaceholderTitle>
+      <C.PlaceholderCopy>{copy}</C.PlaceholderCopy>
+    </C.TabPlaceholderSurface>
+  );
+}
