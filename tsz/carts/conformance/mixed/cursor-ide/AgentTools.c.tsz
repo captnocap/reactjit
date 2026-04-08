@@ -1,50 +1,71 @@
-// Agent Tools Panel — Indexing, embeddings, code analysis
+// Agent Tools Panel — Live tool execution feed + project ops
+// Wires to: tools_builtin.zig (bash/file/grep/glob), agent_spawner.zig (pool)
+
+// Recent tool executions feed (maps to ToolExecutor progress stream)
+function ToolHistoryRow(props) {
+  var exec = props.exec;
+  var isRunning = exec.status == 'running';
+  var isError = exec.status == 'error';
+
+  var dotColor = '#4a4a4a';
+  if (isRunning) dotColor = '#2d62ff';
+  else if (exec.status == 'completed') dotColor = '#7ee787';
+  else if (isError) dotColor = '#ff7b72';
+
+  return (
+    <C.AgentLogEntry>
+      <C.AgentLogLevel style={{ color: dotColor }}>{exec.name}</C.AgentLogLevel>
+      <C.AgentLogMessage>{exec.input.length > 28 ? exec.input.substring(0, 28) + '..' : exec.input}</C.AgentLogMessage>
+      <C.AgentLogTime>{isRunning ? exec.percent + '%' : exec.status}</C.AgentLogTime>
+    </C.AgentLogEntry>
+  );
+}
 
 function AgentTools(props) {
-  var statusColor = '#6e6e6e';
-  if (props.status == 'thinking') statusColor = '#2d62ff';
-  if (props.status == 'error') statusColor = '#ff7b72';
-  if (props.status == 'idle') statusColor = '#7ee787';
+  var hasTool = toolExecutions.length > 0;
+  var running = 0;
+  var done = 0;
+  for (var i = 0; i < toolExecutions.length; i++) {
+    if (toolExecutions[i].status == 'running') running++;
+    else if (toolExecutions[i].status == 'completed') done++;
+  }
 
   return (
     <C.AgentToolsPanel>
       <C.AgentToolsHeader>
-        <C.AgentToolsTitle>Agent Tools</C.AgentToolsTitle>
-        <C.AgentStatus style={{ color: statusColor }}>{props.status}</C.AgentStatus>
+        <C.AgentToolsTitle>Tools</C.AgentToolsTitle>
+        <C.AgentStatus style={{ color: running > 0 ? '#2d62ff' : '#4a4a4a' }}>
+          {running > 0 ? running + ' running' : done + ' done'}
+        </C.AgentStatus>
       </C.AgentToolsHeader>
 
       <C.AgentToolsContent>
         <C.AgentToolSection>
+          <C.AgentToolLabel>Active / Recent</C.AgentToolLabel>
+          <C.AgentLog>
+            {hasTool && toolExecutions.map(function(exec, idx) {
+              return <ToolHistoryRow key={idx} exec={exec} />;
+            })}
+            {!hasTool && (
+              <C.AgentLogMessage>No tools run yet</C.AgentLogMessage>
+            )}
+          </C.AgentLog>
+        </C.AgentToolSection>
+
+        <C.AgentToolSection>
           <C.AgentToolLabel>Project Index</C.AgentToolLabel>
-          <C.AgentProgressBar>
-            <C.AgentProgressFill style={{ width: (props.indexedFiles / props.totalFiles * 100) + '%' }} />
-          </C.AgentProgressBar>
-          <C.AgentToolMeta>{props.indexedFiles} / {props.totalFiles} files indexed</C.AgentToolMeta>
-        </C.AgentToolSection>
-
-        <C.AgentToolSection>
-          <C.AgentToolLabel>SQLite Database</C.AgentToolLabel>
           <C.AgentToolButtons>
-            <C.AgentToolBtn onPress={function() { indexProject('./src'); }}>Reindex</C.AgentToolBtn>
-            <C.AgentToolBtn>Vacuum</C.AgentToolBtn>
-            <C.AgentToolBtn>Export</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { indexProject('.'); }}>Reindex</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { execCommand('git status'); }}>git status</C.AgentToolBtn>
           </C.AgentToolButtons>
         </C.AgentToolSection>
 
         <C.AgentToolSection>
-          <C.AgentToolLabel>Embeddings</C.AgentToolLabel>
-          <C.AgentToolMeta>234 vectors stored</C.AgentToolMeta>
+          <C.AgentToolLabel>Quick Tools</C.AgentToolLabel>
           <C.AgentToolButtons>
-            <C.AgentToolBtn>Rebuild</C.AgentToolBtn>
-            <C.AgentToolBtn>Query</C.AgentToolBtn>
-          </C.AgentToolButtons>
-        </C.AgentToolSection>
-
-        <C.AgentToolSection>
-          <C.AgentToolLabel>External APIs</C.AgentToolLabel>
-          <C.AgentToolButtons>
-            <C.AgentToolBtn onPress={function() { __fetch && __fetch('http://localhost:8080/health'); }}>Test HTTP</C.AgentToolBtn>
-            <C.AgentToolBtn onPress={function() { execCommand('__fs_scandir "."'); }}>Test FS</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { execCommand('ls -la'); }}>ls</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { execCommand('git log --oneline -5'); }}>git log</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { execCommand('pwd'); }}>pwd</C.AgentToolBtn>
           </C.AgentToolButtons>
         </C.AgentToolSection>
       </C.AgentToolsContent>

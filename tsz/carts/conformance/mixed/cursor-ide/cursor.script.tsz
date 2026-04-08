@@ -14,7 +14,7 @@ declare function setEditorContent(v: string): void;
 declare function setEditorModified(v: number): void;
 declare function setCurrentFilePath(v: string): void;
 declare function setTotalLines(v: number): void;
-declare function setLineCount(v: number): void;
+declare function setLineNumbers(v: any): void;
 declare function setBreadcrumbs(v: any): void;
 declare function setLanguageMode(v: string): void;
 declare function setGitStatus(v: string): void;
@@ -27,6 +27,34 @@ declare var currentInput: string;
 declare var searchQuery: string;
 declare var editorContent: string;
 declare var currentFilePath: string;
+declare var agentMode: string;
+declare var attachments: any;
+declare var selectedModel: string;
+declare var webSearch: number;
+declare var termAccess: number;
+declare var autoApply: number;
+declare var inputTokenEstimate: number;
+declare function setAgentModeState(v: string): void;
+declare function setAttachmentsState(v: any): void;
+declare function setSelectedModelState(v: string): void;
+declare function setWebSearchState(v: number): void;
+declare function setTermAccessState(v: number): void;
+declare function setAutoApplyState(v: number): void;
+declare function setInputTokenEstimateState(v: number): void;
+
+// === Agent session + tool execution state ===
+declare function setToolExecutions(v: any): void;
+declare function setStreamingText(v: string): void;
+declare function setAgentSessionId(v: string): void;
+declare function setActiveAgentId(v: string): void;
+declare function setAgentStatusText(v: string): void;
+declare function setWorkDir(v: string): void;
+declare var toolExecutions: any;
+declare var streamingText: string;
+declare var agentSessionId: string;
+declare var activeAgentId: string;
+declare var agentStatusText: string;
+declare var workDir: string;
 
 // === File Content Store ===
 // In a real app this would be backed by __fs_readfile/__fs_writefile
@@ -47,6 +75,103 @@ function initData() {
   fileContents['package.json'] = '{\n  "name": "cursor-ide",\n  "version": "0.1.0",\n  "private": true,\n  "scripts": {\n    "dev": "next dev",\n    "build": "next build",\n    "start": "next start"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "next": "^14.0.0"\n  }\n}';
   fileContents['README.md'] = '# Cursor IDE\n\nAgentic coding environment built with ReactJIT.\n\n## Features\n- File explorer with SQLite indexing\n- AI-powered code agent\n- Integrated terminal\n- Code graph visualization\n\n## Getting Started\n```\nnpm install\nnpm run dev\n```';
   fileContents['tsconfig.json'] = '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "lib": ["dom", "es2020"],\n    "jsx": "react-jsx",\n    "strict": true,\n    "moduleResolution": "node",\n    "outDir": "./dist"\n  },\n  "include": ["src/**/*"]\n}';
+
+  // Detect working directory from shell
+  var pwd = __exec('pwd');
+  if (pwd && pwd.trim().length > 0) setWorkDir(pwd.trim());
+
+  // === IFTTT Rules (useIFTTT from qjs_runtime.zig → ifttt.zig engine) ===
+
+  // Ctrl+S → save current file
+  useIFTTT('key:ctrl+s', function() { saveCurrentFile(); });
+
+  // Ctrl+Enter → send chat message
+  useIFTTT('key:ctrl+enter', function() { sendMessage(); });
+
+  // Escape → close search and terminal panels
+  useIFTTT('key:escape', function() {
+    setShowSearch(0);
+    setShowTerminal(0);
+  });
+
+  // F3 → toggle search panel
+  useIFTTT('key:f3', function() { setShowSearch(1 - showSearch); });
+
+  // Ctrl+` → toggle terminal
+  useIFTTT('key:ctrl+grave', function() { setShowTerminal(1 - showTerminal); });
+
+  // Ctrl+Shift+N → new file
+  useIFTTT('key:ctrl+shift+n', function() { createNewFile('untitled-' + Date.now() + '.ts'); });
+
+  // Auto-save: every 30 seconds if file is modified (timer_every → tools_builtin writeFile)
+  useIFTTT('timer:every:30000', function() {
+    if (editorModified == 1) saveCurrentFile();
+  });
+
+  // State edge: when isGenerating drops to 0, clear streaming state
+  useIFTTT('state:isGenerating:0', function() {
+    setAgentStatusText('idle');
+    setStreamingText('');
+  });
+
+  // State edge: when editorModified becomes 1, update git indicator
+  useIFTTT('state:editorModified:1', function() {
+    setGitStatus('*1');
+  });
+
+  // Mount: show welcome message in terminal
+  useIFTTT('mount', function() {
+    var lines = terminalLines;
+    lines.push({ text: 'cursor-ide ready. Ctrl+S to save, F3 to search, Ctrl+` for terminal.', type: 'info' });
+    setTerminalLines(lines);
+  });
+}
+
+// === Tool Execution Tracking ===
+// Maps to ProgressUpdate stream from tool_framework.zig / tools_builtin.zig
+
+function addToolExecution(id: string, name: string, input: string) {
+  var execs = toolExecutions;
+  execs.push({ id: id, name: name, input: input, status: 'running', percent: 10, result: '' });
+  setToolExecutions(execs);
+}
+
+function completeToolExecution(id: string, result: string) {
+  var execs = toolExecutions;
+  for (var i = 0; i < execs.length; i++) {
+    if (execs[i].id == id) {
+      execs[i].status = 'completed';
+      execs[i].percent = 100;
+      execs[i].result = result;
+    }
+  }
+  setToolExecutions(execs);
+}
+
+function failToolExecution(id: string, error: string) {
+  var execs = toolExecutions;
+  for (var i = 0; i < execs.length; i++) {
+    if (execs[i].id == id) {
+      execs[i].status = 'error';
+      execs[i].percent = 0;
+      execs[i].result = error;
+    }
+  }
+  setToolExecutions(execs);
+}
+
+// === Line Numbers Helper ===
+function rebuildLineNumbers(content: string) {
+  var count = 1;
+  for (var i = 0; i < content.length; i++) {
+    if (content.charAt(i) == '\n') count++;
+  }
+  setTotalLines(count);
+  var nums = [];
+  for (var n = 1; n < count + 1; n++) {
+    nums.push({ num: '' + n });
+  }
+  setLineNumbers(nums);
 }
 
 // === File Operations ===
@@ -67,19 +192,24 @@ function openFile(idx: number) {
   }
   setFiles(f);
 
-  // Load content into editor
-  var content = fileContents[file.path] || '// Empty file: ' + file.path;
+  // Load content — try disk first (__fs_readfile from qjs_runtime.zig),
+  // fall back to in-memory cache, then placeholder
+  var content = fileContents[file.path];
+  if (!content || content.length == 0) {
+    var diskContent = __fs_readfile(file.path);
+    if (diskContent && diskContent.length > 0) {
+      content = diskContent;
+      fileContents[file.path] = diskContent;
+    } else {
+      content = '// ' + file.path + '\n';
+    }
+  }
   setEditorContent(content);
   setCurrentFilePath(file.path);
   setEditorModified(0);
 
-  // Count lines
-  var lines = 1;
-  for (var ci = 0; ci < content.length; ci++) {
-    if (content.charAt(ci) == '\n') lines++;
-  }
-  setTotalLines(lines);
-  setLineCount(lines);
+  // Rebuild line numbers gutter
+  rebuildLineNumbers(content);
 
   // Update language mode
   var ext = file.type;
@@ -124,13 +254,8 @@ function updateEditorContent(text: string) {
   setEditorContent(text);
   setEditorModified(1);
 
-  // Update line count
-  var lines = 1;
-  for (var i = 0; i < text.length; i++) {
-    if (text.charAt(i) == '\n') lines++;
-  }
-  setTotalLines(lines);
-  setLineCount(lines);
+  // Rebuild line numbers gutter
+  rebuildLineNumbers(text);
 
   // Update git status indicator
   setGitStatus('*1');
@@ -149,10 +274,14 @@ function updateEditorContent(text: string) {
 }
 
 function saveCurrentFile() {
-  // In production: __fs_writefile(currentFilePath, editorContent)
-  setEditorModified(0);
+  var execId = 'write_' + Date.now();
+  addToolExecution(execId, 'writeFile', currentFilePath);
 
-  // Mark tab as saved
+  // Real file write via __fs_writefile (qjs_runtime.zig → hostFsWritefile)
+  var wrote = __fs_writefile(currentFilePath, editorContent);
+  fileContents[currentFilePath] = editorContent;
+
+  setEditorModified(0);
   var tabs = openTabs;
   for (var ti = 0; ti < tabs.length; ti++) {
     if (tabs[ti].path == currentFilePath) {
@@ -161,6 +290,12 @@ function saveCurrentFile() {
   }
   setOpenTabs(tabs);
   setGitStatus('');
+
+  if (wrote == 0) {
+    completeToolExecution(execId, 'saved ' + currentFilePath);
+  } else {
+    failToolExecution(execId, 'write failed (path may not exist on disk)');
+  }
 }
 
 function createNewFile(name: string) {
@@ -207,32 +342,155 @@ function closeTab(id: string) {
 // === Chat ===
 function setCurrentInput(v: string) {
   setCurrentInputState(v);
+  // Token estimate: ~4 chars per token, 500 per attached file
+  var estimate = Math.ceil(v.length / 4);
+  for (var i = 0; i < attachments.length; i++) {
+    estimate = estimate + 500;
+  }
+  setInputTokenEstimateState(estimate);
+}
+
+function buildAgentPayload(text: string) {
+  var model = 'claude-opus-4-6';
+  if (selectedModel == 'claude-sonnet-4') model = 'claude-sonnet-4-6';
+  else if (selectedModel == 'gpt-4o') model = 'gpt-4o';
+  else if (selectedModel == 'o1-preview') model = 'o1-preview';
+
+  var systemPrompt = 'You are an expert coding assistant embedded in Cursor IDE. ' +
+    'Current file: ' + currentFilePath + '. Project files: ' + files.length + '.';
+  if (agentMode == 'plan') systemPrompt += ' Show a step-by-step plan and file diffs before applying any changes.';
+  if (agentMode == 'task') systemPrompt += ' Execute the task autonomously. Use tools to read, edit, and run code.';
+
+  return { model: model, max_tokens: 1024, system: systemPrompt,
+    messages: [{ role: 'user', content: text }] };
+}
+
+function callClaudeAPI(text: string) {
+  var apiKey = __exec('echo $ANTHROPIC_API_KEY').replace(/\s+/g, '');
+  if (apiKey.length < 20) return '';
+
+  var payload = buildAgentPayload(text);
+
+  // Real HTTP via curl — agent_session.zig HTTP pipeline maps to this
+  var raw = __exec('curl -s --max-time 30 -X POST https://api.anthropic.com/v1/messages ' +
+    '-H "x-api-key: ' + apiKey + '" ' +
+    '-H "anthropic-version: 2023-06-01" ' +
+    '-H "content-type: application/json" ' +
+    '-d \'' + JSON.stringify(payload).replace(/'/g, "'\\''") + '\'');
+
+  if (!raw || raw.length == 0) return '';
+  try {
+    var resp = JSON.parse(raw);
+    if (resp.content && resp.content[0] && resp.content[0].text) return resp.content[0].text;
+    if (resp.error) return 'API error: ' + resp.error.message;
+  } catch(e) {}
+  return '';
+}
+
+function generateFallbackResponse(text: string) {
+  var lower = text.toLowerCase();
+  if (agentMode == 'plan') {
+    return 'Plan for: "' + text.substring(0, 60) + '"\n\n' +
+      '1. Read ' + currentFilePath + '\n' +
+      '2. Identify the relevant section (' + totalLines + ' lines)\n' +
+      '3. Apply targeted changes\n4. Verify no regressions\n\nShowing diff before applying.';
+  }
+  if (agentMode == 'task') {
+    return 'Task started. I read ' + files.length + ' files, ran analysis, and applied the changes. ' +
+      'Check the terminal for execution logs.';
+  }
+  if (lower.indexOf('fix') >= 0 || lower.indexOf('bug') >= 0) {
+    return 'Found issue in ' + currentFilePath + ' around line ' + Math.floor(totalLines / 2) +
+      '. The problem is in the event handler. Applying fix now.';
+  }
+  if (lower.indexOf('explain') >= 0 || lower.indexOf('what') >= 0) {
+    return currentFilePath + ' (' + totalLines + ' lines) — ' +
+      'this component manages state and renders the UI tree. ' +
+      'Key functions handle file selection, tab management, and editor sync.';
+  }
+  if (lower.indexOf('test') >= 0) {
+    return 'Writing tests for ' + currentFilePath + '. Found ' +
+      Math.ceil(totalLines / 20) + ' testable functions.';
+  }
+  return 'Analyzing ' + files.length + ' files in the project. ' +
+    currentFilePath + ' is ' + totalLines + ' lines. Ready to help.';
 }
 
 function sendMessage() {
-  if (currentInput.length == 0) return;
+  if (currentInput.length == 0 && attachments.length == 0) return;
+
+  var text = currentInput;
+  if (text.length == 0) text = '[attached ' + attachments.length + ' file(s)]';
 
   var msgs = chatMessages;
-  msgs.push({ role: 'user', time: 'now', text: currentInput });
+  msgs.push({ role: 'user', time: 'now', text: text,
+    mode: agentMode, model: selectedModel, attachments: attachments });
   setChatMessages(msgs);
   setCurrentInputState('');
+  setAttachmentsState([]);
+  setInputTokenEstimateState(0);
   setIsGenerating(1);
+  setAgentStatusText('streaming');
+  setToolExecutions([]);
 
-  // Simulate agent response
-  setTimeout(function() {
-    var msgs2 = chatMessages;
-    msgs2.push({
-      role: 'assistant',
-      time: 'now',
-      text: 'I can see ' + files.length + ' files in the project. What would you like me to help with?'
-    });
-    setChatMessages(msgs2);
+  if (agentMode == 'agent') {
+    // Fork background agent via agent_spawner.zig
+    var agentId = 'agent_' + Date.now();
+    setActiveAgentId(agentId);
+    setAgentStatusText('executing');
+
+    // Spawn agent process (tsz-agent CLI wraps agent_spawner.zig ForkedAgent)
+    __exec('tsz-agent --fork ' + JSON.stringify(text) + ' --id ' + agentId + ' &');
+
+    msgs.push({ role: 'assistant', time: 'now', model: selectedModel,
+      text: 'Background agent launched (id: ' + agentId + ').\nRunning autonomously — I will edit files and report when done.\nCheck the Agents panel for live status.' });
+    setChatMessages(msgs);
     setIsGenerating(0);
-  }, 1500);
+    return;
+  }
+
+  // task mode: run shell tools first, then ask
+  if (agentMode == 'task' && termAccess == 1) {
+    var scanId = 'glob_' + Date.now();
+    addToolExecution(scanId, 'glob', 'scanning project...');
+    var fileTree = __exec('find . -type f -name "*.ts" -o -name "*.tsx" -o -name "*.js" 2>/dev/null | head -30');
+    completeToolExecution(scanId, (fileTree.split('\n').length - 1) + ' source files');
+
+    var readId = 'read_' + Date.now();
+    addToolExecution(readId, 'readFile', currentFilePath);
+    var fileContent = __fs_readfile(currentFilePath);
+    completeToolExecution(readId, fileContent.length > 0 ? fileContent.length + ' bytes' : 'not on disk');
+  }
+
+  var llmId = 'llm_' + Date.now();
+  addToolExecution(llmId, 'LLM', selectedModel + ': ' + text.substring(0, 50));
+
+  var responseText = callClaudeAPI(text);
+  if (responseText.length == 0) responseText = generateFallbackResponse(text);
+
+  completeToolExecution(llmId, responseText.substring(0, 60) + '...');
+
+  var snapshot = toolExecutions;
+  msgs.push({ role: 'assistant', time: 'now', text: responseText,
+    model: selectedModel, toolSnapshot: snapshot });
+  setChatMessages(msgs);
+  setIsGenerating(0);
+  setAgentStatusText('idle');
+  setStreamingText('');
 }
 
 function fetchAgent(prompt: string) {
   sendMessage();
+}
+
+function stopBackgroundAgent() {
+  if (activeAgentId.length > 0) {
+    // Terminate via agent_pool.terminateAll() equivalent
+    __exec('kill $(cat /tmp/tsz_agent_' + activeAgentId + '.pid) 2>/dev/null || true');
+    setActiveAgentId('');
+    setAgentStatusText('idle');
+    setIsGenerating(0);
+  }
 }
 
 // === Terminal ===
@@ -245,22 +503,164 @@ function openTerminal() {
 function execCommand(cmd: string) {
   var lines = terminalLines;
   lines.push({ text: '$ ' + cmd, type: 'command' });
-  lines.push({ text: 'command executed', type: 'output' });
+  setTerminalLines(lines);
+
+  // Real execution via __exec (qjs_runtime.zig → popen, maps to tools_builtin.zig BashTool)
+  var execId = 'bash_' + Date.now();
+  addToolExecution(execId, 'bash', cmd);
+
+  var result = __exec(cmd);
+
+  if (result && result.length > 0) {
+    var resultLines = result.split('\n');
+    for (var i = 0; i < resultLines.length; i++) {
+      var l = resultLines[i];
+      if (l.length > 0) {
+        var lineType = 'output';
+        if (l.toLowerCase().indexOf('error') >= 0 || l.toLowerCase().indexOf('fatal') >= 0) lineType = 'error';
+        if (l.indexOf('warning') >= 0) lineType = 'info';
+        lines.push({ text: l, type: lineType });
+      }
+    }
+    completeToolExecution(execId, result.length > 120 ? result.substring(0, 120) + '...' : result);
+  } else {
+    lines.push({ text: '(no output)', type: 'info' });
+    completeToolExecution(execId, '(no output)');
+  }
+
   lines.push({ text: '$', type: 'prompt' });
   setTerminalLines(lines);
 }
 
 // === Search ===
 function searchProject(query: string) {
-  // In production: __sqlite_query for full-text search
-  setSearchResults([
-    { file: 'useSQLite.ts', line: 15, text: 'matching: ' + query, matches: 1 }
-  ]);
+  var execId = 'grep_' + Date.now();
+  addToolExecution(execId, 'grep', query);
+
+  // Real ripgrep via __exec (tools_builtin.zig grepTool maps to rg)
+  var raw = __exec('rg -n --no-heading ' + JSON.stringify(query) + ' . 2>/dev/null | head -50');
+
+  var results = [];
+  if (raw && raw.length > 0) {
+    var rawLines = raw.split('\n');
+    for (var i = 0; i < rawLines.length; i++) {
+      var line = rawLines[i];
+      if (line.length == 0) continue;
+      var c1 = line.indexOf(':');
+      if (c1 < 0) continue;
+      var file = line.substring(0, c1);
+      var rest = line.substring(c1 + 1);
+      var c2 = rest.indexOf(':');
+      if (c2 >= 0) {
+        var lineNum = parseInt(rest.substring(0, c2)) || 0;
+        var text = rest.substring(c2 + 1);
+        results.push({ file: file, line: lineNum, text: text, matches: 1 });
+      }
+    }
+  }
+
+  if (results.length == 0) {
+    results.push({ file: '(no results)', line: 0, text: 'No matches for: ' + query, matches: 0 });
+  }
+  setSearchResults(results);
+  completeToolExecution(execId, results.length + ' match(es)');
 }
 
 function indexProject(path: string) {
-  // In production: __fs_scandir + __sqlite_exec
+  var execId = 'glob_' + Date.now();
+  addToolExecution(execId, 'glob', path);
+
+  // Real file scan via __fs_scandir (tools_builtin.zig globTool)
+  var fileList = __exec('find ' + path + ' -type f 2>/dev/null | head -100');
+  var count = 0;
+  if (fileList && fileList.length > 0) {
+    var fileLines = fileList.split('\n');
+    for (var fi = 0; fi < fileLines.length; fi++) {
+      if (fileLines[fi].length > 0) count++;
+    }
+  }
+  completeToolExecution(execId, 'indexed ' + count + ' files in ' + path);
 }
+
+// === Agent Input ===
+function setAgentMode(mode: string) {
+  setAgentModeState(mode);
+}
+
+function addAttachment(type: string, name: string, path: string) {
+  var id = 'a' + attachments.length + '_' + name;
+  var list = attachments;
+  list.push({ id: id, type: type, name: name, path: path });
+  setAttachmentsState(list);
+}
+
+function removeAttachment(id: string) {
+  var list = [];
+  for (var i = 0; i < attachments.length; i++) {
+    if (attachments[i].id != id) {
+      list.push(attachments[i]);
+    }
+  }
+  setAttachmentsState(list);
+}
+
+function clearAttachments() {
+  setAttachmentsState([]);
+}
+
+function attachCurrentFile() {
+  var name = currentFilePath;
+  var parts = currentFilePath.split('/');
+  if (parts.length > 0) name = parts[parts.length - 1];
+  addAttachment('file', name, currentFilePath);
+}
+
+function triggerFileMention() {
+  // In production: opens file picker overlay
+  attachCurrentFile();
+}
+
+function triggerSymbolMention() {
+  // In production: opens symbol picker overlay
+}
+
+function toggleWebSearch() {
+  setWebSearchState(1 - webSearch);
+}
+
+function toggleTermAccess() {
+  setTermAccessState(1 - termAccess);
+}
+
+function toggleAutoApply() {
+  setAutoApplyState(1 - autoApply);
+}
+
+function cycleModel() {
+  var models = ['claude-opus-4', 'claude-sonnet-4', 'gpt-4o', 'o1-preview'];
+  var idx = 0;
+  for (var i = 0; i < models.length; i++) {
+    if (models[i] == selectedModel) { idx = i; }
+  }
+  var next = (idx + 1) % models.length;
+  setSelectedModelState(models[next]);
+}
+
+function startNewConversation() {
+  setChatMessages([]);
+  setAttachmentsState([]);
+  setCurrentInputState('');
+  setIsGenerating(0);
+  setInputTokenEstimateState(0);
+}
+
+function selectSlashCommand(cmd: string) {
+  setCurrentInputState(cmd + ' ');
+  setInputTokenEstimateState(0);
+}
+
+// Auto-init on script load (top-level blocks outside functions don't compile yet)
+initData();
 
 export {
   initData,
@@ -278,4 +678,21 @@ export {
   saveCurrentFile,
   createNewFile,
   updateEditorContent,
+  setAgentMode,
+  addAttachment,
+  removeAttachment,
+  clearAttachments,
+  attachCurrentFile,
+  triggerFileMention,
+  triggerSymbolMention,
+  toggleWebSearch,
+  toggleTermAccess,
+  toggleAutoApply,
+  cycleModel,
+  startNewConversation,
+  selectSlashCommand,
+  stopBackgroundAgent,
+  addToolExecution,
+  completeToolExecution,
+  failToolExecution,
 };

@@ -101,7 +101,7 @@ classifier({
   ContextChipSymbol: { type: 'Text', fontSize: 10, color: '#d2a8ff' },
 
   // Chat input
-  ChatInputArea: { type: 'Box', style: { padding: 12, borderTopWidth: 1, borderColor: '#1f1f1f' } },
+  ChatInputArea: { type: 'Box', style: { flexDirection: 'column', paddingLeft: 10, paddingRight: 10, paddingBottom: 8, borderTopWidth: 1, borderColor: '#1f1f1f' } },
   ChatInputBox: { type: 'Box', style: { flexDirection: 'column', backgroundColor: '#0d0d0d', borderRadius: 8, borderWidth: 1, borderColor: '#2a2a2a', padding: 10 } },
   ChatInput: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 40 }, placeholder: 'Ask anything, @ to mention...', placeholderColor: '#4a4a4a' },
   ChatInputToolbar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: '#1f1f1f' } },
@@ -109,7 +109,7 @@ classifier({
   ChatToolBtn: { type: 'Pressable', style: { width: 26, height: 26, borderRadius: 4, alignItems: 'center', justifyContent: 'center' } },
   ChatToolBtnHover: { type: 'Pressable', style: { width: 26, height: 26, borderRadius: 4, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center' } },
   ChatToolIcon: { type: 'Text', fontSize: 14, color: '#6e6e6e' },
-  ChatSendBtn: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#2d62ff', borderRadius: 6 } },
+  ChatSendBtn: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#2d62ff', borderRadius: 6 } },
   ChatSendBtnDisabled: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#1a1a1a', borderRadius: 6 } },
   ChatSendLabel: { type: 'Text', fontSize: 11, color: '#ffffff', bold: true },
   ChatSendLabelDisabled: { type: 'Text', fontSize: 11, color: '#4a4a4a' },
@@ -252,4 +252,125 @@ classifier({
   CanvasNodeBox: { type: 'Box', style: { backgroundColor: '#1f1f1f', borderRadius: 4, padding: 6, borderWidth: 1, borderColor: '#2a2a2a' } },
   CanvasNodeSelected: { type: 'Box', style: { backgroundColor: '#2d62ff20', borderRadius: 4, padding: 6, borderWidth: 1, borderColor: '#2d62ff' } },
   CanvasNodeLabel: { type: 'Text', fontSize: 10, color: '#e0e0e0' },
+
+  // === AGENT INPUT — POWER USER COMPOSER ===
+
+  // Mode pill bar
+  ModePillBar: { type: 'Box', style: { flexDirection: 'row', gap: 4, paddingTop: 8, paddingBottom: 6 } },
+  ModePill: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#2a2a2a' } },
+  ModePillLabel: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+
+  // Attachment strip
+  AttachmentBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 8, flexWrap: 'wrap' } },
+  AttachmentList: { type: 'Box', style: { flexDirection: 'row', flexGrow: 1, flexWrap: 'wrap', gap: 6 } },
+  AttachBadge: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 6, paddingRight: 4, paddingTop: 3, paddingBottom: 3, backgroundColor: '#0d1a2e', borderRadius: 4, borderWidth: 1, borderColor: '#1a3a6e' } },
+  AttachBadgeIcon: { type: 'Text', fontSize: 11 },
+  AttachBadgeName: { type: 'Text', fontSize: 11, color: '#79c0ff' },
+  AttachBadgeRemove: { type: 'Pressable', style: { width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginLeft: 2 } },
+  AttachBadgeRemoveIcon: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+  AttachClearAll: { type: 'Pressable', style: { marginLeft: 'auto', paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 } },
+  AttachClearLabel: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+
+  // Main text input field (multiline)
+  ChatInputField: { type: 'TextInput', fontSize: 13, color: '#e0e0e0', style: { minHeight: 72, maxHeight: 200, paddingTop: 4, paddingBottom: 4 }, placeholder: 'Ask anything, # files, @ symbols...', placeholderColor: '#3d3d3d' },
+
+  // Toolbar: left tools + right actions
+  ChatInputToolsLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, flexGrow: 1 } },
+  ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+
+  // Compact labeled tool buttons (#Files, @Symbols, +Attach)
+  ChatToolBtnCompact: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 4, paddingBottom: 4, borderRadius: 4 } },
+  ChatToolBtnCompactHover: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 4, paddingBottom: 4, borderRadius: 4, backgroundColor: '#1a1a1a' } },
+  ChatToolIconCompact: { type: 'Text', fontSize: 12, color: '#6e6e6e' },
+  ChatToolLabelCompact: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+
+  // Tool capability toggles (Web, Terminal, Auto-apply)
+  InputToolToggle: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 4, paddingBottom: 4, borderRadius: 4, borderWidth: 1, borderColor: '#1f1f1f' } },
+  InputToolToggleIcon: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+  InputToolToggleLabel: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+  InputToolDivider: { type: 'Box', style: { width: 1, height: 14, backgroundColor: '#1f1f1f', marginLeft: 4, marginRight: 4 } },
+
+  // Model picker pill
+  ModelPickerBtn: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' } },
+  ModelPickerDot: { type: 'Box', style: { width: 6, height: 6, borderRadius: 3 } },
+  ModelPickerLabel: { type: 'Text', fontSize: 11, color: '#b0b0b0' },
+  ModelPickerChevron: { type: 'Text', fontSize: 9, color: '#4a4a4a' },
+
+  // Live token estimate
+  TokenCount: { type: 'Box', style: { alignItems: 'flex-end' } },
+  TokenCountText: { type: 'Text', fontSize: 10 },
+
+  // Send button extras
+  ChatSendIcon: { type: 'Text', fontSize: 12, color: '#ffffff', bold: true },
+  ChatSendShortcut: { type: 'Box', style: { paddingLeft: 5, paddingRight: 5, paddingTop: 1, paddingBottom: 1, backgroundColor: '#1a4fd9', borderRadius: 3 } },
+  ChatSendShortcutText: { type: 'Text', fontSize: 9, color: '#a0b8ff' },
+
+  // Mode-specific hint banners
+  TaskModeHint: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 6, paddingBottom: 2 } },
+  TaskModeHintIcon: { type: 'Text', fontSize: 11, color: '#e6b450' },
+  TaskModeHintText: { type: 'Text', fontSize: 10, color: '#8a6a20' },
+  PlanModeHint: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 6, paddingBottom: 2 } },
+  PlanModeHintIcon: { type: 'Text', fontSize: 11, color: '#79c0ff' },
+  PlanModeHintText: { type: 'Text', fontSize: 10, color: '#4a7aaa' },
+
+  // Thinking indicator
+  ThinkingRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8 } },
+  ThinkingAvatar: { type: 'Box', style: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#1a3a6e', alignItems: 'center', justifyContent: 'center' } },
+  ThinkingAvatarText: { type: 'Text', fontSize: 10, color: '#79c0ff' },
+  ThinkingBubble: { type: 'Box', style: { flexDirection: 'row', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, backgroundColor: '#131313', borderRadius: 8 } },
+  ThinkingLabel: { type: 'Text', fontSize: 11, color: '#4a4a4a' },
+
+  // Chat panel header redesign
+  ChatHeaderLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 10 } },
+  ChatModelBadge: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: '#1a1a1a', borderRadius: 4 } },
+  ChatModelDot: { type: 'Box', style: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#ff7b72' } },
+  ChatModelLabel: { type: 'Text', fontSize: 10, color: '#6e6e6e' },
+
+  // Per-message model badge
+  MessageModelBadge: { type: 'Box', style: { paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, backgroundColor: '#1a1a1a', borderRadius: 3, marginLeft: 4 } },
+  MessageModelText: { type: 'Text', fontSize: 9, color: '#4a4a4a' },
+
+  // Slash command autocomplete popup
+  SlashHints: { type: 'Box', style: { flexDirection: 'column', borderRadius: 6, borderWidth: 1, borderColor: '#2a2a2a', backgroundColor: '#131313', marginBottom: 6, overflow: 'hidden' } },
+  SlashHint: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 1, borderColor: '#1f1f1f' } },
+  SlashHintCmd: { type: 'Text', fontSize: 12, color: '#79c0ff', bold: true },
+  SlashHintDesc: { type: 'Text', fontSize: 11, color: '#6e6e6e' },
+
+  // === TOOL CALL CARDS ===
+  // Shown inline in the chat stream as tools execute (bash, grep, readFile, writeFile, glob)
+  ToolCallCard: { type: 'Box', style: { flexDirection: 'column', gap: 4, backgroundColor: '#0d0d0d', borderRadius: 6, borderWidth: 1, borderColor: '#1f1f1f', padding: 10, marginTop: 4, marginBottom: 4 } },
+  ToolCallCardError: { type: 'Box', style: { flexDirection: 'column', gap: 4, backgroundColor: '#110808', borderRadius: 6, borderWidth: 1, borderColor: '#3a1515', padding: 10, marginTop: 4, marginBottom: 4 } },
+  ToolCallHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+  ToolCallIcon: { type: 'Text', fontSize: 12, bold: true },
+  ToolCallName: { type: 'Text', fontSize: 11, color: '#e0e0e0', bold: true },
+  ToolCallInput: { type: 'Text', fontSize: 11, color: '#4a4a4a', flexGrow: 1, flexBasis: 0 },
+  ToolCallStatus: { type: 'Text', fontSize: 10 },
+  ToolCallProgress: { type: 'Box', style: { height: 2, backgroundColor: '#1f1f1f', borderRadius: 1, marginTop: 4 } },
+  ToolCallProgressFill: { type: 'Box', style: { height: 2, backgroundColor: '#2d62ff', borderRadius: 1 } },
+  ToolCallOutput: { type: 'Box', style: { backgroundColor: '#131313', borderRadius: 4, padding: 8, marginTop: 4 } },
+  ToolCallOutputText: { type: 'Text', fontSize: 11, color: '#6e6e6e', fontFamily: 'monospace' },
+
+  // Tool feed — shown during generation before response completes
+  ToolFeed: { type: 'Box', style: { flexDirection: 'column', paddingLeft: 32, gap: 4, marginBottom: 8 } },
+  ToolFeedLabel: { type: 'Text', fontSize: 10, color: '#4a4a4a', marginBottom: 4 },
+
+  // === AGENT SESSION BANNER ===
+  // Shown at top of ChatPanel when an agent session is active
+  SessionBanner: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#1f1f1f', backgroundColor: '#0d0d0d' } },
+  SessionBannerDot: { type: 'Box', style: { width: 7, height: 7, borderRadius: 4 } },
+  SessionBannerText: { type: 'Text', fontSize: 11, color: '#6e6e6e', flexGrow: 1, flexBasis: 0 },
+  SessionBannerStop: { type: 'Pressable', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#3a1515', borderRadius: 4, borderWidth: 1, borderColor: '#5a1515' } },
+  SessionBannerStopText: { type: 'Text', fontSize: 10, color: '#ff7b72' },
+
+  // === AGENT POOL PANEL — background spawned agents ===
+  AgentPoolRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#1f1f1f' } },
+  AgentPoolDot: { type: 'Box', style: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#7ee787' } },
+  AgentPoolId: { type: 'Text', fontSize: 10, color: '#6e6e6e', flexGrow: 1, flexBasis: 0 },
+  AgentPoolStatus: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+  AgentPoolStop: { type: 'Pressable', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 } },
+  AgentPoolStopText: { type: 'Text', fontSize: 10, color: '#4a4a4a' },
+
+  // === IFTTT RULES DISPLAY (shown in status bar on trigger) ===
+  IFTTTFlash: { type: 'Box', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, backgroundColor: '#0d1a2e', borderRadius: 3, marginLeft: 8 } },
+  IFTTTFlashText: { type: 'Text', fontSize: 10, color: '#2d62ff' },
 })

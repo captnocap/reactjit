@@ -1,19 +1,24 @@
-// Editor Component — real editable text area with line count
+// Editor Component — code editor with line number gutter and multiline input
 
 function Editor(props) {
   return (
     <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row', backgroundColor: '#0d0d0d' }}>
-      <Box style={{ width: 50, flexDirection: 'column', paddingTop: 8, alignItems: 'flex-end', paddingRight: 12 }}>
-        <Text fontSize={11} color="#3d3d3d">{props.lineCount}</Text>
-        <Text fontSize={11} color="#3d3d3d">lines</Text>
+      <Box style={{ width: 48, flexDirection: 'column', paddingTop: 8, paddingBottom: 8, backgroundColor: '#0d0d0d', borderRight: 1, borderColor: '#1a1a1a' }}>
+        {props.lineNumbers.map(function(line, idx) {
+          return (
+            <Box style={{ height: 18, alignItems: 'flex-end', paddingRight: 12 }}>
+              <Text fontSize={12} color="#3d3d3d">{line.num}</Text>
+            </Box>
+          );
+        })}
       </Box>
       <Box style={{ flexGrow: 1, flexBasis: 0 }}>
         <TextInput
           value={props.content}
-          onChange={props.onChange}
+          multiline={1}
           fontSize={13}
           color="#b0b0b0"
-          style={{ flexGrow: 1, flexBasis: 0, paddingTop: 8, paddingLeft: 4, paddingRight: 8, backgroundColor: '#0d0d0d' }}
+          style={{ flexGrow: 1, flexBasis: 0, paddingTop: 8, paddingLeft: 8, paddingRight: 8, paddingBottom: 8, backgroundColor: '#0d0d0d' }}
         />
       </Box>
     </Box>

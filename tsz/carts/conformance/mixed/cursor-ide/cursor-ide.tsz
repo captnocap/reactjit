@@ -9,7 +9,7 @@ import { TopBar } from './TopBar.c';
 import { TabBar } from './TabBar.c';
 import { TerminalPanel } from './Terminal.c';
 import { SearchPanel } from './SearchPanel.c';
-import { initData, selectFile, activateTab, closeTab, openFile, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent, saveCurrentFile, createNewFile, updateEditorContent } from './cursor.script';
+import { initData, selectFile, activateTab, closeTab, openFile, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent, saveCurrentFile, createNewFile, updateEditorContent, setAgentMode, addAttachment, removeAttachment, clearAttachments, attachCurrentFile, triggerFileMention, triggerSymbolMention, toggleWebSearch, toggleTermAccess, toggleAutoApply, cycleModel, startNewConversation, selectSlashCommand, stopBackgroundAgent } from './cursor.script';
 
 import {
   Shell, Workspace, Editor as EditorShell, Sidebar as SidebarShell, ChatPanel as ChatPanelShell,
@@ -23,6 +23,23 @@ const [currentInput, setCurrentInputState] = useState('');
 const [isGenerating, setIsGenerating] = useState(0);
 const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 const [ready, setReady] = useState(0);
+
+// === AGENT INPUT STATE ===
+const [agentMode, setAgentModeState] = useState('ask');
+const [attachments, setAttachmentsState] = useState([]);
+const [selectedModel, setSelectedModelState] = useState('claude-opus-4');
+const [webSearch, setWebSearchState] = useState(0);
+const [termAccess, setTermAccessState] = useState(0);
+const [autoApply, setAutoApplyState] = useState(0);
+const [inputTokenEstimate, setInputTokenEstimateState] = useState(0);
+
+// === AGENT SESSION + TOOL EXECUTION STATE ===
+const [toolExecutions, setToolExecutions] = useState([]);
+const [streamingText, setStreamingText] = useState('');
+const [agentSessionId, setAgentSessionId] = useState('');
+const [activeAgentId, setActiveAgentId] = useState('');
+const [agentStatusText, setAgentStatusText] = useState('idle');
+const [workDir, setWorkDir] = useState('.');
 
 // === PANEL VISIBILITY ===
 const [showChat, setShowChat] = useState(1);
@@ -56,8 +73,13 @@ const [files, setFiles] = useState([
 const [editorContent, setEditorContent] = useState('// Cursor IDE - Agentic Coding Environment\n\nimport { useState, useEffect } from "react";\n\n// SQLite bridge for project indexing\nconst db = __sqlite_open("project.db");\n\n// File system watcher\nconst watcher = __fs_watch("./src");\n\nfunction Sidebar() {\n  const [files, setFiles] = useState([]);\n\n  useEffect(() => {\n    // Index project files in SQLite\n    __sqlite_exec(db, "CREATE TABLE IF NOT EXISTS files...");\n  }, []);\n\n  return <FileTree />;\n}');
 const [editorModified, setEditorModified] = useState(0);
 const [currentFilePath, setCurrentFilePath] = useState('src/components/Sidebar.tsx');
-const [lineCount, setLineCount] = useState(20);
 const [totalLines, setTotalLines] = useState(20);
+const [lineNumbers, setLineNumbers] = useState([
+  { num: '1' }, { num: '2' }, { num: '3' }, { num: '4' }, { num: '5' },
+  { num: '6' }, { num: '7' }, { num: '8' }, { num: '9' }, { num: '10' },
+  { num: '11' }, { num: '12' }, { num: '13' }, { num: '14' }, { num: '15' },
+  { num: '16' }, { num: '17' }, { num: '18' }, { num: '19' }, { num: '20' },
+]);
 
 // === TABS ===
 const [openTabs, setOpenTabs] = useState([
@@ -125,7 +147,7 @@ function App() {
             })}
           </C.Breadcrumbs>
 
-          <Editor content={editorContent} lineCount={totalLines} cursorLine={cursorPosition.line} modified={editorModified} onChange={function(text) { updateEditorContent(text); }} />
+          <Editor content={editorContent} lineNumbers={lineNumbers} totalLines={totalLines} cursorLine={cursorPosition.line} modified={editorModified} />
 
           {showTerminal == 1 && <TerminalPanel lines={terminalLines} />}
         </C.Editor>
