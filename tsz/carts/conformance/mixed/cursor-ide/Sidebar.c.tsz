@@ -1,47 +1,154 @@
-// Sidebar — File explorer with type icons, section headers
+// Sidebar — workspace explorer with open editors and git change rails
+
+function FileTypeBadge(props) {
+  var label = '#';
+  var bg = '#1a1a1a';
+  var fg = '#6e6e6e';
+
+  if (props.type == 'workspace') { label = 'W'; bg = '#0d2a1a'; fg = '#7ee787'; }
+  else if (props.type == 'component') { label = 'C'; bg = '#10213d'; fg = '#79c0ff'; }
+  else if (props.type == 'cls') { label = 'CL'; bg = '#241233'; fg = '#d2a8ff'; }
+  else if (props.type == 'script') { label = 'JS'; bg = '#102214'; fg = '#7ee787'; }
+  else if (props.type == 'mod') { label = 'MD'; bg = '#331608'; fg = '#ffa657'; }
+  else if (props.type == 'app') { label = 'AP'; bg = '#341316'; fg = '#ff7b72'; }
+  else if (props.type == 'tsz') { label = 'TZ'; bg = '#112016'; fg = '#56d364'; }
+  else if (props.type == 'dir') { label = 'D'; bg = '#1a1f2b'; fg = '#8b949e'; }
+  else if (props.type == 'ts' || props.type == 'tsx') { label = 'TS'; bg = '#0d2040'; fg = '#79c0ff'; }
+  else if (props.type == 'js' || props.type == 'jsx') { label = 'JS'; bg = '#332600'; fg = '#e6b450'; }
+  else if (props.type == 'zig') { label = 'ZG'; bg = '#331608'; fg = '#ffa657'; }
+  else if (props.type == 'md') { label = 'MD'; bg = '#102214'; fg = '#7ee787'; }
+  else if (props.type == 'css') { label = 'CS'; bg = '#241233'; fg = '#d2a8ff'; }
+  else if (props.type == 'json') { label = '{}'; bg = '#112016'; fg = '#56d364'; }
+  else if (props.type == 'home') { label = 'P'; bg = '#10213d'; fg = '#79c0ff'; }
+
+  return (
+    <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: bg }}>
+      <Text fontSize={9} color={fg}>{label}</Text>
+    </Box>
+  );
+}
+
+function GitBadge(props) {
+  if (!props.status || props.status.length == 0) return null;
+
+  var bg = '#262626';
+  var fg = '#8b949e';
+  if (props.status == 'dirty' || props.status.indexOf('M') >= 0) { bg = '#332200'; fg = '#e6b450'; }
+  if (props.status == '??' || props.status == 'new') { bg = '#10213d'; fg = '#79c0ff'; }
+  if (props.status.indexOf('A') >= 0) { bg = '#0d2a1a'; fg = '#7ee787'; }
+  if (props.status.indexOf('D') >= 0) { bg = '#341316'; fg = '#ff7b72'; }
+
+  return (
+    <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: bg }}>
+      <Text fontSize={9} color={fg}>{props.status}</Text>
+    </Box>
+  );
+}
+
+function OpenEditorRow(props) {
+  var tab = props.tab;
+  if (tab.path == '__landing__') return null;
+
+  return (
+    <C.SidebarMiniRow onPress={function() { props.onSelectPath(tab.path); }}>
+      <FileTypeBadge type={tab.type} />
+      <C.SidebarMiniLabel>{tab.name}</C.SidebarMiniLabel>
+      {tab.modified == 1 && <C.SidebarMiniDot style={{ backgroundColor: '#e6b450' }} />}
+      {tab.git && <GitBadge status={tab.git} />}
+    </C.SidebarMiniRow>
+  );
+}
+
+function GitChangeRow(props) {
+  var item = props.item;
+
+  return (
+    <C.SidebarChangeRow onPress={function() { props.onSelectPath(item.path); }}>
+      <C.SidebarChangeDot style={{ backgroundColor: item.tone }} />
+      <C.SidebarChangeLabel>{item.status}</C.SidebarChangeLabel>
+      <C.SidebarChangePath>{item.path}</C.SidebarChangePath>
+    </C.SidebarChangeRow>
+  );
+}
+
+function ExplorerNodeRow(props) {
+  var file = props.file;
+  if (file.visible != 1) return null;
+
+  var bg = '#00000000';
+  if (file.selected == 1) bg = '#182235';
+  else if (file.hot == 1) bg = '#12171f';
+
+  return (
+    <Pressable onPress={function() { props.onSelectPath(file.path); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12 + file.indent * 12, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: bg }}>
+      {file.type == 'dir' && <Text fontSize={10} color="#4a5568">{file.expanded == 1 ? 'v' : '>'}</Text>}
+      {file.type != 'dir' && <Box style={{ width: 8 }} />}
+      <FileTypeBadge type={file.type} />
+      <Text fontSize={12} color={file.selected == 1 ? '#f3f4f6' : '#a7b1c2'}>{file.name}</Text>
+      {file.hot == 1 && <C.SidebarMiniDot style={{ backgroundColor: '#2d62ff' }} />}
+      <Box style={{ flexGrow: 1 }} />
+      {file.git && <GitBadge status={file.git} />}
+    </Pressable>
+  );
+}
 
 function Sidebar(props) {
   return (
     <C.Sidebar>
       <C.SidebarHeader>
-        <C.SidebarTitle>EXPLORER</C.SidebarTitle>
+        <C.SidebarTitle>WORKSPACE</C.SidebarTitle>
         <C.SidebarActions>
-          <C.SidebarActionBtn onPress={function() { createNewFile('untitled.ts'); }}>
+          <C.SidebarActionBtn onPress={function() { props.onRefreshWorkspace(); }}>
+            <C.SidebarActionIcon>R</C.SidebarActionIcon>
+          </C.SidebarActionBtn>
+          <C.SidebarActionBtn onPress={function() { createNewFile('scratch.mod.tsz'); }}>
             <C.SidebarActionIcon>+</C.SidebarActionIcon>
           </C.SidebarActionBtn>
         </C.SidebarActions>
       </C.SidebarHeader>
 
-      {/* Section headers */}
+      <C.SidebarWorkspaceCard onPress={function() { props.onOpenHome(); }}>
+        <C.SidebarWorkspaceName>{props.workspaceName}</C.SidebarWorkspaceName>
+        <C.SidebarWorkspaceMeta>{props.gitBranch + '  ' + props.changedCount + ' dirty  ' + props.stagedCount + ' staged'}</C.SidebarWorkspaceMeta>
+        <C.SidebarWorkspacePath>{props.workDir}</C.SidebarWorkspacePath>
+      </C.SidebarWorkspaceCard>
+
       <C.SidebarSection>
         <C.SidebarSectionHeader>
           <C.SidebarChevron>v</C.SidebarChevron>
           <C.SidebarSectionTitle>OPEN EDITORS</C.SidebarSectionTitle>
         </C.SidebarSectionHeader>
+        <C.SidebarMiniList>
+          {props.tabs.map(function(tab, idx) {
+            return <OpenEditorRow key={idx} tab={tab} onSelectPath={props.onSelectPath} />;
+          })}
+        </C.SidebarMiniList>
       </C.SidebarSection>
 
       <C.SidebarSection>
         <C.SidebarSectionHeader>
           <C.SidebarChevron>v</C.SidebarChevron>
-          <C.SidebarSectionTitle>CURSOR-IDE</C.SidebarSectionTitle>
+          <C.SidebarSectionTitle>{'SOURCE CONTROL  ' + props.changedCount}</C.SidebarSectionTitle>
+        </C.SidebarSectionHeader>
+        <C.SidebarMiniList>
+          {props.gitChanges.map(function(item, idx) {
+            if (idx > 5) return null;
+            return <GitChangeRow key={idx} item={item} onSelectPath={props.onSelectPath} />;
+          })}
+        </C.SidebarMiniList>
+      </C.SidebarSection>
+
+      <C.SidebarSection>
+        <C.SidebarSectionHeader>
+          <C.SidebarChevron>v</C.SidebarChevron>
+          <C.SidebarSectionTitle>EXPLORER</C.SidebarSectionTitle>
         </C.SidebarSectionHeader>
       </C.SidebarSection>
 
       <C.FileTree>
         <C.FileTreeStack>
           {props.files.map(function(file, idx) {
-            return (
-              <Pressable onPress={function() { props.onSelectFile(idx); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12 + file.indent * 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3, backgroundColor: file.selected == 1 ? '#1f1f1f' : '#00000000' }}>
-                {file.type == 'dir' && <Text fontSize={10} color="#6e6e6e">{file.expanded == 1 ? 'v' : '>'}</Text>}
-                {file.type == 'tsx' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1e3a5f' }}><Text fontSize={8} color="#3b82f6">TS</Text></Box>}
-                {file.type == 'ts' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1e3a5f' }}><Text fontSize={8} color="#3b82f6">TS</Text></Box>}
-                {file.type == 'js' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#3a3000' }}><Text fontSize={8} color="#eab308">JS</Text></Box>}
-                {file.type == 'css' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#2a1040' }}><Text fontSize={8} color="#a855f7">CS</Text></Box>}
-                {file.type == 'json' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#0a2a10' }}><Text fontSize={8} color="#22c55e">{ }</Text></Box>}
-                {file.type == 'md' && <Box style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: '#1a1a1a' }}><Text fontSize={8} color="#6e6e6e">MD</Text></Box>}
-                <Text fontSize={12} color={file.selected == 1 ? '#ffffff' : '#9ca3af'}>{file.name}</Text>
-              </Pressable>
-            );
+            return <ExplorerNodeRow key={idx} file={file} onSelectPath={props.onSelectPath} />;
           })}
         </C.FileTreeStack>
       </C.FileTree>

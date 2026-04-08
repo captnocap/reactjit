@@ -1,27 +1,25 @@
-// ChatPanel Component — Power User Agent Interface
-// Wires to: agent_session.zig (streaming), tool_framework.zig (execution), ifttt.zig (key rules)
+// ChatPanel — agent console that shares workspace, git, and editor context
 
-// === Tool Call Card ===
-// Shows live tool executions inline (bash/$, grep/S, readFile/R, writeFile/W, glob/G, LLM/A)
-// Mirrors ProgressUpdate stream from tool_framework.zig ToolExecutor
-// Tool call card — all static, no local vars (compiler drops them in lua-tree)
 function ToolCallCard(props) {
+  var exec = props.exec;
+  var tone = '#79c0ff';
+  if (exec.status == 'completed') tone = '#7ee787';
+  if (exec.status == 'error') tone = '#ff7b72';
+
   return (
     <C.ToolCallCard>
       <C.ToolCallHeader>
-        <C.ToolCallName>{props.exec.name}</C.ToolCallName>
-        <C.ToolCallStatus>{props.exec.status}</C.ToolCallStatus>
+        <C.ToolCallName>{exec.name}</C.ToolCallName>
+        <C.ToolCallInput>{exec.input}</C.ToolCallInput>
+        <C.ToolCallStatus style={{ color: tone }}>{exec.status}</C.ToolCallStatus>
       </C.ToolCallHeader>
       <C.ToolCallOutput>
-        <C.ToolCallOutputText>{props.exec.result}</C.ToolCallOutputText>
+        <C.ToolCallOutputText>{exec.result}</C.ToolCallOutputText>
       </C.ToolCallOutput>
     </C.ToolCallCard>
   );
 }
 
-// === Agent Session Banner ===
-// Shows at top of panel: streaming / executing / background agent / idle
-// Driven by agentStatusText and activeAgentId from agent_spawner.zig
 function AgentSessionBanner() {
   var isStreaming = agentStatusText == 'streaming';
   var isExecuting = agentStatusText == 'executing';
@@ -32,9 +30,9 @@ function AgentSessionBanner() {
 
   var dotColor = '#4a4a4a';
   var label = 'idle';
-  if (isStreaming) { dotColor = '#2d62ff'; label = 'streaming...'; }
-  else if (isExecuting) { dotColor = '#e6b450'; label = 'executing tools...'; }
-  else if (hasAgent) { dotColor = '#7ee787'; label = 'agent ' + activeAgentId.substring(6, 20) + ' running'; }
+  if (isStreaming) { dotColor = '#2d62ff'; label = 'streaming response'; }
+  else if (isExecuting) { dotColor = '#e6b450'; label = 'running tools'; }
+  else if (hasAgent) { dotColor = '#7ee787'; label = 'background agent ' + activeAgentId.substring(6, 18); }
 
   return (
     <C.SessionBanner>
@@ -49,26 +47,50 @@ function AgentSessionBanner() {
   );
 }
 
+function ContextStrip(props) {
+  return (
+    <C.ChatContextStrip>
+      <C.ChatContextChip>
+        <C.ChatContextChipLabel>view</C.ChatContextChipLabel>
+        <C.ChatContextChipValue>{props.activeView}</C.ChatContextChipValue>
+      </C.ChatContextChip>
+      <C.ChatContextChip>
+        <C.ChatContextChipLabel>branch</C.ChatContextChipLabel>
+        <C.ChatContextChipValue>{props.gitBranch}</C.ChatContextChipValue>
+      </C.ChatContextChip>
+      <C.ChatContextChip>
+        <C.ChatContextChipLabel>focus</C.ChatContextChipLabel>
+        <C.ChatContextChipValue>{props.currentFilePath == '__landing__' ? props.workspaceName : props.currentFilePath}</C.ChatContextChipValue>
+      </C.ChatContextChip>
+      <C.ChatContextChip>
+        <C.ChatContextChipLabel>dirty</C.ChatContextChipLabel>
+        <C.ChatContextChipValue>{'' + props.changedCount}</C.ChatContextChipValue>
+      </C.ChatContextChip>
+    </C.ChatContextStrip>
+  );
+}
+
 function Message(props) {
   var msg = props.msg;
   var isUser = msg.role == 'user';
+  var bubbleBg = isUser ? '#101827' : '#10141c';
+  var bubbleBorder = isUser ? '#20324f' : '#1c2531';
 
   return (
     <C.Message>
       <C.MessageHeader>
-        <C.MessageAvatar style={{ backgroundColor: isUser ? '#2a2a2a' : '#1a3a6e' }}>
-          <C.MessageAvatarText>{isUser ? 'You' : 'AI'}</C.MessageAvatarText>
+        <C.MessageAvatar style={{ backgroundColor: isUser ? '#17345d' : '#143120' }}>
+          <C.MessageAvatarText>{isUser ? 'U' : 'A'}</C.MessageAvatarText>
         </C.MessageAvatar>
-        <C.MessageAuthor>{isUser ? 'You' : 'Cursor Agent'}</C.MessageAuthor>
+        <C.MessageAuthor>{isUser ? 'You' : 'Agent'}</C.MessageAuthor>
         <C.MessageTime>{msg.time}</C.MessageTime>
-        {msg.model && (
-          <C.MessageModelBadge>
-            <C.MessageModelText>{msg.model}</C.MessageModelText>
-          </C.MessageModelBadge>
-        )}
+        {msg.mode && <C.MessageModeBadge><C.MessageModeText>{msg.mode}</C.MessageModeText></C.MessageModeBadge>}
+        {msg.model && <C.MessageModelBadge><C.MessageModelText>{msg.model}</C.MessageModelText></C.MessageModelBadge>}
       </C.MessageHeader>
-      <C.MessageBody>
+
+      <C.MessageBubble style={{ backgroundColor: bubbleBg, borderColor: bubbleBorder }}>
         <C.MessageText>{msg.text}</C.MessageText>
+
         {msg.attachments && msg.attachments.length > 0 && (
           <C.ContextBar>
             {msg.attachments.map(function(a, i) {
@@ -80,18 +102,23 @@ function Message(props) {
             })}
           </C.ContextBar>
         )}
-      </C.MessageBody>
+
+        {msg.toolSnapshot && msg.toolSnapshot.length > 0 && (
+          <C.MessageToolList>
+            {msg.toolSnapshot.map(function(exec, idx) {
+              return <ToolCallCard key={idx} exec={exec} />;
+            })}
+          </C.MessageToolList>
+        )}
+      </C.MessageBubble>
     </C.Message>
   );
 }
 
 function ThinkingIndicator() {
-  // Show current tool name if one is running (from ToolExecutor progress stream)
-  var activeLabel = 'thinking...';
+  var activeLabel = 'thinking';
   for (var ti = 0; ti < toolExecutions.length; ti++) {
-    if (toolExecutions[ti].status == 'running') {
-      activeLabel = 'running ' + toolExecutions[ti].name + '...';
-    }
+    if (toolExecutions[ti].status == 'running') activeLabel = 'running ' + toolExecutions[ti].name;
   }
 
   return (
@@ -109,36 +136,35 @@ function ThinkingIndicator() {
   );
 }
 
-// Mode pill bar — Ask / Plan / Task / Agent (static, avoids local-array .map() compiler gap)
 function ModePillBar() {
   return (
     <C.ModePillBar>
-      <C.ModePill onPress={function() { setAgentMode('ask'); }} style={agentMode == 'ask' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+      <C.ModePill onPress={function() { setAgentMode('ask'); }} style={agentMode == 'ask' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
         <C.ModePillLabel style={agentMode == 'ask' ? { color: '#79c0ff' } : {}}>Ask</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('plan'); }} style={agentMode == 'plan' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+      <C.ModePill onPress={function() { setAgentMode('plan'); }} style={agentMode == 'plan' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
         <C.ModePillLabel style={agentMode == 'plan' ? { color: '#79c0ff' } : {}}>Plan</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('task'); }} style={agentMode == 'task' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
-        <C.ModePillLabel style={agentMode == 'task' ? { color: '#79c0ff' } : {}}>Task</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('task'); }} style={agentMode == 'task' ? { backgroundColor: '#182510', borderColor: '#7ee787' } : {}}>
+        <C.ModePillLabel style={agentMode == 'task' ? { color: '#7ee787' } : {}}>Task</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('agent'); }} style={agentMode == 'agent' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
-        <C.ModePillLabel style={agentMode == 'agent' ? { color: '#79c0ff' } : {}}>Agent</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('agent'); }} style={agentMode == 'agent' ? { backgroundColor: '#26180f', borderColor: '#ffa657' } : {}}>
+        <C.ModePillLabel style={agentMode == 'agent' ? { color: '#ffa657' } : {}}>Agent</C.ModePillLabel>
       </C.ModePill>
     </C.ModePillBar>
   );
 }
 
-// Individual attachment badge with remove
 function AttachBadge(props) {
   var a = props.attachment;
-  var isFile = a.type == 'file';
-  var iconColor = isFile ? '#79c0ff' : a.type == 'symbol' ? '#d2a8ff' : '#7ee787';
-  var iconChar = isFile ? '#' : a.type == 'symbol' ? '@' : '>';
+  var icon = '#';
+  var tone = '#79c0ff';
+  if (a.type == 'symbol') { icon = '@'; tone = '#d2a8ff'; }
+  if (a.type == 'git') { icon = 'G'; tone = '#7ee787'; }
 
   return (
     <C.AttachBadge>
-      <C.AttachBadgeIcon style={{ color: iconColor }}>{iconChar}</C.AttachBadgeIcon>
+      <C.AttachBadgeIcon style={{ color: tone }}>{icon}</C.AttachBadgeIcon>
       <C.AttachBadgeName>{a.name}</C.AttachBadgeName>
       <C.AttachBadgeRemove onPress={function() { removeAttachment(a.id); }}>
         <C.AttachBadgeRemoveIcon>x</C.AttachBadgeRemoveIcon>
@@ -147,7 +173,6 @@ function AttachBadge(props) {
   );
 }
 
-// Row of attachment badges, shown when attachments > 0
 function AttachmentBar() {
   if (attachments.length == 0) return null;
 
@@ -159,24 +184,21 @@ function AttachmentBar() {
         })}
       </C.AttachmentList>
       <C.AttachClearAll onPress={function() { clearAttachments(); }}>
-        <C.AttachClearLabel>Clear all</C.AttachClearLabel>
+        <C.AttachClearLabel>Clear</C.AttachClearLabel>
       </C.AttachClearAll>
     </C.AttachmentBar>
   );
 }
 
-// Toggle button for tool capabilities — no ternary styles (compiler drops local vars)
 function ToolToggle(props) {
   return (
-    <C.InputToolToggle onPress={props.onToggle}>
-      <C.InputToolToggleIcon>{props.icon}</C.InputToolToggleIcon>
-      <C.InputToolToggleLabel>{props.label}</C.InputToolToggleLabel>
+    <C.InputToolToggle onPress={props.onToggle} style={props.active == 1 ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
+      <C.InputToolToggleIcon style={props.active == 1 ? { color: '#79c0ff' } : {}}>{props.icon}</C.InputToolToggleIcon>
+      <C.InputToolToggleLabel style={props.active == 1 ? { color: '#79c0ff' } : {}}>{props.label}</C.InputToolToggleLabel>
     </C.InputToolToggle>
   );
 }
 
-// Clickable model pill — cycles through available models
-// Uses modelDisplayName state (set by cycleModel in script) to avoid local-var drop
 function ModelPicker() {
   return (
     <C.ModelPickerBtn onPress={function() { cycleModel(); }}>
@@ -187,37 +209,32 @@ function ModelPicker() {
   );
 }
 
-// Live token estimate — color-coded by proximity to limit
 function TokenCountBadge() {
-  var count = inputTokenEstimate;
-  if (count == 0) return null;
+  if (inputTokenEstimate == 0) return null;
+
   var color = '#4a4a4a';
-  if (count > 8000) color = '#e6b450';
-  if (count > 16000) color = '#ff7b72';
+  if (inputTokenEstimate > 8000) color = '#e6b450';
+  if (inputTokenEstimate > 16000) color = '#ff7b72';
 
   return (
     <C.TokenCount>
-      <C.TokenCountText style={{ color: color }}>{count + ' tkns'}</C.TokenCountText>
+      <C.TokenCountText style={{ color: color }}>{inputTokenEstimate + ' tkns'}</C.TokenCountText>
     </C.TokenCount>
   );
 }
 
-// Slash command autocomplete — shown when input starts with /
 function SlashHints() {
   var cmds = [
-    { cmd: '/fix', desc: 'Fix errors in current file' },
-    { cmd: '/explain', desc: 'Explain selected code' },
+    { cmd: '/fix', desc: 'Fix current file' },
     { cmd: '/review', desc: 'Review recent changes' },
-    { cmd: '/docs', desc: 'Generate documentation' },
-    { cmd: '/test', desc: 'Generate unit tests' },
+    { cmd: '/plan', desc: 'Plan the next edit' },
+    { cmd: '/docs', desc: 'Draft docs' },
     { cmd: '/commit', desc: 'Draft commit message' },
   ];
-
   var filtered = [];
+
   for (var i = 0; i < cmds.length; i++) {
-    if (currentInput == '/' || cmds[i].cmd.indexOf(currentInput) == 0) {
-      filtered.push(cmds[i]);
-    }
+    if (currentInput == '/' || cmds[i].cmd.indexOf(currentInput) == 0) filtered.push(cmds[i]);
   }
 
   if (filtered.length == 0) return null;
@@ -236,13 +253,19 @@ function SlashHints() {
   );
 }
 
-// Main composer — uses direct state refs (avoids local-var dropped expressions)
 function ChatInput() {
   return (
     <C.ChatInputArea>
       <ModePillBar />
 
+      {currentInput.indexOf('/') == 0 && <SlashHints />}
+
       <C.ChatInputBox>
+        <C.ChatComposerSummary>
+          <C.ChatComposerContext>{currentFilePath == '__landing__' ? workspaceName : currentFilePath}</C.ChatComposerContext>
+          <C.ChatComposerMeta>{gitBranch + ' / ' + gitRemote}</C.ChatComposerMeta>
+        </C.ChatComposerSummary>
+
         <AttachmentBar />
 
         <C.ChatInputField
@@ -256,28 +279,26 @@ function ChatInput() {
             <C.ChatToolBtnCompact onPress={function() { triggerFileMention(); }}>
               <C.ChatToolIconCompact>#</C.ChatToolIconCompact>
             </C.ChatToolBtnCompact>
-
             <C.ChatToolBtnCompact onPress={function() { triggerSymbolMention(); }}>
               <C.ChatToolIconCompact>@</C.ChatToolIconCompact>
             </C.ChatToolBtnCompact>
-
+            <C.ChatToolBtnCompact onPress={function() { attachGitContext(); }}>
+              <C.ChatToolIconCompact>G</C.ChatToolIconCompact>
+            </C.ChatToolBtnCompact>
             <C.ChatToolBtnCompact onPress={function() { attachCurrentFile(); }}>
               <C.ChatToolIconCompact>+</C.ChatToolIconCompact>
             </C.ChatToolBtnCompact>
-
             <C.InputToolDivider />
-
             <ToolToggle icon="W" label="Web" active={webSearch} onToggle={function() { toggleWebSearch(); }} />
             <ToolToggle icon=">" label="Term" active={termAccess} onToggle={function() { toggleTermAccess(); }} />
+            <ToolToggle icon="A" label="Auto" active={autoApply} onToggle={function() { toggleAutoApply(); }} />
           </C.ChatInputToolsLeft>
 
           <C.ChatInputToolsRight>
+            <TokenCountBadge />
             <ModelPicker />
             <C.ChatSendBtn onPress={function() { sendMessage(); }}>
-              {agentMode == 'ask' && <C.ChatSendLabel>Send</C.ChatSendLabel>}
-              {agentMode == 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
-              {agentMode == 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
-              {agentMode == 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
+              <C.ChatSendLabel>{agentMode == 'agent' ? 'Launch' : agentMode == 'task' ? 'Run Task' : agentMode == 'plan' ? 'Plan' : 'Send'}</C.ChatSendLabel>
             </C.ChatSendBtn>
           </C.ChatInputToolsRight>
         </C.ChatInputToolbar>
@@ -286,27 +307,26 @@ function ChatInput() {
       {agentMode == 'task' && (
         <C.TaskModeHint>
           <C.TaskModeHintIcon>!</C.TaskModeHintIcon>
-          <C.TaskModeHintText>Task mode — agent autonomously reads and edits files</C.TaskModeHintText>
+          <C.TaskModeHintText>Task mode can read the workspace, inspect git, and use the terminal.</C.TaskModeHintText>
         </C.TaskModeHint>
       )}
 
       {agentMode == 'plan' && (
         <C.PlanModeHint>
           <C.PlanModeHintIcon>i</C.PlanModeHintIcon>
-          <C.PlanModeHintText>Plan mode — review diff before changes are applied</C.PlanModeHintText>
+          <C.PlanModeHintText>Plan mode stays descriptive first, edit second.</C.PlanModeHintText>
         </C.PlanModeHint>
       )}
     </C.ChatInputArea>
   );
 }
 
-// Tool execution feed shown during generation (maps to ToolExecutor concurrency stream)
 function ToolFeed() {
   if (toolExecutions.length == 0) return null;
 
   return (
     <C.ToolFeed>
-      <C.ToolFeedLabel>tool calls</C.ToolFeedLabel>
+      <C.ToolFeedLabel>Live tool calls</C.ToolFeedLabel>
       {toolExecutions.map(function(exec, idx) {
         return <ToolCallCard key={idx} exec={exec} />;
       })}
@@ -319,7 +339,7 @@ function ChatPanel(props) {
     <C.ChatPanel>
       <C.ChatHeader>
         <C.ChatHeaderLeft>
-          <C.ChatTitle>Agent</C.ChatTitle>
+          <C.ChatTitle>Agent Console</C.ChatTitle>
           <C.ChatModelBadge>
             <C.ChatModelDot />
             <C.ChatModelLabel>{selectedModel}</C.ChatModelLabel>
@@ -327,32 +347,36 @@ function ChatPanel(props) {
         </C.ChatHeaderLeft>
         <C.ChatActions>
           <C.ChatActionBtn onPress={function() { startNewConversation(); }}>
-            <C.ChatActionLabel>+ New</C.ChatActionLabel>
+            <C.ChatActionLabel>New</C.ChatActionLabel>
           </C.ChatActionBtn>
           <C.ChatActionBtn onPress={function() { indexProject('.'); }}>
             <C.ChatActionLabel>Index</C.ChatActionLabel>
           </C.ChatActionBtn>
-          <C.ChatActionBtn>
-            <C.ChatActionLabel>...</C.ChatActionLabel>
-          </C.ChatActionBtn>
         </C.ChatActions>
       </C.ChatHeader>
+
+      <ContextStrip
+        activeView={props.activeView}
+        currentFilePath={props.currentFilePath}
+        workspaceName={props.workspaceName}
+        gitBranch={props.gitBranch}
+        gitRemote={props.gitRemote}
+        changedCount={props.changedCount}
+      />
 
       <AgentSessionBanner />
 
       <C.ChatMessages>
         <C.ChatStack>
-          {/* Welcome banner */}
-          <Box style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 8, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#1f1f1f', marginBottom: 8 }}>
-            <Box style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#1a3a6e', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-              <Text fontSize={14} color="#79c0ff">C</Text>
-            </Box>
-            <Text fontSize={11} color="#4a4a4a">Cursor Agent is ready</Text>
-          </Box>
+          <C.ChatWelcome>
+            <C.ChatWelcomeTitle>{props.workspaceName + ' agent session'}</C.ChatWelcomeTitle>
+            <C.ChatWelcomeText>{props.gitBranch + ' / ' + props.gitRemote + ' / ' + props.changedCount + ' dirty paths'}</C.ChatWelcomeText>
+          </C.ChatWelcome>
 
           {props.messages.map(function(msg, idx) {
             return <Message key={idx} msg={msg} />;
           })}
+
           {props.isGenerating == 1 && <ToolFeed />}
           {props.isGenerating == 1 && <ThinkingIndicator />}
         </C.ChatStack>

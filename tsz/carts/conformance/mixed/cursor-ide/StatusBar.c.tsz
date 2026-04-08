@@ -1,32 +1,39 @@
-// StatusBar — git, problems, cursor, language, encoding, Copilot
-// All text uses direct state refs — no local vars (compiler drops them)
+// StatusBar — git health, cursor, file mode, and agent context
 
 function StatusBar(props) {
   return (
     <C.StatusBar>
       <C.StatusLeft>
         <C.StatusBranch>
-          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7ee787', marginRight: 4 }} />
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7ee787' }} />
           <C.StatusTextHighlight>{props.gitBranch}</C.StatusTextHighlight>
+          <C.StatusText>{props.gitRemote}</C.StatusText>
         </C.StatusBranch>
 
         <C.StatusSeparator />
 
         <C.StatusItem>
-          <C.StatusText>No problems</C.StatusText>
+          <C.StatusText>{'dirty ' + props.changedCount}</C.StatusText>
+          <C.StatusText>{'staged ' + props.stagedCount}</C.StatusText>
+          <C.StatusText>{'+' + props.branchAhead + ' / -' + props.branchBehind}</C.StatusText>
         </C.StatusItem>
 
         <C.StatusSeparator />
 
         <C.StatusItem>
-          <C.StatusText>Ln</C.StatusText>
-          <C.StatusText>{props.cursorLine}</C.StatusText>
-          <C.StatusText>Col</C.StatusText>
-          <C.StatusText>{props.cursorColumn}</C.StatusText>
+          <C.StatusText>{'Ln ' + props.cursorLine}</C.StatusText>
+          <C.StatusText>{'Col ' + props.cursorColumn}</C.StatusText>
         </C.StatusItem>
       </C.StatusLeft>
 
       <C.StatusRight>
+        <C.StatusItem>
+          {props.fileName == '__landing__' && <C.StatusText>{props.workDir}</C.StatusText>}
+          {props.fileName != '__landing__' && <C.StatusText>{props.fileName}</C.StatusText>}
+        </C.StatusItem>
+
+        <C.StatusSeparator />
+
         <C.StatusItem>
           <C.StatusText>{props.languageMode}</C.StatusText>
         </C.StatusItem>
@@ -34,18 +41,8 @@ function StatusBar(props) {
         <C.StatusSeparator />
 
         <C.StatusItem>
-          <C.StatusText>UTF-8</C.StatusText>
-        </C.StatusItem>
-
-        <C.StatusItem>
-          <C.StatusText>LF</C.StatusText>
-        </C.StatusItem>
-
-        <C.StatusSeparator />
-
-        <C.StatusItem>
-          <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#2d62ff' }} />
-          <Text fontSize={10} color="#4a4a4a">Copilot</Text>
+          <C.StatusText>{props.selectedModel}</C.StatusText>
+          <C.StatusText>{props.agentStatusText}</C.StatusText>
         </C.StatusItem>
       </C.StatusRight>
     </C.StatusBar>

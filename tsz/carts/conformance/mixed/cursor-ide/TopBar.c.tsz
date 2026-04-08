@@ -1,31 +1,47 @@
-// TopBar — Window chrome with traffic lights, title, panel toggles with shortcut hints
+// TopBar — workspace chrome, git summary, and panel toggles
+
+function TopBarAction(props) {
+  return (
+    <C.TopBarAction onPress={props.onPress}>
+      <C.TopBarActionLabel>{props.label}</C.TopBarActionLabel>
+      {props.meta && <C.TopBarActionMeta>{props.meta}</C.TopBarActionMeta>}
+    </C.TopBarAction>
+  );
+}
 
 function TopBar(props) {
   return (
     <C.TopBar>
       <C.TopBarLeft>
-        {/* Traffic lights */}
-        <Box style={{ flexDirection: 'row', gap: 6, marginRight: 12 }}>
-          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff5f57' }} />
-          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#febc2e' }} />
-          <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#28c840' }} />
-        </Box>
-        <C.WindowTitle>{props.title}</C.WindowTitle>
+        <C.TopBarTraffic>
+          <C.TopBarTrafficDot style={{ backgroundColor: '#ff5f57' }} />
+          <C.TopBarTrafficDot style={{ backgroundColor: '#febc2e' }} />
+          <C.TopBarTrafficDot style={{ backgroundColor: '#28c840' }} />
+        </C.TopBarTraffic>
+
+        <C.TopBarWorkspaceBtn onPress={props.onOpenHome}>
+          <C.TopBarWorkspaceGlyph>{props.workspaceName.charAt(0)}</C.TopBarWorkspaceGlyph>
+          <C.TopBarWorkspaceText>{props.workspaceName}</C.TopBarWorkspaceText>
+        </C.TopBarWorkspaceBtn>
+
+        <C.TopBarCommandBar onPress={props.onOpenHome}>
+          <C.TopBarCommandHint>Project landing</C.TopBarCommandHint>
+          {props.title == '__landing__' && <C.TopBarCommandLabel>{props.workspaceTagline}</C.TopBarCommandLabel>}
+          {props.title != '__landing__' && <C.TopBarCommandLabel>{props.title}</C.TopBarCommandLabel>}
+        </C.TopBarCommandBar>
       </C.TopBarLeft>
+
       <C.TopBarRight>
-        <Pressable onPress={props.onToggleSearch} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
-          <Text fontSize={11} color="#b0b0b0">Search</Text>
-          <Text fontSize={9} color="#4a4a4a">F3</Text>
-        </Pressable>
-        <C.ToolbarDivider />
-        <Pressable onPress={props.onToggleTerminal} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
-          <Text fontSize={11} color="#b0b0b0">Terminal</Text>
-          <Text fontSize={9} color="#4a4a4a">~</Text>
-        </Pressable>
-        <C.ToolbarDivider />
-        <Pressable onPress={props.onToggleChat} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
-          <Text fontSize={11} color="#b0b0b0">Chat</Text>
-        </Pressable>
+        <C.TopBarGitChip>
+          <C.TopBarGitDot />
+          <C.TopBarGitText>{props.gitBranch}</C.TopBarGitText>
+          <C.TopBarGitMeta>{props.changedCount + ' dirty / ' + props.stagedCount + ' staged'}</C.TopBarGitMeta>
+        </C.TopBarGitChip>
+
+        <TopBarAction label="Refresh" meta="R" onPress={props.onRefreshWorkspace} />
+        <TopBarAction label="Search" meta="F3" onPress={props.onToggleSearch} />
+        <TopBarAction label="Terminal" meta="~" onPress={props.onToggleTerminal} />
+        <TopBarAction label="Agent" onPress={props.onToggleChat} />
       </C.TopBarRight>
     </C.TopBar>
   );

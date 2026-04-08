@@ -1,79 +1,116 @@
-// Editor Component — code editor with gutter, minimap, cursor position
-// No local vars in JSX ternaries (compiler drops them in lua-tree)
+// Editor — highlighted code viewport with active row treatment and quiet scratch buffer
 
-function GutterLine(props) {
+function Token(props) {
+  var token = props.token;
+
+  if (token.kind == 'keyword') return <C.TokenKeyword>{token.text}</C.TokenKeyword>;
+  if (token.kind == 'string') return <C.TokenString>{token.text}</C.TokenString>;
+  if (token.kind == 'comment') return <C.TokenComment>{token.text}</C.TokenComment>;
+  if (token.kind == 'function') return <C.TokenFunction>{token.text}</C.TokenFunction>;
+  if (token.kind == 'number') return <C.TokenNumber>{token.text}</C.TokenNumber>;
+  if (token.kind == 'type') return <C.TokenType>{token.text}</C.TokenType>;
+  if (token.kind == 'variable') return <C.TokenVariable>{token.text}</C.TokenVariable>;
+  if (token.kind == 'operator') return <C.TokenOperator>{token.text}</C.TokenOperator>;
+  if (token.kind == 'tag') return <C.TokenTag>{token.text}</C.TokenTag>;
+  if (token.kind == 'attr') return <C.TokenAttr>{token.text}</C.TokenAttr>;
+  return <C.TokenText>{token.text}</C.TokenText>;
+}
+
+function RowMarker(props) {
+  var bg = '#00000000';
+  if (props.marker == 'todo') bg = '#ff7b72';
+  if (props.marker == 'symbol') bg = '#2d62ff';
+  if (props.marker == 'tool') bg = '#7ee787';
+  if (props.marker == 'flow') bg = '#d2a8ff';
+
+  return <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: bg }} />;
+}
+
+function CodeRow(props) {
+  var row = props.row;
+  var isActive = row.line == props.cursorLine;
+  var bg = isActive ? '#111b2d' : row.line % 2 == 0 ? '#0f1218' : '#0d1015';
+
   return (
-    <Box style={{ height: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 12, paddingLeft: 8 }}>
-      <Text fontSize={12} color="#5a5a5a">{props.num}</Text>
+    <Box style={{ flexDirection: 'row', minHeight: 22, backgroundColor: bg }}>
+      <Box style={{ width: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingRight: 12 }}>
+        <RowMarker marker={row.marker} />
+        <Text fontSize={11} color={isActive ? '#79c0ff' : '#4f5b6b'}>{row.line}</Text>
+      </Box>
+
+      <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row', paddingTop: 3, paddingBottom: 3, paddingRight: 18, overflow: 'hidden' }}>
+        {row.tokens.map(function(token, idx) {
+          return <Token key={idx} token={token} />;
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+function MinimapLine(props) {
+  var row = props.row;
+  var color = row.line == props.cursorLine ? '#2d62ff' : '#2a3440';
+  if (row.marker == 'todo') color = '#ff7b72';
+  if (row.marker == 'tool') color = '#7ee787';
+
+  return (
+    <Box style={{ height: 3, marginBottom: 2, flexDirection: 'row' }}>
+      <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: color }} />
     </Box>
   );
 }
 
 function Editor(props) {
   return (
-    <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row', backgroundColor: '#111111' }}>
-      {/* === LINE NUMBER GUTTER === */}
-      <Box style={{ width: 52, flexDirection: 'column', paddingTop: 4, backgroundColor: '#141414', borderRightWidth: 1, borderColor: '#1f1f1f' }}>
-        <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-          <Box style={{ flexDirection: 'column' }}>
-            {props.lineNumbers.map(function(line, idx) {
-              return (
-                <GutterLine num={line.num} isActive={idx + 1 == props.cursorLine ? 1 : 0} />
-              );
+    <C.EditorViewportShell>
+      <C.EditorHeaderBar>
+        <C.EditorHeaderLeft>
+          <C.EditorHeaderTitle>{props.currentFilePath}</C.EditorHeaderTitle>
+          <C.EditorHeaderMeta>{props.totalLines + ' lines'}</C.EditorHeaderMeta>
+        </C.EditorHeaderLeft>
+        <C.EditorHeaderRight>
+          {props.modified == 1 && <C.EditorHeaderBadge style={{ backgroundColor: '#332200' }}><C.EditorHeaderBadgeText style={{ color: '#e6b450' }}>modified</C.EditorHeaderBadgeText></C.EditorHeaderBadge>}
+          <C.EditorHeaderBadge><C.EditorHeaderBadgeText>native view</C.EditorHeaderBadgeText></C.EditorHeaderBadge>
+          <C.EditorHeaderBadge><C.EditorHeaderBadgeText>scratch buffer below</C.EditorHeaderBadgeText></C.EditorHeaderBadge>
+        </C.EditorHeaderRight>
+      </C.EditorHeaderBar>
+
+      <C.EditorViewport>
+        <C.EditorCodeScroll>
+          <C.EditorCodeStack>
+            {props.editorRows.map(function(row, idx) {
+              return <CodeRow key={idx} row={row} cursorLine={props.cursorLine} />;
             })}
-          </Box>
-        </ScrollView>
-        <Box style={{ height: 20, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderColor: '#1f1f1f' }}>
-          <Text fontSize={9} color="#3d3d3d">{props.totalLines}</Text>
-        </Box>
-      </Box>
+          </C.EditorCodeStack>
+        </C.EditorCodeScroll>
 
-      {/* === EDITOR BODY === */}
-      <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'column' }}>
-        <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row' }}>
-          <Box style={{ flexGrow: 1, flexBasis: 0 }}>
-            <TextInput
-              value={props.content}
-              onChange={function(v) { updateEditorContent(v); }}
-              multiline={1}
-              fontSize={13}
-              color="#b0b0b0"
-              style={{ flexGrow: 1, flexBasis: 0, paddingTop: 4, paddingLeft: 12, paddingRight: 12, paddingBottom: 8, backgroundColor: '#111111' }}
-            />
-          </Box>
+        <C.EditorMinimap>
+          <C.EditorMinimapHeader />
+          <C.EditorMinimapScroll>
+            <C.EditorMinimapStack>
+              {props.editorRows.map(function(row, idx) {
+                return <MinimapLine key={idx} row={row} cursorLine={props.cursorLine} />;
+              })}
+            </C.EditorMinimapStack>
+          </C.EditorMinimapScroll>
+        </C.EditorMinimap>
+      </C.EditorViewport>
 
-          {/* === MINIMAP === */}
-          <Box style={{ width: 54, flexDirection: 'column', paddingTop: 4, paddingRight: 4, paddingLeft: 4, backgroundColor: '#111111', borderLeftWidth: 1, borderColor: '#1a1a1a' }}>
-            <Box style={{ height: 4, borderRadius: 2, backgroundColor: '#ffffff08', marginBottom: 4 }} />
-            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
-              <Box style={{ flexDirection: 'column' }}>
-                {props.lineNumbers.map(function(line, idx) {
-                  return (
-                    <Box style={{ height: 2, marginBottom: 1, flexDirection: 'row' }}>
-                      <Box style={{ height: 2, borderRadius: 1, backgroundColor: '#2a2a2a', width: '50%' }} />
-                    </Box>
-                  );
-                })}
-              </Box>
-            </ScrollView>
-          </Box>
-        </Box>
-
-        {/* Editor footer */}
-        <Box style={{ height: 22, flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 12, borderTopWidth: 1, borderColor: '#1f1f1f', backgroundColor: '#111111' }}>
-          <Text fontSize={10} color="#4a4a4a">Ln {props.cursorLine}</Text>
-          <Box style={{ width: 1, height: 10, backgroundColor: '#1f1f1f', marginLeft: 8, marginRight: 8 }} />
-          <Text fontSize={10} color="#4a4a4a">{props.totalLines} lines</Text>
-          {props.modified == 1 && (
-            <Box style={{ marginLeft: 8 }}>
-              <Text fontSize={10} color="#e6b450">modified</Text>
-            </Box>
-          )}
-          <Box style={{ flexGrow: 1 }} />
-          <Text fontSize={10} color="#3d3d3d">UTF-8 LF</Text>
-        </Box>
-      </Box>
-    </Box>
+      <C.EditorScratchPane>
+        <C.EditorScratchHeader>
+          <C.EditorScratchTitle>Scratch Buffer</C.EditorScratchTitle>
+          <C.EditorScratchMeta>Quiet input, no giant focus frame</C.EditorScratchMeta>
+        </C.EditorScratchHeader>
+        <TextInput
+          value={props.content}
+          onChange={function(v) { updateEditorContent(v); }}
+          multiline={1}
+          fontSize={12}
+          color="#c9d2df"
+          style={{ minHeight: 92, paddingTop: 10, paddingBottom: 10, paddingLeft: 12, paddingRight: 12, backgroundColor: '#0f1218', borderWidth: 0 }}
+        />
+      </C.EditorScratchPane>
+    </C.EditorViewportShell>
   );
 }
 

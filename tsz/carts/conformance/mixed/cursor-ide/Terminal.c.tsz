@@ -1,21 +1,28 @@
-// Terminal Panel — real PTY terminal via vterm
+// Terminal panel — same chrome as editor and chat, real PTY underneath
 
 function TerminalPanel(props) {
   return (
     <C.TerminalPanel>
       <C.TerminalHeader>
-        <C.TerminalTitle>Terminal</C.TerminalTitle>
-        <C.TerminalTabs>
-          <C.TerminalTabActive>bash</C.TerminalTabActive>
-        </C.TerminalTabs>
+        <C.TerminalHeaderMain>
+          <C.TerminalTitle>Terminal</C.TerminalTitle>
+          <C.TerminalMeta>{props.gitBranch}</C.TerminalMeta>
+          <C.TerminalMeta>{props.workDir}</C.TerminalMeta>
+        </C.TerminalHeaderMain>
         <C.TerminalActions>
-          <C.TerminalActionBtn>x</C.TerminalActionBtn>
+          <C.TerminalActionBtn onPress={function() { setShowTerminal(0); }}>
+            <C.TerminalActionLabel>x</C.TerminalActionLabel>
+          </C.TerminalActionBtn>
         </C.TerminalActions>
       </C.TerminalHeader>
 
-      <Box style={{ flexGrow: 1, flexBasis: 0, backgroundColor: '#0d0d0d', padding: 4 }}>
+      <C.TerminalBody>
         <Terminal style={{ flexGrow: 1, flexBasis: 0 }} fontSize={13} />
-      </Box>
+      </C.TerminalBody>
+
+      <C.TerminalFooter>
+        <C.TerminalFooterText>pty attached to workspace shell</C.TerminalFooterText>
+      </C.TerminalFooter>
     </C.TerminalPanel>
   );
 }

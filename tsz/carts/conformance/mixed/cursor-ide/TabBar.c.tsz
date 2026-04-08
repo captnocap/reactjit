@@ -1,38 +1,48 @@
-// TabBar — tabs with file type color dots, modified indicator, close button
+// TabBar — project landing, file tabs, git badges, and dirty markers
+
+function TabIcon(props) {
+  var bg = '#1d2330';
+  var fg = '#8b949e';
+  var label = '#';
+
+  if (props.type == 'home') { bg = '#0d2040'; fg = '#79c0ff'; label = 'P'; }
+  else if (props.type == 'component') { bg = '#10213d'; fg = '#79c0ff'; label = 'C'; }
+  else if (props.type == 'cls') { bg = '#241233'; fg = '#d2a8ff'; label = 'CL'; }
+  else if (props.type == 'script') { bg = '#102214'; fg = '#7ee787'; label = 'JS'; }
+  else if (props.type == 'mod') { bg = '#331608'; fg = '#ffa657'; label = 'MD'; }
+  else if (props.type == 'app') { bg = '#341316'; fg = '#ff7b72'; label = 'AP'; }
+  else if (props.type == 'tsz') { bg = '#112016'; fg = '#56d364'; label = 'TZ'; }
+  else if (props.type == 'ts' || props.type == 'tsx') { bg = '#0d2040'; fg = '#79c0ff'; label = 'TS'; }
+  else if (props.type == 'js' || props.type == 'jsx') { bg = '#332600'; fg = '#e6b450'; label = 'JS'; }
+  else if (props.type == 'md') { bg = '#102214'; fg = '#7ee787'; label = 'MD'; }
+  else if (props.type == 'zig') { bg = '#331608'; fg = '#ffa657'; label = 'ZG'; }
+  else if (props.type == 'css') { bg = '#241233'; fg = '#d2a8ff'; label = 'CS'; }
+
+  return (
+    <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, backgroundColor: bg }}>
+      <Text fontSize={9} color={fg}>{label}</Text>
+    </Box>
+  );
+}
 
 function Tab(props) {
   var tab = props.tab;
   var isActive = props.isActive;
 
-  // File type dot color
-  var dotColor = '#6e6e6e';
-  if (tab.type == 'tsx' || tab.type == 'ts') dotColor = '#3b82f6';
-  if (tab.type == 'js') dotColor = '#eab308';
-  if (tab.type == 'css') dotColor = '#a855f7';
-  if (tab.type == 'json') dotColor = '#22c55e';
-
-  if (isActive == 1) {
-    return (
-      <C.TabActive onPress={function() { activateTab(tab.id); }}>
-        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dotColor }} />
-        <C.TabNameActive>{tab.name}</C.TabNameActive>
-        {tab.modified == 1 && <C.TabModified />}
+  return (
+    <Pressable onPress={function() { activateTab(tab.id); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 10, paddingTop: 8, paddingBottom: 8, backgroundColor: isActive == 1 ? '#11161f' : '#0b0e13', borderRightWidth: 1, borderColor: '#18202b', borderTopWidth: isActive == 1 ? 2 : 0, borderTopColor: isActive == 1 ? '#2d62ff' : '#00000000' }}>
+      <TabIcon type={tab.type} />
+      {isActive == 1 && <C.TabNameActive>{tab.name}</C.TabNameActive>}
+      {isActive != 1 && <C.TabName>{tab.name}</C.TabName>}
+      {tab.git && <C.TabGitBadge>{tab.git}</C.TabGitBadge>}
+      {tab.modified == 1 && <C.TabModified />}
+      <Box style={{ flexGrow: 1 }} />
+      {tab.pinned != 1 && (
         <C.TabClose onPress={function() { closeTab(tab.id); }}>
           <C.TabCloseIcon>x</C.TabCloseIcon>
         </C.TabClose>
-      </C.TabActive>
-    );
-  }
-
-  return (
-    <C.Tab onPress={function() { activateTab(tab.id); }}>
-      <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dotColor }} />
-      <C.TabName>{tab.name}</C.TabName>
-      {tab.modified == 1 && <C.TabModified />}
-      <C.TabClose onPress={function() { closeTab(tab.id); }}>
-        <C.TabCloseIcon>x</C.TabCloseIcon>
-      </C.TabClose>
-    </C.Tab>
+      )}
+    </Pressable>
   );
 }
 
@@ -40,9 +50,7 @@ function TabBar(props) {
   return (
     <C.TabBar>
       {props.tabs.map(function(tab, idx) {
-        return (
-          <Tab tab={tab} isActive={tab.id == props.activeId ? 1 : 0} />
-        );
+        return <Tab key={idx} tab={tab} isActive={tab.id == props.activeId ? 1 : 0} />;
       })}
     </C.TabBar>
   );

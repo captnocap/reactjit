@@ -1,0 +1,141 @@
+// Project landing page — recent projects, git wiring, workspace launchpad
+
+function LandingStat(props) {
+  return (
+    <C.LandingStatCard>
+      <C.LandingStatValue style={{ color: props.stat.tone }}>{props.stat.value}</C.LandingStatValue>
+      <C.LandingStatLabel>{props.stat.label}</C.LandingStatLabel>
+    </C.LandingStatCard>
+  );
+}
+
+function LandingProjectCard(props) {
+  var item = props.item;
+
+  return (
+    <C.LandingProjectCard onPress={function() { props.onOpenPath(item.path); }}>
+      <C.LandingProjectHeader>
+        <C.LandingProjectAccent style={{ backgroundColor: item.accent }} />
+        <C.LandingProjectName>{item.name}</C.LandingProjectName>
+        <C.LandingProjectBadge>{item.badge}</C.LandingProjectBadge>
+      </C.LandingProjectHeader>
+      <C.LandingProjectSummary>{item.summary}</C.LandingProjectSummary>
+      <C.LandingProjectMeta>{item.path}</C.LandingProjectMeta>
+    </C.LandingProjectCard>
+  );
+}
+
+function ConnectionRow(props) {
+  var item = props.item;
+
+  return (
+    <C.LandingConnectionRow>
+      <C.LandingConnectionDot style={{ backgroundColor: item.tone }} />
+      <C.LandingConnectionBody>
+        <C.LandingConnectionName>{item.name}</C.LandingConnectionName>
+        <C.LandingConnectionMeta>{item.detail}</C.LandingConnectionMeta>
+      </C.LandingConnectionBody>
+    </C.LandingConnectionRow>
+  );
+}
+
+function RecentRow(props) {
+  var item = props.item;
+
+  return (
+    <C.LandingRecentRow onPress={function() { props.onOpenPath(item.path); }}>
+      <C.LandingRecentName>{item.label}</C.LandingRecentName>
+      <C.LandingRecentReason>{item.reason}</C.LandingRecentReason>
+      <C.LandingRecentPath>{item.path}</C.LandingRecentPath>
+    </C.LandingRecentRow>
+  );
+}
+
+function ProjectLanding(props) {
+  return (
+    <C.LandingPage>
+      <C.LandingContent>
+        <C.LandingHero>
+          <C.LandingEyebrow>PROJECT LANDING</C.LandingEyebrow>
+          <C.LandingTitle>{props.workspaceName}</C.LandingTitle>
+          <C.LandingSubtitle>{props.workDir}</C.LandingSubtitle>
+          <C.LandingBody>{props.workspaceTagline}</C.LandingBody>
+
+          <C.LandingHeroMetaRow>
+            <C.LandingHeroChip>
+              <C.LandingHeroChipKey>branch</C.LandingHeroChipKey>
+              <C.LandingHeroChipValue>{props.gitBranch}</C.LandingHeroChipValue>
+            </C.LandingHeroChip>
+            <C.LandingHeroChip>
+              <C.LandingHeroChipKey>remote</C.LandingHeroChipKey>
+              <C.LandingHeroChipValue>{props.gitRemote}</C.LandingHeroChipValue>
+            </C.LandingHeroChip>
+            <C.LandingHeroChip>
+              <C.LandingHeroChipKey>sync</C.LandingHeroChipKey>
+              <C.LandingHeroChipValue>{'+' + props.branchAhead + ' / -' + props.branchBehind}</C.LandingHeroChipValue>
+            </C.LandingHeroChip>
+            <C.LandingHeroChip>
+              <C.LandingHeroChipKey>dirty</C.LandingHeroChipKey>
+              <C.LandingHeroChipValue>{props.changedCount + ' dirty / ' + props.stagedCount + ' staged'}</C.LandingHeroChipValue>
+            </C.LandingHeroChip>
+          </C.LandingHeroMetaRow>
+
+          <C.LandingActionRow>
+            <C.LandingPrimaryAction onPress={function() { props.onIndexWorkspace(); }}>
+              <C.LandingPrimaryLabel>Index Workspace</C.LandingPrimaryLabel>
+            </C.LandingPrimaryAction>
+            <C.LandingSecondaryAction onPress={function() { props.onOpenPath('tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz'); }}>
+              <C.LandingSecondaryLabel>Open cursor-ide cart</C.LandingSecondaryLabel>
+            </C.LandingSecondaryAction>
+          </C.LandingActionRow>
+        </C.LandingHero>
+
+        <C.LandingStatsRow>
+          {props.stats.map(function(stat, idx) {
+            return <LandingStat key={idx} stat={stat} />;
+          })}
+        </C.LandingStatsRow>
+
+        <C.LandingPanels>
+          <C.LandingPanel>
+            <C.LandingPanelHeader>
+              <C.LandingPanelTitle>Projects</C.LandingPanelTitle>
+              <C.LandingPanelMeta>Curated entry points into the repo</C.LandingPanelMeta>
+            </C.LandingPanelHeader>
+            <C.LandingProjectList>
+              {props.projects.map(function(item, idx) {
+                return <LandingProjectCard key={idx} item={item} onOpenPath={props.onOpenPath} />;
+              })}
+            </C.LandingProjectList>
+          </C.LandingPanel>
+
+          <C.LandingPanel>
+            <C.LandingPanelHeader>
+              <C.LandingPanelTitle>Git Connections</C.LandingPanelTitle>
+              <C.LandingPanelMeta>Branch, remote, and worktree wiring</C.LandingPanelMeta>
+            </C.LandingPanelHeader>
+            <C.LandingConnectionList>
+              {props.connections.map(function(item, idx) {
+                return <ConnectionRow key={idx} item={item} />;
+              })}
+            </C.LandingConnectionList>
+          </C.LandingPanel>
+        </C.LandingPanels>
+
+        <C.LandingPanel>
+          <C.LandingPanelHeader>
+            <C.LandingPanelTitle>Recent Focus</C.LandingPanelTitle>
+            <C.LandingPanelMeta>Dirty files, open tabs, and cart hotspots</C.LandingPanelMeta>
+          </C.LandingPanelHeader>
+          <C.LandingRecentList>
+            {props.recentFiles.map(function(item, idx) {
+              return <RecentRow key={idx} item={item} onOpenPath={props.onOpenPath} />;
+            })}
+          </C.LandingRecentList>
+        </C.LandingPanel>
+      </C.LandingContent>
+    </C.LandingPage>
+  );
+}
+
+export { ProjectLanding };

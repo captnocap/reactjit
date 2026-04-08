@@ -1,5 +1,5 @@
 // Cursor IDE — Agentic coding environment (Cursor clone)
-// Real file editing, icons, line numbers, create/save
+// Deliberately ambitious conformance surface with real workspace hooks.
 
 import { Sidebar } from './Sidebar.c';
 import { Editor } from './Editor.c';
@@ -9,16 +9,17 @@ import { TopBar } from './TopBar.c';
 import { TabBar } from './TabBar.c';
 import { TerminalPanel } from './Terminal.c';
 import { SearchPanel } from './SearchPanel.c';
-import { initData, selectFile, activateTab, closeTab, openFile, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent, saveCurrentFile, createNewFile, updateEditorContent, setAgentMode, addAttachment, removeAttachment, clearAttachments, attachCurrentFile, triggerFileMention, triggerSymbolMention, toggleWebSearch, toggleTermAccess, toggleAutoApply, cycleModel, startNewConversation, selectSlashCommand, stopBackgroundAgent } from './cursor.script';
+import { ProjectLanding } from './ProjectLanding.c';
+import { initData, activateTab, closeTab, openFileByPath, openLandingPage, refreshWorkspace, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent, saveCurrentFile, createNewFile, updateEditorContent, setAgentMode, addAttachment, removeAttachment, clearAttachments, attachCurrentFile, attachGitContext, triggerFileMention, triggerSymbolMention, toggleWebSearch, toggleTermAccess, toggleAutoApply, cycleModel, startNewConversation, selectSlashCommand, stopBackgroundAgent, openSearchResult } from './cursor.script';
 
 import {
   Shell, Workspace, Editor as EditorShell, Sidebar as SidebarShell, ChatPanel as ChatPanelShell,
   TopBar as TopBarShell, TabBar as TabBarShell, Breadcrumbs as BreadcrumbsShell, StatusBar as StatusBarShell,
-  TerminalPanel as TerminalPanelShell, SearchPanel as SearchPanelShell
+  TerminalPanel as TerminalPanelShell, SearchPanel as SearchPanelShell, LandingPage as LandingPageShell
 } from './cursor_cls';
 
 // === CORE STATE ===
-const [activeTabId, setActiveTabId] = useState('1');
+const [activeTabId, setActiveTabId] = useState('home');
 const [currentInput, setCurrentInputState] = useState('');
 const [isGenerating, setIsGenerating] = useState(0);
 const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
@@ -41,6 +42,28 @@ const [activeAgentId, setActiveAgentId] = useState('');
 const [agentStatusText, setAgentStatusText] = useState('idle');
 const [workDir, setWorkDir] = useState('.');
 
+// === WORKSPACE + LANDING STATE ===
+const [workspaceName, setWorkspaceName] = useState('reactjit');
+const [workspaceTagline, setWorkspaceTagline] = useState('Native agent workspace');
+const [workspaceStats, setWorkspaceStats] = useState([
+  { label: 'indexed', value: '0', tone: '#2d62ff' },
+  { label: 'dirty', value: '0', tone: '#ffb86b' },
+  { label: 'tabs', value: '1', tone: '#7ee787' },
+  { label: 'agents', value: 'idle', tone: '#d2a8ff' },
+]);
+const [landingProjects, setLandingProjects] = useState([
+  { name: 'reactjit', path: '__landing__', summary: 'Live workspace overview', badge: 'workspace', accent: '#2d62ff' },
+]);
+const [landingRecentFiles, setLandingRecentFiles] = useState([]);
+const [gitConnections, setGitConnections] = useState([]);
+const [gitChanges, setGitChanges] = useState([]);
+const [gitRemote, setGitRemote] = useState('origin');
+const [branchAhead, setBranchAhead] = useState(0);
+const [branchBehind, setBranchBehind] = useState(0);
+const [changedCount, setChangedCount] = useState(0);
+const [stagedCount, setStagedCount] = useState(0);
+const [activeView, setActiveView] = useState('landing');
+
 // === PANEL VISIBILITY ===
 const [showChat, setShowChat] = useState(1);
 const [showTerminal, setShowTerminal] = useState(0);
@@ -48,50 +71,26 @@ const [showSearch, setShowSearch] = useState(0);
 
 // === FILE TREE STATE ===
 const [files, setFiles] = useState([
-  { name: 'cursor-ide', type: 'dir', indent: 0, expanded: 1, selected: 0, path: '.' },
-  { name: 'src', type: 'dir', indent: 1, expanded: 1, selected: 0, path: 'src' },
-  { name: 'components', type: 'dir', indent: 2, expanded: 1, selected: 0, path: 'src/components' },
-  { name: 'Sidebar.tsx', type: 'tsx', indent: 3, selected: 1, path: 'src/components/Sidebar.tsx' },
-  { name: 'Editor.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/Editor.tsx' },
-  { name: 'ChatPanel.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/ChatPanel.tsx' },
-  { name: 'StatusBar.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/StatusBar.tsx' },
-  { name: 'Terminal.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/Terminal.tsx' },
-  { name: 'hooks', type: 'dir', indent: 2, expanded: 0, selected: 0, path: 'src/hooks' },
-  { name: 'useAgent.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useAgent.ts' },
-  { name: 'useFSWatch.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useFSWatch.ts' },
-  { name: 'useSQLite.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useSQLite.ts' },
-  { name: 'utils', type: 'dir', indent: 1, expanded: 0, selected: 0, path: 'utils' },
-  { name: 'index.ts', type: 'ts', indent: 2, selected: 0, path: 'utils/index.ts' },
-  { name: 'styles', type: 'dir', indent: 1, expanded: 0, selected: 0, path: 'styles' },
-  { name: 'theme.css', type: 'css', indent: 2, selected: 0, path: 'styles/theme.css' },
-  { name: 'package.json', type: 'json', indent: 1, selected: 0, path: 'package.json' },
-  { name: 'README.md', type: 'md', indent: 1, selected: 0, path: 'README.md' },
-  { name: 'tsconfig.json', type: 'json', indent: 1, selected: 0, path: 'tsconfig.json' },
+  { name: 'reactjit', type: 'workspace', indent: 0, expanded: 1, selected: 1, visible: 1, git: '', path: '.' },
 ]);
 
 // === EDITOR STATE ===
 const [editorContent, setEditorContent] = useState('');
 const [editorModified, setEditorModified] = useState(0);
-const [currentFilePath, setCurrentFilePath] = useState('src/components/Sidebar.tsx');
-const [totalLines, setTotalLines] = useState(20);
+const [currentFilePath, setCurrentFilePath] = useState('__landing__');
+const [editorRows, setEditorRows] = useState([]);
+const [totalLines, setTotalLines] = useState(0);
 const [lineNumbers, setLineNumbers] = useState([
-  { num: '1' }, { num: '2' }, { num: '3' }, { num: '4' }, { num: '5' },
-  { num: '6' }, { num: '7' }, { num: '8' }, { num: '9' }, { num: '10' },
-  { num: '11' }, { num: '12' }, { num: '13' }, { num: '14' }, { num: '15' },
-  { num: '16' }, { num: '17' }, { num: '18' }, { num: '19' }, { num: '20' },
+  { num: '1' },
 ]);
 
 // === TABS ===
 const [openTabs, setOpenTabs] = useState([
-  { id: '1', name: 'Sidebar.tsx', path: 'src/components/Sidebar.tsx', type: 'tsx', modified: 0 },
+  { id: 'home', name: 'Projects', path: '__landing__', type: 'home', modified: 0, pinned: 1 },
 ]);
 
 // === CHAT ===
-const [chatMessages, setChatMessages] = useState([
-  { role: 'assistant', time: '2:34 PM', text: 'I have analyzed the codebase. Found 19 files across 5 directories.' },
-  { role: 'user', time: '2:36 PM', text: 'Search for all components using the SQLite bridge' },
-  { role: 'assistant', time: '2:36 PM', text: 'Found 3 files: useSQLite.ts, SearchPanel.tsx, and AgentTools.tsx.' },
-]);
+const [chatMessages, setChatMessages] = useState([]);
 
 // === TERMINAL STATE ===
 const [terminalLines, setTerminalLines] = useState([
@@ -102,26 +101,22 @@ const [terminalLines, setTerminalLines] = useState([
 
 // === SEARCH STATE ===
 const [searchQuery, setSearchQuery] = useState('');
-const [searchResults, setSearchResults] = useState([
-  { file: 'useSQLite.ts', line: 15, text: 'const db = __sqlite_open("project.db");', matches: 3 },
-  { file: 'SearchPanel.tsx', line: 42, text: 'function searchProject(query) {', matches: 2 },
-]);
+const [searchResults, setSearchResults] = useState([]);
 
 // === MODEL DISPLAY ===
 const [modelDisplayName, setModelDisplayName] = useState('Opus 4');
 
 // === STATUS BAR ===
 const [gitBranch, setGitBranch] = useState('main');
-const [gitStatus, setGitStatus] = useState('*1');
+const [gitStatus, setGitStatus] = useState('');
 const [errors, setErrors] = useState(0);
 const [warnings, setWarnings] = useState(0);
-const [languageMode, setLanguageMode] = useState('TypeScript TSX');
+const [languageMode, setLanguageMode] = useState('Workspace');
 
 // Breadcrumbs derived from current file path
 const [breadcrumbs, setBreadcrumbs] = useState([
-  { label: 'src' },
-  { label: 'components' },
-  { label: 'Sidebar.tsx' },
+  { label: 'Projects', icon: 'P', tone: '#2d62ff', active: 0, kind: 'home' },
+  { label: 'reactjit', icon: 'R', tone: '#7ee787', active: 1, kind: 'workspace', meta: 'workspace' },
 ]);
 
 // Initialize on first render
@@ -133,36 +128,122 @@ if (ready == 0) {
 function App() {
   return (
     <C.Shell>
-      <TopBar title={currentFilePath} onToggleChat={function() { setShowChat(1 - showChat); }} onToggleTerminal={function() { openTerminal(); setShowTerminal(1 - showTerminal); }} onToggleSearch={function() { setShowSearch(1 - showSearch); }} />
+      <TopBar
+        title={currentFilePath}
+        workspaceName={workspaceName}
+        workspaceTagline={workspaceTagline}
+        gitBranch={gitBranch}
+        changedCount={changedCount}
+        stagedCount={stagedCount}
+        onOpenHome={function() { openLandingPage(); }}
+        onRefreshWorkspace={function() { refreshWorkspace(); }}
+        onToggleChat={function() { setShowChat(1 - showChat); }}
+        onToggleTerminal={function() { openTerminal(); setShowTerminal(1 - showTerminal); }}
+        onToggleSearch={function() { setShowSearch(1 - showSearch); }}
+      />
 
       <C.Workspace>
-        <Sidebar files={files} onSelectFile={function(idx) { openFile(idx); }} />
+        <Sidebar
+          files={files}
+          tabs={openTabs}
+          gitChanges={gitChanges}
+          workspaceName={workspaceName}
+          workDir={workDir}
+          gitBranch={gitBranch}
+          changedCount={changedCount}
+          stagedCount={stagedCount}
+          currentFilePath={currentFilePath}
+          onOpenHome={function() { openLandingPage(); }}
+          onRefreshWorkspace={function() { refreshWorkspace(); }}
+          onSelectPath={function(path) { openFileByPath(path); }}
+        />
 
         <C.Editor>
           <TabBar tabs={openTabs} activeId={activeTabId} />
           <C.Breadcrumbs>
             {breadcrumbs.map(function(crumb, idx) {
               return (
-                <C.BreadcrumbItem>
-                  <C.BreadcrumbSep>/</C.BreadcrumbSep>
-                  <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>
+                <C.BreadcrumbItem onPress={crumb.kind == 'home' ? function() { openLandingPage(); } : function() {}}>
+                  {idx > 0 && <C.BreadcrumbSep>/</C.BreadcrumbSep>}
+                  <C.BreadcrumbIconPill style={{ backgroundColor: crumb.tone }}>
+                    <C.BreadcrumbIconText>{crumb.icon}</C.BreadcrumbIconText>
+                  </C.BreadcrumbIconPill>
+                  {crumb.active == 1 && <C.BreadcrumbTextActive>{crumb.label}</C.BreadcrumbTextActive>}
+                  {crumb.active != 1 && <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>}
+                  {crumb.meta && <C.BreadcrumbMeta>{crumb.meta}</C.BreadcrumbMeta>}
                 </C.BreadcrumbItem>
               );
             })}
           </C.Breadcrumbs>
 
-          <Editor content={editorContent} lineNumbers={lineNumbers} totalLines={totalLines} cursorLine={cursorPosition.line} modified={editorModified} />
+          {activeView == 'landing' && (
+            <ProjectLanding
+              workspaceName={workspaceName}
+              workspaceTagline={workspaceTagline}
+              workDir={workDir}
+              gitBranch={gitBranch}
+              gitRemote={gitRemote}
+              branchAhead={branchAhead}
+              branchBehind={branchBehind}
+              changedCount={changedCount}
+              stagedCount={stagedCount}
+              stats={workspaceStats}
+              projects={landingProjects}
+              recentFiles={landingRecentFiles}
+              connections={gitConnections}
+              onOpenPath={function(path) { openFileByPath(path); }}
+              onIndexWorkspace={function() { indexProject('.'); }}
+            />
+          )}
 
-          {showTerminal == 1 && <TerminalPanel />}
+          {activeView == 'editor' && (
+            <Editor
+              content={editorContent}
+              editorRows={editorRows}
+              lineNumbers={lineNumbers}
+              totalLines={totalLines}
+              cursorLine={cursorPosition.line}
+              modified={editorModified}
+              currentFilePath={currentFilePath}
+            />
+          )}
+
+          {showTerminal == 1 && <TerminalPanel workDir={workDir} gitBranch={gitBranch} />}
         </C.Editor>
 
-        {showChat == 1 && <ChatPanel messages={chatMessages} isGenerating={isGenerating} />}
-        {showSearch == 1 && <SearchPanel query={searchQuery} results={searchResults} />}
+        {showSearch == 1 && (
+          <SearchPanel
+            query={searchQuery}
+            results={searchResults}
+            workspaceName={workspaceName}
+            gitBranch={gitBranch}
+            onOpenResult={function(path, line) { openSearchResult(path, line); }}
+          />
+        )}
+
+        {showChat == 1 && (
+          <ChatPanel
+            messages={chatMessages}
+            isGenerating={isGenerating}
+            currentFilePath={currentFilePath}
+            gitBranch={gitBranch}
+            gitRemote={gitRemote}
+            changedCount={changedCount}
+            workspaceName={workspaceName}
+            gitConnections={gitConnections}
+            activeView={activeView}
+          />
+        )}
       </C.Workspace>
 
       <StatusBar
         gitBranch={gitBranch}
         gitStatus={gitStatus}
+        gitRemote={gitRemote}
+        branchAhead={branchAhead}
+        branchBehind={branchBehind}
+        changedCount={changedCount}
+        stagedCount={stagedCount}
         cursorLine={cursorPosition.line}
         cursorColumn={cursorPosition.column}
         languageMode={languageMode}
@@ -170,6 +251,9 @@ function App() {
         warnings={warnings}
         modified={editorModified}
         fileName={currentFilePath}
+        workDir={workDir}
+        selectedModel={modelDisplayName}
+        agentStatusText={agentStatusText}
       />
     </C.Shell>
   );
