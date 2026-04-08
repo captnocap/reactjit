@@ -538,19 +538,21 @@ fn padBottom(s: Style) f32 {
 }
 
 fn marLeft(s: Style) f32 {
-    return s.margin_left orelse s.margin;
+    const v = s.margin_left orelse s.margin;
+    return if (std.math.isInf(v)) 0 else v;
 }
-
 fn marRight(s: Style) f32 {
-    return s.margin_right orelse s.margin;
+    const v = s.margin_right orelse s.margin;
+    return if (std.math.isInf(v)) 0 else v;
 }
-
 fn marTop(s: Style) f32 {
-    return s.margin_top orelse s.margin;
+    const v = s.margin_top orelse s.margin;
+    return if (std.math.isInf(v)) 0 else v;
 }
 
 fn marBottom(s: Style) f32 {
-    return s.margin_bottom orelse s.margin;
+    const v = s.margin_bottom orelse s.margin;
+    return if (std.math.isInf(v)) 0 else v;
 }
 
 fn resolveMaybePct(val: ?f32, parent: f32) ?f32 {
@@ -1427,20 +1429,26 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             const freeMain = mainSize - usedMain - lineGaps;
             // Auto margins: distribute free space to auto margins before justify-content
             var autoMarginCount: usize = 0;
-            if (freeMain > 0) {
-                var am_i = ls;
-                while (am_i < ls + lc) : (am_i += 1) {
-                    const am_ci = visibleIndices[@intCast(am_i)];
-                    const cs2 = node.children[@intCast(am_ci)].style;
+            // Pre-scan: count auto margins even before checking freeMain
+            // (needed to zero out the auto margin from usedMain calculation)
+            {
+                var am_pre = ls;
+                while (am_pre < ls + lc) : (am_pre += 1) {
+                    const am_pre_ci = visibleIndices[@intCast(am_pre)];
+                    const am_pre_cs = node.children[@intCast(am_pre_ci)].style;
                     if (isRow) {
-                        if (cs2.isMarginAutoLeft()) autoMarginCount += 1;
-                        if (cs2.isMarginAutoRight()) autoMarginCount += 1;
+                        if (am_pre_cs.isMarginAutoLeft()) autoMarginCount += 1;
+                        if (am_pre_cs.isMarginAutoRight()) autoMarginCount += 1;
                     } else {
-                        if (cs2.isMarginAutoTop()) autoMarginCount += 1;
-                        if (cs2.isMarginAutoBottom()) autoMarginCount += 1;
+                        if (am_pre_cs.isMarginAutoTop()) autoMarginCount += 1;
+                        if (am_pre_cs.isMarginAutoBottom()) autoMarginCount += 1;
                     }
                 }
-                if (autoMarginCount > 0) {
+            }
+
+
+            if (freeMain > 0 and autoMarginCount > 0) {
+                {
                     const perAuto = freeMain / @as(f32, @floatFromInt(autoMarginCount));
                     var am_j = ls;
                     while (am_j < ls + lc) : (am_j += 1) {
