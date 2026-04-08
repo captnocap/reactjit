@@ -1,0 +1,56 @@
+# Cursor IDE — baseline rendering verification
+# Tests that all major panels and content render correctly
+
+# === TOP BAR ===
+expect "cursor-ide"
+
+# === SIDEBAR ===
+expect "EXPLORER"
+expect "PROJECT"
+
+# === SIDEBAR FILE TREE (props.children fix) ===
+expect "Sidebar.tsx"
+expect "Editor.tsx"
+expect "ChatPanel.tsx"
+expect "useAgent.ts"
+
+# === TABS ===
+expect "Sidebar.c.tsz"
+expect "cursor_cls.tsz"
+expect "cursor.script.tsz"
+expect "useSQLite.ts"
+
+# === BREADCRUMBS ===
+expect "components"
+
+# === EDITOR CONTENT ===
+expect "Cursor IDE - Agentic Coding Environment"
+expect "useState"
+expect "SQLite bridge"
+expect "FileTree"
+
+# === CHAT PANEL ===
+expect "Agent"
+expect "GPT-4"
+expect "Cursor Agent"
+expect "SQLite index"
+expect "Search for all components"
+expect "Found 3 files"
+expect "Send"
+
+# === STATUS BAR ===
+expect "main"
+expect "No problems"
+expect "UTF-8"
+expect "LF"
+
+# === SECTION CHEVRONS (ternary truthiness fix) ===
+# PROJECT is expanded=1, should show "v"
+# RECENT is expanded=0, should show ">"
+# If both show "v", the Lua truthiness fix didn't work
+
+# === CONDITIONAL PANELS (hidden by default) ===
+# Note: "Terminal" text appears in TerminalTab labels even when panel is hidden
+reject "Project Search"
+reject "Agent Tools"
+reject "Code Graph"

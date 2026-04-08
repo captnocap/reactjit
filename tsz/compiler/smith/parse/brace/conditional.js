@@ -180,6 +180,28 @@ function tryParseConditional(c, children) {
         c.advance();
         parenWrapped = true;
       }
+      // Check if next is props.children or children — forward component children as conditional body
+      if (ctx.componentChildren &&
+          ((c.kind() === TK.identifier && c.text() === 'children') ||
+           (c.kind() === TK.identifier && ctx.propsObjectName && c.text() === ctx.propsObjectName &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'children'))) {
+        const condExpr = condParts.join('');
+        // Skip tokens: children or props.children
+        if (c.text() === 'children') { c.advance(); }
+        else { c.advance(); c.advance(); c.advance(); } // props . children
+        if (parenWrapped && c.kind() === TK.rparen) c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        // Build Lua condition
+        var _luaCond2 = _buildLuaCondFromTokens(c, _luaCondStart);
+        // Inject each child with the conditional wrapping
+        for (var _cci = 0; _cci < ctx.componentChildren.length; _cci++) {
+          var _ccChild = ctx.componentChildren[_cci];
+          // Preserve the original child but add condition metadata for Lua tree
+          _ccChild.condition = _luaCond2 || condExpr;
+          children.push(_ccChild);
+        }
+        return true;
+      }
       // Check if next is JSX
       if (c.kind() === TK.lt) {
         const condExpr = condParts.join('');
