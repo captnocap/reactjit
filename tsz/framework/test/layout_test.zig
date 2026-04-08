@@ -294,3 +294,99 @@ test "text in stretch flex detail region wraps as a control" {
     try testing.expectApproxEqAbs(detail.computed.w, label.computed.w, 0.01);
     try testing.expect(label.computed.h > 11);
 }
+
+test "row flex item with flex_basis zero keeps auto min width at exact boundary" {
+    layout.setMeasureFn(mockMeasure);
+    defer layout.setMeasureFn(null);
+
+    var tree_text = [_]layout.Node{
+        .{ .text = "Tree", .font_size = 11 },
+    };
+    var detail_text = [_]layout.Node{
+        .{ .text = "detail flex region should wrap", .font_size = 11 },
+    };
+    var row_children = [_]layout.Node{
+        .{
+            .style = .{
+                .width = 120,
+                .justify_content = .center,
+                .align_items = .center,
+            },
+            .children = &tree_text,
+        },
+        .{
+            .style = .{
+                .flex_grow = 1,
+                .flex_basis = 0,
+                .justify_content = .center,
+                .align_items = .stretch,
+            },
+            .children = &detail_text,
+        },
+    };
+    var root = layout.Node{
+        .style = .{
+            .flex_direction = .row,
+            .gap = 6,
+            .align_items = .stretch,
+        },
+        .children = &row_children,
+    };
+
+    layout.markLayoutDirty();
+    layout.layout(&root, 0, 0, 126, 52);
+
+    const detail = &root.children[1];
+    const label = &detail.children[0];
+
+    try testing.expectApproxEqAbs(@as(f32, 36), detail.computed.w, 0.01);
+    try testing.expectApproxEqAbs(detail.computed.w, label.computed.w, 0.01);
+    try testing.expect(label.computed.h > 11);
+}
+
+test "explicit min_width zero opts out of row flex auto minimum" {
+    layout.setMeasureFn(mockMeasure);
+    defer layout.setMeasureFn(null);
+
+    var tree_text = [_]layout.Node{
+        .{ .text = "Tree", .font_size = 11 },
+    };
+    var detail_text = [_]layout.Node{
+        .{ .text = "detail flex region should wrap", .font_size = 11 },
+    };
+    var row_children = [_]layout.Node{
+        .{
+            .style = .{
+                .width = 120,
+                .justify_content = .center,
+                .align_items = .center,
+            },
+            .children = &tree_text,
+        },
+        .{
+            .style = .{
+                .flex_grow = 1,
+                .flex_basis = 0,
+                .min_width = 0,
+                .justify_content = .center,
+                .align_items = .stretch,
+            },
+            .children = &detail_text,
+        },
+    };
+    var root = layout.Node{
+        .style = .{
+            .flex_direction = .row,
+            .gap = 6,
+            .align_items = .stretch,
+        },
+        .children = &row_children,
+    };
+
+    layout.markLayoutDirty();
+    layout.layout(&root, 0, 0, 126, 52);
+
+    const detail = &root.children[1];
+
+    try testing.expectApproxEqAbs(@as(f32, 0), detail.computed.w, 0.01);
+}

@@ -128,6 +128,9 @@ export fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void {
 export fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void {
     luajit_runtime_mod.registerHostFn(name, func orelse return, argc);
 }
+export fn rjit_lua_set_global_int(name: [*:0]const u8, val: i64) void {
+    luajit_runtime_mod.setGlobalInt(name, val);
+}
 
 // ── Engine C-ABI export ──────��────────────────────────────────────���─
 
@@ -141,6 +144,22 @@ export fn rjit_engine_run(config: *const api.EngineConfig) c_int {
         .lua_logic = config.lua_logic_ptr[0..config.lua_logic_len],
         .init = config.init,
         .tick = config.tick,
+        .borderless = config.borderless,
     }) catch return 1;
     return 0;
+}
+
+// ── Window chrome C-ABI exports ─────────────────────────────────────
+
+export fn rjit_window_close() void {
+    engine_mod.windowClose();
+}
+export fn rjit_window_minimize() void {
+    engine_mod.windowMinimize();
+}
+export fn rjit_window_maximize() void {
+    engine_mod.windowMaximize();
+}
+export fn rjit_window_is_maximized() bool {
+    return engine_mod.windowIsMaximized();
 }

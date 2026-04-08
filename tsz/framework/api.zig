@@ -316,6 +316,9 @@ pub const Node = struct {
     effect_name: ?[]const u8 = null,
     effect_background: bool = false,
     effect_mask: bool = false,
+    // Custom window chrome — borderless window drag/resize regions
+    window_drag: bool = false,
+    window_resize: bool = false,
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -390,6 +393,7 @@ pub const EngineConfig = extern struct {
     lua_logic_len: usize,
     init: ?*const fn () void,
     tick: ?*const fn (u32) void,
+    borderless: bool = false,
 };
 
 pub extern fn rjit_engine_run(config: *const EngineConfig) c_int;
@@ -405,10 +409,25 @@ pub const engine = struct {
             .lua_logic_len = opts.lua_logic.len,
             .init = opts.init,
             .tick = opts.tick,
+            .borderless = if (@hasField(@TypeOf(opts), "borderless")) opts.borderless else false,
         };
         const rc = rjit_engine_run(&config);
         if (rc != 0) return error.EngineError;
     }
+};
+
+// ── Window chrome (borderless window controls) ───────────────────────
+pub const window = struct {
+    pub extern fn rjit_window_close() void;
+    pub extern fn rjit_window_minimize() void;
+    pub extern fn rjit_window_maximize() void;
+    pub extern fn rjit_window_is_maximized() bool;
+
+    pub fn close() void { rjit_window_close(); }
+    pub fn minimize() void { rjit_window_minimize(); }
+    /// Toggle maximize/restore.
+    pub fn maximize() void { rjit_window_maximize(); }
+    pub fn isMaximized() bool { return rjit_window_is_maximized(); }
 };
 
 // ── NodePool ───────────────────────────────────────────────────────
@@ -502,8 +521,10 @@ pub const luajit_runtime = struct {
     pub extern fn rjit_lua_call_global(name: [*:0]const u8) void;
     pub extern fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void;
     pub extern fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void;
+    pub extern fn rjit_lua_set_global_int(name: [*:0]const u8, val: i64) void;
 
     pub fn callGlobal(name: [*:0]const u8) void { rjit_lua_call_global(name); }
     pub fn setMapWrapper(index: usize, ptr: *anyopaque) void { rjit_lua_set_map_wrapper(index, ptr); }
     pub fn registerHostFn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void { rjit_lua_register_host_fn(name, func, argc); }
+    pub fn setGlobalInt(name: [*:0]const u8, val: i64) void { rjit_lua_set_global_int(name, val); }
 };

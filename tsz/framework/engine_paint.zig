@@ -160,16 +160,11 @@ pub fn paintNode(node: *Node) void {
         const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
         const cx = r.x + r.w / 2;
         const cy = r.y + r.h / 2;
-        const g_tx = cx - vx * vz;
-        const g_ty = cy - vy * vz;
-        // DEBUG: subpixel offset diagnosis
-        {
-            const S = struct { var logged: bool = false; };
-            if (!S.logged) {
-                S.logged = true;
-                std.debug.print("[graph-debug] rect=({d:.1},{d:.1},{d:.1},{d:.1}) cx={d:.2} cy={d:.2} tx={d:.2} ty={d:.2} vz={d:.3} vx={d:.2} vy={d:.2}\n", .{ r.x, r.y, r.w, r.h, cx, cy, g_tx, g_ty, vz, vx, vy });
-            }
-        }
+        const g_tx_raw = cx - vx * vz;
+        const g_ty_raw = cy - vy * vz;
+        const snap_graph_transform = @abs(vz - 1.0) < 0.001;
+        const g_tx = if (snap_graph_transform) @floor(g_tx_raw) + 0.5 else g_tx_raw;
+        const g_ty = if (snap_graph_transform) @floor(g_ty_raw) + 0.5 else g_ty_raw;
         gpu.setTransform(0, 0, g_tx, g_ty, vz);
         for (node.children) |*child| paintNode(child);
         gpu.resetTransform();
@@ -483,7 +478,8 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
 
     if (node.text) |t| {
-        if (t.len > 0) {
+        // Skip text rendering for TextInput nodes — the input buffer paints instead
+        if (t.len > 0 and node.input_id == null) {
             const tc = node.text_color orelse Color.rgb(255, 255, 255);
             const pl = node.style.padLeft();
             const pt = node.style.padTop();
@@ -518,7 +514,18 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
     }
 
-    if (node.input_id) |id| paintTextInput(node, id);
+    if (node.input_id) |id| {
+        // Seed input buffer from value binding (node.text) when unfocused and buffer is empty/stale
+        if (node.text) |t| {
+            if (t.len > 0 and !input.isFocused(id)) {
+                const current = input.getText(id);
+                if (!std.mem.eql(u8, current, t)) {
+                    input.setText(id, t);
+                }
+            }
+        }
+        paintTextInput(node, id);
+    }
 }
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.

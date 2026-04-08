@@ -389,6 +389,9 @@ pub const Node = struct {
     effect_name: ?[]const u8 = null, // named effect — renders but not drawn, referenced by fillEffect
     effect_background: bool = false, // true = render behind parent's children
     effect_mask: bool = false, // true = post-process parent's rendered content
+    // Custom window chrome — borderless window drag/resize regions
+    window_drag: bool = false, // true = dragging this node moves the window
+    window_resize: bool = false, // true = this node is a resize edge (direction auto-detected from position)
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -1359,8 +1362,24 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         }
                     }
                 }
-                }
                 if (isRow) {
+                    {
+                        var i = ls;
+                        while (i < ls + lc) : (i += 1) {
+                            const childIdx = visibleIndices[@intCast(i)];
+                            const childNode = &node.children[@intCast(childIdx)];
+                            if (childNode.style.min_width != null) {
+                                continue;
+                            }
+                            const mcw = computeMinContentW(childNode);
+                            if (asF32(childBasis[@intCast(i)]) < asF32(mcw)) {
+                                childBasis[@intCast(i)] = mcw;
+                            }
+                        }
+                    }
+                }
+            }
+            if (isRow) {
                 var i = ls;
                 while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
@@ -1368,11 +1387,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     if (childNode.style.min_width != null) {
                         continue;
                     }
-                    const autoMinW = computeMinContentW(childNode);
-                    const maxW = resolveMaybePct(childNode.style.max_width, innerW);
-                    const floorW = if (maxW != null) @min(autoMinW, maxW.?) else autoMinW;
-                    if (asF32(childBasis[@intCast(i)]) < asF32(floorW)) {
-                        childBasis[@intCast(i)] = floorW;
+                    if (childBasis[@intCast(i)] <= 0) {
+                        const autoMinW = computeMinContentW(childNode);
+                        const maxW = resolveMaybePct(childNode.style.max_width, innerW);
+                        const floorW = if (maxW != null) @min(autoMinW, maxW.?) else autoMinW;
+                        if (asF32(childBasis[@intCast(i)]) < asF32(floorW)) {
+                            childBasis[@intCast(i)] = floorW;
+                        }
                     }
                 }
             }

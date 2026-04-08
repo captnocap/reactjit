@@ -578,11 +578,122 @@ pub const AppConfig = struct {
     check_reload: ?*const fn (*AppConfig) bool = null,
     /// Called after init during a hot-reload, before tick. Used for state restoration.
     post_reload: ?*const fn () void = null,
+    /// Borderless window — removes OS window decorations (title bar, borders).
+    /// The app must provide its own chrome using window_drag / window_resize nodes.
+    borderless: bool = false,
 };
 
 // ── Text measurement (framework-owned) ──────────────────────────────────
 
 var g_text_engine: ?*TextEngine = null;
+
+// ── Custom window chrome (borderless mode) ──────────────────────────────
+
+var g_chrome_root: ?*Node = null; // root node for hit-test callback
+var g_chrome_window: ?*c.SDL_Window = null; // window pointer for control functions
+
+/// SDL hit-test callback — called by SDL to determine what region of a borderless
+/// window the cursor is in. Walks the node tree looking for window_drag / window_resize nodes.
+fn windowHitTestCallback(
+    _: ?*c.SDL_Window,
+    point: ?*const c.SDL_Point,
+    _: ?*anyopaque,
+) callconv(std.builtin.CallingConvention.c) c.SDL_HitTestResult {
+    const root = g_chrome_root orelse return c.SDL_HITTEST_NORMAL;
+    const pt = point orelse return c.SDL_HITTEST_NORMAL;
+    const mx: f32 = @floatFromInt(pt.x);
+    const my: f32 = @floatFromInt(pt.y);
+
+    // Walk the tree — deepest matching node wins (children checked first)
+    if (hitTestChrome(root, mx, my)) |result| return result;
+    return c.SDL_HITTEST_NORMAL;
+}
+
+fn hitTestChrome(node: *Node, mx: f32, my: f32) ?c.SDL_HitTestResult {
+    if (node.style.display == .none) return null;
+    const r = node.computed;
+    // Only test nodes the cursor is actually inside
+    if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+
+    // Children first (deeper nodes take priority)
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitTestChrome(&node.children[i], mx, my)) |result| return result;
+    }
+
+    // Check this node
+    if (node.window_drag) return c.SDL_HITTEST_DRAGGABLE;
+    if (node.window_resize) return chromeResizeEdge(node, mx, my);
+
+    return null;
+}
+
+/// Determine which resize edge based on cursor position within the node.
+/// The node's position in the window determines the edge direction:
+/// - Top-left corner → RESIZE_TOPLEFT, etc.
+/// - Nodes along edges → RESIZE_TOP/BOTTOM/LEFT/RIGHT
+fn chromeResizeEdge(node: *Node, mx: f32, my: f32) c.SDL_HitTestResult {
+    const r = node.computed;
+    const corner = @min(r.w, r.h) * 0.4; // 40% of the smaller dimension = corner zone
+
+    const near_left = (mx - r.x) < corner;
+    const near_right = (r.x + r.w - mx) < corner;
+    const near_top = (my - r.y) < corner;
+    const near_bottom = (r.y + r.h - my) < corner;
+
+    // Corner combinations
+    if (near_top and near_left) return c.SDL_HITTEST_RESIZE_TOPLEFT;
+    if (near_top and near_right) return c.SDL_HITTEST_RESIZE_TOPRIGHT;
+    if (near_bottom and near_left) return c.SDL_HITTEST_RESIZE_BOTTOMLEFT;
+    if (near_bottom and near_right) return c.SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+
+    // Edge — use node center to determine which edge this is
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    // Wider nodes are horizontal edges (top/bottom), taller nodes are vertical (left/right)
+    if (r.w > r.h) {
+        return if (cy < my) c.SDL_HITTEST_RESIZE_BOTTOM else c.SDL_HITTEST_RESIZE_TOP;
+    } else {
+        return if (cx < mx) c.SDL_HITTEST_RESIZE_RIGHT else c.SDL_HITTEST_RESIZE_LEFT;
+    }
+}
+
+/// Close the window (for custom close button).
+pub fn windowClose() void {
+    if (g_chrome_window) |w| {
+        // Push a close event so the normal shutdown path runs
+        var event: c.SDL_Event = undefined;
+        event.type = c.SDL_EVENT_QUIT;
+        _ = c.SDL_PushEvent(&event);
+        _ = w; // suppress unused
+    }
+}
+
+/// Minimize the window (for custom minimize button).
+pub fn windowMinimize() void {
+    if (g_chrome_window) |w| _ = c.SDL_MinimizeWindow(w);
+}
+
+/// Maximize or restore the window (toggles, for custom maximize button).
+pub fn windowMaximize() void {
+    if (g_chrome_window) |w| {
+        const flags = c.SDL_GetWindowFlags(w);
+        if ((flags & c.SDL_WINDOW_MAXIMIZED) != 0) {
+            _ = c.SDL_RestoreWindow(w);
+        } else {
+            _ = c.SDL_MaximizeWindow(w);
+        }
+    }
+}
+
+/// Query whether the window is currently maximized.
+pub fn windowIsMaximized() bool {
+    if (g_chrome_window) |w| {
+        return (c.SDL_GetWindowFlags(w) & c.SDL_WINDOW_MAXIMIZED) != 0;
+    }
+    return false;
+}
 
 /// Open a URL — if the app has a JS _browserNavigate handler, navigate in-app.
 /// Otherwise open in the system browser via xdg-open.
@@ -1496,7 +1607,8 @@ pub fn run(config_in: AppConfig) !void {
     const headless = std.posix.getenv("ZIGOS_HEADLESS") != null;
     const window_flags: u64 = c.SDL_WINDOW_RESIZABLE |
         (if (comptime builtin_os == .macos) c.SDL_WINDOW_METAL else @as(u64, 0)) |
-        (if (headless) c.SDL_WINDOW_HIDDEN else @as(u64, 0));
+        (if (headless) c.SDL_WINDOW_HIDDEN else @as(u64, 0)) |
+        (if (config.borderless) c.SDL_WINDOW_BORDERLESS else @as(u64, 0));
     const window = c.SDL_CreateWindow(
         config.title,
         init_w, init_h,
@@ -1507,6 +1619,13 @@ pub fn run(config_in: AppConfig) !void {
     // SDL3: position is set after creation (not in CreateWindow)
     _ = c.SDL_SetWindowPosition(window, init_x, init_y);
     _ = c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
+
+    // Custom window chrome — register hit-test callback for borderless windows
+    if (config.borderless) {
+        g_chrome_root = config.root;
+        g_chrome_window = window;
+        _ = c.SDL_SetWindowHitTest(window, windowHitTestCallback, null);
+    }
 
     // Enable text input events (SDL_EVENT_TEXT_INPUT) — required for keyboard input to work
     _ = c.SDL_StartTextInput(window);
@@ -1636,6 +1755,8 @@ pub fn run(config_in: AppConfig) !void {
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
+                // Update chrome root for borderless hit-testing after root swap
+                if (config.borderless) g_chrome_root = config.root;
                 layout.markLayoutDirty();
                 std.debug.print("[hot-reload] App reloaded\n", .{});
             }

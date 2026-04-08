@@ -8,7 +8,7 @@ const std = @import("std");
 const c = @import("c.zig").imports;
 
 const MAX_INPUTS = 16;
-const BUF_SIZE = 256;
+const BUF_SIZE = 4096;
 
 pub const InputState = struct {
     buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,

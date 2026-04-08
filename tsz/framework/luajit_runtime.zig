@@ -333,6 +333,16 @@ fn readLuaColor(L: ?*lua.lua_State, idx: c_int) ?Color {
         const val: u32 = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, idx))));
         return Color.rgb(@intCast((val >> 16) & 0xFF), @intCast((val >> 8) & 0xFF), @intCast(val & 0xFF));
     }
+    if (lua.lua_isstring(L, idx) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, idx, &len);
+        if (ptr != null) {
+            const s = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (s.len >= 7 and s[0] == '#') {
+                return Color.fromHex(s[0..7]);
+            }
+        }
+    }
     return null;
 }
 
@@ -550,15 +560,35 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     lua.lua_getfield(L, idx, "text_color");
     node.text_color = readLuaColor(L, -1);
     lua.lua_pop(L, 1);
-    // text_input / input_id — TextInput support from Lua tree
-    lua.lua_getfield(L, idx, "text_input");
-    if (lua.lua_toboolean(L, -1) != 0) {
-        node.text_input = true;
-    }
-    lua.lua_pop(L, 1);
+    // TextInput support: input_id + multiline from Lua tree
     lua.lua_getfield(L, idx, "input_id");
     if (lua.lua_isnumber(L, -1) != 0) {
-        node.input_id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+        const iid: u8 = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+        node.input_id = iid;
+        // Check multiline flag and register accordingly
+        lua.lua_pop(L, 1);
+        lua.lua_getfield(L, idx, "multiline");
+        if (lua.lua_toboolean(L, -1) != 0) {
+            input_mod.registerMultiline(iid);
+        } else {
+            input_mod.register(iid);
+        }
+    }
+    lua.lua_pop(L, 1);
+    // Terminal support: terminal + terminal_id from Lua tree
+    lua.lua_getfield(L, idx, "terminal");
+    if (lua.lua_toboolean(L, -1) != 0) {
+        node.terminal = true;
+        lua.lua_pop(L, 1);
+        lua.lua_getfield(L, idx, "terminal_id");
+        if (lua.lua_isnumber(L, -1) != 0) {
+            node.terminal_id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+        }
+        lua.lua_pop(L, 1);
+        lua.lua_getfield(L, idx, "terminal_font_size");
+        if (lua.lua_isnumber(L, -1) != 0) {
+            node.terminal_font_size = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
+        }
     }
     lua.lua_pop(L, 1);
     // style

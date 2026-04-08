@@ -361,6 +361,15 @@ fn hostSetFlowEnabled(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [
     return QJS_UNDEFINED;
 }
 
+fn hostSetVariant(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const theme_mod = @import("theme.zig");
+    if (argc < 1) return QJS_UNDEFINED;
+    var val: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &val, argv[0]);
+    theme_mod.setVariant(@intCast(@max(0, @min(255, val))));
+    return QJS_UNDEFINED;
+}
+
 fn hostGetFps(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_fps));
 }
@@ -1835,6 +1844,24 @@ pub fn setOpenWindowFn(f: *const fn ([*:0]const u8, c_int, c_int) void) void {
     g_open_window_fn = f;
 }
 
+fn hostWindowClose(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const engine_mod = @import("engine.zig");
+    engine_mod.windowClose();
+    return QJS_UNDEFINED;
+}
+
+fn hostWindowMinimize(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const engine_mod = @import("engine.zig");
+    engine_mod.windowMinimize();
+    return QJS_UNDEFINED;
+}
+
+fn hostWindowMaximize(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const engine_mod = @import("engine.zig");
+    engine_mod.windowMaximize();
+    return QJS_UNDEFINED;
+}
+
 fn hostOpenWindow(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     const c2 = ctx orelse return QJS_UNDEFINED;
     if (argc < 3) return QJS_UNDEFINED;
@@ -1902,6 +1929,8 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getSelectedNode", qjs.JS_NewCFunction(ctx, hostGetSelectedNode, "getSelectedNode", 0));
     // Flow animation control
     _ = qjs.JS_SetPropertyStr(ctx, global, "setFlowEnabled", qjs.JS_NewCFunction(ctx, hostSetFlowEnabled, "setFlowEnabled", 1));
+    // Variant switching (classifier variants)
+    _ = qjs.JS_SetPropertyStr(ctx, global, "setVariant", qjs.JS_NewCFunction(ctx, hostSetVariant, "setVariant", 1));
     // Input text access
     _ = qjs.JS_SetPropertyStr(ctx, global, "getInputText", qjs.JS_NewCFunction(ctx, hostGetInputText, "getInputText", 1));
     // Node dim/highlight (filter system)
@@ -1987,6 +2016,9 @@ pub fn initVM() void {
 
     // Window management
     _ = qjs.JS_SetPropertyStr(ctx, global, "__openWindow", qjs.JS_NewCFunction(ctx, hostOpenWindow, "__openWindow", 3));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__windowClose", qjs.JS_NewCFunction(ctx, hostWindowClose, "__windowClose", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__windowMinimize", qjs.JS_NewCFunction(ctx, hostWindowMinimize, "__windowMinimize", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__windowMaximize", qjs.JS_NewCFunction(ctx, hostWindowMaximize, "__windowMaximize", 0));
 
     // IPC debug client host functions (external inspector attach)
     qjs_ipc.registerAll(@ptrCast(ctx));
