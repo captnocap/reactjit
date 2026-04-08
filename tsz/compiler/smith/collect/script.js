@@ -34,6 +34,14 @@ function collectScript(c) {
 
   if (globalThis.__scriptContent) {
     scanScriptFunctionNames(globalThis.__scriptContent, true);
+    // .script.tsz imports arrive via __scriptContent (set by forge merge).
+    // ctx.scriptBlock must be set so brace expression handlers in brace.js
+    // know we have a JS runtime and can emit dynText slots for {expr} in JSX.
+    if (!ctx.scriptBlock) {
+      ctx.scriptBlock = globalThis.__scriptContent;
+    } else {
+      ctx.scriptBlock = ctx.scriptBlock + '\n\n' + globalThis.__scriptContent;
+    }
   }
 }
 

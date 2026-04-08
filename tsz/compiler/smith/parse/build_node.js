@@ -1,3 +1,17 @@
+// Resolve \x02OA_ITEM:oaIdx:iterVar:itemParam markers in Lua condition strings.
+// These markers are inserted by component_brace_values.js when a whole map item
+// is passed as a prop. In Lua conditionals, they need to become _item.field.
+// E.g. "\x02OA_ITEM:3:_i:_item . model" → "_item.model"
+function _resolveOaItemMarkers(expr) {
+  if (!expr || expr.indexOf('\x02') === -1) return expr;
+  // Pattern: \x02OA_ITEM:N:iterVar:itemParam followed by optional " . field"
+  return expr.replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)\s*\.\s*(\w+)/g, function(_, itemParam, field) {
+    return itemParam + '.' + field;
+  }).replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)/g, function(_, itemParam) {
+    return itemParam;
+  });
+}
+
 function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
   // Auto-overflow: any Box with constrained height gets overflow:auto (clips + scrolls when content exceeds)
   // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
@@ -247,8 +261,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             } else {
               // Single-arg: strip Zig runtime calls and casts
               var _singleClean = _fmtExpr;
-              // qjs_runtime.evalToString("String(expr)", &buf) → expr
-              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
+              // Preserve JS-backed values as __eval(...) so Lua doesn't try to
+              // call render-local helpers directly.
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
               // &_eval_buf_N leftover
               _singleClean = _singleClean.replace(/,\s*&_eval_buf_\d+/g, '');
               _singleClean = _singleClean.replace(/&_eval_buf_\d+/g, '');
@@ -662,6 +678,15 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _ln.text_input = true;
             _ln.input_id = parseInt(_nf.slice(12));
           }
+          // TextInput: multiline flag
+          if (_nf === '.multiline = true') {
+            _ln.multiline = true;
+          }
+          // Terminal: terminal_id → mark as terminal in luaNode
+          if (_nf.startsWith('.terminal_id = ')) {
+            _ln.terminal = true;
+            _ln.terminal_id = parseInt(_nf.slice(15));
+          }
           // Canvas/Graph/3D/Physics node fields → forward to luaNode
           var _nfEq = _nf.indexOf(' = ');
           if (_nfEq > 1) {
@@ -752,6 +777,27 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               }
             }
           }
+          // Strip orphaned 'props .' prefix before resolved handler refs
+          _jsBody = _jsBody.replace(/\bprops\s*\.\s*(_handler_press_\d+)/g, '$1');
+          // Inline _handler_press_N(args) calls with the referenced handler's body
+          _jsBody = _jsBody.replace(/_handler_press_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _hIdx, _hArgs) {
+            var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_press_' + _hIdx; });
+            if (_rh && _rh.jsBody) {
+              var _ib = _rh.jsBody;
+              if (_rh.closureParams && _rh.closureParams.length > 0) {
+                var _ca = _hArgs.split(/\s*,\s*/);
+                for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
+                  _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
+                }
+              }
+              return _ib;
+            }
+            return _m;
+          });
+          // TextInput onChange: bind closure params to getInputText
+          if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
+            _jsBody = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsBody;
+          }
           _ln.handler = _jsBody;
           _ln.handlerIsJs = true;
         } else if (_handler.luaBody) {
@@ -778,6 +824,27 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 }
               }
             }
+            // Strip orphaned 'props .' prefix before resolved handler refs
+            _jsH2 = _jsH2.replace(/\bprops\s*\.\s*(_handler_press_\d+)/g, '$1');
+            // Inline _handler_press_N(args) calls with the referenced handler's body
+            _jsH2 = _jsH2.replace(/_handler_press_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _hIdx, _hArgs) {
+              var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_press_' + _hIdx; });
+              if (_rh && _rh.jsBody) {
+                var _ib = _rh.jsBody;
+                if (_rh.closureParams && _rh.closureParams.length > 0) {
+                  var _ca = _hArgs.split(/\s*,\s*/);
+                  for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
+                    _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
+                  }
+                }
+                return _ib;
+              }
+              return _m;
+            });
+            // TextInput onChange: bind closure params to getInputText
+            if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
+              _jsH2 = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsH2;
+            }
             _ln.handler = _jsH2;
             _ln.handlerIsJs = true;
           } else {
@@ -796,10 +863,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           // Conditionals
           if (_ch.condIdx !== undefined && ctx.conditionals[_ch.condIdx]) {
             var _cond = ctx.conditionals[_ch.condIdx];
-            _ln.children.push({ condition: _cond.luaCondExpr || _cond.condExpr, node: _ch.luaNode });
+            _ln.children.push({ condition: _resolveOaItemMarkers(_cond.luaCondExpr || _cond.condExpr), node: _ch.luaNode });
           } else if (_ch.ternaryCondIdx !== undefined && ctx.conditionals[_ch.ternaryCondIdx]) {
             var _tc = ctx.conditionals[_ch.ternaryCondIdx];
-            var _tcLua = _tc.luaCondExpr || _tc.condExpr;
+            var _tcLua = _resolveOaItemMarkers(_tc.luaCondExpr || _tc.condExpr);
             if (_ch.ternaryBranch === 'true') {
               _ln.children.push({ ternaryCondition: _tcLua, trueNode: _ch.luaNode, falseNode: null });
             } else if (_ch.ternaryBranch === 'false') {
@@ -826,7 +893,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           if (_lmr) {
             _ln.children.push({
               luaMapLoop: {
-                dataVar: _lmr.rawSource || _lmr.varName,
+                dataVar: _lmr.dataVar || _lmr.rawSource || _lmr.varName,
                 itemParam: _lmr.itemParam || '_item',
                 indexParam: _lmr.indexParam || null,
                 bodyNode: _lmr.bodyNode || null,
