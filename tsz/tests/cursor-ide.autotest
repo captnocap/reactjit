@@ -99,7 +99,7 @@ expect "FileTree"
 # === COLORS ===
 color "EXPLORER" #6e6e6e
 color "No problems" #6e6e6e
-color "UTF-8" #6e6e6e
+color "UTF-8" #3d3d3d
 
 # === HIDDEN PANELS ===
 reject "Project Search"
