@@ -1512,6 +1512,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         if (isReverse) {
                             cursor -= childMainMarginEnd[@intCast(i)] + cwFinal;
+                        } else {
+                            cursor += childMainMarginStart[@intCast(i)];
                         }
                         cx = x + pl + cursor;
                         chFinal = childCrossSize[@intCast(i)];
@@ -1545,6 +1547,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         if (isReverse) {
                             cursor -= childMainMarginEnd[@intCast(i)] + chFinal;
+                        } else {
+                            cursor += childMainMarginStart[@intCast(i)];
                         }
                         cy = y + pt + cursor;
                         cwFinal = childCrossSize[@intCast(i)];
@@ -1608,7 +1612,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     if (isReverse) {
                         cursor -= childMainMarginStart[@intCast(i)] + gap + extraGap;
                     } else {
-                        cursor += childMainMarginStart[@intCast(i)] + actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
+                        cursor += actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
                     }
                     if (isRow) {
                         const me = (child.computed.x - x) + child.computed.w + childMainMarginEnd[@intCast(i)];
