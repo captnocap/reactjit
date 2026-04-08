@@ -1,5 +1,5 @@
 # Cursor IDE — full baseline test
-# Verifies rendering, file operations, tabs, icons, panels
+# Verifies rendering, file operations, tabs, icons, editing, panels
 
 # === SHELL & TOP BAR ===
 expect "src/components/Sidebar.tsx"
@@ -8,7 +8,7 @@ expect "src/components/Sidebar.tsx"
 expect "EXPLORER"
 expect "+"
 
-# === FILE TREE — directories ===
+# === FILE TREE — directories with chevrons ===
 expect "cursor-ide"
 expect "src"
 expect "components"
@@ -16,7 +16,7 @@ expect "hooks"
 expect "utils"
 expect "styles"
 
-# === FILE TREE — files ===
+# === FILE TREE — files with type badges ===
 expect "Sidebar.tsx"
 expect "Editor.tsx"
 expect "ChatPanel.tsx"
@@ -28,9 +28,10 @@ expect "README.md"
 expect "tsconfig.json"
 expect "theme.css"
 
-# === FILE TYPE ICONS ===
-# TS badge appears for .tsx/.ts files
+# === FILE TYPE ICONS (colored badges) ===
 expect "TS"
+expect "JS"
+expect "MD"
 
 # === TABS ===
 expect "Sidebar.tsx"
@@ -39,7 +40,9 @@ expect "Sidebar.tsx"
 expect "components"
 
 # === EDITOR ===
+# Line count visible
 expect "lines"
+expect "20"
 
 # === CHAT PANEL ===
 expect "Agent"
@@ -49,6 +52,7 @@ expect "I have analyzed the codebase"
 expect "Search for all components"
 expect "Found 3 files"
 expect "Send"
+expect "#"
 
 # === STATUS BAR ===
 expect "git"
@@ -60,29 +64,42 @@ expect "TypeScript TSX"
 expect "UTF-8"
 expect "LF"
 
-# === PANEL TOGGLES IN TOP BAR ===
+# === PANEL TOGGLES ===
 expect "Search"
 expect "Terminal"
 expect "Chat"
 
-# === CLICK FILES — tabs open ===
+# === CLICK FILE — open Editor.tsx ===
 click "Editor.tsx"
+# New tab should appear
 expect "Editor.tsx"
+# Editor content changes to Editor.tsx file
+expect "Editor Component"
 
+# === CLICK FILE — open package.json ===
 click "package.json"
 expect "package.json"
+expect "0.1.0"
 
+# === CLICK FILE — open README.md ===
 click "README.md"
 expect "README.md"
+expect "Agentic coding environment"
 
-# === TAB SWITCHING ===
+# === CLICK FILE — open theme.css ===
+click "theme.css"
+expect "theme.css"
+expect "--bg-primary"
+
+# === TAB SWITCHING — go back to Sidebar.tsx ===
 click "Sidebar.tsx"
-expect "Sidebar.tsx"
+expect "FileTree"
 
 # === COLORS ===
 color "EXPLORER" #6e6e6e
 color "No problems" #6e6e6e
 color "UTF-8" #6e6e6e
 
-# === HIDDEN PANELS (default) ===
+# === HIDDEN PANELS ===
 reject "Project Search"
+reject "$"
