@@ -247,6 +247,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
     if (ctx.scriptBlock) {
       // Strip TypeScript syntax: declare statements, type annotations, generics
       var _jsBlock = ctx.scriptBlock;
+      _jsBlock = _jsBlock.replace(/^export\s+/gm, ''); // strip ES module export keyword
       _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
       _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
       _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3'); // strip param type annotations
@@ -255,6 +256,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
     if (globalThis.__scriptContent) {
       var _scriptCleaned = globalThis.__scriptContent;
       _scriptCleaned = _scriptCleaned.replace(/^<\/?script>$/gm, ''); // strip <script> tags
+      _scriptCleaned = _scriptCleaned.replace(/^export\s+/gm, ''); // strip ES module export keyword
       _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
       _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
       _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');

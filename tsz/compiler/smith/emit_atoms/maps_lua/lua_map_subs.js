@@ -56,9 +56,53 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
       }
     }
   }
-  expr = expr.replace(/===/g, '==');
+  // Strip Zig builtins that leak from parseTemplateLiteral into Lua expressions
+  expr = expr.replace(/@divTrunc\(([^,]+),\s*([^)]+)\)/g, 'math.floor($1 / $2)');
+  expr = expr.replace(/@mod\(([^,]+),\s*([^)]+)\)/g, '($1 % $2)');
+  for (var _zi = 0; _zi < 3; _zi++) {
+    expr = expr.replace(/@as\(\[\]const u8,\s*("[^"]*")\)/g, '$1');
+    expr = expr.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+    expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
+    expr = expr.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+  }
+  // Zig if/else chains → Lua and/or (from parseTemplateLiteral ternary emit)
+  for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
+    var _ifPos = expr.indexOf('if (');
+    if (_ifPos < 0) break;
+    var _depth = 0, _ci3 = _ifPos + 3;
+    for (; _ci3 < expr.length; _ci3++) {
+      if (expr[_ci3] === '(') _depth++;
+      if (expr[_ci3] === ')') { _depth--; if (_depth === 0) break; }
+    }
+    if (_depth !== 0) break;
+    var _cond = expr.substring(_ifPos + 4, _ci3);
+    var _after = expr.substring(_ci3 + 1).trim();
+    var _elseIdx = _after.indexOf(' else ');
+    if (_elseIdx < 0) break;
+    var _trueVal = _after.substring(0, _elseIdx).trim();
+    var _prefix = expr.substring(0, _ifPos);
+    var _suffix = _after.substring(_elseIdx + 6).trim();
+    expr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
+  }
   expr = expr.replace(/!==/g, '~=');
-  expr = expr.replace(/&&/g, 'and');
+  expr = expr.replace(/===/g, '==');
+  expr = expr.replace(/!=/g, '~=');
+  expr = expr.replace(/\|\|/g, ' or ');
+  expr = expr.replace(/&&/g, ' and ');
+  // Bitwise operators → LuaJIT bit library (after &&/|| so remaining &/| are bitwise)
+  if (expr.indexOf('&') >= 0 || expr.indexOf('|') >= 0 || expr.indexOf('^') >= 0 ||
+      expr.indexOf('>>') >= 0 || expr.indexOf('<<') >= 0 || /~(?!=)\w/.test(expr)) {
+    expr = expr.replace(/~(?!=)(\w+)/g, 'bit.bnot($1)');
+    for (var _bp = 0; _bp < 5; _bp++) {
+      var _prevE = expr;
+      expr = expr.replace(/(\w+)\s*>>\s*(\w+)/g, 'bit.rshift($1, $2)');
+      expr = expr.replace(/(\w+)\s*<<\s*(\w+)/g, 'bit.lshift($1, $2)');
+      expr = expr.replace(/(\w+)\s*&\s*(\w+)/g, 'bit.band($1, $2)');
+      expr = expr.replace(/(\w+)\s*\|\s*(\w+)/g, 'bit.bor($1, $2)');
+      expr = expr.replace(/(\w+)\s*\^\s*(\w+)/g, 'bit.bxor($1, $2)');
+      if (expr === _prevE) break;
+    }
+  }
   expr = expr.replace(/'#([0-9a-fA-F]{3,8})'/g, '0x$1');
   expr = expr.replace(/"#([0-9a-fA-F]{3,8})"/g, '0x$1');
   return expr;

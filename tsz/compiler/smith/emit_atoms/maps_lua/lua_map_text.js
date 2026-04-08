@@ -5,6 +5,9 @@
 function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   if (!text) return '""';
 
+  // Normalize pre-escaped quotes from parser (prevents double-escaping: \" → \\")
+  if (typeof text === 'string') text = text.replace(/\\"/g, '"');
+
   // Field reference: { field: "title" } → tostring(_item.title)
   if (typeof text === 'object' && text.field) {
     return 'tostring(_item.' + text.field + ')';
@@ -27,6 +30,8 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
         _sv = _sv.replace(/@as\(\w+,\s*([^)]+)\)/g, '$1');
         _sv = _sv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
         _sv = _sv.replace(/@intCast\(([^)]+)\)/g, '$1');
+        _sv = _sv.replace(/@divTrunc\(([^,]+),\s*([^)]+)\)/g, 'math.floor($1 / $2)');
+        _sv = _sv.replace(/@mod\(([^,]+),\s*([^)]+)\)/g, '($1 % $2)');
       }
       // JS operators → Lua
       _sv = _sv.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');

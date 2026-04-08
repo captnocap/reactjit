@@ -6,7 +6,7 @@
 // Uses _hexToLua, _jsExprToLua from lua_map_subs.js.
 
 // If a condition contains function calls that aren't Lua builtins, wrap in __eval
-var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1 };
+var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1, band:1, bor:1, bxor:1, bnot:1, lshift:1, rshift:1, bit:1 };
 function _cleanCondForEval(expr) {
   // State slot refs → getter names
   expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
@@ -178,6 +178,8 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
       if (child.condition) {
         var cond = _jsExprToLua(child.condition, itemParam, indexParam, _luaIdxExpr);
         cond = _wrapCondEval(cond);
+        // In Lua, 0 is truthy — bitwise results need explicit ~= 0 check
+        if (/\bbit\./.test(cond)) cond = cond + ' ~= 0';
         var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ', _luaIdxExpr);
         // If body is already a conditional ending with 'or nil' (from unwrap), don't double-wrap
         if (body.lastIndexOf(' or nil') === body.length - 7) {

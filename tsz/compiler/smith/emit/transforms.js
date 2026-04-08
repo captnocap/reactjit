@@ -16,6 +16,20 @@ function luaTransform(code) {
   s = s.replace(/&&/g, ' and ');
   // !expr → not expr (but not != which is already handled)
   s = s.replace(/!(?!=|=)/g, 'not ');
+  // Bitwise operators → LuaJIT bit library (after &&/|| so remaining &/| are bitwise)
+  if (s.indexOf('&') >= 0 || s.indexOf('|') >= 0 || s.indexOf('^') >= 0 ||
+      s.indexOf('>>') >= 0 || s.indexOf('<<') >= 0 || /~(?!=)\w/.test(s)) {
+    s = s.replace(/~(?!=)(\w+)/g, 'bit.bnot($1)');
+    for (var _bp = 0; _bp < 5; _bp++) {
+      var _prev = s;
+      s = s.replace(/(\w+)\s*>>\s*(\w+)/g, 'bit.rshift($1, $2)');
+      s = s.replace(/(\w+)\s*<<\s*(\w+)/g, 'bit.lshift($1, $2)');
+      s = s.replace(/(\w+)\s*&\s*(\w+)/g, 'bit.band($1, $2)');
+      s = s.replace(/(\w+)\s*\|\s*(\w+)/g, 'bit.bor($1, $2)');
+      s = s.replace(/(\w+)\s*\^\s*(\w+)/g, 'bit.bxor($1, $2)');
+      if (s === _prev) break;
+    }
+  }
   // Ternary: a ? b : c → (a) and (b) or (c)
   // Find ? at any depth, then find : at the same depth
   var _tDep = 0, _qPos = -1, _qDep = -1;
@@ -133,6 +147,8 @@ function luaTransform(code) {
 function jsTransform(code) {
   if (!code) return code;
   var s = code;
+  // Strip ES module export keyword — QJS doesn't support module syntax
+  s = s.replace(/^export\s+/gm, '');
   // Lua operators that leaked into JS bodies → convert back
   s = s.replace(/\band\b/g, '&&');
   s = s.replace(/\bor\b/g, '||');

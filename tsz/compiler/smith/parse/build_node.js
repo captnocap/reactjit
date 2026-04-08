@@ -129,8 +129,28 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               for (var _cai = 0; _cai < 5; _cai++) {
                 _cleanedArgs = _cleanedArgs.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
               }
-              // Zig if/else → Lua ternary BEFORE splitting
-              _cleanedArgs = _cleanedArgs.replace(/\bif\s+\((.+?)\)\s+("(?:[^"\\]|\\.)*")\s+else\s+("(?:[^"\\]|\\.)*")/g, '($1) and $2 or $3');
+              // @divTrunc/@mod → Lua equivalents BEFORE splitting (they contain commas)
+              _cleanedArgs = _cleanedArgs.replace(/@divTrunc\(([^,]+),\s*([^)]+)\)/g, 'math.floor($1 / $2)');
+              _cleanedArgs = _cleanedArgs.replace(/@mod\(([^,]+),\s*([^)]+)\)/g, '($1 % $2)');
+              // Zig if/else → Lua ternary BEFORE splitting (iterative for nested)
+              for (var _ifJ = 0; _ifJ < 10; _ifJ++) {
+                var _ifQ = _cleanedArgs.indexOf('if (');
+                if (_ifQ < 0) break;
+                var _d3 = 0, _c3 = _ifQ + 3;
+                for (; _c3 < _cleanedArgs.length; _c3++) {
+                  if (_cleanedArgs[_c3] === '(') _d3++;
+                  if (_cleanedArgs[_c3] === ')') { _d3--; if (_d3 === 0) break; }
+                }
+                if (_d3 !== 0) break;
+                var _cd3 = _cleanedArgs.substring(_ifQ + 4, _c3);
+                var _af3 = _cleanedArgs.substring(_c3 + 1).trim();
+                var _el3 = _af3.indexOf(' else ');
+                if (_el3 < 0) break;
+                var _tv3 = _af3.substring(0, _el3).trim();
+                var _pf3 = _cleanedArgs.substring(0, _ifQ);
+                var _sf3 = _af3.substring(_el3 + 6).trim();
+                _cleanedArgs = _pf3 + '(' + _cd3 + ') and ' + _tv3 + ' or ' + _sf3;
+              }
               var _args = _cleanedArgs.split(/,\s*/);
               var _luaParts = [];
               for (var _pi = 0; _pi < _parts.length; _pi++) {
@@ -147,8 +167,25 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                     _argClean = _argClean.replace(/@intCast\(([^)]+)\)/g, '$1');
                     _argClean = _argClean.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
                   }
-                  // Now if/else → Lua (cond) and val or val
-                  _argClean = _argClean.replace(/\bif\s+\((.+?)\)\s+(\S+)\s+else\s+(\S+)/g, '($1) and $2 or $3');
+                  // Now if/else → Lua (cond) and val or val (iterative for nested ternaries)
+                  for (var _ifI = 0; _ifI < 10; _ifI++) {
+                    var _ifP = _argClean.indexOf('if (');
+                    if (_ifP < 0) break;
+                    var _d2 = 0, _c2 = _ifP + 3;
+                    for (; _c2 < _argClean.length; _c2++) {
+                      if (_argClean[_c2] === '(') _d2++;
+                      if (_argClean[_c2] === ')') { _d2--; if (_d2 === 0) break; }
+                    }
+                    if (_d2 !== 0) break;
+                    var _cd2 = _argClean.substring(_ifP + 4, _c2);
+                    var _af2 = _argClean.substring(_c2 + 1).trim();
+                    var _el2 = _af2.indexOf(' else ');
+                    if (_el2 < 0) break;
+                    var _tv2 = _af2.substring(0, _el2).trim();
+                    var _pf2 = _argClean.substring(0, _ifP);
+                    var _sf2 = _af2.substring(_el2 + 6).trim();
+                    _argClean = _pf2 + '(' + _cd2 + ') and ' + _tv2 + ' or ' + _sf2;
+                  }
                   // Clean orphan parens
                   var _ao = (_argClean.match(/\(/g) || []).length;
                   var _ac = (_argClean.match(/\)/g) || []).length;
