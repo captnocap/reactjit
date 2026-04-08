@@ -567,6 +567,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         var _sk = _sf.slice(1, _eqIdx); // strip leading .
         var _sv = _sf.slice(_eqIdx + 3);
         // Color.rgb(r,g,b) → keep as-is for lua_map_style to handle
+        // std.math.inf(f32) → "auto" for Lua margin auto support
+        if (_sv === 'std.math.inf(f32)') _sv = 'auto';
         // .enum_value → strip leading dot
         if (_sv.charAt(0) === '.') _sv = _sv.slice(1);
         // Resolve state.getSlot references to getter names

@@ -166,7 +166,9 @@ function clsStyleFields(def) {
       if (typeof val === 'string' && val.endsWith('%')) {
         const pct = parseFloat(val);
         fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
-      } else if (!(typeof val === 'string' && val === 'auto')) {
+      } else if (typeof val === 'string' && val === 'auto') {
+        fields.push(`.${styleKeys[key]} = std.math.inf(f32)`);
+      } else {
         fields.push(`.${styleKeys[key]} = ${val}`);
       }
     }

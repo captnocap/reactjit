@@ -347,6 +347,29 @@ fn readLuaFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: f
     return readLuaOptFloat(L, idx, field) orelse default;
 }
 
+/// Read a margin field: number → pixel value, "auto" → inf (triggers auto-margin in layout)
+fn readLuaMargin(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
+    lua.lua_getfield(L, idx, field);
+    if (lua.lua_isnumber(L, -1) != 0) {
+        const v: f32 = @floatCast(lua.lua_tonumber(L, -1));
+        lua.lua_pop(L, 1);
+        return v;
+    }
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const s = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, s, "auto")) {
+                lua.lua_pop(L, 1);
+                return std.math.inf(f32);
+            }
+        }
+    }
+    lua.lua_pop(L, 1);
+    return null;
+}
+
 fn readLuaBool(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) bool {
     lua.lua_getfield(L, idx, field);
     const result = lua.lua_toboolean(L, -1) != 0;
@@ -392,9 +415,10 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     if (readLuaOptFloat(L, idx, "padding_bottom")) |v| s.padding_bottom = v;
     if (readLuaOptFloat(L, idx, "padding_left")) |v| s.padding_left = v;
     if (readLuaOptFloat(L, idx, "padding_right")) |v| s.padding_right = v;
-    if (readLuaOptFloat(L, idx, "margin_top")) |v| s.margin_top = v;
-    if (readLuaOptFloat(L, idx, "margin_bottom")) |v| s.margin_bottom = v;
-    if (readLuaOptFloat(L, idx, "margin_left")) |v| s.margin_left = v;
+    if (readLuaMargin(L, idx, "margin_top")) |v| s.margin_top = v;
+    if (readLuaMargin(L, idx, "margin_bottom")) |v| s.margin_bottom = v;
+    if (readLuaMargin(L, idx, "margin_left")) |v| s.margin_left = v;
+    if (readLuaMargin(L, idx, "margin_right")) |v| s.margin_right = v;
     if (readLuaOptFloat(L, idx, "border_radius")) |v| s.border_radius = v;
     if (readLuaOptFloat(L, idx, "border_width")) |v| s.border_width = v;
     // justify_content: check string
@@ -425,7 +449,7 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     lua.lua_pop(L, 1);
     // background_color
     lua.lua_getfield(L, idx, "background_color");
-    s.background_color = readLuaColor(L, -1) orelse Color{};
+    s.background_color = readLuaColor(L, -1);
     lua.lua_pop(L, 1);
     // border_color
     lua.lua_getfield(L, idx, "border_color");
@@ -1003,6 +1027,13 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     } else {
         lua.lua_pop(L, 1);
     }
+}
+
+/// Set a global Lua integer variable
+pub fn setGlobalInt(name: [*:0]const u8, val: i64) void {
+    const L = g_lua orelse return;
+    lua.lua_pushinteger(L, @intCast(val));
+    lua.lua_setglobal(L, name);
 }
 
 /// Check if a global Lua function exists
