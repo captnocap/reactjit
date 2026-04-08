@@ -112,7 +112,7 @@ function _parseTernaryCondParts(c) {
     // props.X dot-access in ternary condition
     var pa = peekPropsAccess(c);
     if (pa) {
-      skipPropsAccess(c);
+      skipPropsAccess(c, pa);
       condParts.push(_condPropValue(pa.value));
       continue;
     }
@@ -442,7 +442,7 @@ function tryParseTernaryText(c, children) {
     {
       const pa = peekPropsAccess(c);
       if (pa) {
-        skipPropsAccess(c);
+        skipPropsAccess(c, pa);
         condParts.push(_condPropValue(pa.value));
         continue;
       }

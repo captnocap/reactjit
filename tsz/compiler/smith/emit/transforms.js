@@ -149,6 +149,10 @@ function jsTransform(code) {
   var s = code;
   // Strip ES module export keyword — QJS doesn't support module syntax
   s = s.replace(/^export\s+/gm, '');
+  // Strip TypeScript — QJS is plain JS
+  s = s.replace(/^declare\s+function\s+[^;]+;?\s*$/gm, '');
+  s = s.replace(/^declare\s+var\s+[^;]+;?\s*$/gm, '');
+  s = s.replace(/:\s*(?:any|string|number|boolean|void|object)\b/g, '');
   // Lua operators that leaked into JS bodies → convert back
   s = s.replace(/\band\b/g, '&&');
   s = s.replace(/\bor\b/g, '||');

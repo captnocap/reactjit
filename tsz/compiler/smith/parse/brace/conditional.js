@@ -16,6 +16,35 @@ function _buildLuaCondFromTokens(c, savedStart) {
       else { parts.push('"' + sv + '"'); }
       c.advance(); continue;
     }
+    // Resolve props.X dot-access (bare-param component: function Comp(props) { ... props.X ... })
+    if (c.kind() === TK.identifier && ctx.propsObjectName && c.text() === ctx.propsObjectName &&
+        c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+      var _ppField = c.textAt(c.pos + 2);
+      if (ctx.propStack && ctx.propStack[_ppField] !== undefined) {
+        var _ppv = String(ctx.propStack[_ppField]);
+        _ppv = _ppv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+        _ppv = _ppv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+        for (var _ppi = 0; _ppi < 3; _ppi++) {
+          _ppv = _ppv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+          _ppv = _ppv.replace(/@intCast\(([^)]+)\)/g, '$1');
+        }
+        _ppv = _ppv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+          return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+        });
+        _ppv = _ppv.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+          return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+        });
+        // Handle .length after props access: props.X.length → #resolved (Lua string length)
+        if (c.pos + 4 < c.count && c.kindAt(c.pos + 3) === TK.dot && c.textAt(c.pos + 4) === 'length') {
+          parts.push('#' + _ppv);
+          c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); // skip props . field . length
+        } else {
+          parts.push(_ppv);
+          c.advance(); c.advance(); c.advance(); // skip props . field
+        }
+        continue;
+      }
+    }
     // Resolve component prop names to their values (OA refs cleaned for Lua)
     // Skip if preceded by a dot (field access like _nitem.deptIdx — not a prop ref)
     var _isPropRef = c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined;
@@ -252,7 +281,7 @@ function tryParseConditional(c, children) {
     {
       const pa = peekPropsAccess(c);
       if (pa) {
-        skipPropsAccess(c);
+        skipPropsAccess(c, pa);
         const pav = _condPropValue(pa.value);
         // Handle .length after props access: props.X.length → resolved.len
         if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {

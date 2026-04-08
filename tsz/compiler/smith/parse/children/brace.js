@@ -84,7 +84,26 @@ function tryParseBraceChild(c, children) {
           // Now cursor is at field name — tryParseMap handles field.map(...)
           const mapResult = tryParseMap(c, oa);
           if (mapResult) {
-            children.push(mapResult);
+            // Convert mapIdx result to _luaMapWrapper for lua-tree compatibility
+            if (mapResult.mapIdx !== undefined) {
+              var _mapInfo2 = ctx.maps[mapResult.mapIdx];
+              if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+              var _pmLuaIdx = ctx._luaMapRebuilders.length;
+              ctx._luaMapRebuilders.push({
+                index: _pmLuaIdx,
+                luaCode: null,
+                bodyNode: mapResult.luaNode || (_mapInfo2 && _mapInfo2._luaBodyNode) || null,
+                itemParam: _mapInfo2 ? _mapInfo2.itemParam : '_item',
+                indexParam: _mapInfo2 ? _mapInfo2.indexParam : null,
+                rawSource: resolvedName,
+                varName: resolvedName,
+                isNested: !!ctx.currentMap
+              });
+              if (_mapInfo2) _mapInfo2.mapBackend = 'lua_runtime';
+              children.push({ nodeExpr: '.{ .test_id = "__lmw' + _pmLuaIdx + '" }', _luaMapWrapper: _pmLuaIdx });
+            } else {
+              children.push(mapResult);
+            }
             if (c.kind() === TK.rbrace) c.advance();
             return true;
           }
@@ -367,7 +386,7 @@ function tryParseBraceChild(c, children) {
   {
     const pa = peekPropsAccess(c);
     if (pa) {
-      skipPropsAccess(c);
+      skipPropsAccess(c, pa);
       const propVal = pa.value;
       if (c.kind() === TK.rbrace) {
         c.advance();
@@ -669,7 +688,7 @@ function tryParseBraceChild(c, children) {
           // Check props access: props.X
           const pa = peekPropsAccess(c);
           if (pa) {
-            skipPropsAccess(c);
+            skipPropsAccess(c, pa);
             const pv = pa.value;
             const isZig = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot'));
             if (isZig) {

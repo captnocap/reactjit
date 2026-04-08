@@ -61,7 +61,10 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
     // Zig if/else or any complex expression → __eval() escape hatch
     if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0 || val.indexOf(' and ') >= 0)) {
       var _jsExpr = val;
-      // 1. Color.rgb → 0xRRGGBB FIRST (before paren stripping mangles them)
+      // 1. Color.rgb/rgba → 0xRRGGBB FIRST (before paren stripping mangles them)
+      _jsExpr = _jsExpr.replace(/Color\.rgba\((\d+),\s*(\d+),\s*(\d+),\s*\d+\)/g, function(_, r, g, b) {
+        return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+      });
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
       });
@@ -103,6 +106,9 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
       // 4. OA refs → _item.field
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
       _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // 4b. std.mem.eql → Lua string compare
+      _jsExpr = _jsExpr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+      _jsExpr = _jsExpr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
       // 5. Zig if/else → Lua (cond) and val or val
       // Handles chained: if (a) X else if (b) Y else Z
       // → (a) and X or (b) and Y or Z

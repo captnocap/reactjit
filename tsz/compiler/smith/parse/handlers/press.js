@@ -99,7 +99,7 @@ function pushInlinePressHandler(c, handlerName) {
 function tryConsumeForwardedPressHandler(c) {
   const pa = peekPropsAccess(c);
   if (pa && typeof pa.value === 'string' && pa.value.startsWith('_handler_press_')) {
-    skipPropsAccess(c);
+    skipPropsAccess(c, pa);
     if (c.kind() === TK.rbrace) c.advance();
     return pa.value;
   }

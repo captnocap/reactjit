@@ -262,14 +262,41 @@ function peekPropsAccess(c) {
   if (c.pos + 2 >= c.count) return null;
   if (c.kindAt(c.pos + 1) !== TK.dot || c.kindAt(c.pos + 2) !== TK.identifier) return null;
   const field = c.textAt(c.pos + 2);
-  if (ctx.propStack && ctx.propStack[field] !== undefined) return { field: field, value: ctx.propStack[field] };
+  if (ctx.propStack && ctx.propStack[field] !== undefined) {
+    var pv = ctx.propStack[field];
+    // OA item ref marker (\x02OA_ITEM:oaIdx:iterVar) — resolve props.item.field to OA field access
+    if (typeof pv === 'string' && pv.charCodeAt(0) === 2) {
+      if (c.pos + 4 < c.count && c.kindAt(c.pos + 3) === TK.dot && c.kindAt(c.pos + 4) === TK.identifier) {
+        var subField = c.textAt(c.pos + 4);
+        var parts = pv.substring(9).split(':'); // skip '\x02OA_ITEM:'
+        var oaIdx = parseInt(parts[0]);
+        var iterVar = parts[1] || '_i';
+        var oa = null;
+        for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
+          if (ctx.objectArrays[_oi].oaIdx === oaIdx) { oa = ctx.objectArrays[_oi]; break; }
+        }
+        var fieldInfo = oa ? oa.fields.find(function(f) { return f.name === subField; }) : null;
+        if (oa && fieldInfo && fieldInfo.type === 'string') {
+          return { field: field, value: '_oa' + oaIdx + '_' + subField + '[' + iterVar + '][0.._oa' + oaIdx + '_' + subField + '_lens[' + iterVar + ']]', skip: 5 };
+        } else if (oa) {
+          return { field: field, value: '_oa' + oaIdx + '_' + subField + '[' + iterVar + ']', skip: 5 };
+        }
+      }
+      // OA item ref without .field — return the item param name
+      // so render-local aliasing works: var tab = props.tab → renderLocals['tab'] = 'tab'
+      // which matches ctx.currentMap.itemParam and triggers OA field resolution downstream
+      var _itemParts = pv.substring(9).split(':');
+      var _itemParam = _itemParts[2] || _itemParts[0];
+      return { field: field, value: _itemParam };
+    }
+    return { field: field, value: pv };
+  }
   return null;
 }
 
-function skipPropsAccess(c) {
-  c.advance();
-  c.advance();
-  c.advance();
+function skipPropsAccess(c, peekResult) {
+  var n = (peekResult && peekResult.skip) ? peekResult.skip : 3;
+  for (var _si = 0; _si < n; _si++) c.advance();
 }
 
 function markRuntimeLogNeeded() {

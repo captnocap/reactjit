@@ -101,7 +101,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 // Wrap if-expressions in parens so Zig operator precedence works
                 if (pv.includes('if (') && pv.includes(' else ')) pv = '(' + pv + ')';
                 valParts.push(pv);
-                skipPropsAccess(c);
+                skipPropsAccess(c, pa);
                 continue;
               }
               // Const OA bracket access: nodes[0] or nodes[0].field

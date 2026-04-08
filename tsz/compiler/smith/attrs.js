@@ -721,7 +721,7 @@ function luaParseHandler(c) {
       {
         const pa = peekPropsAccess(c);
         if (pa) {
-          skipPropsAccess(c);
+          skipPropsAccess(c, pa);
           const pv = pa.value;
           if (typeof pv === 'string') {
             const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');

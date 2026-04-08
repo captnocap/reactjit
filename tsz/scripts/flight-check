@@ -1206,7 +1206,16 @@ if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
     JS_LOGIC_BLOB=$(sed -n '/^pub const JS_LOGIC/,/^;$/p' "$GEN/logic.zig" 2>/dev/null | sed 's/^[[:space:]]*\\\\//')
     if [ -n "$JS_LOGIC_BLOB" ] && [ "$JS_LOGIC_BLOB" != '""' ]; then
         BROKEN_SETTERS=0
+        _prev_setter_pending=""
         while IFS= read -r _line; do
+            # If previous line was a setter missing dirty signal, check if THIS line
+            # delegates to another setter (e.g., setCurrentInput → setCurrentInputState)
+            if [ -n "$_prev_setter_pending" ]; then
+                case "$_line" in
+                    *'set'[A-Z]*'(v)'*|*'set'[A-Z]*'(v;'*|*'__markDirty'*|*'__luaEval'*) _prev_setter_pending="" ;;
+                    *) BROKEN_SETTERS=$((BROKEN_SETTERS + 1)); _prev_setter_pending="" ;;
+                esac
+            fi
             case "$_line" in
                 *'function set'*'(v) {'*)
                     case "$_line" in
@@ -1218,13 +1227,17 @@ if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
                             # Skip OA setters — var declared as array: var X = [];
                             case "$JS_LOGIC_BLOB" in
                                 *"var ${_varname} = [];"*) ;;
-                                *) BROKEN_SETTERS=$((BROKEN_SETTERS + 1)) ;;
+                                *) _prev_setter_pending="$_setter" ;;
                             esac
                             ;;
                     esac
                     ;;
             esac
         done <<< "$JS_LOGIC_BLOB"
+        # Handle trailing pending setter
+        if [ -n "$_prev_setter_pending" ]; then
+            BROKEN_SETTERS=$((BROKEN_SETTERS + 1))
+        fi
         if [ "$BROKEN_SETTERS" -gt 0 ]; then
             fail "LT7a: $BROKEN_SETTERS JS state setter(s) in JS_LOGIC have no dirty signal (__markDirty/__setState) — button presses will update QJS vars but never re-render"
         fi

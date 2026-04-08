@@ -38,8 +38,13 @@ function tryResolveMappedComponentProp(c, attr, propValues) {
 
   c.advance();
   if (c.kind() !== TK.dot) {
-    c.restore(saved);
-    return false;
+    // Whole map item passed as prop (e.g., file={file}) — store OA item ref marker
+    // Format: \x02OA_ITEM:oaIdx:iterVar:itemParam
+    // peekPropsAccess resolves props.X.field → OA field access (skip: 5)
+    // peekPropsAccess resolves props.X (no field) → itemParam name (for render-local aliasing)
+    if (c.kind() === TK.rbrace) c.advance();
+    propValues[attr] = '\x02OA_ITEM:' + matchMap.oa.oaIdx + ':' + (matchMap.iterVar || '_i') + ':' + matchMap.itemParam;
+    return true;
   }
 
   c.advance();
@@ -108,7 +113,7 @@ function parseComponentBraceValue(c) {
 
     const propAccess = peekPropsAccess(c);
     if (propAccess) {
-      skipPropsAccess(c);
+      skipPropsAccess(c, propAccess);
       val += typeof propAccess.value === 'string' ? propAccess.value : String(propAccess.value);
       continue;
     }

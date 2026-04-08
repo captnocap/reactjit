@@ -251,16 +251,42 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
       _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
       _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3'); // strip param type annotations
+      _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*(=)/g, '$1 $3'); // strip var type annotations: var x: any = → var x =
+      _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*;/g, '$1;'); // strip var type: var x: any; → var x;
       jsContent += _jsBlock;
     }
     if (globalThis.__scriptContent) {
       var _scriptCleaned = globalThis.__scriptContent;
       _scriptCleaned = _scriptCleaned.replace(/^<\/?script>$/gm, ''); // strip <script> tags
-      _scriptCleaned = _scriptCleaned.replace(/^export\s+/gm, ''); // strip ES module export keyword
+      _scriptCleaned = _scriptCleaned.replace(/^export\s*\{[^}]*\}\s*;?\s*$/gm, ''); // strip export { ... } blocks
+      _scriptCleaned = _scriptCleaned.replace(/^export\s+/gm, ''); // strip ES module export keyword on declarations
       _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
       _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
       _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');
+      _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*(=)/g, '$1 $3');
+      _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*;/g, '$1;');
       jsContent += (jsContent ? '\n' : '') + _scriptCleaned;
+    }
+    // Auto-call init(state) if script defines it — route state.X = Y to setX(Y)
+    var _scriptSrc = globalThis.__scriptContent || ctx.scriptBlock || '';
+    if (/function\s+init\s*\(\s*\w+\s*\)/.test(_scriptSrc)) {
+      var _initProps = [];
+      if (ctx.objectArrays) {
+        for (var _ip = 0; _ip < ctx.objectArrays.length; _ip++) {
+          var _oa = ctx.objectArrays[_ip];
+          if (_oa.setter) _initProps.push('Object.defineProperty(__is,"' + _oa.getter + '",{set:function(v){' + _oa.setter + '(v)},configurable:true});');
+        }
+      }
+      if (ctx.stateSlots) {
+        for (var _is2 = 0; _is2 < ctx.stateSlots.length; _is2++) {
+          var _ss = ctx.stateSlots[_is2];
+          if (_ss.getter.indexOf('__') === 0) continue;
+          _initProps.push('Object.defineProperty(__is,"' + _ss.getter + '",{set:function(v){' + _ss.setter + '(v)},configurable:true});');
+        }
+      }
+      if (_initProps.length > 0) {
+        jsContent += '\nvar __is={};' + _initProps.join('') + 'init(__is);\n';
+      }
     }
   }
   if (jsContent) {
@@ -325,6 +351,10 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       zig += '        }\n';
       // Lua→QJS sync handled by __syncToJS in Lua setters (no tick sync needed)
     }
+  }
+  // Sync variant index to Lua before render
+  if (ctx.variantNames && ctx.variantNames.length > 0) {
+    zig += '        luajit_runtime.setGlobalInt("__variant", @import("' + prefix + 'api.zig").theme.activeVariant());\n';
   }
   zig += '        luajit_runtime.callGlobal("__render");\n';
   zig += '        state.clearDirty();\n';
