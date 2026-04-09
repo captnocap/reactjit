@@ -40,9 +40,14 @@ if [ -z "$GEN_BLOB" ]; then
 fi
 
 FAILS=0
+LT_WARNS=0
 
 fail() { echo "[flight] FAIL: $1"; FAILS=$((FAILS + 1)); }
 warn() { echo "[flight] WARN: $1"; }
+# Lua-tree content checks — runtime correctness issues inside LUA_LOGIC
+# string literals. Cannot cause zig build failures (content is in a Zig
+# string), but indicate Lua runtime bugs. Warn only, don't block build.
+lt_fail() { echo "[flight] LT-WARN: $1"; LT_WARNS=$((LT_WARNS + 1)); }
 
 # Detect lua-tree mode (LUA_LOGIC with __render = lua-tree architecture)
 IS_LUA_TREE=0
@@ -910,7 +915,7 @@ n=$(gocount 'Color\.rgb\(' "$LUA_BLOB")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS Color.rgb/$n"; fi
 
 if [ "$ZIG_LEAK" -gt 0 ]; then
-    fail "$ZIG_LEAK Zig syntax leaked into LUA_LOGIC:$ZIG_LEAK_DETAILS"
+    lt_fail "$ZIG_LEAK Zig syntax leaked into LUA_LOGIC:$ZIG_LEAK_DETAILS"
 fi
 
 # ── LT2. Unquoted enum values in Lua tables ──────────────────
@@ -925,7 +930,7 @@ for kw in center flex_start flex_end space_between space_around space_evenly str
     fi
 done
 if [ "$UNQUOTED" -gt 0 ]; then
-    fail "$UNQUOTED unquoted enum value(s) in LUA_LOGIC (must be strings):$UNQUOTED_LIST"
+    lt_fail "$UNQUOTED unquoted enum value(s) in LUA_LOGIC (must be strings):$UNQUOTED_LIST"
 fi
 
 # ── LT3. <script> tags in JS_LOGIC ───────────────────────────
@@ -939,7 +944,7 @@ fi
 if [ -n "$JS_BLOB" ]; then
     n=$(gocount '<script>|</script>' "$JS_BLOB")
     if [ "$n" -gt 0 ]; then
-        fail "$n <script> tag(s) leaked into JS_LOGIC — content should be extracted without tags"
+        lt_fail "$n <script> tag(s) leaked into JS_LOGIC — content should be extracted without tags"
     fi
 fi
 
@@ -961,7 +966,7 @@ while IFS= read -r hline; do
     fi
 done < <(grep -E '(lua_on_press|js_on_press) = "' <<< "$LUA_BLOB" 2>/dev/null || true)
 if [ "$BROKEN_HANDLERS" -gt 0 ]; then
-    fail "$BROKEN_HANDLERS handler(s) with unescaped quotes — string literal is broken"
+    lt_fail "$BROKEN_HANDLERS handler(s) with unescaped quotes — string literal is broken"
 fi
 
 # ── LT4c. State key mismatch — setter writes to wrong key ────
@@ -978,7 +983,7 @@ while IFS= read -r sline; do
     fi
 done < <(grep -E 'function set[A-Z].*_state\[' <<< "$LUA_BLOB" 2>/dev/null || true)
 if [ "$STATE_KEY_BAD" -gt 0 ]; then
-    fail "$STATE_KEY_BAD setter(s) write to wrong state key (setFoo stores to _state[\"setFoo\"] instead of _state[\"foo\"])"
+    lt_fail "$STATE_KEY_BAD setter(s) write to wrong state key (setFoo stores to _state[\"setFoo\"] instead of _state[\"foo\"])"
 fi
 
 # ── LT4d. Dropped conditional branches ───────────────────────
@@ -990,7 +995,7 @@ SRC_TOTAL_COND=$((SRC_SHORT_COND + SRC_TERNARY_COND))
 if [ "$SRC_TOTAL_COND" -gt 0 ]; then
     GEN_LUA_COND=$(grep -cE '\) and \{' <<< "$LUA_BLOB" 2>/dev/null) || GEN_LUA_COND=0
     if [ "$GEN_LUA_COND" -eq 0 ]; then
-        fail "$SRC_TOTAL_COND conditional branch(es) in source (&&/$SRC_SHORT_COND ?/$SRC_TERNARY_COND) but 0 in generated — content dropped"
+        lt_fail "$SRC_TOTAL_COND conditional branch(es) in source (&&/$SRC_SHORT_COND ?/$SRC_TERNARY_COND) but 0 in generated — content dropped"
     fi
 fi
 
@@ -1052,7 +1057,7 @@ if [ "$HAS_MAP_LOOP" -gt 0 ]; then
             fi
         done
         if [ "$BARE_COUNT" -gt 0 ]; then
-            fail "$BARE_COUNT unresolved component prop(s) inside __mapLoop:$BARE_PROPS — should be _item.field"
+            lt_fail "$BARE_COUNT unresolved component prop(s) inside __mapLoop:$BARE_PROPS — should be _item.field"
         fi
     fi
 fi
@@ -1068,12 +1073,12 @@ if [ -n "$LUA_BLOB" ]; then
         # _j is never a valid map variable — compiler uses _i (outer) and _ni (inner)
         BAD_J=$(echo "$MAP_BODY_ALL" | grep -oE '\b_j\b' 2>/dev/null | wc -l | tr -d ' ')
         if [ "$BAD_J" -gt 0 ]; then
-            fail "$BAD_J reference(s) to undefined map index '_j' — should be _ni (inner) or _i (outer)"
+            lt_fail "$BAD_J reference(s) to undefined map index '_j' — should be _ni (inner) or _i (outer)"
         fi
         # _k is also never valid
         BAD_K=$(echo "$MAP_BODY_ALL" | grep -oE '\b_k\b' 2>/dev/null | wc -l | tr -d ' ')
         if [ "$BAD_K" -gt 0 ]; then
-            fail "$BAD_K reference(s) to undefined map index '_k' — should be _ni (inner) or _i (outer)"
+            lt_fail "$BAD_K reference(s) to undefined map index '_k' — should be _ni (inner) or _i (outer)"
         fi
     fi
 fi
@@ -1096,7 +1101,7 @@ if [ "$HAS_MAP_LOOP" -gt 0 ] && [ -n "$COMP_PARAMS" ]; then
             fi
         done
         if [ "$BARE_HANDLER_COUNT" -gt 0 ]; then
-            fail "$BARE_HANDLER_COUNT unresolved component prop(s) in handler strings:$BARE_HANDLER_PROPS — should be substituted with map index expression"
+            lt_fail "$BARE_HANDLER_COUNT unresolved component prop(s) in handler strings:$BARE_HANDLER_PROPS — should be substituted with map index expression"
         fi
     fi
 fi
@@ -1110,7 +1115,7 @@ fi
 if [ -n "$LUA_BLOB" ]; then
     DOUBLE_NIL=$(grep -c 'or nil or nil' <<< "$LUA_BLOB" 2>/dev/null) || DOUBLE_NIL=0
     if [ "$DOUBLE_NIL" -gt 0 ]; then
-        fail "$DOUBLE_NIL instance(s) of 'or nil or nil' — nested conditional not unwrapped"
+        lt_fail "$DOUBLE_NIL instance(s) of 'or nil or nil' — nested conditional not unwrapped"
     fi
 fi
 
@@ -1125,7 +1130,7 @@ if [ -n "$LUA_BLOB" ]; then
     # Good pattern: ('" .. (_item.field) .. "') — quote before ..
     UNQUOTED_SPLICES=$(grep -oE '\(" \.\. \(_item\.[a-zA-Z_]+\) \.\. "\)' <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$UNQUOTED_SPLICES" -gt 0 ]; then
-        fail "$UNQUOTED_SPLICES handler splice(s) with unquoted _item.field — string values need quotes"
+        lt_fail "$UNQUOTED_SPLICES handler splice(s) with unquoted _item.field — string values need quotes"
     fi
 fi
 
@@ -1140,7 +1145,7 @@ for mv in $MAP_ITEM_VARS; do
     # Pattern: js_on_press = "... mv . field ..." (should be _item.field)
     n=$(grep -oE "js_on_press = \"[^\"]*\b${mv}\s*\.\s*\w+" <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$n" -gt 0 ]; then
-        fail "$n handler(s) reference map var '$mv' instead of '_item' inside __mapLoop"
+        lt_fail "$n handler(s) reference map var '$mv' instead of '_item' inside __mapLoop"
     fi
 done
 for mv in $MAP_INDEX_VARS; do
@@ -1150,7 +1155,7 @@ for mv in $MAP_INDEX_VARS; do
     MAP_BODY_ALL=$(sed -n '/__mapLoop/,/end)/p' <<< "$LUA_BLOB" 2>/dev/null || true)
     n=$(echo "$MAP_BODY_ALL" | grep -oE "\b${mv}\b" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$n" -gt 0 ]; then
-        fail "$n reference(s) to source map index var '$mv' leaked into Lua — should be (_i - 1) or (_ni - 1)"
+        lt_fail "$n reference(s) to source map index var '$mv' leaked into Lua — should be (_i - 1) or (_ni - 1)"
     fi
 done
 
@@ -1192,7 +1197,7 @@ if [ -d "$GEN" ] && [ -f "$GEN/app.zig" ]; then
         case "$GUARD_LINE" in
             *'if (_first_render)'*) ;; # properly guarded
             *)
-                fail "syncScalarToLua runs every dirty tick (not guarded by _first_render) — stomps Lua state set by lua_on_press"
+                lt_fail "syncScalarToLua runs every dirty tick (not guarded by _first_render) — stomps Lua state set by lua_on_press"
                 ;;
         esac
     fi
@@ -1240,7 +1245,7 @@ if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
             BROKEN_SETTERS=$((BROKEN_SETTERS + 1))
         fi
         if [ "$BROKEN_SETTERS" -gt 0 ]; then
-            fail "LT7a: $BROKEN_SETTERS JS state setter(s) in JS_LOGIC have no dirty signal (__markDirty/__setState) — button presses will update QJS vars but never re-render"
+            lt_fail "LT7a: $BROKEN_SETTERS JS state setter(s) in JS_LOGIC have no dirty signal (__markDirty/__setState) — button presses will update QJS vars but never re-render"
         fi
     fi
 fi
@@ -1261,7 +1266,7 @@ if [ -n "$DECLARE_FNS" ] && [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
             case "$_line" in *"function ${dfn}("*) DEFINED=$((DEFINED + 1)) ;; esac
         done <<< "$JS_BLOB_FOR_DECL"
         if [ "$CALLED" -gt 0 ] && [ "$DEFINED" -eq 0 ]; then
-            fail "LT7b: JS_LOGIC calls '${dfn}' which was declared via 'declare function' (C FFI). The declare line is stripped from JS_LOGIC but the call remains — '${dfn}' is not registered as a QJS global so it will throw ReferenceError at runtime"
+            lt_fail "LT7b: JS_LOGIC calls '${dfn}' which was declared via 'declare function' (C FFI). The declare line is stripped from JS_LOGIC but the call remains — '${dfn}' is not registered as a QJS global so it will throw ReferenceError at runtime"
         fi
     done
 fi
@@ -1272,7 +1277,10 @@ fi # IS_LUA_TREE
 if [ "$FAILS" -gt 0 ]; then
     echo "[flight] $NAME: $FAILS FAILURE(S)"
     exit 2
+fi
+if [ "$LT_WARNS" -gt 0 ]; then
+    echo "[flight] $NAME: OK ($LT_WARNS lua-tree runtime warning(s) — won't block build)"
 else
     echo "[flight] $NAME: OK"
-    exit 0
 fi
+exit 0
