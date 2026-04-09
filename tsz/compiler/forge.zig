@@ -245,6 +245,7 @@ pub fn main() !void {
     var dbg_state = false;
     var dbg_compiler = false;
     var parity_mode = false;
+    var trace_mode = false;
     var out_dir: []const u8 = "/tmp/tsz-gen";
     var input_path: []const u8 = undefined;
     var got_path = false;
@@ -275,6 +276,8 @@ pub fn main() !void {
             dbg_compiler = true;
         } else if (std.mem.eql(u8, arg, "--parity")) {
             parity_mode = true;
+        } else if (std.mem.eql(u8, arg, "--trace")) {
+            trace_mode = true;
         } else {
             input_path = arg;
             got_path = true;
@@ -340,6 +343,7 @@ pub fn main() !void {
     if (dbg_state) smith.setGlobalInt("__DBG_STATE", 1);
     if (dbg_compiler) smith.setGlobalInt("__DBG_COMPILER", 1);
     if (parity_mode) smith.setGlobalInt("__parityMode", 1);
+    if (trace_mode) smith.setGlobalInt("__smithTraceMode", 1);
     if (is_check) smith.setGlobalInt("__CHECK_ONLY", 1);
 
     // Build token kind array as u8 slice for the bridge
@@ -380,6 +384,25 @@ pub fn main() !void {
         std.debug.print("[forge] Smith compile() failed\n", .{});
         return;
     };
+
+    // 6b-trace. Dump line-level coverage if --trace was used
+    if (trace_mode) {
+        // Serialize coverage to a global string, then read it via the bridge
+        const ser_js = "globalThis.__covJSON=JSON.stringify(globalThis.__smithCoverage||{})";
+        _ = smith.loadModule(ser_js, "<trace-ser>");
+        if (smith.getGlobalString("__covJSON")) |cov_json| {
+            const trace_path = std.fmt.allocPrint(Alloc, "{s}/smith_coverage.json", .{out_dir}) catch "/tmp/smith_coverage.json";
+            const trace_file = std.fs.cwd().createFile(trace_path, .{}) catch |err| {
+                std.debug.print("[forge:trace] Cannot write coverage: {}\n", .{err});
+                return;
+            };
+            defer trace_file.close();
+            trace_file.writeAll(cov_json) catch {};
+            std.debug.print("[forge:trace] Coverage written to {s} ({d} bytes)\n", .{ trace_path, cov_json.len });
+        } else {
+            std.debug.print("[forge:trace] No coverage data produced\n", .{});
+        }
+    }
 
     // 6b. Print pattern trace if available (--dbg-compiler)
     if (dbg_compiler) {

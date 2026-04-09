@@ -25,7 +25,19 @@ pub fn main() !void {
     try parts.appendSlice(alloc, "// Source manifest: compiler/smith_LOAD_ORDER.txt\n");
     try parts.appendSlice(alloc, "\n");
 
+    // Coverage infrastructure: injected at start of bundle
+    try parts.appendSlice(alloc,
+        \\// Line-level coverage — active when __smithTraceMode is set
+        \\var __cov = null;
+        \\if (globalThis.__smithTraceMode) {
+        \\  __cov = globalThis.__smithCoverage = {};
+        \\}
+        \\
+        \\
+    );
+
     var entry_count: usize = 0;
+    var cov_points: usize = 0;
     var lines = std.mem.splitScalar(u8, manifest_text, '\n');
     while (lines.next()) |raw_line| {
         const line = std.mem.trim(u8, raw_line, " \t\r");
@@ -36,8 +48,31 @@ pub fn main() !void {
         const source = try std.fs.cwd().readFileAlloc(alloc, source_path, 1024 * 1024);
 
         try parts.writer(alloc).print("// --- {s} ---\n", .{line});
-        try parts.appendSlice(alloc, source);
-        if (source.len == 0 or source[source.len - 1] != '\n') try parts.append(alloc, '\n');
+
+        // Inject coverage markers at function entry points.
+        // For each line containing a function definition, inject
+        // __cov&&(__cov['file:line']=1); after the opening brace.
+        var src_lines = std.mem.splitScalar(u8, source, '\n');
+        var line_num: usize = 0;
+        while (src_lines.next()) |src_line| {
+            line_num += 1;
+            try parts.appendSlice(alloc, src_line);
+            try parts.append(alloc, '\n');
+
+            // Check if this line defines a function (has opening brace)
+            const trimmed = std.mem.trimLeft(u8, src_line, " \t");
+            const is_fn = std.mem.startsWith(u8, trimmed, "function ") or
+                std.mem.startsWith(u8, trimmed, "var ") or
+                std.mem.startsWith(u8, trimmed, "const ") or
+                std.mem.startsWith(u8, trimmed, "let ");
+
+            if (is_fn and hasFunctionWithBrace(trimmed)) {
+                // Inject coverage marker on next line
+                try parts.writer(alloc).print("__cov&&(__cov['{s}:{d}']=(__cov['{s}:{d}']||0)+1);\n", .{ line, line_num, line, line_num });
+                cov_points += 1;
+            }
+        }
+
         try parts.append(alloc, '\n');
     }
 
@@ -52,5 +87,25 @@ pub fn main() !void {
     defer file.close();
     try file.writeAll(parts.items);
 
-    std.debug.print("wrote {s} ({d} entries, {d} bytes)\n", .{ out_path, entry_count, parts.items.len });
+    std.debug.print("wrote {s} ({d} entries, {d} bytes, {d} coverage points)\n", .{ out_path, entry_count, parts.items.len, cov_points });
+}
+
+/// Check if a line contains a function definition with an opening brace.
+/// Matches patterns like:
+///   function foo() {
+///   function foo(a, b) {
+///   var foo = function() {
+///   var foo = function(a) {
+fn hasFunctionWithBrace(line: []const u8) bool {
+    // Must contain "function" and end with "{"
+    const has_fn = std.mem.indexOf(u8, line, "function");
+    if (has_fn == null) return false;
+    // Check line ends with { (possibly with trailing spaces/comments)
+    var i = line.len;
+    while (i > 0) {
+        i -= 1;
+        if (line[i] == '{') return true;
+        if (line[i] != ' ' and line[i] != '\t' and line[i] != '\r') return false;
+    }
+    return false;
 }
