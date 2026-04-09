@@ -34,7 +34,7 @@ pub const GlyphInstance = extern struct {
 // Constants
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_GLYPHS = 8192;
+pub const MAX_GLYPHS = 32768;
 const ATLAS_SIZE = 2048;
 const MAX_ATLAS_GLYPHS = 2048;
 

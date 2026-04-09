@@ -8,6 +8,9 @@
 # First run builds the engine .a (~24s one-time). Every build after: ~6s.
 
 set -euo pipefail
+
+# Ensure PATH includes common tool locations (needed when launched from GUI/runtime)
+export PATH="$HOME/miniconda3/bin:$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 BUILD_T0=$(date +%s%N)
 cd "$(dirname "$0")/.."
 

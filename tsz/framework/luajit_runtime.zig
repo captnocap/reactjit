@@ -346,6 +346,28 @@ fn readLuaColor(L: ?*lua.lua_State, idx: c_int) ?Color {
     return null;
 }
 
+fn readLuaGlyphColor(L: ?*lua.lua_State, idx: c_int) ?Color {
+    if (lua.lua_isnumber(L, idx) != 0) {
+        const val: u32 = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, idx))));
+        return Color.rgba(@intCast((val >> 16) & 0xFF), @intCast((val >> 8) & 0xFF), @intCast(val & 0xFF), 255);
+    }
+    if (lua.lua_isstring(L, idx) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, idx, &len);
+        if (ptr != null) {
+            const s = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, s, "transparent")) {
+                return Color.rgba(0, 0, 0, 0);
+            }
+            if (s.len >= 7 and s[0] == '#') {
+                const rgb = Color.fromHex(s[0..7]);
+                return Color.rgba(rgb.r, rgb.g, rgb.b, 255);
+            }
+        }
+    }
+    return null;
+}
+
 fn readLuaOptFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
     lua.lua_getfield(L, idx, field);
     const result: ?f32 = if (lua.lua_isnumber(L, -1) != 0) @floatCast(lua.lua_tonumber(L, -1)) else null;
@@ -411,6 +433,46 @@ fn readLuaOptString(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, alloc:
     }
     lua.lua_pop(L, 1);
     return null;
+}
+
+fn readLuaInlineGlyphs(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) ?[]layout.InlineGlyph {
+    lua.lua_getfield(L, idx, "inline_glyphs");
+    if (!lua.lua_istable(L, -1)) {
+        lua.lua_pop(L, 1);
+        return null;
+    }
+
+    const count: usize = @intCast(lua.lua_objlen(L, -1));
+    if (count == 0) {
+        lua.lua_pop(L, 1);
+        return null;
+    }
+
+    const glyphs = alloc.alloc(layout.InlineGlyph, count) catch {
+        lua.lua_pop(L, 1);
+        return null;
+    };
+
+    for (0..count) |i| {
+        glyphs[i] = layout.InlineGlyph{ .d = "" };
+        lua.lua_rawgeti(L, -1, @intCast(i + 1));
+        if (lua.lua_istable(L, -1)) {
+            glyphs[i].d = readLuaOptString(L, -1, "d", alloc) orelse "";
+            lua.lua_getfield(L, -1, "fill");
+            glyphs[i].fill = readLuaGlyphColor(L, -1) orelse Color.rgba(0, 0, 0, 0);
+            lua.lua_pop(L, 1);
+            glyphs[i].fill_effect = readLuaOptString(L, -1, "fill_effect", alloc);
+            lua.lua_getfield(L, -1, "stroke");
+            glyphs[i].stroke = readLuaGlyphColor(L, -1) orelse Color.rgba(0, 0, 0, 0);
+            lua.lua_pop(L, 1);
+            glyphs[i].stroke_width = readLuaFloat(L, -1, "stroke_width", 0);
+            glyphs[i].scale = readLuaFloat(L, -1, "scale", 1.0);
+        }
+        lua.lua_pop(L, 1);
+    }
+
+    lua.lua_pop(L, 1);
+    return glyphs;
 }
 
 fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
@@ -560,6 +622,8 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     lua.lua_getfield(L, idx, "text_color");
     node.text_color = readLuaColor(L, -1);
     lua.lua_pop(L, 1);
+    // inline_glyphs
+    node.inline_glyphs = readLuaInlineGlyphs(L, idx, alloc);
     // TextInput support: input_id + multiline from Lua tree
     lua.lua_getfield(L, idx, "input_id");
     if (lua.lua_isnumber(L, -1) != 0) {
@@ -639,6 +703,9 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
+    // ── Window chrome fields ──
+    node.window_drag = readLuaBool(L, idx, "window_drag");
+    node.window_resize = readLuaBool(L, idx, "window_resize");
     // ── Canvas/Graph fields ──
     node.graph_container = readLuaBool(L, idx, "graph_container");
     node.canvas_path = readLuaBool(L, idx, "canvas_path");

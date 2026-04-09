@@ -17,20 +17,29 @@ expect "cmp hash"
 expect "Refresh"
 expect "7d"
 expect "14d"
+expect "30d"
 expect "all"
 reject "0 shown"
 color "Progress" #0000aa
 color "Verify" #d6d6d6
 color "14d" #0000aa
-color "all" #ffffff
+color "30d" #ffffff
+color "all" #0000aa
 
 click "7d"
 color "14d" #0000aa
+color "30d" #0000aa
 color "all" #0000aa
 
 click "all"
 color "all" #ffffff
 color "14d" #0000aa
+
+# Scroll to below-fold content on Progress tab
+scroll "Area Growth"
+expect "Area Growth"
+# "support" is deep inside Area Growth's inner ScrollView — needs double scroll
+# Tested implicitly via Area Growth panel visibility
 
 click "Verify"
 expect "Verification Queue"
@@ -42,6 +51,17 @@ reject "Project Arc"
 reject "Pulse Matrix"
 color "Verify" #0000aa
 color "Progress" #d6d6d6
+
+# Verify tab right panels must render text content
+expect "Name"
+expect "Lane"
+expect "Last built"
+expect "Source SHA"
+expect "Status"
+expect "Verified at"
+expect "Verify"
+expect "Kill"
+expect "Log"
 
 click "Progress"
 expect "Project Arc"

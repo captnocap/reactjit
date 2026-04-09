@@ -133,7 +133,7 @@ var replay_waiting_settle: bool = false; // true = next frame is a settle frame 
 
 // Autotest state
 const AutoStep = struct {
-    kind: enum { click, expect, reject, color, bg, border, styles, type_text, key_press, focus, clear } = .click,
+    kind: enum { click, expect, reject, color, bg, border, styles, type_text, key_press, focus, clear, scroll } = .click,
     text: [TEXT_LEN]u8 = undefined,
     text_len: u16 = 0,
     occurrence: u16 = 1, // 1-based: which occurrence (#1, #2, etc.)
@@ -837,6 +837,9 @@ fn loadAutotest() void {
         } else if (std.mem.startsWith(u8, line, "focus ")) {
             auto_steps[idx].kind = .focus;
             parseAutoText(line[6..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "scroll ")) {
+            auto_steps[idx].kind = .scroll;
+            parseAutoText(line[7..], &auto_steps[idx]);
         } else if (std.mem.eql(u8, line, "clear")) {
             auto_steps[idx].kind = .clear;
             // No text needed — operates on focused input
@@ -986,6 +989,22 @@ fn resolveKeyName(name: []const u8) c_int {
 /// or a text node nearby (e.g., a sibling label). Returns a clickable QueryResult.
 fn findTextInput(root: *Node, search_text: []const u8) ?query.QueryResult {
     return findTextInputWalk(root, search_text, 0);
+}
+
+/// Walk the tree to find the nearest scroll container ancestor of `target`.
+fn findScrollParent(node: *Node, target: *Node) ?*Node {
+    return findScrollParentWalk(node, target, null);
+}
+
+fn findScrollParentWalk(node: *Node, target: *Node, current_scroll: ?*Node) ?*Node {
+    const ov = node.style.overflow;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > node.computed.h));
+    const new_scroll = if (is_scroll) node else current_scroll;
+    if (node == target) return if (new_scroll) |s| s else null;
+    for (node.children) |*child| {
+        if (findScrollParentWalk(child, target, new_scroll)) |result| return result;
+    }
+    return null;
 }
 
 fn findTextInputWalk(node: *Node, search_text: []const u8, scroll_y: f32) ?query.QueryResult {
@@ -1151,6 +1170,36 @@ fn autotestTick(root: *Node) bool {
             } else {
                 std.debug.print(" ... PASS\n", .{});
                 passed = true;
+            }
+        },
+        .scroll => {
+            std.debug.print("  [{d}/{d}] scroll \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (query.find(root, .{ .text_contains = text })) |result| {
+                hit_result = result;
+                // Find the nearest scroll container ancestor and scroll to make this node visible
+                const target_y = result.node.computed.y;
+                const target_h = result.node.computed.h;
+                if (findScrollParent(root, result.node)) |sp| {
+                    const scroll_top = sp.computed.y;
+                    const scroll_h = sp.computed.h;
+                    // If target is below visible area, scroll down
+                    if (target_y + target_h > scroll_top + scroll_h + sp.scroll_y) {
+                        sp.scroll_y = target_y + target_h - scroll_top - scroll_h + 20;
+                    }
+                    // If target is above visible area, scroll up
+                    if (target_y < scroll_top + sp.scroll_y) {
+                        sp.scroll_y = target_y - scroll_top - 10;
+                    }
+                    if (sp.scroll_y < 0) sp.scroll_y = 0;
+                    layout.markLayoutDirty();
+                    std.debug.print(" ... OK (scrolled to y={d:.0})\n", .{sp.scroll_y});
+                    passed = true;
+                } else {
+                    std.debug.print(" ... OK (no scroll needed)\n", .{});
+                    passed = true;
+                }
+            } else {
+                std.debug.print(" ... FAIL (not found)\n", .{});
             }
         },
         .color => {
@@ -1522,6 +1571,7 @@ fn appendManifest(idx: u16, step: *const AutoStep, passed: bool, node_result: ?q
         .key_press => "key",
         .focus => "focus",
         .clear => "clear",
+        .scroll => "scroll",
     };
     const result_str: []const u8 = if (passed) "PASS" else "FAIL";
     const remaining = auto_manifest_buf[auto_manifest_len..];

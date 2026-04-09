@@ -1,13 +1,18 @@
 function findAppStart(c) {
+  var exactAppStart = -1;
   var appStart = -1;
   for (var i = 0; i < c.count - 2; i++) {
     if (c.kindAt(i) === TK.identifier && c.textAt(i) === 'function' &&
         c.kindAt(i + 1) === TK.identifier && c.kindAt(i + 2) === TK.lparen) {
       var name = c.textAt(i + 1);
+      if (name === 'App') {
+        exactAppStart = i;
+        break;
+      }
       if (name[0] >= 'A' && name[0] <= 'Z') appStart = i;
     }
   }
-  return appStart;
+  return exactAppStart >= 0 ? exactAppStart : appStart;
 }
 
 function moveToAppReturn(c, appStart) {

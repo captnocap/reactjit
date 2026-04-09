@@ -12,17 +12,30 @@ function _resolveOaItemMarkers(expr) {
   });
 }
 
+function _cloneInlineGlyphData(glyphData) {
+  if (!glyphData) return null;
+  var out = {
+    d: glyphData.d || '',
+    fill: glyphData.fill || 'transparent',
+    stroke: glyphData.stroke || 'transparent',
+    stroke_width: glyphData.stroke_width || glyphData.strokeWidth || '0',
+    scale: glyphData.scale || '1.0',
+  };
+  if (glyphData.fill_effect || glyphData.fillEffect) out.fill_effect = glyphData.fill_effect || glyphData.fillEffect;
+  return out;
+}
+
 function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
-  // Auto-overflow: any Box with constrained height gets overflow:auto (clips + scrolls when content exceeds)
-  // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
-  // This makes <ScrollView> unnecessary at the authoring level — constrained containers just work.
-  // Full-window containers (width:100% + height:100%) get overflow:hidden (clip, don't scroll).
-  const _hasConstrainedH = styleFields.some(f => f.startsWith('.height') || f.startsWith('.flex_grow'));
+  // Auto-overflow: DISABLED — was causing scissor clipping that hid text in nested containers.
+  // Only explicit overflow in the .tsz source or ScrollView primitives should clip.
+  // Full-window containers (width:100% + height:100%) still get overflow:hidden.
   const _isFullWindow = styleFields.some(f => f === '.height = -1') && styleFields.some(f => f === '.width = -1');
-  if (tag === 'Box' && children.length > 0 && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
-    styleFields.push(_isFullWindow ? '.overflow = .hidden' : '.overflow = .auto');
+  if (tag === 'Box' && children.length > 0 && !styleFields.some(f => f.startsWith('.overflow')) && _isFullWindow) {
+    styleFields.push('.overflow = .hidden');
   }
   const parts = [];
+  var _inlineGlyphData = null;
+  var _inlineGlyphText = null;
   if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
 
   // For Text nodes: if ANY child has a dynamic text, hoist it to the Text node
@@ -321,10 +334,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       // Build combined text with \x01 sentinels at glyph positions
       let combinedText = '';
       const glyphExprs = [];
+      const glyphData = [];
       for (const ch of children) {
         if (ch.isGlyph) {
           combinedText += '\\x01';
           glyphExprs.push(ch.glyphExpr);
+          if (ch.glyphData) glyphData.push(_cloneInlineGlyphData(ch.glyphData));
         } else if (ch.nodeExpr) {
           const m = ch.nodeExpr.match(/\.text = "(.*)"/);
           if (m) combinedText += m[1];
@@ -332,6 +347,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       }
       parts.push(`.text = "${combinedText}"`);
       parts.push(`.inline_glyphs = &[_]layout.InlineGlyph{ ${glyphExprs.join(', ')} }`);
+      _inlineGlyphText = combinedText;
+      if (glyphData.length > 0) _inlineGlyphData = glyphData;
       children = [];
     }
   }
@@ -691,7 +708,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           var _nfEq = _nf.indexOf(' = ');
           if (_nfEq > 1) {
             var _nfKey = _nf.slice(1, _nfEq);
-            if (_nfKey.indexOf('canvas_') === 0 || _nfKey.indexOf('scene3d_') === 0 || _nfKey.indexOf('physics_') === 0 || _nfKey === 'graph_container' || _nfKey === 'bold') {
+            if (_nfKey.indexOf('canvas_') === 0 || _nfKey.indexOf('scene3d_') === 0 || _nfKey.indexOf('physics_') === 0 || _nfKey === 'graph_container' || _nfKey === 'bold' || _nfKey === 'window_drag' || _nfKey === 'window_resize') {
               if (!_ln._nodeFields) _ln._nodeFields = {};
               _ln._nodeFields[_nfKey] = _nf.slice(_nfEq + 3);
             }
@@ -715,6 +732,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     // Static text hoisted from single child
     if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
       _ln.text = _hoistedStaticText;
+    }
+    if (_inlineGlyphData && _inlineGlyphData.length > 0) {
+      if (_inlineGlyphText !== null && _inlineGlyphText !== undefined) {
+        _ln.text = _inlineGlyphText;
+      }
+      _ln.inline_glyphs = _inlineGlyphData;
     }
     // Handler — route to Lua or JS
     // Prefer lua_on_press (works with Lua loop vars like _item, _i).
@@ -896,6 +919,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 dataVar: _lmr.dataVar || _lmr.rawSource || _lmr.varName,
                 itemParam: _lmr.itemParam || '_item',
                 indexParam: _lmr.indexParam || null,
+                filterConditions: _lmr.filterConditions || null,
                 bodyNode: _lmr.bodyNode || null,
                 bodyLua: _lmr.bodyLua || null
               }

@@ -622,6 +622,11 @@ fn hitTestChrome(node: *Node, mx: f32, my: f32) ?c.SDL_HitTestResult {
         if (hitTestChrome(&node.children[i], mx, my)) |result| return result;
     }
 
+    // Interactive nodes (buttons, inputs) override drag — let clicks through
+    if (node.handlers.on_press != null or node.handlers.js_on_press != null or
+        node.handlers.lua_on_press != null or node.input_id != null)
+        return c.SDL_HITTEST_NORMAL;
+
     // Check this node
     if (node.window_drag) return c.SDL_HITTEST_DRAGGABLE;
     if (node.window_resize) return chromeResizeEdge(node, mx, my);
@@ -629,44 +634,49 @@ fn hitTestChrome(node: *Node, mx: f32, my: f32) ?c.SDL_HitTestResult {
     return null;
 }
 
-/// Determine which resize edge based on cursor position within the node.
-/// The node's position in the window determines the edge direction:
-/// - Top-left corner → RESIZE_TOPLEFT, etc.
-/// - Nodes along edges → RESIZE_TOP/BOTTOM/LEFT/RIGHT
+/// Determine which resize edge based on the node's position in the window.
+/// Uses the root node's bounds to figure out which side this edge node is on.
 fn chromeResizeEdge(node: *Node, mx: f32, my: f32) c.SDL_HitTestResult {
+    const root = g_chrome_root orelse return c.SDL_HITTEST_NORMAL;
+    const win_w = root.computed.w;
+    const win_h = root.computed.h;
     const r = node.computed;
-    const corner = @min(r.w, r.h) * 0.4; // 40% of the smaller dimension = corner zone
 
-    const near_left = (mx - r.x) < corner;
-    const near_right = (r.x + r.w - mx) < corner;
-    const near_top = (my - r.y) < corner;
-    const near_bottom = (r.y + r.h - my) < corner;
+    // Node center relative to window
+    const ncx = r.x + r.w / 2;
+    const ncy = r.y + r.h / 2;
+    const half_w = win_w / 2;
+    const half_h = win_h / 2;
 
-    // Corner combinations
-    if (near_top and near_left) return c.SDL_HITTEST_RESIZE_TOPLEFT;
-    if (near_top and near_right) return c.SDL_HITTEST_RESIZE_TOPRIGHT;
-    if (near_bottom and near_left) return c.SDL_HITTEST_RESIZE_BOTTOMLEFT;
-    if (near_bottom and near_right) return c.SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+    // Corner zone: if cursor is near a window corner (within 20px)
+    const corner_thresh: f32 = 20;
+    const near_win_left = mx < corner_thresh;
+    const near_win_right = mx > (win_w - corner_thresh);
+    const near_win_top = my < corner_thresh;
+    const near_win_bottom = my > (win_h - corner_thresh);
 
-    // Edge — use node center to determine which edge this is
-    const cx = r.x + r.w / 2;
-    const cy = r.y + r.h / 2;
-    // Wider nodes are horizontal edges (top/bottom), taller nodes are vertical (left/right)
+    if (near_win_top and near_win_left) return c.SDL_HITTEST_RESIZE_TOPLEFT;
+    if (near_win_top and near_win_right) return c.SDL_HITTEST_RESIZE_TOPRIGHT;
+    if (near_win_bottom and near_win_left) return c.SDL_HITTEST_RESIZE_BOTTOMLEFT;
+    if (near_win_bottom and near_win_right) return c.SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+
+    // Edge: determine by where the node sits in the window
     if (r.w > r.h) {
-        return if (cy < my) c.SDL_HITTEST_RESIZE_BOTTOM else c.SDL_HITTEST_RESIZE_TOP;
+        // Wide node = horizontal edge → top or bottom based on position
+        return if (ncy > half_h) c.SDL_HITTEST_RESIZE_BOTTOM else c.SDL_HITTEST_RESIZE_TOP;
     } else {
-        return if (cx < mx) c.SDL_HITTEST_RESIZE_RIGHT else c.SDL_HITTEST_RESIZE_LEFT;
+        // Tall node = vertical edge → left or right based on position
+        return if (ncx > half_w) c.SDL_HITTEST_RESIZE_RIGHT else c.SDL_HITTEST_RESIZE_LEFT;
     }
 }
 
 /// Close the window (for custom close button).
 pub fn windowClose() void {
-    if (g_chrome_window) |w| {
+    if (g_chrome_window) |_| {
         // Push a close event so the normal shutdown path runs
-        var event: c.SDL_Event = undefined;
+        var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
         event.type = c.SDL_EVENT_QUIT;
         _ = c.SDL_PushEvent(&event);
-        _ = w; // suppress unused
     }
 }
 
@@ -1601,6 +1611,12 @@ pub fn run(config_in: AppConfig) !void {
             }
             log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
         }
+    }
+    if (std.posix.getenv("ZIGOS_WINDOW_W")) |ws| {
+        if (std.fmt.parseInt(c_int, ws, 10) catch null) |w| init_w = w;
+    }
+    if (std.posix.getenv("ZIGOS_WINDOW_H")) |hs| {
+        if (std.fmt.parseInt(c_int, hs, 10) catch null) |h| init_h = h;
     }
 
     const builtin_os = @import("builtin").os.tag;
