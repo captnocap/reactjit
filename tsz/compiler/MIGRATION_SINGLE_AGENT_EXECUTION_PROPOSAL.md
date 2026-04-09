@@ -259,11 +259,11 @@ Implication:
 - [x] 133. Search for split handoff logic in `emit/finalize.js`, `emit/split.js`, and atoms 43-46 and summarize it in `split_finalize_handoff.md`.
 - [x] 134. Re-open all four live-risk reports and write `all_live_risk_reports_have_concrete_findings: true|false` plus any empty report paths to `migration/control_board.md`.
 - [x] 135. Append `111-134 coverage and live-risk baseline complete` to `completed.txt`.
-- [ ] 136. Update `current_step.txt` to `136`, then commit with message `migration(single-agent): S111-140 step-136 coverage-live-risk-baseline`.
-- [ ] 137. Re-open `coverage_matrix.md` and write `coverage_matrix_has_feature_columns_115_123: true|false` to `migration/control_board.md`.
-- [ ] 138. Re-open `_jsExprToLua_collision.md` and write `js_expr_to_lua_collision_names_both_files: true|false` to `migration/control_board.md`.
-- [ ] 139. Re-open `evalLuaMapData_gap.md` and write `eval_lua_map_data_gap_names_a003_a038_a039_a040: true|false` to `migration/control_board.md`.
-- [ ] 140. If any of the booleans from steps 134 and 137-139 are `false`, write the exact failing report path to `blocked.txt`; if all are `true`, write `live_risk_gate_clear: true` to `migration/control_board.md`.
+- [x] 136. Update `current_step.txt` to `136`, then commit with message `migration(single-agent): S111-140 step-136 coverage-live-risk-baseline`.
+- [x] 137. Re-open `coverage_matrix.md` and write `coverage_matrix_has_feature_columns_115_123: true|false` to `migration/control_board.md`.
+- [x] 138. Re-open `_jsExprToLua_collision.md` and write `js_expr_to_lua_collision_names_both_files: true|false` to `migration/control_board.md`.
+- [x] 139. Re-open `evalLuaMapData_gap.md` and write `eval_lua_map_data_gap_names_a003_a038_a039_a040: true|false` to `migration/control_board.md`.
+- [x] 140. If any of the booleans from steps 134 and 137-139 are `false`, write the exact failing report path to `blocked.txt`; if all are `true`, write `live_risk_gate_clear: true` to `migration/control_board.md`.
 
 ## 141-165 Preamble Parity
 

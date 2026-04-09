@@ -55,3 +55,11 @@ harness_scaffold_complete: true
 ## 111-140 Coverage And Live-Risk Baseline
 
 all_live_risk_reports_have_concrete_findings: true
+
+coverage_matrix_has_feature_columns_115_123: true
+
+js_expr_to_lua_collision_names_both_files: true
+
+eval_lua_map_data_gap_names_a003_a038_a039_a040: false (report names preamble.js/runtime_updates.js/entrypoints.js/lua_tree_emit.js but not atom numbers a038/a039/a040)
+
+live_risk_gate_clear: false (step 139 is false)
