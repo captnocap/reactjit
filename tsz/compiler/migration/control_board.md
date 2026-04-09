@@ -66,3 +66,11 @@ js_expr_to_lua_collision_names_both_files: true
 eval_lua_map_data_gap_names_a003_a038_a039_a040: false (report names preamble.js/runtime_updates.js/entrypoints.js/lua_tree_emit.js but not atom numbers a038/a039/a040)
 
 live_risk_gate_clear: false (step 139 is false)
+
+## 459-492 Live Switch And Rollback
+
+rollback_plan_describes_reversible_change_not_reconstruction: true
+
+## 493-517 Legacy Emit Deletion
+
+legacy_emit_deletion_status_names_deleted_and_kept_files: true
