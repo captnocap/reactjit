@@ -9,3 +9,5 @@ resolveConstOaAccess_move_skipped_already_present: false (moved from core.js)
 resolveConstOaFieldFromRef_move_skipped_already_present: false (moved from core.js)
 tryResolveObjectStateAccess_move_skipped_already_present: false (moved from core.js)
 foundation_moves_smoke: MATCH
+shared_surface_documents_written_before_broad_decomposition_started: true
+foundation_smoke_stable: true

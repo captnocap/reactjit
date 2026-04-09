@@ -214,6 +214,21 @@ smith/mod/functions.js
 smith/mod/helpers.js
 smith/mod/index.js
 smith/page.js
+smith/parse/attrs/color.js
+smith/parse/attrs/style_value.js
+smith/parse/attrs/style_block.js
+smith/parse/attrs/style_ternary.js
+smith/parse/attrs/style_normalize.js
+smith/parse/attrs/style_expr_tokenizer.js
+smith/parse/attrs/style_expr_tokens.js
+smith/parse/attrs/style_expr_spec.js
+smith/parse/attrs/style_expr_parser.js
+smith/parse/attrs/style_expr_entry.js
+smith/parse/attrs/pending_style.js
+smith/parse/attrs/handler.js
+smith/parse/attrs/handler_lua.js
+smith/parse/attrs/value_expr.js
+smith/parse/attrs/value_expr_lua.js
 smith/attrs.js
 
 smith/parse/cursor.js
