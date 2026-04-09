@@ -255,6 +255,10 @@ fi
 # to a node's js_on_press. If defined but not referenced, handlers are lost.
 JS_HANDLER_DEFS=$(gocount 'function (_sh_[0-9]+|__mapPress_[0-9]+_[0-9]+)\(' "$GEN_BLOB")
 JS_HANDLER_REFS=$(gocount 'js_on_press = "[^"]*"' "$GEN_BLOB")
+# lua_on_press wiring in LUA_LOGIC also counts — lua-tree map handlers
+# use lua_on_press instead of js_on_press
+LUA_HANDLER_REFS=$(gocount 'lua_on_press = ' "$GEN_BLOB")
+JS_HANDLER_REFS=$((JS_HANDLER_REFS + LUA_HANDLER_REFS))
 # Map handlers also count — each _map_lua_bufs set is one handler wired per-item
 JS_HANDLER_REFS=$((JS_HANDLER_REFS + GEN_MAP_HANDLER_SETS))
 # onChange/onSubmit handlers routed through _inputChange/_inputSubmit Zig wrappers
