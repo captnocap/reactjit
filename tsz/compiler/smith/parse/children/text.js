@@ -102,20 +102,12 @@ function tryParseTextChild(c, children) {
     return true;
   }
 
-  // Recovery path: some mixed carts can leave the cursor sitting on the
-  // head token of a child expression after the opening `{` was consumed
-  // upstream. Re-run the structural child dispatchers before treating the
-  // sequence as literal text.
-  if (c.kind() === TK.identifier) {
-    if (typeof tryParseConditional === 'function' && tryParseConditional(c, children)) return true;
-    if (typeof tryParseTernaryJSX === 'function' && tryParseTernaryJSX(c, children)) return true;
-    if (typeof tryParseTernaryText === 'function' && tryParseTernaryText(c, children)) return true;
-    if (typeof _identifierStartsMapCall === 'function' &&
-        _identifierStartsMapCall(c) &&
-        typeof _tryParseIdentifierMapExpression === 'function') {
-      if (_tryParseIdentifierMapExpression(c, children, true)) return true;
-    }
-  }
+  // NOTE: There was a "recovery path" here that re-ran tryParseConditional/
+  // tryParseTernaryJSX on bare identifiers. REMOVED — it caused the parser
+  // to scan forward from text content (like "Reset") looking for && or ?,
+  // eating close tags and sibling brace expressions as condition strings.
+  // If the cursor is on an identifier and we're in tryParseTextChild,
+  // the structural dispatchers already ran and didn't match. It's text.
 
   if (c.kind() !== TK.rbrace) {
     const textStart = c.starts[c.pos];

@@ -19,7 +19,7 @@ function _handlerToLua(handler, itemParam, indexParam, _luaIdxExpr, _currentOaId
   if (hasDynamic || spliced !== h) {
     return '"' + spliced + '"';
   }
-  return '"' + h.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  return luaStringLiteral(h);
 }
 
 function _normalizeHandlerIndexExprs(h, _ixStr) {
@@ -91,14 +91,13 @@ function _spliceDynamicHandler(h, _ixStr) {
             _splicedArgs.push('" .. (' + _sa + ') .. "');
           }
         } else {
-          _splicedArgs.push(_sa.replace(/"/g, '\\"'));
+          _splicedArgs.push(escapeDoubleQuotedString(_sa));
         }
       }
       out += fnName + '(' + _splicedArgs.join(', ') + ')';
     } else {
       // Escape string args so inner quotes don't break the outer lua_on_press = "..." wrapper
-      var escapedArgs = args.replace(/"/g, '\\"');
-      out += fnName + '(' + escapedArgs + ')';
+      out += fnName + '(' + escapeDoubleQuotedString(args) + ')';
     }
     i = argEnd;
   }

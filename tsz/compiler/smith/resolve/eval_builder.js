@@ -19,32 +19,28 @@ function allocBuf(ctx) {
 // qjs_runtime.evalToString("String(jsExpr)", &_eval_buf_N)
 function buildEval(jsExpr, ctx) {
   var bufId = allocBuf(ctx);
-  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return 'qjs_runtime.evalToString("String(' + escaped + ')", &_eval_buf_' + bufId + ')';
+  return 'qjs_runtime.evalToString(' + zigStringLiteral('String(' + jsExpr + ')') + ', &_eval_buf_' + bufId + ')';
 }
 
 // Build a boolean eval: returns 'T' for truthy, '' for falsy
 // qjs_runtime.evalToString("(jsExpr) ? 'T' : ''", &_eval_buf_N)
 function buildBoolEval(jsExpr, ctx) {
   var bufId = allocBuf(ctx);
-  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return 'qjs_runtime.evalToString("(' + escaped + ") ? 'T' : ''" + '", &_eval_buf_' + bufId + ')';
+  return 'qjs_runtime.evalToString(' + zigStringLiteral('(' + jsExpr + ") ? 'T' : ''") + ', &_eval_buf_' + bufId + ')';
 }
 
 // Build a comparison eval: does the comparison in JS, returns 'T' or ''
 // qjs_runtime.evalToString("(jsExpr) op rhs ? 'T' : ''", &_eval_buf_N)
 function buildComparisonEval(jsExpr, op, rhs, ctx) {
   var bufId = allocBuf(ctx);
-  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return 'qjs_runtime.evalToString("(' + escaped + ') ' + op + ' ' + rhs + " ? 'T' : ''" + '", &_eval_buf_' + bufId + ')';
+  return 'qjs_runtime.evalToString(' + zigStringLiteral('(' + jsExpr + ') ' + op + ' ' + rhs + " ? 'T' : ''") + ', &_eval_buf_' + bufId + ')';
 }
 
 // Build a field access eval: evaluates expr.field in JS
 // qjs_runtime.evalToString("String((jsExpr).field)", &_eval_buf_N)
 function buildFieldEval(jsExpr, field, ctx) {
   var bufId = allocBuf(ctx);
-  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return 'qjs_runtime.evalToString("String((' + escaped + ').' + field + ')", &_eval_buf_' + bufId + ')';
+  return 'qjs_runtime.evalToString(' + zigStringLiteral('String((' + jsExpr + ').' + field + ')') + ', &_eval_buf_' + bufId + ')';
 }
 
 // Extract the inner JS expression from an eval string.
@@ -91,8 +87,7 @@ function extractRuntimeJsExpr(evalStr, rawJs, renderLocalName) {
 // qjs_runtime.evalToString("var varName = jsExpr; String(varName)", &_eval_buf_N)
 function buildVarEval(varName, jsExpr, ctx) {
   var bufId = allocBuf(ctx);
-  var escaped = jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return 'qjs_runtime.evalToString("var ' + varName + ' = ' + escaped + '; String(' + varName + ')", &_eval_buf_' + bufId + ')';
+  return 'qjs_runtime.evalToString(' + zigStringLiteral('var ' + varName + ' = ' + jsExpr + '; String(' + varName + ')') + ', &_eval_buf_' + bufId + ')';
 }
 
 // Check if a string is a qjs eval expression

@@ -30,6 +30,18 @@ function compile() {
   return compileLane(source, tokens, file);
 }
 
+function sourceContract() {
+  const source = globalThis.__source;
+  const tokens = globalThis.__tokens;
+  const file = globalThis.__file || 'unknown.tsz';
+  globalThis.__SOURCE_CONTRACT_MODE = 1;
+  try {
+    return compileLane(source, tokens, file);
+  } finally {
+    globalThis.__SOURCE_CONTRACT_MODE = 0;
+  }
+}
+
 // ── Predict-only check (forge check) ─────────────────────────────────
 // Runs lane detection + pre-parse setup + route scan WITHOUT parse/emit.
 // Returns a structured report with execution path trace.

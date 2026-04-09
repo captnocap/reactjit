@@ -137,7 +137,7 @@ function _emitComplexTextColor(node) {
   } else if (/^0x[0-9a-f]+$/i.test(js) || /^_item\.\w+$/.test(js)) {
     return 'text_color = ' + js;
   } else {
-    return 'text_color = __eval("' + js.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
+    return 'text_color = __eval(' + zigStringLiteral(js) + ')';
   }
 }
 
@@ -186,7 +186,7 @@ function _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaId
     if (isDynamic) {
       return 'js_on_press = "' + _spliceDynamicHandler(jh, ixStr) + '"';
     } else {
-      return 'js_on_press = "' + jh.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+      return 'js_on_press = ' + luaStringLiteral(jh);
     }
   } else {
     // Lua handler
@@ -241,19 +241,19 @@ function _inlineGlyphColorToLua(val) {
   if (zigHex) return zigHex;
   var hexVal = _hexToLua(asString);
   if (typeof hexVal === 'string' && /^0x[0-9a-f]+$/i.test(hexVal)) return hexVal;
-  return '"' + asString.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  return luaStringLiteral(asString);
 }
 
 function _inlineGlyphToLua(glyph) {
   if (!glyph) return '{ d = "" }';
   var parts = [];
-  parts.push('d = "' + String(glyph.d || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+  parts.push('d = ' + luaStringLiteral(String(glyph.d || '')));
   parts.push('fill = ' + _inlineGlyphColorToLua(glyph.fill));
   parts.push('stroke = ' + _inlineGlyphColorToLua(glyph.stroke));
   parts.push('stroke_width = ' + (glyph.stroke_width !== undefined ? glyph.stroke_width : 0));
   parts.push('scale = ' + (glyph.scale !== undefined ? glyph.scale : 1.0));
   if (glyph.fill_effect) {
-    parts.push('fill_effect = "' + String(glyph.fill_effect).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+    parts.push('fill_effect = ' + luaStringLiteral(String(glyph.fill_effect)));
   }
   return '{ ' + parts.join(', ') + ' }';
 }
@@ -327,14 +327,14 @@ function _emitLuaMapLoopChild(ml, itemParam, indexParam, indent, _luaIdxExpr, _c
   var loopDataVar = _jsExprToLua(ml.dataVar || '[]', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
 
   var loopBody;
-  if (ml.bodyLua) {
-    loopBody = ml.bodyLua;
-  } else if (ml.bodyNode) {
+  if (ml.bodyNode) {
     loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, innerIdxP, indent + '    ', innerLuaIdx, ml.oaIdx);
     // Ensure inner item refs use correct variable
     if (isNested && innerId.itemVar === '_nitem') {
       loopBody = loopBody.replace(/\b_item\b/g, '_nitem');
     }
+  } else if (ml.bodyLua) {
+    loopBody = ml.bodyLua;
   } else {
     loopBody = '{}';
   }

@@ -3,6 +3,23 @@
 
 function _pushLuaRawDynText(children, rawExpr) {
   if (!rawExpr || !rawExpr.length) return;
+  var normalizedRaw = String(rawExpr).trim();
+  normalizedRaw = normalizedRaw
+    .replace(/\s*\.\s*/g, '.')
+    .replace(/\[\s*/g, '[')
+    .replace(/\s*\]/g, ']')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')');
+  var textContract = {};
+  if (/^`[\s\S]*`$/.test(normalizedRaw)) {
+    textContract._luaTemplateRaw = normalizedRaw.slice(1, -1);
+  } else if (/^\{[\s\S]*\}$/.test(normalizedRaw) && normalizedRaw.indexOf(':') < 0) {
+    textContract._luaStateGetter = normalizedRaw.slice(1, -1).trim();
+  } else if (normalizedRaw.indexOf('${') >= 0) {
+    textContract._luaTemplateRaw = normalizedRaw;
+  } else {
+    textContract._luaStateGetter = normalizedRaw;
+  }
   var isInMap = !!ctx.currentMap;
   var bufId;
   if (isInMap) {
@@ -40,7 +57,8 @@ function _pushLuaRawDynText(children, rawExpr) {
     nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }',
     dynBufId: bufId,
     inMap: isInMap,
-    _luaTemplateRaw: rawExpr
+    _luaTemplateRaw: textContract._luaTemplateRaw,
+    _luaStateGetter: textContract._luaStateGetter
   });
 }
 
@@ -922,21 +940,46 @@ function tryParseBraceChild(c, children) {
     return true;
   }
 
-  // All dispatchers exhausted — fall through to generic token-drop handler.
+  // All dispatchers exhausted — fall through to generic handler.
+  // Collect tokens to the matching }, but REJECT if JSX tags are present.
+  // JSX in a brace expression means the parser failed to match a conditional
+  // or ternary pattern — dumping it as text would corrupt the Lua output.
   const dropStart = c.pos;
   const dropTokens = [];
+  const dropKinds = [];
   let depth = 1;
   while (depth > 0 && c.kind() !== TK.eof) {
     if (c.kind() === TK.lbrace) depth++;
     if (c.kind() === TK.rbrace) depth--;
     if (depth > 0) {
+      dropKinds.push(c.kind());
       dropTokens.push(c.text());
       c.advance();
     }
   }
   if (c.kind() === TK.rbrace) c.advance();
+
+  // Check for JSX contamination — if ANY token is a JSX open/close tag,
+  // this expression contains unparsed JSX and must not become a text node.
+  var hasJsx = false;
+  for (var _di = 0; _di < dropKinds.length; _di++) {
+    if (dropKinds[_di] === TK.lt || dropKinds[_di] === TK.lt_slash || dropKinds[_di] === TK.slash_gt) {
+      hasJsx = true;
+      break;
+    }
+  }
+
+  if (hasJsx) {
+    // JSX in fallback = parse failure. Skip it, don't create a text node.
+    var _dropPreview = dropTokens.slice(0, 8).join(' ');
+    if (dropTokens.length > 8) _dropPreview += ' ...(' + dropTokens.length + ' tokens)';
+    print('[BRACE_FALLBACK] SKIP: JSX in unparsed brace expression: ' + _dropPreview);
+    return true;
+  }
+
   const exprText = dropTokens.join(' ');
 
+  // Pure JS expression (no JSX) — route to __eval via state slot
   if ((ctx.scriptBlock || globalThis.__scriptContent) && exprText.length > 0) {
     let jsExpr = _normalizeJoinedJsExpr(exprText);
     if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {

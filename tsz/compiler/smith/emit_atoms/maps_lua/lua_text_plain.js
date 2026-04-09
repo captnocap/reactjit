@@ -3,7 +3,7 @@
 // No semantic reparsing — direct Lua string emission.
 
 function _luaTextPlain(text) {
-  return '"' + String(text).replace(/"/g, '\\"') + '"';
+  return luaStringLiteral(text);
 }
 
 function _luaTextFieldRef(fieldName) {

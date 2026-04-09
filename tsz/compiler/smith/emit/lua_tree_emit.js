@@ -62,7 +62,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
 function _luaLiteral(val) {
   if (val === null || val === undefined) return 'nil';
   if (typeof val === 'number') return String(val);
-  if (typeof val === 'string') return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  if (typeof val === 'string') return luaStringLiteral(val);
   if (typeof val === 'boolean') return val ? 'true' : 'false';
   return 'nil';
 }

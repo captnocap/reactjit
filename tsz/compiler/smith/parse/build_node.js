@@ -192,7 +192,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         var _mixedParts = [];
         for (const ch of children) {
           if (ch === dynChild) {
-            if (ch._luaTemplateRaw) _mixedParts.push('${' + ch._luaTemplateRaw + '}');
+            if (ch._luaTemplateRaw) _mixedParts.push(ch._luaTemplateRaw.indexOf('${') >= 0 ? ch._luaTemplateRaw : '${' + ch._luaTemplateRaw + '}');
             else if (ch._luaTextField) _mixedParts.push('${' + ch._luaTextField + '}');
             else if (ch._luaStateGetter) _mixedParts.push('${' + ch._luaStateGetter + '}');
             else if (ch._luaTernaryText) _mixedParts.push('${' + ch._luaTernaryText + '}');

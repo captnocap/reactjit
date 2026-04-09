@@ -11,8 +11,7 @@ function _luaTextTemplateParts(parts, itemParam, indexParam, _luaIdxExpr, _curre
   for (var i = 0; i < parts.length; i++) {
     var part = parts[i];
     if (part.literal) {
-      var escaped = part.literal.replace(/"/g, '\\"');
-      if (escaped.length > 0) luaParts.push('"' + escaped + '"');
+      if (part.literal.length > 0) luaParts.push(luaStringLiteral(part.literal));
     } else if (part.expr) {
       luaParts.push('tostring(' + _luaTextValueExpr(part.expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) + ')');
     }
@@ -51,8 +50,8 @@ function _luaTextTemplateString(text, itemParam, indexParam, _luaIdxExpr, _curre
       while (i < text.length && !(text[i] === '$' && i + 1 < text.length && text[i + 1] === '{')) {
         i++;
       }
-      var lit = text.slice(start, i).replace(/"/g, '\\"');
-      if (lit.length > 0) parts.push('"' + lit + '"');
+      var lit = text.slice(start, i);
+      if (lit.length > 0) parts.push(luaStringLiteral(lit));
     }
   }
 

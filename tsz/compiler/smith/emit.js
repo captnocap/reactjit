@@ -38,6 +38,7 @@ function buildEmitMeta(ctx, rootExpr, file) {
 function emitOutput(rootExpr, file) {
   // ── Lua-tree path: if we have a parsed luaNode, emit Lua-first ──
   if (ctx._luaRootNode && typeof emitLuaTreeApp === 'function') {
+    sanitizeLuaNodeTree(ctx._luaRootNode);
     var _ltOut = emitLuaTreeApp(ctx, rootExpr, file);
     return finalizeEmitOutput(_ltOut, file);
   }

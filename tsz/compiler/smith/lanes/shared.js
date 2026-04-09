@@ -46,6 +46,42 @@ function buildRoutePlan(source) {
   return null;
 }
 
+function buildSourceContractSnapshot(nodeExpr, file, extra) {
+  extra = extra || {};
+  var snapshot = {
+    version: 'source-contract-v1',
+    file: file,
+    sourceTier: ctx._sourceTier || null,
+    routePlan: ctx._routePlan || null,
+    preflight: ctx._preflight || null,
+    rootExpr: nodeExpr || null,
+    luaRootNode: ctx._luaRootNode || null,
+    luaMapRebuilders: ctx._luaMapRebuilders || [],
+    stateSlots: ctx.stateSlots || [],
+    objectArrays: ctx.objectArrays || [],
+    handlers: ctx.handlers || [],
+    conditionals: ctx.conditionals || [],
+    dynTexts: ctx.dynTexts || [],
+    dynColors: ctx.dynColors || [],
+    dynStyles: ctx.dynStyles || [],
+    maps: ctx.maps || [],
+    components: ctx.components || [],
+    classifiers: ctx.classifiers || {},
+    scriptBlock: ctx.scriptBlock || null,
+    luaBlock: ctx.luaBlock || null,
+    renderLocals: ctx.renderLocals || {},
+    debug: {
+      droppedExpressions: ctx._droppedExpressions || [],
+      unknownSubsystemTags: ctx._unknownSubsystemTags || [],
+      undefinedJSCalls: ctx._undefinedJSCalls || [],
+      duplicateJSVars: ctx._duplicateJSVars || [],
+    },
+  };
+  var extraKeys = Object.keys(extra);
+  for (var i = 0; i < extraKeys.length; i++) snapshot[extraKeys[i]] = extra[extraKeys[i]];
+  return JSON.stringify(snapshot, null, 2);
+}
+
 function finishParsedLane(nodeExpr, file, opts) {
   opts = opts || {};
 
@@ -65,6 +101,10 @@ function finishParsedLane(nodeExpr, file, opts) {
   }
 
   ctx._preflight = pf;
+
+  if (globalThis.__SOURCE_CONTRACT_MODE === 1) {
+    return buildSourceContractSnapshot(nodeExpr, file);
+  }
 
   // Emit glyph resolution report
   if (ctx._glyphLog && ctx._glyphLog.length > 0) {

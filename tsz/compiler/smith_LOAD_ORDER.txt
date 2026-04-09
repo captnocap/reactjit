@@ -164,6 +164,8 @@ smith/collect/classifiers.js
 smith/collect/render_locals.js
 smith/collect/pipeline.js
 
+smith/contract/sanitize_for_lua.js
+
 smith/lanes/shared.js
 smith/lanes/app.js
 smith/lanes/page.js
@@ -222,6 +224,7 @@ smith/parse/children/brace_computed.js
 smith/emit_ops/zig_node_to_lua.js
 smith/parse/children/brace_maps.js
 smith/parse/children/brace_render_local.js
+smith/parse/children/chained_expr.js
 smith/parse/children/brace.js
 smith/parse/children/text.js
 smith/parse/element/flow.js

@@ -33,8 +33,7 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
       } else if (oa._computedExpr) {
         oaSourceExpr = oa._computedExpr;
       }
-      var oaSource = oaSourceExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaSource + '");\n';
+      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', ' + zigStringLiteral(oaSourceExpr) + ');\n';
       _oaTickIdx++;
     }
   }
@@ -45,8 +44,7 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
       for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
         var ss = ctx.stateSlots[ssi];
         if (ss.getter.indexOf('__') === 0) continue;
-        var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        zig += '            qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
+        zig += '            qjs_runtime.syncScalarToLua(' + zigStringLiteral(ss.getter) + ');\n';
       }
       zig += '        }\n';
     }
@@ -69,7 +67,7 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
   zig += 'export fn app_get_js_logic_len() usize { return JS_LOGIC.len; }\n';
   zig += 'export fn app_get_lua_logic() [*]const u8 { return LUA_LOGIC.ptr; }\n';
   zig += 'export fn app_get_lua_logic_len() usize { return LUA_LOGIC.len; }\n';
-  zig += 'export fn app_get_title() [*:0]const u8 { return "' + appName + '"; }\n\n';
+  zig += 'export fn app_get_title() [*:0]const u8 { return ' + zigStringLiteral(appName) + '; }\n\n';
 
   zig += 'export fn app_state_count() usize { return ' + (ctx.stateSlots ? ctx.stateSlots.length : 0) + '; }\n';
 
@@ -77,7 +75,7 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
   zig += '\npub fn main() !void {\n';
   if (!fastBuild) zig += '    if (IS_LIB) return;\n';
   zig += '    try engine.run(.{\n';
-  zig += '        .title = "' + appName + '",\n';
+  zig += '        .title = ' + zigStringLiteral(appName) + ',\n';
   zig += '        .root = &_root,\n';
   zig += '        .init = _appInit,\n';
   zig += '        .tick = _appTick,\n';

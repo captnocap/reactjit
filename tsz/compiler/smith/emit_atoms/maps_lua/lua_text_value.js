@@ -30,7 +30,7 @@ function _luaTextStateVar(stateVarExpr, itemParam, indexParam, _luaIdxExpr, _cur
   // Detect literal prefix before expression
   var litMatch = sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
   if (litMatch && litMatch[1].trim().length > 0) {
-    return '"' + litMatch[1].replace(/"/g, '\\"') + '" .. tostring(' + litMatch[2] + ')';
+    return luaStringLiteral(litMatch[1]) + ' .. tostring(' + litMatch[2] + ')';
   }
 
   if (_needsLuaTextEval(sv)) {
@@ -81,7 +81,7 @@ function _luaTextDynamicExpr(text, itemParam, indexParam, _luaIdxExpr, _currentO
       if (_needsLuaTextEval(litTail)) {
         litTail = _jsEvalExpr(litTail);
       }
-      return '"' + litMatch[1].replace(/"/g, '\\"') + '" .. tostring(' + litTail + ')';
+      return luaStringLiteral(litMatch[1]) + ' .. tostring(' + litTail + ')';
     }
 
     if (_needsLuaTextEval(luaExpr)) {
@@ -90,7 +90,7 @@ function _luaTextDynamicExpr(text, itemParam, indexParam, _luaIdxExpr, _currentO
     return 'tostring(' + luaExpr + ')';
   }
 
-  return '"' + luaExpr.replace(/"/g, '\\"') + '"';
+  return luaStringLiteral(luaExpr);
 }
 
 // Wrap tostring() calls around inner expressions
@@ -218,7 +218,7 @@ function _luaTextZigArtifacts(sv) {
     }
     var litMatch = sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
     if (litMatch && litMatch[1].trim().length > 0) {
-      return '"' + litMatch[1].replace(/"/g, '\\"') + '" .. tostring(' + litMatch[2] + ')';
+      return luaStringLiteral(litMatch[1]) + ' .. tostring(' + litMatch[2] + ')';
     }
     return 'tostring(' + sv + ')';
   }

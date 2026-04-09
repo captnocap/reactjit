@@ -161,6 +161,14 @@ function compileSoup(source, file) {
     }
   }
 
+  if (globalThis.__SOURCE_CONTRACT_MODE === 1) {
+    return buildSourceContractSnapshot(rootExpr, file, {
+      preflight: ctx._preflight,
+      lane: 'soup',
+      warnings: warns,
+    });
+  }
+
   var output = emitOutput(rootExpr, file);
 
   // Emit excluded conditional texts as comments (flight check compatibility)

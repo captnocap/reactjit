@@ -186,5 +186,26 @@ function emitLuaTreeLuaSource(ctx) {
   lua.push('end');
   lua.push('');
 
-  return lua.join('\n');
+  // Final sanitization gate — catch any JS operators that emit let through.
+  // This is the LAST stop before LUA_LOGIC becomes a string literal.
+  // Protect __eval("...") and js_on_press = "..." strings first.
+  var result = lua.join('\n');
+  var protected = [];
+  result = result.replace(/__eval\("[^"]*"\)/g, function(m) {
+    protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';
+  });
+  result = result.replace(/js_on_press = "[^"]*"/g, function(m) {
+    protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';
+  });
+  // Convert remaining JS operators to Lua
+  result = result.replace(/!==/g, '~=');
+  result = result.replace(/===/g, '==');
+  result = result.replace(/!=/g, '~=');
+  result = result.replace(/\|\|/g, ' or ');
+  result = result.replace(/&&/g, ' and ');
+  // Restore protected JS strings
+  for (var _pi = 0; _pi < protected.length; _pi++) {
+    result = result.replace('__JSPROTECT_' + _pi + '__', protected[_pi]);
+  }
+  return result;
 }

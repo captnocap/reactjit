@@ -36,7 +36,14 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
     var val = style[key];
     // Strip Zig enum prefix: .hidden → hidden, .center → center
     if (typeof val === 'string' && val.charAt(0) === '.') val = val.slice(1);
-    var luaKey = key; // already snake_case from buildNode
+    if (typeof val === 'string' && ((val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') || (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'"))) {
+      val = val.slice(1, -1);
+    }
+    var luaKey = (typeof _camelToSnake === 'function') ? _camelToSnake(key) : key;
+    if (typeof val === 'string' &&
+        /^(justify_content|align_items|align_content|flex_direction|overflow|position|text_align)$/.test(luaKey)) {
+      val = (typeof _camelToSnake === 'function') ? _camelToSnake(val) : val;
+    }
 
     // Overflow: pass through for ScrollView/auto-overflow
     // readLuaStyle handles scroll/hidden/auto
@@ -177,7 +184,7 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       } else if (/\band\b/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
         parts.push(luaKey + ' = ' + _jsExpr);
       } else {
-        parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
+        parts.push(luaKey + ' = __eval(' + zigStringLiteral(_jsExpr) + ')');
       }
       continue;
     }
@@ -223,7 +230,7 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
     // String keyword BEFORE dynamic item ref check — prevents "row" item param collision
     var _enumPattern = /^(center|row|column|start|end|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|none|flex|absolute|relative|left|right|justify|vertical|horizontal|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end|row_reverse|column_reverse|space_evenly)$/;
     if (typeof val === 'string' && _enumPattern.test(val)) {
-      parts.push(luaKey + ' = "' + val + '"');
+      parts.push(luaKey + ' = ' + luaStringLiteral((typeof _camelToSnake === 'function') ? _camelToSnake(val) : val));
       continue;
     }
 
@@ -245,7 +252,7 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
 
     // String fallback
     if (typeof val === 'string') {
-      parts.push(luaKey + ' = "' + val + '"');
+      parts.push(luaKey + ' = ' + luaStringLiteral(val));
       continue;
     }
   }
@@ -259,6 +266,12 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
     if (_nextResult === result) break;
     result = _nextResult;
   }
-  result = result.replace(/= \.?(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|left|right|justify|vertical|horizontal)([,} ])/g, '= "$1"$2');
+  // Quote bare enum values that aren't already quoted.
+  // Match `= row,` but NOT `= "row",` — the [^"] prevents double-quoting.
+  result = result.replace(/= ([^"])?(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|left|right|justify|vertical|horizontal)([,} ])/g, function(m, pre, name, after) {
+    if (pre === '"') return m; // already quoted
+    var prefix = pre === '.' ? '' : (pre || '');
+    return '= ' + prefix + '"' + name + '"' + after;
+  });
   return result;
 }

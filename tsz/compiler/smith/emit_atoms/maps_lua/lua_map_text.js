@@ -44,7 +44,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   }
 
   // Fallback: coerce to string
-  return '"' + String(text).replace(/"/g, '\\"') + '"';
+  return luaStringLiteral(text);
 }
 
 // Dispatch string text by detected pattern

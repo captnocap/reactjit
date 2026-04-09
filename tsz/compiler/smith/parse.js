@@ -144,6 +144,7 @@ function parseChildren(c) {
     }
     if (tryParseElementChild(c, children)) continue;
     if (tryParseBraceChild(c, children)) continue;
+    if (tryParseChainedExpr(c, children)) continue;
     if (tryParseTextChild(c, children)) continue;
     // If no handler consumed the token, record and skip to avoid infinite loop
     if (c.pos === _prePos) {

@@ -11,7 +11,7 @@ var _luaTextBuiltins = {
 };
 
 function _escapeLuaTextEval(expr) {
-  return String(expr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return escapeDoubleQuotedString(expr);
 }
 
 function _normalizeJsEvalPayload(expr) {
@@ -81,7 +81,7 @@ function _maybeInlineJsEvalExpr(expr, itemParam, indexParam, _luaIdxExpr, _curre
   // Numeric and string literals
   if (/^\d+(?:\.\d+)?$/.test(jsExpr)) return jsExpr;
   if (/^"(?:[^"\\]|\\.)*"$/.test(jsExpr)) return jsExpr;
-  if (/^'(?:[^'\\]|\\.)*'$/.test(jsExpr)) return '"' + jsExpr.slice(1, -1).replace(/"/g, '\\"') + '"';
+  if (/^'(?:[^'\\]|\\.)*'$/.test(jsExpr)) return luaStringLiteral(jsExpr.slice(1, -1));
 
   return null;
 }

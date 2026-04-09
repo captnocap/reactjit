@@ -49,13 +49,21 @@ function indentLines(text, prefix) {
   }).join('\n');
 }
 
-function zigStringLiteral(value) {
-  return '"' + String(value)
+function escapeDoubleQuotedString(value) {
+  return String(value)
     .replace(/\\/g, '\\\\')
     .replace(/\r/g, '\\r')
     .replace(/\n/g, '\\n')
     .replace(/\t/g, '\\t')
-    .replace(/"/g, '\\"') + '"';
+    .replace(/"/g, '\\"');
+}
+
+function zigStringLiteral(value) {
+  return '"' + escapeDoubleQuotedString(value) + '"';
+}
+
+function luaStringLiteral(value) {
+  return '"' + escapeDoubleQuotedString(value) + '"';
 }
 
 function zigEscapeFormatText(value) {

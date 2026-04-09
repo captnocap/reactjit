@@ -113,7 +113,7 @@ function _exprTokensToLua(c, stopAt) {
       if (sv.charAt(0) === '#' && /^#[0-9a-fA-F]{3,8}$/.test(sv)) {
         parts.push('0x' + sv.slice(1));
       } else {
-        parts.push('"' + sv + '"');
+        parts.push(luaStringLiteral(sv));
       }
       c.advance();
       continue;
@@ -131,7 +131,7 @@ function _singleTokenToLua(c) {
   if (c.kind() === TK.string) {
     var sv = c.text().slice(1, -1);
     if (sv.charAt(0) === '#' && /^#[0-9a-fA-F]{3,8}$/.test(sv)) return '0x' + sv.slice(1);
-    return '"' + sv + '"';
+    return luaStringLiteral(sv);
   }
   return c.text();
 }
@@ -156,8 +156,8 @@ function _templateToLua(raw) {
     } else {
       var start = i;
       while (i < raw.length && !(raw[i] === '$' && i + 1 < raw.length && raw[i + 1] === '{')) i++;
-      var lit = raw.slice(start, i).replace(/"/g, '\\"');
-      if (lit.length > 0) parts.push('"' + lit + '"');
+      var lit = raw.slice(start, i);
+      if (lit.length > 0) parts.push(luaStringLiteral(lit));
     }
   }
   return parts.join(' .. ') || '""';

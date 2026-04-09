@@ -446,15 +446,9 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       return arrName + '[((' + idxExpr.trim() + ') + 1)]';
     });
   }
-  // Strip Zig builtins
-  expr = expr.replace(/@divTrunc\(([^,]+),\s*([^)]+)\)/g, 'math.floor($1 / $2)');
-  expr = expr.replace(/@mod\(([^,]+),\s*([^)]+)\)/g, '($1 % $2)');
-  for (var _zi = 0; _zi < 3; _zi++) {
-    expr = expr.replace(/@as\(\[\]const u8,\s*("[^"]*")\)/g, '$1');
-    expr = expr.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
-    expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
-    expr = expr.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
-  }
+  // Pure JS→Lua conversion is done by sanitize_for_lua.js (one source of truth).
+  // This function only handles context-dependent resolution below.
+
   // OA length refs: _oa0_len → #getter_name
   if (typeof ctx !== 'undefined' && ctx.objectArrays) {
     expr = expr.replace(/_oa(\d+)_len\b/g, function(_, oaIdx) {
@@ -506,65 +500,16 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       return _s ? _s.getter : '_slot' + idx;
     });
   }
-  // std.mem.eql → Lua string compare
-  expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
-  expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
-  // Zig qjs_runtime.evalToString → __eval (JS function calls from Lua)
-  // Pattern 1: "String(expr)" → __eval("expr")
+  // Pure JS→Lua operator/syntax conversion removed — handled by sanitize_for_lua.js.
+  // Only context-dependent Zig→Lua rewrites that need OA/state context remain here.
+
+  // Zig qjs_runtime.evalToString → __eval
   expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
-  // Pattern 2: general "any JS code" → __eval("code")
   expr = expr.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
   expr = expr.replace(/&_eval_buf_\d+/g, '');
   expr = _unwrapQuotedDynamicExpr(expr);
   expr = _collapseRedundantParens(expr);
-  var _protectedJsEval = _protectEmbeddedJsEvalForLua(expr);
-  expr = _protectedJsEval.expr;
-  // Zig if/else chains → Lua and/or (from parseTemplateLiteral ternary emit)
-  for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
-    var _ifPos = expr.indexOf('if (');
-    if (_ifPos < 0) break;
-    var _depth = 0, _ci3 = _ifPos + 3;
-    for (; _ci3 < expr.length; _ci3++) {
-      if (expr[_ci3] === '(') _depth++;
-      if (expr[_ci3] === ')') { _depth--; if (_depth === 0) break; }
-    }
-    if (_depth !== 0) break;
-    var _cond = expr.substring(_ifPos + 4, _ci3);
-    var _after = expr.substring(_ci3 + 1).trim();
-    var _elseIdx = _after.indexOf(' else ');
-    if (_elseIdx < 0) break;
-    var _trueVal = _after.substring(0, _elseIdx).trim();
-    var _prefix = expr.substring(0, _ifPos);
-      var _suffix = _after.substring(_elseIdx + 6).trim();
-      expr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
-  }
-  expr = _convertSimpleJsTernary(expr);
-  expr = _rewriteJsStringConcatToLua(expr);
-  expr = expr.replace(/!==/g, '~=');
-  expr = expr.replace(/===/g, '==');
-  expr = expr.replace(/!=/g, '~=');
-  expr = expr.replace(/\|\|/g, ' or ');
-  expr = expr.replace(/&&/g, ' and ');
-  expr = _restoreEmbeddedJsEvalForLua(expr, _protectedJsEval.protectedExprs);
-  expr = _normalizeEmbeddedJsEvalForLua(expr);
-  expr = _collapseRedundantParens(expr);
   expr = _simplifyBoolNumericComparison(expr);
-  // Bitwise operators → LuaJIT bit library (after &&/|| so remaining &/| are bitwise)
-  if (expr.indexOf('&') >= 0 || expr.indexOf('|') >= 0 || expr.indexOf('^') >= 0 ||
-      expr.indexOf('>>') >= 0 || expr.indexOf('<<') >= 0 || /~(?!=)\w/.test(expr)) {
-    expr = expr.replace(/~(?!=)(\w+)/g, 'bit.bnot($1)');
-    for (var _bp = 0; _bp < 5; _bp++) {
-      var _prevE = expr;
-      expr = expr.replace(/(\w+)\s*>>\s*(\w+)/g, 'bit.rshift($1, $2)');
-      expr = expr.replace(/(\w+)\s*<<\s*(\w+)/g, 'bit.lshift($1, $2)');
-      expr = expr.replace(/(\w+)\s*&\s*(\w+)/g, 'bit.band($1, $2)');
-      expr = expr.replace(/(\w+)\s*\|\s*(\w+)/g, 'bit.bor($1, $2)');
-      expr = expr.replace(/(\w+)\s*\^\s*(\w+)/g, 'bit.bxor($1, $2)');
-      if (expr === _prevE) break;
-    }
-  }
-  expr = expr.replace(/'#([0-9a-fA-F]{3,8})'/g, '0x$1');
-  expr = expr.replace(/"#([0-9a-fA-F]{3,8})"/g, '0x$1');
   // DEFENSIVE: _item._item is a bug — collapse to single _item
   expr = expr.replace(/\b_item\._item\b/g, '_item');
   expr = expr.replace(/\b_nitem\._nitem\b/g, '_nitem');

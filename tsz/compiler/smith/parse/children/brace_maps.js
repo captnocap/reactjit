@@ -613,22 +613,28 @@ function _parseJsxForLuaMapBody(c) {
   if (!selfClosing) {
     // Parse children
     if (tagName === 'Text') {
-      // Text content
+      // Text content: normalize source syntax into a template-style contract
+      // so emit never sees raw JSX braces or backticks.
       var textParts = [];
       while (c.pos < c.count && c.kind() !== TK.lt_slash) {
         if (c.kind() === TK.lbrace) {
           c.advance();
           if (c.kind() === TK.template_literal) {
-            textParts.push(c.text());
+            textParts.push(c.text().slice(1, -1));
             c.advance();
           } else {
             var parts = [];
             while (c.kind() !== TK.rbrace && c.pos < c.count) { parts.push(c.text()); c.advance(); }
-            textParts.push('{' + parts.join(' ') + '}');
+            var expr = parts.join(' ')
+              .replace(/\s*\.\s*/g, '.')
+              .replace(/\[\s*/g, '[')
+              .replace(/\s*\]/g, ']')
+              .trim();
+            if (expr.length > 0) textParts.push('${' + expr + '}');
           }
           if (c.kind() === TK.rbrace) c.advance();
         } else if (c.kind() === TK.string) {
-          textParts.push('"' + c.text().slice(1, -1) + '"');
+          textParts.push(c.text().slice(1, -1));
           c.advance();
         } else if (c.kind() === TK.lt && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'Glyph') {
           // Inline glyph
@@ -652,12 +658,12 @@ function _parseJsxForLuaMapBody(c) {
           }
           if (!inlineGlyphs) inlineGlyphs = [];
           inlineGlyphs.push(glyph);
-          textParts.push('"\\x01"');
+          textParts.push('\\x01');
         } else {
           c.advance();
         }
       }
-      if (textParts.length > 0) text = textParts.join(' + ');
+      if (textParts.length > 0) text = textParts.join('');
     } else {
       // Container children
       while (c.pos < c.count && c.kind() !== TK.lt_slash) {
