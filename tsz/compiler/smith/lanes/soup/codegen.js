@@ -7,6 +7,11 @@
 // Every function returns { str: "...", dynBufId: -1 }
 // dynBufId >= 0 means this node is a dynText placeholder that needs wiring.
 
+// Tables defined in rules.js: soupTags, soupFonts, soupColors
+var _STAG = soupTags;
+var _SFONT = soupFonts;
+var _SC = soupColors;
+
 function soupToZig(node, warns, inPressable) {
   if (!node) return { str: '', dynBufId: -1 };
 
