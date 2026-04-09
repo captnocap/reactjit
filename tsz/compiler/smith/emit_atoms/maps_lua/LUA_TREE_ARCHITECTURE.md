@@ -79,10 +79,10 @@ This directory implements the emit phase of a strict three-phase architecture:
 | emit_ops/emit_lua_style.js | lua_map_style.js | 🚫 Deprecated |
 | emit_ops/emit_lua_rebuild.js | a034_lua_logic_block.js | 🚫 Deprecated |
 
-### Wrapper (Being Reduced)
-| File | Current Role | Future |
-|------|--------------|--------|
-| a034_lua_logic_block.js | LUA_LOGIC wrapper + delegator | Wrapper only |
+### Disabled (Migrated to Lua-Tree Path)
+| File | Status | Migration |
+|------|--------|-----------|
+| a034_lua_logic_block.js | DISABLED — returns false from applies() | LUA_LOGIC owned by lua_tree_nodes.js::emitLuaTreeLuaSource() |
 
 ## Usage Pattern
 
@@ -122,8 +122,8 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
 
 - [x] Create lua_map_*.js with proper contract consumption
 - [x] Establish contract schema in contract/*
+- [x] Disconnect a034_lua_logic_block.js (applies() returns false)
 - [ ] Disconnect emit_ops/emit_lua_*.js from load order
-- [ ] Verify a034_lua_logic_block.js only wraps, doesn't translate
 - [ ] Delete emit_ops/emit_lua_*.js files
 - [ ] Document contract schema in AGENTS.md
 
