@@ -24,8 +24,19 @@
   var _origEmitOutput = emitOutput;
 
   emitOutput = function(rootExpr, file) {
+    // For parity comparison, suppress lua-tree path so legacy goes through
+    // emitPreamble() — the same path that atoms a001-a003 target.
+    // Without this, all carts route through emitLuaTreeApp() which has its
+    // own inline preamble that atoms don't match.
+    var _savedLuaRoot = null;
+    if (globalThis.__parityMode && ctx && ctx._luaRootNode) {
+      _savedLuaRoot = ctx._luaRootNode;
+      ctx._luaRootNode = null;
+    }
     // Always run legacy path
     var legacyOut = _origEmitOutput(rootExpr, file);
+    // Restore lua-tree root so the actual output (returned to forge) still uses lua-tree
+    if (_savedLuaRoot) ctx._luaRootNode = _savedLuaRoot;
 
     // If parity mode, also run atoms
     if (globalThis.__parityMode) {
