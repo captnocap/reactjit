@@ -89,12 +89,11 @@ function runLegacyEmit(cart) {
       return { output: null, error: 'no .zig files in ' + genDir };
     }
 
-    // Concatenate all .zig files in sorted order
+    // Concatenate all .zig files in sorted order — no separators,
+    // so output is comparable to raw atom output from runEmitAtoms().
     let combined = '';
     for (const zf of zigFiles) {
-      combined += '// ── ' + zf + ' ──\n';
       combined += fs.readFileSync(path.join(genDir, zf), 'utf8');
-      combined += '\n';
     }
 
     return { output: combined, error: null, files: zigFiles };
