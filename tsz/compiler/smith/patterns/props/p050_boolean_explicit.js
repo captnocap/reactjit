@@ -4,54 +4,31 @@
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   <Button disabled={true} />
-//   <Modal open={false} />
+// Matches: attr={true} or attr={false} — cursor at { with boolean inside
+// Compile: extracts boolean value, advances past }, returns "true"/"false"
 //
-// Mixed syntax (hybrid):
-//   // Mixed: same as soup for this pattern
-//
-// Zig output target:
-//   // Current behavior:
-//   propValues["disabled"] = "true"
-//   propValues["open"] = "false"
-//   // These flow through propStack as strings, not typed booleans.
-//
-// Notes:
-//   Implemented through parse/element/component_props.js ->
-//   tryParseComponentBraceProp() -> parseComponentBraceValue().
-//
-//   The parser does accept `{true}` and `{false}`, but it stores the raw token
-//   text as a string. That means:
-//     - `...={true}` is usually usable because non-empty strings are truthy
-//     - `...={false}` is NOT a real false boolean in many downstream paths
-//       because _condPropValue() treats non-empty strings as truthy constants
-//
-//   This is why the pattern is partial rather than complete. The syntax parses,
-//   but the value is not normalized to a typed boolean through the full pipeline.
+// React:   <Modal visible={false} />
+// Zig:     propValues["visible"] = "false"
 
 function match(c, ctx) {
-  // Value side only: attr = { true|false }
   if (c.kind() !== TK.lbrace) return false;
-  var saved = c.save();
-  c.advance();
-  var result = c.kind() === TK.identifier &&
-    (c.text() === 'true' || c.text() === 'false') &&
-    c.pos + 1 < c.count &&
-    c.kindAt(c.pos + 1) === TK.rbrace;
-  c.restore(saved);
-  return result;
+  var next = c.pos + 1;
+  if (next >= c.count) return false;
+  if (c.kindAt(next) !== TK.identifier) return false;
+  var text = c.textAt(next);
+  if (text !== 'true' && text !== 'false') return false;
+  var afterBool = next + 1;
+  return afterBool < c.count && c.kindAt(afterBool) === TK.rbrace;
 }
 
 function compile(c, ctx) {
-  // { true } or { false } — consume brace, boolean, brace
   c.advance(); // skip {
-  var val = c.text(); // "true" or "false"
+  var value = c.text(); // "true" or "false"
   c.advance(); // skip boolean
-  if (c.kind() === TK.rbrace) c.advance(); // skip }
-  return { value: val };
+  if (c.kind() === TK.rbrace) c.advance();
+  return value;
 }
 
-_patterns[50] = { id: 50, match: match, compile: compile };
+_patterns[50] = { id: 50, group: 'props', name: 'boolean_explicit', match: match, compile: compile };
 
 })();

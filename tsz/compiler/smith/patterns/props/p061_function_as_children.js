@@ -1,77 +1,67 @@
 (function() {
-// ── Pattern 061: function-as-children ──────────────────────────
+// ── Pattern 061: Function-as-children ───────────────────────────
 // Index: 61
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   <DataProvider>
-//     {(value) => <Text>{value}</Text>}
-//   </DataProvider>
+// Matches: <Parent>{(data) => <Child data={data} />}</Parent>
+//          Children slot contains a function that receives data and returns JSX.
+//          This is the "children" variant of render props (p060).
+// Compile: same as p060 but the function appears in children position,
+//          not as a named prop. Returns a render prop marker tagged as children.
 //
-// Mixed syntax (hybrid):
-//   Same as soup for this pattern.
-//
-// Zig output target:
-//   // Not currently emitted.
-//   //
-//   // The child arrow function is rejected during child parsing:
-//   //   F12: dropped expression {(value) => <Text>{value}</Text>}
-//   //
-//   // No callable child template reaches component inlining.
-//
-// Notes:
-//   parseComponentCallChildren() can capture ordinary JSX children and
-//   stash them in ctx.componentChildren, and parse/children/brace.js can
-//   splice bare {children} back into the inlined component body.
-//
-//   The missing piece is the function child itself. A brace child whose
-//   contents are an arrow function is not recognized by tryParseBraceChild():
-//   it is neither a getter, prop, map, ternary, nor logical expression, so
-//   preflight reports F12 "dropped expression".
-//
-//   That means both forms are unsupported today:
-//     1. Passing a function as the only child
-//     2. Calling children(...) inside the component body
-//
-//   This is marked not_applicable for the current Smith architecture rather
-//   than stub because the missing behavior is not "undocumented React";
-//   it is a runtime callable-child pattern that does not fit the current
-//   compile-time slot model without adding first-class callable child slots.
+// React:   <Mouse>{(pos) => <Cat position={pos} />}</Mouse>
+// Zig:     Inlined at component expansion with param binding.
 
 function match(c, ctx) {
-  // Brace child whose contents are an arrow function:
-  //   {(x) => ...}
-  //   {x => ...}
-  var saved = c.save();
-
-  if (c.kind() === TK.lparen) {
-    var depth = 1;
-    c.advance();
-    while (c.pos < c.count && depth > 0) {
-      if (c.kind() === TK.lparen) depth++;
-      if (c.kind() === TK.rparen) depth--;
-      c.advance();
-    }
-    var parenArrow = c.kind() === TK.arrow;
-    c.restore(saved);
-    return parenArrow;
+  // In children context: cursor at { after opening tag's >
+  if (c.kind() !== TK.lbrace) return false;
+  var next = c.pos + 1;
+  if (next >= c.count) return false;
+  if (c.kindAt(next) !== TK.lparen) return false;
+  // Find => after parens
+  var look = next + 1;
+  var pd = 1;
+  while (look < c.count && pd > 0) {
+    if (c.kindAt(look) === TK.lparen) pd++;
+    if (c.kindAt(look) === TK.rparen) pd--;
+    look++;
   }
-
-  if (c.kind() === TK.identifier && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.arrow) {
-    c.restore(saved);
-    return true;
-  }
-
-  c.restore(saved);
-  return false;
+  return look < c.count && c.kindAt(look) === TK.arrow;
 }
 
 function compile(c, ctx) {
-  // No live lowering in the current compile-time component model.
-  return null;
+  c.advance(); // skip {
+  c.advance(); // skip (
+
+  var params = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rparen) {
+    if (c.kind() === TK.identifier) params.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.arrow) c.advance();
+
+  // Parse body — could be JSX or expression
+  var jsxResult = null;
+  if (typeof parseJSXElement === 'function' && c.kind() === TK.lt) {
+    jsxResult = parseJSXElement(c);
+  } else {
+    var depth = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.lbrace) depth++;
+      if (c.kind() === TK.rbrace) {
+        if (depth === 0) break;
+        depth--;
+      }
+      c.advance();
+    }
+  }
+
+  if (c.kind() === TK.rbrace) c.advance();
+  return { __renderProp: true, isChildren: true, params: params, result: jsxResult };
 }
 
-_patterns[61] = { id: 61, match: match, compile: compile };
+_patterns[61] = { id: 61, group: 'props', name: 'function_as_children', match: match, compile: compile };
 
 })();

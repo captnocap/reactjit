@@ -1,50 +1,38 @@
 (function() {
-// ── Pattern 048: Number prop ───────────────────────────────────
+// ── Pattern 048: Number prop ──────────────────────────────────
 // Index: 48
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   <Counter count={5} />
-//   <Spacer size={24} />
+// Matches: attr={42} or attr={-3.14} — cursor at { with number inside
+// Compile: extracts numeric value, advances past }, returns value
 //
-// Mixed syntax (hybrid):
-//   // Mixed: same as soup for this pattern
-//
-// Zig output target:
-//   // During component call collection:
-//   propValues["count"] = "5"
-//   // Numeric consumers regex-match this as a numeric literal and reuse it as
-//   // a Zig numeric expression where appropriate.
-//
-// Notes:
-//   Implemented through parse/element/component_props.js ->
-//   tryParseComponentBraceProp() -> parseComponentBraceValue().
-//
-//   For the simple `{5}` case the brace-value parser collects the numeric token
-//   and stores the literal text in propValues[attr]. Downstream consumers treat
-//   numeric-looking strings as numbers:
-//     - conditionals use _condPropValue() numeric passthrough
-//     - numeric attrs regex-match prop strings back into numeric expressions
-//     - plain text interpolation still renders "5"
+// React:   <Grid columns={3} />
+// Zig:     propValues["columns"] = "3"
 
 function match(c, ctx) {
-  // Value side only: attr = { number }
   if (c.kind() !== TK.lbrace) return false;
-  var saved = c.save();
-  c.advance();
-  var result = c.kind() === TK.number &&
-    c.pos + 1 < c.count &&
-    c.kindAt(c.pos + 1) === TK.rbrace;
-  c.restore(saved);
-  return result;
+  var next = c.pos + 1;
+  if (next < c.count && c.kindAt(next) === TK.minus) next++;
+  if (next >= c.count) return false;
+  if (c.kindAt(next) !== TK.number) return false;
+  var afterNum = next + 1;
+  return afterNum < c.count && c.kindAt(afterNum) === TK.rbrace;
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseComponentBraceProp() / parseComponentBraceValue().
-  return null;
+  c.advance(); // skip {
+  var neg = '';
+  if (c.kind() === TK.minus) {
+    neg = '-';
+    c.advance();
+  }
+  var value = neg + c.text();
+  c.advance(); // skip number
+  if (c.kind() === TK.rbrace) c.advance();
+  return value;
 }
 
-_patterns[48] = { id: 48, match: match, compile: compile };
+_patterns[48] = { id: 48, group: 'props', name: 'number_prop', match: match, compile: compile };
 
 })();

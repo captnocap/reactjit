@@ -4,52 +4,58 @@
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   <Component {[dynamicKey]: value} />
-//   <Box {[`data-${type}`]: id} />
-//   <Input {[fieldName]: fieldValue} />
+// Matches: cursor at [ indicating computed property name in JSX
+//          e.g. <Comp [dynamicKey]={value} />
+// Compile: extracts the key expression, returns marker for runtime resolution
 //
-// Mixed syntax (hybrid):
-//   Not applicable — chad syntax uses explicit named props.
-//   Soup-only pattern.
+// React:   <Comp {...{[key]: value}} />  (computed keys in spread)
+// Note:    JSX doesn't natively support [key]= syntax. This pattern
+//          recognizes the React idiom of computed keys inside spread
+//          objects: {...{[expr]: val}}.
 //
-// Zig output target:
-//   // Would require runtime property resolution:
-//   // The prop name is not known at compile time, so we'd need either:
-//   //   1. QuickJS eval to resolve the key at runtime
-//   //   2. A string-keyed prop map on the node (doesn't exist in Zig struct)
-//   // Neither is currently implemented.
-//
-// Notes:
-//   NOT IMPLEMENTED. The compiler does not support dynamic/computed property
-//   names on JSX elements.
-//
-//   Zig structs require known field names at compile time. A computed prop
-//   name like [dynamicKey] cannot be resolved to a struct field without
-//   either:
-//     1. Exhaustive enumeration of possible key values at compile time
-//     2. Runtime string-keyed property map (contradicts static struct model)
-//
-//   This pattern is rare in practice. Most React code that uses computed
-//   props does so for DOM data attributes or ARIA attributes, which have
-//   dedicated handling (p134, p135).
-//
-//   If needed, the escape hatch is QuickJS eval for the entire component
-//   or using explicit conditional props instead.
+// In tsz compilation, computed prop names require QuickJS eval at runtime
+// since the key isn't known at compile time.
 
 function match(c, ctx) {
-  // { [ expression ] : value }
-  if (c.kind() !== TK.lbrace) return false;
-  if (c.pos + 2 >= c.count) return false;
-  return c.kindAt(c.pos + 1) === TK.lbracket;
+  // Inside a brace context: { [expr]: value }
+  if (c.kind() !== TK.lbracket) return false;
+  // Must have a closing ] followed by :
+  var look = c.pos + 1;
+  var depth = 1;
+  while (look < c.count && depth > 0) {
+    if (c.kindAt(look) === TK.lbracket) depth++;
+    if (c.kindAt(look) === TK.rbracket) depth--;
+    look++;
+  }
+  return look < c.count && c.kindAt(look) === TK.colon;
 }
 
 function compile(c, ctx) {
-  // Not applicable — Zig structs require compile-time field names.
-  // Workaround: use explicit conditional props or data-* attributes (p134).
-  return null;
+  c.advance(); // skip [
+  var keyExpr = '';
+  var depth = 1;
+  while (c.kind() !== TK.eof && depth > 0) {
+    if (c.kind() === TK.lbracket) depth++;
+    if (c.kind() === TK.rbracket) {
+      depth--;
+      if (depth === 0) break;
+    }
+    keyExpr += c.text();
+    c.advance();
+  }
+  if (c.kind() === TK.rbracket) c.advance(); // skip ]
+  if (c.kind() === TK.colon) c.advance(); // skip :
+
+  // Collect value
+  var val = '';
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace && c.kind() !== TK.comma) {
+    val += c.text();
+    c.advance();
+  }
+
+  return { __computed: true, key: keyExpr, value: val };
 }
 
-_patterns[56] = { id: 56, match: match, compile: compile };
+_patterns[56] = { id: 56, group: 'props', name: 'computed_prop_name', match: match, compile: compile };
 
 })();

@@ -1,65 +1,75 @@
 (function() {
-// ── Pattern 065: forwarded ref prop ────────────────────────────
+// ── Pattern 065: Forwarded ref prop ─────────────────────────────
 // Index: 65
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   const Input = forwardRef((props, ref) => (
-//     <TextInput ref={ref} value={props.value} />
-//   ));
+// Matches: React.forwardRef((props, ref) => ...) — the forwardRef HOC
+//          pattern where a component receives both props and a ref.
+// Compile: extracts the props and ref parameter names, marks the
+//          component as ref-forwarding so the ref prop is threaded
+//          through during inlining.
 //
-// Mixed syntax (hybrid):
-//   Same as soup for this pattern.
+// React:   const Input = React.forwardRef((props, ref) => {
+//            return <input ref={ref} {...props} />;
+//          });
+// Zig:     ref is compiled as a pointer to the framework Node handle.
 //
-// Zig output target:
-//   // Not currently emitted as a forwarded component.
-//   //
-//   // Observed current behavior for:
-//   //   <Input value="hello" />
-//   // is an empty root node:
-//   //   var _root = Node{ };
-//
-// Notes:
-//   collectComponents() only registers function declarations of the form:
-//     function Name(...) { ... }
-//
-//   It does not collect:
-//     const Name = forwardRef((props, ref) => ...)
-//
-//   Because findComponent() never sees that binding, <Input /> falls through
-//   the normal tag path instead of the component-inline path. In the isolated
-//   probe for this pattern, that produced an empty root rather than a usable
-//   forwarded component.
-//
-//   This is marked not_applicable for the current Smith architecture rather
-//   than stub because forwarded refs depend on runtime ref identity and a
-//   component collection shape that Smith does not currently model.
-//
-//   Supporting this pattern would require:
-//     1. Collecting const-assigned component bindings
-//     2. Recognizing forwardRef wrappers specifically
-//     3. Preserving/ref-routing semantics for the forwarded `ref` argument
+// In tsz, refs map to node handle pointers. forwardRef is recognized
+// at component definition time and the ref parameter is tracked.
 
 function match(c, ctx) {
-  // const Name = forwardRef(...)
-  var saved = c.save();
-  if (!c.isIdent('const')) return false;
-  c.advance();
-  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
-  c.advance();
-  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
-  c.advance();
-  var ok = c.kind() === TK.identifier && c.text() === 'forwardRef';
-  c.restore(saved);
-  return ok;
+  // Detect: identifier.forwardRef( or forwardRef(
+  if (c.kind() !== TK.identifier) return false;
+  var text = c.text();
+  if (text === 'forwardRef') return true;
+  // React.forwardRef
+  if (text === 'React' && c.pos + 2 < c.count &&
+      c.kindAt(c.pos + 1) === TK.dot &&
+      c.kindAt(c.pos + 2) === TK.identifier &&
+      c.textAt(c.pos + 2) === 'forwardRef') {
+    return true;
+  }
+  return false;
 }
 
 function compile(c, ctx) {
-  // No live lowering in the current compile-time component model.
-  return null;
+  // Skip React.forwardRef or forwardRef
+  if (c.text() === 'React') {
+    c.advance(); // React
+    c.advance(); // .
+  }
+  c.advance(); // forwardRef
+  if (c.kind() === TK.lparen) c.advance(); // (
+
+  // Now at the inner function: (props, ref) => ...
+  var propsParam = null;
+  var refParam = null;
+
+  if (c.kind() === TK.lparen) {
+    c.advance(); // (
+    if (c.kind() === TK.identifier) {
+      propsParam = c.text();
+      c.advance();
+    }
+    if (c.kind() === TK.comma) c.advance();
+    if (c.kind() === TK.identifier) {
+      refParam = c.text();
+      c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+  }
+
+  // Skip => if arrow function
+  if (c.kind() === TK.arrow) c.advance();
+
+  return {
+    __forwardRef: true,
+    propsParam: propsParam,
+    refParam: refParam,
+  };
 }
 
-_patterns[65] = { id: 65, match: match, compile: compile };
+_patterns[65] = { id: 65, group: 'props', name: 'forwarded_ref', match: match, compile: compile };
 
 })();

@@ -4,49 +4,35 @@
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   <Button disabled />
-//   <Modal open />
+// Matches: <Btn disabled /> — attr name with no = (next token is
+//          another identifier, / or >)
+// Compile: returns "true" without advancing (the attr loop handles advance)
 //
-// Mixed syntax (hybrid):
-//   // Mixed: same as soup for this pattern
+// React:   <Input disabled />
+// Zig:     propValues["disabled"] = "true"
 //
-// Zig output target:
-//   // Desired:
-//   propValues["disabled"] = true;
-//   // so inline component bodies can treat the prop as a real boolean flag
-//
-// Notes:
-//   Shorthand booleans exist in the parser, but only partially.
-//
-//   Native element parsing already has a bare-attr path in parseJSXElement():
-//   identifiers without `=` still flow through parseElementAttr(), which is
-//   how flags like `bold`, `background`, and literal-mode `l` work today.
-//
-//   Component props are weaker. collectComponentPropValues() only records an
-//   attribute when it is followed by `=`, so `<C disabled />` is currently
-//   advanced past and dropped at the component-call layer.
-//
-//   Supporting this would require an attribute-position rule roughly like:
-//     if (attr seen and next token !== '=') propValues[attr] = true;
-//   plus real boolean normalization so downstream conditionals can distinguish
-//   true from false instead of treating both as non-empty strings.
+// In React, a bare attribute with no value is implicitly true.
+// The cursor is at the token AFTER the attr name. If there's no =,
+// the attr is boolean shorthand.
 
 function match(c, ctx) {
-  // Attribute-position pattern: identifier with no equals after it.
+  // Called when cursor is past attr name. If next is not =, it's boolean shorthand.
+  // The caller checks: if (c.kind() === TK.equals) { advance; tryPatternMatch }
+  // So this pattern only fires if the caller routes bare-attr detection here.
+  // For standalone use: cursor is at an identifier and the next token is NOT =
   if (c.kind() !== TK.identifier) return false;
-  if (c.pos + 1 >= c.count) return false;
-  return c.kindAt(c.pos + 1) !== TK.equals;
+  var next = c.pos + 1;
+  if (next >= c.count) return true; // last token = bare attr
+  var nextKind = c.kindAt(next);
+  return nextKind !== TK.equals;
 }
 
 function compile(c, ctx) {
-  // Boolean shorthand: bare attribute name with no = after it.
-  // Consume the identifier and return true as the prop value.
-  var name = c.text();
-  c.advance();
-  return { value: 'true', attr: name };
+  // Don't advance — the attr name is consumed by the outer loop.
+  // Just return the boolean value.
+  return 'true';
 }
 
-_patterns[49] = { id: 49, match: match, compile: compile };
+_patterns[49] = { id: 49, group: 'props', name: 'boolean_shorthand', match: match, compile: compile };
 
 })();

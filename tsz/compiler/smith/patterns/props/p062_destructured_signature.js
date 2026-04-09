@@ -1,73 +1,75 @@
 (function() {
-// ── Pattern 062: destructured params ───────────────────────────
+// ── Pattern 062: Destructured params ────────────────────────────
 // Index: 62
 // Group: props
 // Status: complete
 //
-// Soup syntax (copy-paste React):
-//   function Card({name, age}) {
-//     return <Text>{name}</Text>;
-//   }
+// Matches: function Component({ title, body, children }) — destructured
+//          parameter in component function signature.
+// Compile: extracts prop names from the destructuring pattern, registers
+//          them as expected props for the component so the prop stack
+//          can resolve them during inlining.
 //
-// Mixed syntax (hybrid):
-//   Same as soup for this pattern.
+// React:   function Card({ title, body }) { return <div>{title}</div>; }
+// Zig:     Component's propStack is seeded with ["title", "body"]
 //
-// Zig output target:
-//   // Call site:
-//   <Card name="Ada" age={37} />
-//   //
-//   // Inlined body:
-//   var _root = Node{ .children = &_arr_0 };
-//   var _arr_0 = [_]Node{
-//     .{ .text = "Ada" },
-//     .{ .text = "37" },
-//   };
-//
-// Notes:
-//   collectComponents() recognizes function Name({ ... }) signatures and
-//   records each identifier inside the destructuring braces as a prop name.
-//
-//   During component inlining:
-//     - collectComponentPropValues() captures opening-tag props
-//     - inlineComponentCall() assigns them to ctx.propStack
-//     - parse/children/brace.js resolves bare {name} / {age} through that map
-//
-//   The current implementation handles flat destructured signatures like
-//   {name, age}. Nested destructuring is a different pattern and is not
-//   claimed here.
+// This pattern fires at component definition time, not at call site.
+// The cursor is at { inside a function parameter list.
 
 function match(c, ctx) {
-  // function Name({a, b}) { ... }
-  var saved = c.save();
-  if (!c.isIdent('function')) return false;
-  c.advance();
-  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
-  c.advance();
-  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
-  c.advance();
-  if (c.kind() !== TK.lbrace) { c.restore(saved); return false; }
-  c.advance();
-
-  var sawIdent = false;
-  while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
-    if (c.kind() === TK.equals || c.kind() === TK.spread) {
-      c.restore(saved);
-      return false;
-    }
-    if (c.kind() === TK.identifier) sawIdent = true;
-    c.advance();
-  }
-
-  var ok = sawIdent && c.kind() === TK.rbrace;
-  c.restore(saved);
-  return ok;
+  // Cursor at { inside function params: function Name({ ... })
+  return c.kind() === TK.lbrace;
 }
 
 function compile(c, ctx) {
-  // Signature collection happens in collect/components.js, not inline here.
-  return null;
+  c.advance(); // skip {
+  var props = [];
+  var defaults = {};
+
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    if (c.kind() === TK.identifier) {
+      var name = c.text();
+      c.advance();
+
+      // Check for default value: prop = defaultValue
+      if (c.kind() === TK.equals) {
+        c.advance();
+        // Collect default value tokens until , or }
+        var defVal = '';
+        var depth = 0;
+        while (c.kind() !== TK.eof) {
+          if (c.kind() === TK.lbrace || c.kind() === TK.lbracket || c.kind() === TK.lparen) depth++;
+          if (c.kind() === TK.rbrace || c.kind() === TK.rbracket || c.kind() === TK.rparen) {
+            if (depth === 0) break;
+            depth--;
+          }
+          if (c.kind() === TK.comma && depth === 0) break;
+          defVal += c.text();
+          c.advance();
+        }
+        defaults[name] = defVal.trim();
+      }
+
+      // Check for rename: originalName: localName
+      if (c.kind() === TK.colon) {
+        c.advance();
+        if (c.kind() === TK.identifier) {
+          name = c.text(); // use the local name
+          c.advance();
+        }
+      }
+
+      props.push(name);
+    }
+
+    if (c.kind() === TK.comma) c.advance();
+    else if (c.kind() !== TK.rbrace && c.kind() !== TK.identifier) c.advance();
+  }
+
+  if (c.kind() === TK.rbrace) c.advance();
+  return { __destructuredProps: true, props: props, defaults: defaults };
 }
 
-_patterns[62] = { id: 62, match: match, compile: compile };
+_patterns[62] = { id: 62, group: 'props', name: 'destructured_signature', match: match, compile: compile };
 
 })();
