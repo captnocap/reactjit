@@ -18,37 +18,15 @@
 //    to splitOutput() which returns the encoded multi-file string.
 
 function _a046_applies() {
-  // Always runs — it's the final step
-  return true;
+  // No-op in atom pipeline — finalizeEmitOutput() in emit/finalize.js
+  // handles debug appendix, undefined-zeroing, and split handoff after
+  // runEmitAtoms() returns.
+  return false;
 }
 
-function _a046_emit(out, ctx, file) {
-  // ── 1. Debug appendix ──
-  if (ctx._debugLines && ctx._debugLines.length > 0) {
-    out += '\n// ── SMITH DEBUG ──\n';
-    for (var i = 0; i < ctx._debugLines.length; i++) {
-      out += '// ' + ctx._debugLines[i] + '\n';
-    }
-  }
-  if (globalThis.__dbg && globalThis.__dbg.length > 0) {
-    out += '\n// ── Smith debug log ──\n';
-    for (var j = 0; j < globalThis.__dbg.length; j++) {
-      out += '// DBG: ' + globalThis.__dbg[j] + '\n';
-    }
-    globalThis.__dbg = [];
-  }
-
-  // ── 2. Undefined-zeroing ──
-  out = out.replace(/^(var \w+: )([^\n=]+) = undefined;$/gm, function(_, prefix, type) {
-    return prefix + type + ' = std.mem.zeroes(' + type.trim() + ');';
-  });
-
-  // ── 3. Split handoff ──
-  // If split output is enabled, the monolith is passed to splitOutput()
-  // (atoms 043-045) which returns the encoded multi-file string.
-  // This decision lives in the live finalizeEmitOutput() in emit/finalize.js.
-
-  return out;
+function _a046_emit(ctx, meta) {
+  void ctx; void meta;
+  return '';
 }
 
 _emitAtoms[46] = {

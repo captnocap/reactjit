@@ -305,17 +305,19 @@ smith/emit_ops/effect_transpile.js
 smith/emit_ops/effect_wgsl.js
 smith/emit_ops/zig_node_to_lua.js
 
-smith/emit/preamble.js
-smith/emit/state_manifest.js
-smith/emit/node_tree.js
-smith/emit/dyn_text.js
-smith/emit/handlers.js
-smith/emit/effects.js
-smith/emit/object_arrays.js
-smith/emit/map_pools.js
-smith/emit/runtime_updates.js
-smith/emit/entrypoints.js
-smith/emit/logic_blocks.js
+# LEGACY EMIT ORCHESTRATION — commented out by live switch (S459-492)
+# Rollback: uncomment these lines and revert emit.js to legacy path
+# smith/emit/preamble.js
+# smith/emit/state_manifest.js
+# smith/emit/node_tree.js
+# smith/emit/dyn_text.js
+# smith/emit/handlers.js
+# smith/emit/effects.js
+# smith/emit/object_arrays.js
+# smith/emit/map_pools.js
+# smith/emit/runtime_updates.js
+# smith/emit/entrypoints.js
+# smith/emit/logic_blocks.js
 smith/emit/split.js
 smith/emit/finalize.js
 smith/emit/lua_tree_emit.js

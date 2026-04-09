@@ -1,3 +1,40 @@
+function buildEmitMeta(ctx, rootExpr, file) {
+  var basename = file.split('/').pop();
+  var appName = basename.replace(/\.tsz$/, '');
+  var hasState = ctx.stateSlots.length > 0;
+  var hasDynText = ctx.dynCount > 0;
+  var prefix = 'framework/';
+  var pfLane = ctx._preflight ? ctx._preflight.lane : 'unknown';
+  var hasDynamicOA = ctx.objectArrays.some(function(o) { return !o.isConst && !o.isNested; });
+  var fastBuild = globalThis.__fastBuild === 1;
+  var hasScriptRuntime = hasDynamicOA || ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent;
+  var promotedToPerItem = computePromotedMapArrays(ctx);
+  var hasConds = ctx.conditionals && ctx.conditionals.length > 0;
+  var hasVariants = ctx.variantBindings && ctx.variantBindings.length > 0;
+  var hasDynStyles = ctx.dynStyles && ctx.dynStyles.length > 0;
+  var hasFlatMaps = ctx.maps && ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
+  var hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
+  return {
+    basename: basename,
+    appName: appName,
+    hasState: hasState,
+    hasDynText: hasDynText,
+    prefix: prefix,
+    pfLane: pfLane,
+    hasDynamicOA: hasDynamicOA,
+    fastBuild: fastBuild,
+    hasScriptRuntime: hasScriptRuntime,
+    rootExpr: rootExpr,
+    promotedToPerItem: promotedToPerItem,
+    hasConds: hasConds,
+    hasVariants: hasVariants,
+    hasDynStyles: hasDynStyles,
+    hasFlatMaps: hasFlatMaps,
+    hasLuaMaps: hasLuaMaps,
+    hasRuntimeLog: ctx._needsRuntimeLog === true,
+  };
+}
+
 function emitOutput(rootExpr, file) {
   // ── Lua-tree path: if we have a parsed luaNode, emit Lua-first ──
   if (ctx._luaRootNode && typeof emitLuaTreeApp === 'function') {
@@ -13,83 +50,10 @@ function emitOutput(rootExpr, file) {
     }
     if (hasUnknowns || ctx._patternTraceEnabled) dumpPatternTrace();
   }
-  const basename = file.split('/').pop();
-  const appName = basename.replace(/\.tsz$/, '');
-  const hasState = ctx.stateSlots.length > 0;
-  const hasDynText = ctx.dynCount > 0;
-  const prefix = 'framework/';
+  var meta = buildEmitMeta(ctx, rootExpr, file);
 
-  let out = '';
-  const pfLane = ctx._preflight ? ctx._preflight.lane : 'unknown';
-  const hasDynamicOA = ctx.objectArrays.some(o => !o.isConst && !o.isNested);
-  const fastBuild = globalThis.__fastBuild === 1;
-  const hasScriptRuntime = hasDynamicOA || ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent;
-
-  out += emitPreamble({
-    basename: basename,
-    pfLane: pfLane,
-    prefix: prefix,
-    hasState: hasState,
-    hasDynamicOA: hasDynamicOA,
-    hasRuntimeLog: ctx._needsRuntimeLog === true,
-    fastBuild: fastBuild,
-    hasScriptRuntime: hasScriptRuntime,
-    hasLuaMaps: ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0,
-  });
-  out += emitStateManifest(ctx, hasState);
-
-  const _promotedToPerItem = computePromotedMapArrays(ctx);
-
-  out += emitNodeTree(ctx, rootExpr, _promotedToPerItem);
-  out += emitDynamicTextBuffers(ctx);
-
-  // Emit Zig fns for non-map handlers (map handlers dispatch through QuickJS/Lua, no Zig stub needed)
-  const nonMapHandlers = ctx.handlers.filter(h => !h.inMap);
-  out += emitNonMapHandlers(nonMapHandlers);
-
-  // Effect render functions — transpile JS onRender callbacks to Zig
-  out += emitEffectRenders(ctx, prefix);
-
-  out += emitObjectArrayInfrastructure(ctx, {
-    fastBuild: fastBuild,
-    prefix: prefix,
-  });
-
-  // Map pools — two passes: (1) all declarations, (2) all rebuild functions
-  const mapPoolDecls = emitMapPoolDeclarations(ctx, _promotedToPerItem);
-  const _mapMeta = mapPoolDecls.mapMeta;
-  const mapOrder = mapPoolDecls.mapOrder;
-  out += mapPoolDecls.out;
-  out += emitMapPoolRebuilds(ctx, {
-    mapMeta: _mapMeta,
-    mapOrder: mapOrder,
-    promotedToPerItem: _promotedToPerItem,
-  });
-
-  out = appendOrphanedMapArrays(out, ctx);
-
-  if (nonMapHandlers.length > 0 && !out.endsWith('\n\n')) out += '\n';
-
-  out += emitLogicBlocks(ctx);
-  out += emitInitState(ctx);
-  const runtimeSections = emitRuntimeSupportSections(ctx, {
-    promotedToPerItem: _promotedToPerItem,
-    rootExpr: rootExpr,
-    prefix: prefix,
-    fastBuild: fastBuild,
-  });
-  out += runtimeSections.out;
-  out += emitRuntimeEntrypoints(ctx, {
-    appName: appName,
-    prefix: prefix,
-    fastBuild: fastBuild,
-    hasState: hasState,
-    hasDynText: hasDynText,
-    hasConds: runtimeSections.hasConds,
-    hasVariants: runtimeSections.hasVariants,
-    hasDynStyles: runtimeSections.hasDynStyles,
-    hasFlatMaps: runtimeSections.hasFlatMaps,
-  });
+  // ── Atom-based emit path (replaces legacy orchestration) ──
+  var out = runEmitAtoms(ctx, meta);
 
   return finalizeEmitOutput(out, file);
 }
