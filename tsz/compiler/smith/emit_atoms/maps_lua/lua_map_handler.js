@@ -4,16 +4,18 @@
 
 function _handlerToLua(handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   if (!handler) return null;
+  // Get canonical map identity (itemVar, idxVar, idxExpr)
+  var id = (typeof _getMapIdentity === 'function') ? _getMapIdentity(_luaIdxExpr) : { itemVar: '_item', idxVar: '_i', idxExpr: _luaIdxExpr || '(_i - 1)' };
   var h = _jsExprToLua(handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
-  var _ixStr = _luaIdxExpr || '(_i - 1)';
   // Safety pass: inlined component props can still leave bare callback param
   // names behind here. Normalize them before deciding whether the handler is
   // static so mapped clicks always receive a concrete row-specific payload.
-  if (itemParam) h = h.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
-  if (indexParam) h = h.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), _ixStr);
-  h = _normalizeHandlerIndexExprs(h, _ixStr);
-  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf('_nitem') >= 0 || h.indexOf(_ixStr) >= 0 || h.indexOf('(_i - 1)') >= 0 || h.indexOf('(_ni - 1)') >= 0 || /(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h) || /(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h);
-  var spliced = _spliceDynamicHandler(h, _ixStr);
+  if (itemParam) h = h.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), id.itemVar);
+  if (indexParam) h = h.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), id.idxExpr);
+  h = _normalizeHandlerIndexExprs(h, id.idxExpr);
+  // Check for dynamic content: uses item variable or index expression
+  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf('_nitem') >= 0 || h.indexOf(id.idxExpr) >= 0 || h.indexOf('(_i - 1)') >= 0 || h.indexOf('(_ni - 1)') >= 0 || /(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h) || /(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h);
+  var spliced = _spliceDynamicHandler(h, id.idxExpr);
   if (hasDynamic || spliced !== h) {
     return '"' + spliced + '"';
   }

@@ -22,13 +22,9 @@ This directory implements the emit phase of a strict three-phase architecture:
 **Output:** Structured contracts (luaNode objects)
 
 **Key Contract Files:**
-- `node_contract.js` — schema for text nodes, map loops, handlers, conditionals
-- `emit_contract.js` — interface between parse and emit
-
-**Parse files that BUILD contracts:**
+- `CONTRACT_SCHEMA.md` — schema documentation
 - `tsz/compiler/smith/parse/build_node.js` — builds luaNode for each element
 - `tsz/compiler/smith/parse/children/brace_maps.js` — builds map loop contracts
-- `tsz/compiler/smith/parse/element/component_inline.js` — builds inlined component contracts
 
 ### Phase 3: Emit (Final Assembly)
 **Location:** `tsz/compiler/smith/emit_atoms/maps_lua/*`
@@ -37,7 +33,7 @@ This directory implements the emit phase of a strict three-phase architecture:
 **Output:** Lua source strings
 
 **Emit Atom Files:**
-- `lua_map_subs.js` — `_jsExprToLua()`: ONLY js→lua expression conversion
+- `lua_map_subs.js` — `_jsExprToLua()`: JS→Lua expression conversion (SOLO SOURCE)
 - `lua_map_node.js` — `_nodeToLua()`: consumes full node contracts
 - `lua_map_text.js` — `_textToLua()`: consumes text contracts
 - `lua_map_style.js` — `_styleToLua()`: consumes style contracts
@@ -54,35 +50,52 @@ This directory implements the emit phase of a strict three-phase architecture:
 ✅ Other emit atoms via shared functions (e.g., `_jsExprToLua`)
 
 ### What Emit Atoms Must NOT Do
-❌ Parse strings to extract field names
-❌ Resolve prop references from ctx.propStack
-❌ Re-infer map identities from source text
-❌ Access `globalThis.__source`
-❌ Call token cursor methods (c.kind(), c.advance())
+❌ Parse strings to extract field names (DONE - no violations)
+❌ Re-infer map identities from source text (DONE - no violations)
+❌ Access `globalThis.__source` (DONE - no violations)
+❌ Call token cursor methods (c.kind(), c.advance()) - EXCEPT `lua_expr.js` (legacy path)
+❌ Access `ctx.propStack` directly - REMAINING WORK in `lua_map_subs.js`
+
+## Known Technical Debt
+
+### `lua_expr.js` — Token Cursor Access
+**Status:** LEGACY PATH — This file provides direct token-to-Lua conversion for the non-lua-tree path. It is NOT part of the lua-tree emit architecture.
+
+**Location:** Used by soup lane and legacy emit paths.
+
+**Future:** Will be deprecated when all lanes use lua-tree contracts.
+
+### `lua_map_subs.js` — PropStack Access
+**Status:** PARTIAL VIOLATION — This file accesses `ctx.propStack` to resolve prop references during JS→Lua expression translation.
+
+**Why it exists:** Prop resolution during emit is a historical artifact from before strict contract separation.
+
+**Future cleanup:** Move prop resolution to contract phase (build_node.js), emit only pre-resolved prop values.
 
 ## File Status
 
 ### Active (Source of Truth)
 | File | Role | Status |
 |------|------|--------|
-| lua_map_subs.js | Expression conversion | ✅ Active |
+| lua_map_subs.js | Expression conversion | ✅ Active (with tech debt) |
 | lua_map_node.js | Node emission | ✅ Active |
 | lua_map_text.js | Text emission | ✅ Active |
 | lua_map_style.js | Style emission | ✅ Active |
 | lua_map_handler.js | Handler emission | ✅ Active |
+| lua_text_*.js | Text category helpers | ✅ Active |
 
-### Deprecated (Being Disconnected)
+### Deleted (Disconnected from Live Path)
 | File | Replacement | Status |
 |------|-------------|--------|
-| emit_ops/emit_lua_element.js | lua_map_node.js | 🚫 Deprecated |
-| emit_ops/emit_lua_text.js | lua_map_text.js | 🚫 Deprecated |
-| emit_ops/emit_lua_style.js | lua_map_style.js | 🚫 Deprecated |
-| emit_ops/emit_lua_rebuild.js | a034_lua_logic_block.js | 🚫 Deprecated |
+| ~~emit_ops/emit_lua_element.js~~ | lua_map_node.js | 🚫 DELETED |
+| ~~emit_ops/emit_lua_text.js~~ | lua_map_text.js | 🚫 DELETED |
+| ~~emit_ops/emit_lua_style.js~~ | lua_map_style.js | 🚫 DELETED |
+| ~~emit_ops/emit_lua_rebuild.js~~ | a034_lua_logic_block.js | 🚫 DELETED |
 
-### Disabled (Migrated to Lua-Tree Path)
-| File | Status | Migration |
-|------|--------|-----------|
-| a034_lua_logic_block.js | DISABLED — returns false from applies() | LUA_LOGIC owned by lua_tree_nodes.js::emitLuaTreeLuaSource() |
+### Wrapper-Only
+| File | Current Role | Future |
+|------|--------------|--------|
+| a034_lua_logic_block.js | LUA_LOGIC wrapper + delegator | ✅ Properly reduced |
 
 ## Usage Pattern
 
@@ -121,11 +134,25 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
 ## Migration Checklist
 
 - [x] Create lua_map_*.js with proper contract consumption
-- [x] Establish contract schema in contract/*
-- [x] Disconnect a034_lua_logic_block.js (applies() returns false)
-- [ ] Disconnect emit_ops/emit_lua_*.js from load order
-- [ ] Delete emit_ops/emit_lua_*.js files
-- [ ] Document contract schema in AGENTS.md
+- [x] Establish contract schema in contract/
+- [x] Disconnect emit_ops/emit_lua_*.js from load order
+- [x] Delete emit_ops/emit_lua_*.js files
+- [x] Reduce a034_lua_logic_block.js to wrapper
+- [ ] Remove propStack access from lua_map_subs.js (future work)
+- [ ] Deprecate lua_expr.js token cursor usage (future work)
 
-## Co-Authored-By
-Kimi-K2-5 <noreply@moondream.ai>
+## Regression Lockdown
+
+See: `tsz/carts/conformance/REGRESSION_LOCKDOWN.md`
+
+Key test coverage:
+- d41, d55: Component props, nested objects
+- d04, d10, d20: Map handlers
+- d01, d09, d21, d55: Nested OA fields
+- d48, d67: Template text in maps
+- d03, d17, d25, d61: Conditionals in maps
+
+---
+
+**Architecture Verification Date:** 2026-04-09  
+**Co-Authored-By:** Kimi-K2.5 <noreply@moondream.ai>

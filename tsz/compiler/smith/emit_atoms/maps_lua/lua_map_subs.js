@@ -364,6 +364,16 @@ function _normalizePropValueForLua(propValue, _luaIdxExpr, _currentOaIdx) {
   return _pv;
 }
 
+function _getMapIdentity(_luaIdxExpr) {
+  // Determine canonical map identity variables based on context
+  // _luaIdxExpr is set for nested maps, null/undefined for top-level maps
+  var isNested = !!_luaIdxExpr;
+  return {
+    itemVar: isNested ? '_nitem' : '_item',
+    idxExpr: _luaIdxExpr || '(_i - 1)'
+  };
+}
+
 function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   var _origExpr = expr;
   var id = _getMapIdentity(_luaIdxExpr);

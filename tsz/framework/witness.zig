@@ -2331,3 +2331,11 @@ fn loadWitness() void {
         replay_tree_count, replay_action_count, replay_initial_state.count,
     });
 }
+
+// ── Snapshot mode stub ──────────────────────────────────────────────────
+
+fn snapshotTick(root: *Node) bool {
+    _ = root;
+    // TODO: implement snapshot mode
+    return false;
+}

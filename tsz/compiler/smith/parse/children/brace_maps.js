@@ -485,3 +485,216 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     return true;
   }
 }
+
+
+// ── Helper: Parse JSX element for Lua map body ─────────────────────────
+// Returns a node structure compatible with _nodeToLua in emit_atoms/maps_lua.
+// This replaces the old emitLuaElement token-walker approach.
+function _parseJsxForLuaMapBody(c) {
+  if (c.kind() !== TK.lt) return null;
+  
+  // Parse opening tag
+  c.advance(); // skip <
+  var tagName = c.text();
+  c.advance(); // skip tag name
+  
+  var style = {};
+  var nodeFields = {};
+  var handler = null;
+  var handlerIsJs = false;
+  var text = null;
+  var color = null;
+  var fontSize = null;
+  var inlineGlyphs = null;
+  var children = [];
+  
+  // Parse attributes until > or />
+  while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash_gt) {
+    if (c.kind() === TK.identifier) {
+      var attrName = c.text();
+      c.advance();
+      if (c.kind() === TK.equals) {
+        c.advance();
+        if (attrName === 'style' && c.kind() === TK.lbrace) {
+          // Parse style object
+          c.advance(); // skip {
+          if (c.kind() === TK.lbrace) {
+            c.advance(); // skip inner {
+            while (c.kind() !== TK.rbrace && c.pos < c.count) {
+              if (c.kind() === TK.identifier) {
+                var key = c.text();
+                c.advance();
+                if (c.kind() === TK.colon) c.advance();
+                var val = null;
+                if (c.kind() === TK.number) { val = c.text(); c.advance(); }
+                else if (c.kind() === TK.string) { val = c.text(); c.advance(); }
+                else if (c.kind() === TK.lbrace) {
+                  c.advance();
+                  var parts = [];
+                  while (c.kind() !== TK.rbrace && c.pos < c.count) {
+                    parts.push(c.text());
+                    c.advance();
+                  }
+                  if (c.kind() === TK.rbrace) c.advance();
+                  val = parts.join(' ');
+                } else if (c.kind() === TK.identifier) {
+                  var parts = [];
+                  while (c.kind() !== TK.comma && c.kind() !== TK.rbrace && c.pos < c.count) {
+                    parts.push(c.text());
+                    c.advance();
+                  }
+                  val = parts.join(' ');
+                }
+                style[key] = val;
+              }
+              if (c.kind() === TK.comma) c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance(); // inner }
+            if (c.kind() === TK.rbrace) c.advance(); // outer }
+          }
+        } else if (attrName === 'onPress' || attrName === 'onClick') {
+          // Handler
+          if (c.kind() === TK.lbrace) {
+            c.advance();
+            // Skip arrow function syntax: () =>
+            while (c.kind() !== TK.arrow && c.kind() !== TK.rbrace && c.pos < c.count) c.advance();
+            if (c.kind() === TK.arrow) c.advance();
+            if (c.kind() === TK.lbrace) c.advance(); // block {
+            var hParts = [];
+            var depth = 0;
+            while (c.pos < c.count) {
+              if (c.kind() === TK.lbrace) depth++;
+              if (c.kind() === TK.rbrace) {
+                if (depth === 0) break;
+                depth--;
+              }
+              hParts.push(c.text());
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance(); // block }
+            if (c.kind() === TK.rbrace) c.advance(); // outer }
+            handler = hParts.join(' ').trim();
+            // Detect if handler is JS (contains JS-only syntax)
+            handlerIsJs = /\bconsole\.|\bwindow\.|\bdocument\./.test(handler);
+          }
+        } else if (attrName === 'color') {
+          if (c.kind() === TK.string) { color = c.text().slice(1, -1); c.advance(); }
+          else if (c.kind() === TK.lbrace) {
+            c.advance();
+            var parts = [];
+            while (c.kind() !== TK.rbrace && c.pos < c.count) { parts.push(c.text()); c.advance(); }
+            if (c.kind() === TK.rbrace) c.advance();
+            color = parts.join(' ');
+          }
+        } else if (attrName === 'fontSize') {
+          if (c.kind() === TK.number) { fontSize = c.text(); c.advance(); }
+          else if (c.kind() === TK.lbrace) { c.advance(); fontSize = c.text(); c.advance(); if (c.kind() === TK.rbrace) c.advance(); }
+        } else if (attrName === 'key') {
+          // Skip key attribute
+          if (c.kind() === TK.lbrace) { c.advance(); while (c.kind() !== TK.rbrace && c.pos < c.count) c.advance(); if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.string) c.advance();
+        } else {
+          // Generic attribute - skip value
+          if (c.kind() === TK.string) c.advance();
+          else if (c.kind() === TK.lbrace) { c.advance(); while (c.kind() !== TK.rbrace && c.pos < c.count) c.advance(); if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) c.advance();
+        }
+      }
+    } else {
+      c.advance();
+    }
+  }
+  
+  // Self-closing or container
+  var selfClosing = (c.kind() === TK.slash_gt);
+  if (c.kind() === TK.slash_gt) c.advance();
+  else if (c.kind() === TK.gt) c.advance();
+  
+  if (!selfClosing) {
+    // Parse children
+    if (tagName === 'Text') {
+      // Text content
+      var textParts = [];
+      while (c.pos < c.count && c.kind() !== TK.lt_slash) {
+        if (c.kind() === TK.lbrace) {
+          c.advance();
+          if (c.kind() === TK.template_literal) {
+            textParts.push(c.text());
+            c.advance();
+          } else {
+            var parts = [];
+            while (c.kind() !== TK.rbrace && c.pos < c.count) { parts.push(c.text()); c.advance(); }
+            textParts.push('{' + parts.join(' ') + '}');
+          }
+          if (c.kind() === TK.rbrace) c.advance();
+        } else if (c.kind() === TK.string) {
+          textParts.push('"' + c.text().slice(1, -1) + '"');
+          c.advance();
+        } else if (c.kind() === TK.lt && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'Glyph') {
+          // Inline glyph
+          c.advance(); c.advance(); // < Glyph
+          var glyph = { d: '', fill: '#ffffff', stroke: null, stroke_width: 0, scale: 1.0 };
+          while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.pos < c.count) {
+            if (c.kind() === TK.identifier) {
+              var gn = c.text(); c.advance();
+              if (c.kind() === TK.equals) {
+                c.advance();
+                if (c.kind() === TK.string) { glyph[gn] = c.text().slice(1, -1); c.advance(); }
+                else if (c.kind() === TK.number) { glyph[gn] = c.text(); c.advance(); }
+              }
+            } else c.advance();
+          }
+          if (c.kind() === TK.slash_gt) c.advance();
+          else if (c.kind() === TK.gt) {
+            c.advance();
+            while (c.pos < c.count && c.kind() !== TK.lt_slash) c.advance();
+            if (c.kind() === TK.lt_slash) { c.advance(); if (c.kind() === TK.identifier) c.advance(); if (c.kind() === TK.gt) c.advance(); }
+          }
+          if (!inlineGlyphs) inlineGlyphs = [];
+          inlineGlyphs.push(glyph);
+          textParts.push('"\\x01"');
+        } else {
+          c.advance();
+        }
+      }
+      if (textParts.length > 0) text = textParts.join(' + ');
+    } else {
+      // Container children
+      while (c.pos < c.count && c.kind() !== TK.lt_slash) {
+        if (c.kind() === TK.lt) {
+          var child = _parseJsxForLuaMapBody(c);
+          if (child) children.push(child);
+        } else if (c.kind() === TK.lbrace) {
+          // Conditional or map expression
+          c.advance();
+          var parts = [];
+          while (c.kind() !== TK.rbrace && c.pos < c.count) { parts.push(c.text()); c.advance(); }
+          if (c.kind() === TK.rbrace) c.advance();
+          // Mark as conditional child
+          children.push({ condition: parts.join(' '), node: { tag: 'Box', style: {}, children: [] } });
+        } else {
+          c.advance();
+        }
+      }
+    }
+    // Skip closing tag
+    if (c.kind() === TK.lt_slash) {
+      c.advance();
+      if (c.kind() === TK.identifier) c.advance();
+      if (c.kind() === TK.gt) c.advance();
+    }
+  }
+  
+  return {
+    tag: tagName,
+    style: style,
+    text: text,
+    color: color,
+    fontSize: fontSize,
+    handler: handler,
+    handlerIsJs: handlerIsJs,
+    children: children,
+    inline_glyphs: inlineGlyphs,
+    _nodeFields: nodeFields
+  };
+}

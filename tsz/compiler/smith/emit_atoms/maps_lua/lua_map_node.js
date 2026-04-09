@@ -305,19 +305,24 @@ function _emitTernaryChildren(tcond, trueNodeLua, falseNodeLua, itemParam, index
 
 function _emitNestedMapChild(nm, itemParam, indexParam, indent, _luaIdxExpr, _currentOaIdx) {
   // nm = { field, itemParam, indexParam, bodyNode }
-  var innerBody = _nodeToLua(nm.bodyNode, nm.itemParam || '_nitem', nm.indexParam, indent + '  ', null, null);
-  return '__luaNestedMap(_item.' + nm.field + ', function(_nitem, _ni)\n' +
+  // Use canonical map identity for nested context (always _nitem/_ni for inner map)
+  var innerId = (typeof _getMapIdentity === 'function') ? _getMapIdentity('(_ni - 1)') : { itemVar: '_nitem', idxVar: '_ni', idxExpr: '(_ni - 1)' };
+  var outerId = (typeof _getMapIdentity === 'function') ? _getMapIdentity(_luaIdxExpr) : { itemVar: '_item', idxVar: '_i', idxExpr: _luaIdxExpr || '(_i - 1)' };
+  var innerBody = _nodeToLua(nm.bodyNode, nm.itemParam || innerId.itemVar, nm.indexParam, indent + '  ', null, null);
+  // nm.field is accessed from outer item variable
+  return '__luaNestedMap(' + outerId.itemVar + '.' + nm.field + ', function(' + innerId.itemVar + ', ' + innerId.idxVar + ')\n' +
     indent + '    return ' + innerBody + '\n' +
     indent + '  end)';
 }
 
 function _emitLuaMapLoopChild(ml, itemParam, indexParam, indent, _luaIdxExpr, _currentOaIdx) {
   // ml = { dataVar, indexParam, bodyNode/bodyLua, filterConditions, parentIndexParam, parentItemParam, oaIdx }
+  // Get canonical map identities for outer and inner contexts
+  var outerId = (typeof _getMapIdentity === 'function') ? _getMapIdentity(_luaIdxExpr) : { itemVar: '_item', idxVar: '_i', idxExpr: _luaIdxExpr || '(_i - 1)' };
   var isNested = !!itemParam;
-  var innerFnItem = isNested ? '_nitem' : '_item';
-  var innerFnIdx = isNested ? '_ni' : '_i';
-  var innerIdxP = ml.indexParam || null;
   var innerLuaIdx = isNested ? '(_ni - 1)' : null;
+  var innerId = (typeof _getMapIdentity === 'function') ? _getMapIdentity(innerLuaIdx) : { itemVar: isNested ? '_nitem' : '_item', idxVar: isNested ? '_ni' : '_i', idxExpr: innerLuaIdx || '(_i - 1)' };
+  var innerIdxP = ml.indexParam || null;
 
   var loopDataVar = _jsExprToLua(ml.dataVar || '[]', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
 
@@ -326,52 +331,51 @@ function _emitLuaMapLoopChild(ml, itemParam, indexParam, indent, _luaIdxExpr, _c
     loopBody = ml.bodyLua;
   } else if (ml.bodyNode) {
     loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, innerIdxP, indent + '    ', innerLuaIdx, ml.oaIdx);
-    if (isNested) {
-      loopBody = loopBody.replace(/\b_item\b/g, innerFnItem);
+    // Ensure inner item refs use correct variable
+    if (isNested && innerId.itemVar === '_nitem') {
+      loopBody = loopBody.replace(/\b_item\b/g, '_nitem');
     }
   } else {
     loopBody = '{}';
   }
 
-  // Apply parent param substitutions for nested maps
+  // Apply parent param substitutions for nested maps using canonical identity
   if (isNested) {
-    var parentIdxExpr = _luaIdxExpr || '(_i - 1)';
     if (ml.parentIndexParam) {
-      loopBody = loopBody.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), parentIdxExpr);
+      loopBody = loopBody.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), outerId.idxExpr);
     }
     if (indexParam) {
-      loopBody = loopBody.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), parentIdxExpr);
+      loopBody = loopBody.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), outerId.idxExpr);
     }
     if (ml.parentItemParam) {
-      loopBody = loopBody.replace(new RegExp('\\b' + ml.parentItemParam + '\\b', 'g'), '_item');
+      loopBody = loopBody.replace(new RegExp('\\b' + ml.parentItemParam + '\\b', 'g'), outerId.itemVar);
     }
     if (itemParam) {
-      loopBody = loopBody.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+      loopBody = loopBody.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), outerId.itemVar);
     }
   }
 
-  // Apply filters
+  // Apply filters with proper context
   if (ml.filterConditions && ml.filterConditions.length > 0) {
     var filterParts = [];
     for (var i = 0; i < ml.filterConditions.length; i++) {
       var fc = ml.filterConditions[i];
       var filterCond = _jsExprToLua(fc.raw, ml.itemParam, fc.indexParam || innerIdxP, innerLuaIdx, ml.oaIdx);
       filterCond = _wrapCondEval(filterCond);
-      if (isNested) filterCond = filterCond.replace(/\b_item\b/g, innerFnItem);
+      // Ensure inner item refs use _nitem
+      if (isNested) filterCond = filterCond.replace(/\b_item\b/g, '_nitem');
       if (isNested && ml.parentIndexParam) {
-        var pIdx2 = _luaIdxExpr || '(_i - 1)';
-        filterCond = filterCond.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), pIdx2);
+        filterCond = filterCond.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), outerId.idxExpr);
       }
       if (isNested && indexParam) {
-        var pIdx3 = _luaIdxExpr || '(_i - 1)';
-        filterCond = filterCond.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), pIdx3);
+        filterCond = filterCond.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), outerId.idxExpr);
       }
       filterParts.push('(' + filterCond + ')');
     }
     loopBody = filterParts.join(' and ') + ' and ' + loopBody + ' or nil';
   }
 
-  return '__mapLoop(' + loopDataVar + ', function(' + innerFnItem + ', ' + innerFnIdx + ')\n' +
+  return '__mapLoop(' + loopDataVar + ', function(' + innerId.itemVar + ', ' + innerId.idxVar + ')\n' +
     indent + '    return ' + loopBody + '\n' +
     indent + '  end)';
 }
