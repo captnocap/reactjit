@@ -274,11 +274,9 @@ smith/emit/effect_wgsl.js
 smith/emit/transforms.js
 smith/emit_ops/constants.js
 smith/emit_ops/hex_to_color.js
-smith/emit_ops/js_expr_to_lua.js
 smith/emit_ops/style_assignments.js
 smith/emit_ops/replace_field_refs.js
 smith/emit_ops/wrap_condition.js
-smith/emit_ops/transforms.js
 smith/emit_ops/emit_arena.js
 smith/emit_ops/emit_map_decl.js
 smith/emit_ops/emit_text_storage.js
@@ -301,8 +299,6 @@ smith/emit_ops/emit_lua_rebuild.js
 smith/emit_ops/wire_handler_ptrs.js
 smith/emit_ops/rebuild_map.js
 smith/emit_ops/compute_map_meta.js
-smith/emit_ops/effect_transpile.js
-smith/emit_ops/effect_wgsl.js
 smith/emit_ops/zig_node_to_lua.js
 
 # LEGACY EMIT ORCHESTRATION — commented out by live switch (S459-492)
