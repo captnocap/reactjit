@@ -14,6 +14,8 @@
 // It is invoked from Zig via luajit_runtime.callGlobal on state change.
 
 function _a032_applies(ctx) {
+  // Disabled — Lua map content is emitted by a034 inside LUA_LOGIC
+  return false; void ctx;
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 

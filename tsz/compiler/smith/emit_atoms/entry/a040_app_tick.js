@@ -31,6 +31,7 @@ function _a040_emit(ctx, meta) {
       if (hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
       for (var mi = 0; mi < ctx.maps.length; mi++) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+        if (ctx.maps[mi].mapBackend === 'lua_runtime') continue;
         out += '        _rebuildMap' + mi + '();\n';
       }
       if (hasLuaMaps) {
@@ -49,6 +50,7 @@ function _a040_emit(ctx, meta) {
       if (hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
       for (var mi2 = 0; mi2 < ctx.maps.length; mi2++) {
         if (ctx.maps[mi2].isNested || ctx.maps[mi2].isInline) continue;
+        if (ctx.maps[mi2].mapBackend === 'lua_runtime') continue;
         out += '        _rebuildMap' + mi2 + '();\n';
       }
       if (hasLuaMaps) {
@@ -77,10 +79,8 @@ function _a040_emit(ctx, meta) {
   }
 
   if (meta.hasVariants) out += '    _updateVariants();\n';
-  if (meta.hasScriptRuntime) {
-    out += '    qjs_runtime.tick();\n';
-    out += '    luajit_runtime.tick();\n';
-  }
+  // qjs_runtime.tick()/luajit_runtime.tick() not needed — the engine
+  // drives VM ticks from its own loop, not from the generated cart.
   out += '}\n\n';
   return out;
 }

@@ -17,6 +17,8 @@
 // at the end of each rebuilder's luaCode output.
 
 function _a031_applies(ctx) {
+  // Disabled — Lua map content is emitted by a034 inside LUA_LOGIC
+  return false; void ctx;
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 

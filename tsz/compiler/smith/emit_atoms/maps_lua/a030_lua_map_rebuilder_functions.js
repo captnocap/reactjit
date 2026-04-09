@@ -11,6 +11,8 @@
 //   lua_map_node.js  — recursive node → Lua table
 
 function _a030_applies(ctx) {
+  // Disabled — Lua map content is emitted by a034 inside LUA_LOGIC
+  return false; void ctx;
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 

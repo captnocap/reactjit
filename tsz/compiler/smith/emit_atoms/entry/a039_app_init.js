@@ -59,9 +59,17 @@ function _a039_emit(ctx, meta) {
     }
   }
 
-  if (meta.hasFlatMaps) out += '    _ = _pool_arena.reset(.retain_capacity);\n';
+  // Only emit Zig map rebuilds for non-Lua maps
+  var hasZigMaps = false;
   for (var mi2 = 0; mi2 < ctx.maps.length; mi2++) {
     if (ctx.maps[mi2].isNested || ctx.maps[mi2].isInline) continue;
+    if (ctx.maps[mi2].mapBackend === 'lua_runtime') continue;
+    hasZigMaps = true;
+  }
+  if (hasZigMaps && meta.hasFlatMaps) out += '    _ = _pool_arena.reset(.retain_capacity);\n';
+  for (var mi2 = 0; mi2 < ctx.maps.length; mi2++) {
+    if (ctx.maps[mi2].isNested || ctx.maps[mi2].isInline) continue;
+    if (ctx.maps[mi2].mapBackend === 'lua_runtime') continue;
     out += '    _rebuildMap' + mi2 + '();\n';
   }
 

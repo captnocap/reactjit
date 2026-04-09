@@ -423,7 +423,11 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
 
   let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
   if (!oa) oa = inferOaFromSource(c, maybeArr);
-  if (!oa) return false;
+  if (!oa) {
+    globalThis.__dbg = globalThis.__dbg || [];
+    globalThis.__dbg.push('[OA_MISS] maybeArr=' + maybeArr + ' oaCount=' + ctx.objectArrays.length + ' getters=' + ctx.objectArrays.map(function(o) { return o.getter; }).join(','));
+    return false;
+  }
 
   // ── ALL OA maps route to Lua. No exceptions. ──
   // Zig cannot handle mapped content. LuaJIT handles all map templates.

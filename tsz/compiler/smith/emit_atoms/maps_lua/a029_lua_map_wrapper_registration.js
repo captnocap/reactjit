@@ -14,6 +14,8 @@
 // with a pointer to that node element.
 
 function _a029_applies(ctx) {
+  // Disabled — Lua map content is emitted by a034 inside LUA_LOGIC
+  return false; void ctx;
   return ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
 }
 

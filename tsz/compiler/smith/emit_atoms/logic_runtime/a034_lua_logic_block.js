@@ -98,7 +98,11 @@ function _a034_emit(ctx, meta) {
         luaLines.push('  end');
         luaLines.push('  local tmpl = {}');
         luaLines.push('  for _i, _item in ipairs(items) do');
-        luaLines.push('    tmpl[#tmpl + 1] = ' + bodyLua);
+        // bodyLua may contain embedded newlines — split into individual lines
+        var bodyLuaLines = ('    tmpl[#tmpl + 1] = ' + bodyLua).split('\n');
+        for (var bli = 0; bli < bodyLuaLines.length; bli++) {
+          luaLines.push(bodyLuaLines[bli]);
+        }
         luaLines.push('  end');
         luaLines.push('  __declareChildren(wrapper, tmpl)');
         luaLines.push('end');
@@ -119,12 +123,21 @@ function _a034_emit(ctx, meta) {
     luaLines.push('');
   }
 
-  // Emit LUA_LOGIC
+  // Emit LUA_LOGIC — flatten any embedded newlines so each line gets \\ prefix
+  var flatLines = [];
+  for (var fi = 0; fi < luaLines.length; fi++) {
+    if (luaLines[fi].indexOf('\n') >= 0) {
+      var parts = luaLines[fi].split('\n');
+      for (var pi = 0; pi < parts.length; pi++) flatLines.push(parts[pi]);
+    } else {
+      flatLines.push(luaLines[fi]);
+    }
+  }
   var out = '// ── Embedded Lua logic ─────────────────────────────────────────\n';
-  if (luaLines.length > 0) {
+  if (flatLines.length > 0) {
     out += 'const LUA_LOGIC =\n';
-    for (var li = 0; li < luaLines.length; li++) {
-      out += '    \\\\' + luaLines[li] + '\n';
+    for (var li = 0; li < flatLines.length; li++) {
+      out += '    \\\\' + flatLines[li] + '\n';
     }
     out += ';\n\n';
   } else {
