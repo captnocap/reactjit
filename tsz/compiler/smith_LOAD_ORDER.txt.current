@@ -347,6 +347,12 @@ smith/emit_atoms/maps_zig/a027_nested_map_rebuild.js
 smith/emit_atoms/maps_zig/a028_inline_map_rebuild.js
 smith/emit_atoms/maps_lua/lua_map_subs.js
 smith/emit_atoms/maps_lua/lua_map_style.js
+smith/emit_atoms/maps_lua/lua_text_eval.js
+smith/emit_atoms/maps_lua/lua_text_plain.js
+smith/emit_atoms/maps_lua/lua_text_template.js
+smith/emit_atoms/maps_lua/lua_text_label.js
+smith/emit_atoms/maps_lua/lua_text_ternary.js
+smith/emit_atoms/maps_lua/lua_text_value.js
 smith/emit_atoms/maps_lua/lua_map_text.js
 smith/emit_atoms/maps_lua/lua_map_handler.js
 smith/emit_atoms/maps_lua/lua_map_node.js
