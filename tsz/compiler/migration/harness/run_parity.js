@@ -46,7 +46,7 @@ function hashString(str) {
 
 function runLegacyEmit(cart) {
   try {
-    const forgeCmd = './zig-out/bin/forge build ' + cart;
+    const forgeCmd = './zig-out/bin/forge build --parity ' + cart;
     const forgeOut = execSync(forgeCmd, {
       cwd: path.resolve(__dirname, '../../..'),
       timeout: 30000,
@@ -81,12 +81,24 @@ function runLegacyEmit(cart) {
   }
 }
 
-// ── Step 96: Atom path (pending — wired in parity sections) ──
+// ── Step 96: Atom path — reads output from parity_intercept.js via forge --parity ──
 
 function runAtomEmit(cart) {
-  // Atom emit requires Smith-internal intercept. Not available until
-  // parity sections wire runEmitAtoms() into the forge compile flow.
-  return { output: null, error: 'atom_path_not_wired' };
+  // forge --parity runs both emitOutput() and runEmitAtoms() inside QuickJS.
+  // The atom output is written to /tmp/tsz-gen/parity_atom_output.zig by forge.
+  const atomFile = '/tmp/tsz-gen/parity_atom_output.zig';
+  try {
+    if (!fs.existsSync(atomFile)) {
+      return { output: null, error: 'atom output file not found: ' + atomFile };
+    }
+    const atomOutput = fs.readFileSync(atomFile, 'utf8');
+    if (atomOutput.startsWith('__PARITY_ERROR__')) {
+      return { output: null, error: atomOutput };
+    }
+    return { output: atomOutput, error: null };
+  } catch (err) {
+    return { output: null, error: err.message };
+  }
 }
 
 // ── Step 100: Split-output detection ──

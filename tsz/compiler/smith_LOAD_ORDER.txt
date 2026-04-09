@@ -384,4 +384,5 @@ smith/lanes/soup/codegen.js
 smith/lanes/soup/maps.js
 smith/lanes/soup/index.js
 
+smith/emit_atoms/parity_intercept.js
 smith/debug.js

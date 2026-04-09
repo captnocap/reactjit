@@ -244,6 +244,7 @@ pub fn main() !void {
     var dbg_nodes = false;
     var dbg_state = false;
     var dbg_compiler = false;
+    var parity_mode = false;
     var out_dir: []const u8 = "/tmp/tsz-gen";
     var input_path: []const u8 = undefined;
     var got_path = false;
@@ -272,6 +273,8 @@ pub fn main() !void {
             dbg_state = true;
         } else if (std.mem.eql(u8, arg, "--dbg-compiler")) {
             dbg_compiler = true;
+        } else if (std.mem.eql(u8, arg, "--parity")) {
+            parity_mode = true;
         } else {
             input_path = arg;
             got_path = true;
@@ -336,6 +339,7 @@ pub fn main() !void {
     if (dbg_nodes) smith.setGlobalInt("__DBG_NODES", 1);
     if (dbg_state) smith.setGlobalInt("__DBG_STATE", 1);
     if (dbg_compiler) smith.setGlobalInt("__DBG_COMPILER", 1);
+    if (parity_mode) smith.setGlobalInt("__parityMode", 1);
     if (is_check) smith.setGlobalInt("__CHECK_ONLY", 1);
 
     // Build token kind array as u8 slice for the bridge
@@ -381,6 +385,22 @@ pub fn main() !void {
     if (dbg_compiler) {
         if (smith.getGlobalString("__patternTrace")) |trace| {
             std.debug.print("{s}", .{trace});
+        }
+    }
+
+    // 6c. Write parity atom output if --parity was used
+    if (parity_mode) {
+        if (smith.getGlobalString("__parityAtomOutput")) |atom_out| {
+            const atom_path = std.fmt.allocPrint(Alloc, "{s}/parity_atom_output.zig", .{out_dir}) catch "/tmp/parity_atom_output.zig";
+            const atom_file = std.fs.cwd().createFile(atom_path, .{}) catch |err| {
+                std.debug.print("[forge:parity] Cannot write atom output: {}\n", .{err});
+                return;
+            };
+            defer atom_file.close();
+            atom_file.writeAll(atom_out) catch {};
+            std.debug.print("[forge:parity] Atom output written to {s} ({d} bytes)\n", .{ atom_path, atom_out.len });
+        } else {
+            std.debug.print("[forge:parity] No atom output produced\n", .{});
         }
     }
 
