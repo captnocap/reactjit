@@ -54,11 +54,29 @@ function match(c, ctx) {
 }
 
 function compile(c, children, ctx) {
-  // No dedicated compile path. If used as a prop value, the tagged
-  // template expression is passed to qjs eval. If used as a variable
-  // assignment, it becomes a render-local evaluated at runtime.
-  // The CSS string it produces has no effect — no DOM to inject into.
-  return null;
+  void children;
+  void ctx;
+  var tag = c.text();
+  c.advance();
+  if (tag === 'styled' && c.kind() === TK.dot) {
+    tag += '.';
+    c.advance();
+    if (c.kind() === TK.identifier) {
+      tag += c.text();
+      c.advance();
+    }
+  }
+  var template = '';
+  if (c.kind() === TK.template_literal) {
+    template = c.text().slice(1, -1);
+    c.advance();
+  }
+  return {
+    kind: 'css_in_js_template',
+    tag: tag,
+    template: template,
+    warning: '[W] CSS-in-JS template has no native style target; use style={{...}}',
+  };
 }
 
 _patterns[113] = { id: 113, match: match, compile: compile };

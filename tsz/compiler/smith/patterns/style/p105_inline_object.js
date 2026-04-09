@@ -72,9 +72,11 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to parseStyleBlock() in attrs.js.
-  // Returns array of Zig style field strings.
-  return null;
+  void ctx;
+  return {
+    kind: 'style_fields',
+    fields: parseStyleBlock(c),
+  };
 }
 
 _patterns[105] = { id: 105, match: match, compile: compile };

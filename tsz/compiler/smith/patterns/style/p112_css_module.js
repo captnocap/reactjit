@@ -36,9 +36,22 @@ function match(c, ctx) {
 }
 
 function compile(c, children, ctx) {
-  // The import statement is ignored. className={styles.X} is dropped
-  // with warning "[W] dynamic className dropped". No Zig output.
-  return null;
+  void children;
+  void ctx;
+  var base = c.text();
+  c.advance();
+  var field = '';
+  if (c.kind() === TK.dot) c.advance();
+  if (c.kind() === TK.identifier) {
+    field = c.text();
+    c.advance();
+  }
+  return {
+    kind: 'dropped_classname',
+    dynamic: true,
+    moduleRef: base + (field ? '.' + field : ''),
+    warning: '[W] dynamic className dropped',
+  };
 }
 
 _patterns[112] = { id: 112, match: match, compile: compile };

@@ -34,6 +34,7 @@
 //   supported style patterns.
 
 function match(c, ctx) {
+  void ctx;
   // clsx(...) or classnames(...) or cx(...) or cn(...)
   if (c.kind() !== TK.identifier) return false;
   var t = c.text();
@@ -43,10 +44,25 @@ function match(c, ctx) {
 }
 
 function compile(c, children, ctx) {
-  // className is dropped with a warning by the soup lane.
-  // No Zig output is generated — the attr is consumed and discarded.
-  // Warnings: "[W] dynamic className dropped" or "[W] className=... dropped"
-  return null;
+  void children;
+  void ctx;
+  var callee = c.text();
+  c.advance();
+  if (c.kind() === TK.lparen) {
+    var depth = 1;
+    c.advance();
+    while (c.kind() !== TK.eof && depth > 0) {
+      if (c.kind() === TK.lparen) depth++;
+      else if (c.kind() === TK.rparen) depth--;
+      c.advance();
+    }
+  }
+  return {
+    kind: 'dropped_classname',
+    utility: callee,
+    dynamic: true,
+    warning: '[W] dynamic className dropped',
+  };
 }
 
 _patterns[111] = { id: 111, match: match, compile: compile };

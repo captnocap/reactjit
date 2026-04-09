@@ -52,7 +52,17 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  return null;
+  void ctx;
+  var attr = c.text();
+  c.advance();
+  if (c.kind() === TK.equals) c.advance();
+  if (c.kind() === TK.lbrace) skipBraces(c);
+  return {
+    kind: 'dropped_classname',
+    attr: attr,
+    dynamic: true,
+    warning: '[W] dynamic className dropped',
+  };
 }
 
 _patterns[108] = { id: 108, match: match, compile: compile };

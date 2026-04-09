@@ -49,11 +49,17 @@ function match(c, ctx) {
 }
 
 function compile(c, children, ctx) {
-  // No compile path — css() calls produce CSS class names via runtime
-  // injection in web frameworks. In native, the call would execute in
-  // qjs eval but its return value (a class name string) has no effect.
-  // Users should use style={{...}} instead.
-  return null;
+  void children;
+  void ctx;
+  c.advance(); // css
+  if (c.kind() === TK.lparen) c.advance();
+  var payload = parseStyleBlock(c);
+  if (c.kind() === TK.rparen) c.advance();
+  return {
+    kind: 'css_in_js_object',
+    fields: payload,
+    warning: '[W] css({...}) has no native class target; use style={{...}}',
+  };
 }
 
 _patterns[114] = { id: 114, match: match, compile: compile };

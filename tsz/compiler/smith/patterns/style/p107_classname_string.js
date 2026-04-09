@@ -48,7 +48,22 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  return null;
+  void ctx;
+  var attr = c.text();
+  c.advance();
+  if (c.kind() === TK.equals) c.advance();
+  var value = '';
+  if (c.kind() === TK.string) {
+    value = c.text().slice(1, -1);
+    c.advance();
+  }
+  return {
+    kind: 'dropped_classname',
+    attr: attr,
+    dynamic: false,
+    className: value,
+    warning: '[W] className="' + String(value).substring(0, 40) + '" dropped',
+  };
 }
 
 _patterns[107] = { id: 107, match: match, compile: compile };
