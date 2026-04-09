@@ -24,7 +24,8 @@
 //    - app.zig:   all cross-module refs (nodes/st/maps/logic)
 
 function _a044_applies() {
-  return globalThis.__splitOutput == 1;
+  // Disabled — split is handled by emit/split.js via finalizeEmitOutput().
+  return false;
 }
 
 function _a044_emit(F) {

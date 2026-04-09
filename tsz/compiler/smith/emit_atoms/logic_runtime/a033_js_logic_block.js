@@ -129,19 +129,24 @@ function _a033_emit(ctx, meta) {
 
   if (ctx._luaRootNode) {
     var luaTreeJs = _a033_emitLuaTreeJsLogic(ctx);
-    if (luaTreeJs) jsLines.push(luaTreeJs);
+    if (luaTreeJs) {
+      var ltLines = luaTreeJs.split('\n');
+      for (var lti = 0; lti < ltLines.length; lti++) {
+        if (ltLines[lti].length > 0) jsLines.push(ltLines[lti]);
+      }
+    }
   } else {
     if (ctx.scriptBlock) {
       var jsBlock = jsTransform(ctx.scriptBlock);
-      jsLines.push(jsBlock);
+      jsBlock.split('\n').forEach(function(l) { if (l.length > 0) jsLines.push(l); });
     }
     if (globalThis.__scriptContent) {
-      jsLines.push(jsTransform(globalThis.__scriptContent));
+      jsTransform(globalThis.__scriptContent).split('\n').forEach(function(l) { if (l.length > 0) jsLines.push(l); });
     }
   }
 
   // Emit JS_LOGIC
-  var out = '';
+  var out = '// ── Embedded JS logic ──────────────────────────────────────────\n';
   if (jsLines.length > 0) {
     out += 'const JS_LOGIC =\n';
     for (var ji = 0; ji < jsLines.length; ji++) {

@@ -22,7 +22,10 @@
 //   app.zig      ← update fns + init/tick + exports + main + debug
 
 function _a043_applies() {
-  return globalThis.__splitOutput == 1;
+  // Disabled — split is handled by emit/split.js via finalizeEmitOutput().
+  // This atom cannot work in runEmitAtoms because it needs the accumulated
+  // output string, but receives (ctx, meta) instead.
+  return false;
 }
 
 function _a043_emit(monolith) {

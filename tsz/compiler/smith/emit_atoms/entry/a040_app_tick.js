@@ -25,7 +25,7 @@ function _a040_emit(ctx, meta) {
 
   if (meta.hasState || ctx.objectArrays.length > 0 || hasLuaMaps) {
     if (meta.hasDynStyles) {
-      out += '    if (state.isDirty()) { _updateDynamicText();';
+      out += '    if (state.isDirty()) { _updateDynamicTexts();';
       if (meta.hasConds) out += ' _updateConditionals();';
       out += '\n';
       if (hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
@@ -43,7 +43,7 @@ function _a040_emit(ctx, meta) {
       }
       out += ' state.clearDirty(); }\n';
     } else if (ctx.maps.length > 0 || hasLuaMaps) {
-      out += '    if (state.isDirty()) { _updateDynamicText();';
+      out += '    if (state.isDirty()) { _updateDynamicTexts();';
       if (meta.hasConds) out += ' _updateConditionals();';
       out += '\n';
       if (hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
@@ -62,7 +62,7 @@ function _a040_emit(ctx, meta) {
       out += ' state.clearDirty(); }\n';
     } else {
       out += '    if (state.isDirty()) {';
-      out += ' _updateDynamicText();';
+      out += ' _updateDynamicTexts();';
       if (meta.hasConds) out += ' _updateConditionals();';
       if (hasLuaMaps) {
         for (var ldi3 = 0; ldi3 < ctx._luaMapRebuilders.length; ldi3++) {

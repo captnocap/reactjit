@@ -27,7 +27,8 @@
 // encodes as __SPLIT_OUTPUT__\n__FILE:name__\ncontent format.
 
 function _a045_applies() {
-  return globalThis.__splitOutput == 1;
+  // Disabled — split is handled by emit/split.js via finalizeEmitOutput().
+  return false;
 }
 
 function _a045_emit(F, basename, appName) {

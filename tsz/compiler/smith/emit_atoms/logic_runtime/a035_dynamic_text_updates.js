@@ -7,7 +7,7 @@
 //
 // Trigger: ctx.dynTexts has non-map entries, or ctx.dynColors/dynStyles
 //   have entries needing runtime updates.
-// Output target: fn _updateDynamicText() void { ... }
+// Output target: fn _updateDynamicTexts() void { ... }
 //
 // Notes:
 //   Emits a Zig function that updates dynamic text buffers and
@@ -26,7 +26,7 @@
 
 function _a035_applies(ctx, meta) {
   void meta;
-  // _updateDynamicText is always emitted (even if body is empty)
+  // _updateDynamicTexts is always emitted (even if body is empty)
   return !!ctx;
 }
 
@@ -48,7 +48,7 @@ function _a035_emit(ctx, meta) {
 
   var out = '';
   if (meta._deferredInitState) out += meta._deferredInitState;
-  out += 'fn _updateDynamicText() void {\n';
+  out += 'fn _updateDynamicTexts() void {\n';
   for (var di = 0; di < ctx.dynTexts.length; di++) {
     var dt = ctx.dynTexts[di];
     if (dt.inMap) continue;

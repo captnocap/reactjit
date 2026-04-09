@@ -36,12 +36,6 @@ function buildEmitMeta(ctx, rootExpr, file) {
 }
 
 function emitOutput(rootExpr, file) {
-  // ── Lua-tree path: if we have a parsed luaNode, emit Lua-first ──
-  if (ctx._luaRootNode && typeof emitLuaTreeApp === 'function') {
-    var _ltOut = emitLuaTreeApp(ctx, rootExpr, file);
-    return finalizeEmitOutput(_ltOut, file);
-  }
-
   // Dump pattern trace if enabled (--dbg-compiler / -c) or if unknowns were hit
   if (ctx._patternTrace.length > 0) {
     var hasUnknowns = false;

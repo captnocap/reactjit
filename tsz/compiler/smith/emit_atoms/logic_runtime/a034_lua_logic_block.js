@@ -120,7 +120,7 @@ function _a034_emit(ctx, meta) {
   }
 
   // Emit LUA_LOGIC
-  var out = '';
+  var out = '// ── Embedded Lua logic ─────────────────────────────────────────\n';
   if (luaLines.length > 0) {
     out += 'const LUA_LOGIC =\n';
     for (var li = 0; li < luaLines.length; li++) {

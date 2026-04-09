@@ -32,7 +32,7 @@ function _a038_emit(ctx, meta) {
   var hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
   var out = 'fn _dirtyTick() void {\n';
 
-  out += '    _updateDynamicText();\n';
+  out += '    _updateDynamicTexts();\n';
   if (meta.hasConds) out += '    _updateConditionals();\n';
   if (meta.hasDynStyles && meta.hasDynText) out += '    _updateDynamicStyles();\n';
   if (meta.hasVariants) out += '    _updateVariants();\n';

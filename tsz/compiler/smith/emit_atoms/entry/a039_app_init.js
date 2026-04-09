@@ -45,7 +45,7 @@ function _a039_emit(ctx, meta) {
     }
   }
 
-  if (meta.hasDynText) out += '    _updateDynamicText();\n';
+  if (meta.hasDynText) out += '    _updateDynamicTexts();\n';
   if (meta.hasConds) out += '    _updateConditionals();\n';
   if (meta.hasVariants) out += '    _updateVariants();\n';
 
