@@ -1045,6 +1045,8 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
             TOTAL_FAILS=$(( ${FAIL_COUNT:-0} + ${RUNTIME_ERRORS:-0} ))
             if [ "$TOTAL_FAILS" -gt 0 ]; then
                 echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE"
+                echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary"
+                rm -f "$BINARY" "zig-out/bin/${NAME}" 2>/dev/null
             else
                 echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
             fi
