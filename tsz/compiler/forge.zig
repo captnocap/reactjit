@@ -420,6 +420,15 @@ pub fn main() !void {
         return;
     };
 
+    // Print debug output before any early exit — when a cart fails to compile
+    // the -c/-s/-n flags are exactly what you need to see.
+    if (dbg_compiler or dbg_nodes or dbg_state) {
+        _ = smith.loadModule("if(globalThis.__dbgStderr&&globalThis.__dbgStderr.length>0)globalThis.__dbgOutput=globalThis.__dbgStderr.join('\\n');", "<dbg>");
+        if (smith.getGlobalString("__dbgOutput")) |dbg_out| {
+            std.debug.print("{s}\n", .{dbg_out});
+        }
+    }
+
     // Contract validation — if the contract is broken, stop the build
     if (std.mem.indexOf(u8, zig_output, "__CONTRACT_FAIL__")) |fail_pos| {
         std.debug.print("[forge] CONTRACT VALIDATION FAILED — build stopped\n", .{});
@@ -450,14 +459,8 @@ pub fn main() !void {
         }
     }
 
-    // 6b. Print debug output if available (--dbg-compiler or --dbg-nodes or --dbg-state)
-    if (dbg_compiler or dbg_nodes or dbg_state) {
-        // __dbgStderr persists across compilation (unlike __dbg which finalize clears)
-        _ = smith.loadModule("if(globalThis.__dbgStderr&&globalThis.__dbgStderr.length>0)globalThis.__dbgOutput=globalThis.__dbgStderr.join('\\n');", "<dbg>");
-        if (smith.getGlobalString("__dbgOutput")) |dbg_out| {
-            std.debug.print("{s}\n", .{dbg_out});
-        }
-    }
+    // 6b. Print pattern trace if available (--dbg-compiler)
+    // Note: __dbg output is printed earlier, before the contract failure check.
     if (dbg_compiler) {
         if (smith.getGlobalString("__patternTrace")) |trace| {
             std.debug.print("{s}", .{trace});
