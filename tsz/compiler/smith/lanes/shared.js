@@ -79,7 +79,14 @@ function buildSourceContractSnapshot(nodeExpr, file, extra) {
   };
   var extraKeys = Object.keys(extra);
   for (var i = 0; i < extraKeys.length; i++) snapshot[extraKeys[i]] = extra[extraKeys[i]];
-  return JSON.stringify(snapshot, null, 2);
+  // Strip emit artifacts from maps — _topArrayDecls/_topArrayComments are
+  // the entire Zig node pool duplicated per map (100s of KB each).
+  // Also strip mapArrayDecls/mapArrayComments (same pattern, per-map scope).
+  return JSON.stringify(snapshot, function(key, val) {
+    if (key === '_topArrayDecls' || key === '_topArrayComments' ||
+        key === 'mapArrayDecls' || key === 'mapArrayComments') return undefined;
+    return val;
+  }, 2);
 }
 
 function finishParsedLane(nodeExpr, file, opts) {
