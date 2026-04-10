@@ -759,6 +759,7 @@ FLIGHT_GEN="$GEN_DIR"
 if [ -e "$FLIGHT_GEN" ]; then
     FLIGHT_EXIT=0
     FLIGHT_OUT=$(./scripts/flight-check "$CART" "$FLIGHT_GEN" 2>&1) || FLIGHT_EXIT=$?
+    echo "$FLIGHT_OUT" | tail -1
     if [ "$FLIGHT_EXIT" -ne 0 ]; then
         echo "$FLIGHT_OUT"
         record_build "flight_fail" "$FLIGHT_OUT"

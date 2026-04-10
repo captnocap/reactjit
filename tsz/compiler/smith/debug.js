@@ -10,15 +10,15 @@
 //   ./scripts/build carts/app.tsz -nsc   # all three
 //
 // -n  NODES: Every node gets a debug_name ("Box@L12", "Text@L15").
-//     On frame 1, dumps the full tree with computed x/y/w/h to stderr.
+//     On frame 5, dumps the full tree with computed x/y/w/h to stderr.
 //     Tells you: what rendered, where, how big, and what didn't show.
 //
 // -s  STATE: Wraps every state.setSlot with a print showing the slot
 //     name and old→new value. Tells you: what state changed and when.
 //
 // -c  COMPILER: Dumps the compiler ctx after the parse phase — all
-//     state slots, maps, handlers, components, etc. as comments in
-//     the generated .zig. Tells you: what Smith understood.
+//     state slots, maps, handlers, components, etc. Prints to stderr
+//     via forge. Tells you: what Smith understood.
 
 // ════════════════════════════════════════════════════════════════════
 // ── Implementation ──
@@ -34,6 +34,10 @@
   var __dgb = function(msg) {
     if (!globalThis.__dbg) globalThis.__dbg = [];
     globalThis.__dbg.push(msg);
+    // Also accumulate to __dbgStderr — __dbg gets cleared by finalizeEmitOutput
+    // but forge needs to read the debug output after compilation finishes.
+    if (!globalThis.__dbgStderr) globalThis.__dbgStderr = [];
+    globalThis.__dbgStderr.push(msg);
   };
 
   // ── Value summarizer ──
@@ -128,18 +132,19 @@
       return _origBuildNode.call(this, tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset);
     };
 
-    // Hook emitRuntimeEntrypoints to inject a tree dump on frame 1.
-    // Walks _root recursively and prints every node with its computed layout.
-    var _origEmitEntrypoints = globalThis.emitRuntimeEntrypoints;
-    globalThis.emitRuntimeEntrypoints = function(ctx, meta) {
-      var out = _origEmitEntrypoints.call(this, ctx, meta);
+    // Hook emitOutput to inject the tree dump function AND the call site.
+    // The old code split this across emitRuntimeEntrypoints (function def)
+    // and emitOutput (call site), but emitRuntimeEntrypoints was removed
+    // in the atom-based emit refactor. Now we do both in emitOutput.
+    var _origEmitOutput = globalThis.emitOutput;
+    globalThis.emitOutput = function(rootExpr, file) {
+      var out = _origEmitOutput.call(this, rootExpr, file);
 
-      // Insert the tree dump function before the final main()
+      // Build the _dbgDumpTree function
       var treeDumper = '\n// ── Debug: node tree dump (-n flag) ────────────────────────\n';
       treeDumper += 'fn _dbgDumpTree(node: *const Node, depth: u16) void {\n';
       treeDumper += '    const r = node.computed;\n';
       treeDumper += '    const name = node.debug_name orelse "?";\n';
-      treeDumper += '    // Indent by depth\n';
       treeDumper += '    var pad: [64]u8 = undefined;\n';
       treeDumper += '    const pad_len = @min(depth * 2, 62);\n';
       treeDumper += '    for (0..pad_len) |pi| pad[pi] = \' \';\n';
@@ -149,59 +154,35 @@
       treeDumper += '    for (node.children) |*child| _dbgDumpTree(child, depth + 1);\n';
       treeDumper += '}\n\n';
 
-      // Insert before "pub fn main()"
-      var mainIdx = out.indexOf('pub fn main()');
-      if (mainIdx !== -1) {
-        out = out.substring(0, mainIdx) + treeDumper + out.substring(mainIdx);
-      } else {
-        out += treeDumper;
-      }
-
-      return out;
-    };
-
-    // Hook _appTick to call the tree dumper on frame 1.
-    // Detects split output (nodes._root) vs monolith (_root).
-    var _origEmitOutput = globalThis.emitOutput;
-    globalThis.emitOutput = function(rootExpr, file) {
-      var out = _origEmitOutput.call(this, rootExpr, file);
-
       // Detect split output: look for nodes._root or just _root
       var isSplit = out.indexOf('nodes._root') !== -1;
       var rootRef = isSplit ? 'nodes._root' : '_root';
 
-      // Add frame counter before _appTick
+      // Insert the tree dump function before _appTick
       var tickIdx = out.indexOf('fn _appTick(');
       if (tickIdx !== -1) {
-        out = out.substring(0, tickIdx) + 'var _dbg_frame: u32 = 0;\n' + out.substring(tickIdx);
+        out = out.substring(0, tickIdx) + treeDumper + 'var _dbg_frame: u32 = 0;\n' + out.substring(tickIdx);
       }
 
-      // Inject dump call at start of _appTick body
-      var tickBodyIdx = out.indexOf('fn _appTick(now: u32) void {');
-      if (tickBodyIdx !== -1) {
-        var insertAfter = out.indexOf('\n', tickBodyIdx);
-        if (insertAfter !== -1) {
+      // Inject dump call at start of _appTick body, after "_ = now;"
+      var nowLine = out.indexOf('_ = now;');
+      if (nowLine !== -1) {
+        var afterNow = out.indexOf('\n', nowLine);
+        if (afterNow !== -1) {
           var dumpCall = '\n    _dbg_frame += 1;\n';
-          dumpCall += '    if (_dbg_frame == 5) { // frame 5 = after layout settles\n';
-          dumpCall += '        std.debug.print("\\n\\xe2\\x95\\x90\\xe2\\x95\\x90 NODE TREE (frame 1) \\xe2\\x95\\x90\\xe2\\x95\\x90\\n", .{});\n';
+          dumpCall += '    if (_dbg_frame == 5) {\n';
+          dumpCall += '        std.debug.print("\\n\\xe2\\x95\\x90\\xe2\\x95\\x90 NODE TREE (frame 5) \\xe2\\x95\\x90\\xe2\\x95\\x90\\n", .{});\n';
           dumpCall += '        _dbgDumpTree(&' + rootRef + ', 0);\n';
           dumpCall += '        std.debug.print("\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\xe2\\x95\\x90\\n\\n", .{});\n';
           dumpCall += '    }\n';
-          // Skip past "_ = now;" line
-          var nowLine = out.indexOf('_ = now;', tickBodyIdx);
-          if (nowLine !== -1) {
-            var afterNow = out.indexOf('\n', nowLine);
-            out = out.substring(0, afterNow) + dumpCall + out.substring(afterNow);
-          } else {
-            out = out.substring(0, insertAfter) + dumpCall + out.substring(insertAfter);
-          }
+          out = out.substring(0, afterNow) + dumpCall + out.substring(afterNow);
         }
       }
 
       return out;
     };
 
-    __dgb('[DEBUG -n] Node debug: debug_name on all nodes + tree dump on frame 1');
+    __dgb('[DEBUG -n] Node debug: debug_name on all nodes + tree dump on frame 5');
   }
 
   // ================================================================
@@ -231,7 +212,6 @@
         }
 
         // Wrap state.setSlot(N, val) → print + set
-        // Also setSlotFloat, setSlotBool, setSlotString
         var setters = [
           { pat: 'state.setSlot(', getter: 'state.getSlot(', type: 'int', fmt: '{d}', cast: '' },
           { pat: 'state.setSlotFloat(', getter: 'state.getSlotFloat(', type: 'float', fmt: '{d:.2}', cast: '' },
@@ -280,8 +260,7 @@
   // -c  COMPILER DEBUG: dump ctx after parse
   // ================================================================
   if (DBG_COMPILER) {
-    // Hook parseJSXElement (the top-level call, not recursive ones)
-    // to dump ctx after the root parse completes.
+    // Hook finishParsedLane to dump ctx after the root parse completes.
     var _origFinishParsedLane = globalThis.finishParsedLane;
     if (typeof _origFinishParsedLane === 'function') {
       globalThis.finishParsedLane = function(nodeExpr, file, opts) {

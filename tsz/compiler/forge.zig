@@ -450,7 +450,14 @@ pub fn main() !void {
         }
     }
 
-    // 6b. Print pattern trace if available (--dbg-compiler)
+    // 6b. Print debug output if available (--dbg-compiler or --dbg-nodes or --dbg-state)
+    if (dbg_compiler or dbg_nodes or dbg_state) {
+        // __dbgStderr persists across compilation (unlike __dbg which finalize clears)
+        _ = smith.loadModule("if(globalThis.__dbgStderr&&globalThis.__dbgStderr.length>0)globalThis.__dbgOutput=globalThis.__dbgStderr.join('\\n');", "<dbg>");
+        if (smith.getGlobalString("__dbgOutput")) |dbg_out| {
+            std.debug.print("{s}\n", .{dbg_out});
+        }
+    }
     if (dbg_compiler) {
         if (smith.getGlobalString("__patternTrace")) |trace| {
             std.debug.print("{s}", .{trace});

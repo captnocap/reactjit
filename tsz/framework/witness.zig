@@ -1255,7 +1255,15 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
     if (snap_pressable_count >= SNAP_MAX_CLICKS) return;
 
     const h = node.handlers;
-    const has_press = (h.on_press != null or h.js_on_press != null or h.lua_on_press != null);
+    var has_press = (h.on_press != null or h.js_on_press != null or h.lua_on_press != null);
+
+    // Skip window control handlers — clicking these kills/minimizes the app
+    if (has_press) {
+        if (h.js_on_press) |jp| {
+            const jp_span = std.mem.span(jp);
+            if (std.mem.startsWith(u8, jp_span, "__window")) has_press = false;
+        }
+    }
 
     if (has_press) {
         // test_id is the most reliable label — compiler injects it from the handler name
