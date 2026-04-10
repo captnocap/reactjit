@@ -16,6 +16,8 @@ function LandingStat(props) {
 
 function LandingProjectCard(props) {
   var item = props.item;
+  var metaPath = item.path;
+  if (item.path == '__landing__') metaPath = 'Project landing';
 
   return (
     <C.LandingProjectCard onPress={function() { props.onOpenPath(item.path); }}>
@@ -25,7 +27,7 @@ function LandingProjectCard(props) {
         <C.LandingProjectBadge>{item.badge}</C.LandingProjectBadge>
       </C.LandingProjectHeader>
       <C.LandingProjectSummary>{item.summary}</C.LandingProjectSummary>
-      <C.LandingProjectMeta>{item.path}</C.LandingProjectMeta>
+      <C.LandingProjectMeta>{metaPath}</C.LandingProjectMeta>
     </C.LandingProjectCard>
   );
 }

@@ -96,6 +96,12 @@ declare var windowHeight: number;
 declare var widthBand: string;
 declare var compactSurface: string;
 
+function setCursorPosition(v: any) {
+  if (!v) return;
+  setCursorPosition_line(v.line || 1);
+  setCursorPosition_column(v.column || 1);
+}
+
 var fileContents = {};
 var gitStatusByPath = {};
 var cachedTreePaths = [];

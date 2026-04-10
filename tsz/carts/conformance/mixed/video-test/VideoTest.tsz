@@ -1,4 +1,4 @@
-import { Page, Header, Title, Subtitle, VideoContainer, Controls, InfoRow, InfoLabel, InfoValue } from './video_test_cls';
+import { Page, Header, Title, Subtitle, VideoContainer, Controls, InfoRow, InfoLabel, InfoValue } from './video_test.cls';
 
 function App() {
   return (

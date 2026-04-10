@@ -3,13 +3,20 @@
 import { PackageIcon, GitBranchIcon, RefreshCcwIcon, SearchIcon, TerminalIcon, MessageSquareIcon, PaletteIcon } from './Icon.c';
 
 function TopBarAction(props) {
+  var showLabel = 0;
+  var metaText = props.meta || '';
+  var showMeta = 0;
+
+  if (props.iconOnly != 1) showLabel = 1;
+  if (showLabel == 1 && metaText.length > 0) showMeta = 1;
+
   return (
     <C.TopBarAction onPress={props.onPress} style={props.active == 1 ? props.iconOnly == 1 ? { paddingLeft: 8, paddingRight: 8, backgroundColor: '#10213d', borderColor: '#2d62ff' } : { backgroundColor: '#10213d', borderColor: '#2d62ff' } : props.iconOnly == 1 ? { paddingLeft: 8, paddingRight: 8 } : {}}>
       <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
         {props.children}
       </Box>
-      {props.iconOnly != 1 && <C.TopBarActionLabel>{props.label}</C.TopBarActionLabel>}
-      {props.iconOnly != 1 && props.meta && <C.TopBarActionMeta>{props.meta}</C.TopBarActionMeta>}
+      {showLabel == 1 && <C.TopBarActionLabel>{props.label}</C.TopBarActionLabel>}
+      {showMeta == 1 && <C.TopBarActionMeta>{metaText}</C.TopBarActionMeta>}
     </C.TopBarAction>
   );
 }

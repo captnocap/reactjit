@@ -137,9 +137,11 @@ function CapabilityRow(props) {
 
 function SettingsPanel(props) {
   var selectedProvider = props.providers[0];
+  var selectedProviderCapabilities = [];
   for (var pi = 0; pi < props.providers.length; pi++) {
     if (props.providers[pi].id == props.selectedProviderId) selectedProvider = props.providers[pi];
   }
+  if (selectedProvider && selectedProvider.capabilities) selectedProviderCapabilities = selectedProvider.capabilities;
 
   var desktopBand = props.widthBand exact 'desktop' ? 1 : 0;
   var navWidth = desktopBand == 1 ? 240 : 0;
@@ -191,7 +193,7 @@ function SettingsPanel(props) {
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: selectedProvider.tone, backgroundColor: '#10151d', gap: 12 }}>
                 <PanelHeader icon="globe" title={selectedProvider.name + ' Routing'} meta={selectedProvider.summary} trailing={selectedProvider.status} trailingColor={selectedProvider.tone} />
                 <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  {selectedProvider.capabilities.map(function(capability, idx) {
+                  {selectedProviderCapabilities.map(function(capability, idx) {
                     return <DenseChip key={idx} label={capability} color={selectedProvider.tone} borderColor={selectedProvider.tone} backgroundColor="#11161f" />;
                   })}
                 </Box>
