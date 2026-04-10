@@ -1258,11 +1258,6 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
     const has_press = (h.on_press != null or h.js_on_press != null or h.lua_on_press != null);
 
     if (has_press) {
-        // DEBUG: log what we find on each pressable
-        const _dbg_tid = node.test_id orelse "(null)";
-        const _dbg_txt = node.text orelse "(null)";
-        const _dbg_js = if (h.js_on_press) |jp| std.mem.span(jp) else "(null)";
-        std.debug.print("[snap_press] test_id={s} text={s} js={s}\n", .{ _dbg_tid, _dbg_txt, _dbg_js });
         // test_id is the most reliable label — compiler injects it from the handler name
         var label: ?[]const u8 = node.test_id;
         // Fall back to visible text
