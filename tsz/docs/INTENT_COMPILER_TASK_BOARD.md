@@ -33,11 +33,11 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - [x] Add diagnostics for backend-language leakage inside hatched intent functions.
 
 ## Phase 1: Conformance Source Cleanup
-- [ ] Rewrite `tsz/carts/conformance/chad/apps/` to dictionary-correct syntax.
-- [ ] Normalize loops in apps to lowercase `<for ...>` forms.
-- [ ] Remove `<state>` usage in apps; migrate to `<var>` with `set_` declarations.
-- [ ] Remove `<timer>` usage in apps; migrate to `every` headers in `<functions>`.
-- [ ] Re-run chad conformance carts and record pass/fail deltas.
+- [x] Rewrite `tsz/carts/conformance/chad/apps/` to dictionary-correct syntax.
+- [x] Normalize loops in apps to lowercase `<for ...>` forms.
+- [x] Remove `<state>` usage in apps; migrate to `<var>` with `set_` declarations.
+- [x] Remove `<timer>` usage in apps; migrate to `every` headers in `<functions>`.
+- [!] Re-run chad conformance carts and record pass/fail deltas. (blocked by conformance tamper gate until human override)
 
 ## Phase 2: Chad Parser Architecture Simplification
 - [ ] Refactor top-level chad artifact parsing to a unified block contract.
@@ -81,10 +81,12 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 ## Active Work Queue
 - [x] Create persistent task board file for multi-turn tracking.
 - [x] Start Phase 0 implementation.
-- [ ] Start Phase 1 chad app syntax rewrites.
+- [x] Start Phase 1 chad app syntax rewrites.
+- [ ] Start Phase 2 parser architecture simplification.
 
 ## Notes
 - Mixed lane remains operational bridge lane.
 - Soup remains React-proxy lane.
 - Chad lane remains strict explicit intent lane with dictionary authority.
 - Phase 0 implementation lives in `tsz/compiler/smith/lanes/chad/strict_validator.js` and is wired in `tsz/compiler/smith/lanes/chad.js`.
+- Phase 1 app rewrite removed `<state>` and legacy `<For each=...>` across `tsz/carts/conformance/chad/apps/`.

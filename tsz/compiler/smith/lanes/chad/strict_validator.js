@@ -26,6 +26,7 @@ function _chadStrictLineText(source, index) {
 function _chadStrictPushViolation(violations, seen, source, index, code, message, hint) {
   var line = _chadStrictLineNumber(source, index);
   var snippet = _chadStrictLineText(source, index);
+  if (snippet.indexOf('//') === 0) return;
   var key = code + '|' + line + '|' + snippet;
   if (seen[key]) return;
   seen[key] = true;

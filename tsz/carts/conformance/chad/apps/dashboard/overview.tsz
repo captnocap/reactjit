@@ -66,13 +66,13 @@ from '../../icons.glyphs'
           <C.TableCell><C.TableLabel>Action</C.TableLabel></C.TableCell>
           <C.TableCell><C.TableLabel>Time</C.TableLabel></C.TableCell>
         </C.TableHeader>
-        <For each=recentActivity>
+        <for recentActivity>
           <C.TableRow>
             <C.TableCell><C.TableText>{item.user}</C.TableText></C.TableCell>
             <C.TableCell><C.TableText>{item.action}</C.TableText></C.TableCell>
             <C.TableCell><C.Hint>{item.time}</C.Hint></C.TableCell>
           </C.TableRow>
-        </For>
+        </for>
       </C.Card>
     </C.Col>
   )

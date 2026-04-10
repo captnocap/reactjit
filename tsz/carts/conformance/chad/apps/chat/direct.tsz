@@ -7,9 +7,9 @@ from './message_row.c'
 <direct page>
   <var>
     contacts is objects
-    activeContact is 'alice'
-    messages is objects
-    input is ''
+    set_activeContact is 'alice'
+    set_messages is objects
+    set_input is ''
   </var>
 
   <contacts>
@@ -23,13 +23,6 @@ from './message_row.c'
     id: 2, contact: alice, author: me, text: Yeah whats up, time: '11:01 AM'
     id: 3, contact: bob, author: bob, text: PR looks good, time: '10:30 AM'
   </messages>
-
-  <state>
-    set_activeContact
-    set_messages
-    set_input
-  </state>
-
   <functions>
     selectContact requires item:
       set_activeContact is item.id
@@ -61,7 +54,7 @@ from './message_row.c'
     <C.Split>
       <C.PanelNarrow>
         <C.Subtitle>Direct Messages</C.Subtitle>
-        <For each=contacts>
+        <for contacts>
           <Pressable onPress=selectContact>
             <C.ListItem>
               <if item.status exact 'online'>
@@ -76,16 +69,16 @@ from './message_row.c'
               <C.Body>{item.name}</C.Body>
             </C.ListItem>
           </Pressable>
-        </For>
+        </for>
       </C.PanelNarrow>
 
       <C.Panel>
         <C.Title>{activeContact}</C.Title>
         <C.Divider />
         <C.Scroll>
-          <For each=contactMessages>
+          <for contactMessages>
             <MessageRow message=item />
-          </For>
+          </for>
         </C.Scroll>
         <C.Divider />
         <C.Row>

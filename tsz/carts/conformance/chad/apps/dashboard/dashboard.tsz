@@ -7,7 +7,7 @@ from '../../icons.glyphs'
 <dashboard app>
   <var>
     pages is page array
-    active is 'overview'
+    set_active is 'overview'
   </var>
 
   <pages>
@@ -15,11 +15,6 @@ from '../../icons.glyphs'
     users
     analytics
   </pages>
-
-  <state>
-    set_active
-  </state>
-
   <functions>
     goTo requires item:
       set_active is item
@@ -30,7 +25,7 @@ from '../../icons.glyphs'
       <C.Sidebar>
         <C.Title>:settings: Admin</C.Title>
         <C.Divider />
-        <For each=pages>
+        <for pages>
           <Pressable onPress=goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
@@ -39,7 +34,7 @@ from '../../icons.glyphs'
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
           </Pressable>
-        </For>
+        </for>
         <C.Spacer />
         <C.Hint>{sys.user}</C.Hint>
       </C.Sidebar>

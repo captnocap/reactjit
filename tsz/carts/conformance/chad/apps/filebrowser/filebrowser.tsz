@@ -9,18 +9,13 @@ from './file_row.c'
 <fileBrowser app>
   <var>
     pages is page array
-    active is 'browse'
+    set_active is 'browse'
   </var>
 
   <pages>
     browse
     preview
   </pages>
-
-  <state>
-    set_active
-  </state>
-
   <functions>
     goTo requires item:
       set_active is item
@@ -31,7 +26,7 @@ from './file_row.c'
       <C.Sidebar>
         <C.Title>:folder: Files</C.Title>
         <C.Divider />
-        <For each=pages>
+        <for pages>
           <Pressable onPress=goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
@@ -40,7 +35,7 @@ from './file_row.c'
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
           </Pressable>
-        </For>
+        </for>
         <C.Spacer />
         <C.Hint>{sys.os + ' ' + sys.kernel}</C.Hint>
       </C.Sidebar>

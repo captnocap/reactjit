@@ -1,5 +1,5 @@
 // CONFORMANCE: Hacker News Reader — app with pages, navigation, network fetch.
-// Proves: app structure, <pages>, <active page />, navigation, <For>, <during> states.
+// Proves: app structure, <pages>, <active page />, navigation, <for>, <during> states.
 
 from '../../theme.cls'
 from '../../icons.glyphs'
@@ -7,7 +7,7 @@ from '../../icons.glyphs'
 <hn app>
   <var>
     pages is page array
-    active is 'front'
+    set_active is 'front'
   </var>
 
   <pages>
@@ -15,11 +15,6 @@ from '../../icons.glyphs'
     story
     settings
   </pages>
-
-  <state>
-    set_active
-  </state>
-
   <functions>
     goTo requires item:
       set_active is item
@@ -29,7 +24,7 @@ from '../../icons.glyphs'
     <C.PageRow>
       <C.Sidebar>
         <C.Title>:home: HN</C.Title>
-        <For each=pages>
+        <for pages>
           <Pressable onPress=goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
@@ -38,7 +33,7 @@ from '../../icons.glyphs'
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
           </Pressable>
-        </For>
+        </for>
       </C.Sidebar>
       <C.Main>
         <active page />

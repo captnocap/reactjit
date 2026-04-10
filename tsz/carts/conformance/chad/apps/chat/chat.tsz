@@ -8,22 +8,15 @@ from '../../libs/net/net'
 <chat app>
   <var>
     pages is page array
-    active is 'channels'
-    connected is false
-    username is 'user'
+    set_active is 'channels'
+    set_connected is false
+    set_username is 'user'
   </var>
 
   <pages>
     channels
     direct
   </pages>
-
-  <state>
-    set_active
-    set_connected
-    set_username
-  </state>
-
   <functions>
     boot:
       net.socket.connect('wss://chat.example.com')
@@ -49,7 +42,7 @@ from '../../libs/net/net'
           </else>
         </C.Hint>
         <C.Divider />
-        <For each=pages>
+        <for pages>
           <Pressable onPress=goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
@@ -58,7 +51,7 @@ from '../../libs/net/net'
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
           </Pressable>
-        </For>
+        </for>
         <C.Divider />
         <C.Hint>{username}</C.Hint>
       </C.Sidebar>

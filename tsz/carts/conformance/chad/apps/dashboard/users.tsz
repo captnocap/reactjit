@@ -6,8 +6,8 @@ from '../../icons.glyphs'
 <users page>
   <var>
     userList is objects
-    search is ''
-    roleFilter exact type
+    set_search is ''
+    set_roleFilter exact type
   </var>
 
   <userList>
@@ -26,12 +26,6 @@ from '../../icons.glyphs'
       viewer
     </roleFilter>
   </types>
-
-  <state>
-    set_search
-    set_roleFilter exact roleFilter
-  </state>
-
   <functions>
     visibleUsers:
       <if roleFilter exact 'all'>
@@ -88,7 +82,7 @@ from '../../icons.glyphs'
           <C.TableCell><C.TableLabel>Role</C.TableLabel></C.TableCell>
           <C.TableCell><C.TableLabel>Status</C.TableLabel></C.TableCell>
         </C.TableHeader>
-        <For each=visibleUsers>
+        <for visibleUsers>
           <C.TableRow>
             <C.TableCell><C.TableText>{item.name}</C.TableText></C.TableCell>
             <C.TableCell><C.Mono>{item.email}</C.Mono></C.TableCell>
@@ -111,7 +105,7 @@ from '../../icons.glyphs'
               </Pressable>
             </C.TableCell>
           </C.TableRow>
-        </For>
+        </for>
       </C.Card>
     </C.Col>
   )

@@ -5,12 +5,12 @@ from '../../icons.glyphs'
 
 <front page>
   <var>
-    stories is objects
-    loading is false
-    ready is false
-    error is false
-    errorMessage is ''
-    page is 1
+    set_stories is objects
+    set_loading is false
+    set_ready is false
+    set_error is false
+    set_errorMessage is ''
+    set_page is 1
   </var>
 
   <stories>
@@ -18,16 +18,6 @@ from '../../icons.glyphs'
     id: 2, title: Why we moved from React to native, points: 218, author: asmith, comments: 95, url: 'blog.example.com'
     id: 3, title: SQLite is all you need, points: 567, author: dknuth, comments: 203, url: 'sqlite.org'
   </stories>
-
-  <state>
-    set_stories
-    set_loading
-    set_ready
-    set_error
-    set_errorMessage
-    set_page
-  </state>
-
   <functions>
     fetchStories:
       set_loading is true
@@ -87,7 +77,7 @@ from '../../icons.glyphs'
 
       <during ready>
         <C.Scroll>
-          <For each=stories>
+          <for stories>
             <C.ListItem>
               <Pressable onPress=upvote>
                 <C.Mono>:star: {item.points}</C.Mono>
@@ -97,7 +87,7 @@ from '../../icons.glyphs'
                 <C.Hint>{storyDomain + ' · ' + item.author + ' · ' + item.comments + ' comments'}</C.Hint>
               </C.Col>
             </C.ListItem>
-          </For>
+          </for>
         </C.Scroll>
 
         <C.Row>

@@ -8,10 +8,10 @@ from './message_row.c'
 <channels page>
   <var>
     channelList is objects
-    activeChannel is 'general'
-    messages is objects
-    input is ''
-    sending is false
+    set_activeChannel is 'general'
+    set_messages is objects
+    set_input is ''
+    set_sending is false
   </var>
 
   <channelList>
@@ -28,14 +28,6 @@ from './message_row.c'
     id: 4, channel: dev, author: dave, text: PR is up for the layout engine rewrite, time: '10:15 AM'
     id: 5, channel: dev, author: alice, text: Will review after lunch, time: '10:16 AM'
   </messages>
-
-  <state>
-    set_activeChannel
-    set_messages
-    set_input
-    set_sending
-  </state>
-
   <functions>
     switchChannel requires item:
       set_activeChannel is item.id
@@ -74,7 +66,7 @@ from './message_row.c'
       // ── Channel list ──
       <C.PanelNarrow>
         <C.Subtitle>Channels</C.Subtitle>
-        <For each=channelList>
+        <for channelList>
           <Pressable onPress=switchChannel>
             <C.ListItem>
               <if item.id exact activeChannel>
@@ -89,7 +81,7 @@ from './message_row.c'
               </if>
             </C.ListItem>
           </Pressable>
-        </For>
+        </for>
       </C.PanelNarrow>
 
       // ── Messages ──
@@ -99,9 +91,9 @@ from './message_row.c'
         </C.Row>
         <C.Divider />
         <C.Scroll>
-          <For each=channelMessages>
+          <for channelMessages>
             <MessageRow message=item />
-          </For>
+          </for>
         </C.Scroll>
         <C.Divider />
         <C.Row>

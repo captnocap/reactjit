@@ -5,13 +5,13 @@ from '../../icons.glyphs'
 
 <analytics page>
   <var>
-    period exact type
-    requests is 0
-    latencyP50 is 0
-    latencyP99 is 0
-    errorCount is 0
+    set_period exact type
+    set_requests is 0
+    set_latencyP50 is 0
+    set_latencyP99 is 0
+    set_errorCount is 0
     topEndpoints is objects
-    lastRefresh is ''
+    set_lastRefresh is ''
   </var>
 
   <types>
@@ -29,16 +29,6 @@ from '../../icons.glyphs'
     path: /api/data, hits: 6541, avgMs: 128
     path: /api/health, hits: 45012, avgMs: 3
   </topEndpoints>
-
-  <state>
-    set_period exact period
-    set_requests
-    set_latencyP50
-    set_latencyP99
-    set_errorCount
-    set_lastRefresh
-  </state>
-
   <functions>
     fetchMetrics:
       set_requests is 45012
@@ -117,13 +107,13 @@ from '../../icons.glyphs'
           <C.TableCell><C.TableLabel>Hits</C.TableLabel></C.TableCell>
           <C.TableCell><C.TableLabel>Avg Latency</C.TableLabel></C.TableCell>
         </C.TableHeader>
-        <For each=topEndpoints>
+        <for topEndpoints>
           <C.TableRow>
             <C.TableCell><C.Mono>{item.path}</C.Mono></C.TableCell>
             <C.TableCell><C.TableText>{item.hits}</C.TableText></C.TableCell>
             <C.TableCell><C.TableText>{item.avgMs + 'ms'}</C.TableText></C.TableCell>
           </C.TableRow>
-        </For>
+        </for>
       </C.Card>
     </C.Col>
   )

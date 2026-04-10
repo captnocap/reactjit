@@ -5,13 +5,13 @@ from '../../icons.glyphs'
 
 <story page>
   <var>
-    title is 'Story Title'
+    set_title is 'Story Title'
     url is ''
     author is ''
     points is 0
-    comments is objects
-    loading is false
-    ready is false
+    set_comments is objects
+    set_loading is false
+    set_ready is false
   </var>
 
   <comments>
@@ -19,14 +19,6 @@ from '../../icons.glyphs'
     id: 2, author: user2, text: I disagree with the premise, depth: 0
     id: 3, author: user3, text: Can you elaborate?, depth: 1
   </comments>
-
-  <state>
-    set_title
-    set_loading
-    set_ready
-    set_comments
-  </state>
-
   <functions>
     boot:
       set_ready is true
@@ -52,7 +44,7 @@ from '../../icons.glyphs'
       <during ready>
         <C.Subtitle>{comments.length + ' comments'}</C.Subtitle>
         <C.Scroll>
-          <For each=comments>
+          <for comments>
             <C.Card>
               <C.Row>
                 <C.Mono>{item.author}</C.Mono>
@@ -63,7 +55,7 @@ from '../../icons.glyphs'
               </C.Row>
               <C.Body>{item.text}</C.Body>
             </C.Card>
-          </For>
+          </for>
         </C.Scroll>
       </during>
     </C.Col>

@@ -7,13 +7,13 @@ from './file_row.c'
 
 <browse page>
   <var>
-    currentPath is '/home'
-    entries is objects
-    selectedFile
-    loading is false
-    ready is false
-    pathParts is array
-    sortBy exact type
+    set_currentPath is '/home'
+    set_entries is objects
+    set_selectedFile
+    set_loading is false
+    set_ready is false
+    set_pathParts is array
+    set_sortBy exact type
   </var>
 
   <entries>
@@ -35,17 +35,6 @@ from './file_row.c'
       type
     </sortBy>
   </types>
-
-  <state>
-    set_currentPath
-    set_entries
-    set_selectedFile
-    set_loading
-    set_ready
-    set_pathParts
-    set_sortBy exact sortBy
-  </state>
-
   <functions>
     loadDirectory(path):
       set_loading is true
@@ -118,10 +107,10 @@ from './file_row.c'
     <C.Col>
       // ── Breadcrumbs ──
       <C.Breadcrumb>
-        <For each=pathParts>
+        <for pathParts>
           <C.BreadcrumbText>{item}</C.BreadcrumbText>
           <C.BreadcrumbText>/</C.BreadcrumbText>
-        </For>
+        </for>
         <C.BreadcrumbActive>{currentPath}</C.BreadcrumbActive>
       </C.Breadcrumb>
 
@@ -148,14 +137,14 @@ from './file_row.c'
           </C.TableHeader>
 
           // ── Directories first ──
-          <For each=directories>
+          <for directories>
             <FileRow entry=item onNavigate=navigateTo onDelete=deleteFile />
-          </For>
+          </for>
 
           // ── Then files ──
-          <For each=files>
+          <for files>
             <FileRow entry=item onNavigate=selectFile onDelete=deleteFile />
-          </For>
+          </for>
         </C.Card>
 
         <C.Hint>{entries.length + ' items'}</C.Hint>

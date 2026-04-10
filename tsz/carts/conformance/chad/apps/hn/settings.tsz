@@ -4,19 +4,11 @@ from '../../theme.cls'
 
 <settings page>
   <var>
-    storiesPerPage is 30
-    showDomains is true
-    autoRefresh is true
-    refreshInterval is 300
+    set_storiesPerPage is 30
+    set_showDomains is true
+    set_autoRefresh is true
+    set_refreshInterval is 300
   </var>
-
-  <state>
-    set_storiesPerPage
-    set_showDomains
-    set_autoRefresh
-    set_refreshInterval
-  </state>
-
   <functions>
     toggleDomains:
       set_showDomains is not showDomains

@@ -6,21 +6,12 @@ from '../../libs/fs/fs'
 
 <preview page>
   <var>
-    filePath is ''
-    content is ''
-    fileType is 'unknown'
-    loaded is false
-    loading is false
+    set_filePath is ''
+    set_content is ''
+    set_fileType is 'unknown'
+    set_loaded is false
+    set_loading is false
   </var>
-
-  <state>
-    set_filePath
-    set_content
-    set_fileType
-    set_loaded
-    set_loading
-  </state>
-
   <functions>
     loadFile(path):
       set_loading is true

@@ -11,8 +11,8 @@ from '../../theme.cls'
   </props>
 
   <var>
-    draft is ''
-    priority exact type
+    set_draft is ''
+    set_priority exact type
   </var>
 
   <types>
@@ -22,12 +22,6 @@ from '../../theme.cls'
       high
     </priority>
   </types>
-
-  <state>
-    set_draft
-    set_priority exact priority
-  </state>
-
   <functions>
     boot:
       set_draft is card.title
