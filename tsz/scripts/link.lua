@@ -109,10 +109,15 @@ end
 local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
--- ── Step 2: Link .o + engine .so → binary ───────────────────────────
+-- ── Step 2: Link .o + engine .so (+ resolved deps) → binary ─────────
+-- TSZ_LINK_EXTRA_SOS: space-separated .so paths from dep resolver
+-- TSZ_LINK_EXTRA_LIBS: space-separated library names (for -l flags)
+local extra_sos = os.getenv("TSZ_LINK_EXTRA_SOS") or ""
+local extra_libs = os.getenv("TSZ_LINK_EXTRA_LIBS") or ""
+
 local link_cmd
 if is_macos then
-    link_cmd = table.concat({
+    local parts = {
         ZIG_ENV .. "zig cc",
         "-o " .. binary,
         obj_name,
@@ -121,18 +126,34 @@ if is_macos then
         "-L/opt/homebrew/opt/libarchive/lib",
         "'-Wl,-rpath,@executable_path/../Frameworks'",
         "'-Wl,-headerpad_max_install_names'",
-    }, " ")
+    }
+    for so in extra_sos:gmatch("%S+") do
+        io.write("[link] + " .. so:match("[^/]+$") .. "\n")
+        table.insert(parts, so)
+    end
+    for lib in extra_libs:gmatch("%S+") do
+        table.insert(parts, "-l" .. lib)
+    end
+    link_cmd = table.concat(parts, " ")
 else
     -- $ORIGIN/lib lets the self-extracting package find the bundled .so
     -- Single-quote the -Wl arg so the shell doesn't expand $ORIGIN
-    link_cmd = table.concat({
+    local parts = {
         ZIG_ENV .. "zig cc",
         "-o " .. binary,
         obj_name,
         ENGINE_SO,
         "'-Wl,-rpath,$ORIGIN/lib'",
         "-lm -lpthread -ldl",
-    }, " ")
+    }
+    for so in extra_sos:gmatch("%S+") do
+        io.write("[link] + " .. so:match("[^/]+$") .. "\n")
+        table.insert(parts, so)
+    end
+    for lib in extra_libs:gmatch("%S+") do
+        table.insert(parts, "-l" .. lib)
+    end
+    link_cmd = table.concat(parts, " ")
 end
 
 io.write("[link] link → " .. binary .. "... ")

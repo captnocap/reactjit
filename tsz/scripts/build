@@ -773,6 +773,112 @@ else
     APP_SOURCE="$GEN"
 fi
 
+# ── Step 2c: optional dep resolution (deps.json manifest) ────────────
+# Scan the .tsz source for each dep's detection patterns. If found,
+# build or locate the .so, pass to link.lua, mark for bundling.
+IS_LINUX=1; IS_MACOS=0
+[ "$(uname -s)" = "Darwin" ] && { IS_LINUX=0; IS_MACOS=1; }
+
+RESOLVED_DEPS=""       # space-separated list of dep names that matched
+RESOLVED_SOS=""        # space-separated list of .so paths to link
+RESOLVED_LINK_LIBS=""  # space-separated extra -l flags
+
+resolve_deps() {
+    local deps_file="deps.json"
+    [ ! -f "$deps_file" ] && return
+
+    local dep_names
+    dep_names=$(jq -r 'keys[]' "$deps_file")
+
+    for dep in $dep_names; do
+        # Build grep pattern from detect array: "pat1\|pat2\|pat3"
+        local patterns
+        patterns=$(jq -r --arg d "$dep" '.[$d].detect | join("\\|")' "$deps_file")
+        [ -z "$patterns" ] && continue
+
+        if ! grep -qE "$(echo "$patterns" | sed 's/\\|/|/g')" "$CART" 2>/dev/null; then
+            continue
+        fi
+
+        local desc
+        desc=$(jq -r --arg d "$dep" '.[$d].description // $d' "$deps_file")
+        RESOLVED_DEPS="$RESOLVED_DEPS $dep"
+
+        # Case 1: we build the .so ourselves (like llama)
+        local build_step
+        build_step=$(jq -r --arg d "$dep" '.[$d].build_step // empty' "$deps_file")
+        if [ -n "$build_step" ]; then
+            local so_name
+            so_name=$(jq -r --arg d "$dep" '.[$d].so // empty' "$deps_file")
+            local ext=".so"; [ "$IS_MACOS" -eq 1 ] && ext=".dylib"
+            local so_path="zig-out/lib/${so_name}${ext}"
+            if [ ! -f "$so_path" ]; then
+                echo "[$NAME] $desc detected — building ${so_name}${ext}..."
+                local t_start; t_start=$(date +%s%N)
+                eval "$build_step" 2>&1 || { echo "[$NAME] ERROR: $dep build failed"; exit 1; }
+                local t_ms=$(( ($(date +%s%N) - t_start) / 1000000 ))
+                echo "[$NAME] ${so_name}${ext} built (${t_ms}ms)"
+            else
+                echo "[$NAME] $desc detected — ${so_name}${ext} cached"
+            fi
+            RESOLVED_SOS="$RESOLVED_SOS $so_path"
+        fi
+
+        # Case 2: system .so (like libmpv, libbox2d)
+        local so_key="system_so"
+        local search_key="system_search"
+        [ "$IS_MACOS" -eq 1 ] && { so_key="macos_so"; search_key="macos_search"; }
+
+        local sys_candidates
+        sys_candidates=$(jq -r --arg d "$dep" --arg k "$so_key" '.[$d][$k] // [] | .[]' "$deps_file" 2>/dev/null)
+        if [ -n "$sys_candidates" ]; then
+            local found_so=""
+            # Build search paths: system defaults + manifest extras
+            local search_paths="/usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib"
+            [ "$IS_MACOS" -eq 1 ] && search_paths="/opt/homebrew/lib /usr/local/lib /usr/lib"
+            local extra_paths
+            extra_paths=$(jq -r --arg d "$dep" --arg k "$search_key" '.[$d][$k] // [] | .[]' "$deps_file" 2>/dev/null)
+            [ -n "$extra_paths" ] && search_paths="$extra_paths $search_paths"
+
+            for candidate in $sys_candidates; do
+                # Try ldconfig first (Linux)
+                if [ "$IS_LINUX" -eq 1 ]; then
+                    found_so=$(ldconfig -p 2>/dev/null | grep "$candidate" | head -1 | sed 's/.* => //' || true)
+                    [ -n "$found_so" ] && [ -f "$found_so" ] && break
+                fi
+                # Search known paths
+                for dir in $search_paths; do
+                    if [ -f "$dir/$candidate" ]; then
+                        found_so="$dir/$candidate"
+                        break 2
+                    fi
+                done
+            done
+
+            if [ -n "$found_so" ]; then
+                echo "[$NAME] $desc detected — found $found_so"
+                RESOLVED_SOS="$RESOLVED_SOS $found_so"
+            else
+                echo "[$NAME] WARNING: $desc detected in source but library not found on system"
+            fi
+        fi
+
+        # Extra link libs (like -lvulkan for llama)
+        local extra_libs
+        extra_libs=$(jq -r --arg d "$dep" '.[$d].link_libs // [] | .[]' "$deps_file" 2>/dev/null)
+        for lib in $extra_libs; do
+            RESOLVED_LINK_LIBS="$RESOLVED_LINK_LIBS $lib"
+        done
+    done
+}
+resolve_deps
+
+# Export for link.lua
+if [ -n "$RESOLVED_SOS" ]; then
+    export TSZ_LINK_EXTRA_SOS="$RESOLVED_SOS"
+    export TSZ_LINK_EXTRA_LIBS="$RESOLVED_LINK_LIBS"
+fi
+
 # ── Step 3: LuaJIT link (cart .zig → .o + engine .so → binary) ───────
 echo "[$NAME] zig build..."
 ZIG_START=$(date +%s%N)
@@ -853,6 +959,11 @@ PLIST
         ENGINE_DYLIB="zig-out/lib/libreactjit-core.dylib"
         [ -f "$ENGINE_DYLIB" ] && cp "$ENGINE_DYLIB" "$FW_DIR/libreactjit-core.dylib"
 
+        # Bundle resolved dep .so/.dylibs
+        for dep_so in $RESOLVED_SOS; do
+            [ -f "$dep_so" ] && cp "$dep_so" "$FW_DIR/$(basename "$dep_so")"
+        done
+
         # Recursively collect non-system dylibs
         collect_dylibs() {
             for bin in "$@"; do
@@ -910,6 +1021,11 @@ PLIST
         # ── Linux: collect shared libs via ldd ───────────────────────
         ENGINE_SO="zig-out/lib/libreactjit-core.so"
         [ -f "$ENGINE_SO" ] && cp "$(readlink -f "$ENGINE_SO")" "$LIB_DIR/libreactjit-core.so"
+
+        # Bundle resolved dep .so files
+        for dep_so in $RESOLVED_SOS; do
+            [ -f "$dep_so" ] && cp "$(readlink -f "$dep_so")" "$LIB_DIR/$(basename "$dep_so")"
+        done
 
         LDD_TMP=$(mktemp)
         ldd "$RAW_BIN" >> "$LDD_TMP" 2>/dev/null
