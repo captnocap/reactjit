@@ -1182,10 +1182,14 @@ fn snapCollectTexts(root: *Node) void {
             snapAddFmt("# FAIL: nil in rendered text: \"{s}\"", .{txt});
             continue;
         }
-        // Detect \x01 glyph placeholders — glyph system failed to resolve
+        // Detect glyph placeholders — glyph system failed to resolve
+        // Check both raw 0x01 byte and escaped "\1" string
         var has_glyph_placeholder = false;
         for (txt) |ch| {
             if (ch == 0x01) { has_glyph_placeholder = true; break; }
+        }
+        if (!has_glyph_placeholder and std.mem.indexOf(u8, txt, "\\1") != null) {
+            has_glyph_placeholder = true;
         }
         if (has_glyph_placeholder) {
             snap_nil_count += 1;
@@ -1223,7 +1227,20 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
             label = findFirstChildText(node);
         }
         if (label) |lbl| {
-            if (lbl.len >= 2 and lbl.len <= 64) {
+            // Skip glyph placeholders (\x01 byte or "\1" escaped string) and non-printable labels
+            var is_valid_label = lbl.len >= 2 and lbl.len <= 64;
+            if (is_valid_label) {
+                // Check for raw 0x01 byte
+                for (lbl) |ch| {
+                    if (ch < 0x20) { is_valid_label = false; break; }
+                }
+            }
+            if (is_valid_label) {
+                // Check for escaped glyph placeholder "\1" or "\\1"
+                if (std.mem.indexOf(u8, lbl, "\\1") != null) is_valid_label = false;
+                if (std.mem.eql(u8, lbl, "\\1")) is_valid_label = false;
+            }
+            if (is_valid_label) {
                 const idx = snap_pressable_count;
                 snap_pressables[idx] = .{
                     .node = node,
