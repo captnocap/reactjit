@@ -1178,9 +1178,19 @@ fn snapCollectTexts(root: *Node) void {
                 ri += 1;
                 continue;
             }
+            if (ch == '\\' and ri + 2 < raw_txt.len and raw_txt[ri + 1] == '\\' and raw_txt[ri + 2] == '1') {
+                saw_glyph_placeholder = true;
+                ri += 2;
+                continue;
+            }
             if (ch == '\\' and ri + 3 < raw_txt.len and raw_txt[ri + 1] == 'x' and raw_txt[ri + 2] == '0' and raw_txt[ri + 3] == '1') {
                 saw_glyph_placeholder = true;
                 ri += 3;
+                continue;
+            }
+            if (ch == '\\' and ri + 4 < raw_txt.len and raw_txt[ri + 1] == '\\' and raw_txt[ri + 2] == 'x' and raw_txt[ri + 3] == '0' and raw_txt[ri + 4] == '1') {
+                saw_glyph_placeholder = true;
+                ri += 4;
                 continue;
             }
             normalized_buf[normalized_len] = ch;
@@ -1254,7 +1264,7 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
             label = findFirstChildText(node);
         }
         if (label) |lbl| {
-            // Skip glyph placeholders (\x01 byte, "\1", or "\x01" escaped strings) and non-printable labels
+            // Skip glyph placeholders (\x01 byte, "\1"/"\\1", or "\x01"/"\\x01" escaped strings) and non-printable labels
             var is_valid_label = lbl.len >= 2 and lbl.len <= 64;
             if (is_valid_label) {
                 // Check for raw 0x01 byte
@@ -1266,8 +1276,12 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
                 // Check for escaped glyph placeholder "\1", "\\1", or "\\x01"
                 if (std.mem.indexOf(u8, lbl, "\\1") != null) is_valid_label = false;
                 if (std.mem.eql(u8, lbl, "\\1")) is_valid_label = false;
+                if (std.mem.indexOf(u8, lbl, "\\\\1") != null) is_valid_label = false;
+                if (std.mem.eql(u8, lbl, "\\\\1")) is_valid_label = false;
                 if (std.mem.indexOf(u8, lbl, "\\x01") != null) is_valid_label = false;
                 if (std.mem.eql(u8, lbl, "\\x01")) is_valid_label = false;
+                if (std.mem.indexOf(u8, lbl, "\\\\x01") != null) is_valid_label = false;
+                if (std.mem.eql(u8, lbl, "\\\\x01")) is_valid_label = false;
             }
             if (is_valid_label) {
                 const idx = snap_pressable_count;
@@ -1298,7 +1312,22 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
 fn findFirstChildText(node: *Node) ?[]const u8 {
     for (node.children) |*child| {
         if (child.style.display == .none) continue;
-        if (child.text) |t| return t;
+        if (child.text) |t| {
+            // Skip invalid labels: too short, non-printable, glyph placeholders, markers
+            if (t.len < 2) continue; // too short
+            var has_printable = false;
+            var has_nonprintable = false;
+            for (t) |ch| {
+                if (ch >= 'A' and ch <= 'z') has_printable = true;
+                if (ch < 0x20) has_nonprintable = true;
+            }
+            if (has_nonprintable) continue; // glyph byte
+            if (!has_printable) continue; // no letters at all
+            if (std.mem.indexOf(u8, t, "\\1") != null) continue; // escaped glyph
+            if (std.mem.indexOf(u8, t, "\\x01") != null) continue; // hex escaped glyph
+            if (t[0] == '_' and t[1] == '_') continue; // __marker__
+            return t;
+        }
         const sub = findFirstChildText(child);
         if (sub != null) return sub;
     }
@@ -1386,17 +1415,27 @@ fn snapshotTick(root: *Node) bool {
 
             const label = snap_press_labels[snap_click_idx][0..snap_press_label_lens[snap_click_idx]];
 
-            // Re-find this pressable by its label text (coordinates may have shifted)
-            if (query.find(root, .{ .text_contains = label })) |result| {
-                snapAddLine("");
-                snapAddFmt("click \"{s}\"", .{label});
-                testdriver.click(result.cx, result.cy);
-                snap_settle_countdown = 3;
-                snap_phase = .settle_after_click;
-            } else {
-                // Node disappeared — skip
-                snap_click_idx += 1;
+            // Skip if we already clicked a button with this exact label
+            var already_clicked = false;
+            for (0..snap_click_idx) |prev| {
+                const prev_label = snap_press_labels[prev][0..snap_press_label_lens[prev]];
+                if (std.mem.eql(u8, label, prev_label)) {
+                    already_clicked = true;
+                    break;
+                }
             }
+            if (already_clicked) {
+                snap_click_idx += 1;
+                return false;
+            }
+
+            // Click using stored coordinates (don't re-find — avoids hitting wrong node with same label)
+            const p = snap_pressables[snap_click_idx];
+            snapAddLine("");
+            snapAddFmt("click \"{s}\"", .{label});
+            testdriver.click(p.cx, p.cy);
+            snap_settle_countdown = 3;
+            snap_phase = .settle_after_click;
             return false;
         },
         .settle_after_click => {
