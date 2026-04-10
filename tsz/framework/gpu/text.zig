@@ -38,6 +38,15 @@ pub const MAX_GLYPHS = 32768;
 const ATLAS_SIZE = 2048;
 const MAX_ATLAS_GLYPHS = 2048;
 
+fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
+    if (i >= text.len) return 0;
+    if (text[i] == 0x01) return 1;
+    if (text[i] != '\\') return 0;
+    if (i + 1 < text.len and text[i + 1] == '1') return 2;
+    if (i + 3 < text.len and text[i + 1] == 'x' and text[i + 2] == '0' and text[i + 3] == '1') return 4;
+    return 0;
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Atlas cache types
 // ════════════════════════════════════════════════════════════════════════
@@ -232,7 +241,8 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     var i: usize = 0;
     while (i < text.len) {
         // Inline glyph sentinel — record slot position, advance by fontSize
-        if (text[i] == 0x01) {
+        const sentinel_len = inlineGlyphSentinelLen(text, i);
+        if (sentinel_len > 0) {
             if (g_inline_slot_count < MAX_RECORDED_SLOTS) {
                 const slot_size: f32 = @floatFromInt(size_px);
                 g_inline_slots[g_inline_slot_count] = .{
@@ -242,7 +252,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 g_inline_slot_count += 1;
             }
             pen_x += @floatFromInt(size_px);
-            i += 1;
+            i += sentinel_len;
             continue;
         }
         const ch = decodeUtf8(text[i..]);
@@ -309,7 +319,8 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     while (i < text.len) {
         if (max_lines > 0 and lines_drawn >= max_lines) break;
         // Inline glyph sentinel — treat as non-wrappable char with fontSize advance
-        if (text[i] == 0x01) {
+        const sentinel_len = inlineGlyphSentinelLen(text, i);
+        if (sentinel_len > 0) {
             const advance: f32 = @floatFromInt(size_px);
             if (pen_x + advance > max_width and pen_x > 0) {
                 if (last_break > line_start) {
@@ -320,7 +331,8 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                     pen_x = 0;
                     var j: usize = line_start;
                     while (j < i) {
-                        if (text[j] == 0x01) { pen_x += @floatFromInt(size_px); j += 1; continue; }
+                        const j_sentinel_len = inlineGlyphSentinelLen(text, j);
+                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
                         const jch = decodeUtf8(text[j..]);
                         if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
                         j += jch.len;
@@ -330,7 +342,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 }
             }
             pen_x += advance;
-            i += 1;
+            i += sentinel_len;
             continue;
         }
         const ch = decodeUtf8(text[i..]);
@@ -373,7 +385,8 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 pen_x = 0;
                 var j: usize = line_start;
                 while (j < i) {
-                    if (text[j] == 0x01) { pen_x += @floatFromInt(size_px); j += 1; continue; }
+                    const j_sentinel_len = inlineGlyphSentinelLen(text, j);
+                    if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
                     const jch = decodeUtf8(text[j..]);
                     if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
                     j += jch.len;

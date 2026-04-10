@@ -900,7 +900,8 @@ fn hostClearLuaNodes(_: ?*lua.lua_State) callconv(.c) c_int {
     return 0;
 }
 
-/// __eval(jsExpr) → evaluates JS expression in QJS, returns result as string/number to Lua
+/// __eval(jsExpr) → evaluates a JS expression in QJS and returns the bridged value to Lua.
+/// Scalars still work as before; arrays/objects now return Lua tables through the shared bridge.
 /// __syncToJS(name, value) — sync a Lua state variable back to QJS
 /// Called by Lua setters when a <script> block is present, so JS and Lua stay in sync.
 fn hostSyncToJS(L: ?*lua.lua_State) callconv(.c) c_int {
@@ -922,35 +923,33 @@ fn hostEval(L: ?*lua.lua_State) callconv(.c) c_int {
         return 1;
     }
     const code: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-    var buf: [256]u8 = undefined;
-    const result = qjs_runtime.evalToString(code, &buf);
-    if (result.len == 0) {
+    if (!qjs_runtime.evalToLua(code)) {
         lua.lua_pushnil(L);
-    } else {
-        // Try to push as number if it looks like one
-        var is_num = true;
-        var has_dot = false;
-        for (result) |ch| {
-            if (ch == '.') { has_dot = true; continue; }
-            if (ch == '-' or (ch >= '0' and ch <= '9')) continue;
-            is_num = false;
-            break;
-        }
-        if (is_num and result.len > 0) {
-            if (has_dot) {
-                const f = std.fmt.parseFloat(f64, result) catch 0.0;
-                lua.lua_pushnumber(L, f);
-            } else {
-                const i = std.fmt.parseInt(i64, result, 10) catch 0;
-                lua.lua_pushinteger(L, @intCast(i));
-            }
-        } else if (std.mem.eql(u8, result, "true")) {
-            lua.lua_pushboolean(L, 1);
-        } else if (std.mem.eql(u8, result, "false")) {
-            lua.lua_pushboolean(L, 0);
-        } else {
-            lua.lua_pushlstring(L, result.ptr, result.len);
-        }
+    }
+    return 1;
+}
+
+/// __callJS(name) → call a global JS function by name, discarding the return value.
+fn hostCallJS(L: ?*lua.lua_State) callconv(.c) c_int {
+    var len: usize = 0;
+    const ptr = lua.lua_tolstring(L, 1, &len);
+    if (ptr == null or len == 0) return 0;
+    const name_z: [*:0]const u8 = @ptrCast(ptr);
+    qjs_runtime.callGlobal(name_z);
+    return 0;
+}
+
+/// __callJSReturn(name) → call a global JS function by name and bridge the result to Lua.
+fn hostCallJSReturn(L: ?*lua.lua_State) callconv(.c) c_int {
+    var len: usize = 0;
+    const ptr = lua.lua_tolstring(L, 1, &len);
+    if (ptr == null or len == 0) {
+        lua.lua_pushnil(L);
+        return 1;
+    }
+    const name_z: [*:0]const u8 = @ptrCast(ptr);
+    if (!qjs_runtime.callGlobalReturnToLua(name_z)) {
+        lua.lua_pushnil(L);
     }
     return 1;
 }
@@ -1015,6 +1014,8 @@ pub fn initVM() void {
         .{ .name = "__declareChildren", .func = &hostDeclareChildren },
         .{ .name = "__clearLuaNodes", .func = &hostClearLuaNodes },
         .{ .name = "__eval", .func = &hostEval },
+        .{ .name = "__callJS", .func = &hostCallJS },
+        .{ .name = "__callJSReturn", .func = &hostCallJSReturn },
         .{ .name = "__syncToJS", .func = &hostSyncToJS },
     };
 

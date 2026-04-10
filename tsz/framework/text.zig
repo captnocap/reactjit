@@ -56,6 +56,15 @@ fn decodeUtf8(bytes: []const u8) Utf8Char {
     }
 }
 
+fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
+    if (i >= text.len) return 0;
+    if (text[i] == 0x01) return 1;
+    if (text[i] != '\\') return 0;
+    if (i + 1 < text.len and text[i + 1] == '1') return 2;
+    if (i + 3 < text.len and text[i + 1] == 'x' and text[i + 2] == '0' and text[i + 3] == '1') return 4;
+    return 0;
+}
+
 // ── Color Span (for syntax highlighting) ─────────────────────────────────────
 
 pub const ColorSpan = struct {
@@ -582,9 +591,10 @@ pub const TextEngine = struct {
             const word_start = i;
             var word_width: f32 = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
-                if (text[i] == 0x01) {
+                const sentinel_len = inlineGlyphSentinelLen(text, i);
+                if (sentinel_len > 0) {
                     word_width += @floatFromInt(size_px);
-                    i += 1;
+                    i += sentinel_len;
                     continue;
                 }
                 const ch = decodeUtf8(text[i..]);
@@ -631,10 +641,11 @@ pub const TextEngine = struct {
         var i: usize = 0;
         while (i < text.len) {
             // Inline glyph sentinel — occupies fontSize×fontSize square
-            if (text[i] == 0x01) {
+            const sentinel_len = inlineGlyphSentinelLen(text, i);
+            if (sentinel_len > 0) {
                 width += @floatFromInt(size_px);
                 char_count += 1;
-                i += 1;
+                i += sentinel_len;
                 continue;
             }
             const ch = decodeUtf8(text[i..]);
@@ -759,7 +770,8 @@ pub const TextEngine = struct {
             var word_w: f32 = 0;
             var char_count: usize = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
-                if (text[i] == 0x01) { word_w += @floatFromInt(size_px); char_count += 1; i += 1; continue; }
+                const sentinel_len = inlineGlyphSentinelLen(text, i);
+                if (sentinel_len > 0) { word_w += @floatFromInt(size_px); char_count += 1; i += sentinel_len; continue; }
                 const ch = decodeUtf8(text[i..]);
                 word_w += self.cpAdvance(ch.codepoint, size_px);
                 char_count += 1;
@@ -790,6 +802,17 @@ pub const TextEngine = struct {
         var i: usize = 0;
         var char_count: usize = 0;
         while (i < text.len) {
+            const sentinel_len = inlineGlyphSentinelLen(text, i);
+            if (sentinel_len > 0) {
+                var adv: f32 = @floatFromInt(size_px);
+                if (char_count > 0) adv += letter_spacing;
+                if (pen + adv > avail) break;
+                pen += adv;
+                i += sentinel_len;
+                char_count += 1;
+                last_ok = i;
+                continue;
+            }
             const ch = decodeUtf8(text[i..]);
             var adv: f32 = 0;
             if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
@@ -840,7 +863,16 @@ pub const TextEngine = struct {
         const baseline_y = y + lm.ascent;
 
         var i: usize = 0;
+        var char_count: usize = 0;
         while (i < text.len) {
+            const sentinel_len = inlineGlyphSentinelLen(text, i);
+            if (sentinel_len > 0) {
+                pen_x += @floatFromInt(size_px);
+                if (char_count > 0 or i + sentinel_len < text.len) pen_x += letter_spacing;
+                i += sentinel_len;
+                char_count += 1;
+                continue;
+            }
             const ch = decodeUtf8(text[i..]);
             if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 if (g.texture) |tex| {
@@ -875,9 +907,10 @@ pub const TextEngine = struct {
                     if (self.renderer) |r| _ = c.SDL_RenderTexture(r, tex, null, &dst);
                 }
                 pen_x += @floatFromInt(g.advance);
-                pen_x += letter_spacing;
             }
+            if (char_count > 0 or i + ch.len < text.len) pen_x += letter_spacing;
             i += ch.len;
+            char_count += 1;
         }
     }
 

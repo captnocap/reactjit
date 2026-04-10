@@ -9,6 +9,8 @@ pub const state_mod = @import("state.zig");
 pub const engine_mod = @import("engine.zig");
 pub const qjs_runtime_mod = @import("qjs_runtime.zig");
 pub const luajit_runtime_mod = @import("luajit_runtime.zig");
+// NOTE: llama.cpp symbols are in a separate libllama_ffi.so, not in the engine.
+// Carts that use llama FFI link it via scripts/build auto-detection.
 
 // ── State C-ABI exports ─────────────────────────────────────────────
 

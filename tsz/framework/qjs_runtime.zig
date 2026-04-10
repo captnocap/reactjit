@@ -37,6 +37,14 @@ const qjs = if (HAS_QUICKJS) @cImport({
 };
 const QJS_UNDEFINED = if (HAS_QUICKJS) (qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 }) else qjs.JSValue{};
 
+fn jsBoolValue(val: bool) qjs.JSValue {
+    if (comptime !HAS_QUICKJS) return qjs.JSValue{};
+    return qjs.JSValue{
+        .u = .{ .int32 = if (val) 1 else 0 },
+        .tag = qjs.JS_TAG_BOOL,
+    };
+}
+
 var g_qjs_rt: ?*qjs.JSRuntime = null;
 var g_qjs_ctx: ?*qjs.JSContext = null;
 var g_text_engine: ?*TextEngine = null;
@@ -2174,9 +2182,9 @@ pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
     return "";
 }
 
-/// Sync a scalar JS variable to a Lua global of the same name.
-/// Reads the JS value via eval, then sets the Lua global using luajit_runtime.
-/// Handles: string, number, boolean. Arrays/objects are skipped (use evalLuaMapData).
+/// Sync a JS variable to a Lua global of the same name.
+/// Reads the JS value via eval, then pushes the full converted value into Lua.
+/// Arrays/objects use the same direct walker as evalLuaMapData.
 pub fn syncScalarToLua(var_name: [*:0]const u8) void {
     if (comptime !HAS_QUICKJS) return;
     const ctx = g_qjs_ctx orelse return;
@@ -2188,37 +2196,12 @@ pub fn syncScalarToLua(var_name: [*:0]const u8) void {
     const name_span = std.mem.span(var_name);
     if (name_span.len == 0) return;
 
-    // Eval the JS variable name to get its value
     const r = qjs.JS_Eval(ctx, name_span.ptr, name_span.len, "<sync>", 0);
     defer qjs.JS_FreeValue(ctx, r);
     if (qjs.JS_IsException(r)) return;
 
-    // Push the value type to Lua
-    if (qjs.JS_IsNumber(r)) {
-        var dval: f64 = 0;
-        _ = qjs.JS_ToFloat64(ctx, &dval, r);
-        _ = lua.lua_getglobal(L, "_G");
-        lua.lua_pushnumber(L, dval);
-        lua.lua_setfield(L, -2, var_name);
-        lua.lua_pop(L, 1);
-    } else if (qjs.JS_IsBool(r)) {
-        const bval = qjs.JS_ToBool(ctx, r);
-        _ = lua.lua_getglobal(L, "_G");
-        lua.lua_pushboolean(L, if (bval != 0) 1 else 0);
-        lua.lua_setfield(L, -2, var_name);
-        lua.lua_pop(L, 1);
-    } else {
-        // String or other — convert to string
-        const s = qjs.JS_ToCString(ctx, r);
-        if (s) |str| {
-            defer qjs.JS_FreeCString(ctx, s);
-            const span = std.mem.span(str);
-            _ = lua.lua_getglobal(L, "_G");
-            _ = lua.lua_pushlstring(L, span.ptr, span.len);
-            lua.lua_setfield(L, -2, var_name);
-            lua.lua_pop(L, 1);
-        }
-    }
+    pushJSValueToLua(ctx, L, r, 0);
+    lua.lua_setglobal(L, var_name);
 }
 
 /// Sync a Lua global variable to a QJS global variable.
@@ -2242,21 +2225,68 @@ pub fn syncLuaToQjs(var_name: [*:0]const u8) void {
     const global = qjs.JS_GetGlobalObject(ctx);
     defer qjs.JS_FreeValue(ctx, global);
 
-    if (lua.lua_type(L, -1) == 3) { // LUA_TNUMBER — exact type check, not coercible
-        const val = lua.lua_tonumber(L, -1);
-        const js_val = qjs.JS_NewFloat64(ctx, val);
-        _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
-    } else if (lua.lua_type(L, -1) == 1) { // LUA_TBOOLEAN
-        const js_val = if (lua.lua_toboolean(L, -1) != 0) qjs.JS_NewFloat64(ctx, 1) else qjs.JS_NewFloat64(ctx, 0);
-        _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
-    } else if (lua.lua_isstring(L, -1) != 0) {
-        var len: usize = 0;
-        const ptr = lua.lua_tolstring(L, -1, &len);
-        if (ptr != null) {
-            const js_val = qjs.JS_NewStringLen(ctx, @ptrCast(ptr), len);
-            _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
+    const js_val = pushLuaValueToJS(ctx, L, -1, 0);
+    _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
+}
+
+/// Evaluate a JS expression and push the converted value onto the Lua stack.
+/// Returns false on error or when either VM is unavailable.
+pub fn evalToLua(code: []const u8) bool {
+    if (comptime !HAS_QUICKJS) return false;
+    const ctx = g_qjs_ctx orelse return false;
+    if (code.len == 0) return false;
+
+    const luajit = @import("luajit_runtime.zig");
+    const L = luajit.g_lua orelse return false;
+
+    const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<expr>", 0);
+    defer qjs.JS_FreeValue(ctx, r);
+    if (qjs.JS_IsException(r)) {
+        const ex = qjs.JS_GetException(ctx);
+        defer qjs.JS_FreeValue(ctx, ex);
+        const es = qjs.JS_ToCString(ctx, ex);
+        if (es) |s| {
+            std.debug.print("[evalToLua error] {s}: {s}\n", .{ code, s });
+            qjs.JS_FreeCString(ctx, s);
         }
+        return false;
     }
+
+    pushJSValueToLua(ctx, L, r, 0);
+    return true;
+}
+
+/// Call a global JS function by name and push the converted result onto the Lua stack.
+/// Returns false when the function is missing, not callable, or throws.
+pub fn callGlobalReturnToLua(name: [*:0]const u8) bool {
+    if (comptime !HAS_QUICKJS) return false;
+    const ctx = g_qjs_ctx orelse return false;
+
+    const luajit = @import("luajit_runtime.zig");
+    const L = luajit.g_lua orelse return false;
+
+    const global = qjs.JS_GetGlobalObject(ctx);
+    defer qjs.JS_FreeValue(ctx, global);
+
+    const func = qjs.JS_GetPropertyStr(ctx, global, name);
+    defer qjs.JS_FreeValue(ctx, func);
+    if (qjs.JS_IsUndefined(func) or !qjs.JS_IsFunction(ctx, func)) return false;
+
+    const r = qjs.JS_Call(ctx, func, global, 0, null);
+    defer qjs.JS_FreeValue(ctx, r);
+    if (qjs.JS_IsException(r)) {
+        const ex = qjs.JS_GetException(ctx);
+        defer qjs.JS_FreeValue(ctx, ex);
+        const es = qjs.JS_ToCString(ctx, ex);
+        if (es) |s| {
+            std.debug.print("[callGlobalReturnToLua error] {s}: {s}\n", .{ std.mem.span(name), s });
+            qjs.JS_FreeCString(ctx, s);
+        }
+        return false;
+    }
+
+    pushJSValueToLua(ctx, L, r, 0);
+    return true;
 }
 
 /// Evaluate a JS expression and pass the result directly to LuaJIT as
@@ -2439,6 +2469,103 @@ fn pushJSValueToLua(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.l
 
     // Unknown tag — push nil
     lua.lua_pushnil(L);
+}
+
+fn luaAbsIndex(L: *@import("luajit_runtime.zig").lua.lua_State, idx: c_int) c_int {
+    return if (idx > 0) idx else @as(c_int, luaAbsTop(L)) + idx + 1;
+}
+
+fn luaAbsTop(L: *@import("luajit_runtime.zig").lua.lua_State) c_int {
+    const lua = @import("luajit_runtime.zig").lua;
+    return lua.lua_gettop(L);
+}
+
+fn luaTableIsEmpty(L: *@import("luajit_runtime.zig").lua.lua_State, idx: c_int) bool {
+    const lua = @import("luajit_runtime.zig").lua;
+    const abs_idx = luaAbsIndex(L, idx);
+    lua.lua_pushnil(L);
+    if (lua.lua_next(L, abs_idx) != 0) {
+        lua.lua_pop(L, 2);
+        return false;
+    }
+    return true;
+}
+
+/// Convert a Lua value to a QuickJS JSValue via direct recursive construction.
+/// Matches love2d/lua/bridge_quickjs.lua:luaToJSValue.
+fn pushLuaValueToJS(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.lua_State, idx: c_int, depth: u32) qjs.JSValue {
+    const lua = @import("luajit_runtime.zig").lua;
+    if (depth > 32) return QJS_UNDEFINED;
+
+    const abs_idx = luaAbsIndex(L, idx);
+    const ty = lua.lua_type(L, abs_idx);
+
+    if (ty == lua.LUA_TSTRING) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, abs_idx, &len);
+        if (ptr == null) return QJS_UNDEFINED;
+        return qjs.JS_NewStringLen(ctx, @ptrCast(ptr), len);
+    }
+
+    if (ty == lua.LUA_TNUMBER) {
+        const val = lua.lua_tonumber(L, abs_idx);
+        const truncated = @trunc(val);
+        if (val == truncated and truncated >= -2147483648 and truncated <= 2147483647) {
+            return qjs.JS_NewInt32(ctx, @intFromFloat(truncated));
+        }
+        return qjs.JS_NewFloat64(ctx, val);
+    }
+
+    if (ty == lua.LUA_TBOOLEAN) {
+        return jsBoolValue(lua.lua_toboolean(L, abs_idx) != 0);
+    }
+
+    if (ty == lua.LUA_TNIL) {
+        return QJS_UNDEFINED;
+    }
+
+    if (ty == lua.LUA_TTABLE) {
+        lua.lua_rawgeti(L, abs_idx, 1);
+        const has_first = !lua.lua_isnil(L, -1);
+        lua.lua_pop(L, 1);
+        const is_empty = luaTableIsEmpty(L, abs_idx);
+
+        if (has_first or is_empty) {
+            const len = lua.lua_objlen(L, abs_idx);
+            const arr = qjs.JS_NewArray(ctx);
+            for (0..len) |i| {
+                lua.lua_rawgeti(L, abs_idx, @intCast(i + 1));
+                const child = pushLuaValueToJS(ctx, L, -1, depth + 1);
+                _ = qjs.JS_SetPropertyUint32(ctx, arr, @intCast(i), child);
+                lua.lua_pop(L, 1);
+            }
+            return arr;
+        }
+
+        const obj = qjs.JS_NewObject(ctx);
+        lua.lua_pushnil(L);
+        while (lua.lua_next(L, abs_idx) != 0) {
+            lua.lua_pushvalue(L, -2);
+            var key_len: usize = 0;
+            const key_ptr = lua.lua_tolstring(L, -1, &key_len);
+            if (key_ptr != null) {
+                var key_buf = std.heap.page_allocator.alloc(u8, key_len + 1) catch {
+                    lua.lua_pop(L, 3);
+                    return obj;
+                };
+                defer std.heap.page_allocator.free(key_buf);
+                @memcpy(key_buf[0..key_len], @as([*]const u8, @ptrCast(key_ptr))[0..key_len]);
+                key_buf[key_len] = 0;
+
+                const child = pushLuaValueToJS(ctx, L, -2, depth + 1);
+                _ = qjs.JS_SetPropertyStr(ctx, obj, @ptrCast(key_buf[0..key_len :0]), child);
+            }
+            lua.lua_pop(L, 2);
+        }
+        return obj;
+    }
+
+    return QJS_UNDEFINED;
 }
 
 pub fn tick() void {

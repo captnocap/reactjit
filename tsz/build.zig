@@ -140,6 +140,39 @@ pub fn build(b: *std.Build) void {
         cart_fast_step.dependOn(&cart_fast_install.step);
     }
 
+    // ── llama.cpp as a standalone shared library ─────────────────
+    // Only carts that use llama FFI (ffi.C.llama_*) link this .so.
+    // Built on demand by scripts/build when it detects llama usage.
+    {
+        const llama_dep = b.dependency("llama_cpp_zig", .{
+            .target = target,
+            .optimize = .ReleaseFast,
+            .backend = .vulkan,
+        });
+        const llama_artifact = llama_dep.artifact("llama_cpp");
+
+        // Wrap the llama_cpp static lib into a shared library that
+        // exports all symbols LuaJIT ffi.C needs at runtime.
+        const llama_so = b.addLibrary(.{
+            .linkage = .dynamic,
+            .name = "llama_ffi",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("framework/llama_exports.zig"),
+                .target = target,
+                .optimize = .ReleaseFast,
+            }),
+        });
+        llama_so.addObjectFile(llama_artifact.getEmittedBin());
+        llama_so.linkLibrary(llama_artifact);
+        llama_so.linkSystemLibrary("vulkan");
+        llama_so.linkLibC();
+        llama_so.linkLibCpp();
+
+        const llama_so_install = b.addInstallArtifact(llama_so, .{});
+        const llama_so_step = b.step("llama-so", "Build llama.cpp as a standalone .so (for carts that use llama FFI)");
+        llama_so_step.dependOn(&llama_so_install.step);
+    }
+
     // ── Dev shell (hot-reload host — loads app .so at runtime) ───
     // Always build dev shell in ReleaseFast — Debug mode tanks layout perf
     const dev_shell_optimize = if (optimize == .Debug) .ReleaseFast else optimize;
@@ -790,6 +823,10 @@ fn addCoreLib(
     // ── Vello CPU ──
     lib.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
+    // NOTE: llama.cpp is NOT linked into the engine. It ships as a separate
+    // libllama_ffi.so, built via `zig build llama-so`, and only linked into
+    // carts that use llama FFI (detected by scripts/build at compile time).
+
     if (os == .linux) {
         if (sysroot) |sr| {
             lib.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
@@ -936,6 +973,10 @@ fn addAppExe(
 
         // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
         exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
+
+        // NOTE: llama.cpp is NOT linked into app executables. It ships as a
+        // separate libllama_ffi.so, built via `zig build llama-so`, and only
+        // linked into carts that use llama FFI (detected by scripts/build).
 
         if (os == .linux) {
             if (sysroot) |sr| {
