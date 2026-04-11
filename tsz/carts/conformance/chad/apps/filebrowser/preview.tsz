@@ -1,9 +1,5 @@
 // File preview page — displays file contents or metadata.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from '../../libs/fs/fs'
-
 <preview page>
   <var>
     set_filePath is ''

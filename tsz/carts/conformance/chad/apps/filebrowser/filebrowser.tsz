@@ -1,15 +1,10 @@
 // CONFORMANCE: File Browser — Finder/Nautilus-style app.
 // Proves: fs lib integration, tree structure, <switch> on file type, breadcrumbs, components.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from '../../libs/fs/fs'
-from './file_row.c'
-
 <fileBrowser app>
   <var>
     pages is page array
-    set_active is 'browse'
+    set_active
   </var>
 
   <pages>
@@ -17,6 +12,9 @@ from './file_row.c'
     preview
   </pages>
   <functions>
+    boot:
+      set_active is browse
+
     goTo requires item:
       set_active is item
   </functions>

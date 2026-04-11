@@ -1,10 +1,5 @@
 // Browse page — directory listing, navigation, file operations.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from '../../libs/fs/fs'
-from './file_row.c'
-
 <browse page>
   <var>
     set_currentPath is '/home'

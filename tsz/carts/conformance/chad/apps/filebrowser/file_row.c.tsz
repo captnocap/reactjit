@@ -1,9 +1,6 @@
 // File row component — displays a single file/directory entry.
 // Proves: component with multiple callback props, <if>/<else> in return.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <fileRow component>
   <props>
     entry
