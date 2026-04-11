@@ -31,6 +31,7 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - [x] Hard-fail on `<timer>` in chad lane with migration hint to `name every N:`.
 - [x] Hard-fail on uppercase intent tag variants in chad lane.
 - [x] Add diagnostics for backend-language leakage inside hatched intent functions.
+- [x] Hard-fail on `import`/`from` in intent/chad syntax files.
 
 ## Phase 1: Conformance Source Cleanup
 - [x] Rewrite `tsz/carts/conformance/chad/apps/` to dictionary-correct syntax.
@@ -45,6 +46,7 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - [ ] Consolidate shared intent function/body lowering for app/page/widget/component/lib.
 - [x] Remove chad-lane legacy compatibility behavior not in dictionary.
 - [-] Ensure parser behavior is driven by top-most block type + allowed child blocks.
+- [x] In intent/chad mode, merge ambient `.tsz` sources from the entry root tree (entry file last), file-name agnostic.
 
 ## Phase 3: Hatch Semantics And Parity
 - [ ] Keep `<script>` as router surface (not JS-only).
@@ -91,3 +93,4 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - Phase 0 implementation lives in `tsz/compiler/smith/lanes/chad/strict_validator.js` and is wired in `tsz/compiler/smith/lanes/chad.js`.
 - Phase 1 app rewrite removed `<state>` and legacy `<For each=...>` across `tsz/carts/conformance/chad/apps/`.
 - Phase 2 in progress: chad lane now ignores legacy `<state>/<timer>` plumbing and shared `<var>` parsing canonicalizes `set_` declarations.
+- Forge now enforces import bans for intent/chad syntax files and switches intent entries to ambient root-tree source merge mode.

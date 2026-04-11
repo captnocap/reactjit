@@ -17,7 +17,7 @@ const smith = @import("smith_bridge.zig");
 // Smith JS source — generated bundle from compiler/smith_LOAD_ORDER.txt
 const SMITH_JS = @embedFile("dist/smith.bundle.js");
 
-const MAX_IMPORTS = 64;
+const MAX_IMPORTS = 512;
 const Alloc = std.heap.page_allocator;
 const IntentImportError = error{IntentImportsForbidden};
 
@@ -231,6 +231,121 @@ fn findFirstImportLine(source: []const u8) ?usize {
     return null;
 }
 
+fn enforceIntentNoImports(
+    file_path: []const u8,
+    source: []const u8,
+    known_import_count: u32,
+) IntentImportError!void {
+    if (!isIntentSyntaxSource(source)) return;
+    const first_import_line = findFirstImportLine(source);
+    if (known_import_count > 0 or first_import_line != null) {
+        const line_no = first_import_line orelse 1;
+        std.debug.print(
+            "[forge] Intent syntax import violation: {s}:{d}\n",
+            .{ file_path, line_no },
+        );
+        std.debug.print(
+            "[forge] Import statements are forbidden in intent/chad syntax files. Ambient namespace is required.\n",
+            .{},
+        );
+        return error.IntentImportsForbidden;
+    }
+}
+
+fn appendClassifiedSource(
+    file_path: []const u8,
+    source: []const u8,
+    component_buf: *std.ArrayListUnmanaged(u8),
+    cls_buf: *std.ArrayListUnmanaged(u8),
+    script_buf: *std.ArrayListUnmanaged(u8),
+) void {
+    const class = classifyFile(file_path);
+    switch (class) {
+        .classifier => {
+            cls_buf.appendSlice(Alloc, source) catch {};
+            cls_buf.append(Alloc, '\n') catch {};
+        },
+        .script => {
+            script_buf.appendSlice(Alloc, source) catch {};
+            script_buf.append(Alloc, '\n') catch {};
+        },
+        .component => {
+            const stripped = stripAppStub(source);
+            component_buf.appendSlice(Alloc, stripped) catch {};
+            component_buf.append(Alloc, '\n') catch {};
+        },
+        .unknown => {
+            component_buf.appendSlice(Alloc, source) catch {};
+            component_buf.append(Alloc, '\n') catch {};
+        },
+    }
+}
+
+fn mergeIntentAmbientTree(
+    entry_path: []const u8,
+    entry_source: []const u8,
+    visited: *[MAX_IMPORTS][]const u8,
+    visited_count: *u32,
+    component_buf: *std.ArrayListUnmanaged(u8),
+    cls_buf: *std.ArrayListUnmanaged(u8),
+    script_buf: *std.ArrayListUnmanaged(u8),
+) IntentImportError!void {
+    const root_dir = std.fs.path.dirname(entry_path) orelse ".";
+    var root = std.fs.cwd().openDir(root_dir, .{ .iterate = true }) catch |err| {
+        std.debug.print("[forge:ambient] failed to open root dir {s}: {s}\n", .{ root_dir, @errorName(err) });
+        return;
+    };
+    defer root.close();
+
+    var walker = root.walk(Alloc) catch |err| {
+        std.debug.print("[forge:ambient] failed to walk root dir {s}: {s}\n", .{ root_dir, @errorName(err) });
+        return;
+    };
+    defer walker.deinit();
+
+    var paths: std.ArrayListUnmanaged([]const u8) = .{};
+    defer paths.deinit(Alloc);
+
+    while (walker.next() catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.path, ".tsz")) continue;
+        const full_path = std.fmt.allocPrint(Alloc, "{s}/{s}", .{ root_dir, entry.path }) catch continue;
+        if (std.mem.eql(u8, full_path, entry_path)) continue;
+        paths.append(Alloc, full_path) catch {};
+    }
+
+    std.mem.sort([]const u8, paths.items, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.lessThan);
+
+    for (paths.items) |path| {
+        // 16 MB cap so large carts/components can still be merged.
+        const src = std.fs.cwd().readFileAlloc(Alloc, path, 16 * 1024 * 1024) catch |err| {
+            std.debug.print("[forge:ambient] READ-FAILED: {s} ({s})\n", .{ path, @errorName(err) });
+            continue;
+        };
+        var imp_paths: [MAX_IMPORTS][]const u8 = undefined;
+        const imp_count = findImportPaths(src, &imp_paths);
+        try enforceIntentNoImports(path, src, imp_count);
+        if (visited_count.* < MAX_IMPORTS) {
+            visited.*[visited_count.*] = path;
+            visited_count.* += 1;
+        }
+        appendClassifiedSource(path, src, component_buf, cls_buf, script_buf);
+    }
+
+    var entry_imp_paths: [MAX_IMPORTS][]const u8 = undefined;
+    const entry_imp_count = findImportPaths(entry_source, &entry_imp_paths);
+    try enforceIntentNoImports(entry_path, entry_source, entry_imp_count);
+    if (visited_count.* < MAX_IMPORTS) {
+        visited.*[visited_count.*] = entry_path;
+        visited_count.* += 1;
+    }
+    appendClassifiedSource(entry_path, entry_source, component_buf, cls_buf, script_buf);
+}
+
 /// Strip `function App() { ... }` test stubs from component files.
 /// Component files often have a standalone App() for testing. When merged into
 /// a larger app, these stubs confuse the parser (multiple App definitions,
@@ -275,22 +390,7 @@ fn mergeImports(
     // Find import paths in this file
     var paths: [MAX_IMPORTS][]const u8 = undefined;
     const path_count = findImportPaths(source, &paths);
-    const is_intent_source = isIntentSyntaxSource(source);
-    if (is_intent_source) {
-        const first_import_line = findFirstImportLine(source);
-        if (path_count > 0 or first_import_line != null) {
-            const line_no = first_import_line orelse 1;
-            std.debug.print(
-                "[forge] Intent syntax import violation: {s}:{d}\n",
-                .{ file_path, line_no },
-            );
-            std.debug.print(
-                "[forge] Import statements are forbidden in intent/chad syntax files. Ambient namespace is required.\n",
-                .{},
-            );
-            return error.IntentImportsForbidden;
-        }
-    }
+    try enforceIntentNoImports(file_path, source, path_count);
 
     std.debug.print("[forge:merge] {s} class={s} imports={d}\n", .{ file_path, @tagName(classifyFile(file_path)), path_count });
 
@@ -299,19 +399,20 @@ fn mergeImports(
             std.debug.print("[forge:merge]   UNRESOLVED: {s}\n", .{raw_path});
             continue;
         };
-        const imp_source = std.fs.cwd().readFileAlloc(Alloc, resolved, 1024 * 1024) catch continue;
+        // 16 MB cap so auto-generated icon packs and other large components can link.
+        const imp_source = std.fs.cwd().readFileAlloc(Alloc, resolved, 16 * 1024 * 1024) catch |err| {
+            std.debug.print("[forge:merge]   READ-FAILED: {s} ({s})\n", .{ resolved, @errorName(err) });
+            continue;
+        };
         const class = classifyFile(resolved);
 
         switch (class) {
             .classifier => {
                 // Recursively resolve imports from classifier files (e.g. .cls imports .tcls)
                 try mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
-                cls_buf.appendSlice(Alloc, imp_source) catch {};
-                cls_buf.append(Alloc, '\n') catch {};
             },
             .script => {
-                script_buf.appendSlice(Alloc, imp_source) catch {};
-                script_buf.append(Alloc, '\n') catch {};
+                appendClassifiedSource(resolved, imp_source, component_buf, cls_buf, script_buf);
             },
             .component, .unknown => {
                 // Recursively resolve this file's imports first (depth-first)
@@ -320,20 +421,7 @@ fn mergeImports(
         }
     }
 
-    // Append this file's source to component_buf (after its deps)
-    // For component files, strip `function App() { ... }` test stubs that would
-    // pollute the merged source and confuse the App-finding logic in Smith.
-    const this_class = classifyFile(file_path);
-    if (this_class == .component) {
-        // Strip function App() test stubs from component files only
-        const stripped = stripAppStub(source);
-        component_buf.appendSlice(Alloc, stripped) catch {};
-        component_buf.append(Alloc, '\n') catch {};
-    } else if (this_class == .unknown) {
-        // Main entry file — keep function App() intact
-        component_buf.appendSlice(Alloc, source) catch {};
-        component_buf.append(Alloc, '\n') catch {};
-    }
+    appendClassifiedSource(file_path, source, component_buf, cls_buf, script_buf);
 }
 
 pub fn main() !void {
@@ -423,12 +511,22 @@ pub fn main() !void {
     var cls_buf: std.ArrayListUnmanaged(u8) = .{};
     var script_buf: std.ArrayListUnmanaged(u8) = .{};
 
-    mergeImports(input_path, source, &visited, &visited_count, &component_buf, &cls_buf, &script_buf) catch |err| {
-        if (err == error.IntentImportsForbidden) {
-            std.process.exit(1);
-        }
-        return err;
-    };
+    const intent_ambient_mode = isIntentSyntaxSource(source);
+    if (intent_ambient_mode) {
+        mergeIntentAmbientTree(input_path, source, &visited, &visited_count, &component_buf, &cls_buf, &script_buf) catch |err| {
+            if (err == error.IntentImportsForbidden) {
+                std.process.exit(1);
+            }
+            return err;
+        };
+    } else {
+        mergeImports(input_path, source, &visited, &visited_count, &component_buf, &cls_buf, &script_buf) catch |err| {
+            if (err == error.IntentImportsForbidden) {
+                std.process.exit(1);
+            }
+            return err;
+        };
+    }
 
     // Build merged source: component deps first, then main app source
     // (mergeImports already added the main source to component_buf via the recursive call)
@@ -443,7 +541,13 @@ pub fn main() !void {
         if (c == '\n') src_lines += 1;
     }
     std.debug.print("[forge] Lexed {d} tokens from {s}", .{ lexer.count, input_path });
-    if (visited_count > 1) std.debug.print(" (+{d} imports)", .{visited_count - 1});
+    if (visited_count > 1) {
+        if (intent_ambient_mode) {
+            std.debug.print(" (+{d} ambient files)", .{visited_count - 1});
+        } else {
+            std.debug.print(" (+{d} imports)", .{visited_count - 1});
+        }
+    }
     std.debug.print("\n", .{});
     std.debug.print("[forge] source_lines={d} merged_bytes={d}\n", .{ src_lines, merged_source.len });
 
