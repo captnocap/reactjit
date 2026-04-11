@@ -1,14 +1,10 @@
 // CONFORMANCE: Chat — Slack/Discord-style app.
 // Proves: app structure, websocket <during connected>, components with callbacks, cross-lib state.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from '../../libs/net/net'
-
 <chat app>
   <var>
     pages is page array
-    set_active is 'channels'
+    set_active
     set_connected is false
     set_username is 'user'
   </var>
@@ -19,6 +15,7 @@ from '../../libs/net/net'
   </pages>
   <functions>
     boot:
+      set_active is channels
       net.socket.connect('wss://chat.example.com')
       set_connected is true
 

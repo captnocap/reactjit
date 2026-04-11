@@ -1,8 +1,6 @@
 // Message row component — displays a single chat message.
 // Proves: component with props, no caller scope access, classifier usage.
 
-from '../../theme.cls'
-
 <messageRow component>
   <props>
     message

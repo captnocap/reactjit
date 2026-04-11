@@ -1,14 +1,9 @@
 // Chat channels page — message list, input, channel switching.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from '../../libs/net/net'
-from './message_row.c'
-
 <channels page>
   <var>
     channelList is objects
-    set_activeChannel is 'general'
+    set_activeChannel
     set_messages is objects
     set_input is ''
     set_sending is false
@@ -29,6 +24,9 @@ from './message_row.c'
     id: 5, channel: dev, author: alice, text: Will review after lunch, time: '10:16 AM'
   </messages>
   <functions>
+    boot:
+      set_activeChannel is general
+
     switchChannel requires item:
       set_activeChannel is item.id
       item.unread is 0

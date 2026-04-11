@@ -1,13 +1,9 @@
 // Direct messages page — 1:1 conversations.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from './message_row.c'
-
 <direct page>
   <var>
     contacts is objects
-    set_activeContact is 'alice'
+    set_activeContact
     set_messages is objects
     set_input is ''
   </var>
@@ -24,6 +20,9 @@ from './message_row.c'
     id: 3, contact: bob, author: bob, text: PR looks good, time: '10:30 AM'
   </messages>
   <functions>
+    boot:
+      set_activeContact is alice
+
     selectContact requires item:
       set_activeContact is item.id
 
