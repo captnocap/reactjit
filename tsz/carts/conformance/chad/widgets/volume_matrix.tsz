@@ -158,6 +158,12 @@
     color is theme-textSecondary
   </C.BtnLabelSmall>
 
+  <C.Button is Pressable>
+    padding is theme-spaceSm
+    borderRadius is theme-radiusSm
+    alignItems exact center
+  </C.Button>
+
   <var>
     channelCount exact 8
     set_channels is objects
@@ -237,9 +243,9 @@
       <C.Row>
         <for channels>
           <C.Card>
-            <Pressable selectChannel>
+            <C.Button selectChannel>
               <C.Subtitle>{item.label}</C.Subtitle>
-            </Pressable>
+            </C.Button>
 
             <if item.muted>
               <C.DotRed />

@@ -111,12 +111,12 @@
 
       // ── Toolbar ──
       <C.Row>
-        <C.BtnSmall onPress=goUp><C.BtnLabelSmall>Up</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall goUp><C.BtnLabelSmall>Up</C.BtnLabelSmall></C.BtnSmall>
         <C.Spacer />
         <C.Label>Sort:</C.Label>
-        <C.BtnSmall onPress=sortByName><C.BtnLabelSmall>Name</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=sortBySize><C.BtnLabelSmall>Size</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=sortByType><C.BtnLabelSmall>Type</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall sortByName><C.BtnLabelSmall>Name</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall sortBySize><C.BtnLabelSmall>Size</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall sortByType><C.BtnLabelSmall>Type</C.BtnLabelSmall></C.BtnSmall>
       </C.Row>
 
       <during loading>

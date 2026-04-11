@@ -41,18 +41,18 @@
   return(
     <C.TableRow>
       <C.TableCell>
-        <Pressable onPress=navigate>
+        <C.Button navigate>
           <C.Row>
             <C.Body>{icon}</C.Body>
             <C.TableText>{entry.name}</C.TableText>
           </C.Row>
-        </Pressable>
+        </C.Button>
       </C.TableCell>
       <C.TableCell>
         <C.Hint>{sizeLabel}</C.Hint>
       </C.TableCell>
       <C.TableCell>
-        <C.BtnSmall onPress=remove><C.BtnLabelSmall>Delete</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall remove><C.BtnLabelSmall>Delete</C.BtnLabelSmall></C.BtnSmall>
       </C.TableCell>
     </C.TableRow>
   )

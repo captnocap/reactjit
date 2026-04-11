@@ -96,7 +96,7 @@
         <C.InputWrap>
           <TextInput value={input} onChange=set_input placeholder='New card...' />
         </C.InputWrap>
-        <C.Btn onPress=addCard><C.BtnLabel>Add</C.BtnLabel></C.Btn>
+        <C.Btn addCard><C.BtnLabel>Add</C.BtnLabel></C.Btn>
       </C.Row>
 
       <C.Row>
@@ -112,9 +112,9 @@
               <C.KanbanTitle>{item.title}</C.KanbanTitle>
               <C.Hint>{item.priority}</C.Hint>
               <C.Row>
-                <C.BtnSmall onPress=moveToProgress><C.BtnLabelSmall>Start</C.BtnLabelSmall></C.BtnSmall>
-                <C.BtnSmall onPress=editCard><C.BtnLabelSmall>Edit</C.BtnLabelSmall></C.BtnSmall>
-                <C.BtnSmall onPress=deleteCard><C.BtnLabelSmall>x</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall moveToProgress><C.BtnLabelSmall>Start</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall editCard><C.BtnLabelSmall>Edit</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall deleteCard><C.BtnLabelSmall>x</C.BtnLabelSmall></C.BtnSmall>
               </C.Row>
             </C.KanbanCard>
           </for>
@@ -132,8 +132,8 @@
               <C.KanbanTitle>{item.title}</C.KanbanTitle>
               <C.Hint>{item.priority}</C.Hint>
               <C.Row>
-                <C.BtnSmall onPress=moveToTodo><C.BtnLabelSmall>Back</C.BtnLabelSmall></C.BtnSmall>
-                <C.BtnSmall onPress=moveToDone><C.BtnLabelSmall>Done</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall moveToTodo><C.BtnLabelSmall>Back</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall moveToDone><C.BtnLabelSmall>Done</C.BtnLabelSmall></C.BtnSmall>
               </C.Row>
             </C.KanbanCard>
           </for>
@@ -150,8 +150,8 @@
             <C.KanbanCard>
               <C.KanbanTitle>{item.title}</C.KanbanTitle>
               <C.Row>
-                <C.BtnSmall onPress=moveToTodo><C.BtnLabelSmall>Reopen</C.BtnLabelSmall></C.BtnSmall>
-                <C.BtnSmall onPress=deleteCard><C.BtnLabelSmall>x</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall moveToTodo><C.BtnLabelSmall>Reopen</C.BtnLabelSmall></C.BtnSmall>
+                <C.BtnSmall deleteCard><C.BtnLabelSmall>x</C.BtnLabelSmall></C.BtnSmall>
               </C.Row>
             </C.KanbanCard>
           </for>

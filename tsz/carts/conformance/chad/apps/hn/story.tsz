@@ -46,9 +46,9 @@
               <C.Row>
                 <C.Mono>{item.author}</C.Mono>
                 <C.Spacer />
-                <Pressable onPress=upvoteComment>
+                <C.Button upvoteComment>
                   <C.Hint>:star:</C.Hint>
-                </Pressable>
+                </C.Button>
               </C.Row>
               <C.Body>{item.text}</C.Body>
             </C.Card>

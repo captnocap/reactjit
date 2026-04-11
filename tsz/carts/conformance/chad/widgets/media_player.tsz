@@ -202,6 +202,11 @@
     color is theme-textSecondary
   </C.BtnLabelSmall>
 
+  <C.Button is Pressable>
+    borderRadius is theme-radiusSm
+    backgroundColor is theme-surface
+  </C.Button>
+
   <C.ProgressTrack is Box>
     height exact 6
     backgroundColor is theme-surface
@@ -344,7 +349,7 @@
           </C.InputWrap>
           <C.Scroll>
             <for visibleTracks>
-              <Pressable selectTrack>
+              <C.Button selectTrack>
                 <C.ListItem>
                   <if item.id exact currentTrack.id>
                     <C.DotGreen />
@@ -357,7 +362,7 @@
                     <C.Hint>{item.artist + ' · ' + formatTime(item.length)}</C.Hint>
                   </C.Col>
                 </C.ListItem>
-              </Pressable>
+              </C.Button>
             </for>
           </C.Scroll>
         </C.Panel>

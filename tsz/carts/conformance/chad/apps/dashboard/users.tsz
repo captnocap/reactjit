@@ -66,10 +66,10 @@
       </C.Row>
 
       <C.Row>
-        <C.BtnSmall onPress=showAll><C.BtnLabelSmall>All</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=showAdmins><C.BtnLabelSmall>Admins</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=showEditors><C.BtnLabelSmall>Editors</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=showViewers><C.BtnLabelSmall>Viewers</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall showAll><C.BtnLabelSmall>All</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall showAdmins><C.BtnLabelSmall>Admins</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall showEditors><C.BtnLabelSmall>Editors</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall showViewers><C.BtnLabelSmall>Viewers</C.BtnLabelSmall></C.BtnSmall>
       </C.Row>
 
       <C.Card>
@@ -92,14 +92,14 @@
               </else>
             </C.TableCell>
             <C.TableCell>
-              <Pressable onPress=toggleActive>
+              <C.Button toggleActive>
                 <if item.active>
                   <C.DotGreen />
                 </if>
                 <else>
                   <C.DotRed />
                 </else>
-              </Pressable>
+              </C.Button>
             </C.TableCell>
           </C.TableRow>
         </for>

@@ -96,7 +96,7 @@
           <C.InputWrap>
             <TextInput value={input} onChange=set_input placeholder='Message...' />
           </C.InputWrap>
-          <C.Btn onPress=sendMessage><C.BtnLabel>:send:</C.BtnLabel></C.Btn>
+          <C.Btn sendMessage><C.BtnLabel>:send:</C.BtnLabel></C.Btn>
         </C.Row>
       </C.Panel>
     </C.Split>

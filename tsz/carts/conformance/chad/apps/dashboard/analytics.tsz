@@ -71,10 +71,10 @@
       </C.Row>
 
       <C.Row>
-        <C.BtnSmall onPress=setPeriodHour><C.BtnLabelSmall>1h</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=setPeriodDay><C.BtnLabelSmall>24h</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=setPeriodWeek><C.BtnLabelSmall>7d</C.BtnLabelSmall></C.BtnSmall>
-        <C.BtnSmall onPress=setPeriodMonth><C.BtnLabelSmall>30d</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall setPeriodHour><C.BtnLabelSmall>1h</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall setPeriodDay><C.BtnLabelSmall>24h</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall setPeriodWeek><C.BtnLabelSmall>7d</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall setPeriodMonth><C.BtnLabelSmall>30d</C.BtnLabelSmall></C.BtnSmall>
       </C.Row>
 
       <C.Row>

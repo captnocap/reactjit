@@ -57,7 +57,7 @@
       <C.Row>
         <C.Title>Front Page</C.Title>
         <C.Spacer />
-        <C.BtnSmall onPress=refresh><C.BtnLabelSmall>:search: Refresh</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall refresh><C.BtnLabelSmall>:search: Refresh</C.BtnLabelSmall></C.BtnSmall>
       </C.Row>
 
       <during loading>
@@ -76,9 +76,9 @@
         <C.Scroll>
           <for stories>
             <C.ListItem>
-              <Pressable onPress=upvote>
+              <C.Button upvote>
                 <C.Mono>:star: {item.points}</C.Mono>
-              </Pressable>
+              </C.Button>
               <C.Col>
                 <C.Body>{item.title}</C.Body>
                 <C.Hint>{storyDomain + ' · ' + item.author + ' · ' + item.comments + ' comments'}</C.Hint>
@@ -88,9 +88,9 @@
         </C.Scroll>
 
         <C.Row>
-          <C.BtnSmall onPress=prevPage><C.BtnLabelSmall>Prev</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall prevPage><C.BtnLabelSmall>Prev</C.BtnLabelSmall></C.BtnSmall>
           <C.Hint>{'Page ' + page}</C.Hint>
-          <C.BtnSmall onPress=nextPage><C.BtnLabelSmall>Next</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall nextPage><C.BtnLabelSmall>Next</C.BtnLabelSmall></C.BtnSmall>
         </C.Row>
       </during>
     </C.Col>

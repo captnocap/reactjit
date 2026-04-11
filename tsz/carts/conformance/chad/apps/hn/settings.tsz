@@ -34,14 +34,14 @@
         <C.Row>
           <C.Label>Stories per page</C.Label>
           <C.Spacer />
-          <C.BtnSmall onPress=fewerStories><C.BtnLabelSmall>-</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall fewerStories><C.BtnLabelSmall>-</C.BtnLabelSmall></C.BtnSmall>
           <C.Mono>{storiesPerPage}</C.Mono>
-          <C.BtnSmall onPress=moreStories><C.BtnLabelSmall>+</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall moreStories><C.BtnLabelSmall>+</C.BtnLabelSmall></C.BtnSmall>
         </C.Row>
         <C.Row>
           <C.Label>Show domains</C.Label>
           <C.Spacer />
-          <C.BtnSmall onPress=toggleDomains>
+          <C.BtnSmall toggleDomains>
             <C.BtnLabelSmall>
               <if showDomains>
                 On
@@ -59,7 +59,7 @@
         <C.Row>
           <C.Label>Auto-refresh</C.Label>
           <C.Spacer />
-          <C.BtnSmall onPress=toggleAutoRefresh>
+          <C.BtnSmall toggleAutoRefresh>
             <C.BtnLabelSmall>
               <if autoRefresh>
                 On

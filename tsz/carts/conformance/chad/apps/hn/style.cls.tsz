@@ -7,8 +7,9 @@ classifier({
   Card: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 10, borderRadius: 10, backgroundColor: '#161b22', borderWidth: 1, borderColor: '#30363d' } },
   Scroll: { type: 'Box', style: { flexDirection: 'column', gap: 6, flexGrow: 1 } },
   ListItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'flexStart', gap: 8, padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
+  Button: { type: 'Pressable', style: { padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
   Spacer: { type: 'Box', style: { flexGrow: 1 } },
-  BtnSmall: { type: 'Box', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: 8, backgroundColor: '#21262d' } },
+  BtnSmall: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: 8, backgroundColor: '#21262d' } },
   NavItem: { type: 'Box', style: { padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
   NavItemActive: { type: 'Box', style: { padding: 8, borderRadius: 8, backgroundColor: '#1f6feb' } },
 

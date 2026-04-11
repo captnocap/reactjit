@@ -26,14 +26,14 @@
         <C.Title>:settings: Admin</C.Title>
         <C.Divider />
         <for pages>
-          <Pressable onPress=goTo>
+          <C.Button goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
             </if>
             <else>
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
-          </Pressable>
+          </C.Button>
         </for>
         <C.Spacer />
         <C.Hint>{sys.user}</C.Hint>

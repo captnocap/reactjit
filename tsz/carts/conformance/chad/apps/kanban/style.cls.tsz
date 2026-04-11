@@ -6,8 +6,8 @@ classifier({
   Card: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 10, borderRadius: 10, backgroundColor: '#161b22', borderWidth: 1, borderColor: '#30363d' } },
   KanbanCol: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 8, padding: 8, borderRadius: 10, backgroundColor: '#161b22' } },
   KanbanCard: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
-  Btn: { type: 'Box', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRadius: 8, backgroundColor: '#1f6feb' } },
-  BtnSmall: { type: 'Box', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: 8, backgroundColor: '#21262d' } },
+  Btn: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRadius: 8, backgroundColor: '#1f6feb' } },
+  BtnSmall: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: 8, backgroundColor: '#21262d' } },
 
   Title: { type: 'Text', fontSize: 20, color: '#e6edf3' },
   Subtitle: { type: 'Text', fontSize: 16, color: '#e6edf3' },

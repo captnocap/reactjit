@@ -54,7 +54,7 @@
       <C.PanelNarrow>
         <C.Subtitle>Direct Messages</C.Subtitle>
         <for contacts>
-          <Pressable onPress=selectContact>
+          <C.Button selectContact>
             <C.ListItem>
               <if item.status exact 'online'>
                 <C.DotGreen />
@@ -67,7 +67,7 @@
               </else>
               <C.Body>{item.name}</C.Body>
             </C.ListItem>
-          </Pressable>
+          </C.Button>
         </for>
       </C.PanelNarrow>
 
@@ -84,7 +84,7 @@
           <C.InputWrap>
             <TextInput value={input} onChange=set_input placeholder='Message...' />
           </C.InputWrap>
-          <C.Btn onPress=sendDM><C.BtnLabel>Send</C.BtnLabel></C.Btn>
+          <C.Btn sendDM><C.BtnLabel>Send</C.BtnLabel></C.Btn>
         </C.Row>
       </C.Panel>
     </C.Split>

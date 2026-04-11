@@ -21,7 +21,7 @@ classifier({
   DotYellow: { type: 'Box', style: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#d29922' } },
   DotRed: { type: 'Box', style: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#f85149' } },
   BadgeGreen: { type: 'Box', style: { paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 999, backgroundColor: '#2ea043' } },
-  Btn: { type: 'Box', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRadius: 8, backgroundColor: '#1f6feb' } },
+  Btn: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRadius: 8, backgroundColor: '#1f6feb' } },
 
   Title: { type: 'Text', fontSize: 20, color: '#e6edf3' },
   Subtitle: { type: 'Text', fontSize: 16, color: '#e6edf3' },
