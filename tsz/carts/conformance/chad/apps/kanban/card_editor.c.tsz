@@ -1,8 +1,6 @@
 // Card editor component — edit a kanban card.
 // Proves: component props with callbacks, internal state, scope isolation.
 
-from '../../theme.cls'
-
 <cardEditor component>
   <props>
     card

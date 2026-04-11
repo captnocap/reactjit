@@ -1,10 +1,6 @@
 // CONFORMANCE: Kanban — Trello-style board.
 // Proves: objects data block, .where(), scope-aware functions, composition, components with callbacks.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-from './card_editor.c'
-
 <kanban widget>
   <var>
     set_cards is objects
