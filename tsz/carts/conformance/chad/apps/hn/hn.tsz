@@ -1,13 +1,10 @@
 // CONFORMANCE: Hacker News Reader — app with pages, navigation, network fetch.
 // Proves: app structure, <pages>, <active page />, navigation, <for>, <during> states.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <hn app>
   <var>
     pages is page array
-    set_active is 'front'
+    set_active
   </var>
 
   <pages>
@@ -16,6 +13,9 @@ from '../../icons.glyphs'
     settings
   </pages>
   <functions>
+    boot:
+      set_active is front
+
     goTo requires item:
       set_active is item
   </functions>

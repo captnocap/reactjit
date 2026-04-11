@@ -1,7 +1,5 @@
 // HN settings page — preferences, theme selection.
 
-from '../../theme.cls'
-
 <settings page>
   <var>
     set_storiesPerPage is 30

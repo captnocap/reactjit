@@ -1,8 +1,5 @@
 // HN story detail page — single story view with comments.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <story page>
   <var>
     set_title is 'Story Title'

@@ -1,8 +1,5 @@
 // HN front page — story list, loading states, auto-refresh.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <front page>
   <var>
     set_stories is objects
