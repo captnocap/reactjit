@@ -19,7 +19,12 @@ function allocBuf(ctx) {
 // qjs_runtime.evalToString("String(jsExpr)", &_eval_buf_N)
 function buildEval(jsExpr, ctx) {
   var bufId = allocBuf(ctx);
-  return 'qjs_runtime.evalToString(' + zigStringLiteral('String(' + jsExpr + ')') + ', &_eval_buf_' + bufId + ')';
+  var out = 'qjs_runtime.evalToString(' + zigStringLiteral('String(' + jsExpr + ')') + ', &_eval_buf_' + bufId + ')';
+  if (typeof jsExpr === 'string' && jsExpr.indexOf('widget') >= 0) {
+    print('[BUILDEVAL_TRACE] in: ' + jsExpr.slice(0, 160));
+    print('[BUILDEVAL_TRACE] out: ' + out.slice(0, 240));
+  }
+  return out;
 }
 
 // Build a boolean eval: returns 'T' for truthy, '' for falsy
@@ -33,6 +38,10 @@ function buildBoolEval(jsExpr, ctx) {
 // qjs_runtime.evalToString("(jsExpr) op rhs ? 'T' : ''", &_eval_buf_N)
 function buildComparisonEval(jsExpr, op, rhs, ctx) {
   var bufId = allocBuf(ctx);
+  if ((typeof jsExpr === 'string' && jsExpr.indexOf('widget') >= 0) ||
+      (typeof rhs === 'string' && rhs.indexOf('widget') >= 0)) {
+    print('[BCE_TRACE] jsExpr=' + JSON.stringify(String(jsExpr).slice(0, 80)) + ' op=' + op + ' rhs=' + JSON.stringify(rhs));
+  }
   return 'qjs_runtime.evalToString(' + zigStringLiteral('(' + jsExpr + ') ' + op + ' ' + rhs + " ? 'T' : ''") + ', &_eval_buf_' + bufId + ')';
 }
 
@@ -79,7 +88,16 @@ function extractRuntimeJsExpr(evalStr, rawJs, renderLocalName) {
     }
     return rawJs;
   }
-  return extractInner(evalStr);
+  // Fallback: extract the inner expression text from the eval string.
+  // Decode the zig-string-literal escapes so the returned expression is in RAW
+  // form. Without this, callers (e.g. resolveComponentRenderLocalValue,
+  // resolveComparison) feed the still-escaped result back into buildEval,
+  // which re-escapes it. Repeated re-escape stacks `\"` → `\\\"` → `\\\\\\"`
+  // and produces broken lua source like `\\\widget\\\` when finally embedded
+  // into a multi-line zig string. (See sweatshop cockpit cart, 2026-04-17.)
+  var inner = extractInner(evalStr);
+  if (inner === null || inner === undefined) return null;
+  return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 }
 
 // Build a var-decl eval: assigns to a named JS variable then returns it as string.

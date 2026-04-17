@@ -440,6 +440,13 @@ function _buildLuaCondFromTokens(c, savedStart) {
   if (_joined.indexOf('.0') >= 0 || _joined.indexOf('0.0') >= 0) {
     print('[LUA_COND_DEBUG] raw=' + _joined);
   }
+  // JS empty-array literal `[]` → lua empty-table `{}`
+  _joined = _joined.replace(/\[\s*\]/g, '{}');
+  // Operator-precedence fix: `EXPRS or {}.len OP RHS` should be
+  // `(EXPRS or {}).len OP RHS`. The OR chain produces a value, then we take
+  // its length. Without grouping, lua parses `or {}.len` as `or ({}.len)`.
+  // Wrap the OR chain leading up to `{}.len` in parens.
+  _joined = _joined.replace(/((?:^|[(,\s])(?:[A-Za-z_][\w.()]*\s+or\s+)+)\{\}\s*\.\s*len(\s*[=~<>])/g, '($1{}).len$3');
   return _joined;
 }
 

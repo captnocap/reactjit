@@ -132,14 +132,12 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
   }
 
   if ((attr === 'w' || attr === 'gw') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
-    const value = parseNumericAttrValue(c, false);
-    if (value !== null) nodeFields.push(`.canvas_gw = ${value}`);
+    parseCanvasNodeAxisAttr(c, nodeFields, 'canvas_gw');
     return true;
   }
 
   if ((attr === 'h' || attr === 'gh') && (rawTag === 'Canvas.Node' || rawTag === 'Graph.Node')) {
-    const value = parseNumericAttrValue(c, false);
-    if (value !== null) nodeFields.push(`.canvas_gh = ${value}`);
+    parseCanvasNodeAxisAttr(c, nodeFields, 'canvas_gh');
     return true;
   }
 
@@ -253,6 +251,16 @@ function parseCanvasNodeAxisAttr(c, nodeFields, zigField) {
     const numberValue = parseSignedNumberToken(c);
     if (numberValue !== null) {
       nodeFields.push(`.${zigField} = ${numberValue}`);
+    } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam &&
+               c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+      // Map item field: gx={item.field}
+      c.advance(); // itemParam
+      c.advance(); // .
+      const fieldName = c.text();
+      c.advance(); // field
+      if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = [];
+      ctx.currentMap._deferredCanvasAttrs.push({ zigField, oaField: fieldName, type: 'number' });
+      nodeFields.push('.' + zigField + ' = _item.' + fieldName);
     } else if (c.kind() === TK.identifier) {
       // Const OA bracket access: nodes[0].field
       var _canvOa = resolveConstOaAccess(c);

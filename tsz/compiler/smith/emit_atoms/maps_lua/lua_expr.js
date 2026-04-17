@@ -150,7 +150,7 @@ function _templateToLua(raw) {
       }
       var expr = raw.slice(i + 2, j - 1).trim();
       // Apply basic substitutions to the expression
-      expr = expr.replace(/===/g, '==').replace(/!==/g, '~=').replace(/&&/g, 'and').replace(/\|\|/g, 'or');
+      expr = expr.replace(/===/g, '==').replace(/!==/g, '~=').replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
       parts.push('tostring(' + expr + ')');
       i = j;
     } else {

@@ -19,6 +19,10 @@ function _unwrapQuotedDynamicExpr(expr) {
   return expr.replace(/"((?:[^"\\]|\\.)*)"/g, function(full, inner) {
     var decoded = inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
     if (/^\(+.*(?:==|~=|>=|<=|&&|\|\||\band\b|\bor\b|\?|:).*\)+$/.test(decoded.trim())) {
+      if (full.indexOf('widget') >= 0 || decoded.indexOf('widget') >= 0) {
+        var widx = decoded.indexOf('widget');
+        print('[UNWRAP_TRACE] FIRED. full[0..60]=' + JSON.stringify(full.slice(0,60)) + ' decoded around widget=' + JSON.stringify(decoded.slice(Math.max(0,widx-30), widx+30)));
+      }
       return decoded;
     }
     return full;
@@ -392,6 +396,11 @@ function _resolveOaFieldRef(oaIdx, field, _luaIdxExpr, _currentOaIdx) {
 
 function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   var _origExpr = expr;
+  var _hasW = typeof expr === 'string' && expr.indexOf('widget') >= 0;
+  if (_hasW) {
+    var _wi0 = expr.indexOf('widget');
+    print('[J2L_IN] around widget: ' + JSON.stringify(expr.slice(Math.max(0,_wi0-30), _wi0+30)));
+  }
   var id = _getMapIdentity(_luaIdxExpr);
   var _idxExpr = id.idxExpr;
   
@@ -504,8 +513,12 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   // Only context-dependent Zig→Lua rewrites that need OA/state context remain here.
 
   // Zig qjs_runtime.evalToString → __eval
-  expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
-  expr = expr.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+  // Capture group must respect escape sequences (e.g. inner \"widget\") — the prior
+  // [^"]+ pattern stopped at the first escaped inner quote and mangled the tail,
+  // which broke any inlined render-local that contained a JS string literal.
+  expr = expr.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '__eval("$1")');
+  expr = expr.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '__eval("$1")');
+  expr = expr.replace(/,\s*&_eval_buf_\d+/g, '');
   expr = expr.replace(/&_eval_buf_\d+/g, '');
   expr = _unwrapQuotedDynamicExpr(expr);
   expr = _collapseRedundantParens(expr);
@@ -516,8 +529,43 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   // DEFENSIVE: mixed nested item refs are bugs too
   expr = expr.replace(/\b_item\._nitem\b/g, '_nitem');
   expr = expr.replace(/\b_nitem\._item\b/g, '_item');
+  // JS empty-array literal `[]` → lua empty-table `{}`. Required when smith
+  // inlines JS `(props.X || [])` patterns into lua source via prop chains.
+  // Lua doesn't understand `[]` syntax.
+  expr = expr.replace(/\[\s*\]/g, '{}');
   if (expr.indexOf('_item.0') >= 0 || expr.indexOf('0.0') >= 0) {
     print('[MAP_SUB_DEBUG] before=' + _origExpr + ' after=' + expr + ' item=' + (itemParam || '') + ' idx=' + (indexParam || '') + ' props=' + JSON.stringify((ctx && ctx.propStack) || {}));
+  }
+  if (_hasW || (typeof expr === 'string' && expr.indexOf('widget') >= 0)) {
+    var _wi1 = expr.indexOf('widget');
+    if (_wi1 >= 0) print('[J2L_OUT] around widget: ' + JSON.stringify(expr.slice(Math.max(0,_wi1-30), _wi1+30)));
+    else print('[J2L_OUT] widget gone from expr');
+  }
+
+  // FALLBACK: if smith's JS→Lua translation produced syntax that lua can't parse
+  // (e.g. `{}.len` from `[].length` because lua doesn't allow direct access on
+  // a literal table; or `or {}.len == 0` which has wrong precedence vs the
+  // intended `(... or {}).len`), wrap the ORIGINAL JS expression in __eval(...)
+  // so QJS evaluates it natively at runtime. Detected patterns:
+  //   - `{}.len`   — empty-table literal followed by length
+  //   - `[]`       — JS array literal that escaped the [] → {} translation
+  //   - `||`       — JS-style logical operator that survived translation
+  //   - `===`/`!==` — JS-style equality that survived translation
+  function _hasLuaUnsafePatterns(s) {
+    if (typeof s !== 'string') return false;
+    if (s.indexOf('{}.len') >= 0) return true;
+    if (/\[(?!\s*[A-Za-z_]\w*\s*\])\s*\]/.test(s)) return true;  // `[]` not as `[ident]`
+    if (/(?:^|[^|])\|\|(?!\|)/.test(s)) return true;
+    if (s.indexOf('===') >= 0 || s.indexOf('!==') >= 0) return true;
+    return false;
+  }
+  if (_hasLuaUnsafePatterns(expr) && typeof _origExpr === 'string') {
+    var _safeOrig = _origExpr
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r');
+    return '__eval("' + _safeOrig + '")';
   }
   return expr;
 }

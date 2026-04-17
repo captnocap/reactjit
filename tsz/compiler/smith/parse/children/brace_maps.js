@@ -1,3 +1,15 @@
+function _normalizeLuaMapSourceExpr(expr) {
+  if (expr === undefined || expr === null) return expr;
+  var out = String(expr).trim();
+  if (typeof _expandRenderLocalJsFully === 'function') out = _expandRenderLocalJsFully(out);
+  out = out.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
+  out = out.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '$1');
+  out = out.replace(/,\s*&_eval_buf_\d+/g, '');
+  out = out.replace(/&_eval_buf_\d+/g, '');
+  if (typeof _normalizeJoinedJsExpr === 'function') out = _normalizeJoinedJsExpr(out);
+  return out;
+}
+
 function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosingBrace) {
   if (consumeClosingBrace === undefined) consumeClosingBrace = true;
   const saved = c.save();
@@ -54,7 +66,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
   const mapSnippet = snippetParts.join('');
 
   const getterName = _sanitizeComputedGetter(baseName, suffixText);
-  const mapExpr = (baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText;
+  const mapExpr = _normalizeLuaMapSourceExpr((baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText);
 
   // ── Lua detour: if the source is render-local/computed, route to LuaJIT ──
   // .map() content ALWAYS goes to Lua. Use the normal parser for Zig side
@@ -91,7 +103,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     // Use the PARSED node result — convert Zig template → Lua table
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _luaIdx = ctx._luaMapRebuilders.length;
-    var _luaRaw = mapExpr;
+    var _luaRaw = _normalizeLuaMapSourceExpr(mapExpr);
     var _luaTemplateExpr = (mapIdx >= 0 && ctx.maps[mapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
     var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, { templateNodeExpr: _luaTemplateExpr }, oa);
     ctx._luaMapRebuilders.push({
@@ -132,7 +144,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
 
   if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
   var _ccLuaIdx = ctx._luaMapRebuilders.length;
-  var _ccRawSource = mapExpr;
+    var _ccRawSource = _normalizeLuaMapSourceExpr(mapExpr);
   // Use the PARSED node result — the parser already walked the JSX and built the
   // template node expression. Just convert Zig syntax → Lua table syntax.
   var _ccTemplateExpr = (_ccMapIdx >= 0 && ctx.maps[_ccMapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
@@ -351,7 +363,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
         _nmRawSource = _nmRawSource.replace(new RegExp('\\b' + ctx.currentMap.itemParam + '\\b', 'g'), '_item');
       }
       // Clean spaces around dots: "_item . items" → "_item.items"
-      _nmRawSource = _nmRawSource.replace(/\s*\.\s*/g, '.');
+      _nmRawSource = _normalizeLuaMapSourceExpr(_nmRawSource.replace(/\s*\.\s*/g, '.'));
       // Parse JSX body into a node structure for emit_atoms/maps_lua to convert
       // Substitution of param names (_item→_nitem, etc) happens in _nodeToLua
       var _nmBodyNode = null;
@@ -388,6 +400,21 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
   let oa = ctx.objectArrays.find(o => o.getter === maybeArr);
   if (!oa) oa = inferOaFromSource(c, maybeArr);
   if (!oa) {
+    // Plain identifier maps like topics.map(...) or related.map(...) do not
+    // necessarily have an OA backing. Route them through the generic Lua
+    // runtime map path so the callback body is consumed as a map instead of
+    // leaking the closing "))" into text children.
+    var rawExpr = null;
+    if (ctx._renderLocalRaw && typeof ctx._renderLocalRaw[maybeArr] === 'string') {
+      rawExpr = ctx._renderLocalRaw[maybeArr];
+    } else if (ctx.propStack && typeof ctx.propStack[maybeArr] === 'string') {
+      rawExpr = ctx.propStack[maybeArr];
+    } else if (ctx.renderLocals && typeof ctx.renderLocals[maybeArr] === 'string') {
+      rawExpr = ctx.renderLocals[maybeArr];
+    } else {
+      rawExpr = maybeArr;
+    }
+    if (_tryParseComputedChainMap(c, children, maybeArr, rawExpr, consumeClosingBrace)) return true;
     globalThis.__dbg = globalThis.__dbg || [];
     globalThis.__dbg.push('[OA_MISS] maybeArr=' + maybeArr + ' oaCount=' + ctx.objectArrays.length + ' getters=' + ctx.objectArrays.map(function(o) { return o.getter; }).join(','));
     return false;
@@ -476,7 +503,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       parentItemParam: ctx.currentMap ? ctx.currentMap.itemParam : null,
       parentIndexParam: ctx.currentMap ? ctx.currentMap.indexParam : null,
       filterConditions: _dynMapIdx >= 0 ? ctx.maps[_dynMapIdx].filterConditions : null,
-      rawSource: maybeArr,
+      rawSource: _normalizeLuaMapSourceExpr(rawExpr),
       varName: maybeArr,
       isNested: !!ctx.currentMap
     });

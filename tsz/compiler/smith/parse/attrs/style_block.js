@@ -1,5 +1,20 @@
 // ── Style block parser (from attrs.js) ──
 
+function _styleTruthyCondition(val) {
+  if (!val) return 'false';
+  const expr = val.zigExpr || val.value || '0';
+  const exprType = val.exprType || val.fieldType || val.type;
+  if (exprType === 'bool') return expr;
+  if (exprType === 'string') return `${expr}.len > 0`;
+  return `${expr} != 0`;
+}
+
+function _styleNumericBranchExpr(v) {
+  if (!v) return '@as(f32, 0)';
+  if (v.type === 'zig_expr') return v.zigExpr;
+  return `@as(f32, ${v.value})`;
+}
+
 function parseStyleBlock(c) {
   const fields = [];
   if (c.kind() === TK.lbrace) c.advance();
@@ -67,9 +82,9 @@ function parseStyleBlock(c) {
           var cond = resolveComparison(val.zigExpr, op, rhs, ctx);
           // Resolve branch expressions: string→parseColor, zig_expr→zigExpr, number→value
           const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
-          const resolveNumBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.value;
+          const resolveNumBranch = (v) => _styleNumericBranchExpr(v);
           if (colorKeys[key] && (trueVal.type === 'string' || trueVal.type === 'zig_expr' || trueVal.type === 'number') && (falseVal.type === 'string' || falseVal.type === 'zig_expr' || falseVal.type === 'number')) {
-            const colorExpr = `if ${cond} ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
+            const colorExpr = `if (${cond}) ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
             if (ctx.currentMap) {
               // Inside map: emit inline — _rebuildMap re-evaluates per item
               fields.push(`.${colorKeys[key]} = ${colorExpr}`);
@@ -85,7 +100,7 @@ function parseStyleBlock(c) {
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (styleKeys[key] && trueVal.type === 'number' && falseVal.type === 'number') {
-            const numExpr = `if ${cond} @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`;
+            const numExpr = `if (${cond}) @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`;
             if (ctx.currentMap) {
               // Inside map: emit inline — _rebuildMap re-evaluates per item
               fields.push(`.${styleKeys[key]} = ${numExpr}`);
@@ -104,10 +119,56 @@ function parseStyleBlock(c) {
             const e = enumKeys[key];
             const tv = trueVal.type === 'string' && e.values[trueVal.value] ? e.values[trueVal.value] : '.flex';
             const fv = falseVal.type === 'string' && e.values[falseVal.value] ? e.values[falseVal.value] : '.none';
-            fields.push(`.${e.field} = if ${cond} ${tv} else ${fv}`);
+            fields.push(`.${e.field} = if (${cond}) ${tv} else ${fv}`);
             if (c.kind() === TK.comma) c.advance();
             continue;
           }
+        }
+      }
+      // Bare truthy ternary in style value: expr ? valA : valB
+      if (c.kind() === TK.question && val.zigExpr) {
+        c.advance(); // skip ?
+        const trueVal = parseTernaryBranch(c, key);
+        if (c.kind() === TK.colon) c.advance();
+        const falseVal = parseTernaryBranch(c, key);
+        const cond = _styleTruthyCondition(val);
+        const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
+        const resolveNumBranch = (v) => _styleNumericBranchExpr(v);
+        if (colorKeys[key] && (trueVal.type === 'string' || trueVal.type === 'zig_expr' || trueVal.type === 'number') && (falseVal.type === 'string' || falseVal.type === 'zig_expr' || falseVal.type === 'number')) {
+          const colorExpr = `if (${cond}) ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
+          if (ctx.currentMap) {
+            fields.push(`.${colorKeys[key]} = ${colorExpr}`);
+          } else {
+            fields.push(`.${colorKeys[key]} = Color{}`);
+            if (!ctx.dynStyles) ctx.dynStyles = [];
+            const dsId = ctx.dynStyles.length;
+            ctx.dynStyles.push({ field: colorKeys[key], expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+            if (!fields._dynStyleIds) fields._dynStyleIds = [];
+            fields._dynStyleIds.push(dsId);
+          }
+          if (c.kind() === TK.comma) c.advance();
+          continue;
+        } else if (styleKeys[key] && (trueVal.type === 'number' || trueVal.type === 'zig_expr') && (falseVal.type === 'number' || falseVal.type === 'zig_expr')) {
+          const numExpr = `if (${cond}) ${resolveNumBranch(trueVal)} else ${resolveNumBranch(falseVal)}`;
+          if (ctx.currentMap) {
+            fields.push(`.${styleKeys[key]} = ${numExpr}`);
+          } else {
+            fields.push(`.${styleKeys[key]} = 0`);
+            if (!ctx.dynStyles) ctx.dynStyles = [];
+            const dsId2 = ctx.dynStyles.length;
+            ctx.dynStyles.push({ field: styleKeys[key], expression: numExpr, arrName: '', arrIndex: -1 });
+            if (!fields._dynStyleIds) fields._dynStyleIds = [];
+            fields._dynStyleIds.push(dsId2);
+          }
+          if (c.kind() === TK.comma) c.advance();
+          continue;
+        } else if (enumKeys[key]) {
+          const e = enumKeys[key];
+          const tv = trueVal.type === 'string' && e.values[trueVal.value] ? e.values[trueVal.value] : '.flex';
+          const fv = falseVal.type === 'string' && e.values[falseVal.value] ? e.values[falseVal.value] : '.none';
+          fields.push(`.${e.field} = if (${cond}) ${tv} else ${fv}`);
+          if (c.kind() === TK.comma) c.advance();
+          continue;
         }
       }
       if (colorKeys[key]) {

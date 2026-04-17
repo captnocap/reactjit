@@ -29,9 +29,9 @@ function _a011_emit(ctx, meta) {
         out += '    \\\\' + wgslLine + '\n';
       });
       out += ';\n';
-      out += 'pub const _effect_shader_' + effectRender.id + ' = api.GpuShaderDesc{ .wgsl = _effect_wgsl_' + effectRender.id + ' };\n\n';
+      out += 'pub const _effect_shader_' + effectRender.id + ': ?effect_shader.GpuShaderDesc = effect_shader.GpuShaderDesc{ .wgsl = _effect_wgsl_' + effectRender.id + ' };\n\n';
     } else {
-      out += 'pub const _effect_shader_' + effectRender.id + ': ?api.GpuShaderDesc = null;  // CPU-only effect\n\n';
+      out += 'pub const _effect_shader_' + effectRender.id + ': ?effect_shader.GpuShaderDesc = null;  // CPU-only effect\n\n';
     }
   });
   return out;

@@ -34,6 +34,9 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   var parts = [];
   for (var key in style) {
     var val = style[key];
+    if (typeof val === 'string' && val.indexOf('widget') >= 0 && key === 'height') {
+      print('[STYLE_VAL_FULL height] ' + JSON.stringify(val));
+    }
     // Strip Zig enum prefix: .hidden → hidden, .center → center
     if (typeof val === 'string' && val.charAt(0) === '.') val = val.slice(1);
     if (typeof val === 'string' && ((val.charAt(0) === '"' && val.charAt(val.length - 1) === '"') || (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'"))) {
@@ -52,7 +55,14 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
     if (typeof val === 'string' && val === 'Color{}') val = '0x000000';
 
     // JS ternary in style: cond ? valA : valB → (cond) and valA or valB
-    if (typeof val === 'string' && val.indexOf('?') >= 0 && val.indexOf(':') >= 0) {
+    // SKIP if val contains an eval call — buildBoolEval/buildComparisonEval embed
+    // their own `? 'T' : ''` templates inside the eval string literal, and a naive
+    // regex match here will split on those inner ?/: and then `.replace(/"/g,'')`
+    // below will strip ALL quotes from the leftover, turning `\"widget\"` into
+    // `\widget\` (3-backslash bug surfaces once the outer multi-line zig string
+    // sees it). Route eval-bearing values through the complex-expression branch.
+    if (typeof val === 'string' && val.indexOf('?') >= 0 && val.indexOf(':') >= 0 &&
+        val.indexOf('qjs_runtime.evalToString') < 0 && val.indexOf('__eval(') < 0) {
       var _tParts = val.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/);
       if (_tParts) {
         var _tCond = _tParts[1].replace(/===/g, '==').replace(/!==/g, '~=');
@@ -65,8 +75,35 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       }
     }
 
+    // EARLY OUT: values that contain an upstream eval call are already valid
+    // lua expressions — emit them VERBATIM without running the JS-ternary /
+    // Zig-if conversion below. Those conversions are regex-based and don't
+    // respect string-literal boundaries, so they will mangle the `?:` and
+    // `if (...)` text that lives INSIDE the eval string's JS source content
+    // (which QJS, not lua, will evaluate at runtime).
+    if (typeof val === 'string' &&
+        (val.indexOf('qjs_runtime.evalToString') >= 0 || val.indexOf('__eval(') >= 0)) {
+      parts.push(luaKey + ' = ' + val);
+      continue;
+    }
+    // EARLY OUT 2: values that contain a JS IIFE `(function(){ ... })()` are
+    // raw JS that lua cannot run. Wrap the whole expression in __eval(...) so
+    // QJS evaluates it at runtime. This catches cases where smith inlined the
+    // source IIFE instead of resolving to its eval-call result (e.g. cursor-ide
+    // style props that depend on render-locals via mapped-component contexts).
+    if (typeof val === 'string' && val.indexOf('(function(){') >= 0) {
+      parts.push(luaKey + ' = __eval(' + zigStringLiteral(val) + ')');
+      continue;
+    }
+
     // Zig if/else or any complex expression → __eval() escape hatch
-    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0 || val.indexOf(' and ') >= 0)) {
+    // Also catch values that already contain a qjs_runtime.evalToString or __eval(
+    // call — these were built upstream by buildEval/buildComparisonEval and are
+    // ALREADY-ESCAPED expressions (escape level 1). The fallback at the bottom
+    // (`luaStringLiteral(val)`) would re-escape them and produce broken lua
+    // source like `\\\widget\\\` (3 backslashes per side). Route through the
+    // expression branch so they're emitted as raw lua, not as string literals.
+    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0 || val.indexOf(' and ') >= 0 || val.indexOf('qjs_runtime.evalToString') >= 0 || val.indexOf('__eval(') >= 0)) {
       var _jsExpr = val;
       // 1. Color.rgb/rgba → 0xRRGGBB FIRST (before paren stripping mangles them)
       _jsExpr = _jsExpr.replace(/Color\.rgba\((\d+),\s*(\d+),\s*(\d+),\s*\d+\)/g, function(_, r, g, b) {
@@ -177,6 +214,10 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       var _ec = (_jsExpr.match(/\)/g) || []).length;
       while (_ec > _eo && _jsExpr.endsWith(')')) { _jsExpr = _jsExpr.slice(0, -1); _ec--; }
       // 8. Emit — check if result is valid Lua
+      if (typeof _jsExpr === 'string' && _jsExpr.indexOf('widget') >= 0) {
+        var _swidx2 = _jsExpr.indexOf('widget');
+        print('[STYLE_EMIT_TRACE] key=' + luaKey + ' jsExpr around widget: ' + JSON.stringify(_jsExpr.slice(Math.max(0,_swidx2-40), _swidx2+40)));
+      }
       if (/^[a-zA-Z_][\w.]*$/.test(_jsExpr) || /^_item\.\w+$/.test(_jsExpr)) {
         parts.push(luaKey + ' = ' + _jsExpr);
       } else if (/^[\w._\s+\-*/%()]+$/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
@@ -184,6 +225,10 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
       } else if (/\band\b/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
         parts.push(luaKey + ' = ' + _jsExpr);
       } else {
+        if (typeof _jsExpr === 'string' && _jsExpr.indexOf('widget') >= 0) {
+          var _swidx = _jsExpr.indexOf('widget');
+          print('[STYLE_EVAL_TRACE] key=' + luaKey + ' jsExpr around widget: ' + JSON.stringify(_jsExpr.slice(Math.max(0,_swidx-40), _swidx+40)));
+        }
         parts.push(luaKey + ' = __eval(' + zigStringLiteral(_jsExpr) + ')');
       }
       continue;

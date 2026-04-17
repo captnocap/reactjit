@@ -17,8 +17,9 @@ function _resolveOaItemMarkers(expr) {
 function _normalizeLuaConditionExpr(expr) {
   if (!expr || typeof expr !== 'string') return expr;
   var out = _resolveOaItemMarkers(expr);
-  out = out.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
-  out = out.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+  out = out.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '__eval("$1")');
+  out = out.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '__eval("$1")');
+  out = out.replace(/,\s*&_eval_buf_\d+/g, '');
   out = out.replace(/&_eval_buf_\d+/g, '');
   if (ctx && ctx.stateSlots) {
     out = out.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
@@ -359,7 +360,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               // Strip Zig runtime calls BEFORE splitting (they contain commas)
               var _cleanedArgs = _fmtExpr;
               // qjs_runtime.evalToString("String(expr)", &buf) → expr
-              _cleanedArgs = _cleanedArgs.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
+              _cleanedArgs = _cleanedArgs.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
+              _cleanedArgs = _cleanedArgs.replace(/,\s*&_eval_buf_\d+/g, '');
               _cleanedArgs = _cleanedArgs.replace(/&_eval_buf_\d+/g, '');
               for (var _cai = 0; _cai < 5; _cai++) {
                 _cleanedArgs = _cleanedArgs.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
@@ -393,7 +395,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 if (_pi < _args.length) {
                   var _argClean = _args[_pi].trim();
                   // Strip qjs_runtime.evalToString → bare expression
-                  _argClean = _argClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
+                  _argClean = _argClean.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
                   _argClean = _argClean.replace(/,\s*&_eval_buf_\d+/g, '');
                   _argClean = _argClean.replace(/&_eval_buf_\d+/g, '');
                   // Strip @as wrappers first (iterate for nesting)
@@ -436,8 +438,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               var _singleClean = _fmtExpr;
               // Preserve JS-backed values as __eval(...) so Lua doesn't try to
               // call render-local helpers directly.
-              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
-              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '__eval("$1")');
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '__eval("$1")');
               // &_eval_buf_N leftover
               _singleClean = _singleClean.replace(/,\s*&_eval_buf_\d+/g, '');
               _singleClean = _singleClean.replace(/&_eval_buf_\d+/g, '');
@@ -761,7 +763,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         expr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
       }
       // qjs_runtime.evalToString → bare expression
-      expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
+      expr = expr.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
+      expr = expr.replace(/,\s*&_eval_buf_\d+/g, '');
       expr = expr.replace(/&_eval_buf_\d+/g, '');
       return expr;
     };
@@ -881,6 +884,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _ln.terminal = true;
             _ln.terminal_id = parseInt(_nf.slice(15));
           }
+          // Effect fields → pull id out of _effect_render_N / _effect_shader_N
+          var _effRenderM = _nf.match(/^\.effect_render = _effect_render_(\d+)$/);
+          if (_effRenderM) _ln.effect_id = parseInt(_effRenderM[1], 10);
+          if (_nf === '.effect_background = true') _ln.effect_background = true;
           // Canvas/Graph/3D/Physics node fields → forward to luaNode
           var _nfEq = _nf.indexOf(' = ');
           if (_nfEq > 1) {

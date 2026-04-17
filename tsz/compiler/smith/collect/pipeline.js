@@ -10,6 +10,7 @@ function collectCompilerInputs(c) {
   collectComponents(c);
   collectState(c);
   collectConstArrays(c);
+  collectModuleScope(c);
   collectClassifiers();
   collectVariantNames();
 }

@@ -143,7 +143,7 @@ function compile(c, children, ctx) {
     if (ctx.scriptBlock) {
       ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: expr });
     } else if (ctx.luaBlock) {
-      var luaExpr = expr.replace(/\|\|/g, 'or').replace(/&&/g, 'and').replace(/===/g, '==').replace(/!==/g, '~=');
+      var luaExpr = expr.replace(/\|\|/g, ' or ').replace(/&&/g, ' and ').replace(/===/g, '==').replace(/!==/g, '~=');
       ctx._luaDynTexts.push({ slotIdx: jsSlotIdx, luaExpr: luaExpr });
     }
     return { nodeExpr: '.{ .text = "" }', dynBufId: jsBufId };

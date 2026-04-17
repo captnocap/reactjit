@@ -59,5 +59,11 @@ function _normalizeJoinedJsExpr(expr) {
     .replace(/<\s*=/g, '<=')
     .replace(/&\s*&/g, '&&')
     .replace(/\|\s*\|/g, '||')
+    // Reconstitute postfix increment/decrement from space-joined tokens:
+    // `i + + ;`, `i + + )`, `i + + ,`, `i + + }` → `i++;`, `i++)`, etc.
+    // Only fires when `+ +` is terminated by a non-operand — unambiguously
+    // postfix, so we don't corrupt `a + +b` (unary plus RHS).
+    .replace(/(\w)\s*\+\s*\+(\s*[);,}\]])/g, '$1++$2')
+    .replace(/(\w)\s*-\s*-(\s*[);,}\]])/g, '$1--$2')
     .replace(/\bexact\b/g, '===');
 }

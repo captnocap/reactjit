@@ -51,8 +51,13 @@ function parseStyleValue(c) {
       c.restore(saved);
     }
     if (isGetter(name)) {
+      var slotType = null;
+      if (ctx && ctx.stateSlots) {
+        const slot = ctx.stateSlots.find(s => s.getter === name);
+        if (slot && slot.type) slotType = slot.type;
+      }
       c.advance();
-      return { type: 'state', value: name, zigExpr: slotGet(name) };
+      return { type: 'state', value: name, zigExpr: slotGet(name), exprType: slotType || 'number' };
     }
     // Map item member access: tag.field (supports multi-level: tag.config.theme.bg)
     if (ctx.currentMap && name === ctx.currentMap.itemParam) {
@@ -94,7 +99,7 @@ function parseStyleValue(c) {
       if (/^-?\d+(\.\d+)?$/.test(rlv)) return { type: 'number', value: rlv };
       if (rlv.startsWith('#') || namedColors[rlv]) return { type: 'string', value: rlv };
       const isZigExpr = rlv.includes('state.get') || rlv.includes('getSlot') || rlv.includes('_oa') || rlv.includes('@as');
-      if (isZigExpr) return { type: 'state', value: name, zigExpr: rlv };
+      if (isZigExpr) return { type: 'state', value: name, zigExpr: rlv, exprType: 'number' };
       return { type: 'number', value: rlv };
     }
     // Prop reference — detect type from prop value
@@ -130,7 +135,7 @@ function parseStyleValue(c) {
       if (isZigExpr) {
         // Wrap if-expressions in parens so they compose safely in further comparisons
         const zigExpr = pv.startsWith('if (') ? '(' + pv + ')' : pv;
-        return { type: 'state', value: name, zigExpr };
+        return { type: 'state', value: name, zigExpr, exprType: 'number' };
       }
       // Ensure numeric props have zigExpr so ternary resolution works (prop == N ? A : B)
       return { type: 'number', value: pv, zigExpr: pv };

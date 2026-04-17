@@ -40,6 +40,12 @@ function emitLuaTreeJsLogic(ctx) {
         while (_raw.endsWith(')')) _raw = _raw.slice(0, -1).trim();
         while (_raw.endsWith(';')) _raw = _raw.slice(0, -1).trim();
         if (_raw.length > 2) _jsInit = _raw;
+      } else if (joa.isConst && joa.constData && joa.constData.length > 0) {
+        // Const OAs (collected from bare `var/const X = [...]`) have pre-parsed
+        // data but no token range. Serialize constData as JSON — QJS eval of
+        // map expressions (e.g. `sortedQueue(mockCodeSessions)`) needs the real
+        // array to produce non-empty tile content.
+        try { _jsInit = JSON.stringify(joa.constData); } catch (_e) { _jsInit = '[]'; }
       }
       jsStateBindings += 'var ' + joa.getter + ' = ' + _jsInit + ';\n';
       if (joa.setter) {
@@ -48,7 +54,57 @@ function emitLuaTreeJsLogic(ctx) {
     }
   }
 
-  var jsContent = 'var __luaReady = false;\n' + jsStateBindings;
+  // Hoisted module-scope decls from imported .c.tsz/.mod.tsz files.
+  // evalLuaMapData expressions like `sortedQueue(...)` or `panelRows(...)` need
+  // these functions in QJS global scope. `var props = {}` lets expressions like
+  // `props.sessions || mockCodeSessions` degrade gracefully when the component
+  // isn't being called with real props from the eval sandbox.
+  //
+  // Emit order: variables first (`var`/`const`/`let`), functions second. Rationale:
+  //  - `const` is subject to the temporal dead zone — a function declared before
+  //    a `const X` that reads `X` will crash when called. Declaring values first
+  //    and function bodies last keeps the TDZ window closed by the time any hoist
+  //    is invoked (all decls run sequentially before anything calls any helper).
+  //  - `var` is hoisted-as-undefined either way, but same-bucket ordering keeps
+  //    the generated file readable.
+  var moduleScopeBindings = 'var props = props || {};\n';
+  if (ctx.moduleScopeDecls && ctx.moduleScopeDecls.length > 0) {
+    var _seenHoist = {};
+    var _varDecls = [];
+    var _fnDecls = [];
+    // Walk in reverse so last-wins on duplicate names (later files override earlier).
+    for (var _md = ctx.moduleScopeDecls.length - 1; _md >= 0; _md--) {
+      var _d = ctx.moduleScopeDecls[_md];
+      if (_seenHoist[_d.name]) continue;
+      if (ctx.stateSlots && ctx.stateSlots.some(function(s) { return s.getter === _d.name; })) continue;
+      if (ctx.objectArrays && ctx.objectArrays.some(function(o) { return o.getter === _d.name; })) continue;
+      _seenHoist[_d.name] = true;
+      if (_d.kind === 'function') _fnDecls.push(_d);
+      else _varDecls.push(_d);
+    }
+    // Normalize `const`/`let` → `var` on hoisted decls. Merged module-scope
+    // bindings get invoked from event callbacks (evalLuaMapData, handlers) whose
+    // execution order is not the declaration order, so TDZ semantics of
+    // `const`/`let` produce "not initialized" errors when a function that
+    // transitively reads a const runs before the const statement has executed.
+    // `var` is hoisted-as-undefined and — critically — lookup returns the
+    // current binding, so cross-decl references resolve regardless of order.
+    function _toVar(t) {
+      return t.replace(/^\s*(const|let)\s+/, 'var ');
+    }
+    // Push var/const/let first, then function declarations.
+    for (var _vi = 0; _vi < _varDecls.length; _vi++) {
+      var _vd = _varDecls[_vi];
+      var _vt = _toVar(_vd.text);
+      moduleScopeBindings += _vt + (_vt.endsWith(';') || _vt.endsWith('}') ? '' : ';') + '\n';
+    }
+    for (var _fi = 0; _fi < _fnDecls.length; _fi++) {
+      var _fd = _fnDecls[_fi];
+      moduleScopeBindings += _fd.text + (_fd.text.endsWith(';') || _fd.text.endsWith('}') ? '' : ';') + '\n';
+    }
+  }
+
+  var jsContent = 'var __luaReady = false;\n' + jsStateBindings + moduleScopeBindings;
   // When FFI decls are present the script block is routed to LUA_LOGIC instead
   if (!ctx._scriptBlockIsLua) {
     if (ctx.scriptBlock) {

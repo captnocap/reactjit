@@ -94,8 +94,8 @@ function _emitComplexTextColor(node) {
     js = js.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
   }
   js = js.replace(/@intCast\(/g, '(');
-  js = js.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
-  js = js.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '$1');
+  js = js.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
+  js = js.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '$1');
   js = js.replace(/,\s*&_eval_buf_\d+/g, '');
   js = js.replace(/&_eval_buf_\d+/g, '');
 
@@ -204,8 +204,8 @@ function _emitNodeCanvasFields(node) {
       val = val.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
         return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
       });
-      val = val.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '__eval("$1")');
-      val = val.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+      val = val.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '__eval("$1")');
+      val = val.replace(/qjs_runtime\.evalToString\("((?:[^"\\]|\\.)+)"[^)]*\)/g, '__eval("$1")');
       val = val.replace(/&_eval_buf_\d+/g, '');
       // OA refs
       val = val.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
@@ -500,6 +500,15 @@ function _cleanCondForEval(expr) {
   // std.mem.eql → Lua string compare
   expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
   expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
+  // JS operators that slipped through upstream translators — map them to
+  // Lua equivalents so the result can be dropped directly into Lua source
+  // (not inside __eval). `!==`/`===` are handled before `!=`/`==` to avoid
+  // trailing-`=` drift.
+  expr = expr.replace(/!==/g, '~=');
+  expr = expr.replace(/===/g, '==');
+  expr = expr.replace(/([^~!<>=])!=([^=])/g, '$1~=$2');
+  expr = expr.replace(/&&/g, ' and ');
+  expr = expr.replace(/\|\|/g, ' or ');
   // Clean orphan parens
   var open = (expr.match(/\(/g) || []).length;
   var close = (expr.match(/\)/g) || []).length;
@@ -539,7 +548,7 @@ function _wrapCondEval(cond) {
             if (!_luaBuiltins[cfn]) { stillNeedsEval = true; break; }
           }
         }
-        if (stillNeedsEval) return '__eval("' + cleaned.replace(/"/g, '\\"') + '")';
+        if (stillNeedsEval) return '__eval("' + _luaCondToJsForEval(cleaned).replace(/"/g, '\\"') + '")';
         return cleaned;
       }
     }
@@ -549,10 +558,38 @@ function _wrapCondEval(cond) {
   if (/@|state\.getSlot/.test(cond)) {
     var cleaned2 = _cleanCondForEval(cond);
     if (!/@/.test(cleaned2) && !/state\.getSlot/.test(cleaned2)) return cleaned2;
-    return '__eval("' + cleaned2.replace(/"/g, '\\"') + '")';
+    return '__eval("' + _luaCondToJsForEval(cleaned2).replace(/"/g, '\\"') + '")';
   }
 
-  return cond;
+  // Final fallthrough: the condition is "pure Lua" — no function calls,
+  // no Zig. But upstream paths sometimes leave JS operators (`!=`, `===`,
+  // `&&`, `||`) inside conditions that never reach the other branches of
+  // this function (e.g. `tab.type != 'home' && tab.type != 'component'`
+  // chains in a map callback). Run the same JS→Lua swap the other return
+  // paths get, since this string is about to be dropped into Lua source.
+  return _cleanCondForEval(cond);
+}
+
+// Flip Lua-side operators back to JS for the string we're about to embed in
+// `__eval(...)`. The caller often built this expression through a Lua path
+// (`_cleanCondForEval`, condition collectors), which leaves `and`/`or`/`not`
+// and `~=` / `.len` inside the text. QJS evaluates that text as JS at runtime
+// and errors out on the Lua tokens — convert before wrapping, not at runtime.
+function _luaCondToJsForEval(expr) {
+  if (!expr || typeof expr !== 'string') return expr;
+  var out = expr;
+  // Operator swap is order-sensitive: do `~=` before `=` comparisons land.
+  out = out.replace(/~=/g, '!=');
+  // Word operators — bounded on both sides to avoid mangling identifiers like
+  // `orchestra` / `random` / `notice`.
+  out = out.replace(/\band\b/g, '&&');
+  out = out.replace(/\bor\b/g, '||');
+  out = out.replace(/\bnot\b/g, '!');
+  // `#x` (Lua length) → `x.length`. Only fires when `#` is not a color prefix.
+  out = out.replace(/#(\(?[A-Za-z_][\w.\[\]()]*\)?)/g, function(_, x) { return x + '.length'; });
+  // `.len` (sometimes survives) → `.length`
+  out = out.replace(/\.len\b/g, '.length');
+  return out;
 }
 
 // ── Section 8: Main Entry ───────────────────────────────────────
@@ -620,6 +657,14 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr, _currentOa
   // Canvas/Graph/3D fields
   var canvasFields = _emitNodeCanvasFields(node);
   if (canvasFields) fields.push(canvasFields);
+
+  // Effect fields (id + background flag → resolved to fn pointer in luajit_runtime)
+  if (typeof node.effect_id === 'number') {
+    fields.push('effect_id = ' + node.effect_id);
+  }
+  if (node.effect_background) {
+    fields.push('effect_background = true');
+  }
 
   // Children (includes conditionals, ternaries, nested maps, loops)
   var childrenField = _emitNodeChildren(node, itemParam, indexParam, indent, _luaIdxExpr, _currentOaIdx);

@@ -119,6 +119,11 @@ function _jsToLua(expr) {
   expr = expr.replace(/\|\|/g, ' or ');
   expr = expr.replace(/&&/g, ' and ');
 
+  // 9b. JS empty-array literal `[]` → lua empty-table `{}`. Catches expressions
+  // like `(props.X || [])` that get inlined into lua source via prop chains
+  // without going through __eval. Lua doesn't understand `[]`.
+  expr = expr.replace(/\[\s*\]/g, '{}');
+
   // 10. Negation: !expr → not expr (but not != which is already handled)
   expr = expr.replace(/!([A-Za-z_(])/g, 'not $1');
 

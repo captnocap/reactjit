@@ -22,7 +22,7 @@ function _a010_emit(ctx, meta) {
 
   var out = '\n// ── Effect render functions ─────────────────────────────────────\n';
   out += 'const effect_ctx = @import("' + prefix + 'effect_ctx.zig");\n';
-  out += 'const api = @import("' + prefix + 'api.zig");\n\n';
+  out += 'const effect_shader = @import("' + prefix + 'effect_shader.zig");\n\n';
 
   ctx.effectRenders.forEach(function(effectRender) {
     out += 'pub fn _effect_render_' + effectRender.id + '(ctx_e: *effect_ctx.EffectContext) void {\n';

@@ -49,17 +49,48 @@ function indentLines(text, prefix) {
   }).join('\n');
 }
 
+function _findWidgetCtx(value) {
+  if (typeof value !== 'string') return -1;
+  return value.indexOf('widget');
+}
+
 function escapeDoubleQuotedString(value) {
-  return String(value)
+  var idx = _findWidgetCtx(value);
+  if (idx >= 0) {
+    var lo = Math.max(0, idx - 30);
+    var hi = Math.min(value.length, idx + 30);
+    print('[ESC_TRACE] in[' + idx + ']: ' + JSON.stringify(value.slice(lo, hi)));
+  }
+  var out = String(value)
     .replace(/\\/g, '\\\\')
     .replace(/\r/g, '\\r')
     .replace(/\n/g, '\\n')
     .replace(/\t/g, '\\t')
     .replace(/"/g, '\\"');
+  var idx2 = _findWidgetCtx(out);
+  if (idx >= 0) {
+    var lo2 = Math.max(0, idx2 - 30);
+    var hi2 = Math.min(out.length, idx2 + 30);
+    print('[ESC_TRACE] out[' + idx2 + ']: ' + JSON.stringify(out.slice(lo2, hi2)));
+  }
+  return out;
 }
 
 function zigStringLiteral(value) {
-  return '"' + escapeDoubleQuotedString(value) + '"';
+  var idx = _findWidgetCtx(value);
+  if (idx >= 0) {
+    var lo = Math.max(0, idx - 30);
+    var hi = Math.min(value.length, idx + 30);
+    print('[ZSL_TRACE] in[' + idx + ']: ' + JSON.stringify(value.slice(lo, hi)));
+  }
+  var out = '"' + escapeDoubleQuotedString(value) + '"';
+  var idx2 = _findWidgetCtx(out);
+  if (idx >= 0) {
+    var lo2 = Math.max(0, idx2 - 30);
+    var hi2 = Math.min(out.length, idx2 + 30);
+    print('[ZSL_TRACE] out[' + idx2 + ']: ' + JSON.stringify(out.slice(lo2, hi2)));
+  }
+  return out;
 }
 
 function luaStringLiteral(value) {

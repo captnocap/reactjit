@@ -127,6 +127,8 @@ function splitOutput(monolith, file) {
     var ac = F['app.zig'];
     ac = prefixArrRefs(ac, 'nodes.');
     ac = ac.replace(/\b(_root)\b/g, 'nodes.$1');
+    ac = ac.replace(/&(_effect_render_\d+)\b/g, '&handlers.$1');
+    ac = ac.replace(/&(_effect_shader_\d+)\b/g, '&handlers.$1');
     ac = ac.replace(/\b(_dyn_(?:buf|text)_\d+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_eval_buf_\d+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_oa\d+_\w+)\b/g, 'st.$1');

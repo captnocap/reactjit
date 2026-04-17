@@ -146,6 +146,12 @@ function normalizeRenderLocalJs(rawJs) {
     .replace(/<\s*=/g, '<=')
     .replace(/&\s*&/g, '&&')
     .replace(/\|\s*\|/g, '||')
+    // Postfix `++`/`--` split by the lexer into two plus/minus tokens and
+    // space-joined by the render-local collector. The terminator-based guard
+    // only matches unambiguous postfix positions (never merges into a unary
+    // `+b` binary-plus construct).
+    .replace(/(\w)\s*\+\s*\+(\s*[);,}\]])/g, '$1++$2')
+    .replace(/(\w)\s*-\s*-(\s*[);,}\]])/g, '$1--$2')
     .replace(/\bexact\b/g, '===');
 }
 
@@ -311,7 +317,14 @@ function collectRenderLocals(c, appStart) {
             var iifeVar = '_rl_' + reassignedVar;
             var mangledBody = bodyRaw.replace(new RegExp('\\b' + reassignedVar + '\\b', 'g'), iifeVar);
             var iife = '(function(){ var ' + iifeVar + ' = ' + initRaw + '; if (' + condRaw + ') { ' + mangledBody + ' } return ' + iifeVar + '; })()';
+            if (condRaw && condRaw.indexOf('widget') >= 0) {
+              print('[RL_TRACE] var=' + reassignedVar + ' condRaw=' + JSON.stringify(condRaw.slice(0, 120)));
+            }
             var expandedIife = expandRenderLocalRawExpr(iife, reassignedVar);
+            if (expandedIife && expandedIife.indexOf('widget') >= 0) {
+              var widx = expandedIife.indexOf('widget');
+              print('[RL_TRACE] iife around widget: ' + JSON.stringify(expandedIife.slice(Math.max(0,widx-30), widx+30)));
+            }
             // Store the EXPANDED IIFE so further expansions don't re-expand shotStatsData → nested IIFEs
             ctx._renderLocalRaw[reassignedVar] = expandedIife;
             ctx.renderLocals[reassignedVar] = buildEval(expandedIife, ctx);

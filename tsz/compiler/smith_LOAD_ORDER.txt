@@ -162,6 +162,7 @@ smith/collect/script.js
 smith/collect/state.js
 smith/collect/classifiers.js
 smith/collect/render_locals.js
+smith/collect/module_scope.js
 smith/collect/pipeline.js
 
 smith/contract/sanitize_for_lua.js

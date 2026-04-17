@@ -20,6 +20,14 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
       zig += '    qjs_runtime.evalExpr(' + zigStringLiteral(nativePlan.initJsExprs[nei]) + ');\n';
     }
   }
+  // Register effect render fns + shaders so luajit_runtime can resolve by id
+  if (ctx.effectRenders && ctx.effectRenders.length > 0) {
+    for (var efi = 0; efi < ctx.effectRenders.length; efi++) {
+      var eid = ctx.effectRenders[efi].id;
+      zig += '    luajit_runtime.setEffectRender(' + eid + ', &_effect_render_' + eid + ');\n';
+      zig += '    luajit_runtime.setEffectShader(' + eid + ', &_effect_shader_' + eid + ');\n';
+    }
+  }
   zig += '    // OA data synced on first tick (after JS_LOGIC loads)\n';
   zig += '    state.markDirty();\n';
   zig += '}\n\n';
@@ -46,6 +54,12 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
       } else if (oa._computedExpr) {
         oaSourceExpr = oa._computedExpr;
       }
+      // evalLuaMapData runs its expression argument directly in QJS. Any
+      // `qjs_runtime.evalToString("String(X)", &_eval_buf_N)` wrapper that
+      // upstream stages added is Zig FFI syntax — it can't survive a QJS
+      // eval. Strip those wrappers back to the raw JS expression so QJS
+      // sees `X` instead of `qjs_runtime.evalToString(...)`.
+      oaSourceExpr = _a040_unwrapZigEvalWrappers(oaSourceExpr);
       zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', ' + zigStringLiteral(oaSourceExpr) + ');\n';
       _oaTickIdx++;
     }
@@ -99,4 +113,32 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
   zig += '}\n';
 
   return zig;
+}
+
+// Strip any `qjs_runtime.evalToString("String(X)", &_eval_buf_N)` wrappers out
+// of an OA source expression so the resulting string is pure JS. Handles nested
+// occurrences (the wrapper can appear as the left operand of `||`). Returns the
+// input unchanged if no wrapper is detected.
+function _a040_unwrapZigEvalWrappers(expr) {
+  if (!expr || typeof expr !== 'string') return expr;
+  if (expr.indexOf('qjs_runtime.evalToString') < 0 && expr.indexOf('&_eval_buf_') < 0 &&
+      expr.indexOf('&st._eval_buf_') < 0) return expr;
+  var out = expr;
+  for (var pass = 0; pass < 6; pass++) {
+    var prev = out;
+    // evalToString("String(X)", &..._eval_buf_N) → X
+    out = out.replace(/qjs_runtime\.evalToString\(\s*"String\(([\s\S]+?)\)"\s*,\s*&[\w.]+\)/g, '$1');
+    // Fallback: `qjs_runtime.evalToString(..., &..._eval_buf_N)` (any first arg)
+    out = out.replace(/qjs_runtime\.evalToString\(\s*("(?:[^"\\]|\\.)*")\s*,\s*&[\w.]+\)/g, function(_, s) {
+      // Decode the first-arg zig string literal back to the raw expression.
+      var inner = s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      var m = inner.match(/^String\(([\s\S]+)\)$/);
+      return m ? m[1] : inner;
+    });
+    // Strip lone `&st._eval_buf_N` / `&_eval_buf_N` artifacts if any stragglers
+    // survived upstream rewrites.
+    out = out.replace(/,\s*&(?:st\.)?_eval_buf_\d+/g, '');
+    if (out === prev) break;
+  }
+  return out;
 }

@@ -357,7 +357,7 @@ function tryParseTernaryJSX(c, children) {
   }
   c.advance();
 
-  var _rawCondStr = condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==').replace(/&&/g, 'and').replace(/\|\|/g, 'or');
+  var _rawCondStr = condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==').replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
   // Resolve OA refs and state slots in Lua condition
   _rawCondStr = _rawCondStr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   _rawCondStr = _rawCondStr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');

@@ -6,7 +6,9 @@
 // Handles: for loops, const/let/var decls, e.method() calls, arithmetic, nested expressions
 function transpileEffectBody(jsBody, param) {
   let out = '';
-  const lines = jsBody.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  // Join continuation lines: a newline followed by a leading binary operator glues to previous.
+  const joinedBody = jsBody.replace(/\s*\n\s*(?=[+\-*/&|<>=!?:,)])/g, ' ');
+  const lines = joinedBody.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const p = param || 'e'; // effect context param name
   const indent = (n) => '    '.repeat(n);
   let depth = 1; // start at 1 for function body indent
@@ -51,16 +53,47 @@ function transpileEffectBody(jsBody, param) {
     }
 
     // const/let/var declaration
-    const declMatch = line.match(/^(?:const|let|var)\s+(\w+)\s*=\s*(.+?);?\s*$/);
+    const declMatch = line.match(/^(const|let|var)\s+(\w+)\s*=\s*(.+?);?\s*$/);
     if (declMatch) {
-      const [, vname, expr] = declMatch;
+      const [, kw, vname, expr] = declMatch;
       const zigExpr = transpileExpr(expr, p, arrayVars);
       // Detect return types: hsv/hsl → [3]f32, voronoi → [2]f32
       const isColorArray = new RegExp(`\\b${p}\\.(hsv|hsl)\\(`).test(expr);
       const isVoronoi = new RegExp(`\\b${p}\\.voronoi\\(`).test(expr);
       const zigType = isColorArray ? '[3]f32' : isVoronoi ? '[2]f32' : 'f32';
       if (isColorArray || isVoronoi) arrayVars.add(vname);
-      out += indent(depth) + `const ${vname}: ${zigType} = ${zigExpr};\n`;
+      const storage = kw === 'const' ? 'const' : 'var';
+      out += indent(depth) + `${storage} ${vname}: ${zigType} = ${zigExpr};\n`;
+      continue;
+    }
+
+    // Bare reassignment: `name = expr;` (no leading const/let/var)
+    const assignMatch = line.match(/^(\w+)\s*=\s*(.+?);?\s*$/);
+    if (assignMatch) {
+      const [, vname, expr] = assignMatch;
+      out += indent(depth) + `${vname} = ${transpileExpr(expr, p, arrayVars)};\n`;
+      continue;
+    }
+
+    // Inline: `if (cond) name = expr;` (single-line body, no braces)
+    const ifInline = line.match(/^if\s*\((.+?)\)\s*(\w+)\s*=\s*(.+?);?\s*$/);
+    if (ifInline) {
+      const [, cond, vname, expr] = ifInline;
+      out += indent(depth) + `if (${transpileExpr(cond, p, arrayVars)}) { ${vname} = ${transpileExpr(expr, p, arrayVars)}; }\n`;
+      continue;
+    }
+    // Inline: `else if (cond) name = expr;`
+    const elseIfInline = line.match(/^else\s+if\s*\((.+?)\)\s*(\w+)\s*=\s*(.+?);?\s*$/);
+    if (elseIfInline) {
+      const [, cond, vname, expr] = elseIfInline;
+      out += indent(depth) + `else if (${transpileExpr(cond, p, arrayVars)}) { ${vname} = ${transpileExpr(expr, p, arrayVars)}; }\n`;
+      continue;
+    }
+    // Inline: `else name = expr;`
+    const elseInline = line.match(/^else\s+(\w+)\s*=\s*(.+?);?\s*$/);
+    if (elseInline) {
+      const [, vname, expr] = elseInline;
+      out += indent(depth) + `else { ${vname} = ${transpileExpr(expr, p, arrayVars)}; }\n`;
       continue;
     }
 
@@ -147,6 +180,9 @@ function transpileExpr(expr, p, arrayVars) {
   e = e.replace(new RegExp(`\\b${p}\\.voronoi\\(`, 'g'), 'ctx_e.voronoi(');
   // Math.PI
   e = e.replace(/\bMath\.PI\b/g, '3.14159265');
+  // Logical operators — JS && / || → Zig and / or
+  e = e.replace(/&&/g, ' and ');
+  e = e.replace(/\|\|/g, ' or ');
   // Convert .x/.y/.z to [0]/[1]/[2] for array-typed vars (voronoi, hsv, hsl results)
   if (arrayVars && arrayVars.size > 0) {
     for (const av of arrayVars) {

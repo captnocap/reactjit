@@ -224,7 +224,14 @@ function emitLuaTreeLuaSource(ctx) {
   if (ctx.objectArrays && ctx.objectArrays.length > 0) {
     for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
       var oa = ctx.objectArrays[oi];
-      lua.push(oa.getter + ' = {}');
+      // Const OAs (collected from `var X = [{...}, ...]` at module scope)
+      // carry their parsed data. Emit it as a Lua table literal so Lua-side
+      // reads see the same data as the JS-side hoist.
+      if (oa.isConst && oa.constData && oa.constData.length > 0) {
+        lua.push(oa.getter + ' = ' + _luaTableFromConstData(oa.constData));
+      } else {
+        lua.push(oa.getter + ' = {}');
+      }
       if (oa.setter) {
         lua.push('function ' + oa.setter + '(v) ' + oa.getter + ' = v; __markDirty() end');
       }
@@ -245,6 +252,12 @@ function emitLuaTreeLuaSource(ctx) {
         lua.push('  if not src then return {} end');
         lua.push('  local out = {}');
         lua.push('  for _ri, _raw in ipairs(src) do');
+        // Primitive rows (numbers, strings) arrive when the data helper
+        // returns `[0, 16, 32, ...]` instead of `[{...}, {...}]`. Field
+        // indexing (`_raw["x"]`) would error with "attempt to index a number
+        // value" — pass the primitive through so the map body can still bind
+        // its item param (`function(y)` uses `y` as the primitive).
+        lua.push('    if type(_raw) ~= "table" then out[_ri] = _raw; goto continue_' + _oaLoaderIdx + ' end');
         lua.push('    local _row = {}');
         for (var _fi = 0; _fi < _oaLoad.fields.length; _fi++) {
           var _field = _oaLoad.fields[_fi];
@@ -260,6 +273,7 @@ function emitLuaTreeLuaSource(ctx) {
           lua.push('    _row["' + _field.name + '"] = _v' + _fi);
         }
         lua.push('    out[_ri] = _row');
+        lua.push('    ::continue_' + _oaLoaderIdx + '::');
         lua.push('  end');
         lua.push('  return out');
       }
@@ -272,7 +286,12 @@ function emitLuaTreeLuaSource(ctx) {
   // Component functions — emit from parsed tree
   if (ctx._luaRootNode) {
     lua.push('function App()');
-    lua.push('  return ' + _nodeToLua(ctx._luaRootNode, null, null, '  '));
+    var _appBody = _nodeToLua(ctx._luaRootNode, null, null, '  ');
+    if (typeof _appBody === 'string' && _appBody.indexOf('widget') >= 0) {
+      var _abwidx = _appBody.indexOf('widget');
+      print('[APPBODY_TRACE] around widget: ' + JSON.stringify(_appBody.slice(Math.max(0,_abwidx-40), _abwidx+40)));
+    }
+    lua.push('  return ' + _appBody);
     lua.push('end');
   } else {
     lua.push('function App()');
@@ -303,6 +322,10 @@ function emitLuaTreeLuaSource(ctx) {
   // This is the LAST stop before LUA_LOGIC becomes a string literal.
   // Protect __eval("...") and js_on_press = "..." strings first.
   var result = lua.join('\n');
+  if (result.indexOf('widget') >= 0) {
+    var _atJoin = result.indexOf('widget');
+    print('[NODES_AT_JOIN] around widget: ' + JSON.stringify(result.slice(Math.max(0,_atJoin-40), _atJoin+40)));
+  }
   function _rewriteLuaSafeEvalAtGate(entry) {
     if (!entry || entry.indexOf('__eval("') !== 0) return entry;
     var m = entry.match(/^__eval\("((?:[^"\\]|\\.)*)"\)$/);
@@ -342,6 +365,12 @@ function emitLuaTreeLuaSource(ctx) {
     if (scrubbed.indexOf('||') >= 0) decoded = decoded.replace(/\|\|/g, ' or ');
     if (scrubbed.indexOf('!==') >= 0) decoded = decoded.replace(/!==/g, '~=');
     if (scrubbed.indexOf('===') >= 0) decoded = decoded.replace(/===/g, '==');
+    // Plain `!=` → `~=` when we're unwrapping to bare Lua. Must run after
+    // `!==`/`===` (otherwise the trailing `=` gets eaten). Without this,
+    // __eval strings like `_item.type != 'home'` would come out as bare
+    // Lua with `!=` — a Lua parse error at script load.
+    scrubbed = _stripQuotedStrings(decoded);
+    if (scrubbed.indexOf('!=') >= 0) decoded = decoded.replace(/([^~!<>=])!=([^=])/g, '$1~=$2');
     scrubbed = _stripQuotedStrings(decoded);
     if (scrubbed.indexOf('&&') >= 0 || scrubbed.indexOf('||') >= 0 ||
         scrubbed.indexOf('===') >= 0 || scrubbed.indexOf('!==') >= 0 ||
@@ -351,11 +380,21 @@ function emitLuaTreeLuaSource(ctx) {
         scrubbed.indexOf('.charAt(') >= 0 || scrubbed.indexOf('||{}') >= 0) {
       return entry;
     }
+    // Recursive unwrap: if `decoded` is itself `__eval("...")`, apply the
+    // same gate logic again. Upstream phases sometimes double-wrap when a
+    // conditional-builder and a normalizer both decide they need an eval
+    // fallback, producing `__eval("__eval(\\"X\\")")`. Without this pass the
+    // inner call survives and hits runtime with JS operators it can't parse.
+    if (decoded.indexOf('__eval("') === 0 && decoded.charAt(decoded.length - 1) === ')') {
+      var _inner = _rewriteLuaSafeEvalAtGate(decoded);
+      if (_inner !== decoded) decoded = _inner;
+    }
     return decoded;
   }
   var protected = [];
   result = result.replace(/__eval\("((?:[^"\\]|\\.)*)"\)/g, function(m) {
-    protected.push(_rewriteLuaSafeEvalAtGate(m)); return '__JSPROTECT_' + (protected.length - 1) + '__';
+    protected.push(_rewriteLuaSafeEvalAtGate(m));
+    return '__JSPROTECT_' + (protected.length - 1) + '__';
   });
   result = result.replace(/js_on_press = "[^"]*"/g, function(m) {
     protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';
@@ -376,7 +415,53 @@ function emitLuaTreeLuaSource(ctx) {
   result = result.replace(/([\s(,=])\.(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|flex|left|right|justify|vertical|horizontal|start|end)(?=[\s),}])/g, '$1"$2"');
   // Restore protected JS strings
   for (var _pi = 0; _pi < protected.length; _pi++) {
+    if (typeof protected[_pi] === 'string' && protected[_pi].indexOf('widget') >= 0) {
+      var _pwidx = protected[_pi].indexOf('widget');
+      print('[NODES_PROTECTED_' + _pi + '] before-restore: ' + JSON.stringify(protected[_pi].slice(Math.max(0,_pwidx-30), _pwidx+30)));
+    }
     result = result.replace('__JSPROTECT_' + _pi + '__', protected[_pi]);
   }
+  if (typeof result === 'string' && result.indexOf('widget') >= 0) {
+    var _rwidx = result.indexOf('widget');
+    print('[NODES_RESULT] final around widget: ' + JSON.stringify(result.slice(Math.max(0,_rwidx-40), _rwidx+40)));
+  }
   return result;
+}
+
+// Serialize a parsed constData array-of-objects (or scalars) as a Lua table
+// literal. Mirrors the JSON form emitted into JS_LOGIC so both language sides
+// see the same table shape for `var mockX = [{...}]` module-scope data.
+function _luaTableFromConstData(items) {
+  if (!Array.isArray(items)) return '{}';
+  var out = '{';
+  for (var i = 0; i < items.length; i++) {
+    if (i > 0) out += ',';
+    out += _luaValueFromConst(items[i]);
+  }
+  out += '}';
+  return out;
+}
+
+function _luaValueFromConst(v) {
+  if (v === null || v === undefined) return 'nil';
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'string') {
+    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+  }
+  if (Array.isArray(v)) return _luaTableFromConstData(v);
+  if (typeof v === 'object') {
+    var out = '{';
+    var first = true;
+    for (var k in v) {
+      if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+      if (!first) out += ',';
+      first = false;
+      // Use `["key"]` form — robust against Lua reserved words and non-ident keys.
+      out += '["' + k.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]=' + _luaValueFromConst(v[k]);
+    }
+    out += '}';
+    return out;
+  }
+  return 'nil';
 }

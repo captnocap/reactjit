@@ -762,7 +762,7 @@ function tryParseBraceChild(c, children) {
           ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: fullExpr });
         } else if (ctx.luaBlock) {
           // Convert JS operators to Lua operators, and single-quoted strings to double-quoted
-          let luaExpr = fullExpr.replace(/\|\|/g, 'or').replace(/&&/g, 'and').replace(/===/g, '==').replace(/!==/g, '~=');
+          let luaExpr = fullExpr.replace(/\|\|/g, ' or ').replace(/&&/g, ' and ').replace(/===/g, '==').replace(/!==/g, '~=');
           // Convert 'string' to "string" for Lua compatibility
           luaExpr = luaExpr.replace(/'([^']*)'/g, '"$1"');
           ctx._luaDynTexts.push({ slotIdx: jsSlotIdx, luaExpr: luaExpr });

@@ -183,7 +183,7 @@ function _luaTextZigArtifacts(sv) {
   sv = sv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
 
   // qjs_runtime.evalToString → bare expression
-  sv = sv.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+  sv = sv.replace(/qjs_runtime\.evalToString\("String\(((?:[^"\\]|\\.)+)\)"[^)]*\)/g, '$1');
   sv = sv.replace(/&_eval_buf_\d+/g, '');
 
   // Iterative if/else → and/or
