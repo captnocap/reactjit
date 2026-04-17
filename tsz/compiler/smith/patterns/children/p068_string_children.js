@@ -25,6 +25,9 @@
 
 function match(c, ctx) {
   // Raw text token inside children position.
+  // Same guard as p001 — refuse to match when called from brace-child
+  // dispatch, otherwise the pattern byte-slices brace expression source.
+  if (ctx && ctx._inBraceChildDispatch) return false;
   return c.kind() !== TK.lt &&
          c.kind() !== TK.lt_slash &&
          c.kind() !== TK.lbrace &&

@@ -14,7 +14,11 @@ function emitLuaTreeJsLogic(ctx) {
   if (ctx.stateSlots && ctx.stateSlots.length > 0) {
     for (var jsi = 0; jsi < ctx.stateSlots.length; jsi++) {
       var js = ctx.stateSlots[jsi];
-      if (js.getter.indexOf('__') === 0) continue; // skip internal slots
+      // Skip internal slots (prefix `__`) — EXCEPT `__jsExpr_N`, which is the
+      // JS-evaluated dynamic text slot created by p010/brace.js for each
+      // `{expr}` brace child. It needs a real JS setter so `__evalDynTexts()`
+      // can write the evaluated string back into Lua state.
+      if (js.getter.indexOf('__') === 0 && js.getter.indexOf('__jsExpr_') !== 0) continue;
       var jsInit = js.initial !== undefined ? JSON.stringify(js.initial) : '0';
       jsStateBindings += 'var ' + js.getter + ' = ' + jsInit + ';\n';
       // JS setter updates local var then calls Lua setter (Lua owns state).
@@ -150,6 +154,27 @@ function emitLuaTreeJsLogic(ctx) {
         jsContent += '\nvar __is={};' + _initProps.join('') + 'init(__is);\n';
       }
     }
+  }
+
+  // JS-evaluated dynamic text expressions — mirrors page.js:756-766.
+  // Each brace expression routed to `_jsDynTexts` gets a state slot (__jsExpr_N).
+  // This function evaluates every such expr and pushes the string result to the
+  // Lua-side state slot, which the Lua render reads via `tostring(__jsExpr_N)`.
+  //
+  // We go through `eval` (not a direct function body) so that a single bad
+  // expression — e.g. one that already had a parse error upstream — doesn't
+  // nuke the entire JS_LOGIC at load time. Each try/catch swallows parse +
+  // runtime errors per-slot and writes an empty string fallback.
+  if (ctx._jsDynTexts && ctx._jsDynTexts.length > 0) {
+    var _jsEvalLines = ['function __evalDynTexts() {'];
+    for (var _jdi = 0; _jdi < ctx._jsDynTexts.length; _jdi++) {
+      var _jdt = ctx._jsDynTexts[_jdi];
+      var _escaped = JSON.stringify('String((' + _jdt.jsExpr + '))');
+      _jsEvalLines.push('  try { __setJsExpr_' + _jdt.slotIdx + '(eval(' + _escaped + ')); } catch (_e) { __setJsExpr_' + _jdt.slotIdx + '(""); }');
+    }
+    _jsEvalLines.push('}');
+    _jsEvalLines.push('try { __evalDynTexts(); } catch (_e) {}');
+    jsContent += '\n' + _jsEvalLines.join('\n') + '\n';
   }
 
   return jsContent;

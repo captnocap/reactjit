@@ -24,6 +24,11 @@
 function match(c, ctx) {
   // A string literal child is any token that is NOT < (element), { (brace),
   // or } (close brace) — i.e., raw text between tags. We peek without advancing.
+  // HARD GUARD: this pattern is only valid for raw text BETWEEN JSX tags.
+  // If tryPatternMatch is called from tryParseBraceChild (cursor already past
+  // the opening `{`), refuse to match — otherwise we byte-slice the brace
+  // expression source as if it were plain text (see d159_classifier_text_fn_call).
+  if (ctx && ctx._inBraceChildDispatch) return false;
   var k = c.kind();
   return k !== TK.lt && k !== TK.lt_slash && k !== TK.lbrace &&
          k !== TK.rbrace && k !== TK.eof && k !== TK.comment;

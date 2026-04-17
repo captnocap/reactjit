@@ -80,6 +80,13 @@ function emitLuaTreeEntry(ctx, appName, prefix) {
   if (ctx.variantNames && ctx.variantNames.length > 0) {
     zig += '        luajit_runtime.setGlobalInt("__variant", @import("' + prefix + 'api.zig").theme.activeVariant());\n';
   }
+  // Evaluate JS-backed dynamic text expressions (from p010/brace.js) on every
+  // dirty tick. `__evalDynTexts` was emitted into JS_LOGIC and writes each
+  // `__jsExpr_N` slot's current value back into Lua state so the Lua-side
+  // `tostring(__jsExpr_N)` in the node tree picks up the computed string.
+  if (ctx._jsDynTexts && ctx._jsDynTexts.length > 0) {
+    zig += '        qjs_runtime.evalExpr("if (typeof __evalDynTexts === \'function\') __evalDynTexts();");\n';
+  }
   zig += '        luajit_runtime.callGlobal("__render");\n';
   zig += '        state.clearDirty();\n';
   zig += '        _first_render = false;\n';

@@ -133,18 +133,21 @@ function compile(c, children, ctx) {
     return { nodeExpr: '.{ .text = "" }', dynBufId: bufId };
   }
 
-  // Script runtime fallback — route to QuickJS/Lua eval
-  if (ctx.scriptBlock || ctx.luaBlock) {
+  // Script runtime fallback — route to QuickJS/Lua eval.
+  // Module-scope hoisted decls (see collect/module_scope.js) also count as JS
+  // runtime: they put `function X() { ... }` into JS_LOGIC so __eval can call it.
+  var _hasModuleScope = ctx.moduleScopeDecls && ctx.moduleScopeDecls.length > 0;
+  if (ctx.scriptBlock || ctx.luaBlock || _hasModuleScope) {
     var jsSlotIdx = ctx.stateSlots.length;
     ctx.stateSlots.push({ getter: '__jsExpr_' + jsSlotIdx, setter: '__setJsExpr_' + jsSlotIdx, initial: '', type: 'string' });
     var jsBufId = ctx.dynCount;
     ctx.dynTexts.push({ bufId: jsBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jsSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
     ctx.dynCount++;
-    if (ctx.scriptBlock) {
-      ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: expr });
-    } else if (ctx.luaBlock) {
+    if (ctx.luaBlock && !ctx.scriptBlock && !_hasModuleScope) {
       var luaExpr = expr.replace(/\|\|/g, ' or ').replace(/&&/g, ' and ').replace(/===/g, '==').replace(/!==/g, '~=');
       ctx._luaDynTexts.push({ slotIdx: jsSlotIdx, luaExpr: luaExpr });
+    } else {
+      ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: expr });
     }
     return { nodeExpr: '.{ .text = "" }', dynBufId: jsBufId };
   }

@@ -63,7 +63,15 @@ function _pushLuaRawDynText(children, rawExpr) {
 }
 
 function _braceShouldUseJsDynText(expr) {
-  if (!(ctx.scriptBlock || globalThis.__scriptContent)) return false;
+  // Module-scope hoisted decls count as JS runtime: if the cart imported
+  // a `.c.tsz`/`.mod.tsz` with `function X()` at top level, `X` is in
+  // JS_LOGIC (see collect/module_scope.js). That means brace expressions
+  // referencing those decls can legitimately route through __eval — the
+  // older check only looked for an explicit `<script>` or Sweatshop-style
+  // `.script.tsz` import and missed this path.
+  var _hasJs = ctx.scriptBlock || globalThis.__scriptContent ||
+               (ctx.moduleScopeDecls && ctx.moduleScopeDecls.length > 0);
+  if (!_hasJs) return false;
   if (typeof nativeExprNeedsLua === 'function' && nativeExprNeedsLua(expr)) return false;
   return true;
 }
@@ -946,9 +954,16 @@ function tryParseBraceChild(c, children) {
       }
     }
   }
-  if (typeof tryPatternMatch === 'function' && tryPatternMatch(c, children)) {
-    return true;
-  }
+  // Pattern dispatch runs *inside* a brace expression — the opening `{` is
+  // already consumed. Signal that to patterns whose match() would otherwise
+  // greedily claim the brace content (p001/p068 match raw text between JSX
+  // tags, not expression content; without this flag they byte-slice the
+  // brace expression source and emit it as a literal .text = "source").
+  var _priorInBraceChild = ctx._inBraceChildDispatch;
+  ctx._inBraceChildDispatch = true;
+  var _patMatched = (typeof tryPatternMatch === 'function' && tryPatternMatch(c, children));
+  ctx._inBraceChildDispatch = _priorInBraceChild;
+  if (_patMatched) return true;
 
   // All dispatchers exhausted — fall through to generic handler.
   // Collect tokens to the matching }, but REJECT if JSX tags are present.
