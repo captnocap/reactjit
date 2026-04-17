@@ -108,6 +108,48 @@ function emitLuaTreeJsLogic(ctx) {
     }
   }
 
+  // Noop fallbacks for handler-body identifiers that aren't declared anywhere
+  // in JS_LOGIC. Cart sources often declare `var onExpand = props.onExpand || function(){}`
+  // inside a component body; on inlining, the handler body keeps the bare call
+  // but the render-local isn't hoisted to global JS scope. Emit a global noop
+  // so QJS eval doesn't throw ReferenceError on click. The guarded pattern
+  // preserves the binding when a later decl (state slot, module scope, etc.)
+  // actually provides a real function.
+  // Noop fallbacks for callables referenced in handlers or the script block
+  // that aren't defined in JS_LOGIC. Cart sources commonly declare
+  // `var onExpand = props.onExpand || function(){}` inside a component body
+  // (doesn't hoist globally) or `declare function setWorkspaceName(...)` in
+  // a script (a TS ambient that never gets a JS body). At QJS eval time both
+  // throw ReferenceError; guard each with a typeof check so a real binding
+  // later still wins via override.
+  var _builtins = /^(if|else|for|while|do|return|function|var|let|const|tostring|tonumber|print|pcall|String|Number|Math|Date|JSON|Object|Array|typeof|new|try|catch|eval|undefined|null|true|false|and|or|not|parseInt|parseFloat|isNaN|Boolean)$/;
+  var _fallbackAdded = {};
+  var _fallbackLines = '';
+  var _callRe = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+  function _harvestNoops(src) {
+    if (!src || typeof src !== 'string') return;
+    _callRe.lastIndex = 0;
+    var _m;
+    while ((_m = _callRe.exec(src)) !== null) {
+      var _callee = _m[1];
+      if (_fallbackAdded[_callee]) continue;
+      if (_builtins.test(_callee)) continue;
+      if (_callee.indexOf('__') === 0) continue;
+      if (_callee === 'qjs_runtime' || _callee === 'state' || _callee === 'props') continue;
+      _fallbackAdded[_callee] = 1;
+      _fallbackLines += 'if (typeof ' + _callee + " !== 'function') { globalThis." + _callee + ' = function() {}; }\n';
+    }
+  }
+  if (ctx.handlers) {
+    for (var _hi = 0; _hi < ctx.handlers.length; _hi++) {
+      _harvestNoops(ctx.handlers[_hi].jsBody);
+      _harvestNoops(ctx.handlers[_hi].luaBody);
+    }
+  }
+  if (ctx.scriptBlock) _harvestNoops(ctx.scriptBlock);
+  if (globalThis.__scriptContent) _harvestNoops(globalThis.__scriptContent);
+  moduleScopeBindings += _fallbackLines;
+
   var jsContent = 'var __luaReady = false;\n' + jsStateBindings + moduleScopeBindings;
   // When FFI decls are present the script block is routed to LUA_LOGIC instead
   if (!ctx._scriptBlockIsLua) {
