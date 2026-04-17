@@ -301,6 +301,10 @@ pub fn telemetryCameraState() TelemetryCameraState {
     return telemetryCameraStateFor(0);
 }
 
+pub fn cameraIsActive(id: u8) bool {
+    return inst(id).active;
+}
+
 pub fn telemetryCameraStateFor(id: u8) TelemetryCameraState {
     const ci = inst(id);
     return .{

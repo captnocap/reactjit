@@ -1499,7 +1499,10 @@ fn paintCanvasChild(child: *Node, child_idx: u16, hovered: ?u16, selected: ?u16)
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
     const ct = node.canvas_type.?;
-    if (node.canvas_view_set) {
+    // Apply initial camera only once per canvas instance — re-renders from
+    // state updates rebuild the Node tree with canvas_view_set=true each time,
+    // which would otherwise reset the user's pan/zoom on every state change.
+    if (node.canvas_view_set and !canvas.cameraIsActive(node.canvas_id)) {
         canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
         node.canvas_view_set = false;
     }

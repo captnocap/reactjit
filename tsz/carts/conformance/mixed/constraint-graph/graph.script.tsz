@@ -69,7 +69,6 @@ function toggleFlow() {
   setFlowOn(_flowOn);
   for (var p in _pathEdges) {
     setPathFlow(+p, _flowOn ? 1 : 0);
-    setNodeDim(+p, _flowOn ? 1.0 : 0.3);
   }
 }
 

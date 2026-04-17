@@ -702,26 +702,76 @@ fn sampleEffect(
 /// Draw a stroked path using GPU-native SDF bezier curves.
 /// Smooth at any zoom level — no tessellation artifacts.
 /// Lines are drawn as degenerate quadratics (control point at midpoint).
-pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32, _flow_speed: f32, _ticks: u32) void {
-    _ = _flow_speed;
-    _ = _ticks;
+pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32, stroke_a: f32, stroke_width: f32, flow_speed: f32, ticks: u32) void {
+    // When flow is active, dim the base stroke so the flowing pulse reads
+    // as the foreground. At rest (flow_speed == 0), draw full-opacity stroke.
+    const flowing = flow_speed != 0;
+    const base_a = if (flowing) stroke_a * 0.25 else stroke_a;
     for (0..path.curve_count) |i| {
         const seg = &path.curves[i];
         switch (seg.kind) {
             .line => {
-                // Collinear p0/p1/p2 makes the SDF bezier shader's cross-product math
-                // degenerate → periodic dot artifacts at certain zooms. Route straight
-                // lines through the AABB rect primitive instead.
-                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, stroke_a);
+                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, base_a);
             },
             .quadratic => {
-                gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
+                gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
             },
             .cubic => {
-                // Split cubic into quadratics via gpu.drawCubicCurve
-                gpu.drawCubicCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x2, seg.y2, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
+                gpu.drawCubicCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x2, seg.y2, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
             },
         }
+        if (flowing) drawFlowParticles(seg, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width, flow_speed, ticks);
+    }
+}
+
+// Overlay a small moving glow along the segment. Clean anti-aliased look:
+// one bright pulse per segment sliding end-to-end, drawn through the same
+// SDF bezier shader as the stroke so it's always smooth.
+fn drawFlowParticles(seg: *const CurveSegment, r: f32, g: f32, b: f32, a: f32, stroke_width: f32, flow_speed: f32, ticks: u32) void {
+    const pulse_count: u32 = 2;
+    const pulse_len: f32 = 0.18; // as fraction of segment
+    const seconds = @as(f32, @floatFromInt(ticks)) * 0.001;
+    // Positive flow_speed → pulse travels p0→p3, negative → reverse.
+    const raw_phase = @mod(seconds * flow_speed * 0.15, 1.0);
+    const phase = if (raw_phase < 0) raw_phase + 1.0 else raw_phase;
+    var i: u32 = 0;
+    while (i < pulse_count) : (i += 1) {
+        const center = @mod(phase + @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(pulse_count)), 1.0);
+        const t0 = @max(0.0, center - pulse_len * 0.5);
+        const t1 = @min(1.0, center + pulse_len * 0.5);
+        if (t1 <= t0) continue;
+        const edge_fade = @min(center, 1.0 - center) * 6.0;
+        const alpha = a * std.math.clamp(edge_fade, 0.0, 1.0);
+        const tm = (t0 + t1) * 0.5;
+        const p0 = sampleSegment(seg, t0);
+        const pm = sampleSegment(seg, tm);
+        const p1 = sampleSegment(seg, t1);
+        // Bezier control needed to pass through pm at t=0.5
+        const cx = 2.0 * pm[0] - 0.5 * (p0[0] + p1[0]);
+        const cy = 2.0 * pm[1] - 0.5 * (p0[1] + p1[1]);
+        gpu.drawCurve(p0[0], p0[1], cx, cy, p1[0], p1[1], r, g, b, alpha, stroke_width * 2.0);
+    }
+}
+
+fn sampleSegment(seg: *const CurveSegment, t: f32) [2]f32 {
+    switch (seg.kind) {
+        .line => return .{ seg.x0 + (seg.x3 - seg.x0) * t, seg.y0 + (seg.y3 - seg.y0) * t },
+        .quadratic => {
+            const mt = 1.0 - t;
+            return .{
+                mt * mt * seg.x0 + 2.0 * mt * t * seg.x1 + t * t * seg.x3,
+                mt * mt * seg.y0 + 2.0 * mt * t * seg.y1 + t * t * seg.y3,
+            };
+        },
+        .cubic => {
+            const mt = 1.0 - t;
+            const mt2 = mt * mt;
+            const t2 = t * t;
+            return .{
+                mt2 * mt * seg.x0 + 3.0 * mt2 * t * seg.x1 + 3.0 * mt * t2 * seg.x2 + t2 * t * seg.x3,
+                mt2 * mt * seg.y0 + 3.0 * mt2 * t * seg.y1 + 3.0 * mt * t2 * seg.y2 + t2 * t * seg.y3,
+            };
+        },
     }
 }
 
