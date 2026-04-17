@@ -251,15 +251,28 @@ function collectObjectArrayState(c, getter, setter) {
     }
   }
 
-  let depth = 2;
-  while (depth > 0 && c.kind() !== TK.eof) {
-    if (c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
-    if (c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+  // Find the end of the array via bulletproof balance-match from arrayStartPos.
+  // The field-collection loop above doesn't recurse through nested arrays/objects
+  // inside array element fields, so the cursor can drift. Resetting to arrayStartPos
+  // (the position of the outer `[`) and balance-matching all bracket types ensures
+  // we always find the matching `]` regardless of nesting depth.
+  c.pos = arrayStartPos;
+  let _bmDepth = 0;
+  while (c.pos < c.count && c.kind() !== TK.eof) {
+    const _bmKind = c.kind();
+    if (_bmKind === TK.lparen || _bmKind === TK.lbracket || _bmKind === TK.lbrace) {
+      _bmDepth++;
+    } else if (_bmKind === TK.rparen || _bmKind === TK.rbracket || _bmKind === TK.rbrace) {
+      _bmDepth--;
+      if (_bmDepth === 0) { c.advance(); break; }
+    }
     c.advance();
   }
   // Save end position for initial data reconstruction
   const oa = ctx.objectArrays[parentOaIdx];
-  oa.initDataEndPos = c.pos; // position after closing ] )
+  oa.initDataEndPos = c.pos; // position after closing ]
+  // Don't advance past `)` or `;` — the main collectState loop's trailing
+  // c.advance() does that. Over-advancing here makes us skip the next `const`.
 
   return 'object_array';
 }
