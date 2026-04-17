@@ -439,6 +439,14 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       c.advance();
     }
     if (c.kind() === TK.lparen) c.advance();
+    // `.map(function(w, i) => ...)` — skip the `function` keyword + its `(`.
+    // Without this, `_dynItemParam` binds to the literal string "function",
+    // and every `w.X` inside the callback body emits as `(w).X` with no
+    // map-rename (see d162_inlined_component_prop_fields).
+    if (c.isIdent('function')) {
+      c.advance();
+      if (c.kind() === TK.lparen) c.advance();
+    }
     var _dynItemParam = c.kind() === TK.identifier ? c.text() : '_item';
     c.advance();
     var _dynIdxParam = null;

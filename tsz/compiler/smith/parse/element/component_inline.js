@@ -235,6 +235,14 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
         c.advance();
       }
       if (c.kind() === TK.lparen) c.advance();
+      // `.map(function(w, i) => ...)` — skip the `function` keyword + its `(`.
+      // Without this, `c.text()` below binds itemParam to the string "function"
+      // and every `worker.X` inside the callback emits as `(w).X` with no
+      // map-rename in scope (see d162_inlined_component_prop_fields).
+      if (c.isIdent('function')) {
+        c.advance();
+        if (c.kind() === TK.lparen) c.advance();
+      }
       var _ciItemParam = c.kind() === TK.identifier ? c.text() : '_item';
       c.advance();
       var _ciIdxParam = null;

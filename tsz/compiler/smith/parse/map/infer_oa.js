@@ -96,6 +96,13 @@ function inferOaFromSource(c, name) {
         c.advance(); continue;
       }
       c.pos = chainPos + 2; // skip map (
+      // `.map(function(w, i) => ...)` — skip the `function` keyword + opening `(`
+      // so itemParam binds to the actual param name, not the literal text
+      // "function" (see d162_inlined_component_prop_fields).
+      if (c.isIdent('function')) {
+        c.advance();
+        if (c.kind() === TK.lparen) c.advance();
+      }
       if (c.kind() === TK.lparen) c.advance();
       if (c.kind() !== TK.identifier) { c.advance(); continue; }
       var itemParam = c.text();
