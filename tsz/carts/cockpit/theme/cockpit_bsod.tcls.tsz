@@ -99,4 +99,10 @@ theme('cockpit_bsod', {
   borderW0: 0, borderW1: 1, borderW2: 1, borderW3: 1, borderW4: 2,
   fontXxs: 9, fontXs: 10, fontSm: 11, fontMd: 12,
   fontLg: 14, fontXl: 16, fontXxl: 20, fontHuge: 24,
+
+  // Retro: snappier, no breath
+  durationInstant: 0, durationFast: 80, durationNormal: 150, durationSlow: 300,
+  durationLong: 600, durationHeartbeat: 800, durationBreath: 2000,
+  lineHeightTight: 1.0, lineHeightNormal: 1.2, lineHeightLoose: 1.5,
+  weightLight: 400, weightNormal: 400, weightMedium: 700, weightBold: 900,
 });

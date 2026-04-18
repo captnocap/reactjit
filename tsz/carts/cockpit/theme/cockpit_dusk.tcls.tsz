@@ -115,4 +115,12 @@ theme('cockpit_dusk', {
   // Font sizes
   fontXxs: 9, fontXs: 10, fontSm: 11, fontMd: 13,
   fontLg: 15, fontXl: 18, fontXxl: 22, fontHuge: 28,
+
+  // Motion
+  durationInstant: 0, durationFast: 120, durationNormal: 250, durationSlow: 450,
+  durationLong: 900, durationHeartbeat: 1000, durationBreath: 4000,
+
+  // Line heights / weights
+  lineHeightTight: 1.1, lineHeightNormal: 1.4, lineHeightLoose: 1.7,
+  weightLight: 300, weightNormal: 400, weightMedium: 500, weightBold: 700,
 });

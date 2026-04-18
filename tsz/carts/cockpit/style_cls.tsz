@@ -5,7 +5,7 @@ classifier({
   },
   Content: {
     type: 'Box',
-    style: { flexGrow: 1, flexBasis: 0, padding: 'theme-spaceLg', gap: 'theme-spaceSm' },
+    style: { flexGrow: 1, flexBasis: 0, padding: 'theme-spaceLg', gap: 'theme-spaceMd' },
   },
   BottomBar: {
     type: 'Box',
@@ -30,4 +30,74 @@ classifier({
 
   Title: { type: 'Text', fontSize: 'theme-fontXl', color: 'theme-textPrimary' },
   Hint: { type: 'Text', fontSize: 'theme-fontMd', color: 'theme-textSecondary' },
+
+  SwatchRow: {
+    type: 'Box',
+    style: { flexDirection: 'row', gap: 'theme-spaceSm', flexWrap: 'wrap' },
+  },
+  Swatch: {
+    type: 'Box',
+    style: {
+      width: 96,
+      height: 48,
+      borderRadius: 'theme-radiusMd',
+      padding: 'theme-spaceSm',
+      borderWidth: 'theme-borderW1',
+      borderColor: 'theme-borderHair',
+    },
+  },
+  SwatchLabel: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textPrimary' },
+  SwatchPrimary: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-primary' },
+  },
+  SwatchAccent: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-accent' },
+  },
+  SwatchSuccess: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-success' },
+  },
+  SwatchWarning: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-warning' },
+  },
+  SwatchError: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-error' },
+  },
+  SwatchInfo: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-info' },
+  },
+  SwatchTier1: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-tier1' },
+  },
+  SwatchTier2: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-tier2' },
+  },
+  SwatchTier3: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-tier3' },
+  },
+  SwatchTier4: {
+    type: 'Box',
+    style: { width: 96, height: 48, borderRadius: 'theme-radiusMd', padding: 'theme-spaceSm', backgroundColor: 'theme-tier4' },
+  },
+
+  Card: {
+    type: 'Box',
+    style: {
+      padding: 'theme-spaceMd',
+      gap: 'theme-spaceSm',
+      borderRadius: 'theme-radiusLg',
+      backgroundColor: 'theme-bgRaised',
+      borderWidth: 'theme-borderW1',
+      borderColor: 'theme-borderLight',
+    },
+  },
+  CardTitle: { type: 'Text', fontSize: 'theme-fontLg', color: 'theme-textPrimary' },
 })

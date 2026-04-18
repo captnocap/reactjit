@@ -2,7 +2,29 @@ export function Home() {
   return (
     <C.Content>
       <C.Title>Cockpit</C.Title>
-      <C.Hint>Home page placeholder.</C.Hint>
+      <C.Hint>Rebuild with --theme=cockpit_dusk / cockpit_clarity / cockpit_bsod.</C.Hint>
+
+      <C.Card>
+        <C.CardTitle>Semantic</C.CardTitle>
+        <C.SwatchRow>
+          <C.SwatchPrimary><C.SwatchLabel>primary</C.SwatchLabel></C.SwatchPrimary>
+          <C.SwatchAccent><C.SwatchLabel>accent</C.SwatchLabel></C.SwatchAccent>
+          <C.SwatchSuccess><C.SwatchLabel>success</C.SwatchLabel></C.SwatchSuccess>
+          <C.SwatchWarning><C.SwatchLabel>warning</C.SwatchLabel></C.SwatchWarning>
+          <C.SwatchError><C.SwatchLabel>error</C.SwatchLabel></C.SwatchError>
+          <C.SwatchInfo><C.SwatchLabel>info</C.SwatchLabel></C.SwatchInfo>
+        </C.SwatchRow>
+      </C.Card>
+
+      <C.Card>
+        <C.CardTitle>Tiers</C.CardTitle>
+        <C.SwatchRow>
+          <C.SwatchTier1><C.SwatchLabel>tier1</C.SwatchLabel></C.SwatchTier1>
+          <C.SwatchTier2><C.SwatchLabel>tier2</C.SwatchLabel></C.SwatchTier2>
+          <C.SwatchTier3><C.SwatchLabel>tier3</C.SwatchLabel></C.SwatchTier3>
+          <C.SwatchTier4><C.SwatchLabel>tier4</C.SwatchLabel></C.SwatchTier4>
+        </C.SwatchRow>
+      </C.Card>
     </C.Content>
   );
 }

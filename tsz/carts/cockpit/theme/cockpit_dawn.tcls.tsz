@@ -136,4 +136,24 @@ theme('cockpit_dawn', {
   fontXl: 18,
   fontXxl: 22,
   fontHuge: 28,
+
+  // Motion — consumed by effects layer
+  durationInstant: 0,
+  durationFast: 120,
+  durationNormal: 250,
+  durationSlow: 450,
+  durationLong: 900,
+  durationHeartbeat: 1000,
+  durationBreath: 4000,
+
+  // Line heights
+  lineHeightTight: 1.1,
+  lineHeightNormal: 1.4,
+  lineHeightLoose: 1.7,
+
+  // Font weights
+  weightLight: 300,
+  weightNormal: 400,
+  weightMedium: 500,
+  weightBold: 700,
 });

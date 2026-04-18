@@ -98,4 +98,9 @@ theme('cockpit_clarity', {
   borderW0: 0, borderW1: 1, borderW2: 2, borderW3: 3, borderW4: 4,
   fontXxs: 9, fontXs: 10, fontSm: 11, fontMd: 13,
   fontLg: 15, fontXl: 18, fontXxl: 22, fontHuge: 28,
+
+  durationInstant: 0, durationFast: 120, durationNormal: 250, durationSlow: 450,
+  durationLong: 900, durationHeartbeat: 1000, durationBreath: 4000,
+  lineHeightTight: 1.1, lineHeightNormal: 1.4, lineHeightLoose: 1.7,
+  weightLight: 300, weightNormal: 400, weightMedium: 500, weightBold: 700,
 });
