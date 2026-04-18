@@ -928,9 +928,17 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
         return;
     }
-    // Canvas.Path: no layout dimensions, skip.
-    if (node.canvas_path or node.canvas_path_d != null) {
+    // Canvas.Path: standalone (icon) paths take their box's style/parent size
+    // so paintCanvasPath can scale the 24×24 viewbox to fit. Inline paths
+    // (canvas_path=true) collapse — they overlay their parent.
+    if (node.canvas_path) {
         node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
+        return;
+    }
+    if (node.canvas_path_d != null) {
+        const w = if (s.width) |v| v else if (s.flex_basis) |fb| fb else pw;
+        const h = if (s.height) |v| v else ph;
+        node.computed = .{ .x = px, .y = py, .w = w, .h = h };
         return;
     }
     // Canvas.Clamp: spans full parent bounds (viewport overlay).
