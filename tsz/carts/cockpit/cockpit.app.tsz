@@ -15,17 +15,23 @@ import { Spacing } from './Spacing.c';
   useIFTTT('key:31', function() { setVariant(1); setActiveTheme(1); })
   useIFTTT('key:32', function() { setVariant(2); setActiveTheme(2); })
   useIFTTT('key:33', function() { setVariant(3); setActiveTheme(3); })
+
+  // Heartbeat: blink the status dot every 500ms (spec durationHeartbeat/2).
+  useIFTTT('timer:every:500', function() { setBeat(1 - beat) })
 </script>
 
 export default function App() {
   const [active, setActive] = useState('home');
   const [activeTheme, setActiveTheme] = useState(0);
+  const [beat, setBeat] = useState(0);
   return (
     <C.Root>
       {active == 'home' && <Home />}
       {active == 'typography' && <Typography />}
       {active == 'spacing' && <Spacing />}
       <C.BottomBar>
+        {beat == 1 && <C.DotOn />}
+        {beat == 0 && <C.DotOff />}
         <C.NavRow>
           {active == 'home' && <C.NavPickActive onPress={() => setActive('home')}><C.NavLabelActive>home</C.NavLabelActive></C.NavPickActive>}
           {active != 'home' && <C.NavPick onPress={() => setActive('home')}><C.NavLabel>home</C.NavLabel></C.NavPick>}

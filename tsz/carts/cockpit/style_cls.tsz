@@ -182,4 +182,7 @@ classifier({
   RadiusLg:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusLg' } },
   RadiusXl:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusXl' } },
   RadiusFull: { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusFull' } },
+
+  DotOn:  { type: 'Box', style: { width: 8, height: 8, borderRadius: 'theme-radiusFull', backgroundColor: 'theme-primary' } },
+  DotOff: { type: 'Box', style: { width: 8, height: 8, borderRadius: 'theme-radiusFull', backgroundColor: 'theme-textDim' } },
 })
