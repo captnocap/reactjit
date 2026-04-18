@@ -538,6 +538,29 @@ pub fn main() !void {
         };
     }
 
+    // User override: append ~/.claude/<cart>/user.tcls.tsz to cls_buf if present.
+    // Derives cart name from the entry file basename (strip .app.tsz / .tsz).
+    {
+        const home = std.posix.getenv("HOME");
+        if (home) |h| {
+            const entry_base = std.fs.path.basename(input_path);
+            var cart_name = entry_base;
+            if (std.mem.endsWith(u8, cart_name, ".app.tsz")) {
+                cart_name = cart_name[0 .. cart_name.len - ".app.tsz".len];
+            } else if (std.mem.endsWith(u8, cart_name, ".tsz")) {
+                cart_name = cart_name[0 .. cart_name.len - ".tsz".len];
+            }
+            const user_path = std.fmt.allocPrint(Alloc, "{s}/.claude/{s}/user.tcls.tsz", .{ h, cart_name }) catch null;
+            if (user_path) |up| {
+                if (std.fs.cwd().readFileAlloc(Alloc, up, 4 * 1024 * 1024)) |user_src| {
+                    std.debug.print("[forge:user-theme] merged {s} ({d} bytes)\n", .{ up, user_src.len });
+                    cls_buf.appendSlice(Alloc, user_src) catch {};
+                    cls_buf.append(Alloc, '\n') catch {};
+                } else |_| {}
+            }
+        }
+    }
+
     // Build merged source: component deps first, then main app source
     // (mergeImports already added the main source to component_buf via the recursive call)
     const merged_source = if (component_buf.items.len > 0) component_buf.items else source;

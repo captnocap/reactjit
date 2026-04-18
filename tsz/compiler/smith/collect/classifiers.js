@@ -35,12 +35,15 @@ function collectClassifiers() {
     eval(cleanText);
     ctx.classifiers = merged;
     const desired = globalThis.__activeThemeName;
-    const names = Object.keys(_themeRegistry);
+    const names = Object.keys(_themeRegistry).filter(function(n) { return n !== 'user'; });
+    let base = {};
     if (desired && _themeRegistry[desired]) {
-      _activeTheme = _themeRegistry[desired];
+      base = _themeRegistry[desired];
     } else if (names.length > 0) {
-      _activeTheme = _themeRegistry[names[0]];
+      base = _themeRegistry[names[0]];
     }
+    // User override merges on top of whichever base theme is selected.
+    _activeTheme = Object.assign({}, base, _themeRegistry['user'] || {});
   } catch (e) {
     if (!ctx._debugLines) ctx._debugLines = [];
     ctx._debugLines.push('collectClassifiers eval failed: ' + String(e));
