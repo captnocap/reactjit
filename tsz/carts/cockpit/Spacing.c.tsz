@@ -1,0 +1,33 @@
+export function Spacing() {
+  return (
+    <C.Content>
+      <C.Title>Spacing + Radius</C.Title>
+      <C.Hint>BSOD collapses the scale; dawn and clarity share it.</C.Hint>
+
+      <C.Card>
+        <C.CardTitle>Space scale</C.CardTitle>
+        <C.SpaceRow><C.TypeLabel>Xxs</C.TypeLabel><C.SpaceBarXxs /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Xs</C.TypeLabel><C.SpaceBarXs /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Sm</C.TypeLabel><C.SpaceBarSm /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Md</C.TypeLabel><C.SpaceBarMd /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Lg</C.TypeLabel><C.SpaceBarLg /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Xl</C.TypeLabel><C.SpaceBarXl /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Xxl</C.TypeLabel><C.SpaceBarXxl /></C.SpaceRow>
+        <C.SpaceRow><C.TypeLabel>Huge</C.TypeLabel><C.SpaceBarHuge /></C.SpaceRow>
+      </C.Card>
+
+      <C.Card>
+        <C.CardTitle>Radius scale</C.CardTitle>
+        <C.SwatchRow>
+          <C.RadiusNone><C.SwatchLabel>none</C.SwatchLabel></C.RadiusNone>
+          <C.RadiusXs><C.SwatchLabel>xs</C.SwatchLabel></C.RadiusXs>
+          <C.RadiusSm><C.SwatchLabel>sm</C.SwatchLabel></C.RadiusSm>
+          <C.RadiusMd><C.SwatchLabel>md</C.SwatchLabel></C.RadiusMd>
+          <C.RadiusLg><C.SwatchLabel>lg</C.SwatchLabel></C.RadiusLg>
+          <C.RadiusXl><C.SwatchLabel>xl</C.SwatchLabel></C.RadiusXl>
+          <C.RadiusFull><C.SwatchLabel>full</C.SwatchLabel></C.RadiusFull>
+        </C.SwatchRow>
+      </C.Card>
+    </C.Content>
+  );
+}

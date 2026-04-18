@@ -164,4 +164,22 @@ classifier({
   TypeSm:   { type: 'Text', fontSize: 'theme-fontSm',   color: 'theme-textPrimary' },
   TypeXs:   { type: 'Text', fontSize: 'theme-fontXs',   color: 'theme-textPrimary' },
   TypeXxs:  { type: 'Text', fontSize: 'theme-fontXxs',  color: 'theme-textPrimary' },
+
+  SpaceRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 'theme-spaceMd' } },
+  SpaceBarXxs:  { type: 'Box', style: { width: 'theme-spaceXxs',  height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarXs:   { type: 'Box', style: { width: 'theme-spaceXs',   height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarSm:   { type: 'Box', style: { width: 'theme-spaceSm',   height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarMd:   { type: 'Box', style: { width: 'theme-spaceMd',   height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarLg:   { type: 'Box', style: { width: 'theme-spaceLg',   height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarXl:   { type: 'Box', style: { width: 'theme-spaceXl',   height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarXxl:  { type: 'Box', style: { width: 'theme-spaceXxl',  height: 14, backgroundColor: 'theme-primary' } },
+  SpaceBarHuge: { type: 'Box', style: { width: 'theme-spaceHuge', height: 14, backgroundColor: 'theme-primary' } },
+
+  RadiusNone: { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusNone' } },
+  RadiusXs:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusXs' } },
+  RadiusSm:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusSm' } },
+  RadiusMd:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusMd' } },
+  RadiusLg:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusLg' } },
+  RadiusXl:   { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusXl' } },
+  RadiusFull: { type: 'Box', style: { width: 64, height: 32, backgroundColor: 'theme-accent', borderRadius: 'theme-radiusFull' } },
 })

@@ -5,6 +5,7 @@ import { _cockpitBsodAnchor } from './theme/cockpit_bsod.tcls';
 import { Root as _clsAnchor } from './style_cls';
 import { Home } from './Home.c';
 import { Typography } from './Typography.c';
+import { Spacing } from './Spacing.c';
 
 // Variant indices match tcls import order: 0 dawn (base) | 1 dusk | 2 clarity | 3 bsod
 
@@ -15,12 +16,15 @@ export default function App() {
     <C.Root>
       {active == 'home' && <Home />}
       {active == 'typography' && <Typography />}
+      {active == 'spacing' && <Spacing />}
       <C.BottomBar>
         <C.NavRow>
           {active == 'home' && <C.NavPickActive onPress={() => setActive('home')}><C.NavLabelActive>home</C.NavLabelActive></C.NavPickActive>}
           {active != 'home' && <C.NavPick onPress={() => setActive('home')}><C.NavLabel>home</C.NavLabel></C.NavPick>}
           {active == 'typography' && <C.NavPickActive onPress={() => setActive('typography')}><C.NavLabelActive>type</C.NavLabelActive></C.NavPickActive>}
           {active != 'typography' && <C.NavPick onPress={() => setActive('typography')}><C.NavLabel>type</C.NavLabel></C.NavPick>}
+          {active == 'spacing' && <C.NavPickActive onPress={() => setActive('spacing')}><C.NavLabelActive>space</C.NavLabelActive></C.NavPickActive>}
+          {active != 'spacing' && <C.NavPick onPress={() => setActive('spacing')}><C.NavLabel>space</C.NavLabel></C.NavPick>}
         </C.NavRow>
         <C.BarSep />
         <C.BarLabel>{active}</C.BarLabel>
