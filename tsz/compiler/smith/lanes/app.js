@@ -75,6 +75,8 @@ function compileAppLane(source, tokens, file) {
 
   resetCtx();
   ctx._source = source;
+  smithTraceSetCursor(c);
+  smithTraceSetPhase('collect');
   if (source.indexOf('// @borderless') !== -1) ctx.borderless = true;
   assignSurfaceTier(source, file);
   collectCompilerInputs(c);
@@ -88,10 +90,13 @@ function compileAppLane(source, tokens, file) {
   var routeErr = buildRoutePlan(source);
   if (routeErr) return routeErr;
 
+  smithTraceSetPhase('parse');
   moveToAppReturn(c, appStart);
 
   var root = parseJSXElement(c);
+  ctx._traceRootNode = root;
   if (root.luaNode) ctx._luaRootNode = root.luaNode;
+  smithTraceSetCursor(null);
 
   flushInlineDebugLogs();
 

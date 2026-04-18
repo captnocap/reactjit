@@ -151,6 +151,34 @@ function _peekNumericComparison(c, startPos) {
   return { op: op, value: c.textAt(pos), endPos: pos };
 }
 
+function _peekStringComparison(c, startPos) {
+  if (startPos >= c.count) return null;
+  var op = null;
+  var pos = startPos;
+  if (c.kindAt(pos) === TK.identifier && c.textAt(pos) === 'exact') {
+    op = '==';
+    pos++;
+    if (pos < c.count && c.kindAt(pos) === TK.equals) pos++;
+  } else if (c.kindAt(pos) === TK.eq_eq || c.kindAt(pos) === TK.not_eq) {
+    op = c.kindAt(pos) === TK.eq_eq ? '==' : '!=';
+    pos++;
+    if (pos < c.count && c.kindAt(pos) === TK.equals) pos++;
+  } else {
+    return null;
+  }
+  if (pos >= c.count) return null;
+  if (c.kindAt(pos) === TK.string) return { op: op, value: c.textAt(pos), endPos: pos };
+  if (c.kindAt(pos) === TK.identifier) {
+    var ident = c.textAt(pos);
+    if (ident === 'true' || ident === 'false' || ident === 'null' || ident === 'undefined') return null;
+    if (isGetter(ident)) return null;
+    if (ctx.renderLocals && ctx.renderLocals[ident] !== undefined) return null;
+    if (ctx.propStack && ctx.propStack[ident] !== undefined) return null;
+    return { op: op, value: '"' + ident.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"', endPos: pos };
+  }
+  return null;
+}
+
 function _luaBoolNumericComparison(expr, cmp) {
   if (!cmp) return null;
   if (!expr || !_looksBooleanLikeRuntimeExpr(expr)) return null;
@@ -167,6 +195,50 @@ function _condBoolNumericComparison(expr, cmp) {
   if ((cmp.op === '==' && cmp.value === '1') || (cmp.op === '!=' && cmp.value === '0')) {
     return '(' + expr + ')';
   }
+  return null;
+}
+
+function _unwrapCondNumericBoolIfExpr(expr) {
+  if (typeof expr !== 'string') return null;
+  var value = expr.trim();
+  for (var _pi = 0; _pi < 2; _pi++) {
+    if (value.charAt(0) !== '(' || value.charAt(value.length - 1) !== ')') break;
+    var depth = 0;
+    var wrapsWhole = true;
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0 && i < value.length - 1) {
+          wrapsWhole = false;
+          break;
+        }
+      }
+    }
+    if (!wrapsWhole) break;
+    value = value.slice(1, -1).trim();
+  }
+  if (value.indexOf('if (') !== 0) return null;
+  var condStart = value.indexOf('(');
+  var condDepth = 0;
+  var condEnd = -1;
+  for (var ci = condStart; ci < value.length; ci++) {
+    var cch = value.charAt(ci);
+    if (cch === '(') condDepth++;
+    else if (cch === ')') {
+      condDepth--;
+      if (condDepth === 0) {
+        condEnd = ci;
+        break;
+      }
+    }
+  }
+  if (condEnd < 0) return null;
+  var cond = value.slice(condStart + 1, condEnd).trim();
+  var tail = value.slice(condEnd + 1).trim();
+  if (/^@as\(i64,\s*1\)\s*else\s*@as\(i64,\s*0\)$/.test(tail)) return { cond: cond, truthyWhenTrue: true };
+  if (/^@as\(i64,\s*0\)\s*else\s*@as\(i64,\s*1\)$/.test(tail)) return { cond: cond, truthyWhenTrue: false };
   return null;
 }
 
@@ -488,6 +560,7 @@ function _buildLuaCondFromTokens(c, savedStart) {
 function tryParseConditional(c, children) {
   // Look ahead: identifier (op identifier/number)* && <
   const saved = c.save();
+  const _condStartPos = c.pos;
   // Map expressions own their own callback-local conditionals. If we scan them
   // here, a nested `&&` inside the callback can hijack the whole brace expr.
   if (c.kind() === TK.identifier && typeof _identifierStartsMapCall === 'function' && _identifierStartsMapCall(c)) {
@@ -525,7 +598,11 @@ function tryParseConditional(c, children) {
       continue;
     }
     if (c.kind() === TK.amp_amp) {
+      const _condTokenEnd = c.pos;
       c.advance();
+      const _acornCondExpr = (ctx.inlineComponent || (ctx.propsObjectName && ctx.propStack))
+        ? _parseSmithConditionExprFromTokens(c, _condStartPos, _condTokenEnd, ctx)
+        : null;
       // Skip optional ( wrapper around JSX
       let parenWrapped = false;
       let savedBeforeParen = null;
@@ -539,7 +616,7 @@ function tryParseConditional(c, children) {
           ((c.kind() === TK.identifier && c.text() === 'children') ||
            (c.kind() === TK.identifier && ctx.propsObjectName && c.text() === ctx.propsObjectName &&
             c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'children'))) {
-        const condExpr = condParts.join('');
+        const condExpr = _acornCondExpr || condParts.join('');
         // Skip tokens: children or props.children
         if (c.text() === 'children') { c.advance(); }
         else { c.advance(); c.advance(); c.advance(); } // props . children
@@ -558,7 +635,7 @@ function tryParseConditional(c, children) {
       }
       // Check if next is JSX
       if (c.kind() === TK.lt) {
-        const condExpr = condParts.join('');
+        const condExpr = _acornCondExpr || condParts.join('');
         const jsxNode = parseJSXElement(c);
         if (parenWrapped && c.kind() === TK.rparen) c.advance();
         if (c.kind() === TK.rbrace) c.advance();
@@ -595,7 +672,7 @@ function tryParseConditional(c, children) {
           c.advance();
           if (parenWrapped && c.kind() === TK.rparen) c.advance();
           if (c.kind() === TK.rbrace) c.advance();
-          const condExpr = condParts.join('');
+          const condExpr = _acornCondExpr || condParts.join('');
           // Wrap all children in a conditional Box
           const condIdx = ctx.conditionals.length;
           ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
@@ -618,7 +695,7 @@ function tryParseConditional(c, children) {
           c.advance(); // children
           if (parenWrapped && c.kind() === TK.rparen) c.advance();
           if (c.kind() === TK.rbrace) c.advance();
-          const condExpr = condParts.join('');
+          const condExpr = _acornCondExpr || condParts.join('');
           const condIdx = ctx.conditionals.length;
           ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
           const wrapperExpr = `.{ .style = .{ .flex_direction = .column } }`;
@@ -647,7 +724,7 @@ function tryParseConditional(c, children) {
         if (_cmHasMap) {
           // Restore to after && and let the normal brace child parser handle the map
           // Wrap in a conditional show/hide
-          var condExpr = condParts.join('');
+          var condExpr = _acornCondExpr || condParts.join('');
           var condIdx = ctx.conditionals.length;
           ctx.conditionals.push({ condExpr: condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
           // Parse the map expression as a child — the map parser will route to Lua
@@ -709,6 +786,12 @@ function tryParseConditional(c, children) {
           c.advance(); // skip length
         } else {
           const pav = _condPropValue(pa.value);
+          const pavStrCmp = _peekStringComparison(c, c.pos);
+          if (pavStrCmp) {
+            condParts.push(resolveComparison(pav, pavStrCmp.op, pavStrCmp.value, ctx));
+            while (c.pos <= pavStrCmp.endPos) c.advance();
+            continue;
+          }
           const pavCmp = _peekNumericComparison(c, c.pos);
           const pavBoolCmp = _condBoolNumericComparison(pav, pavCmp);
           if (pavBoolCmp) {
@@ -793,7 +876,23 @@ function tryParseConditional(c, children) {
         const nextKind = c.pos + 1 < c.count ? c.kindAt(c.pos + 1) : TK.eof;
         const hasExplicitComparison = nextKind === TK.eq_eq || nextKind === TK.not_eq ||
           nextKind === TK.gt || nextKind === TK.gt_eq || nextKind === TK.lt || nextKind === TK.lt_eq;
+      const rlBoolIf = _unwrapCondNumericBoolIfExpr(rlVal);
+      const rlStrCmp = _peekStringComparison(c, c.pos + 1);
+      if (rlStrCmp && rlBoolIf) {
+        condParts.push(resolveComparison(rlBoolIf.cond, rlStrCmp.op, rlStrCmp.value, ctx));
+        while (c.pos <= rlStrCmp.endPos) c.advance();
+        continue;
+      }
       const rlCmp = _peekNumericComparison(c, c.pos + 1);
+      if (rlCmp && rlBoolIf) {
+        var _rlCondExpr = rlBoolIf.truthyWhenTrue ? rlBoolIf.cond : '(!(' + rlBoolIf.cond + '))';
+        var _rlBoolIfCmp = _condBoolNumericComparison(_rlCondExpr, rlCmp);
+        if (_rlBoolIfCmp) {
+          condParts.push(_rlBoolIfCmp);
+          while (c.pos <= rlCmp.endPos) c.advance();
+          continue;
+        }
+      }
       const rlBoolCmp = _condBoolNumericComparison(rlVal, rlCmp);
       if (rlBoolCmp) {
         condParts.push(rlBoolCmp);
@@ -881,6 +980,12 @@ function tryParseConditional(c, children) {
           continue;
         }
         const pvCond = _condPropValue(pv);
+        const pvStrCmp = _peekStringComparison(c, c.pos + 1);
+        if (pvStrCmp) {
+          condParts.push(resolveComparison(pvCond, pvStrCmp.op, pvStrCmp.value, ctx));
+          while (c.pos <= pvStrCmp.endPos) c.advance();
+          continue;
+        }
         const pvCmp = _peekNumericComparison(c, c.pos + 1);
         const pvBoolCmp = _condBoolNumericComparison(pvCond, pvCmp);
         if (pvBoolCmp) {

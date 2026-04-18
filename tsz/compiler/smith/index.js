@@ -27,7 +27,13 @@ function compile() {
   const file = globalThis.__file || 'unknown.tsz';
   // Debug mode disabled — enable manually when debugging component inlining
   // if (file.includes('Tools.app')) globalThis.__SMITH_DEBUG_INLINE = 1;
-  return compileLane(source, tokens, file);
+  try {
+    return compileLane(source, tokens, file);
+  } finally {
+    if (globalThis.__TRACE_MUTATIONS === 1 && typeof smithTracePublish === 'function') {
+      smithTracePublish(file);
+    }
+  }
 }
 
 function sourceContract() {
@@ -36,7 +42,13 @@ function sourceContract() {
   const file = globalThis.__file || 'unknown.tsz';
   globalThis.__SOURCE_CONTRACT_MODE = 1;
   try {
-    return compileLane(source, tokens, file);
+    try {
+      return compileLane(source, tokens, file);
+    } finally {
+      if (globalThis.__TRACE_MUTATIONS === 1 && typeof smithTracePublish === 'function') {
+        smithTracePublish(file);
+      }
+    }
   } finally {
     globalThis.__SOURCE_CONTRACT_MODE = 0;
   }

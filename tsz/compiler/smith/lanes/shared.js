@@ -120,6 +120,7 @@ function buildSourceContractSnapshot(nodeExpr, file, extra) {
 function finishParsedLane(nodeExpr, file, opts) {
   opts = opts || {};
 
+  smithTraceSetPhase('preflight');
   var pf = validate(ctx);
   if (opts.logPreflight) {
     LOG_EMIT('L092', { lane: pf.lane, summary: Object.keys(pf.intents).filter(function(k) { return pf.intents[k]; }).join(',') });
@@ -157,7 +158,9 @@ function finishParsedLane(nodeExpr, file, opts) {
     }
   }
 
+  smithTraceSetPhase('emit');
   var zigOut = emitOutput(nodeExpr, file);
+  smithTraceFinalizeEmit(nodeExpr, zigOut);
 
   // ── Routing check — verify output matches route plan ──
   if (ctx._routePlan && typeof routingCheck === 'function') {

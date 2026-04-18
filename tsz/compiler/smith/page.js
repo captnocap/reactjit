@@ -618,6 +618,8 @@ function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks, dec
 // Current named dictionary pages (`<home page>`) do not enter here.
 
 function compilePage(source, c, file) {
+  smithTraceSetCursor(c);
+  smithTraceSetPhase('collect');
   // Extract route name
   var pageMatch = source.match(/<page\s+route=(\w+)\s*>/);
   var routeName = pageMatch ? pageMatch[1] : 'Page';
@@ -751,7 +753,10 @@ function compilePage(source, c, file) {
   }
 
   // Parse JSX tree
+  smithTraceSetPhase('parse');
   var root = parseJSXElement(c);
+  ctx._traceRootNode = root;
+  smithTraceSetCursor(null);
 
   // ── Append __evalDynTexts to JS_LOGIC for JS-evaluated expressions ──
   if (ctx._jsDynTexts.length > 0) {

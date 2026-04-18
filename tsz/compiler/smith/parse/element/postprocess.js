@@ -28,8 +28,25 @@ function applyClassifierDefaults(clsDef, state) {
 function bindVariantState(clsDef, clsName, state) {
   if (!clsDef || (!clsDef.variants && !clsDef.bp)) return;
 
-  var vStyles = [state.styleFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
-  var vNodeFields = [state.nodeFields.filter(function(f) { return !f.startsWith('._'); }).join(', ')];
+  // Surface Text-node fields (font_size, text_color) into the style branch so
+  // runtime variant switching covers Text classifier entries too. Without this
+  // the Lua emit of font_size/text_color sits at node-level and stays static
+  // across variants.
+  function _lift(styleFieldsStr, nodeFieldsArr) {
+    var lifted = styleFieldsStr;
+    for (var ni = 0; ni < nodeFieldsArr.length; ni++) {
+      var nf = nodeFieldsArr[ni];
+      if (nf.startsWith('.font_size = ') || nf.startsWith('.text_color = ')) {
+        lifted = lifted ? lifted + ', ' + nf : nf;
+      }
+    }
+    return lifted;
+  }
+
+  var baseStyleFields = state.styleFields.filter(function(f) { return !f.startsWith('._'); });
+  var baseNodeFields = state.nodeFields.filter(function(f) { return !f.startsWith('._'); });
+  var vStyles = [_lift(baseStyleFields.join(', '), baseNodeFields)];
+  var vNodeFields = [baseNodeFields.join(', ')];
   for (var vi = 0; vi < ctx.variantNames.length; vi++) {
     var vname = ctx.variantNames[vi];
     var vdef = clsDef.variants && clsDef.variants[vname];
@@ -37,11 +54,13 @@ function bindVariantState(clsDef, clsName, state) {
       var vFields = mergeFields(clsStyleFields(vdef), state.styleFields.filter(function(f) {
         return !clsStyleFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
       }));
-      vStyles.push(vFields.filter(function(f) { return !f.startsWith('._'); }).join(', '));
       var vnf = mergeFields(clsNodeFields(vdef), state.nodeFields.filter(function(f) {
         return !clsNodeFields(clsDef).some(function(cf) { return cf.split('=')[0].trim() === f.split('=')[0].trim(); });
       }));
-      vNodeFields.push(vnf.filter(function(f) { return !f.startsWith('._'); }).join(', '));
+      var vFieldsStr = vFields.filter(function(f) { return !f.startsWith('._'); }).join(', ');
+      var vnfArr = vnf.filter(function(f) { return !f.startsWith('._'); });
+      vStyles.push(_lift(vFieldsStr, vnfArr));
+      vNodeFields.push(vnfArr.join(', '));
     } else {
       vStyles.push(vStyles[0]);
       vNodeFields.push(vNodeFields[0]);

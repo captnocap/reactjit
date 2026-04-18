@@ -22,6 +22,49 @@ function _normalizeInlineComponentPropValue(value) {
   return value;
 }
 
+function _matchInlineReturnNullGuard(c) {
+  const saved = c.save();
+  if (!c.isIdent('if')) return null;
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+  const condStart = c.pos;
+  let depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen) depth++;
+    else if (c.kind() === TK.rparen) {
+      depth--;
+      if (depth === 0) break;
+    }
+    c.advance();
+  }
+  if (depth !== 0) { c.restore(saved); return null; }
+  const condEnd = c.pos;
+  const condExpr = _parseSmithConditionExprFromTokens(c, condStart, condEnd, ctx);
+  const showCondExpr = _parseSmithInvertedConditionExprFromTokens(c, condStart, condEnd, ctx);
+  c.advance(); // )
+  let blockWrapped = false;
+  if (c.kind() === TK.lbrace) {
+    blockWrapped = true;
+    c.advance();
+  }
+  if (!c.isIdent('return')) { c.restore(saved); return null; }
+  c.advance();
+  if (!c.isIdent('null')) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() === TK.semicolon) c.advance();
+  if (blockWrapped) {
+    if (c.kind() !== TK.rbrace) { c.restore(saved); return null; }
+    c.advance();
+  }
+  c.restore(saved);
+  if (!condExpr && !showCondExpr) return null;
+  return {
+    condExpr: showCondExpr || '(!(' + condExpr + '))',
+    luaCondExpr: showCondExpr || '(!(' + condExpr + '))',
+  };
+}
+
 function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   // Guard against recursive component inlining (e.g. RecursiveCard calls itself)
   if (!ctx._inliningStack) ctx._inliningStack = [];
@@ -42,9 +85,6 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   ctx.inlineComponent = rawTag;
   ctx.componentChildren = compChildren;
   if (globalThis.__SMITH_DEBUG) print('[INLINE] ' + rawTag + ' propStack: ' + JSON.stringify(propValues) + ' inMap: ' + !!ctx.currentMap);
-  if (rawTag === 'TopBar' || rawTag === 'Sidebar' || rawTag === 'MainSurfacePane' || rawTag === 'TopBarAction' || rawTag === 'ExplorerNodeRow' || rawTag === 'GitBadge') {
-    print('[PROP_STACK ' + rawTag + '] ' + JSON.stringify(propValues));
-  }
 
   // Set propsObjectName for bare-param components: function Comp(props) { ... props.X ... }
   const savedPropsObjectName = ctx.propsObjectName;
@@ -75,6 +115,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   // Handles patterns like: const isActive = props.active === 1;
   const savedRenderLocals = Object.assign({}, ctx.renderLocals);
   const savedRenderLocalRaw = Object.assign({}, ctx._renderLocalRaw || {});
+  const inlineGuardConds = [];
   ctx.renderLocals = {};
   ctx._renderLocalRaw = {};
   if (comp.funcBodyPos >= 0 && comp.bodyPos > comp.funcBodyPos) {
@@ -83,6 +124,10 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     if (c.kind() === TK.lbrace) c.advance();
     while (c.pos < comp.bodyPos) {
       if (c.isIdent('return')) break;
+      const inlineGuard = _matchInlineReturnNullGuard(c);
+      if (inlineGuard) {
+        inlineGuardConds.push(inlineGuard);
+      }
       if (c.isIdent('const') || c.isIdent('let') || c.isIdent('var')) {
         c.advance();
         if (c.kind() === TK.lbracket) {
@@ -112,33 +157,8 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 let pv = _normalizeInlineComponentPropValue(typeof pa.value === 'string' ? pa.value : String(pa.value));
                 // Wrap if-expressions in parens so Zig operator precedence works
                 if (pv.includes('if (') && pv.includes(' else ')) pv = '(' + pv + ')';
-                skipPropsAccess(c, pa);
-                if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
-                  var _pvCmpOp = c.kind() === TK.eq_eq ? '==' : '!=';
-                  c.advance();
-                  if (c.kind() === TK.equals) c.advance();
-                  if (c.kind() === TK.number || c.kind() === TK.string) {
-                    valParts.push(resolveComparison(pv, _pvCmpOp, c.text(), ctx));
-                    c.advance();
-                    continue;
-                  }
-                  valParts.push(pv);
-                  valParts.push(' ' + _pvCmpOp + ' ');
-                  continue;
-                }
-                if (c.kind() === TK.identifier && c.text() === 'exact') {
-                  c.advance();
-                  if (c.kind() === TK.equals) c.advance();
-                  if (c.kind() === TK.string) {
-                    valParts.push(resolveComparison(pv, '==', c.text(), ctx));
-                    c.advance();
-                    continue;
-                  }
-                  valParts.push(pv);
-                  valParts.push(' == ');
-                  continue;
-                }
                 valParts.push(pv);
+                skipPropsAccess(c, pa);
                 continue;
               }
               // Const OA bracket access: nodes[0] or nodes[0].field
@@ -253,19 +273,8 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     }
     c.restore(rlSaved);
   }
-  if (rawTag === 'TopBarAction' || rawTag === 'ExplorerNodeRow' || rawTag === 'GitBadge') {
-    print('[RENDER_LOCALS ' + rawTag + '] ' + JSON.stringify(ctx.renderLocals));
-  }
 
   c.pos = comp.bodyPos;
-  // -> PROBE INJECTED HERE
-  print('[INLINE PROBE] Inlining component: ' + comp.name + ' bodyPos: ' + comp.bodyPos + ' token: ' + c.text() + ' kind: ' + c.kind());
-  if (comp.name === 'TopBar' || comp.name === 'Sidebar' || comp.name === 'MainSurfacePane' || comp.name === 'TopBarAction' || comp.name === 'ExplorerNodeRow' || comp.name === 'GitBadge') {
-    for (var _tdi = comp.bodyPos; _tdi < Math.min(comp.bodyPos + 40, c.count); _tdi++) {
-      print('[INLINE TOK ' + comp.name + ' @' + _tdi + '] kind=' + c.kindAt(_tdi) + ' text=' + c.textAt(_tdi));
-    }
-  }
-  
   let result;
   if (c.kind() === TK.identifier) {
     const maybeArr = c.text();
@@ -360,6 +369,22 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   }
 
   ctx._inliningStack.pop();
+  if (result && inlineGuardConds.length > 0 && result.condIdx === undefined) {
+    let combinedCond = inlineGuardConds[0].condExpr;
+    let combinedLua = inlineGuardConds[0].luaCondExpr;
+    for (let gi = 1; gi < inlineGuardConds.length; gi++) {
+      combinedCond = '(' + combinedCond + ') and (' + inlineGuardConds[gi].condExpr + ')';
+      combinedLua = '(' + combinedLua + ') and (' + inlineGuardConds[gi].luaCondExpr + ')';
+    }
+    const condIdx = ctx.conditionals.length;
+    ctx.conditionals.push({
+      condExpr: combinedCond,
+      luaCondExpr: combinedLua,
+      kind: 'show_hide',
+      inMap: !!ctx.currentMap
+    });
+    result.condIdx = condIdx;
+  }
   ctx.propStack = savedProps;
   ctx.inlineComponent = savedInline;
   ctx.componentChildren = savedChildren;

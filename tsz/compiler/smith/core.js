@@ -165,6 +165,371 @@ function mkCursor(raw, source) {
   };
 }
 
+function _smithTraceShort(value, maxLen) {
+  var limit = maxLen || 96;
+  if (value === null || value === undefined) return '';
+  var out = String(value).replace(/\s+/g, ' ').trim();
+  if (out.length > limit) out = out.slice(0, limit - 3) + '...';
+  return out;
+}
+
+function _smithTraceLineCol(source, offset) {
+  var line = 1;
+  var col = 1;
+  if (!source || offset === undefined || offset === null || offset < 0) return { line: 0, col: 0 };
+  for (var i = 0; i < offset && i < source.length; i++) {
+    if (source.charCodeAt(i) === 10) {
+      line++;
+      col = 1;
+    } else {
+      col++;
+    }
+  }
+  return { line: line, col: col };
+}
+
+function smithTraceSpanFromOffsets(start, end) {
+  var source = (ctx && ctx._source) || globalThis.__source || '';
+  if (start === undefined || start === null) return null;
+  var finish = end === undefined || end === null ? start : end;
+  var beginLC = _smithTraceLineCol(source, start);
+  var endLC = _smithTraceLineCol(source, finish);
+  return {
+    start: start,
+    end: finish,
+    line: beginLC.line,
+    col: beginLC.col,
+    endLine: endLC.line,
+    endCol: endLC.col,
+  };
+}
+
+function _smithTraceActiveSpan() {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.cursor) return null;
+  var c = ctx._mutationTrace.cursor;
+  if (!c || !c.starts || c.count <= 0) return null;
+  var pos = c.pos;
+  if (pos >= c.count) pos = c.count - 1;
+  if (pos < 0) pos = 0;
+  var start = c.starts[pos];
+  var end = c.ends && c.ends[pos] !== undefined ? c.ends[pos] : start;
+  if (start === undefined && pos > 0) {
+    start = c.starts[pos - 1];
+    end = c.ends && c.ends[pos - 1] !== undefined ? c.ends[pos - 1] : start;
+  }
+  if (start === undefined) return null;
+  return smithTraceSpanFromOffsets(start, end);
+}
+
+function _smithTraceNormalizeData(data) {
+  if (!data || typeof data !== 'object') return data || null;
+  var out = {};
+  var keys = Object.keys(data);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var value = data[key];
+    if (value === undefined || typeof value === 'function') continue;
+    if (typeof value === 'string') out[key] = _smithTraceShort(value, 140);
+    else if (value && typeof value === 'object') out[key] = _smithTraceShort(JSON.stringify(value), 140);
+    else out[key] = value;
+  }
+  return out;
+}
+
+function _smithTraceNextId(trace, kind) {
+  if (!trace.counters[kind]) trace.counters[kind] = 0;
+  trace.counters[kind]++;
+  return trace.counters[kind];
+}
+
+function _smithTraceLabelFor(kind, item) {
+  if (!item || typeof item !== 'object') return kind;
+  if (kind === 'state_slot') return item.getter || item.setter || kind;
+  if (kind === 'object_array') return item.getter || ('oa' + item.oaIdx);
+  if (kind === 'component') return item.name || kind;
+  if (kind === 'handler') return item.name || kind;
+  if (kind === 'dyn_text') return 'buf' + (item.bufId !== undefined ? item.bufId : '?');
+  if (kind === 'map') {
+    var oaName = item.oa && item.oa.getter ? item.oa.getter : 'map';
+    return oaName + '.map';
+  }
+  if (kind === 'conditional') return 'cond' + (item.condIdx !== undefined ? item.condIdx : '');
+  if (kind === 'dyn_style') return item.field || kind;
+  if (kind === 'dyn_color') return item.field || 'text_color';
+  if (kind === 'variant_binding') return item.clsName || kind;
+  if (kind === 'node') return item.tag || item.srcTag || 'Node';
+  return kind;
+}
+
+function _smithTraceMetaFor(kind, item, collectionName) {
+  if (!item || typeof item !== 'object') return {};
+  if (kind === 'state_slot') {
+    return { getter: item.getter || '', setter: item.setter || '', type: item.type || '', collection: collectionName };
+  }
+  if (kind === 'object_array') {
+    return { getter: item.getter || '', setter: item.setter || '', oaIdx: item.oaIdx, fields: item.fields ? item.fields.length : 0, collection: collectionName };
+  }
+  if (kind === 'component') {
+    return { name: item.name || '', props: item.propNames ? item.propNames.length : 0, collection: collectionName };
+  }
+  if (kind === 'handler') {
+    return { name: item.name || '', inMap: !!item.inMap, mapIdx: item.mapIdx, collection: collectionName };
+  }
+  if (kind === 'dyn_text') {
+    return {
+      bufId: item.bufId,
+      fmt: item.fmtString || '',
+      inMap: !!item.inMap,
+      mapIdx: item.mapIdx,
+      targetField: item.targetField || 'text',
+      collection: collectionName,
+    };
+  }
+  if (kind === 'map') {
+    return {
+      mapIdx: item.mapIdx,
+      oaIdx: item.oaIdx,
+      oa: item.oa && item.oa.getter ? item.oa.getter : '',
+      nested: !!item.isNested,
+      inline: !!item.isInline,
+      collection: collectionName,
+    };
+  }
+  if (kind === 'conditional') return { inMap: !!item.inMap, arrName: item.arrName || '', collection: collectionName };
+  if (kind === 'dyn_style') return { field: item.field || '', expression: item.expression || '', collection: collectionName };
+  if (kind === 'dyn_color') return { field: item.field || 'text_color', expression: item.expression || item.colorExpr || '', collection: collectionName };
+  if (kind === 'variant_binding') return { clsName: item.clsName || '', inMap: !!item.inMap, collection: collectionName };
+  return { collection: collectionName };
+}
+
+function smithTraceEnsureEntity(target, kind, meta) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return target;
+  if (!target || typeof target !== 'object') return target;
+  meta = meta || {};
+  if (!target._traceId) {
+    var trace = ctx._mutationTrace;
+    target._traceKind = kind || target._traceKind || 'entity';
+    target._traceId = target._traceKind + '#' + _smithTraceNextId(trace, target._traceKind);
+    target._traceLabel = meta.label || _smithTraceLabelFor(target._traceKind, target);
+    target._traceSpan = meta.span || _smithTraceActiveSpan();
+    trace.entities[target._traceId] = {
+      id: target._traceId,
+      kind: target._traceKind,
+      label: target._traceLabel || target._traceKind,
+      span: target._traceSpan || null,
+      meta: _smithTraceNormalizeData(meta.meta) || {},
+      events: [],
+    };
+    trace.order.push(target._traceId);
+  } else if (meta.label || meta.span || meta.meta) {
+    var rec = ctx._mutationTrace.entities[target._traceId];
+    if (rec) {
+      if (meta.label && !rec.label) rec.label = meta.label;
+      if (meta.span && !rec.span) rec.span = meta.span;
+      if (meta.meta) {
+        var norm = _smithTraceNormalizeData(meta.meta);
+        var keys = Object.keys(norm || {});
+        for (var i = 0; i < keys.length; i++) {
+          if (rec.meta[keys[i]] === undefined) rec.meta[keys[i]] = norm[keys[i]];
+        }
+      }
+    }
+  }
+  return target;
+}
+
+function _smithTraceRelatedIds(related) {
+  if (!related) return [];
+  var items = Array.isArray(related) ? related : [related];
+  var out = [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item) continue;
+    if (typeof item === 'string') out.push(item);
+    else if (item._traceId) out.push(item._traceId);
+  }
+  return out;
+}
+
+function smithTraceMutation(target, op, detail, extra) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return;
+  extra = extra || {};
+  var entity = target;
+  if (entity && typeof entity === 'object') {
+    smithTraceEnsureEntity(entity, extra.kind || entity._traceKind || 'entity', extra);
+    entity = entity._traceId;
+  }
+  if (!entity || !ctx._mutationTrace.entities[entity]) return;
+  var rec = ctx._mutationTrace.entities[entity];
+  if (!rec.span && extra.span) rec.span = extra.span;
+  if (!rec.label && extra.label) rec.label = extra.label;
+  rec.events.push({
+    phase: ctx._mutationTrace.phase || 'unknown',
+    op: op,
+    detail: _smithTraceShort(detail || '', 160),
+    related: _smithTraceRelatedIds(extra.related),
+    data: _smithTraceNormalizeData(extra.data) || {},
+  });
+}
+
+function _smithTraceWrapArray(ctxObj, field, kind) {
+  var arr = ctxObj[field];
+  if (!arr || arr.__smithTraceWrapped) return;
+  arr.push = function() {
+    for (var i = 0; i < arguments.length; i++) {
+      var item = arguments[i];
+      smithTraceEnsureEntity(item, kind, {
+        label: _smithTraceLabelFor(kind, item),
+        meta: _smithTraceMetaFor(kind, item, field),
+      });
+      smithTraceMutation(item, 'create', field, {
+        data: _smithTraceMetaFor(kind, item, field),
+      });
+      Array.prototype.push.call(this, item);
+    }
+    return this.length;
+  };
+  arr.__smithTraceWrapped = true;
+}
+
+function _smithTraceWrapCtxCollections(ctxObj) {
+  if (!ctxObj || !ctxObj._mutationTrace || !ctxObj._mutationTrace.enabled) return;
+  _smithTraceWrapArray(ctxObj, 'stateSlots', 'state_slot');
+  _smithTraceWrapArray(ctxObj, 'components', 'component');
+  _smithTraceWrapArray(ctxObj, 'handlers', 'handler');
+  _smithTraceWrapArray(ctxObj, 'dynTexts', 'dyn_text');
+  _smithTraceWrapArray(ctxObj, 'dynColors', 'dyn_color');
+  _smithTraceWrapArray(ctxObj, 'dynStyles', 'dyn_style');
+  _smithTraceWrapArray(ctxObj, 'conditionals', 'conditional');
+  _smithTraceWrapArray(ctxObj, 'objectArrays', 'object_array');
+  _smithTraceWrapArray(ctxObj, 'maps', 'map');
+  _smithTraceWrapArray(ctxObj, 'variantBindings', 'variant_binding');
+}
+
+function smithTraceSetPhase(phase) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return;
+  ctx._mutationTrace.phase = phase;
+}
+
+function smithTraceSetCursor(cursor) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return;
+  ctx._mutationTrace.cursor = cursor || null;
+}
+
+function _smithTraceMatchesLine(rec, lineFilter) {
+  if (!lineFilter || lineFilter <= 0) return true;
+  if (!rec || !rec.span) return false;
+  var start = rec.span.line || 0;
+  var finish = rec.span.endLine || start;
+  return lineFilter >= start && lineFilter <= finish;
+}
+
+function smithTraceFinalizeEmit(nodeExpr, zigOut) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return;
+  if (ctx._mutationTrace.emitFinalized) return;
+  ctx._mutationTrace.emitFinalized = true;
+  if (ctx._traceRootNode) {
+    smithTraceMutation(ctx._traceRootNode, 'emit.root', _smithTraceShort(nodeExpr || '', 120), {
+      data: {
+        output: (typeof zigOut === 'string' && zigOut.indexOf('__SPLIT_OUTPUT__') === 0) ? 'split' : 'single',
+        bytes: zigOut ? zigOut.length : 0,
+      },
+    });
+  }
+  if (ctx.dynTexts) {
+    for (var di = 0; di < ctx.dynTexts.length; di++) {
+      var dt = ctx.dynTexts[di];
+      var target = dt.arrName ? (dt.arrName + '[' + dt.arrIndex + '].' + (dt.targetField || 'text')) :
+        (dt.inMap ? ('map#' + dt.mapIdx + '::__mt' + dt.bufId + '__') : ('buf' + dt.bufId));
+      smithTraceMutation(dt, 'emit.dynamic_target', target, {
+        data: { fmt: dt.fmtString || '', inMap: !!dt.inMap, mapIdx: dt.mapIdx },
+      });
+    }
+  }
+  if (ctx.maps) {
+    for (var mi = 0; mi < ctx.maps.length; mi++) {
+      var mapInfo = ctx.maps[mi];
+      var mapTarget = mapInfo.parentArr ?
+        (mapInfo.parentArr + '[' + mapInfo.childIdx + '].children <- _map_pool_' + mapInfo.mapIdx) :
+        ('_map_pool_' + mapInfo.mapIdx);
+      smithTraceMutation(mapInfo, 'emit.map_target', mapTarget, {
+        data: {
+          nested: !!mapInfo.isNested,
+          inline: !!mapInfo.isInline,
+          oa: mapInfo.oa && mapInfo.oa.getter ? mapInfo.oa.getter : '',
+        },
+      });
+    }
+  }
+  if (ctx.handlers) {
+    for (var hi = 0; hi < ctx.handlers.length; hi++) {
+      var handler = ctx.handlers[hi];
+      if (handler._traceLastRoute) {
+        smithTraceMutation(handler, 'emit.handler_route', handler._traceLastRoute, {
+          data: { inMap: !!handler.inMap, mapIdx: handler.mapIdx },
+        });
+      }
+    }
+  }
+}
+
+function _smithTraceBuildSnapshot(file) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return null;
+  var trace = ctx._mutationTrace;
+  var entities = [];
+  for (var i = 0; i < trace.order.length; i++) {
+    var id = trace.order[i];
+    var rec = trace.entities[id];
+    if (!rec) continue;
+    if (!_smithTraceMatchesLine(rec, trace.lineFilter)) continue;
+    entities.push(rec);
+  }
+  return {
+    version: 'smith-mutations-v1',
+    file: file || trace.file || (globalThis.__file || 'unknown.tsz'),
+    lineFilter: trace.lineFilter || 0,
+    entityCount: entities.length,
+    entities: entities,
+  };
+}
+
+function _smithTraceFormatText(snapshot) {
+  if (!snapshot) return '';
+  var lines = [];
+  var basename = (snapshot.file || 'unknown.tsz').split('/').pop();
+  lines.push('=== Smith mutations: ' + basename + ' ===');
+  if (snapshot.lineFilter) lines.push('line filter: ' + snapshot.lineFilter);
+  lines.push('entities: ' + snapshot.entityCount);
+  for (var i = 0; i < snapshot.entities.length; i++) {
+    var rec = snapshot.entities[i];
+    var loc = rec.span && rec.span.line ? ('L' + rec.span.line + (rec.span.col ? ':' + rec.span.col : '')) : 'L?';
+    lines.push('');
+    lines.push(rec.id + ' [' + rec.kind + '] ' + (rec.label || rec.kind) + ' @ ' + loc);
+    for (var ei = 0; ei < rec.events.length; ei++) {
+      var evt = rec.events[ei];
+      var line = '  ' + (ei + 1) + '. [' + evt.phase + '] ' + evt.op;
+      if (evt.detail) line += ' -> ' + evt.detail;
+      if (evt.related && evt.related.length > 0) line += ' | related: ' + evt.related.join(', ');
+      var keys = Object.keys(evt.data || {});
+      if (keys.length > 0) {
+        var parts = [];
+        for (var ki = 0; ki < keys.length; ki++) parts.push(keys[ki] + '=' + evt.data[keys[ki]]);
+        line += ' | ' + parts.join(' ');
+      }
+      lines.push(line);
+    }
+  }
+  if (snapshot.entities.length === 0) lines.push('', 'No matching mutation entities.');
+  return lines.join('\n');
+}
+
+function smithTracePublish(file) {
+  if (!ctx || !ctx._mutationTrace || !ctx._mutationTrace.enabled) return;
+  var snapshot = _smithTraceBuildSnapshot(file);
+  globalThis.__mutationTraceJSON = JSON.stringify(snapshot, null, 2);
+  globalThis.__mutationTraceText = _smithTraceFormatText(snapshot);
+}
+
 let ctx = {};
 function resetCtx() {
   ctx = {
@@ -213,6 +578,18 @@ function resetCtx() {
     _computedMapCounter: 0,
     _glyphLog: [],
     _literalTextMode: false,
+    _traceRootNode: null,
+    _mutationTrace: {
+      enabled: globalThis.__TRACE_MUTATIONS === 1,
+      lineFilter: globalThis.__TRACE_LINE || 0,
+      phase: 'reset',
+      cursor: null,
+      counters: {},
+      entities: {},
+      order: [],
+      file: globalThis.__file || 'unknown.tsz',
+      emitFinalized: false,
+    },
     // Pattern trace — records every pattern match for diagnostics
     _patternTrace: [],
     _patternDepth: 0,
@@ -224,6 +601,7 @@ function resetCtx() {
     // Monotonic id for Lua-tree ScrollView scroll offset persistence (_scrollY[id])
     nextScrollPersistSlot: 0,
   };
+  _smithTraceWrapCtxCollections(ctx);
 }
 
 // Record a pattern match in the trace

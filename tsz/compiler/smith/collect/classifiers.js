@@ -47,23 +47,30 @@ function collectClassifiers() {
     const base = baseThemeName ? _themeRegistry[baseThemeName] : {};
     _activeTheme = Object.assign({}, base, _themeRegistry['user'] || {});
 
-    function _styleUsesTheme(style) {
-      if (!style) return false;
-      for (const k of Object.keys(style)) {
-        const v = style[k];
-        if (typeof v === 'string' && v.startsWith('theme-')) return true;
+    function _isThemeRef(v) {
+      return typeof v === 'string' && v.startsWith('theme-');
+    }
+    function _resolveThemeRef(v, themeMap) {
+      if (!_isThemeRef(v)) return v;
+      const tok = v.slice(6);
+      return themeMap[tok] !== undefined ? themeMap[tok] : v;
+    }
+    function _entryUsesTheme(entry) {
+      if (!entry) return false;
+      if (entry.style) {
+        for (const k of Object.keys(entry.style)) {
+          if (_isThemeRef(entry.style[k])) return true;
+        }
       }
+      // Top-level Text node fields (not inside .style)
+      if (_isThemeRef(entry.fontSize)) return true;
+      if (_isThemeRef(entry.color)) return true;
       return false;
     }
     function _applyThemeToStyle(style, themeMap) {
       const out = {};
       for (const k of Object.keys(style)) {
-        let v = style[k];
-        if (typeof v === 'string' && v.startsWith('theme-')) {
-          const tok = v.slice(6);
-          if (themeMap[tok] !== undefined) v = themeMap[tok];
-        }
-        out[k] = v;
+        out[k] = _resolveThemeRef(style[k], themeMap);
       }
       return out;
     }
@@ -72,13 +79,17 @@ function collectClassifiers() {
       for (const key of Object.keys(ctx.classifiers)) {
         const entry = ctx.classifiers[key];
         if (!entry || typeof entry !== 'object') continue;
-        if (!_styleUsesTheme(entry.style)) continue;
+        if (!_entryUsesTheme(entry)) continue;
         if (!entry.variants) entry.variants = {};
         for (let i = 1; i < themeNames.length; i++) {
           const vname = themeNames[i];
           const tmap = _themeRegistry[vname];
           if (entry.variants[vname]) continue;
-          entry.variants[vname] = { style: _applyThemeToStyle(entry.style, tmap) };
+          const v = {};
+          if (entry.style) v.style = _applyThemeToStyle(entry.style, tmap);
+          if (entry.fontSize !== undefined) v.fontSize = _resolveThemeRef(entry.fontSize, tmap);
+          if (entry.color !== undefined) v.color = _resolveThemeRef(entry.color, tmap);
+          entry.variants[vname] = v;
         }
       }
     }

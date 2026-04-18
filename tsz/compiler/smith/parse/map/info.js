@@ -20,5 +20,24 @@ function createMapInfo(base, extras) {
     for (var key in extras) mapInfo[key] = extras[key];
   }
 
+  smithTraceEnsureEntity(mapInfo, 'map', {
+    label: (mapInfo.oa && mapInfo.oa.getter ? mapInfo.oa.getter : 'map') + '.map',
+    meta: {
+      oa: mapInfo.oa && mapInfo.oa.getter ? mapInfo.oa.getter : '',
+      oaIdx: mapInfo.oaIdx,
+      itemParam: mapInfo.itemParam,
+      indexParam: mapInfo.indexParam,
+      nested: !!mapInfo.isNested,
+      inline: !!mapInfo.isInline,
+    },
+  });
+  smithTraceMutation(mapInfo, 'parse.create_map', (mapInfo.oa && mapInfo.oa.getter ? mapInfo.oa.getter : 'map') + '.map', {
+    data: {
+      itemParam: mapInfo.itemParam,
+      indexParam: mapInfo.indexParam,
+      nested: !!mapInfo.isNested,
+      inline: !!mapInfo.isInline,
+    },
+  });
   return mapInfo;
 }

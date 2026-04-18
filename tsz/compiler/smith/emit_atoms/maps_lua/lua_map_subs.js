@@ -57,6 +57,98 @@ function _collapseRedundantParens(expr) {
 }
 
 function _simplifyBoolNumericComparison(expr) {
+  function _splitTopLevelLuaLogicalParts(expr) {
+    if (typeof expr !== 'string') return null;
+    var value = expr.trim();
+    var parts = [];
+    var start = 0;
+    var depthParen = 0;
+    var depthBracket = 0;
+    var depthBrace = 0;
+    var quote = '';
+    var escape = false;
+
+    function pushPart(end) {
+      var part = value.slice(start, end).trim();
+      if (part.length > 0) parts.push(part);
+    }
+
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (quote) {
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escape = true;
+          continue;
+        }
+        if (ch === quote) quote = '';
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
+      if (ch === '(') { depthParen++; continue; }
+      if (ch === ')') { if (depthParen > 0) depthParen--; continue; }
+      if (ch === '[') { depthBracket++; continue; }
+      if (ch === ']') { if (depthBracket > 0) depthBracket--; continue; }
+      if (ch === '{') { depthBrace++; continue; }
+      if (ch === '}') { if (depthBrace > 0) depthBrace--; continue; }
+      if (depthParen !== 0 || depthBracket !== 0 || depthBrace !== 0) continue;
+      if (value.slice(i, i + 5) === ' and ') {
+        pushPart(i);
+        start = i + 5;
+        i += 4;
+        continue;
+      }
+      if (value.slice(i, i + 4) === ' or ') {
+        pushPart(i);
+        start = i + 4;
+        i += 3;
+        continue;
+      }
+    }
+
+    if (parts.length === 0) return null;
+    pushPart(value.length);
+    return parts.length > 1 ? parts : null;
+  }
+
+  function _looksBoolLikeLuaExpr(expr) {
+    if (typeof expr !== 'string') return false;
+    var value = expr.trim();
+    if (!value) return false;
+    if (value === 'true' || value === 'false') return true;
+    if (value.charAt(0) === '(' && value.charAt(value.length - 1) === ')') {
+      var depth = 0;
+      var wrapsWhole = true;
+      for (var i = 0; i < value.length; i++) {
+        var ch = value.charAt(i);
+        if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0 && i < value.length - 1) {
+            wrapsWhole = false;
+            break;
+          }
+        }
+      }
+      if (wrapsWhole) return _looksBoolLikeLuaExpr(value.slice(1, -1));
+    }
+    if (value.indexOf('not ') === 0) return _looksBoolLikeLuaExpr(value.slice(4));
+    var logicalParts = _splitTopLevelLuaLogicalParts(value);
+    if (logicalParts) {
+      for (var pi = 0; pi < logicalParts.length; pi++) {
+        if (!_looksBoolLikeLuaExpr(logicalParts[pi])) return false;
+      }
+      return true;
+    }
+    return /(?:==|~=|>=|<=|>|<)/.test(value);
+  }
+
   function _boolCmp(lhs, op, rhs) {
     lhs = lhs.trim();
     if (lhs === 'true') {
@@ -67,6 +159,7 @@ function _simplifyBoolNumericComparison(expr) {
       if ((op === '==' && rhs === '1') || (op === '~=' && rhs === '0')) return 'false';
       if ((op === '~=' && rhs === '1') || (op === '==' && rhs === '0')) return 'true';
     }
+    if (!_looksBoolLikeLuaExpr(lhs)) return '((' + lhs + ') ' + op + ' ' + rhs + ')';
     if ((op === '==' && rhs === '1') || (op === '~=' && rhs === '0')) return '(' + lhs + ')';
     if ((op === '~=' && rhs === '1') || (op === '==' && rhs === '0')) return '(not (' + lhs + '))';
     return '(' + lhs + ' ' + op + ' ' + rhs + ')';

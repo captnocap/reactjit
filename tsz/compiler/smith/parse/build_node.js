@@ -165,6 +165,63 @@ function _cloneInlineGlyphData(glyphData) {
   return out;
 }
 
+function _findTraceDynText(bufId, inMap) {
+  if (!ctx || !ctx.dynTexts) return null;
+  return ctx.dynTexts.find(function(d) {
+    return d.bufId === bufId && (!!d.inMap) === !!inMap;
+  });
+}
+
+function _traceNodeResult(result, tag, srcTag, srcOffset, extra) {
+  extra = extra || {};
+  smithTraceEnsureEntity(result, 'node', {
+    label: tag || 'Node',
+    span: srcOffset !== undefined ? smithTraceSpanFromOffsets(srcOffset, srcOffset + 1) : null,
+    meta: {
+      tag: tag || '',
+      srcTag: srcTag || '',
+      childCount: extra.childCount || 0,
+      dynamicMode: extra.dynamicMode || '',
+    },
+  });
+  smithTraceMutation(result, 'parse.build_node', srcTag === '>' ? '<>' : '<' + (srcTag || tag || 'Node') + '>', {
+    data: {
+      tag: tag || '',
+      childCount: extra.childCount || 0,
+      dynamicMode: extra.dynamicMode || '',
+      array: extra.arrName || '',
+    },
+  });
+  if (extra.handler) {
+    smithTraceMutation(result, 'build.attach_handler', extra.handler.name || '', {
+      related: [extra.handler],
+      data: { route: extra.handler._traceLastRoute || '' },
+    });
+    smithTraceMutation(extra.handler, 'build.bound_to_node', tag || 'Node', {
+      related: [result],
+    });
+  }
+  if (extra.dynamicMode) {
+    var dt = extra.dynText || _findTraceDynText(result.dynBufId, result.inMap);
+    if (dt) {
+      smithTraceMutation(dt, 'build.' + extra.dynamicMode, tag || 'Text', {
+        related: [result],
+        data: { inMap: !!result.inMap, bufId: result.dynBufId },
+      });
+      smithTraceMutation(result, 'build.consume_dyn_text', dt._traceId, {
+        related: [dt],
+        data: { mode: extra.dynamicMode },
+      });
+    }
+  }
+  if (extra.arrName) {
+    smithTraceMutation(result, 'build.bind_children', extra.arrName, {
+      data: { count: extra.childCount || 0 },
+    });
+  }
+  return result;
+}
+
 function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
   // Auto-overflow: DISABLED — was causing scissor clipping that hid text in nested containers.
   // Only explicit overflow in the .tsz source or ScrollView primitives should clip.
@@ -219,7 +276,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
       if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
       if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
-      return result;
+      return _traceNodeResult(result, tag, srcTag, srcOffset, {
+        childCount: 2,
+        dynamicMode: 'split_glyph_dynamic',
+        dynText: _findTraceDynText(result.dynBufId, result.inMap),
+      });
     }
 
     if (dynChild) {
@@ -489,7 +550,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         }
         result.luaNode = _dln;
       }
-      return result;
+      return _traceNodeResult(result, tag, srcTag, srcOffset, {
+        childCount: 0,
+        dynamicMode: 'hoist_dyn_text',
+        dynText: _findTraceDynText(result.dynBufId, result.inMap),
+      });
     }
     // Single static text child — hoist to .text field
     var _hoistedStaticText = null;
@@ -531,8 +596,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     for (const nf of nodeFields) parts.push(nf);
   }
 
+  var _handlerTrace = null;
   if (handlerRef) {
     const handler = ctx.handlers.find(h => h.name === handlerRef);
+    _handlerTrace = handler || null;
     if (handler && handler.luaBody) {
       // Route decision: js_on_press vs lua_on_press
       // If the app has JS script functions (scriptBlock or scriptContent),
@@ -573,20 +640,25 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         }
       }
       if (_useJs && handler.jsBody) {
+        handler._traceLastRoute = 'js_on_press';
         const jsEscaped = handler.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         parts.push(`.handlers = .{ .js_on_press = "${jsEscaped}" }`);
       } else {
+        handler._traceLastRoute = 'lua_on_press';
         const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
       }
     } else {
+      if (_handlerTrace) _handlerTrace._traceLastRoute = 'handler_ptr';
       parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
     }
   }
 
+  var _childArrName = null;
   if (children.length > 0) {
     const arrName = `_arr_${ctx.arrayCounter}`;
     ctx.arrayCounter++;
+    _childArrName = arrName;
     // Transfer parent layout style fields to map placeholder children
     const layoutFields = styleFields.filter(f =>
       f.startsWith('.gap') || f.startsWith('.flex_direction') || f.startsWith('.flex_wrap') ||
@@ -609,11 +681,23 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           const sch = children[sci].subChildren[sj];
           if (sch.dynBufId !== undefined) {
             const dt = ctx.dynTexts.find(d => d.bufId === sch.dynBufId && !!d.inMap === !!sch.inMap);
-            if (dt && !dt.arrName) { dt.arrName = subArrName; dt.arrIndex = sj; }
+            if (dt && !dt.arrName) {
+              dt.arrName = subArrName;
+              dt.arrIndex = sj;
+              smithTraceMutation(dt, 'build.bind_subarray', subArrName + '[' + sj + ']', {
+                data: { array: subArrName, index: sj },
+              });
+            }
           }
           if (sch.mapIdx !== undefined) {
             const m = ctx.maps[sch.mapIdx];
-            if (m) { m.parentArr = subArrName; m.childIdx = sj; }
+            if (m) {
+              m.parentArr = subArrName;
+              m.childIdx = sj;
+              smithTraceMutation(m, 'build.attach_subarray', subArrName + '[' + sj + ']', {
+                data: { array: subArrName, index: sj },
+              });
+            }
           }
           if (sch.condIdx !== undefined) {
             const cond = ctx.conditionals[sch.condIdx];
@@ -648,6 +732,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         if (dt && !dt.arrName) {
           dt.arrName = arrName;
           dt.arrIndex = i;
+          smithTraceMutation(dt, 'build.bind_array', arrName + '[' + i + ']', {
+            data: { array: arrName, index: i },
+          });
         }
       }
       if (children[i].mapIdx !== undefined) {
@@ -655,6 +742,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         if (m) {
           m.parentArr = arrName;
           m.childIdx = i;
+          smithTraceMutation(m, 'build.attach_array', arrName + '[' + i + ']', {
+            data: { array: arrName, index: i },
+          });
         }
       }
       if (children[i].condIdx !== undefined) {
@@ -827,6 +917,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           }
           _ln._variantStyles.push(_vs);
         }
+        // If the variant style branch carries text_color/font_size, drop the
+        // node-level duplicates so runtime variant swap is the only source of
+        // truth for Text classifier entries.
+        var _vsHead = _ln._variantStyles[0] || {};
+        if (_vsHead.text_color !== undefined) _ln.color = undefined;
+        if (_vsHead.font_size !== undefined) _ln.fontSize = undefined;
       }
     }
     // Overlay dynStyle expressions — these replace placeholder values (0, Color{})
@@ -861,8 +957,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       for (var _ni = 0; _ni < nodeFields.length; _ni++) {
         var _nf = nodeFields[_ni];
         if (typeof _nf === 'string') {
-          if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
-          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _cleanZigExpr(_nf.slice(14));
+          var _vsHead2 = (_ln._variantStyles && _ln._variantStyles[0]) || null;
+          if (_nf.startsWith('.font_size = ') && !(_vsHead2 && _vsHead2.font_size !== undefined)) _ln.fontSize = _nf.slice(13);
+          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color) && !(_vsHead2 && _vsHead2.text_color !== undefined)) _ln.color = _cleanZigExpr(_nf.slice(14));
           if (_nf.startsWith('.text = ')) {
             var _textVal = _nf.slice(8);
             var _isQuotedStr = _textVal.charAt(0) === '"' && _textVal.charAt(_textVal.length - 1) === '"';
@@ -1131,5 +1228,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     nodeResult.luaNode = _ln;
   }
 
-  return nodeResult;
+  return _traceNodeResult(nodeResult, tag, srcTag, srcOffset, {
+    childCount: children.length,
+    arrName: _childArrName,
+    handler: _handlerTrace,
+  });
 }

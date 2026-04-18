@@ -13,6 +13,20 @@ function enterMapContext(mapInfo) {
   mapInfo.mapIdx = ctx.maps.length;
   ctx.maps.push(mapInfo);
   ctx.currentMap = mapInfo;
+  smithTraceMutation(mapInfo, 'parse.enter_map', 'map#' + mapInfo.mapIdx, {
+    related: mapInfo.parentMap ? [mapInfo.parentMap] : null,
+    data: {
+      mapIdx: mapInfo.mapIdx,
+      nested: !!mapInfo.isNested,
+      inline: !!mapInfo.isInline,
+      oa: mapInfo.oa && mapInfo.oa.getter ? mapInfo.oa.getter : '',
+    },
+  });
+  if (mapInfo.parentMap) {
+    smithTraceMutation(mapInfo.parentMap, 'parse.spawn_nested_map', mapInfo._traceId, {
+      related: [mapInfo],
+    });
+  }
 
   mapInfo._topArrayDecls = scope.arrayDecls;
   mapInfo._topArrayComments = scope.arrayComments;
@@ -42,5 +56,18 @@ function consumeMapClose(c) {
 function finalizeMapNode(mapInfo, templateNode) {
   mapInfo.templateExpr = templateNode.nodeExpr;
   if (templateNode.luaNode) mapInfo._luaBodyNode = templateNode.luaNode;
+  smithTraceMutation(mapInfo, 'parse.attach_template', _smithTraceShort(templateNode.nodeExpr, 120), {
+    related: templateNode && templateNode._traceId ? [templateNode] : null,
+    data: {
+      mapIdx: mapInfo.mapIdx,
+      nested: !!mapInfo.isNested,
+      inline: !!mapInfo.isInline,
+    },
+  });
+  if (templateNode && templateNode._traceId) {
+    smithTraceMutation(templateNode, 'parse.template_for_map', mapInfo._traceId, {
+      related: [mapInfo],
+    });
+  }
   return { nodeExpr: '.{}', mapIdx: mapInfo.mapIdx, templateNodeExpr: templateNode.nodeExpr, luaNode: templateNode.luaNode || null };
 }

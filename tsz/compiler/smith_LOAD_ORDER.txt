@@ -5,6 +5,7 @@ smith/rules.js
 smith/logs.js
 
 smith/core.js
+smith/vendor/acorn.js
 
 smith/resolve/eval_builder.js
 smith/resolve/identity.js
@@ -223,6 +224,7 @@ smith/parse/attrs/value_expr_lua.js
 smith/attrs.js
 
 smith/parse/cursor.js
+smith/parse/expr_ast.js
 smith/parse/handlers/press.js
 smith/parse/utils.js
 smith/parse/template_literal.js
