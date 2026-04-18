@@ -185,4 +185,27 @@ classifier({
 
   DotOn:  { type: 'Box', style: { width: 8, height: 8, borderRadius: 'theme-radiusFull', backgroundColor: 'theme-primary' } },
   DotOff: { type: 'Box', style: { width: 8, height: 8, borderRadius: 'theme-radiusFull', backgroundColor: 'theme-textDim' } },
+
+  EffectRow: { type: 'Box', style: { flexDirection: 'row', gap: 'theme-spaceMd' } },
+  EffectCard: {
+    type: 'Box',
+    style: {
+      flexGrow: 1, flexBasis: 0,
+      padding: 'theme-spaceMd',
+      gap: 'theme-spaceSm',
+      borderRadius: 'theme-radiusLg',
+      backgroundColor: 'theme-bgRaised',
+      borderWidth: 'theme-borderW1',
+      borderColor: 'theme-borderLight',
+    },
+  },
+  EffectSurface: {
+    type: 'Box',
+    style: {
+      height: 100,
+      borderRadius: 'theme-radiusMd',
+      backgroundColor: 'theme-bgSunken',
+      overflow: 'hidden',
+    },
+  },
 })

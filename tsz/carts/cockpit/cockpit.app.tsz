@@ -6,6 +6,7 @@ import { Root as _clsAnchor } from './style_cls';
 import { Home } from './Home.c';
 import { Typography } from './Typography.c';
 import { Spacing } from './Spacing.c';
+import { Effects } from './Effects.c';
 
 // Variant indices match tcls import order: 0 dawn (base) | 1 dusk | 2 clarity | 3 bsod
 
@@ -29,6 +30,7 @@ export default function App() {
       {active == 'home' && <Home />}
       {active == 'typography' && <Typography />}
       {active == 'spacing' && <Spacing />}
+      {active == 'effects' && <Effects />}
       <C.BottomBar>
         {beat == 1 && <C.DotOn />}
         {beat == 0 && <C.DotOff />}
@@ -39,6 +41,8 @@ export default function App() {
           {active != 'typography' && <C.NavPick onPress={() => setActive('typography')}><C.NavLabel>type</C.NavLabel></C.NavPick>}
           {active == 'spacing' && <C.NavPickActive onPress={() => setActive('spacing')}><C.NavLabelActive>space</C.NavLabelActive></C.NavPickActive>}
           {active != 'spacing' && <C.NavPick onPress={() => setActive('spacing')}><C.NavLabel>space</C.NavLabel></C.NavPick>}
+          {active == 'effects' && <C.NavPickActive onPress={() => setActive('effects')}><C.NavLabelActive>fx</C.NavLabelActive></C.NavPickActive>}
+          {active != 'effects' && <C.NavPick onPress={() => setActive('effects')}><C.NavLabel>fx</C.NavLabel></C.NavPick>}
         </C.NavRow>
         <C.BarSep />
         <C.BarLabel>{active}</C.BarLabel>

@@ -1,0 +1,126 @@
+// Effects demo — 6 ambient motion cards per the theme spec.
+// Callbacks are expression-only (no if/ternary) because the compiler
+// transpiles each onRender body to Zig; branchless math only.
+
+export function Effects() {
+  return (
+    <C.Content>
+      <C.Title>Effects</C.Title>
+      <C.Hint>Ambient motion. Peripheral, not attention-demanding.</C.Hint>
+
+      <C.EffectRow>
+        <C.EffectCard>
+          <C.CardTitle>Heartbeat</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              const beat = e.sin(e.time * 6.28) * 0.5 + 0.5;
+              for (let y = 0; y < e.height; y++) {
+                for (let x = 0; x < e.width; x++) {
+                  const dx = x - e.width * 0.5;
+                  const dy = y - e.height * 0.5;
+                  const d = e.sqrt(dx * dx + dy * dy);
+                  const radius = 10 + 6 * beat;
+                  const a = e.max(0.0, e.min(1.0, radius - d));
+                  e.setPixel(x, y, 0.74 + 0.20 * beat, 0.71 + 0.15 * beat, 0.97, a);
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+
+        <C.EffectCard>
+          <C.CardTitle>Stream shimmer</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              const t = e.time;
+              for (let y = 0; y < e.height; y++) {
+                const topEdge  = e.max(0.0, 1.0 - y * 0.4);
+                const botEdge  = e.max(0.0, 1.0 - (e.height - 1 - y) * 0.4);
+                const edge = topEdge + botEdge;
+                for (let x = 0; x < e.width; x++) {
+                  const phase = (x / e.width) + t * 0.4;
+                  const wave = e.sin(phase * 6.28) * 0.5 + 0.5;
+                  e.setPixel(x, y, 0.74 + 0.18 * wave, 0.71 + 0.10 * wave, 0.97, edge * wave);
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+      </C.EffectRow>
+
+      <C.EffectRow>
+        <C.EffectCard>
+          <C.CardTitle>Wound bleed</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              const pulse = e.max(0.0, e.sin(e.time * 1.5));
+              const fresh = pulse * pulse;
+              for (let y = 0; y < e.height; y++) {
+                for (let x = 0; x < e.width; x++) {
+                  const dx = x - e.width * 0.5;
+                  const dy = y - e.height * 0.5;
+                  const d = e.sqrt(dx * dx + dy * dy);
+                  const core = e.max(0.0, e.min(1.0, 14.0 - d));
+                  const glow = fresh * e.max(0.0, 1.0 - d / 30.0);
+                  e.setPixel(x, y, 0.70, 0.31, 0.31, e.min(1.0, core + glow * 0.6));
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+
+        <C.EffectCard>
+          <C.CardTitle>Tetris scanlines</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              for (let y = 0; y < e.height; y++) {
+                const band = e.sin(y * 3.14159) * 0.5 + 0.5;
+                const scan = band * band * 0.10;
+                for (let x = 0; x < e.width; x++) {
+                  e.setPixel(x, y, 0.0, 0.0, 0.0, scan);
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+      </C.EffectRow>
+
+      <C.EffectRow>
+        <C.EffectCard>
+          <C.CardTitle>Focus glow</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              const breathe = e.sin(e.time * 6.28 * 0.25) * 0.5 + 0.5;
+              for (let y = 0; y < e.height; y++) {
+                for (let x = 0; x < e.width; x++) {
+                  const dx = x - e.width * 0.5;
+                  const dy = y - e.height * 0.5;
+                  const d = e.sqrt(dx * dx + dy * dy);
+                  const falloff = e.max(0.0, 1.0 - d / 40.0);
+                  e.setPixel(x, y, 0.71, 0.58, 0.91, falloff * breathe * 0.6);
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+
+        <C.EffectCard>
+          <C.CardTitle>Memory flow</C.CardTitle>
+          <C.EffectSurface>
+            <Effect onRender={(e) => {
+              const t = e.time;
+              for (let y = 0; y < e.height; y++) {
+                const band = (y / e.height) - 0.5;
+                for (let x = 0; x < e.width; x++) {
+                  const phase = (x / e.width) + t * 0.15;
+                  const wave = e.sin(phase * 6.28 + band * 4.0) * 0.5 + 0.5;
+                  e.setPixel(x, y, 0.55, 0.72, 0.78, wave * 0.5);
+                }
+              }
+            }} style={{ flexGrow: 1 }} />
+          </C.EffectSurface>
+        </C.EffectCard>
+      </C.EffectRow>
+    </C.Content>
+  );
+}
