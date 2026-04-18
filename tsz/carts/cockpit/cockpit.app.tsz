@@ -9,6 +9,14 @@ import { Spacing } from './Spacing.c';
 
 // Variant indices match tcls import order: 0 dawn (base) | 1 dusk | 2 clarity | 3 bsod
 
+<script>
+  // SDL_SCANCODE digit keys: 1→30, 2→31, 3→32, 4→33
+  useIFTTT('key:30', function() { setVariant(0); setActiveTheme(0); })
+  useIFTTT('key:31', function() { setVariant(1); setActiveTheme(1); })
+  useIFTTT('key:32', function() { setVariant(2); setActiveTheme(2); })
+  useIFTTT('key:33', function() { setVariant(3); setActiveTheme(3); })
+</script>
+
 export default function App() {
   const [active, setActive] = useState('home');
   const [activeTheme, setActiveTheme] = useState(0);
