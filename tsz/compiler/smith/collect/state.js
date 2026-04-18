@@ -69,6 +69,11 @@ function collectState(c) {
               if (type !== 'object_array' && type !== 'object_flat' && type !== 'opaque_state') {
                 ctx.stateSlots.push({ getter, setter, initial, type });
               }
+              // After object_array, the collectObjectArrayState helper has already
+              // advanced past the trailing `)` and `;` of the useState(...) call —
+              // skip the unconditional c.advance() below so we don't over-shoot
+              // and miss the next `const`.
+              if (type === 'object_array') continue;
             }
           }
         }
@@ -251,15 +256,30 @@ function collectObjectArrayState(c, getter, setter) {
     }
   }
 
-  let depth = 2;
-  while (depth > 0 && c.kind() !== TK.eof) {
-    if (c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
-    if (c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+  // Balance-match from arrayStartPos (position of outer `[`) to find the end of
+  // the array. The field-iteration above doesn't recurse through nested
+  // arrays/objects inside array-element fields, so the cursor can drift;
+  // resetting to arrayStartPos and tracking all bracket types ensures we find
+  // the matching `]` regardless of nesting depth. Without this, deeply nested
+  // useState init literals drop the closing `}` and produce invalid JS_LOGIC.
+  c.pos = arrayStartPos;
+  let _bmDepth = 0;
+  while (c.pos < c.count && c.kind() !== TK.eof) {
+    const _bmKind = c.kind();
+    if (_bmKind === TK.lparen || _bmKind === TK.lbracket || _bmKind === TK.lbrace) {
+      _bmDepth++;
+    } else if (_bmKind === TK.rparen || _bmKind === TK.rbracket || _bmKind === TK.rbrace) {
+      _bmDepth--;
+      if (_bmDepth === 0) { c.advance(); break; }
+    }
     c.advance();
   }
   // Save end position for initial data reconstruction
   const oa = ctx.objectArrays[parentOaIdx];
-  oa.initDataEndPos = c.pos; // position after closing ] )
+  oa.initDataEndPos = c.pos; // position after closing ]
+  // Skip past any trailing `)` and `;` from the enclosing useState(...)
+  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.semicolon) c.advance();
 
   return 'object_array';
 }
