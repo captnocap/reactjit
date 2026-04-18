@@ -1,6 +1,7 @@
 // ── Classifier support ────────────────────────────────────────────
 
 var _activeTheme = {};
+var _themeRegistry = {};
 
 function collectClassifiers() {
   ctx.classifiers = {};
@@ -16,20 +17,30 @@ function collectClassifiers() {
   // Existing JS eval path (mixed-style classifiers)
   try {
     let merged = {};
-    let themeCollected = false;
+    _themeRegistry = {};
     const classifier = function(obj) { for (const k in obj) merged[k] = obj[k]; };
     const effects = function() {};
     const glyphs = function() {};
     const theme = function(name, obj) {
-      if (!themeCollected) {
-        _activeTheme = obj;
-        themeCollected = true;
-      }
+      _themeRegistry[name] = obj;
     };
     const variants = function() {};
-    const cleanText = clsText.split('\n').filter(function(line) { return !line.trim().match(/^from\s+['"]/); }).join('\n');
+    const cleanText = clsText.split('\n').filter(function(line) {
+      const t = line.trim();
+      if (t.match(/^from\s+['"]/)) return false;
+      if (t.match(/^export\s+/)) return false;
+      if (t.match(/^import\s+/)) return false;
+      return true;
+    }).join('\n');
     eval(cleanText);
     ctx.classifiers = merged;
+    const desired = globalThis.__activeThemeName;
+    const names = Object.keys(_themeRegistry);
+    if (desired && _themeRegistry[desired]) {
+      _activeTheme = _themeRegistry[desired];
+    } else if (names.length > 0) {
+      _activeTheme = _themeRegistry[names[0]];
+    }
   } catch (e) {
     if (!ctx._debugLines) ctx._debugLines = [];
     ctx._debugLines.push('collectClassifiers eval failed: ' + String(e));

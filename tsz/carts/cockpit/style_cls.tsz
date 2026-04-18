@@ -1,0 +1,33 @@
+classifier({
+  Root: {
+    type: 'Box',
+    style: { width: '100%', height: '100%', flexDirection: 'column', backgroundColor: 'theme-bg' },
+  },
+  Content: {
+    type: 'Box',
+    style: { flexGrow: 1, flexBasis: 0, padding: 'theme-spaceLg', gap: 'theme-spaceSm' },
+  },
+  BottomBar: {
+    type: 'Box',
+    style: {
+      height: 28,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: 'theme-spaceMd',
+      paddingRight: 'theme-spaceMd',
+      gap: 'theme-spaceMd',
+      backgroundColor: 'theme-bgRaised',
+      borderTopWidth: 'theme-borderW1',
+      borderTopColor: 'theme-borderHair',
+    },
+  },
+  BarLabel: { type: 'Text', fontSize: 'theme-fontSm', color: 'theme-textDim' },
+  BarSep: {
+    type: 'Box',
+    style: { width: 'theme-borderW1', height: 12, backgroundColor: 'theme-borderLight' },
+  },
+  Spacer: { type: 'Box', style: { flexGrow: 1 } },
+
+  Title: { type: 'Text', fontSize: 'theme-fontXl', color: 'theme-textPrimary' },
+  Hint: { type: 'Text', fontSize: 'theme-fontMd', color: 'theme-textSecondary' },
+})

@@ -1,0 +1,8 @@
+export function Home() {
+  return (
+    <C.Content>
+      <C.Title>Cockpit</C.Title>
+      <C.Hint>Home page placeholder.</C.Hint>
+    </C.Content>
+  );
+}

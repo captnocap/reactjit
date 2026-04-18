@@ -1,0 +1,139 @@
+// Dawn — soft pastels, cream background, lavender primary.
+// Default cockpit theme. "Garden at dawn."
+
+export const _cockpitDawnAnchor = 'cockpit_dawn';
+
+theme('cockpit_dawn', {
+  // Backgrounds
+  bg: '#F7F2E0',
+  bgAlt: '#D4D4A8',
+  bgRaised: '#E4E1FC',
+  bgSunken: '#D6C7E8',
+  bgFloat: '#E4E1FC',
+  bgOverlay: 'rgba(54, 47, 66, 0.40)',
+  bgTint: '#EEE8F5',
+
+  // Text
+  textPrimary: '#362F42',
+  textSecondary: '#67474D',
+  textDim: '#A87965',
+  textAccent: '#B595E8',
+  textOnAccent: '#FFFFFF',
+  textDisabled: '#C4A8D4',
+  textError: '#B34E4E',
+  textWarning: '#F2DB43',
+  textSuccess: '#4EB378',
+
+  // Borders
+  borderHair: '#D6C7E8',
+  borderLight: '#C4A8D4',
+  borderMid: '#A87965',
+  borderStrong: '#504C54',
+  borderFocus: '#B595E8',
+
+  // Semantic
+  primary: '#BDB5F8',
+  accent: '#F3B5D2',
+  success: '#4EB378',
+  warning: '#F2DB43',
+  error: '#B34E4E',
+  info: '#99C8F0',
+
+  // Tiers
+  tier0: '#A87965',
+  tier1: '#ECC2C2',
+  tier2: '#F2DB43',
+  tier3: '#F27835',
+  tier4: '#B34E4E',
+
+  // Affect
+  affectConfident: '#A8D4BC',
+  affectUncertain: '#8BB8C8',
+  affectFrustrated: '#F094BB',
+  affectStuck: '#30414E',
+  affectRationalizing: '#F27835',
+  affectFocused: '#B595E8',
+  affectDrifting: '#E9BFA0',
+  affectPerforming: '#F2DB43',
+
+  // Backend
+  backendClaude: '#99C8F0',
+  backendCodex: '#C09DF8',
+  backendKimi: '#A8D4BC',
+
+  // Memory layers
+  l1River: '#8BB8C8',
+  l2Feeling: '#F09BA9',
+  l3Echo: '#BDB5F8',
+  l4Wound: '#B34E4E',
+  l5Cooccurrence: '#549696',
+
+  // Worker slots
+  worker1: '#BDB5F8',
+  worker2: '#F3B5D2',
+  worker3: '#A8D4BC',
+  worker4: '#99C8F0',
+  worker5: '#E9BFA0',
+  worker6: '#F099C8',
+  worker7: '#549696',
+  worker8: '#C09DF8',
+
+  // Tetris
+  tetrisSpec: '#BDB5F8',
+  tetrisWorker1: '#BDB5F8',
+  tetrisWorker2: '#F3B5D2',
+  tetrisWorker3: '#A8D4BC',
+  tetrisWorker4: '#99C8F0',
+  tetrisWorker5: '#E9BFA0',
+  tetrisWorker6: '#F099C8',
+  tetrisWorker7: '#549696',
+  tetrisWorker8: '#C09DF8',
+  tetrisRationalizationWound: '#B34E4E',
+  tetrisPinned: '#4EB378',
+  tetrisResonance3: '#F27835',
+  tetrisUserNote: '#F2DB43',
+  tetrisBreadcrumb: '#A87965',
+  tetrisFloor: '#D6C7E8',
+  tetrisScanline: 'rgba(0, 0, 0, 0.08)',
+
+  // Law ticker
+  lawConstitutional: '#B34E4E',
+  lawOperational: '#F2DB43',
+  lawFieldNote: '#ECC2C2',
+
+  // Spacing
+  spaceXxs: 2,
+  spaceXs: 4,
+  spaceSm: 8,
+  spaceMd: 12,
+  spaceLg: 16,
+  spaceXl: 24,
+  spaceXxl: 32,
+  spaceHuge: 48,
+
+  // Radius
+  radiusNone: 0,
+  radiusXs: 2,
+  radiusSm: 4,
+  radiusMd: 6,
+  radiusLg: 10,
+  radiusXl: 16,
+  radiusFull: 9999,
+
+  // Border widths
+  borderW0: 0,
+  borderW1: 1,
+  borderW2: 2,
+  borderW3: 3,
+  borderW4: 4,
+
+  // Font sizes
+  fontXxs: 9,
+  fontXs: 10,
+  fontSm: 11,
+  fontMd: 13,
+  fontLg: 15,
+  fontXl: 18,
+  fontXxl: 22,
+  fontHuge: 28,
+});

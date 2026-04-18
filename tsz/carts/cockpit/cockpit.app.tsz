@@ -1,0 +1,22 @@
+import { _cockpitDawnAnchor } from './theme/cockpit_dawn.tcls';
+import { _cockpitDuskAnchor } from './theme/cockpit_dusk.tcls';
+import { _cockpitClarityAnchor } from './theme/cockpit_clarity.tcls';
+import { _cockpitBsodAnchor } from './theme/cockpit_bsod.tcls';
+import { Root as _clsAnchor } from './style_cls';
+import { Home } from './Home.c';
+
+export default function App() {
+  const [active, setActive] = useState('home');
+  return (
+    <C.Root>
+      <Home />
+      <C.BottomBar>
+        <C.BarLabel>cockpit</C.BarLabel>
+        <C.BarSep />
+        <C.BarLabel>{active}</C.BarLabel>
+        <C.Spacer />
+        <C.BarLabel>ready</C.BarLabel>
+      </C.BottomBar>
+    </C.Root>
+  );
+}

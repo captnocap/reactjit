@@ -17,6 +17,7 @@ cd "$(dirname "$0")/.."
 # ── Parse flags ──────────────────────────────────────────────────────
 POSITIONAL=()
 DBG_FLAGS=""
+TRACE_FLAGS=""
 GDB_MODE=0
 PROVE_I_BROKE_IT=0
 PROVE_COMPILER_BROKE_IT=0
@@ -30,6 +31,9 @@ for arg in "$@"; do
         -n) DBG_FLAGS="$DBG_FLAGS --dbg-nodes" ;;
         -s) DBG_FLAGS="$DBG_FLAGS --dbg-state" ;;
         -c) DBG_FLAGS="$DBG_FLAGS --dbg-compiler" ;;
+        --trace-mutations) TRACE_FLAGS="$TRACE_FLAGS --trace-mutations" ;;
+        --trace-line=*) TRACE_FLAGS="$TRACE_FLAGS --trace-mutations $arg" ;;
+        --theme=*) DBG_FLAGS="$DBG_FLAGS $arg" ;;
         -g) GDB_MODE=1 ;;
         -nsc|-nsv|-ns|-nc|-sc|-snc|-ng|-sg|-cg|-nsg|-ncg|-scg|-nscg) # combo flags
             [[ "$arg" == *n* ]] && DBG_FLAGS="$DBG_FLAGS --dbg-nodes"
@@ -772,7 +776,7 @@ rm -f "$GEN"
 rm -rf "$GEN_DIR"
 echo "[$NAME] 3/3 forge..."
 FORGE_START=$(date +%s%N)
-FORGE_OUT=$(./zig-out/bin/forge build --fast $DBG_FLAGS "$CART" 2>&1) || {
+FORGE_OUT=$(./zig-out/bin/forge build --fast $DBG_FLAGS $TRACE_FLAGS "$CART" 2>&1) || {
     echo "$FORGE_OUT"
     record_build "forge_fail" "$FORGE_OUT"
     exit 1
@@ -796,7 +800,7 @@ fi
 # the standard native build path can still link the cart.
 if [ -f "$GEN" ] && grep -q '^__SPLIT_OUTPUT__$' "$GEN" 2>/dev/null; then
     echo "[$NAME] forge returned split markers in monolith output — retrying with --single..."
-    ./zig-out/bin/forge build --fast --single "$CART" 2>&1
+    ./zig-out/bin/forge build --fast --single $TRACE_FLAGS "$CART" 2>&1
 fi
 
 # If split output, concat all files for lint (grep needs a single target)

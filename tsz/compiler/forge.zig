@@ -455,7 +455,10 @@ pub fn main() !void {
     var dbg_compiler = false;
     var parity_mode = false;
     var trace_mode = false;
+    var trace_mutations = false;
+    var trace_line: i64 = 0;
     var out_dir: []const u8 = "/tmp/tsz-gen";
+    var theme_name: ?[]const u8 = null;
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
@@ -487,6 +490,13 @@ pub fn main() !void {
             parity_mode = true;
         } else if (std.mem.eql(u8, arg, "--trace")) {
             trace_mode = true;
+        } else if (std.mem.eql(u8, arg, "--trace-mutations")) {
+            trace_mutations = true;
+        } else if (std.mem.startsWith(u8, arg, "--trace-line=")) {
+            trace_line = std.fmt.parseInt(i64, arg["--trace-line=".len..], 10) catch 0;
+            trace_mutations = true;
+        } else if (std.mem.startsWith(u8, arg, "--theme=")) {
+            theme_name = arg["--theme=".len..];
         } else {
             input_path = arg;
             got_path = true;
@@ -560,6 +570,7 @@ pub fn main() !void {
     smith.setGlobalString("__file", input_path);
     if (script_buf.items.len > 0) smith.setGlobalString("__scriptContent", script_buf.items);
     if (cls_buf.items.len > 0) smith.setGlobalString("__clsContent", cls_buf.items);
+    if (theme_name) |t| smith.setGlobalString("__activeThemeName", t);
     smith.setGlobalInt("__fastBuild", if (fast_build) 1 else 0);
     smith.setGlobalInt("__modBuild", if (mod_build) 1 else 0);
     if (mod_build) smith.setGlobalString("__modTarget", mod_target);
@@ -574,6 +585,8 @@ pub fn main() !void {
     if (dbg_compiler) smith.setGlobalInt("__DBG_COMPILER", 1);
     if (parity_mode) smith.setGlobalInt("__parityMode", 1);
     if (trace_mode) smith.setGlobalInt("__smithTraceMode", 1);
+    if (trace_mutations) smith.setGlobalInt("__TRACE_MUTATIONS", 1);
+    if (trace_line > 0) smith.setGlobalInt("__TRACE_LINE", trace_line);
     if (is_check) smith.setGlobalInt("__CHECK_ONLY", 1);
 
     // Build token kind array as u8 slice for the bridge
@@ -655,6 +668,32 @@ pub fn main() !void {
         _ = smith.loadModule("if(globalThis.__dbgStderr&&globalThis.__dbgStderr.length>0)globalThis.__dbgOutput=globalThis.__dbgStderr.join('\\n');", "<dbg>");
         if (smith.getGlobalString("__dbgOutput")) |dbg_out| {
             std.debug.print("{s}\n", .{dbg_out});
+        }
+    }
+
+    if (trace_mutations) {
+        const trace_basename = std.fs.path.basename(input_path);
+        const trace_dot = std.mem.lastIndexOfScalar(u8, trace_basename, '.') orelse trace_basename.len;
+        const trace_stem = trace_basename[0..trace_dot];
+        std.fs.cwd().makePath(out_dir) catch {};
+        if (smith.getGlobalString("__mutationTraceText")) |trace_text| {
+            const trace_txt_path = std.fmt.allocPrint(Alloc, "{s}/smith_mutations_{s}.txt", .{ out_dir, trace_stem }) catch "/tmp/smith_mutations.txt";
+            const trace_txt_file = std.fs.cwd().createFile(trace_txt_path, .{}) catch null;
+            if (trace_txt_file) |f| {
+                defer f.close();
+                f.writeAll(trace_text) catch {};
+            }
+            std.debug.print("{s}\n", .{trace_text});
+            std.debug.print("[forge:trace] Mutation text written to {s}\n", .{trace_txt_path});
+        }
+        if (smith.getGlobalString("__mutationTraceJSON")) |trace_json| {
+            const trace_json_path = std.fmt.allocPrint(Alloc, "{s}/smith_mutations_{s}.json", .{ out_dir, trace_stem }) catch "/tmp/smith_mutations.json";
+            const trace_json_file = std.fs.cwd().createFile(trace_json_path, .{}) catch null;
+            if (trace_json_file) |f| {
+                defer f.close();
+                f.writeAll(trace_json) catch {};
+            }
+            std.debug.print("[forge:trace] Mutation JSON written to {s} ({d} bytes)\n", .{ trace_json_path, trace_json.len });
         }
     }
 
