@@ -18,7 +18,7 @@ expect "Nested wrappers"
 
 # Click-through: 1 pressable nodes
 
-click "Tap me (0)"
+click "press:setTaps"
 expect "Children Prop"
 expect "Simple card with text children"
 expect "Just two Text nodes inside a Card wrapper"
