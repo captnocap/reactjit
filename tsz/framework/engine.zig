@@ -801,6 +801,8 @@ var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
 var g_budget_exceeded: bool = false;
+var g_effect_child_seen2: bool = false;
+var g_effect_bg_logged2: bool = false;
 var g_dt_sec: f32 = 0;
 var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
@@ -848,8 +850,17 @@ fn paintNode(node: *Node) void {
 
     // Background effects — children with effect_background paint behind siblings
     for (node.children) |*child| {
+        if (child.effect_render != null and !g_effect_child_seen2) {
+            g_effect_child_seen2 = true;
+            std.debug.print("[eng effect-seen] parent={x} child={x} bg={} parent_rect={d}x{d} child_rect={d}x{d}\n", .{ @intFromPtr(node), @intFromPtr(child), child.effect_background, r.w, r.h, child.computed.w, child.computed.h });
+        }
         if (child.effect_background and child.effect_render != null) {
-            _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
+            if (!g_effect_bg_logged2) {
+                g_effect_bg_logged2 = true;
+                std.debug.print("[eng effect-bg-paint] firing rect={d}x{d}\n", .{ r.w, r.h });
+            }
+            const _pce_ret = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
+            std.debug.print("[eng after-pce] ret={}\n", .{_pce_ret});
         }
     }
 
@@ -911,6 +922,17 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
     @setRuntimeSafety(false);
     if (node.canvas_path_d) |d| {
         const tc = node.text_color orelse Color.rgb(255, 255, 255);
+        // Standalone path (icon mode): scale 24×24 viewbox into node's rect.
+        // Inline paths (canvas_path=true) overlay parent and don't transform.
+        const r = node.computed;
+        const is_icon = !node.canvas_path and r.w > 0 and r.h > 0;
+        if (is_icon) {
+            const vb: f32 = 24.0;
+            const scale = @min(r.w / vb, r.h / vb);
+            const ox = r.x + (r.w - vb * scale) / 2;
+            const oy = r.y + (r.h - vb * scale) / 2;
+            gpu.setTransform(0, 0, ox, oy, scale);
+        }
         // Fill pass — either from named effect texture or flat color
         if (node.canvas_fill_effect) |ename| {
             // Look up the named effect's pixel buffer and fill triangles with sampled colors
@@ -998,6 +1020,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
             if (g_flow_enabled) node.canvas_flow_speed else 0,
             @as(u32, @truncate(c.SDL_GetTicks())),
         );
+        if (is_icon) gpu.resetTransform();
     }
 }
 

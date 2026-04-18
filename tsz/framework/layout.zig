@@ -936,9 +936,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         return;
     }
     if (node.canvas_path_d != null) {
-        const w = if (s.width) |v| v else if (s.flex_basis) |fb| fb else pw;
-        const h = if (s.height) |v| v else ph;
-        node.computed = .{ .x = px, .y = py, .w = w, .h = h };
+        // Icons typically fill their container; if the flex parent shrink-wrapped
+        // us to 0 (alignItems:center on a content-less child), fall back to the
+        // 24×24 viewbox so paintCanvasPath can render at the natural icon size.
+        const fb_w: f32 = if (s.flex_basis) |fb| fb else 0;
+        const w_pref = if (s.width) |v| v else if (fb_w > 0) fb_w else if (pw > 0) pw else 24;
+        const h_pref = if (s.height) |v| v else if (ph > 0) ph else 24;
+        node.computed = .{ .x = px, .y = py, .w = w_pref, .h = h_pref };
         return;
     }
     // Canvas.Clamp: spans full parent bounds (viewport overlay).

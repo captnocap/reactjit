@@ -707,30 +707,19 @@ pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_
     // as the foreground. At rest (flow_speed == 0), draw full-opacity stroke.
     const flowing = flow_speed != 0;
     const base_a = if (flowing) stroke_a * 0.25 else stroke_a;
-    // Apply current canvas transform (set by gpu.setTransform) — used by icon
-    // paint to scale a 24×24 viewbox into the node's screen rect. drawLineSegment
-    // and the curve helpers go straight to the GPU and don't honor the transform
-    // themselves, so we bake it into each segment's coords here.
-    const t = gpu.getTransform();
-    const sx: f32 = if (t.active) t.scale else 1.0;
-    const ox: f32 = if (t.active) t.tx else 0.0;
-    const oy: f32 = if (t.active) t.ty else 0.0;
-    const sw = stroke_width * sx;
+    // GPU primitives (drawCurve, drawCubicCurve, drawRect) honor gpu.setTransform
+    // internally, so pass raw segment coords through.
     for (0..path.curve_count) |i| {
         const seg = &path.curves[i];
-        const x0 = seg.x0 * sx + ox; const y0 = seg.y0 * sx + oy;
-        const x1 = seg.x1 * sx + ox; const y1 = seg.y1 * sx + oy;
-        const x2 = seg.x2 * sx + ox; const y2 = seg.y2 * sx + oy;
-        const x3 = seg.x3 * sx + ox; const y3 = seg.y3 * sx + oy;
         switch (seg.kind) {
             .line => {
-                drawLineSegment(x0, y0, x3, y3, sw, stroke_r, stroke_g, stroke_b, base_a);
+                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, base_a);
             },
             .quadratic => {
-                gpu.drawCurve(x0, y0, x1, y1, x3, y3, stroke_r, stroke_g, stroke_b, base_a, sw);
+                gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
             },
             .cubic => {
-                gpu.drawCubicCurve(x0, y0, x1, y1, x2, y2, x3, y3, stroke_r, stroke_g, stroke_b, base_a, sw);
+                gpu.drawCubicCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x2, seg.y2, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
             },
         }
         if (flowing) drawFlowParticles(seg, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width, flow_speed, ticks);
@@ -820,28 +809,13 @@ pub fn drawStroke(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32
 
 /// Draw a single line segment as an oriented rectangle.
 fn drawLineSegment(x0: f32, y0: f32, x1: f32, y1: f32, width: f32, r: f32, g: f32, b: f32, a: f32) void {
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const len = @sqrt(dx * dx + dy * dy);
-    if (len < 0.1) return;
-
-    // Normal perpendicular to the line direction
-    const nx = -dy / len * width * 0.5;
-    const ny = dx / len * width * 0.5;
-
-    // The quad corners
-    // We can't draw rotated rects with drawRect, so use the axis-aligned bounding box
-    // and accept slight width imprecision on diagonal lines.
-    // For proper rotated quads, we'd need a triangle/quad primitive.
-    // For now: draw the AABB of the line segment with the stroke color.
-    const min_x = @min(x0 - @abs(nx), x1 - @abs(nx));
-    const min_y = @min(y0 - @abs(ny), y1 - @abs(ny));
-    const max_x = @max(x0 + @abs(nx), x1 + @abs(nx));
-    const max_y = @max(y0 + @abs(ny), y1 + @abs(ny));
-
-    // For near-horizontal or near-vertical lines, this is perfect.
-    // For diagonals, the rect is slightly wider than the line.
-    gpu.drawRect(min_x, min_y, max_x - min_x, max_y - min_y, r, g, b, a, 0, 0, 0, 0, 0, 0);
+    // Route through drawCurve (SDF bezier shader) so diagonal lines render as
+    // proper anti-aliased strokes instead of axis-aligned bounding boxes
+    // (which collapse a true diagonal into a solid filled square).
+    // Degenerate quadratic: control point at midpoint.
+    const mx = (x0 + x1) * 0.5;
+    const my = (y0 + y1) * 0.5;
+    gpu.drawCurve(x0, y0, mx, my, x1, y1, r, g, b, a, width);
 }
 
 // ── Arc-length utilities (for animation) ────────────────────────────────
