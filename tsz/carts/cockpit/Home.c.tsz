@@ -2,7 +2,7 @@ export function Home() {
   return (
     <C.Content>
       <C.Title>Cockpit</C.Title>
-      <C.Hint>Rebuild with --theme=cockpit_dusk / cockpit_clarity / cockpit_bsod.</C.Hint>
+      <C.Hint>Click a theme in the bottom bar to swap live.</C.Hint>
 
       <C.Card>
         <C.CardTitle>Semantic</C.CardTitle>

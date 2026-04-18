@@ -458,7 +458,6 @@ pub fn main() !void {
     var trace_mutations = false;
     var trace_line: i64 = 0;
     var out_dir: []const u8 = "/tmp/tsz-gen";
-    var theme_name: ?[]const u8 = null;
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
@@ -495,8 +494,6 @@ pub fn main() !void {
         } else if (std.mem.startsWith(u8, arg, "--trace-line=")) {
             trace_line = std.fmt.parseInt(i64, arg["--trace-line=".len..], 10) catch 0;
             trace_mutations = true;
-        } else if (std.mem.startsWith(u8, arg, "--theme=")) {
-            theme_name = arg["--theme=".len..];
         } else {
             input_path = arg;
             got_path = true;
@@ -593,7 +590,6 @@ pub fn main() !void {
     smith.setGlobalString("__file", input_path);
     if (script_buf.items.len > 0) smith.setGlobalString("__scriptContent", script_buf.items);
     if (cls_buf.items.len > 0) smith.setGlobalString("__clsContent", cls_buf.items);
-    if (theme_name) |t| smith.setGlobalString("__activeThemeName", t);
     smith.setGlobalInt("__fastBuild", if (fast_build) 1 else 0);
     smith.setGlobalInt("__modBuild", if (mod_build) 1 else 0);
     if (mod_build) smith.setGlobalString("__modTarget", mod_target);

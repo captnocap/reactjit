@@ -34,16 +34,54 @@ function collectClassifiers() {
     }).join('\n');
     eval(cleanText);
     ctx.classifiers = merged;
-    const desired = globalThis.__activeThemeName;
-    const names = Object.keys(_themeRegistry).filter(function(n) { return n !== 'user'; });
-    let base = {};
-    if (desired && _themeRegistry[desired]) {
-      base = _themeRegistry[desired];
-    } else if (names.length > 0) {
-      base = _themeRegistry[names[0]];
-    }
-    // User override merges on top of whichever base theme is selected.
+
+    // Theme composition
+    // - First registered theme = base (variant 0). The ONE active_theme used when
+    //   classifier styles are resolved.
+    // - Every *other* registered theme (except `user`) gets auto-expanded into a
+    //   named classifier variant. Runtime setVariant(N) swaps themes without a
+    //   rebuild. User override merges on top of the base only — follow-up work
+    //   to cascade user overrides into every variant.
+    const themeNames = Object.keys(_themeRegistry).filter(function(n) { return n !== 'user'; });
+    const baseThemeName = themeNames[0];
+    const base = baseThemeName ? _themeRegistry[baseThemeName] : {};
     _activeTheme = Object.assign({}, base, _themeRegistry['user'] || {});
+
+    function _styleUsesTheme(style) {
+      if (!style) return false;
+      for (const k of Object.keys(style)) {
+        const v = style[k];
+        if (typeof v === 'string' && v.startsWith('theme-')) return true;
+      }
+      return false;
+    }
+    function _applyThemeToStyle(style, themeMap) {
+      const out = {};
+      for (const k of Object.keys(style)) {
+        let v = style[k];
+        if (typeof v === 'string' && v.startsWith('theme-')) {
+          const tok = v.slice(6);
+          if (themeMap[tok] !== undefined) v = themeMap[tok];
+        }
+        out[k] = v;
+      }
+      return out;
+    }
+
+    if (themeNames.length > 1) {
+      for (const key of Object.keys(ctx.classifiers)) {
+        const entry = ctx.classifiers[key];
+        if (!entry || typeof entry !== 'object') continue;
+        if (!_styleUsesTheme(entry.style)) continue;
+        if (!entry.variants) entry.variants = {};
+        for (let i = 1; i < themeNames.length; i++) {
+          const vname = themeNames[i];
+          const tmap = _themeRegistry[vname];
+          if (entry.variants[vname]) continue;
+          entry.variants[vname] = { style: _applyThemeToStyle(entry.style, tmap) };
+        }
+      }
+    }
   } catch (e) {
     if (!ctx._debugLines) ctx._debugLines = [];
     ctx._debugLines.push('collectClassifiers eval failed: ' + String(e));

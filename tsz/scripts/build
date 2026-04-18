@@ -33,7 +33,6 @@ for arg in "$@"; do
         -c) DBG_FLAGS="$DBG_FLAGS --dbg-compiler" ;;
         --trace-mutations) TRACE_FLAGS="$TRACE_FLAGS --trace-mutations" ;;
         --trace-line=*) TRACE_FLAGS="$TRACE_FLAGS --trace-mutations $arg" ;;
-        --theme=*) DBG_FLAGS="$DBG_FLAGS $arg" ;;
         -g) GDB_MODE=1 ;;
         -nsc|-nsv|-ns|-nc|-sc|-snc|-ng|-sg|-cg|-nsg|-ncg|-scg|-nscg) # combo flags
             [[ "$arg" == *n* ]] && DBG_FLAGS="$DBG_FLAGS --dbg-nodes"

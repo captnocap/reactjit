@@ -100,4 +100,33 @@ classifier({
     },
   },
   CardTitle: { type: 'Text', fontSize: 'theme-fontLg', color: 'theme-textPrimary' },
+
+  ThemePick: {
+    type: 'Pressable',
+    style: {
+      paddingLeft: 'theme-spaceSm',
+      paddingRight: 'theme-spaceSm',
+      paddingTop: 2,
+      paddingBottom: 2,
+      borderRadius: 'theme-radiusSm',
+      borderWidth: 'theme-borderW1',
+      borderColor: 'theme-borderHair',
+      backgroundColor: 'theme-bgRaised',
+    },
+  },
+  ThemePickActive: {
+    type: 'Pressable',
+    style: {
+      paddingLeft: 'theme-spaceSm',
+      paddingRight: 'theme-spaceSm',
+      paddingTop: 2,
+      paddingBottom: 2,
+      borderRadius: 'theme-radiusSm',
+      borderWidth: 'theme-borderW1',
+      borderColor: 'theme-borderFocus',
+      backgroundColor: 'theme-primary',
+    },
+  },
+  ThemePickLabel: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textPrimary' },
+  ThemePickLabelActive: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textOnAccent' },
 })

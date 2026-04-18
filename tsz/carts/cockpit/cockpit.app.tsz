@@ -5,8 +5,12 @@ import { _cockpitBsodAnchor } from './theme/cockpit_bsod.tcls';
 import { Root as _clsAnchor } from './style_cls';
 import { Home } from './Home.c';
 
+// Variant indices match tcls import order:
+//   0 dawn (base)  |  1 dusk  |  2 clarity  |  3 bsod
+
 export default function App() {
   const [active, setActive] = useState('home');
+  const [activeTheme, setActiveTheme] = useState(0);
   return (
     <C.Root>
       <Home />
@@ -15,7 +19,14 @@ export default function App() {
         <C.BarSep />
         <C.BarLabel>{active}</C.BarLabel>
         <C.Spacer />
-        <C.BarLabel>ready</C.BarLabel>
+        {activeTheme == 0 && <C.ThemePickActive onPress={() => { setVariant(0); setActiveTheme(0) }}><C.ThemePickLabelActive>dawn</C.ThemePickLabelActive></C.ThemePickActive>}
+        {activeTheme != 0 && <C.ThemePick onPress={() => { setVariant(0); setActiveTheme(0) }}><C.ThemePickLabel>dawn</C.ThemePickLabel></C.ThemePick>}
+        {activeTheme == 1 && <C.ThemePickActive onPress={() => { setVariant(1); setActiveTheme(1) }}><C.ThemePickLabelActive>dusk</C.ThemePickLabelActive></C.ThemePickActive>}
+        {activeTheme != 1 && <C.ThemePick onPress={() => { setVariant(1); setActiveTheme(1) }}><C.ThemePickLabel>dusk</C.ThemePickLabel></C.ThemePick>}
+        {activeTheme == 2 && <C.ThemePickActive onPress={() => { setVariant(2); setActiveTheme(2) }}><C.ThemePickLabelActive>clarity</C.ThemePickLabelActive></C.ThemePickActive>}
+        {activeTheme != 2 && <C.ThemePick onPress={() => { setVariant(2); setActiveTheme(2) }}><C.ThemePickLabel>clarity</C.ThemePickLabel></C.ThemePick>}
+        {activeTheme == 3 && <C.ThemePickActive onPress={() => { setVariant(3); setActiveTheme(3) }}><C.ThemePickLabelActive>bsod</C.ThemePickLabelActive></C.ThemePickActive>}
+        {activeTheme != 3 && <C.ThemePick onPress={() => { setVariant(3); setActiveTheme(3) }}><C.ThemePickLabel>bsod</C.ThemePickLabel></C.ThemePick>}
       </C.BottomBar>
     </C.Root>
   );
