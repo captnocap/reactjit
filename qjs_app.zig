@@ -595,8 +595,15 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
 }
 
 fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
-    if (std.mem.eql(u8, type_name, "ScrollView")) {
+    const eq = std.mem.eql;
+    if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
+    } else if (eq(u8, type_name, "Canvas.Node") or eq(u8, type_name, "Graph.Node")) {
+        node.canvas_node = true;
+    } else if (eq(u8, type_name, "Canvas.Path") or eq(u8, type_name, "Graph.Path")) {
+        node.canvas_path = true;
+    } else if (eq(u8, type_name, "Canvas.Clamp")) {
+        node.canvas_clamp = true;
     }
     ensureInputSlot(node, id, type_name);
 }
@@ -637,6 +644,30 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| node.debug_name = s;
         } else if (std.mem.eql(u8, k, "testID")) {
             if (dupJsonText(v)) |s| node.test_id = s;
+        }
+        // ── Canvas / Graph props ──
+        else if (std.mem.eql(u8, k, "gx")) {
+            if (jsonFloat(v)) |f| node.canvas_gx = f;
+        } else if (std.mem.eql(u8, k, "gy")) {
+            if (jsonFloat(v)) |f| node.canvas_gy = f;
+        } else if (std.mem.eql(u8, k, "gw")) {
+            if (jsonFloat(v)) |f| node.canvas_gw = f;
+        } else if (std.mem.eql(u8, k, "gh")) {
+            if (jsonFloat(v)) |f| node.canvas_gh = f;
+        } else if (std.mem.eql(u8, k, "d")) {
+            if (dupJsonText(v)) |s| node.canvas_path_d = s;
+        } else if (std.mem.eql(u8, k, "stroke")) {
+            // `stroke` maps to text_color — that's the field engine_paint.zig
+            // reads for Canvas.Path / Graph.Path stroke color.
+            if (v == .string) node.text_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "strokeWidth")) {
+            if (jsonFloat(v)) |f| node.canvas_stroke_width = f;
+        } else if (std.mem.eql(u8, k, "fill")) {
+            if (v == .string) node.canvas_fill_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "fillEffect")) {
+            if (dupJsonText(v)) |s| node.canvas_fill_effect = s;
+        } else if (std.mem.eql(u8, k, "textEffect")) {
+            if (dupJsonText(v)) |s| node.text_effect = s;
         }
     }
 }

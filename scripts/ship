@@ -72,10 +72,95 @@ if [[ "$DEBUG" -eq 1 ]] || [[ "$RAW" -eq 1 ]]; then
     exit 0
 fi
 
-# ── 4. Package as self-extracting binary (Linux) ──────────────────────
+# ── 4. Package as self-extracting binary ──────────────────────────────
 OS="$(uname -s)"
+
+if [[ "$OS" == "Darwin" ]]; then
+    # ── macOS: package as .app bundle ──────────────────────────────
+    echo "[ship] packaging macOS .app bundle..."
+    APP_BUNDLE="zig-out/bin/${NAME}.app"
+    CONTENTS="$APP_BUNDLE/Contents"
+    MACOS_DIR="$CONTENTS/MacOS"
+    FW_DIR="$CONTENTS/Frameworks"
+    rm -rf "$APP_BUNDLE"
+    mkdir -p "$MACOS_DIR" "$FW_DIR"
+    cp "$RAW_BIN" "$MACOS_DIR/$NAME"
+
+    cat > "$CONTENTS/Info.plist" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>$NAME</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.reactjit.$NAME</string>
+    <key>CFBundleName</key>
+    <string>$NAME</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+</dict>
+</plist>
+PLIST
+
+    # Recursively collect non-system dylibs into Frameworks/
+    collect_dylibs() {
+        for bin in "$@"; do
+            otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r lib_path; do
+                case "$lib_path" in
+                    /usr/lib/*|/System/*|@rpath/*|@executable_path/*) continue ;;
+                esac
+                [ ! -f "$lib_path" ] && continue
+                lib_name=$(basename "$lib_path")
+                [ -f "$FW_DIR/$lib_name" ] && continue
+                cp "$lib_path" "$FW_DIR/$lib_name"
+                echo "$lib_name"
+            done
+        done
+    }
+    collect_dylibs "$MACOS_DIR/$NAME" >/dev/null
+    # Transitive deps from bundled dylibs
+    collect_dylibs "$FW_DIR"/*.dylib >/dev/null 2>/dev/null || true
+
+    # Rewrite dylib paths → @executable_path/../Frameworks/
+    rewrite_dylib_paths() {
+        local bin="$1"
+        otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r lib_path; do
+            case "$lib_path" in
+                /usr/lib/*|/System/*|@rpath/*|@executable_path/*) continue ;;
+            esac
+            lib_name=$(basename "$lib_path")
+            install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$lib_name" "$bin" 2>/dev/null || true
+        done
+    }
+    rewrite_dylib_paths "$MACOS_DIR/$NAME"
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_DIR/$NAME" 2>/dev/null || true
+
+    # Fix each bundled dylib's id + transitive refs
+    for dylib in "$FW_DIR"/*.dylib; do
+        [ -f "$dylib" ] || continue
+        lib_name=$(basename "$dylib")
+        install_name_tool -id "@executable_path/../Frameworks/$lib_name" "$dylib" 2>/dev/null || true
+        rewrite_dylib_paths "$dylib"
+    done
+
+    # Ad-hoc sign (Sequoia requires valid signatures even for unsigned builds)
+    codesign --force --sign - --deep "$APP_BUNDLE" 2>/dev/null || true
+
+    LIB_COUNT=$(find "$FW_DIR" -name '*.dylib' 2>/dev/null | wc -l | tr -d ' ')
+    SIZE_MB=$(du -sm "$APP_BUNDLE" | cut -f1)
+    echo "[ship] done (${SIZE_MB}MB .app bundle, $LIB_COUNT dylibs) → $APP_BUNDLE"
+    exit 0
+fi
+
 if [[ "$OS" != "Linux" ]]; then
-    echo "[ship] packaging not yet implemented for $OS — leaving raw ELF at $RAW_BIN"
+    echo "[ship] packaging not implemented for $OS — leaving raw ELF at $RAW_BIN"
     exit 0
 fi
 
