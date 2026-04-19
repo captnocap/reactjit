@@ -194,6 +194,8 @@ const Instance = struct {
     // Position (for mouse hit testing)
     screen_x: f32 = 0,
     screen_y: f32 = 0,
+    display_width: f32 = 0,
+    display_height: f32 = 0,
 
     fn deinit(self: *Instance) void {
         if (self.state) |s| {
@@ -228,6 +230,11 @@ const Instance = struct {
         self.sampler = null;
         self.texture_view = null;
         self.texture = null;
+    }
+
+    fn setDisplaySize(self: *Instance, w: f32, h: f32) void {
+        self.display_width = @max(1.0, w);
+        self.display_height = @max(1.0, h);
     }
 
     fn ensureCpuSize(self: *Instance, w: u32, h: u32) void {
@@ -341,6 +348,82 @@ const Instance = struct {
     }
 };
 
+const EffectSize = struct {
+    width: u32,
+    height: u32,
+    pixels: u32,
+    scaled: bool,
+};
+
+const InstanceMouseCoords = struct {
+    effect_x: f32,
+    effect_y: f32,
+    inside: bool,
+};
+
+fn remainingEffectPixels() u32 {
+    return if (g_frame_effect_pixels >= MAX_EFFECT_PIXELS) 0 else MAX_EFFECT_PIXELS - g_frame_effect_pixels;
+}
+
+fn remainingCpuEffectPixels() u32 {
+    const remaining_upload_bytes = if (g_frame_upload_bytes >= MAX_UPLOAD_BYTES) 0 else MAX_UPLOAD_BYTES - g_frame_upload_bytes;
+    return @min(remainingEffectPixels(), remaining_upload_bytes / 4);
+}
+
+fn resolveEffectSize(request_w: f32, request_h: f32, pixel_budget: u32) ?EffectSize {
+    if (pixel_budget == 0) return null;
+
+    const safe_w: f32 = @max(1.0, request_w);
+    const safe_h: f32 = @max(1.0, request_h);
+    const requested_w: u32 = @as(u32, @intFromFloat(safe_w));
+    const requested_h: u32 = @as(u32, @intFromFloat(safe_h));
+    const dim_limit: f32 = @floatFromInt(MAX_EFFECT_DIM);
+    const pixel_budget_f: f32 = @floatFromInt(pixel_budget);
+
+    var scale: f32 = 1.0;
+    if (safe_w > dim_limit) scale = @min(scale, dim_limit / safe_w);
+    if (safe_h > dim_limit) scale = @min(scale, dim_limit / safe_h);
+
+    const requested_pixels = safe_w * safe_h;
+    if (requested_pixels > pixel_budget_f and requested_pixels > 0) {
+        scale = @min(scale, @sqrt(pixel_budget_f / requested_pixels));
+    }
+
+    var width: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1.0, safe_w * scale))));
+    var height: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1.0, safe_h * scale))));
+    while (@as(u64, width) * @as(u64, height) > pixel_budget) {
+        if (width >= height and width > 1) {
+            width -= 1;
+        } else if (height > 1) {
+            height -= 1;
+        } else {
+            break;
+        }
+    }
+
+    return .{
+        .width = width,
+        .height = height,
+        .pixels = width * height,
+        .scaled = width != requested_w or height != requested_h,
+    };
+}
+
+fn instanceMouseCoords(inst: *const Instance) InstanceMouseCoords {
+    const draw_x = g_mouse_x - inst.screen_x;
+    const draw_y = g_mouse_y - inst.screen_y;
+    const draw_w = if (inst.display_width > 0) inst.display_width else @as(f32, @floatFromInt(inst.width));
+    const draw_h = if (inst.display_height > 0) inst.display_height else @as(f32, @floatFromInt(inst.height));
+    const inside = draw_x >= 0 and draw_x <= draw_w and draw_y >= 0 and draw_y <= draw_h;
+    const scale_x = if (draw_w > 0) @as(f32, @floatFromInt(inst.width)) / draw_w else 1.0;
+    const scale_y = if (draw_h > 0) @as(f32, @floatFromInt(inst.height)) / draw_h else 1.0;
+    return .{
+        .effect_x = draw_x * scale_x,
+        .effect_y = draw_y * scale_y,
+        .inside = inside,
+    };
+}
+
 var instances: [MAX_INSTANCES]Instance = [_]Instance{.{}} ** MAX_INSTANCES;
 var instance_count: usize = 0;
 var g_backend_pref: BackendPref = .auto;
@@ -371,17 +454,14 @@ pub fn pollMouse(mx: f32, my: f32, dt: f32) void {
 }
 
 fn instanceMouse(inst: *const Instance) MouseInfo {
-    const local_x = g_mouse_x - inst.screen_x;
-    const local_y = g_mouse_y - inst.screen_y;
-    const w: f32 = @floatFromInt(inst.width);
-    const h: f32 = @floatFromInt(inst.height);
+    const mouse = instanceMouseCoords(inst);
     return .{
-        .x = local_x,
-        .y = local_y,
+        .x = mouse.effect_x,
+        .y = mouse.effect_y,
         .dx = g_mouse_dx,
         .dy = g_mouse_dy,
         .speed = g_mouse_speed,
-        .inside = local_x >= 0 and local_x <= w and local_y >= 0 and local_y <= h,
+        .inside = mouse.inside,
         .idle = g_mouse_idle,
     };
 }
@@ -532,18 +612,16 @@ fn renderGpu(self: *Instance) bool {
     const uniform_buf = self.gpu_uniform_buffer orelse return false;
     const target_view = self.texture_view orelse return false;
 
+    const mouse = instanceMouseCoords(self);
     const uniforms = GpuUniforms{
         .size_w = @floatFromInt(self.width),
         .size_h = @floatFromInt(self.height),
         .time = self.time,
         .dt = g_dt,
         .frame = @floatFromInt(self.frame_count),
-        .mouse_x = g_mouse_x - self.screen_x,
-        .mouse_y = g_mouse_y - self.screen_y,
-        .mouse_inside = if ((g_mouse_x - self.screen_x) >= 0 and
-            (g_mouse_x - self.screen_x) <= @as(f32, @floatFromInt(self.width)) and
-            (g_mouse_y - self.screen_y) >= 0 and
-            (g_mouse_y - self.screen_y) <= @as(f32, @floatFromInt(self.height))) 1.0 else 0.0,
+        .mouse_x = mouse.effect_x,
+        .mouse_y = mouse.effect_y,
+        .mouse_inside = if (mouse.inside) 1.0 else 0.0,
     };
     queue.writeBuffer(uniform_buf, 0, @ptrCast(&uniforms), @sizeOf(GpuUniforms));
 
@@ -581,6 +659,7 @@ fn renderCpuNow(self: *Instance) bool {
     const buf = self.pixel_buf orelse return false;
     if (self.width == 0 or self.height == 0) return false;
     if (buf.len < @as(usize, self.width) * @as(usize, self.height) * 4) return false;
+    const mouse = instanceMouseCoords(self);
     var ctx = EffectContext{
         .buf = buf.ptr,
         .width = self.width,
@@ -588,12 +667,9 @@ fn renderCpuNow(self: *Instance) bool {
         .stride = self.width * 4,
         .time = self.time,
         .dt = g_dt,
-        .mouse_x = g_mouse_x - self.screen_x,
-        .mouse_y = g_mouse_y - self.screen_y,
-        .mouse_inside = (g_mouse_x - self.screen_x) >= 0 and
-            (g_mouse_x - self.screen_x) <= @as(f32, @floatFromInt(self.width)) and
-            (g_mouse_y - self.screen_y) >= 0 and
-            (g_mouse_y - self.screen_y) <= @as(f32, @floatFromInt(self.height)),
+        .mouse_x = mouse.effect_x,
+        .mouse_y = mouse.effect_y,
+        .mouse_inside = mouse.inside,
         .frame = self.frame_count,
     };
     render(&ctx);
@@ -668,20 +744,18 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     i.active = true;
     i.screen_x = x;
     i.screen_y = y;
+    i.setDisplaySize(w, h);
     i.backend = .cpu;
 
-    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
-    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
-    const pixels = iw * ih;
-    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
+    const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
+            std.debug.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
         }
         return false;
-    }
-    g_frame_effect_pixels += pixels;
-    i.ensureCpuSize(iw, ih);
+    };
+    g_frame_effect_pixels += resolved.pixels;
+    i.ensureCpuSize(resolved.width, resolved.height);
 
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
@@ -705,18 +779,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     i.active = true;
     i.screen_x = x;
     i.screen_y = y;
-
-    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
-    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
-    const pixels = iw * ih;
-    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
-        if (!g_effect_budget_logged) {
-            g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
-        }
-        return false;
-    }
-    g_frame_effect_pixels += pixels;
+    i.setDisplaySize(w, h);
     const node_name = node.debug_name orelse "?";
     log.info(.render, "custom effect node={s} ptr=0x{x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) gpu_try={} gpu_failed={} shader={} background={}", .{
         node_name, @intFromPtr(node), x, y, w, h, shouldTryGpu(node), i.gpu_failed, node.effect_shader != null, node.effect_background,
@@ -727,8 +790,16 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
         std.debug.print("[effect-paint] node={x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) shouldTryGpu={} shader_set={}\n", .{ @intFromPtr(node), x, y, w, h, shouldTryGpu(node), node.effect_shader != null });
     }
     if (shouldTryGpu(node) and !i.gpu_failed) {
+        const resolved = resolveEffectSize(w, h, remainingEffectPixels()) orelse {
+            if (!g_effect_budget_logged) {
+                g_effect_budget_logged = true;
+                std.debug.print("[BUDGET] Effect pixel budget exhausted — skipping effect\n", .{});
+            }
+            return false;
+        };
+        g_frame_effect_pixels += resolved.pixels;
         i.backend = .gpu;
-        const size_ok = ensureGpuSize(i, iw, ih);
+        const size_ok = ensureGpuSize(i, resolved.width, resolved.height);
         const pipe_ok = size_ok and ensureGpuPipeline(i);
         const render_ok = pipe_ok and renderGpu(i);
         if (!g_effect_gpu_result_logged) {
@@ -752,12 +823,21 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
             log.info(.render, "custom effect gpu queued node={s}", .{node_name});
             return true;
         }
+        g_frame_effect_pixels -= resolved.pixels;
         log.warn(.render, "custom effect gpu failed node={s} -> cpu fallback", .{node_name});
         i.gpu_failed = true;
     }
 
+    const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
+        if (!g_effect_budget_logged) {
+            g_effect_budget_logged = true;
+            std.debug.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
+        }
+        return false;
+    };
+    g_frame_effect_pixels += resolved.pixels;
     i.backend = .cpu;
-    i.ensureCpuSize(iw, ih);
+    i.ensureCpuSize(resolved.width, resolved.height);
     if (i.width == 0 or i.height == 0) {
         log.warn(.render, "custom effect cpu zero-sized node={s}", .{node_name});
         return false;
@@ -790,11 +870,18 @@ pub fn paintBackground(effect_type: []const u8, px: f32, py: f32, pw: f32, ph: f
     i.active = true;
     i.screen_x = px;
     i.screen_y = py;
+    i.setDisplaySize(pw, ph);
     i.backend = .cpu;
 
-    const iw: u32 = @intFromFloat(@max(1, pw));
-    const ih: u32 = @intFromFloat(@max(1, ph));
-    i.ensureCpuSize(iw, ih);
+    const resolved = resolveEffectSize(pw, ph, remainingCpuEffectPixels()) orelse {
+        if (!g_effect_budget_logged) {
+            g_effect_budget_logged = true;
+            std.debug.print("[BUDGET] Effect budget exhausted — skipping background effect\n", .{});
+        }
+        return false;
+    };
+    g_frame_effect_pixels += resolved.pixels;
+    i.ensureCpuSize(resolved.width, resolved.height);
 
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
@@ -909,19 +996,17 @@ pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f
     i.name = effect_name;
     i.screen_x = x;
     i.screen_y = y;
+    i.setDisplaySize(w, h);
 
-    const iw: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, w))));
-    const ih: u32 = @min(MAX_EFFECT_DIM, @as(u32, @intFromFloat(@max(1, h))));
-    const pixels = iw * ih;
-    if (g_frame_effect_pixels + pixels > MAX_EFFECT_PIXELS) {
+    const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect pixel budget exceeded {d}/frame — skipping effect\n", .{MAX_EFFECT_PIXELS});
+            std.debug.print("[BUDGET] Effect budget exhausted — skipping named effect\n", .{});
         }
         return false;
-    }
-    g_frame_effect_pixels += pixels;
-    i.ensureCpuSize(iw, ih);
+    };
+    g_frame_effect_pixels += resolved.pixels;
+    i.ensureCpuSize(resolved.width, resolved.height);
 
     if (i.width == 0 or i.height == 0) return false;
     const ok = renderCpuNow(i);

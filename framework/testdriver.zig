@@ -31,6 +31,27 @@ pub fn click(x: f32, y: f32) void {
     _ = c.SDL_PushEvent(&up);
 }
 
+/// Simulate a right click at (x, y). Pushes MOUSE_BUTTON_DOWN + MOUSE_BUTTON_UP.
+pub fn rightClick(x: f32, y: f32) void {
+    var down: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
+    down.type = c.SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.x = x;
+    down.button.y = y;
+    down.button.button = c.SDL_BUTTON_RIGHT;
+    down.button.down = true;
+    down.button.clicks = 1;
+    _ = c.SDL_PushEvent(&down);
+
+    var up: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
+    up.type = c.SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.x = x;
+    up.button.y = y;
+    up.button.button = c.SDL_BUTTON_RIGHT;
+    up.button.down = false;
+    up.button.clicks = 1;
+    _ = c.SDL_PushEvent(&up);
+}
+
 /// Click a node found by query. Returns true if found and clicked.
 pub fn clickNode(root: *Node, opts: QueryOpts) bool {
     if (query.find(root, opts)) |result| {

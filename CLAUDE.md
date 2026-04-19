@@ -6,9 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The following directories are READ-ONLY and FROZEN:
 - `archive/` — old compiler iterations (v1 tsz, v2 tsz-gen). Reference only.
-- `love2d/` — Lua reference stack. Read for porting, do not modify.
-
-The active codebase is `tsz/`. The active `.tsz` compiler path is Forge + Smith inside `tsz/`: rebuild with `zig build forge`, then use `./scripts/build` for end-to-end cart builds or `./zig-out/bin/forge build` for direct compiler runs.
+- `love2d/` — Lua reference stack. Read for porting reference, do not modify.
+- `tsz/` — Smith-era stack (.tsz compiler, d-suite conformance, cockpit/Sweatshop .tsz carts, InspectorTsz tools). Read for porting reference, do not modify. Same treatment as `love2d/`.
 
 # HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
 For feature verification, compiler capability checks, and architecture comparisons in this repo:
@@ -31,38 +30,38 @@ Why:
 
 **Committing:** If you commit on your own, only commit your own work. If prompted to commit, commit everything unaccounted for.
 
-## What This Is
+## What This Is (active shape)
 
-ReactJIT is a TS-to-native compiler and UI framework. `.tsz` is compiled by **Forge + Smith** (Smith runs in **QuickJS** at compile time). At **runtime**, **Zig** hosts the loop, hit-testing, layout, paint, dirty flags, and stamped `Node` graph; **LuaJIT** runs **`LUA_LOGIC`** and holds **Lua heap** state for many carts; **QuickJS** runs **`JS_LOGIC`**, **`__eval`**, **`evalLuaMapData`**, and **`js_on_press`**. State is **not** only `state.zig` slots. See [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) § *Where runtime work actually happens*.
+ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild, and run inside the framework's **QuickJS** VM via `qjs_app.zig`. The reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned Node pool; the Zig framework handles layout, paint, hit-test, text, input, events, effects, and GPU.
 
-- **`tsz/`** — The active engine: compiler, framework, carts. See `tsz/CLAUDE.md`.
-- **`love2d/`** — Lua reference stack (React reconciler → QuickJS → Lua → Love2D). Read for porting reference.
-- **`os/`** — CartridgeOS + Exodia (future). App shell and distribution layer.
+- **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows, QuickJS bridge.
+- **`qjs_app.zig`** — Host entry. Loads `bundle.js` into QuickJS, wires events, owns Node pool.
+- **`runtime/`** — JS entry point (`index.tsx`), JSX shim, primitives, host globals.
+- **`renderer/`** — React-reconciler host config. Emits mutation commands to `__hostFlush`.
+- **`cart/`** — `.tsx` apps.
+- **`scripts/build-bundle.mjs`** — esbuild bundler. Takes a cart path, produces `bundle.js`.
+- **`tsz/`** — FROZEN. Smith compiler + Smith-era carts. Reference only.
+- **`love2d/`** — FROZEN. The proven reconciler-on-Lua stack. Reference for every runtime pattern we need.
+- **`os/`** — CartridgeOS + Exodia (future).
 
-**All active development happens in `tsz/`.** Read `tsz/CLAUDE.md` before working there.
+## Ship Path (the only path)
 
-### The tsz Rule
+1. Write/edit a `.tsx` cart in `cart/`.
+2. Bundle: `node scripts/build-bundle.mjs cart/<name>.tsx` → writes `bundle.js`.
+3. Build: `zig build app -Dapp-source=qjs_app.zig -Dapp-name=<name>` → `zig-out/bin/<name>`.
+4. Run: `./zig-out/bin/<name>`.
 
-**If it's not generating code, it should be generated code.** The runtime is written in `.mod.tsz`. The compiler turns `.mod.tsz` into `.zig`. Hand-written `.zig` in the runtime is temporary — it means the compiler hasn't caught up. Fix the compiler, don't write more `.zig`.
+Long-running goal: a single `scripts/ship <name>` that does steps 2+3.
 
-### File Extensions
+**No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
 
-| Extension | What | Example |
-|-----------|------|---------|
-| `.app.tsz` | App → binary | `counter.app.tsz` |
-| `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
-| `.tsz` | Component import | `Button.tsz` |
-| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+## The Primitives
 
-## The Primitives (shared)
+`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`. Custom host-handled types (Cartridge, Audio, Video, Canvas, etc.) use the `<Native type="X" {...props} />` pattern from love2d — the reconciler emits CREATE with that type, the Zig host handles it.
 
-`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Cartridge`, `ascript`
+## Layout Rules
 
-Everything is composed from these. A dashboard is Boxes and Text. `<Cartridge src="app.so">` embeds a dynamically loaded .so app inline. `<ascript>` runs AppleScript on macOS (see below).
-
-## Layout Rules (shared)
-
-The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and the Zig runtime (`tsz/framework/layout.zig`).
+Pixel-perfect flex, shared logic with love2d's layout engine.
 
 ### Sizing tiers (first match wins)
 1. **Explicit dimensions** — `width`, `height`, `flexGrow`, `flexBasis`
@@ -74,91 +73,6 @@ The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layo
 - Use `flexGrow: 1` for space-filling elements, never hardcoded pixel heights
 - ScrollView needs explicit height (excluded from proportional fallback)
 - Don't mix text and expressions in `<Text>` — use template literals
-
-### Layout anti-patterns
-- Hardcoding pixel heights to fit a known window size → use `flexGrow: 1`
-- Manual pixel budgeting → let flex handle distribution
-- Fixed dimensions where auto-sizing works → let containers shrink-wrap
-
-## Build (tsz stack)
-
-Use the `tsz/` build path that the active compiler actually uses:
-
-```bash
-cd tsz
-./scripts/build carts/path/to/app.tsz   # preferred end-to-end cart build
-zig build forge                         # rebuild Forge after editing Smith compiler files
-zig build smith-sync                    # verify Smith manifest/bundle coverage
-zig build smith-bundle                  # rebuild Smith bundle only
-./zig-out/bin/forge build --single carts/path/to/app.tsz  # direct compiler run when needed
-```
-
-Smith now lives directly under `tsz/compiler/` as `smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, and `smith_emit/`.
-
-**Do not use Node for active Smith builds.** The old `node compiler/build_smith_bundle.mjs` and `node compiler/sync_smith.mjs` path is removed. The active bundle/sync tools are native Zig: `tsz/compiler/smith_bundle.zig` and `tsz/compiler/smith_sync.zig`.
-
-## Hot-Reload Dev Mode (PREFERRED FOR ITERATION)
-
-**Use `tsz dev` instead of `tsz build` during development.** It's 63x faster.
-
-```bash
-# Start dev mode (compiles .tsz → .so, launches shell, watches for changes)
-bin/tsz dev carts/path/to/app.tsz
-
-# Or enter the cart directory and let tsz infer the entry file
-cd tsz/carts/my-cart
-../../zig-out/bin/tsz run dev
-# ../../zig-out/bin/tsz dev works too
-
-# The shell stays open. Edit any .tsz file in the cart directory.
-# Changes auto-detect → recompile → hot-reload (186ms, no restart).
-# State (counters, form values, etc.) survives reloads.
-```
-
-**Single instance:** If a dev shell is already running, `tsz dev` just rebuilds the .so and exits. The running shell auto-reloads. No duplicate windows.
-
-**Entry inference:** When run without a file argument, `tsz run dev` and `tsz dev` use the current directory if it contains exactly one app entry. If there are multiple app files, pass one explicitly.
-
-### Build targets
-
-```bash
-cd tsz
-zig build tsz              # Lean compiler
-zig build tsz-full         # Full compiler
-zig build app              # Full binary (links everything — slow, for production)
-zig build app-lib          # Shared library .so (pure Zig, no native deps — fast, for dev)
-zig build dev-shell        # Dev shell binary (built once, cached)
-zig build -Dcart-source=file.zig -Dcart-name=foo cart  # Custom Zig cartridge .so
-```
-
-### CartridgeOS (multi-app host)
-
-The dev shell can load multiple .so cartridges in a tabbed interface:
-
-```bash
-tsz-dev app1.so app2.so app3.so    # Tabbed multi-app host
-```
-
-Each cartridge has independent state, event handlers, lifecycle. Cross-cartridge state access is available via the shell. Cartridges hot-reload independently.
-
-### `<Cartridge>` component
-
-Any .so can be embedded inline as a component:
-
-```tsx
-<Cartridge src="sidebar.so" style={{ width: 250 }} />
-<Cartridge src="editor.so" style={{ flexGrow: 1 }} />
-```
-
-Any language that can produce a .so with C exports can be a cartridge (Zig, Rust, C, Go). The ABI is 6 functions: `app_get_root`, `app_get_init`, `app_get_tick`, `app_get_title`, `app_state_count`, `app_state_*`.
-
-## Build (Love2D stack)
-
-`build.zig` at the repo root compiles Love2D native deps:
-
-```bash
-zig build                    # libquickjs + blake3
-```
 
 ## One-Liner Design Philosophy
 
@@ -187,7 +101,7 @@ The only safe git commands are: `git add`, `git commit`, `git push`, `git status
 - When in doubt, commit
 
 ### How to commit
-- Descriptive conventional-commit messages: `feat(tsz): add FFI support`
+- Descriptive conventional-commit messages: `feat: add inspector elements panel`
 - One logical change per commit
 - Never leave a session with uncommitted work
 
@@ -206,4 +120,4 @@ Documentation is a completion criterion. After major features:
 
 ## Skills & Agents
 
-All skills and agents are Love2D-specific and live in `love2d/.claude/`. The `tsz/` stack has none yet.
+Love2D-specific skills live in `love2d/.claude/` and only apply when working inside the frozen love2d/ tree. The Smith-era skills (`flight-check-loop`, `chad-audit`, `conformance`) are retained only for reference while touching the frozen `tsz/` tree; do not invoke them against root-level work.

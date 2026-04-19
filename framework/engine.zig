@@ -507,6 +507,15 @@ fn scanCartridgeNodes(node: *Node) void {
     }
 }
 
+fn findNodeByScrollSlot(node: *Node, slot: u32) ?*Node {
+    if (slot == 0) return null;
+    if (node.scroll_persist_slot == slot) return node;
+    for (node.children) |*child| {
+        if (findNodeByScrollSlot(child, slot)) |hit| return hit;
+    }
+    return null;
+}
+
 fn updateHover(root: *Node, mx: f32, my: f32) void {
     const events = @import("events.zig");
     const hit = events.hitTestHoverable(root, mx, my);
@@ -515,11 +524,29 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     // Exit previous
     if (hovered_node) |prev| {
         if (prev.handlers.on_hover_exit) |handler| handler();
+        if (prev.handlers.lua_on_hover_exit) |lua_expr| {
+            luajit_runtime.evalExpr(std.mem.span(lua_expr));
+        }
+        if (prev.handlers.js_on_hover_exit) |js_expr| {
+            qjs_runtime.callGlobal("__beginJsEvent");
+            qjs_runtime.evalExpr(std.mem.span(js_expr));
+            qjs_runtime.callGlobal("__endJsEvent");
+            state_mod.markDirty();
+        }
     }
     hovered_node = hit;
     // Enter new
     if (hit) |node| {
         if (node.handlers.on_hover_enter) |handler| handler();
+        if (node.handlers.lua_on_hover_enter) |lua_expr| {
+            luajit_runtime.evalExpr(std.mem.span(lua_expr));
+        }
+        if (node.handlers.js_on_hover_enter) |js_expr| {
+            qjs_runtime.callGlobal("__beginJsEvent");
+            qjs_runtime.evalExpr(std.mem.span(js_expr));
+            qjs_runtime.callGlobal("__endJsEvent");
+            state_mod.markDirty();
+        }
         // Tooltip: show if node carries tooltip text
         if (node.tooltip) |tt| {
             const r = node.computed;
@@ -748,10 +775,11 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 
 // ── Node painting (framework-owned) ─────────────────────────────────────
 
-fn offsetDescendants(node: *Node, dy: f32) void {
+fn offsetDescendants(node: *Node, dx: f32, dy: f32) void {
     for (node.children) |*child| {
+        child.computed.x += dx;
         child.computed.y += dy;
-        offsetDescendants(child, dy);
+        offsetDescendants(child, dx, dy);
     }
 }
 
@@ -904,11 +932,12 @@ fn paintNode(node: *Node) void {
         }
     }
 
-    if (is_scroll and node.scroll_y != 0) {
+    if (is_scroll and (node.scroll_x != 0 or node.scroll_y != 0)) {
+        const sx = node.scroll_x;
         const sy = node.scroll_y;
-        offsetDescendants(node, -sy);
+        offsetDescendants(node, -sx, -sy);
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
-        offsetDescendants(node, sy);
+        offsetDescendants(node, sx, sy);
     } else {
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
     }
@@ -1028,7 +1057,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
 /// Separated from paintNode to reduce the recursive frame size.
 noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
-    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.handlers.js_on_hover_enter != null or node.handlers.lua_on_hover_enter != null or node.handlers.js_on_hover_exit != null or node.handlers.lua_on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
         gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6,
@@ -1223,7 +1252,15 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
     }
 
-    if (node.input_id) |id| paintTextInput(node, id);
+    if (node.input_id) |id| {
+        if (node.text) |t| {
+            const current = input.getText(id);
+            if (!input.isFocused(id) and !std.mem.eql(u8, current, t)) {
+                input.setText(id, t);
+            }
+        }
+        paintTextInput(node, id);
+    }
 }
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
@@ -1333,7 +1370,16 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const pl = node.style.padLeft();
         const pt = node.style.padTop();
         const max_w = r.w - pl - node.style.padRight();
-        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, max_w, 0, 0, 0, false);
+        const is_multiline = input.isMultiline(id);
+        const metrics = measureCallback(
+            typed[0..cursor_pos],
+            node.font_size,
+            max_w,
+            0,
+            0,
+            if (is_multiline) 0 else 1,
+            !is_multiline,
+        );
         const cx = r.x + pl + metrics.width;
         // Cursor height = one line of text, not the full input height.
         // For multi-line inputs, position cursor at the baseline of the current line.
@@ -1863,6 +1909,7 @@ pub fn run(config_in: AppConfig) !void {
                         const rc_events = @import("events.zig");
                         if (rc_events.hitTestRightClick(config.root, mx, my)) |h| {
                             if (h.handlers.on_right_click) |handler| {
+                                qjs_runtime.prepareNodeEvent(h.scroll_persist_slot);
                                 handler(mx, my);
                             } else if (h.context_menu_items) |items| {
                                 context_menu.show(mx, my, items);
@@ -2147,6 +2194,7 @@ pub fn run(config_in: AppConfig) !void {
                 c.SDL_EVENT_KEY_DOWN => {
                     const sym: c_int = @intCast(event.key.key);
                     const mod = event.key.mod;
+                    const packed_key: i64 = (@as(i64, @intCast(mod)) << 16) | (@as(i64, @intCast(sym)) & 0xFFFF);
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
                     // Terminal copy/paste: Ctrl+Shift+C/V (not Ctrl+C which is SIGINT)
@@ -2205,18 +2253,23 @@ pub fn run(config_in: AppConfig) !void {
                     {
                         const ctrl = (mod & c.SDL_KMOD_CTRL) != 0;
                         const input_consumed = if (input.getFocusedId() != null)
-                            (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
+                            (if (ctrl) input.handleCtrlKey(sym, mod) else input.handleKey(sym, mod))
                         else
                             false;
                         if (!input_consumed and !videos.handleKey(sym)) {
                             selection.onKeyDown(config.root, sym, mod);
+                            qjs_runtime.callGlobalInt("__ifttt_onKeyDown", packed_key);
                             // Forward key events to QuickJS script layer
                             qjs_runtime.callGlobalInt("__onKeyDown", @intCast(sym));
                         }
                     }
                 },
                 c.SDL_EVENT_KEY_UP => {
+                    const sym: c_int = @intCast(event.key.key);
+                    const mod = event.key.mod;
+                    const packed_key: i64 = (@as(i64, @intCast(mod)) << 16) | (@as(i64, @intCast(sym)) & 0xFFFF);
                     _ = render_surfaces.handleKeyUp(@intCast(event.key.key));
+                    qjs_runtime.callGlobalInt("__ifttt_onKeyUp", packed_key);
                 },
                 c.SDL_EVENT_MOUSE_WHEEL => {
                     // SDL3: mouse_x/mouse_y are in the wheel event itself
@@ -2224,15 +2277,29 @@ pub fn run(config_in: AppConfig) !void {
                     const my: f32 = event.wheel.mouse_y;
                     witness.recordScroll(mx, my, event.wheel.x, event.wheel.y);
                     const events = @import("events.zig");
-                    // Terminal scrollback — mouse wheel scrolls history (check all terminals)
+                    // Terminal scrollback — mouse wheel scrolls history (check all terminals).
+                    // When a terminal is nested inside a Canvas.Node its computed rect is in
+                    // graph space; transform the cursor into graph space before hit-testing.
                     {
                         var scroll_ti: u8 = 0;
                         var scroll_handled = false;
+                        const canvas_hit = events.findCanvasNode(config.root, mx, my);
+                        var gx: f32 = mx;
+                        var gy: f32 = my;
+                        if (canvas_hit) |cn| {
+                            const vp_cx = cn.computed.x + cn.computed.w / 2;
+                            const vp_cy = cn.computed.y + cn.computed.h / 2;
+                            const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                            gx = gpos[0];
+                            gy = gpos[1];
+                        }
                         while (scroll_ti < MAX_TERMINALS) : (scroll_ti += 1) {
                             if (!terminals_initialized[scroll_ti]) continue;
                             if (findTerminalNodeById(config.root, scroll_ti)) |tn| {
                                 const tr = tn.computed;
-                                if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                                const screen_hit = mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h;
+                                const graph_hit = canvas_hit != null and gx >= tr.x and gx <= tr.x + tr.w and gy >= tr.y and gy <= tr.y + tr.h;
+                                if (screen_hit or graph_hit) {
                                     const wheel_y: i32 = @intFromFloat(event.wheel.y);
                                     if (wheel_y > 0) {
                                         vterm_mod.scrollUpIdx(scroll_ti, @intCast(wheel_y * 3));
@@ -2267,10 +2334,22 @@ pub fn run(config_in: AppConfig) !void {
                         if (scroll_hit) |scroll_node| {
                             const sc: f32 = if (comptime @import("builtin").os.tag == .macos) 10.0 else 30.0;
                             if (event.wheel.y != 0) scroll_node.scroll_y -= event.wheel.y * sc;
-                            if (event.wheel.x != 0) scroll_node.scroll_y -= event.wheel.x * sc;
-                            const max_s = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
-                            scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_s));
+                            if (event.wheel.x != 0) scroll_node.scroll_x -= event.wheel.x * sc;
+                            const max_sx = @max(0.0, scroll_node.content_width - scroll_node.computed.w);
+                            const max_sy = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
+                            scroll_node.scroll_x = @max(0.0, @min(scroll_node.scroll_x, max_sx));
+                            scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_sy));
                             luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
+                            if (scroll_node.handlers.on_scroll) |handler| {
+                                qjs_runtime.prepareScrollEvent(
+                                    scroll_node.scroll_persist_slot,
+                                    scroll_node.scroll_x,
+                                    scroll_node.scroll_y,
+                                    event.wheel.x,
+                                    event.wheel.y,
+                                );
+                                handler();
+                            }
                         } else {
                             const delta: f32 = event.wheel.y;
                             canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
@@ -2284,11 +2363,23 @@ pub fn run(config_in: AppConfig) !void {
                         }
                         if (event.wheel.x != 0) {
                             const scale_x: f32 = if (comptime @import("builtin").os.tag == .macos) 10.0 else @max(scroll_node.computed.h * 0.8, 60.0);
-                            scroll_node.scroll_y -= event.wheel.x * scale_x;
+                            scroll_node.scroll_x -= event.wheel.x * scale_x;
                         }
-                        const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
-                        scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+                        const max_scroll_x = @max(0.0, scroll_node.content_width - scroll_node.computed.w);
+                        const max_scroll_y = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
+                        scroll_node.scroll_x = @max(0.0, @min(scroll_node.scroll_x, max_scroll_x));
+                        scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll_y));
                         luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
+                        if (scroll_node.handlers.on_scroll) |handler| {
+                            qjs_runtime.prepareScrollEvent(
+                                scroll_node.scroll_persist_slot,
+                                scroll_node.scroll_x,
+                                scroll_node.scroll_y,
+                                event.wheel.x,
+                                event.wheel.y,
+                            );
+                            handler();
+                        }
                     }
                 },
                 c.SDL_EVENT_DROP_FILE => {
@@ -2313,10 +2404,11 @@ pub fn run(config_in: AppConfig) !void {
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| {
             tickFn(@truncate(c.SDL_GetTicks()));
-            // Tick may reset arena pools (map rebuilds), invalidating node pointers.
-            // Null out hovered_node to prevent telemetry/paint from reading freed memory.
-            // Next mouse move re-establishes it via updateHover().
-            hovered_node = null;
+            // Tick may rebuild arena-backed trees. Re-resolve the hovered node by its
+            // stable slot id when available so hover exit/enter continues to work.
+            if (hovered_node) |prev| {
+                hovered_node = findNodeByScrollSlot(config.root, prev.scroll_persist_slot);
+            }
         }
 
         // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)

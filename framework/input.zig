@@ -7,7 +7,7 @@
 const std = @import("std");
 const c = @import("c.zig").imports;
 
-const MAX_INPUTS = 16;
+pub const MAX_INPUTS = 128;
 const BUF_SIZE = 4096;
 
 pub const InputState = struct {
@@ -24,7 +24,28 @@ pub const InputState = struct {
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;
 var on_change_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
 var on_submit_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
+var on_focus_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
+var on_blur_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
+var on_key_callbacks: [MAX_INPUTS]?*const fn (key: c_int, mods: u16) void = [_]?*const fn (key: c_int, mods: u16) void{null} ** MAX_INPUTS;
 var focused_id: ?u8 = null;
+
+// ── Submit event bus ────────────────────────────────────────────────────
+// On Enter, captures the pre-clear text so cart JS can pick it up later via
+// consumeLastSubmit(). Works even when no onSubmit callback is registered,
+// letting non-soup-lane carts drive their own submit logic from a poll loop.
+var g_last_submit_id: i16 = -1;
+var g_last_submit_buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE;
+var g_last_submit_len: u16 = 0;
+
+pub const SubmitEvent = struct { id: u8, text: []const u8 };
+
+pub fn consumeLastSubmit() ?SubmitEvent {
+    if (g_last_submit_id < 0) return null;
+    const id: u8 = @intCast(g_last_submit_id);
+    const text = g_last_submit_buf[0..g_last_submit_len];
+    g_last_submit_id = -1;
+    return .{ .id = id, .text = text };
+}
 var cursor_blink: f32 = 0;
 var cursor_visible: bool = true;
 var measure_width_fn: ?*const fn ([]const u8, u16) f32 = null;
@@ -53,6 +74,7 @@ pub fn trackClick(now_ms: u32) u8 {
 pub fn register(id: u8) void {
     if (id < MAX_INPUTS) {
         inputs[id].active = true;
+        inputs[id].multiline = false;
     }
 }
 
@@ -70,12 +92,55 @@ pub fn setOnSubmit(id: u8, callback: *const fn () void) void {
     }
 }
 
+/// Set a focus callback for an input. Called when the input gains focus.
+pub fn setOnFocus(id: u8, callback: *const fn () void) void {
+    if (id < MAX_INPUTS) {
+        on_focus_callbacks[id] = callback;
+    }
+}
+
+/// Set a blur callback for an input. Called when the input loses focus.
+pub fn setOnBlur(id: u8, callback: *const fn () void) void {
+    if (id < MAX_INPUTS) {
+        on_blur_callbacks[id] = callback;
+    }
+}
+
+/// Set a key callback for an input. Called on key-down while focused.
+pub fn setOnKey(id: u8, callback: *const fn (key: c_int, mods: u16) void) void {
+    if (id < MAX_INPUTS) {
+        on_key_callbacks[id] = callback;
+    }
+}
+
 /// Register a multiline input slot (TextArea).
 pub fn registerMultiline(id: u8) void {
     if (id < MAX_INPUTS) {
         inputs[id].active = true;
         inputs[id].multiline = true;
     }
+}
+
+/// Release an input slot so it can be reused by a newly mounted field.
+pub fn unregister(id: u8) void {
+    if (id >= MAX_INPUTS) return;
+    if (focused_id != null and focused_id.? == id) {
+        focused_id = null;
+    }
+    if (undo_input_id != null and undo_input_id.? == id) {
+        undo_input_id = null;
+        undo_count = 0;
+    }
+    if (g_last_submit_id >= 0 and @as(u8, @intCast(g_last_submit_id)) == id) {
+        g_last_submit_id = -1;
+        g_last_submit_len = 0;
+    }
+    on_change_callbacks[id] = null;
+    on_submit_callbacks[id] = null;
+    on_focus_callbacks[id] = null;
+    on_blur_callbacks[id] = null;
+    on_key_callbacks[id] = null;
+    inputs[id] = .{};
 }
 
 /// Get the text content of an input.
@@ -92,21 +157,45 @@ pub fn getTextZ(id: u8) ?[]const u8 {
 
 /// Focus an input. Starts SDL text input.
 pub fn focus(id: u8) void {
+    if (id >= MAX_INPUTS) return;
+    if (focused_id != null and focused_id.? == id) {
+        cursor_blink = 0;
+        cursor_visible = true;
+        return;
+    }
+    if (focused_id) |prev| {
+        if (prev < MAX_INPUTS) {
+            if (on_blur_callbacks[prev]) |cb| cb();
+        }
+    }
     focused_id = id;
     cursor_blink = 0;
     cursor_visible = true;
+    if (on_focus_callbacks[id]) |cb| cb();
     // SDL3: text input is started once at engine init (requires window param)
 }
 
 /// Unfocus all inputs. Text input events continue flowing so terminals
 /// and other consumers (PTY, render surfaces) still receive SDL_TEXTINPUT.
 pub fn unfocus() void {
+    if (focused_id) |prev| {
+        focused_id = null;
+        if (prev < MAX_INPUTS) {
+            if (on_blur_callbacks[prev]) |cb| cb();
+        }
+        return;
+    }
     focused_id = null;
 }
 
 /// Check if a specific input is focused.
 pub fn isFocused(id: u8) bool {
     return focused_id != null and focused_id.? == id;
+}
+
+pub fn isMultiline(id: u8) bool {
+    if (id >= MAX_INPUTS) return false;
+    return inputs[id].multiline;
 }
 
 /// Get the currently focused input ID, or null.
@@ -153,9 +242,10 @@ pub fn handleTextInput(text: [*:0]const u8) void {
 }
 
 /// Handle key events for the focused input.
-pub fn handleKey(sym: c_int) bool {
+pub fn handleKey(sym: c_int, mods: u16) bool {
     const id = focused_id orelse return false;
     if (id >= MAX_INPUTS) return false;
+    if (on_key_callbacks[id]) |cb| cb(sym, mods);
     var inp = &inputs[id];
     const prev_len = inp.len;
 
@@ -240,7 +330,13 @@ pub fn handleKey(sym: c_int) bool {
             }
             return true;
         }
-        // Single-line: fire submit callback, then clear input
+        // Single-line: capture the pre-clear text for the submit bus,
+        // fire submit callback, then clear input.
+        if (inp.len > 0) {
+            @memcpy(g_last_submit_buf[0..inp.len], inp.buf[0..inp.len]);
+            g_last_submit_len = inp.len;
+            g_last_submit_id = @intCast(id);
+        }
         if (on_submit_callbacks[id]) |cb| cb();
         // Clear the input after submit
         inp.len = 0;
@@ -271,17 +367,22 @@ pub fn handleKey(sym: c_int) bool {
             }
             return true;
         }
-        // Single-line: cycle to next active input
+        // Single-line: cycle to next/previous active input
+        const reverse = (mods & c.SDL_KMOD_SHIFT) != 0;
         const current = id;
-        var next = current +% 1;
+        var next = current;
         var tried: u8 = 0;
         while (tried < MAX_INPUTS) : (tried += 1) {
-            if (next >= MAX_INPUTS) next = 0;
+            if (reverse) {
+                next = if (next == 0) MAX_INPUTS - 1 else next - 1;
+            } else {
+                next +%= 1;
+                if (next >= MAX_INPUTS) next = 0;
+            }
             if (inputs[next].active) {
                 focus(next);
                 return true;
             }
-            next +%= 1;
         }
         return true;
     }
@@ -375,9 +476,10 @@ fn popUndo(inp: *InputState) void {
 // ── Ctrl+Key handler ────────────────────────────────────────────────
 
 /// Handle Ctrl+key combinations. Returns true if handled.
-pub fn handleCtrlKey(sym: c_int) bool {
+pub fn handleCtrlKey(sym: c_int, mods: u16) bool {
     const id = focused_id orelse return false;
     if (id >= MAX_INPUTS) return false;
+    if (on_key_callbacks[id]) |cb| cb(sym, mods);
     var inp = &inputs[id];
 
     // Ctrl+A — select all
@@ -474,15 +576,11 @@ pub fn clear(id: u8) void {
 pub fn setText(id: u8, text: []const u8) void {
     if (id >= MAX_INPUTS) return;
     var inp = &inputs[id];
-    const prev_len = inp.len;
     const copy_len: u16 = @intCast(@min(text.len, BUF_SIZE - 1));
     @memcpy(inp.buf[0..copy_len], text[0..copy_len]);
     inp.len = copy_len;
     inp.cursor = copy_len;
     inp.has_selection = false;
-    if (inp.len != prev_len) {
-        if (on_change_callbacks[id]) |cb| cb();
-    }
 }
 
 // ── Telemetry ────────────────────────────────────────────────────────────

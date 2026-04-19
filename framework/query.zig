@@ -58,8 +58,11 @@ fn matches(node: *const Node, opts: QueryOpts) bool {
     if (opts.has_handler) {
         const h = node.handlers;
         if (h.on_press == null and h.on_hover_enter == null and
-            h.on_hover_exit == null and h.on_key == null and
-            h.on_change_text == null and h.on_scroll == null) return false;
+            h.on_hover_exit == null and h.js_on_hover_enter == null and
+            h.lua_on_hover_enter == null and h.js_on_hover_exit == null and
+            h.lua_on_hover_exit == null and h.on_key == null and
+            h.on_change_text == null and h.on_scroll == null and
+            h.js_on_press == null and h.lua_on_press == null) return false;
     }
     return true;
 }

@@ -576,18 +576,34 @@ pub fn getCharWidth(size_px: u16) f32 {
 pub fn drawGlyphAt(char_buf: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg: f32, cb: f32, ca: f32) void {
     if (g_ft_face == null) return;
     if (char_buf.len == 0) return;
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
+
+    // Honor the active canvas transform the same way drawTextLine does — without
+    // this, Terminal cells inside a Canvas.Node render at untransformed graph
+    // coordinates and appear off-screen / at the wrong scale.
+    const transform = core.getTransform();
+    const s = transform.scale;
+    const has_transform = transform.active;
+    const render_size: u16 = if (has_transform)
+        @intFromFloat(@max(4, @min(200, @round(@as(f32, @floatFromInt(size_px)) * s))))
+    else
+        size_px;
+
+    if (g_ft_current_size != render_size) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, render_size);
+        g_ft_current_size = render_size;
     }
     const face = g_ft_face;
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
     const ch = decodeUtf8(char_buf);
-    if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+
+    const pen_x: f32 = if (has_transform) @round((x - transform.ox) * s + transform.ox + transform.tx) else x;
+    const pen_y: f32 = if (has_transform) @round((y - transform.oy) * s + transform.oy + transform.ty) else y;
+
+    if (cacheGlyph(ch.codepoint, render_size)) |glyph| {
         if (glyph.width > 0 and glyph.height > 0 and g_glyph_count < MAX_GLYPHS) {
             g_glyphs[g_glyph_count] = .{
-                .pos_x = x + @as(f32, @floatFromInt(glyph.bearing_x)),
-                .pos_y = y + ascent - @as(f32, @floatFromInt(glyph.bearing_y)),
+                .pos_x = pen_x + @as(f32, @floatFromInt(glyph.bearing_x)),
+                .pos_y = pen_y + ascent - @as(f32, @floatFromInt(glyph.bearing_y)),
                 .size_w = @floatFromInt(glyph.width),
                 .size_h = @floatFromInt(glyph.height),
                 .uv_x = glyph.uv_x,

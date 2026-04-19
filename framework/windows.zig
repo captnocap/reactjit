@@ -29,6 +29,8 @@ const builtin = @import("builtin");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const luajit_runtime = @import("luajit_runtime.zig");
+const qjs_runtime = @import("qjs_runtime.zig");
+const state_mod = @import("state.zig");
 const text_mod = @import("text.zig");
 const events = @import("events.zig");
 const log = @import("log.zig");
@@ -323,9 +325,23 @@ fn handleMouseMotion(idx: usize, mx: f32, my: f32) void {
         if (prev != slots[idx].hovered) {
             if (prev) |p| {
                 if (p.handlers.on_hover_exit) |h| h();
+                if (p.handlers.lua_on_hover_exit) |lua_expr| luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                if (p.handlers.js_on_hover_exit) |js_expr| {
+                    qjs_runtime.callGlobal("__beginJsEvent");
+                    qjs_runtime.evalExpr(std.mem.span(js_expr));
+                    qjs_runtime.callGlobal("__endJsEvent");
+                    state_mod.markDirty();
+                }
             }
             if (slots[idx].hovered) |n| {
                 if (n.handlers.on_hover_enter) |h| h();
+                if (n.handlers.lua_on_hover_enter) |lua_expr| luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                if (n.handlers.js_on_hover_enter) |js_expr| {
+                    qjs_runtime.callGlobal("__beginJsEvent");
+                    qjs_runtime.evalExpr(std.mem.span(js_expr));
+                    qjs_runtime.callGlobal("__endJsEvent");
+                    state_mod.markDirty();
+                }
             }
         }
     }

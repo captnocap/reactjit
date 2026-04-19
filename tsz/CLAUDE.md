@@ -1,199 +1,32 @@
-# tsz/ — Active Stack
+# tsz/ — FROZEN (Smith-era stack)
 
-## DEBUG FLAGS — USE THESE WHEN SHIT DOESN'T RENDER
+This directory is **read-only reference**, same treatment as `archive/` and `love2d/`.
 
-```bash
-./scripts/build carts/app.tsz -n    # NODES: every node tagged with source line + x/y/w/h dump on frame 1
-./scripts/build carts/app.tsz -s    # STATE: prints slot name + old→new value on every state change
-./scripts/build carts/app.tsz -c    # COMPILER: dumps what Smith understood (ctx after parse)
-./scripts/build carts/app.tsz -ns   # combine any flags
-```
+Active development has moved to the repo root:
+- `framework/` — lifted from `tsz/framework/` (copy, not symlink)
+- `qjs_app.zig` — the React-reconciler host (in-process QuickJS)
+- `runtime/` + `renderer/` + `cart/` — `.tsx` carts + bundler
 
-`-n` is the one you want 90% of the time. Build with `-n`, run the binary, stderr shows the full node tree with computed layout. Every node says what it is and where it came from (`Box@L12`, `Text@L45`). Zero-size or hidden nodes get flagged `!! ZERO-SIZE` or `!! HIDDEN`. No env vars, no editing files, no remembering anything. Just `-n`.
+See the root `CLAUDE.md` for the active ship path.
 
-**DO NOT invent new debug methods.** Do not scatter `std.debug.print` in framework code. Do not add `__dbg.push()` in compiler JS. Do not create new debug flags. The flags above exist. Use them.
+## Why frozen, not deleted
 
----
+`.tsz` + Smith was 50 days of work. The lesson from that: we didn't need a custom DSL — the reconciler-over-QuickJS shape from `love2d/` was already the answer. `qjs_app.zig` proved it (`qjs_d152` performs identically to Smith-compiled d152; see `benchmark_bridge_perf.md` in memory).
 
-## THE ONLY BUILD COMMAND
+Everything in here — the d-suite, cockpit's Smith-compiled pages, InspectorTsz, wpt-flex tests, sweatshop carts — stays available as a reference for shape, screenshots, and intent. Regenerate in `.tsx` on demand rather than porting mechanically.
 
-```bash
-./scripts/build carts/conformance/CART.tsz
-```
+## Do not
 
-That is it. If you are typing `zig build core-so`, `zig build core`, `zig build app`, or ANY raw zig build command — you are **bypassing the engine tracking system** and you will be caught. The build script auto-detects untracked engines and forces a clean rebuild.
+- Rebuild `zig-out/bin/forge`, `zig-out/bin/smith`, or `zig-out/bin/tsz` from this tree.
+- Run `./scripts/build`, `./zig-out/bin/forge build`, or any Smith-era pipeline against root-level `.tsx` carts.
+- Treat `carts/conformance/` as a test suite for current work — those are Smith regression fixtures.
+- Invoke the `flight-check-loop`, `chad-audit`, or `conformance` skills against root-level work.
 
-**NEVER run `zig build core-so` or `zig build core` directly.** The build script handles engine rebuilds automatically. It detects framework/ changes, nukes the Zig cache, and force-rebuilds when needed.
+## Reference material worth knowing exists
 
-### Engine builds — blessed vs dirty
-
-Two engines exist: a **blessed** engine (human-verified, no pre-existing bugs) and a **dirty** engine (whatever you just built).
-
-```bash
-# Normal build — auto-detects if framework/ changed, rebuilds engine if needed
-./scripts/build carts/conformance/CART.tsz
-
-# Build against the blessed engine — proves bugs are in your compiler/cart code
-./scripts/build carts/conformance/CART.tsz --proveIBrokeIt
-
-# Build against the blessed compiler — proves bugs are in your engine/cart code
-./scripts/build carts/conformance/CART.tsz --proveMyCompilerBrokeIt
-
-# Both blessed — isolates to cart code only
-./scripts/build carts/conformance/CART.tsz --proveIBrokeIt --proveMyCompilerBrokeIt
-
-# If you touched framework/ code and want to be explicit about it:
-./scripts/buildFromMyShittyNewCode carts/conformance/CART.tsz
-
-# If you only touched compiler/ or cart code:
-./scripts/ICantCallPreExistingOnThisOne carts/conformance/CART.tsz
-```
-
-**DO NOT run `./scripts/bless-engine` or `./scripts/bless-compiler`.** Only the human promotes engines/compilers to blessed.
-
-If a conformance build fails, the build script prints a **failure receipt** showing: the test source hash, the engine hash, the compiler hash, the framework and smith source hash diffs between your code and the last working build, human verification status, and how many engines and compilers this test has passed on. If the source is unchanged and the framework or compiler changed — it's your code.
-
----
-
-This is the active engine. When the user says "the compiler", "the runtime", "layout", "the inspector" — this is it.
-
-**Zig vs Lua vs QJS at runtime:** read `docs/ARCHITECTURE.md` § *Where runtime work actually happens* before assuming all state is Zig slots or a single QJS→Zig→Lua chain.
-
-## Structure
-
-```
-compiler/
-  smith_*.js        — Smith root JS compiler files (orchestration; heavy logic in subdirs)
-  smith_collect/    — Collection pass
-  smith_lanes/      — Entry lanes + surface tiering (chad, mixed, soup, …)
-  smith_parse/      — JSX/map/element parsing
-  smith_preflight/  — Validation rules (preflight checks)
-  smith_emit/       — Emit helpers + atoms (incl. lua-tree under emit_atoms/maps_lua/)
-  smith_DICTIONARY.md — Live map of the active Smith layout
-  forge.zig         — Forge: Zig binary that hosts Smith via QuickJS
-  smith_bridge.zig  — QuickJS bridge (init, eval, pass tokens, get result)
-  lexer.zig         — Tokenizer (shared, stays in Zig for speed)
-  cli.zig           — CLI interface
-framework/          — Engine core: layout, GPU, events, state, text, windows, canvas
-carts/              — Apps built with the framework
-  conformance/      — Conformance test carts (d01-d104, verify against bin/tsz)
-  smith-test/       — Smith-specific test apps
-```
-
-## Build Pipeline
-
-The build has 3 stages. Understand this or you will waste everyone's time:
-
-1. **Forge** (Zig binary) — runs Smith (the JS compiler)
-2. **Smith** (JS) — compiles `.tsz` → `generated_*.zig` plus **`LUA_LOGIC`** (default); **`JS_LOGIC`** when emitted (script imports / `<script>`); QJS still used for `__eval` / `evalLuaMapData` / `js_on_press` on many carts
-3. **Zig build** — compiles generated Zig + links `framework/` → native binary
-
-### Commands
-
-```bash
-# === THE ONE COMMAND YOU NEED ===
-# From tsz/ directory:
-./scripts/build carts/conformance/d01_nested_maps.tsz
-
-# Or with the alias (if set up):
-tsz-build carts/conformance/d01_nested_maps.tsz
-
-# Debug build (unoptimized):
-./scripts/build carts/conformance/d01_nested_maps.tsz --debug
-
-# Output: zig-out/bin/d01_nested_maps
-```
-
-### Manual steps (if you need them individually)
-
-```bash
-# Step 1: Build forge (only needed after editing Smith JS files)
-zig build forge
-
-# Step 2: Run forge to compile a .tsz → .zig
-./zig-out/bin/forge build carts/conformance/d01_nested_maps.tsz
-# produces: generated_d01_nested_maps.zig
-
-# Step 3: Copy into place and build binary
-cp generated_d01_nested_maps.zig generated_app.zig
-zig build app -Dapp-name=d01_nested_maps -Doptimize=ReleaseFast
-
-# Output: zig-out/bin/d01_nested_maps
-```
-
-### IMPORTANT: Forge embeds JS at build time
-
-When you edit Smith files in `compiler/` (`smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, `smith_emit/`), you MUST rebuild forge (`zig build forge`) before those changes take effect. Forge embeds the JS bundle. If you skip this step, forge runs the old Smith code and your changes do nothing.
-
-### IMPORTANT: Zig build caching
-
-Zig aggressively caches. If the binary timestamp doesn't update after `zig build app`, the build used cache. Delete the old binary from `zig-out/bin/` and rebuild.
-
-## Frozen Reference Binary
-
-**`bin/tsz`** is the frozen reference compiler binary. SHA256: `fa6a74bc1ab0e1613cb55e7b33666a71141e3470bbc5b71a24b93860b3c169ab`. Backup at `bin/tsz.frozen`.
-
-**DO NOT rebuild `bin/tsz`. DO NOT use `zig-out/bin/tsz` as reference.** The `zig-out/bin/tsz` binary was rebuilt by other sessions and produces DIFFERENT output. Always verify Smith against `bin/tsz`.
-
-The old compiler source is archived under `../archive/frozen-compilers/` — do not edit frozen snapshots unless you are explicitly preserving history.
-
-## Reference Implementation (Love2D)
-
-**love2d/scripts/tslx_compile.mjs** (1565 lines) is a working reference compiler from the Love2D stack. It already solves every compiler problem — maps, nested maps, component inlining, prop resolution, conditionals inside maps, template literals.
-
-When you hit a compiler bug in Smith, READ THE LOVE2D VERSION FIRST. Copy the approach. Do not invent from scratch.
-
-- love2d compiler → Lua output (tables, closures, ipairs loops)
-- Smith compiler → Zig output (static arrays, Node structs, comptime pools)
-- The OUTPUT is different but the COMPILER LOGIC (how to walk JSX, track scope, resolve props) is the same.
-
-## Rules
-
-- **Do not add debug logging.** Use `./scripts/build app.tsz -n` (or `-s`, `-c`). See top of this file.
-- **Do not build comptime dispatch tables or academic Zig tricks.** Simple and dumb. If love2d does it in 5 lines, yours should be about 5 lines.
-- **Do not trace scope chains.** If something is broken, check the love2d reference for how it handles the same case.
-- **Do not declare "fundamental limitations."** We own the compiler, lexer, parser, runtime — everything. Nothing is impossible.
-
-## File Extensions
-
-7 file kinds in two isolated worlds (app and module). Full taxonomy: `compiler/cli.zig:165-227`.
-
-## Debug Tools
-
-**Use the build flags.** See top of this file. `-n` for layout, `-s` for state, `-c` for compiler.
-
-- `--strict` — warnings become build errors
-- `--embed` — compile UI into `framework/devtools.zig` for engine integration
-
-## Conformance Tracking
-
-Every `scripts/build` run on a `carts/conformance/` cart auto-records to `conformance.db` (pass or fail). No manual step needed.
-
-```bash
-# Summary: coverage, pass rate, per-lane breakdown, failures
-./scripts/conformance-report
-
-# All tests (disk vs db, shows untested)
-./scripts/conformance-report --all
-
-# Only failures + untested
-./scripts/conformance-report --fails
-
-# Filter by lane (chad, mixed, lscript, wpt-flex, soup, etc.)
-./scripts/conformance-report --lane mixed
-
-# List tests with no db entry
-./scripts/conformance-report --untested
-```
-
-**DO NOT run `--verify`, `--verified`, or `--override`.** Human verification is a manual process only. See `docs/CONFORMANCE_VERIFY.md` for the human workflow.
-
-**DO NOT edit verified test sources.** The build script will detect source hash changes on verified tests and block the build with `TAMPER DETECTED`. Only the human can run `--override` to accept a legitimate source change. If your build is blocked by a tamper check, STOP and tell the user.
-
-## File Length Limit (ENFORCED)
-
-**Max 1600 lines per `.zig` or `.tsz` file.** Enforced by `scripts/check-file-length.sh`. If a file is over 1600 lines, the build fails. Split the file — never raise the limit.
-
-## See Also
-
-- `MODULES.md` — Framework module architecture, logging, windows, breakpoints
+- `tsz/screenshots/Inspector.png` — shape of the inspector we want to regenerate in `.tsx`.
+- `tsz/reference/lua/inspector.lua` — love2d's inspector, imported here for porting.
+- `tsz/carts/cockpit/` — the cockpit app's Smith-era form.
+- `tsz/framework/` — preserved here too, identical to the root copy at the time of lift.
+- `tsz/docs/ARCHITECTURE.md` — Smith-era architecture notes, still useful context.
+- `tsz/compiler/smith_DICTIONARY.md` — historical record of Smith's lane/surface vocabulary.

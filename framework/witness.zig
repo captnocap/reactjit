@@ -133,7 +133,7 @@ var replay_waiting_settle: bool = false; // true = next frame is a settle frame 
 
 // Autotest state
 const AutoStep = struct {
-    kind: enum { click, expect, reject, color, bg, border, styles, type_text, key_press, focus, clear, scroll } = .click,
+    kind: enum { click, expect, reject, color, bg, border, styles, type_text, key_press, focus, clear, scroll, hover, rightclick, wheel, wheelx } = .click,
     text: [TEXT_LEN]u8 = undefined,
     text_len: u16 = 0,
     occurrence: u16 = 1, // 1-based: which occurrence (#1, #2, etc.)
@@ -169,16 +169,27 @@ const StyleEntry = struct {
     text_len: u8 = 0,
     depth: u8 = 0,
     // Computed layout
-    x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0,
+    x: f32 = 0,
+    y: f32 = 0,
+    w: f32 = 0,
+    h: f32 = 0,
     // Style properties
-    padding_top: f32 = 0, padding_bottom: f32 = 0,
-    padding_left: f32 = 0, padding_right: f32 = 0,
+    padding_top: f32 = 0,
+    padding_bottom: f32 = 0,
+    padding_left: f32 = 0,
+    padding_right: f32 = 0,
     border_radius: f32 = 0,
     border_width: f32 = 0,
     gap: f32 = 0,
     font_size: u16 = 0,
-    bg_r: u8 = 0, bg_g: u8 = 0, bg_b: u8 = 0, has_bg: bool = false,
-    tc_r: u8 = 0, tc_g: u8 = 0, tc_b: u8 = 0, has_tc: bool = false,
+    bg_r: u8 = 0,
+    bg_g: u8 = 0,
+    bg_b: u8 = 0,
+    has_bg: bool = false,
+    tc_r: u8 = 0,
+    tc_g: u8 = 0,
+    tc_b: u8 = 0,
+    has_tc: bool = false,
 };
 const MAX_STYLE_ENTRIES = 256;
 var style_snap_before: [MAX_STYLE_ENTRIES]StyleEntry = undefined;
@@ -541,13 +552,16 @@ pub fn tick(root: *Node) bool {
                 if (txt.len > 0) {
                     std.debug.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}  \"{s}\"\n", .{
                         pad[0..pad_len], if (name.len > 0) name else "?",
-                        tn.w, tn.h, tn.x, tn.y, vis, txt,
+                        tn.w,            tn.h,
+                        tn.x,            tn.y,
+                        vis,             txt,
                     });
                 } else {
                     std.debug.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}{s}\n", .{
                         pad[0..pad_len], if (name.len > 0) name else "?",
-                        tn.w, tn.h, tn.x, tn.y, vis,
-                        if (tn.has_handler) " [pressable]" else "",
+                        tn.w,            tn.h,
+                        tn.x,            tn.y,
+                        vis,             if (tn.has_handler) " [pressable]" else "",
                     });
                 }
             }
@@ -716,8 +730,9 @@ fn replayTick(root: *Node) bool {
             // Scroll: send wheel event with mouse position
             testdriver.scrollAt(action.scroll_x, action.scroll_y, action.mouse_x, action.mouse_y);
             std.debug.print("  [{d}/{d}] scroll ({d:.1},{d:.1}) @ ({d:.0},{d:.0})\n", .{
-                replay_idx + 1, replay_action_count,
-                action.scroll_x, action.scroll_y, action.mouse_x, action.mouse_y,
+                replay_idx + 1,  replay_action_count,
+                action.scroll_x, action.scroll_y,
+                action.mouse_x,  action.mouse_y,
             });
             replay_idx += 1;
             replay_waiting_settle = true; // wait 1 frame for SDL to process
@@ -813,6 +828,18 @@ fn loadAutotest() void {
         //        reject "text"
         if (std.mem.startsWith(u8, line, "click ")) {
             auto_steps[idx].kind = .click;
+            parseAutoText(line[6..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "hover ")) {
+            auto_steps[idx].kind = .hover;
+            parseAutoText(line[6..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "rightclick ")) {
+            auto_steps[idx].kind = .rightclick;
+            parseAutoText(line[11..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "wheelx ")) {
+            auto_steps[idx].kind = .wheelx;
+            parseAutoText(line[7..], &auto_steps[idx]);
+        } else if (std.mem.startsWith(u8, line, "wheel ")) {
+            auto_steps[idx].kind = .wheel;
             parseAutoText(line[6..], &auto_steps[idx]);
         } else if (std.mem.startsWith(u8, line, "expect ")) {
             auto_steps[idx].kind = .expect;
@@ -1019,9 +1046,35 @@ fn findTextInputWalk(node: *Node, search_text: []const u8, scroll_y: f32) ?query
     if (node.style.display == .none) return null;
 
     // Check if this node IS a TextInput and matches the search text
-    if (node.input_id != null) {
-        // Match against the node's text content (placeholder or typed text)
+    if (node.input_id) |input_id| {
+        // Match against the live native buffer first, then fall back to bound text
+        // and placeholder values when the input is currently empty.
+        const live_text = input_mod.getText(input_id);
+        if (live_text.len > 0 and std.mem.indexOf(u8, live_text, search_text) != null) {
+            return query.QueryResult{
+                .node = node,
+                .x = node.computed.x,
+                .y = node.computed.y - scroll_y,
+                .w = node.computed.w,
+                .h = node.computed.h,
+                .cx = node.computed.x + node.computed.w / 2.0,
+                .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+            };
+        }
         if (node.text) |txt| {
+            if (txt.len > 0 and std.mem.indexOf(u8, txt, search_text) != null) {
+                return query.QueryResult{
+                    .node = node,
+                    .x = node.computed.x,
+                    .y = node.computed.y - scroll_y,
+                    .w = node.computed.w,
+                    .h = node.computed.h,
+                    .cx = node.computed.x + node.computed.w / 2.0,
+                    .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+                };
+            }
+        }
+        if (node.placeholder) |txt| {
             if (txt.len > 0 and std.mem.indexOf(u8, txt, search_text) != null) {
                 return query.QueryResult{
                     .node = node,
@@ -1080,6 +1133,23 @@ fn findFirstTextInputWalk(node: *Node, scroll_y: f32) ?query.QueryResult {
         if (findFirstTextInputWalk(child, child_scroll)) |result| return result;
     }
     return null;
+}
+
+fn findActionTargets(root: *Node, label: []const u8, out: []query.QueryResult) usize {
+    const by_test_id = query.findAll(root, .{ .test_id = label }, out);
+    if (by_test_id > 0) return by_test_id;
+
+    const by_debug_name = query.findAll(root, .{ .debug_name = label }, out);
+    if (by_debug_name > 0) return by_debug_name;
+
+    return query.findAll(root, .{ .text_contains = label }, out);
+}
+
+fn findActionTarget(root: *Node, label: []const u8, occurrence: u16) ?query.QueryResult {
+    var results: [32]query.QueryResult = undefined;
+    const found = findActionTargets(root, label, &results);
+    if (occurrence == 0 or occurrence > found) return null;
+    return results[occurrence - 1];
 }
 
 fn colorToHex(col: layout.Color, buf: *[7]u8) []const u8 {
@@ -1277,9 +1347,7 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
         }
         // Last resort: handler string directly
         if (label == null) {
-            if (node.debug_name) |dn| label = dn
-            else if (h.js_on_press) |jp| label = std.mem.span(jp)
-            else if (h.lua_on_press) |lp| label = std.mem.span(lp);
+            if (node.debug_name) |dn| label = dn else if (h.js_on_press) |jp| label = std.mem.span(jp) else if (h.lua_on_press) |lp| label = std.mem.span(lp);
         }
         if (label) |lbl| {
             // Skip glyph placeholders (\x01 byte, "\1"/"\\1", or "\x01"/"\\x01" escaped strings) and non-printable labels
@@ -1287,7 +1355,10 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
             if (is_valid_label) {
                 // Check for raw 0x01 byte
                 for (lbl) |ch| {
-                    if (ch < 0x20) { is_valid_label = false; break; }
+                    if (ch < 0x20) {
+                        is_valid_label = false;
+                        break;
+                    }
                 }
             }
             if (is_valid_label) {
@@ -1582,16 +1653,67 @@ fn autotestTick(root: *Node) bool {
 
     switch (step.kind) {
         .click => {
-            var results: [32]query.QueryResult = undefined;
-            const found = query.findAll(root, .{ .text_contains = text }, &results);
-            const nth = step.occurrence;
             std.debug.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (nth > 0 and nth <= found) {
-                hit_result = results[nth - 1];
-                testdriver.click(results[nth - 1].cx, results[nth - 1].cy);
+            if (findActionTarget(root, text, step.occurrence)) |result| {
+                hit_result = result;
+                testdriver.click(result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
                 passed = true;
             } else {
+                var results: [32]query.QueryResult = undefined;
+                const found = findActionTargets(root, text, &results);
+                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+            }
+        },
+        .hover => {
+            std.debug.print("  [{d}/{d}] hover \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (findActionTarget(root, text, step.occurrence)) |result| {
+                hit_result = result;
+                testdriver.moveMouse(result.cx, result.cy);
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            } else {
+                var results: [32]query.QueryResult = undefined;
+                const found = findActionTargets(root, text, &results);
+                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+            }
+        },
+        .rightclick => {
+            std.debug.print("  [{d}/{d}] rightclick \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (findActionTarget(root, text, step.occurrence)) |result| {
+                hit_result = result;
+                testdriver.rightClick(result.cx, result.cy);
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            } else {
+                var results: [32]query.QueryResult = undefined;
+                const found = findActionTargets(root, text, &results);
+                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+            }
+        },
+        .wheel => {
+            std.debug.print("  [{d}/{d}] wheel \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (findActionTarget(root, text, step.occurrence)) |result| {
+                hit_result = result;
+                testdriver.scrollAt(0, -3, result.cx, result.cy);
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            } else {
+                var results: [32]query.QueryResult = undefined;
+                const found = findActionTargets(root, text, &results);
+                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+            }
+        },
+        .wheelx => {
+            std.debug.print("  [{d}/{d}] wheelx \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            if (findActionTarget(root, text, step.occurrence)) |result| {
+                hit_result = result;
+                testdriver.scrollAt(-3, 0, result.cx, result.cy);
+                std.debug.print(" ... OK\n", .{});
+                passed = true;
+            } else {
+                var results: [32]query.QueryResult = undefined;
+                const found = findActionTargets(root, text, &results);
                 std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
@@ -1617,7 +1739,7 @@ fn autotestTick(root: *Node) bool {
         },
         .scroll => {
             std.debug.print("  [{d}/{d}] scroll \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (query.find(root, .{ .text_contains = text })) |result| {
+            if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 // Find the nearest scroll container ancestor and scroll to make this node visible
                 const target_y = result.node.computed.y;
@@ -1686,8 +1808,10 @@ fn autotestTick(root: *Node) bool {
                         passed = true; // tentative — Python overrides if pixels fail
                         hit_result = .{
                             .node = bn,
-                            .x = bn.computed.x, .y = bn.computed.y,
-                            .w = bn.computed.w, .h = bn.computed.h,
+                            .x = bn.computed.x,
+                            .y = bn.computed.y,
+                            .w = bn.computed.w,
+                            .h = bn.computed.h,
                             .cx = bn.computed.x + bn.computed.w / 2,
                             .cy = bn.computed.y + bn.computed.h / 2,
                         };
@@ -1961,7 +2085,10 @@ fn onAutotestCapture(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {
         const filename = wp[start..];
         var end = filename.len;
         for (filename, 0..) |ch, i| {
-            if (ch == '.') { end = i; break; }
+            if (ch == '.') {
+                end = i;
+                break;
+            }
         }
         break :blk filename[0..end];
     };
@@ -2004,6 +2131,10 @@ fn appendManifest(idx: u16, step: *const AutoStep, passed: bool, node_result: ?q
     const text = step.text[0..step.text_len];
     const kind_str: []const u8 = switch (step.kind) {
         .click => "click",
+        .hover => "hover",
+        .rightclick => "rightclick",
+        .wheel => "wheel",
+        .wheelx => "wheelx",
         .expect => "expect",
         .reject => "reject",
         .color => "color",
@@ -2044,7 +2175,10 @@ fn finishAutotest() void {
         const filename = wp[start..];
         var end = filename.len;
         for (filename, 0..) |ch, i| {
-            if (ch == '.') { end = i; break; }
+            if (ch == '.') {
+                end = i;
+                break;
+            }
         }
         break :blk filename[0..end];
     };
@@ -2310,14 +2444,14 @@ fn auditSourceTexts(root: *Node) void {
 fn isStyleValue(text: []const u8) bool {
     // Filter out CSS-like values: "row", "center", "column", etc.
     const style_words = [_][]const u8{
-        "row",           "column",         "center",       "flex-start",
-        "flex-end",      "stretch",        "wrap",         "nowrap",
-        "absolute",      "relative",       "hidden",       "visible",
-        "none",          "solid",          "dashed",       "init",
-        "spaceBetween",  "spaceAround",    "spaceEvenly",  "flexStart",
-        "flexEnd",       "flexGrow",       "alignItems",   "justifyContent",
-        "borderRadius",  "padding",        "gap",          "width",
-        "height",        "auto",
+        "row",          "column",      "center",      "flex-start",
+        "flex-end",     "stretch",     "wrap",        "nowrap",
+        "absolute",     "relative",    "hidden",      "visible",
+        "none",         "solid",       "dashed",      "init",
+        "spaceBetween", "spaceAround", "spaceEvenly", "flexStart",
+        "flexEnd",      "flexGrow",    "alignItems",  "justifyContent",
+        "borderRadius", "padding",     "gap",         "width",
+        "height",       "auto",
     };
     for (style_words) |w| {
         if (std.mem.eql(u8, text, w)) return true;
@@ -2464,9 +2598,8 @@ pub fn flush() void {
             const name = tn.name_buf[0..tn.name_len];
             const txt = tn.text_buf[0..tn.text_len];
             emit(file, &buf, "N {d} {d:.0} {d:.0} {d:.0} {d:.0} {d} {d}:{s} {d}:{s}\n", .{
-                tn.depth, tn.x, tn.y, tn.w, tn.h,
-                @as(u8, if (tn.has_handler) 1 else 0),
-                name.len, name, txt.len, txt,
+                tn.depth,                              tn.x,     tn.y, tn.w,    tn.h,
+                @as(u8, if (tn.has_handler) 1 else 0), name.len, name, txt.len, txt,
             });
         }
         emit(file, &buf, "END\n", .{});

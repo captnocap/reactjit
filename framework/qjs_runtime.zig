@@ -52,6 +52,18 @@ var g_text_engine: ?*TextEngine = null;
 // ── PTY singleton ────────────────────────────────────────────────
 var g_pty: ?pty_mod.Pty = null;
 
+// ── Claude SDK session singleton ─────────────────────────────────
+const claude_sdk = @import("claude_sdk/mod.zig");
+var g_claude_session: ?claude_sdk.Session = null;
+
+// ── Kimi Wire SDK session singleton ──────────────────────────────
+const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
+var g_kimi_session: ?kimi_wire_sdk.Session = null;
+
+// ── Local AI runtime singleton ────────────────────────────────────
+const local_ai_runtime = @import("local_ai_runtime.zig");
+var g_local_ai_session: ?*local_ai_runtime.Session = null;
+
 // ── Telemetry (written by the main loop, read by JS host functions) ──
 pub var telemetry_fps: u32 = 0;
 pub var telemetry_layout_us: u64 = 0;
@@ -60,6 +72,13 @@ pub var telemetry_tick_us: u64 = 0;
 pub var telemetry_bridge_calls: u64 = 0;
 pub var bridge_calls_this_second: u64 = 0;
 var bridge_last_reset: i64 = 0;
+var g_prepared_node_event_id: u32 = 0;
+var g_prepared_mouse_x: f32 = 0;
+var g_prepared_mouse_y: f32 = 0;
+var g_prepared_scroll_x: f32 = 0;
+var g_prepared_scroll_y: f32 = 0;
+var g_prepared_scroll_dx: f32 = 0;
+var g_prepared_scroll_dy: f32 = 0;
 
 // ── Host functions ──────────────────────────────────────────────
 
@@ -241,6 +260,87 @@ fn hostGetInputText(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c
     if (text.len == 0) return qjs.JS_NewString(ctx, "");
     // Need null-terminated string for JS
     return qjs.JS_NewStringLen(ctx, text.ptr, @intCast(text.len));
+}
+
+/// __setInputText(id, text) — write to the framework input buffer directly.
+/// Used to clear an input from JS after a button-driven submit.
+fn hostSetInputText(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const input_mod = @import("input.zig");
+    if (argc < 2) return QJS_UNDEFINED;
+    var id: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &id, argv[0]);
+    const s = qjs.JS_ToCString(ctx, argv[1]);
+    if (s == null) {
+        input_mod.setText(@intCast(@max(0, id)), "");
+        return QJS_UNDEFINED;
+    }
+    defer qjs.JS_FreeCString(ctx, s);
+    input_mod.setText(@intCast(@max(0, id)), std.mem.span(s));
+    return QJS_UNDEFINED;
+}
+
+/// __pollInputSubmit() -> { id: number, text: string } | null
+/// Drains the framework's "last Enter submit" one-shot. Enables carts whose
+/// onSubmit handler the compiler failed to wire up to still drive Enter
+/// submissions from a tick loop.
+fn hostPollInputSubmit(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const input_mod = @import("input.zig");
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const evt = input_mod.consumeLastSubmit() orelse return QJS_UNDEFINED;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "id", @floatFromInt(evt.id));
+    _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, evt.text.ptr, @intCast(evt.text.len)));
+    return obj;
+}
+
+fn hostGetPreparedRightClick(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "x", g_prepared_mouse_x);
+    setF(c2, obj, "y", g_prepared_mouse_y);
+    return obj;
+}
+
+fn hostGetPreparedScroll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "scrollX", g_prepared_scroll_x);
+    setF(c2, obj, "scrollY", g_prepared_scroll_y);
+    setF(c2, obj, "deltaX", g_prepared_scroll_dx);
+    setF(c2, obj, "deltaY", g_prepared_scroll_dy);
+    return obj;
+}
+
+pub fn prepareNodeEvent(node_id: u32) void {
+    g_prepared_node_event_id = node_id;
+}
+
+pub fn prepareScrollEvent(node_id: u32, scroll_x: f32, scroll_y: f32, delta_x: f32, delta_y: f32) void {
+    g_prepared_node_event_id = node_id;
+    g_prepared_scroll_x = scroll_x;
+    g_prepared_scroll_y = scroll_y;
+    g_prepared_scroll_dx = delta_x;
+    g_prepared_scroll_dy = delta_y;
+}
+
+pub fn dispatchPreparedRightClick(x: f32, y: f32) void {
+    if (g_prepared_node_event_id == 0) return;
+    g_prepared_mouse_x = x;
+    g_prepared_mouse_y = y;
+    callGlobal("__beginJsEvent");
+    callGlobalInt("__dispatchRightClick", @intCast(g_prepared_node_event_id));
+    callGlobal("__endJsEvent");
+    state.markDirty();
+    g_prepared_node_event_id = 0;
+}
+
+pub fn dispatchPreparedScroll() void {
+    if (g_prepared_node_event_id == 0) return;
+    callGlobal("__beginJsEvent");
+    callGlobalInt("__dispatchScroll", @intCast(g_prepared_node_event_id));
+    callGlobal("__endJsEvent");
+    state.markDirty();
+    g_prepared_node_event_id = 0;
 }
 
 fn hostSetNodeDim(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -564,6 +664,592 @@ fn hostSemTree(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     var buf: [4096]u8 = undefined;
     const tree = semantic.formatTree(&buf);
     return qjs.JS_NewStringLen(c2, tree.ptr, @intCast(tree.len));
+}
+
+// ── Claude SDK host functions ────────────────────────────────────
+// __claude_init(cwd: string, model?: string) -> bool
+// __claude_send(text: string) -> bool
+// __claude_poll() -> event object or null
+// __claude_close() -> void
+
+fn hostClaudeInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 1) return jsBoolValue(false);
+    if (g_claude_session != null) return jsBoolValue(true); // already running
+
+    const cwd_z = qjs.JS_ToCString(c2, argv[0]);
+    if (cwd_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, cwd_z);
+    const cwd = std.mem.span(cwd_z);
+
+    var model: ?[]const u8 = null;
+    var model_z: ?[*:0]const u8 = null;
+    if (argc >= 2) {
+        model_z = qjs.JS_ToCString(c2, argv[1]);
+        if (model_z) |mz| model = std.mem.span(mz);
+    }
+    defer if (model_z) |mz| qjs.JS_FreeCString(c2, mz);
+
+    const opts = claude_sdk.SessionOptions{
+        .cwd = cwd,
+        .model = model,
+        .verbose = true,
+        .permission_mode = .bypass_permissions,
+        .inherit_stderr = true,
+    };
+    std.debug.print("[claude_sdk] init cwd={s} model={s}\n", .{ cwd, if (model) |m| m else "(default)" });
+    const sess = claude_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
+        std.debug.print("[claude_sdk] init FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    std.debug.print("[claude_sdk] init OK\n", .{});
+    g_claude_session = sess;
+    return jsBoolValue(true);
+}
+
+fn hostClaudeSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 1) return jsBoolValue(false);
+    if (g_claude_session == null) return jsBoolValue(false);
+
+    const text_z = qjs.JS_ToCString(c2, argv[0]);
+    if (text_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, text_z);
+    const text = std.mem.span(text_z);
+
+    std.debug.print("[claude_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
+    g_claude_session.?.send(text) catch |err| {
+        std.debug.print("[claude_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    return jsBoolValue(true);
+}
+
+var g_claude_poll_count: u64 = 0;
+
+fn hostClaudePoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    g_claude_poll_count += 1;
+    // Heartbeat every ~1s (60 polls @ 16ms) so we can see if the loop is alive
+    if (g_claude_poll_count % 60 == 0) {
+        std.debug.print("[claude_sdk] poll heartbeat count={d} session_alive={}\n",
+            .{ g_claude_poll_count, g_claude_session != null });
+    }
+    if (g_claude_session == null) return QJS_UNDEFINED;
+
+    var owned = (g_claude_session.?.poll() catch |err| {
+        std.debug.print("[claude_sdk] poll FAILED: {s}\n", .{@errorName(err)});
+        return QJS_UNDEFINED;
+    }) orelse return QJS_UNDEFINED;
+    defer owned.deinit();
+
+    const tag = @tagName(owned.msg);
+    std.debug.print("[claude_sdk] recv {s}\n", .{tag});
+    return claudeMessageToJs(c2, owned.msg);
+}
+
+fn hostClaudeClose(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_claude_session) |*sess| {
+        sess.close() catch {};
+        sess.deinit();
+        g_claude_session = null;
+    }
+    return QJS_UNDEFINED;
+}
+
+fn claudeMessageToJs(ctx: *qjs.JSContext, msg: claude_sdk.Message) qjs.JSValue {
+    const obj = qjs.JS_NewObject(ctx);
+    switch (msg) {
+        .system => |s| {
+            setStr(ctx, obj, "type", "system");
+            setStr(ctx, obj, "session_id", s.session_id);
+            if (s.model) |m| setStr(ctx, obj, "model", m);
+            if (s.cwd) |cwd| setStr(ctx, obj, "cwd", cwd);
+            const tools = qjs.JS_NewArray(ctx);
+            for (s.tools, 0..) |tname, i| {
+                _ = qjs.JS_SetPropertyUint32(ctx, tools, @intCast(i), qjs.JS_NewStringLen(ctx, tname.ptr, @intCast(tname.len)));
+            }
+            _ = qjs.JS_SetPropertyStr(ctx, obj, "tools", tools);
+        },
+        .assistant => |a| {
+            setStr(ctx, obj, "type", "assistant");
+            if (a.id) |id| setStr(ctx, obj, "id", id);
+            if (a.session_id) |sid| setStr(ctx, obj, "session_id", sid);
+            if (a.stop_reason) |sr| setStr(ctx, obj, "stop_reason", sr);
+            setF(ctx, obj, "input_tokens", @floatFromInt(a.usage.input_tokens));
+            setF(ctx, obj, "output_tokens", @floatFromInt(a.usage.output_tokens));
+
+            const blocks = qjs.JS_NewArray(ctx);
+            for (a.content, 0..) |blk, i| {
+                const b_obj = qjs.JS_NewObject(ctx);
+                switch (blk) {
+                    .text => |t| {
+                        setStr(ctx, b_obj, "type", "text");
+                        setStr(ctx, b_obj, "text", t.text);
+                    },
+                    .thinking => |th| {
+                        setStr(ctx, b_obj, "type", "thinking");
+                        setStr(ctx, b_obj, "thinking", th.thinking);
+                    },
+                    .tool_use => |tu| {
+                        setStr(ctx, b_obj, "type", "tool_use");
+                        setStr(ctx, b_obj, "id", tu.id);
+                        setStr(ctx, b_obj, "name", tu.name);
+                        setStr(ctx, b_obj, "input_json", tu.input_json);
+                    },
+                }
+                _ = qjs.JS_SetPropertyUint32(ctx, blocks, @intCast(i), b_obj);
+            }
+            _ = qjs.JS_SetPropertyStr(ctx, obj, "content", blocks);
+        },
+        .user => |u| {
+            setStr(ctx, obj, "type", "user");
+            if (u.session_id) |sid| setStr(ctx, obj, "session_id", sid);
+            setStr(ctx, obj, "content_json", u.content_json);
+        },
+        .result => |r| {
+            std.debug.print("[claude_sdk] result num_turns={d} cost={d} is_error={}\n", .{ r.num_turns, r.total_cost_usd, r.is_error });
+            setStr(ctx, obj, "type", "result");
+            setStr(ctx, obj, "subtype", @tagName(r.subtype));
+            setStr(ctx, obj, "session_id", r.session_id);
+            if (r.result) |rt| setStr(ctx, obj, "result", rt);
+            setF(ctx, obj, "total_cost_usd", r.total_cost_usd);
+            setF(ctx, obj, "duration_ms", @floatFromInt(r.duration_ms));
+            setF(ctx, obj, "num_turns", @floatFromInt(r.num_turns));
+            setB(ctx, obj, "is_error", r.is_error);
+        },
+    }
+    return obj;
+}
+
+// ── Kimi Wire host functions ─────────────────────────────────────
+// __kimi_init(cwd: string, model?: string) -> bool
+// __kimi_send(text: string) -> bool
+// __kimi_poll() -> event object or null
+// __kimi_close() -> void
+
+fn hostKimiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 1) return jsBoolValue(false);
+    if (g_kimi_session != null) return jsBoolValue(true);
+
+    const cwd_z = qjs.JS_ToCString(c2, argv[0]);
+    if (cwd_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, cwd_z);
+    const cwd = std.mem.span(cwd_z);
+
+    var model: ?[]const u8 = null;
+    var model_z: ?[*:0]const u8 = null;
+    if (argc >= 2) {
+        model_z = qjs.JS_ToCString(c2, argv[1]);
+        if (model_z) |mz| model = std.mem.span(mz);
+    }
+    defer if (model_z) |mz| qjs.JS_FreeCString(c2, mz);
+
+    const opts = kimi_wire_sdk.SessionOptions{
+        .cwd = cwd,
+        .model = model,
+        .yolo = true,
+        .inherit_stderr = true,
+    };
+    std.debug.print("[kimi_wire_sdk] init cwd={s} model={s}\n", .{ cwd, if (model) |m| m else "(default)" });
+    var sess = kimi_wire_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
+        std.debug.print("[kimi_wire_sdk] init FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    var init_result = sess.initialize(.{}) catch |err| {
+        std.debug.print("[kimi_wire_sdk] initialize FAILED: {s}\n", .{@errorName(err)});
+        sess.deinit();
+        return jsBoolValue(false);
+    };
+    defer init_result.deinit();
+
+    std.debug.print("[kimi_wire_sdk] init OK protocol={s} server={s}/{s}\n", .{
+        init_result.protocol_version,
+        init_result.server_name,
+        init_result.server_version,
+    });
+    g_kimi_session = sess;
+    return jsBoolValue(true);
+}
+
+fn hostKimiSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 1) return jsBoolValue(false);
+    if (g_kimi_session == null) return jsBoolValue(false);
+
+    const text_z = qjs.JS_ToCString(c2, argv[0]);
+    if (text_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, text_z);
+    const text = std.mem.span(text_z);
+
+    std.debug.print("[kimi_wire_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
+    var token = g_kimi_session.?.prompt(.{ .text = text }) catch |err| {
+        std.debug.print("[kimi_wire_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    token.deinit();
+    return jsBoolValue(true);
+}
+
+var g_kimi_poll_count: u64 = 0;
+
+fn hostKimiPoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    g_kimi_poll_count += 1;
+    if (g_kimi_poll_count % 60 == 0) {
+        std.debug.print("[kimi_wire_sdk] poll heartbeat count={d} session_alive={}\n",
+            .{ g_kimi_poll_count, g_kimi_session != null });
+    }
+    if (g_kimi_session == null) return QJS_UNDEFINED;
+
+    var owned = (g_kimi_session.?.poll() catch |err| {
+        std.debug.print("[kimi_wire_sdk] poll FAILED: {s}\n", .{@errorName(err)});
+        return QJS_UNDEFINED;
+    }) orelse return QJS_UNDEFINED;
+    defer owned.deinit();
+
+    std.debug.print("[kimi_wire_sdk] recv {s}\n", .{@tagName(owned.msg)});
+    return kimiMessageToJs(c2, owned.msg);
+}
+
+fn hostKimiClose(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_kimi_session) |*sess| {
+        sess.close() catch {};
+        sess.deinit();
+        g_kimi_session = null;
+    }
+    return QJS_UNDEFINED;
+}
+
+fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.JSValue {
+    const obj = qjs.JS_NewObject(ctx);
+    switch (msg) {
+        .event => |event| {
+            const event_name = event.event_type;
+            if (std.mem.eql(u8, event_name, "TurnBegin")) {
+                setStr(ctx, obj, "type", "turn_begin");
+                if (jsonGetStringPath(event.payload, &.{"user_input"})) |value| setStr(ctx, obj, "text", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "TurnEnd")) {
+                setStr(ctx, obj, "type", "status");
+                setStr(ctx, obj, "status", "turn_end");
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "StatusUpdate")) {
+                setStr(ctx, obj, "type", "usage");
+                setF(ctx, obj, "input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_other"}) orelse 0));
+                setF(ctx, obj, "output_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "output"}) orelse 0));
+                setF(ctx, obj, "cache_creation_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_cache_creation"}) orelse 0));
+                setF(ctx, obj, "cache_read_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_cache_read"}) orelse 0));
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "ContentPart")) {
+                const part_type = jsonGetStringPath(event.payload, &.{"type"}) orelse "unknown";
+                setStr(ctx, obj, "type", "assistant_part");
+                if (std.mem.eql(u8, part_type, "text")) {
+                    setStr(ctx, obj, "part_type", "text");
+                    if (jsonGetStringPath(event.payload, &.{"text"})) |value| setStr(ctx, obj, "text", value);
+                    return obj;
+                }
+                if (std.mem.eql(u8, part_type, "think")) {
+                    setStr(ctx, obj, "part_type", "thinking");
+                    if (jsonGetStringPath(event.payload, &.{"think"})) |value| setStr(ctx, obj, "text", value);
+                    return obj;
+                }
+                setStr(ctx, obj, "part_type", part_type);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "ToolCall")) {
+                setStr(ctx, obj, "type", "tool_call");
+                if (jsonGetStringPath(event.payload, &.{"function", "name"})) |value| setStr(ctx, obj, "name", value);
+                const maybe_input_json = jsonValueTextAlloc(std.heap.c_allocator, jsonGetPath(event.payload, &.{"function", "arguments"})) catch null;
+                defer if (maybe_input_json) |value| std.heap.c_allocator.free(value);
+                if (maybe_input_json) |value| setStr(ctx, obj, "input_json", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "ToolCallPart")) {
+                setStr(ctx, obj, "type", "tool_call");
+                setStr(ctx, obj, "name", "tool_delta");
+                if (jsonGetStringPath(event.payload, &.{"arguments_part"})) |value| setStr(ctx, obj, "input_json", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "ToolResult")) {
+                setStr(ctx, obj, "type", "tool_result");
+                setB(ctx, obj, "is_error", jsonGetBoolPath(event.payload, &.{"return_value", "is_error"}) orelse false);
+                const maybe_text = extractKimiToolResultTextAlloc(std.heap.c_allocator, event.payload) catch null;
+                defer if (maybe_text) |value| std.heap.c_allocator.free(value);
+                if (maybe_text) |value| setStr(ctx, obj, "text", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "PlanDisplay")) {
+                setStr(ctx, obj, "type", "assistant_part");
+                setStr(ctx, obj, "part_type", "text");
+                if (jsonGetStringPath(event.payload, &.{"content"})) |value| setStr(ctx, obj, "text", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "BtwBegin")) {
+                setStr(ctx, obj, "type", "status");
+                if (jsonGetStringPath(event.payload, &.{"question"})) |value| setStr(ctx, obj, "text", value);
+                return obj;
+            }
+            if (std.mem.eql(u8, event_name, "BtwEnd")) {
+                setStr(ctx, obj, "type", "status");
+                if (jsonGetStringPath(event.payload, &.{"response"})) |value| setStr(ctx, obj, "text", value);
+                if (jsonGetStringPath(event.payload, &.{"error"})) |value| {
+                    setStr(ctx, obj, "text", value);
+                    setB(ctx, obj, "is_error", true);
+                }
+                return obj;
+            }
+
+            setStr(ctx, obj, "type", "status");
+            setStr(ctx, obj, "status", event_name);
+            const payload_json = jsonStringifyAlloc(std.heap.c_allocator, event.payload) catch null;
+            defer if (payload_json) |value| std.heap.c_allocator.free(value);
+            if (payload_json) |value| setStr(ctx, obj, "payload_json", value);
+            return obj;
+        },
+        .request => |request| {
+            if (std.mem.eql(u8, request.request_type, "ToolCallRequest")) {
+                setStr(ctx, obj, "type", "tool_call");
+                if (jsonGetStringPath(request.payload, &.{"name"})) |value| setStr(ctx, obj, "name", value);
+                if (jsonGetStringPath(request.payload, &.{"arguments"})) |value| setStr(ctx, obj, "input_json", value);
+                return obj;
+            }
+
+            setStr(ctx, obj, "type", "status");
+            if (std.mem.eql(u8, request.request_type, "ApprovalRequest")) {
+                if (jsonGetStringPath(request.payload, &.{"description"})) |value| {
+                    setStr(ctx, obj, "text", value);
+                } else if (jsonGetStringPath(request.payload, &.{"action"})) |value| {
+                    setStr(ctx, obj, "text", value);
+                }
+            } else if (std.mem.eql(u8, request.request_type, "QuestionRequest")) {
+                const maybe_text = extractKimiQuestionTextAlloc(std.heap.c_allocator, request.payload) catch null;
+                defer if (maybe_text) |value| std.heap.c_allocator.free(value);
+                if (maybe_text) |value| setStr(ctx, obj, "text", value);
+            } else if (std.mem.eql(u8, request.request_type, "HookRequest")) {
+                if (jsonGetStringPath(request.payload, &.{"target"})) |value| setStr(ctx, obj, "text", value);
+            }
+            setStr(ctx, obj, "status", request.request_type);
+            return obj;
+        },
+        .response => |response| {
+            setStr(ctx, obj, "type", "result");
+            if (response.status()) |value| setStr(ctx, obj, "status", value);
+            setB(ctx, obj, "is_error", response.isError());
+            if (response.error_message) |value| setStr(ctx, obj, "result", value);
+            const maybe_json = response.resultJsonAlloc(std.heap.c_allocator) catch null;
+            defer if (maybe_json) |value| std.heap.c_allocator.free(value);
+            if (maybe_json) |value| setStr(ctx, obj, "result", value);
+            return obj;
+        },
+    }
+}
+
+fn jsonStringifyAlloc(allocator: std.mem.Allocator, value: std.json.Value) ![]u8 {
+    return std.json.Stringify.valueAlloc(allocator, value, .{});
+}
+
+fn jsonValueTextAlloc(allocator: std.mem.Allocator, maybe_value: ?std.json.Value) !?[]u8 {
+    const value = maybe_value orelse return null;
+    if (jsonAsString(value)) |text| return try allocator.dupe(u8, text);
+    return try jsonStringifyAlloc(allocator, value);
+}
+
+fn extractKimiToolResultTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
+    if (jsonGetStringPath(payload, &.{"return_value", "message"})) |message| {
+        return try allocator.dupe(u8, message);
+    }
+    return extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"return_value", "output"}));
+}
+
+fn extractKimiQuestionTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
+    const questions_value = jsonGetPath(payload, &.{"questions"}) orelse return null;
+    const questions = jsonAsArray(questions_value) orelse return null;
+    if (questions.items.len == 0) return null;
+    const first = jsonAsObject(questions.items[0]) orelse return null;
+    const question_value = first.get("question") orelse return null;
+    if (jsonAsString(question_value)) |text| return try allocator.dupe(u8, text);
+    return try jsonStringifyAlloc(allocator, question_value);
+}
+
+fn extractKimiContentTextAlloc(allocator: std.mem.Allocator, maybe_value: ?std.json.Value) !?[]u8 {
+    const value = maybe_value orelse return null;
+    if (jsonAsString(value)) |text| return try allocator.dupe(u8, text);
+
+    const arr = jsonAsArray(value) orelse return null;
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(allocator);
+
+    for (arr.items) |entry| {
+        const obj = jsonAsObject(entry) orelse continue;
+        const item_type = if (obj.get("type")) |type_value| jsonAsString(type_value) else null;
+        if (item_type != null and !std.mem.eql(u8, item_type.?, "text")) continue;
+        const text_value = obj.get("text") orelse continue;
+        const text = jsonAsString(text_value) orelse continue;
+        if (buf.items.len > 0) try buf.append(allocator, '\n');
+        try buf.appendSlice(allocator, text);
+    }
+
+    if (buf.items.len == 0) return null;
+    return try buf.toOwnedSlice(allocator);
+}
+
+fn jsonGetPath(root: std.json.Value, path: []const []const u8) ?std.json.Value {
+    var current = root;
+    for (path) |segment| {
+        const obj = jsonAsObject(current) orelse return null;
+        current = obj.get(segment) orelse return null;
+    }
+    return current;
+}
+
+fn jsonGetStringPath(root: std.json.Value, path: []const []const u8) ?[]const u8 {
+    const value = jsonGetPath(root, path) orelse return null;
+    return jsonAsString(value);
+}
+
+fn jsonGetUIntPath(root: std.json.Value, path: []const []const u8) ?u64 {
+    const value = jsonGetPath(root, path) orelse return null;
+    return switch (value) {
+        .integer => |number| @intCast(@max(number, 0)),
+        else => null,
+    };
+}
+
+fn jsonGetBoolPath(root: std.json.Value, path: []const []const u8) ?bool {
+    const value = jsonGetPath(root, path) orelse return null;
+    return switch (value) {
+        .bool => |flag| flag,
+        else => null,
+    };
+}
+
+fn jsonAsObject(value: std.json.Value) ?std.json.ObjectMap {
+    return switch (value) {
+        .object => |object| object,
+        else => null,
+    };
+}
+
+fn jsonAsArray(value: std.json.Value) ?std.json.Array {
+    return switch (value) {
+        .array => |array| array,
+        else => null,
+    };
+}
+
+fn jsonAsString(value: std.json.Value) ?[]const u8 {
+    return switch (value) {
+        .string => |text| text,
+        else => null,
+    };
+}
+
+// ── Local AI host functions ───────────────────────────────────────
+// __localai_init(cwd: string, model_path: string) -> bool
+// __localai_send(text: string) -> bool
+// __localai_poll() -> event object or null
+// __localai_close() -> void
+
+fn hostLocalAiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 2) return jsBoolValue(false);
+    if (g_local_ai_session != null) return jsBoolValue(true);
+
+    const cwd_z = qjs.JS_ToCString(c2, argv[0]);
+    if (cwd_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, cwd_z);
+    const cwd = std.mem.span(cwd_z);
+
+    const model_z = qjs.JS_ToCString(c2, argv[1]);
+    if (model_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, model_z);
+    const model_path = std.mem.span(model_z);
+    if (model_path.len == 0) return jsBoolValue(false);
+
+    const opts = local_ai_runtime.SessionOptions{
+        .cwd = cwd,
+        .model_path = model_path,
+        .verbose = false,
+    };
+    const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch |err| {
+        std.debug.print("[local_ai_runtime] init FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    g_local_ai_session = sess;
+    return jsBoolValue(true);
+}
+
+fn hostLocalAiSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return jsBoolValue(false);
+    if (argc < 1) return jsBoolValue(false);
+    const sess = g_local_ai_session orelse return jsBoolValue(false);
+
+    const text_z = qjs.JS_ToCString(c2, argv[0]);
+    if (text_z == null) return jsBoolValue(false);
+    defer qjs.JS_FreeCString(c2, text_z);
+    const text = std.mem.span(text_z);
+
+    sess.submit(.{ .text = text }) catch |err| {
+        std.debug.print("[local_ai_runtime] send FAILED: {s}\n", .{@errorName(err)});
+        return jsBoolValue(false);
+    };
+    return jsBoolValue(true);
+}
+
+fn hostLocalAiPoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const sess = g_local_ai_session orelse return QJS_UNDEFINED;
+    var evt = sess.poll() orelse return QJS_UNDEFINED;
+    defer evt.deinit();
+    return localAiEventToJs(c2, evt);
+}
+
+fn hostLocalAiClose(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (g_local_ai_session) |sess| {
+        sess.destroy();
+        g_local_ai_session = null;
+    }
+    return QJS_UNDEFINED;
+}
+
+fn localAiEventToJs(ctx: *qjs.JSContext, evt: local_ai_runtime.OwnedEvent) qjs.JSValue {
+    const obj = qjs.JS_NewObject(ctx);
+    switch (evt.kind) {
+        .system => {
+            setStr(ctx, obj, "type", "system");
+            if (evt.model) |value| setStr(ctx, obj, "model", value);
+            if (evt.session_id) |value| setStr(ctx, obj, "session_id", value);
+        },
+        .assistant_part => {
+            setStr(ctx, obj, "type", "assistant_part");
+            setStr(ctx, obj, "part_type", evt.part_type orelse "text");
+            if (evt.text) |value| setStr(ctx, obj, "text", value);
+        },
+        .status => {
+            setStr(ctx, obj, "type", "status");
+            if (evt.text) |value| setStr(ctx, obj, "text", value);
+            setB(ctx, obj, "is_error", evt.is_error);
+        },
+        .result => {
+            setStr(ctx, obj, "type", "result");
+            if (evt.text) |value| setStr(ctx, obj, "result", value);
+            setB(ctx, obj, "is_error", evt.is_error);
+        },
+    }
+    return obj;
+}
+
+fn setStr(ctx: *qjs.JSContext, obj: qjs.JSValue, key: []const u8, val: []const u8) void {
+    var key_buf: [64]u8 = undefined;
+    if (key.len >= key_buf.len) return;
+    @memcpy(key_buf[0..key.len], key);
+    key_buf[key.len] = 0;
+    _ = qjs.JS_SetPropertyStr(ctx, obj, @ptrCast(&key_buf), qjs.JS_NewStringLen(ctx, val.ptr, @intCast(val.len)));
 }
 
 fn hostSemSetMode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -2106,6 +2792,10 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "setVariant", qjs.JS_NewCFunction(ctx, hostSetVariant, "setVariant", 1));
     // Input text access
     _ = qjs.JS_SetPropertyStr(ctx, global, "getInputText", qjs.JS_NewCFunction(ctx, hostGetInputText, "getInputText", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__setInputText", qjs.JS_NewCFunction(ctx, hostSetInputText, "__setInputText", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pollInputSubmit", qjs.JS_NewCFunction(ctx, hostPollInputSubmit, "__pollInputSubmit", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getPreparedRightClick", qjs.JS_NewCFunction(ctx, hostGetPreparedRightClick, "__getPreparedRightClick", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getPreparedScroll", qjs.JS_NewCFunction(ctx, hostGetPreparedScroll, "__getPreparedScroll", 0));
     // Node dim/highlight (filter system)
     _ = qjs.JS_SetPropertyStr(ctx, global, "setNodeDim", qjs.JS_NewCFunction(ctx, hostSetNodeDim, "setNodeDim", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "resetNodeDim", qjs.JS_NewCFunction(ctx, hostResetNodeDim, "resetNodeDim", 0));
@@ -2141,6 +2831,24 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_read", qjs.JS_NewCFunction(ctx, hostPtyRead, "__pty_read", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_write", qjs.JS_NewCFunction(ctx, hostPtyWrite, "__pty_write", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 0));
+
+    // Claude Code SDK — subprocess session in stream-json mode
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_init", qjs.JS_NewCFunction(ctx, hostClaudeInit, "__claude_init", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_send", qjs.JS_NewCFunction(ctx, hostClaudeSend, "__claude_send", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_poll", qjs.JS_NewCFunction(ctx, hostClaudePoll, "__claude_poll", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_close", qjs.JS_NewCFunction(ctx, hostClaudeClose, "__claude_close", 0));
+
+    // Kimi Wire SDK — subprocess session in wire mode
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__kimi_init", qjs.JS_NewCFunction(ctx, hostKimiInit, "__kimi_init", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__kimi_send", qjs.JS_NewCFunction(ctx, hostKimiSend, "__kimi_send", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__kimi_poll", qjs.JS_NewCFunction(ctx, hostKimiPoll, "__kimi_poll", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__kimi_close", qjs.JS_NewCFunction(ctx, hostKimiClose, "__kimi_close", 0));
+
+    // Local AI runtime — background-thread llama.cpp session
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__localai_init", qjs.JS_NewCFunction(ctx, hostLocalAiInit, "__localai_init", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__localai_send", qjs.JS_NewCFunction(ctx, hostLocalAiSend, "__localai_send", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__localai_poll", qjs.JS_NewCFunction(ctx, hostLocalAiPoll, "__localai_poll", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__localai_close", qjs.JS_NewCFunction(ctx, hostLocalAiClose, "__localai_close", 0));
 
     // Semantic terminal bridge — structured data from CLI output
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_state", qjs.JS_NewCFunction(ctx, hostSemState, "__sem_state", 0));
@@ -2293,6 +3001,26 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
         if (!qjs.JS_IsUndefined(func)) {
             var argv = [1]qjs.JSValue{qjs.JS_NewInt64(ctx, arg)};
             const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with three integer arguments.
+pub fn callGlobal3Int(name: [*:0]const u8, arg0: i64, arg1: i64, arg2: i64) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [3]qjs.JSValue{
+                qjs.JS_NewInt64(ctx, arg0),
+                qjs.JS_NewInt64(ctx, arg1),
+                qjs.JS_NewInt64(ctx, arg2),
+            };
+            const r = qjs.JS_Call(ctx, func, global, 3, &argv);
             qjs.JS_FreeValue(ctx, r);
         }
     }
@@ -2753,6 +3481,20 @@ pub fn tick() void {
 
 pub fn deinit() void {
     if (comptime !HAS_QUICKJS) return;
+    if (g_claude_session) |*sess| {
+        sess.close() catch {};
+        sess.deinit();
+        g_claude_session = null;
+    }
+    if (g_kimi_session) |*sess| {
+        sess.close() catch {};
+        sess.deinit();
+        g_kimi_session = null;
+    }
+    if (g_local_ai_session) |sess| {
+        sess.destroy();
+        g_local_ai_session = null;
+    }
     if (g_qjs_ctx) |ctx| qjs.JS_FreeContext(ctx);
     if (g_qjs_rt) |rt| qjs.JS_FreeRuntime(rt);
 }

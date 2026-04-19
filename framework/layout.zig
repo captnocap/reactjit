@@ -462,7 +462,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
 }
 
 fn hasHandlers(h: EventHandler) bool {
-    return h.on_press != null or h.js_on_press != null or h.lua_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
+    return h.on_press != null or h.js_on_press != null or h.lua_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.js_on_hover_enter != null or h.lua_on_hover_enter != null or h.js_on_hover_exit != null or h.lua_on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
 }
 
 pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
@@ -1693,8 +1693,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         }
     }
     if (s.overflow == .scroll or s.overflow == .hidden or s.overflow == .auto) {
-        const fullContent = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
-        node.content_height = fullContent;
+        node.content_width = if (isRow) contentMainEnd + pr else contentCrossEnd + pr;
+        node.content_height = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
     }
     const resolvedH = h orelse 0;
     {

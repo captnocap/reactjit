@@ -189,11 +189,12 @@ pub fn paintNode(node: *Node) void {
 
     if (is_clipped) gpu.pushScissor(r.x, r.y, r.w, r.h);
 
-    if (is_scroll and node.scroll_y != 0) {
+    if (is_scroll and (node.scroll_x != 0 or node.scroll_y != 0)) {
+        const sx = node.scroll_x;
         const sy = node.scroll_y;
-        offsetDescendants(node, -sy);
+        offsetDescendants(node, -sx, -sy);
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
-        offsetDescendants(node, sy);
+        offsetDescendants(node, sx, sy);
     } else {
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
     }
@@ -378,7 +379,7 @@ fn paintShadowSDF(r: layout.LayoutRect, style: layout.Style, sc: Color) void {
 /// Separated from paintNode to reduce the recursive frame size.
 noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
-    const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+    const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.handlers.js_on_hover_enter != null or node.handlers.lua_on_hover_enter != null or node.handlers.js_on_hover_exit != null or node.handlers.lua_on_hover_exit != null or node.hoverable);
 
     // Box shadow — draw BEFORE background so it appears behind
     if (node.style.shadow_color) |sc| {
@@ -661,7 +662,16 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const pl = node.style.padLeft();
         const pt = node.style.padTop();
         const pb = node.style.padBottom();
-        const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
+        const is_multiline = input.isMultiline(id);
+        const metrics = measureCallback(
+            typed[0..cursor_pos],
+            node.font_size,
+            r.w - pl - node.style.padRight(),
+            0,
+            0,
+            if (is_multiline) 0 else 1,
+            !is_multiline,
+        );
         const cx = r.x + pl + metrics.width;
         const ch = r.h - pt - pb;
         gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
