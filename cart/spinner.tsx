@@ -1,15 +1,33 @@
 import { Box } from '../runtime/primitives';
+const React: any = require('react');
+const { useState, useEffect } = React;
 
-export default function SpinnerTest({ spinIdx }: { spinIdx: number }) {
+const COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
+
+export default function SpinnerTest() {
+  const [spinIdx, setSpinIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSpinIdx((i: number) => (i + 1) % COLORS.length);
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: 'black', padding: 20, flexDirection: 'row', gap: 20, justifyContent: 'center', alignItems: 'center' }}>
       <Box style={{ flexDirection: 'row', gap: 16 }}>
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 0 ? 'white' : 'red',     borderRadius: 8 }} />
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 1 ? 'white' : 'blue',    borderRadius: 8 }} />
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 2 ? 'white' : 'green',   borderRadius: 8 }} />
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 3 ? 'white' : 'yellow',  borderRadius: 8 }} />
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 4 ? 'white' : 'cyan',    borderRadius: 8 }} />
-        <Box style={{ width: 60, height: 60, backgroundColor: spinIdx === 5 ? 'white' : 'magenta', borderRadius: 8 }} />
+        {COLORS.map((color, i) => (
+          <Box
+            key={i}
+            style={{
+              width: 60,
+              height: 60,
+              backgroundColor: spinIdx === i ? 'white' : color,
+              borderRadius: 8,
+            }}
+          />
+        ))}
       </Box>
     </Box>
   );

@@ -961,7 +961,10 @@ fn appInit() void {
 }
 
 fn appTick(now: u32) void {
-    _ = now;
+    // Fire any JS timers whose due-time has arrived. setTimeout/setInterval
+    // in the bundle are implemented against this — see runtime/index.tsx.
+    qjs_runtime.callGlobalInt("__jsTick", @intCast(now));
+
     if (g_dirty) {
         snapshotRuntimeState();
         rebuildTree();

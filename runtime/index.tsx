@@ -2,13 +2,66 @@
 // globalThis.__hostFlush(json) before evaling this bundle. It also calls
 // globalThis.__dispatchEvent(id, type) when the user presses a Node.
 
-// Minimal polyfills — QuickJS has setTimeout but let's not assume.
-const _timerQueue: Array<() => void> = [];
-if (typeof (globalThis as any).setTimeout !== 'function') {
-  (globalThis as any).setTimeout = (fn: () => void, _ms?: number) => { _timerQueue.push(fn); return 0; };
-  (globalThis as any).clearTimeout = (_id: number) => {};
-}
-(globalThis as any).performance = (globalThis as any).performance || { now: () => Date.now() };
+// ── Timer subsystem ──────────────────────────────────────────────────
+// QuickJS has no event loop of its own. The Zig host calls globalThis.__jsTick(now)
+// every frame (from qjs_app.zig:appTick). __jsTick walks this array and fires
+// any timers whose due time has arrived. Intervals re-enqueue themselves.
+
+type TimerRecord = {
+  id: number;
+  due: number;       // absolute ms (performance.now() units)
+  fn: () => void;
+  interval: number;  // 0 = one-shot, >0 = setInterval period
+  cleared: boolean;
+};
+
+const _timers: TimerRecord[] = [];
+let _timerSeq = 1;
+let _nowMs = 0;
+
+(globalThis as any).performance = (globalThis as any).performance || { now: () => _nowMs };
+
+(globalThis as any).setTimeout = (fn: () => void, ms?: number): number => {
+  const id = _timerSeq++;
+  _timers.push({ id, due: _nowMs + (ms ?? 0), fn, interval: 0, cleared: false });
+  return id;
+};
+
+(globalThis as any).setInterval = (fn: () => void, ms?: number): number => {
+  const id = _timerSeq++;
+  const period = Math.max(1, ms ?? 0);
+  _timers.push({ id, due: _nowMs + period, fn, interval: period, cleared: false });
+  return id;
+};
+
+(globalThis as any).clearTimeout = (id: number): void => {
+  for (const t of _timers) if (t.id === id) { t.cleared = true; return; }
+};
+(globalThis as any).clearInterval = (globalThis as any).clearTimeout;
+
+// Called each frame by the Zig host. `now` is in ms (engine tick time).
+(globalThis as any).__jsTick = (now: number): void => {
+  _nowMs = now;
+  // Two-phase: collect due timers, fire them, then cull/requeue.
+  // Prevents infinite loops when interval callbacks schedule new timers.
+  const due: TimerRecord[] = [];
+  for (const t of _timers) {
+    if (!t.cleared && t.due <= now) due.push(t);
+  }
+  for (const t of due) {
+    if (t.cleared) continue;
+    try { t.fn(); } catch (_e) {}
+    if (t.interval > 0 && !t.cleared) {
+      t.due = now + t.interval;
+    } else {
+      t.cleared = true;
+    }
+  }
+  // Compact: drop cleared/fired one-shots.
+  for (let i = _timers.length - 1; i >= 0; i--) {
+    if (_timers[i].cleared) _timers.splice(i, 1);
+  }
+};
 
 // CJS default interop (QuickJS CJS wrappers from esbuild behave like Node's).
 const React: any = require('react');
@@ -33,13 +86,6 @@ setTransportFlush((cmds: any) => {
     printer(`CMD ${payload}`);
   }
 });
-
-function drainTimerQueue() {
-  while (_timerQueue.length) {
-    const t = _timerQueue.shift()!;
-    try { t(); } catch (_e) {}
-  }
-}
 
 function getInputTextForNode(id: number): string {
   const host: any = globalThis as any;
@@ -86,16 +132,13 @@ function eventAliases(type: string): string[] {
 }
 
 (globalThis as any).__beginJsEvent = () => {};
-(globalThis as any).__endJsEvent = () => {
-  drainTimerQueue();
-};
+(globalThis as any).__endJsEvent = () => {};
 
 // Event dispatch entry from Zig — host calls this inside js_on_press eval.
 (globalThis as any).__dispatchEvent = (id: number, type: string) => {
   try {
     const payload = { targetId: id };
     dispatchAliases(id, eventAliases(type), payload);
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -106,7 +149,6 @@ function eventAliases(type: string): string[] {
     const text = getInputTextForNode(id);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onChangeText', 'onChange', 'onInput'], text, payload);
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -117,7 +159,6 @@ function eventAliases(type: string): string[] {
     const text = getInputTextForNode(id);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onSubmit', 'onSubmitEditing'], text, payload);
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -126,7 +167,6 @@ function eventAliases(type: string): string[] {
 (globalThis as any).__dispatchInputFocus = (id: number) => {
   try {
     dispatchAliases(id, ['onFocus'], { targetId: id });
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -135,7 +175,6 @@ function eventAliases(type: string): string[] {
 (globalThis as any).__dispatchInputBlur = (id: number) => {
   try {
     dispatchAliases(id, ['onBlur'], { targetId: id });
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -144,7 +183,6 @@ function eventAliases(type: string): string[] {
 (globalThis as any).__dispatchInputKey = (id: number, keyCode: number, mods: number) => {
   try {
     dispatchAliases(id, ['onKeyDown'], { targetId: id, keyCode, mods });
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -154,7 +192,6 @@ function eventAliases(type: string): string[] {
   try {
     const payload = { targetId: id, ...getPreparedRightClickPayload() };
     dispatchAliases(id, ['onRightClick', 'onContextMenu'], payload);
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -164,7 +201,6 @@ function eventAliases(type: string): string[] {
   try {
     const payload = { targetId: id, ...getPreparedScrollPayload() };
     dispatchAliases(id, ['onScroll'], payload);
-    drainTimerQueue();
   } catch (e) {
     // swallow — host prints nothing for eval exceptions except via QJS itself
   }
@@ -173,4 +209,3 @@ function eventAliases(type: string): string[] {
 const reconciler = Reconciler(hostConfig);
 const container = reconciler.createContainer({ id: 0 }, 0, null, false, null, '', (_e: any) => {}, null);
 reconciler.updateContainer(React.createElement(App, {}), container, null, null);
-drainTimerQueue();

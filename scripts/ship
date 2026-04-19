@@ -209,7 +209,11 @@ chmod +x "$TMP_DIR/run"
 TARBALL="/tmp/reactjit-${NAME}-payload.tar.gz"
 (cd "$TMP_DIR" && tar czf "$TARBALL" .)
 
-cat > "$RAW_BIN" << HEADER
+# Write wrapper to a staging file, then atomic-rename over the raw ELF.
+# Atomic rename works even if the previous binary is currently running —
+# the running process keeps its fd to the old inode, the dentry is replaced.
+STAGED="${RAW_BIN}.staged"
+cat > "$STAGED" << HEADER
 #!/bin/sh
 set -e
 APP_DIR=\${XDG_CACHE_HOME:-\$HOME/.cache}/reactjit-$NAME
@@ -225,8 +229,9 @@ fi
 exec "\$CACHE/run" "\$@"
 __ARCHIVE__
 HEADER
-cat "$TARBALL" >> "$RAW_BIN"
-chmod +x "$RAW_BIN"
+cat "$TARBALL" >> "$STAGED"
+chmod +x "$STAGED"
+mv -f "$STAGED" "$RAW_BIN"
 
 SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
 echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $RAW_BIN"
