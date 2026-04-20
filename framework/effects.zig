@@ -191,6 +191,14 @@ const Instance = struct {
     time: f32 = 0,
     frame_count: u32 = 0,
 
+    // Last `g_effect_frame` at which a paint call referenced this instance.
+    // The sweep pass in `update(dt)` deinits + compacts slots that go more
+    // than a few frames without being touched — this is what reclaims GPU
+    // pipelines/textures when a cart un-mounts (cart-switch in a gallery,
+    // tab picker, etc). Without this, each cart visit leaks an Instance
+    // slot until MAX_INSTANCES is hit and all effects silently break.
+    last_painted_frame: u32 = 0,
+
     // Position (for mouse hit testing)
     screen_x: f32 = 0,
     screen_y: f32 = 0,
@@ -671,6 +679,7 @@ fn renderCpuNow(self: *Instance) bool {
         .mouse_y = mouse.effect_y,
         .mouse_inside = mouse.inside,
         .frame = self.frame_count,
+        .user_data = self.node_key,
     };
     render(&ctx);
     self.dirty = true;
@@ -692,12 +701,55 @@ pub fn deinit() void {
     g_gpu_bind_group_layout = null;
 }
 
+/// Monotonic frame counter — bumped at the start of each `update(dt)` call.
+/// The sweep pass compares each Instance's `last_painted_frame` to this to
+/// decide whether a slot can be reclaimed.
+var g_effect_frame: u32 = 0;
+/// Grace period — an Instance is kept for this many idle frames after its
+/// last paint before we free it. A small buffer absorbs frames where the
+/// reconciler tears down an effect briefly and re-mounts it (hot reload,
+/// transitions); anything quieter than this really is dead.
+const STALE_INSTANCE_GRACE: u32 = 2;
+
+/// Deinit and drop an instance slot. Swap with the last slot so active ids
+/// stay compact and instance_count shrinks.
+fn dropInstance(i: usize) void {
+    instances[i].deinit();
+    const last = instance_count - 1;
+    if (i != last) {
+        instances[i] = instances[last];
+        instances[last] = .{};
+    } else {
+        instances[i] = .{};
+    }
+    instance_count -= 1;
+}
+
 /// Called every frame: update registry-based effect instances and store dt.
 pub fn update(dt: f32) void {
     g_dt = dt;
     g_frame_effect_pixels = 0;
     g_frame_upload_bytes = 0;
     g_effect_budget_logged = false;
+
+    // Reclaim slots for effects whose host nodes have unmounted. An instance
+    // that was painted as recently as last frame still has
+    // last_painted_frame ≈ g_effect_frame, so the `+ STALE_INSTANCE_GRACE`
+    // check passes — nothing currently-visible gets collected.
+    var i: usize = 0;
+    while (i < instance_count) {
+        const inst = &instances[i];
+        const idle = g_effect_frame -% inst.last_painted_frame;
+        if (idle > STALE_INSTANCE_GRACE) {
+            dropInstance(i);
+            // Do not advance i — the slot now holds the previously-last
+            // instance, which we still need to inspect.
+            continue;
+        }
+        i += 1;
+    }
+
+    g_effect_frame +%= 1;
 
     for (instances[0..instance_count]) |*inst| {
         if (!inst.active) continue;
@@ -742,6 +794,7 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     }
     const i = inst orelse return false;
     i.active = true;
+    i.last_painted_frame = g_effect_frame;
     i.screen_x = x;
     i.screen_y = y;
     i.setDisplaySize(w, h);
@@ -770,13 +823,13 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
 /// Paint a custom effect (node has effect_render and optional effect_shader).
 /// GPU is used when a shader-safe lowering exists; otherwise this falls back to CPU.
 pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
-    std.debug.print("[PCE ENTER] node={x} xy=({d:.0},{d:.0}) wh=({d:.0},{d:.0})\n", .{ @intFromPtr(node), x, y, w, h });
-    var inst = findInstanceByNode(@intFromPtr(node));
+    var inst = findInstanceByNode(node);
     if (inst == null) {
         inst = createCustomInstance(node);
     }
     const i = inst orelse return false;
     i.active = true;
+    i.last_painted_frame = g_effect_frame;
     i.screen_x = x;
     i.screen_y = y;
     i.setDisplaySize(w, h);
@@ -868,6 +921,7 @@ pub fn paintBackground(effect_type: []const u8, px: f32, py: f32, pw: f32, ph: f
     }
     const i = inst orelse return false;
     i.active = true;
+    i.last_painted_frame = g_effect_frame;
     i.screen_x = px;
     i.screen_y = py;
     i.setDisplaySize(pw, ph);
@@ -902,9 +956,20 @@ fn findInstanceByType(effect_type: []const u8) ?*Instance {
     return null;
 }
 
-fn findInstanceByNode(node_key: usize) ?*Instance {
+/// Stable identity for an effect node. `scroll_persist_slot` carries the
+/// React fiber id through every tree rebuild (set by the host's ensureNode
+/// path); fall back to the arena pointer for non-QJS hosts (LuaJIT cart
+/// runtime) that don't populate it. Keying Instances by the React id stops
+/// cart switches from re-binding a new shader's uniforms onto the previous
+/// cart's pipeline just because the arena reused the same address.
+fn instanceKey(node: *const Node) usize {
+    return if (node.scroll_persist_slot != 0) @as(usize, node.scroll_persist_slot) else @intFromPtr(node);
+}
+
+fn findInstanceByNode(node: *const Node) ?*Instance {
+    const key = instanceKey(node);
     for (instances[0..instance_count]) |*inst| {
-        if (inst.active and inst.node_key == node_key and inst.render_fn != null)
+        if (inst.active and inst.node_key == key and inst.render_fn != null)
             return inst;
     }
     return null;
@@ -919,6 +984,7 @@ fn createRegistryInstance(effect_type: []const u8) ?*Instance {
         .active = true,
         .effect_type = effect_type,
         .module = m,
+        .last_painted_frame = g_effect_frame,
     };
     instance_count += 1;
     return inst;
@@ -933,7 +999,8 @@ fn createCustomInstance(node: *const Node) ?*Instance {
         .active = true,
         .render_fn = render_fn,
         .shader_desc = node.effect_shader,
-        .node_key = @intFromPtr(node),
+        .node_key = instanceKey(node),
+        .last_painted_frame = g_effect_frame,
     };
     instance_count += 1;
     return inst;
@@ -986,12 +1053,13 @@ pub fn getEffectFill(effect_name: []const u8) ?EffectFillInfo {
 /// for later lookup by Graph.Path fillEffect references. Does NOT draw an image
 /// quad — the effect is invisible until referenced by a fill.
 pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f32, w: f32, h: f32) bool {
-    var inst = findInstanceByNode(@intFromPtr(node));
+    var inst = findInstanceByNode(node);
     if (inst == null) {
         inst = createCustomInstance(node);
     }
     const i = inst orelse return false;
     i.active = true;
+    i.last_painted_frame = g_effect_frame;
     i.backend = .cpu;
     i.name = effect_name;
     i.screen_x = x;

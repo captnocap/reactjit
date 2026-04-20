@@ -43,6 +43,12 @@ pub const EffectContext = struct {
     // ── Frame counter ──
     frame: u32,
 
+    // ── Shim plumbing ──
+    // Opaque payload the host sets before invoking a render callback. QJS uses
+    // this to carry the React node id so the render shim can look up the JS
+    // closure registered via handlerRegistry.
+    user_data: usize = 0,
+
     // ── Source buffer (mask mode only) ──
     // When non-null, this is the captured parent content for post-processing.
     // Masks read from source (parent's rendered pixels) and write to buf (output).

@@ -20,6 +20,7 @@ const HAS_DEBUG_SERVER = if (@hasDecl(build_options, "has_debug_server")) build_
 const qjs_ipc = if (HAS_DEBUG_SERVER) @import("qjs_ipc.zig") else struct {
     pub fn registerAll(_: *anyopaque) void {}
 };
+const qjs_bindings = @import("qjs_bindings.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;
@@ -59,6 +60,8 @@ var g_claude_session: ?claude_sdk.Session = null;
 // ── Kimi Wire SDK session singleton ──────────────────────────────
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
 var g_kimi_session: ?kimi_wire_sdk.Session = null;
+var g_kimi_turn_text: std.ArrayList(u8) = .{};
+var g_kimi_turn_thinking: std.ArrayList(u8) = .{};
 
 // ── Local AI runtime singleton ────────────────────────────────────
 const local_ai_runtime = @import("local_ai_runtime.zig");
@@ -79,6 +82,26 @@ var g_prepared_scroll_x: f32 = 0;
 var g_prepared_scroll_y: f32 = 0;
 var g_prepared_scroll_dx: f32 = 0;
 var g_prepared_scroll_dy: f32 = 0;
+
+fn kimiResetTurnBuffers() void {
+    g_kimi_turn_text.clearRetainingCapacity();
+    g_kimi_turn_thinking.clearRetainingCapacity();
+}
+
+fn kimiDeinitTurnBuffers() void {
+    g_kimi_turn_text.deinit(std.heap.c_allocator);
+    g_kimi_turn_thinking.deinit(std.heap.c_allocator);
+    g_kimi_turn_text = .{};
+    g_kimi_turn_thinking = .{};
+}
+
+fn kimiAppendTurnText(kind: enum { assistant, thinking }, chunk: []const u8) void {
+    if (chunk.len == 0) return;
+    switch (kind) {
+        .assistant => g_kimi_turn_text.appendSlice(std.heap.c_allocator, chunk) catch {},
+        .thinking => g_kimi_turn_thinking.appendSlice(std.heap.c_allocator, chunk) catch {},
+    }
+}
 
 // ── Host functions ──────────────────────────────────────────────
 
@@ -667,7 +690,7 @@ fn hostSemTree(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
 }
 
 // ── Claude SDK host functions ────────────────────────────────────
-// __claude_init(cwd: string, model?: string) -> bool
+// __claude_init(cwd: string, model?: string, resume_session?: string) -> bool
 // __claude_send(text: string) -> bool
 // __claude_poll() -> event object or null
 // __claude_close() -> void
@@ -690,14 +713,30 @@ fn hostClaudeInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     }
     defer if (model_z) |mz| qjs.JS_FreeCString(c2, mz);
 
+    var resume_session: ?[]const u8 = null;
+    var resume_session_z: ?[*:0]const u8 = null;
+    if (argc >= 3) {
+        resume_session_z = qjs.JS_ToCString(c2, argv[2]);
+        if (resume_session_z) |sidz| {
+            const sid = std.mem.span(sidz);
+            if (sid.len > 0) resume_session = sid;
+        }
+    }
+    defer if (resume_session_z) |sidz| qjs.JS_FreeCString(c2, sidz);
+
     const opts = claude_sdk.SessionOptions{
         .cwd = cwd,
         .model = model,
+        .resume_session = resume_session,
         .verbose = true,
         .permission_mode = .bypass_permissions,
         .inherit_stderr = true,
     };
-    std.debug.print("[claude_sdk] init cwd={s} model={s}\n", .{ cwd, if (model) |m| m else "(default)" });
+    std.debug.print("[claude_sdk] init cwd={s} model={s} resume={s}\n", .{
+        cwd,
+        if (model) |m| m else "(default)",
+        if (resume_session) |sid| sid else "(new)",
+    });
     const sess = claude_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
         std.debug.print("[claude_sdk] init FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
@@ -720,6 +759,10 @@ fn hostClaudeSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     std.debug.print("[claude_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
     g_claude_session.?.send(text) catch |err| {
         std.debug.print("[claude_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        if (g_claude_session) |*sess| {
+            sess.deinit();
+            g_claude_session = null;
+        }
         return jsBoolValue(false);
     };
     return jsBoolValue(true);
@@ -740,7 +783,14 @@ fn hostClaudePoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSV
     var owned = (g_claude_session.?.poll() catch |err| {
         std.debug.print("[claude_sdk] poll FAILED: {s}\n", .{@errorName(err)});
         return QJS_UNDEFINED;
-    }) orelse return QJS_UNDEFINED;
+    }) orelse {
+        if (g_claude_session.?.closed) {
+            std.debug.print("[claude_sdk] session exited\n", .{});
+            g_claude_session.?.deinit();
+            g_claude_session = null;
+        }
+        return QJS_UNDEFINED;
+    };
     defer owned.deinit();
 
     const tag = @tagName(owned.msg);
@@ -780,16 +830,22 @@ fn claudeMessageToJs(ctx: *qjs.JSContext, msg: claude_sdk.Message) qjs.JSValue {
             setF(ctx, obj, "output_tokens", @floatFromInt(a.usage.output_tokens));
 
             const blocks = qjs.JS_NewArray(ctx);
+            var text_join: std.ArrayList(u8) = .{};
+            defer text_join.deinit(std.heap.c_allocator);
+            var thinking_join: std.ArrayList(u8) = .{};
+            defer thinking_join.deinit(std.heap.c_allocator);
             for (a.content, 0..) |blk, i| {
                 const b_obj = qjs.JS_NewObject(ctx);
                 switch (blk) {
                     .text => |t| {
                         setStr(ctx, b_obj, "type", "text");
                         setStr(ctx, b_obj, "text", t.text);
+                        text_join.appendSlice(std.heap.c_allocator, t.text) catch {};
                     },
                     .thinking => |th| {
                         setStr(ctx, b_obj, "type", "thinking");
                         setStr(ctx, b_obj, "thinking", th.thinking);
+                        thinking_join.appendSlice(std.heap.c_allocator, th.thinking) catch {};
                     },
                     .tool_use => |tu| {
                         setStr(ctx, b_obj, "type", "tool_use");
@@ -801,6 +857,8 @@ fn claudeMessageToJs(ctx: *qjs.JSContext, msg: claude_sdk.Message) qjs.JSValue {
                 _ = qjs.JS_SetPropertyUint32(ctx, blocks, @intCast(i), b_obj);
             }
             _ = qjs.JS_SetPropertyStr(ctx, obj, "content", blocks);
+            if (text_join.items.len > 0) setStr(ctx, obj, "text", text_join.items);
+            if (thinking_join.items.len > 0) setStr(ctx, obj, "thinking", thinking_join.items);
         },
         .user => |u| {
             setStr(ctx, obj, "type", "user");
@@ -823,7 +881,7 @@ fn claudeMessageToJs(ctx: *qjs.JSContext, msg: claude_sdk.Message) qjs.JSValue {
 }
 
 // ── Kimi Wire host functions ─────────────────────────────────────
-// __kimi_init(cwd: string, model?: string) -> bool
+// __kimi_init(cwd: string, model?: string, session_id?: string) -> bool
 // __kimi_send(text: string) -> bool
 // __kimi_poll() -> event object or null
 // __kimi_close() -> void
@@ -846,13 +904,29 @@ fn hostKimiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     }
     defer if (model_z) |mz| qjs.JS_FreeCString(c2, mz);
 
+    var session_id: ?[]const u8 = null;
+    var session_id_z: ?[*:0]const u8 = null;
+    if (argc >= 3) {
+        session_id_z = qjs.JS_ToCString(c2, argv[2]);
+        if (session_id_z) |sidz| {
+            const sid = std.mem.span(sidz);
+            if (sid.len > 0) session_id = sid;
+        }
+    }
+    defer if (session_id_z) |sidz| qjs.JS_FreeCString(c2, sidz);
+
     const opts = kimi_wire_sdk.SessionOptions{
         .cwd = cwd,
         .model = model,
+        .session_id = session_id,
         .yolo = true,
         .inherit_stderr = true,
     };
-    std.debug.print("[kimi_wire_sdk] init cwd={s} model={s}\n", .{ cwd, if (model) |m| m else "(default)" });
+    std.debug.print("[kimi_wire_sdk] init cwd={s} model={s} session={s}\n", .{
+        cwd,
+        if (model) |m| m else "(default)",
+        if (session_id) |sid| sid else "(new)",
+    });
     var sess = kimi_wire_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
         std.debug.print("[kimi_wire_sdk] init FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
@@ -869,6 +943,7 @@ fn hostKimiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
         init_result.server_name,
         init_result.server_version,
     });
+    kimiResetTurnBuffers();
     g_kimi_session = sess;
     return jsBoolValue(true);
 }
@@ -884,8 +959,14 @@ fn hostKimiSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     const text = std.mem.span(text_z);
 
     std.debug.print("[kimi_wire_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
+    kimiResetTurnBuffers();
     var token = g_kimi_session.?.prompt(.{ .text = text }) catch |err| {
         std.debug.print("[kimi_wire_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        if (g_kimi_session) |*sess| {
+            sess.deinit();
+            g_kimi_session = null;
+        }
+        kimiDeinitTurnBuffers();
         return jsBoolValue(false);
     };
     token.deinit();
@@ -906,10 +987,22 @@ fn hostKimiPoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVal
     var owned = (g_kimi_session.?.poll() catch |err| {
         std.debug.print("[kimi_wire_sdk] poll FAILED: {s}\n", .{@errorName(err)});
         return QJS_UNDEFINED;
-    }) orelse return QJS_UNDEFINED;
+    }) orelse {
+        if (g_kimi_session.?.closed) {
+            std.debug.print("[kimi_wire_sdk] session exited\n", .{});
+            g_kimi_session.?.deinit();
+            g_kimi_session = null;
+            kimiDeinitTurnBuffers();
+        }
+        return QJS_UNDEFINED;
+    };
     defer owned.deinit();
 
-    std.debug.print("[kimi_wire_sdk] recv {s}\n", .{@tagName(owned.msg)});
+    switch (owned.msg) {
+        .event => |event| std.debug.print("[kimi_wire_sdk] recv event {s}\n", .{event.event_type}),
+        .request => |request| std.debug.print("[kimi_wire_sdk] recv request {s}\n", .{request.request_type}),
+        .response => |response| std.debug.print("[kimi_wire_sdk] recv response {s}\n", .{response.status() orelse response.id}),
+    }
     return kimiMessageToJs(c2, owned.msg);
 }
 
@@ -919,6 +1012,7 @@ fn hostKimiClose(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
         sess.deinit();
         g_kimi_session = null;
     }
+    kimiDeinitTurnBuffers();
     return QJS_UNDEFINED;
 }
 
@@ -928,6 +1022,7 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
         .event => |event| {
             const event_name = event.event_type;
             if (std.mem.eql(u8, event_name, "TurnBegin")) {
+                kimiResetTurnBuffers();
                 setStr(ctx, obj, "type", "turn_begin");
                 if (jsonGetStringPath(event.payload, &.{"user_input"})) |value| setStr(ctx, obj, "text", value);
                 return obj;
@@ -947,15 +1042,29 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             }
             if (std.mem.eql(u8, event_name, "ContentPart")) {
                 const part_type = jsonGetStringPath(event.payload, &.{"type"}) orelse "unknown";
+                const maybe_text = extractKimiDisplayTextAlloc(std.heap.c_allocator, event.payload) catch null;
+                defer if (maybe_text) |value| std.heap.c_allocator.free(value);
                 setStr(ctx, obj, "type", "assistant_part");
                 if (std.mem.eql(u8, part_type, "text")) {
                     setStr(ctx, obj, "part_type", "text");
-                    if (jsonGetStringPath(event.payload, &.{"text"})) |value| setStr(ctx, obj, "text", value);
+                    if (maybe_text) |value| {
+                        kimiAppendTurnText(.assistant, value);
+                        setStr(ctx, obj, "text", value);
+                    }
                     return obj;
                 }
-                if (std.mem.eql(u8, part_type, "think")) {
+                if (std.mem.eql(u8, part_type, "think") or std.mem.eql(u8, part_type, "thinking")) {
                     setStr(ctx, obj, "part_type", "thinking");
-                    if (jsonGetStringPath(event.payload, &.{"think"})) |value| setStr(ctx, obj, "text", value);
+                    if (maybe_text) |value| {
+                        kimiAppendTurnText(.thinking, value);
+                        setStr(ctx, obj, "text", value);
+                    }
+                    return obj;
+                }
+                if (maybe_text) |value| {
+                    kimiAppendTurnText(.assistant, value);
+                    setStr(ctx, obj, "part_type", "text");
+                    setStr(ctx, obj, "text", value);
                     return obj;
                 }
                 setStr(ctx, obj, "part_type", part_type);
@@ -986,8 +1095,20 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             if (std.mem.eql(u8, event_name, "PlanDisplay")) {
                 setStr(ctx, obj, "type", "assistant_part");
                 setStr(ctx, obj, "part_type", "text");
-                if (jsonGetStringPath(event.payload, &.{"content"})) |value| setStr(ctx, obj, "text", value);
+                const maybe_text = extractKimiDisplayTextAlloc(std.heap.c_allocator, event.payload) catch null;
+                defer if (maybe_text) |value| std.heap.c_allocator.free(value);
+                if (maybe_text) |value| setStr(ctx, obj, "text", value);
                 return obj;
+            }
+            if (std.mem.endsWith(u8, event_name, "Display")) {
+                const maybe_text = extractKimiDisplayTextAlloc(std.heap.c_allocator, event.payload) catch null;
+                defer if (maybe_text) |value| std.heap.c_allocator.free(value);
+                if (maybe_text) |value| {
+                    setStr(ctx, obj, "type", "assistant_part");
+                    setStr(ctx, obj, "part_type", "text");
+                    setStr(ctx, obj, "text", value);
+                    return obj;
+                }
             }
             if (std.mem.eql(u8, event_name, "BtwBegin")) {
                 setStr(ctx, obj, "type", "status");
@@ -1043,7 +1164,12 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             if (response.error_message) |value| setStr(ctx, obj, "result", value);
             const maybe_json = response.resultJsonAlloc(std.heap.c_allocator) catch null;
             defer if (maybe_json) |value| std.heap.c_allocator.free(value);
-            if (maybe_json) |value| setStr(ctx, obj, "result", value);
+            if (!response.isError() and g_kimi_turn_text.items.len > 0) {
+                setStr(ctx, obj, "result", g_kimi_turn_text.items);
+            } else if (maybe_json) |value| {
+                setStr(ctx, obj, "result", value);
+            }
+            if (g_kimi_turn_thinking.items.len > 0) setStr(ctx, obj, "thinking", g_kimi_turn_thinking.items);
             return obj;
         },
     }
@@ -1064,6 +1190,21 @@ fn extractKimiToolResultTextAlloc(allocator: std.mem.Allocator, payload: std.jso
         return try allocator.dupe(u8, message);
     }
     return extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"return_value", "output"}));
+}
+
+fn extractKimiDisplayTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
+    if (jsonGetStringPath(payload, &.{"text"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"content"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"message"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"response"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"delta"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"markdown"})) |text| return try allocator.dupe(u8, text);
+    if (jsonGetStringPath(payload, &.{"think"})) |text| return try allocator.dupe(u8, text);
+    if (try extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"content"}))) |text| return text;
+    if (try extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"output"}))) |text| return text;
+    if (try extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"parts"}))) |text| return text;
+    if (try extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"delta"}))) |text| return text;
+    return null;
 }
 
 fn extractKimiQuestionTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
@@ -1150,7 +1291,7 @@ fn jsonAsString(value: std.json.Value) ?[]const u8 {
 }
 
 // ── Local AI host functions ───────────────────────────────────────
-// __localai_init(cwd: string, model_path: string) -> bool
+// __localai_init(cwd: string, model_path: string, session_id?: string) -> bool
 // __localai_send(text: string) -> bool
 // __localai_poll() -> event object or null
 // __localai_close() -> void
@@ -1171,9 +1312,21 @@ fn hostLocalAiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]
     const model_path = std.mem.span(model_z);
     if (model_path.len == 0) return jsBoolValue(false);
 
+    var session_id: ?[]const u8 = null;
+    var session_id_z: ?[*:0]const u8 = null;
+    if (argc >= 3) {
+        session_id_z = qjs.JS_ToCString(c2, argv[2]);
+        if (session_id_z) |sidz| {
+            const sid = std.mem.span(sidz);
+            if (sid.len > 0) session_id = sid;
+        }
+    }
+    defer if (session_id_z) |sidz| qjs.JS_FreeCString(c2, sidz);
+
     const opts = local_ai_runtime.SessionOptions{
         .cwd = cwd,
         .model_path = model_path,
+        .session_id = session_id,
         .verbose = false,
     };
     const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch |err| {
@@ -2718,6 +2871,11 @@ fn hostWindowMaximize(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.J
     return QJS_UNDEFINED;
 }
 
+fn hostWindowIsMaximized(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const engine_mod = @import("engine.zig");
+    return jsBoolValue(engine_mod.windowIsMaximized());
+}
+
 fn hostOpenWindow(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     const c2 = ctx orelse return QJS_UNDEFINED;
     if (argc < 3) return QJS_UNDEFINED;
@@ -2796,6 +2954,10 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pollInputSubmit", qjs.JS_NewCFunction(ctx, hostPollInputSubmit, "__pollInputSubmit", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getPreparedRightClick", qjs.JS_NewCFunction(ctx, hostGetPreparedRightClick, "__getPreparedRightClick", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getPreparedScroll", qjs.JS_NewCFunction(ctx, hostGetPreparedScroll, "__getPreparedScroll", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__window_close", qjs.JS_NewCFunction(ctx, hostWindowClose, "__window_close", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__window_minimize", qjs.JS_NewCFunction(ctx, hostWindowMinimize, "__window_minimize", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__window_maximize", qjs.JS_NewCFunction(ctx, hostWindowMaximize, "__window_maximize", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__window_is_maximized", qjs.JS_NewCFunction(ctx, hostWindowIsMaximized, "__window_is_maximized", 0));
     // Node dim/highlight (filter system)
     _ = qjs.JS_SetPropertyStr(ctx, global, "setNodeDim", qjs.JS_NewCFunction(ctx, hostSetNodeDim, "setNodeDim", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "resetNodeDim", qjs.JS_NewCFunction(ctx, hostResetNodeDim, "resetNodeDim", 0));
@@ -2904,12 +3066,33 @@ pub fn initVM() void {
     // IPC debug client host functions (external inspector attach)
     qjs_ipc.registerAll(@ptrCast(ctx));
 
+    // runtime/hooks bindings (fs, localstore, crypto, env, exit)
+    qjs_bindings.registerAll(@ptrCast(ctx));
+
     const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, val);
 
     // Load IFTTT rules engine
     const ifttt_val = qjs.JS_Eval(ctx, JS_IFTTT.ptr, JS_IFTTT.len, "<ifttt>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, ifttt_val);
+}
+
+/// Accessor so peer modules (e.g., qjs_bindings.zig) can reach the live JSContext
+/// without needing the runtime's @cImport of quickjs.h. Returns null before
+/// initVM or after teardown.
+pub export fn qjs_runtime_get_ctx() ?*anyopaque {
+    if (comptime !HAS_QUICKJS) return null;
+    return @ptrCast(g_qjs_ctx);
+}
+
+/// Tear down the QuickJS VM. Used by dev-mode hot reload to wipe the JS world
+/// before re-evaluating a fresh bundle. Safe to call followed by a new initVM().
+pub fn teardownVM() void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| qjs.JS_FreeContext(ctx);
+    if (g_qjs_rt) |rt| qjs.JS_FreeRuntime(rt);
+    g_qjs_ctx = null;
+    g_qjs_rt = null;
 }
 
 /// Register a native function on the JS global object. Call after initVM, before evalScript.
@@ -3024,6 +3207,98 @@ pub fn callGlobal3Int(name: [*:0]const u8, arg0: i64, arg1: i64, arg2: i64) void
             qjs.JS_FreeValue(ctx, r);
         }
     }
+}
+
+/// Call a global JS function with five integer arguments.
+pub fn callGlobal5Int(name: [*:0]const u8, arg0: i64, arg1: i64, arg2: i64, arg3: i64, arg4: i64) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [5]qjs.JSValue{
+                qjs.JS_NewInt64(ctx, arg0),
+                qjs.JS_NewInt64(ctx, arg1),
+                qjs.JS_NewInt64(ctx, arg2),
+                qjs.JS_NewInt64(ctx, arg3),
+                qjs.JS_NewInt64(ctx, arg4),
+            };
+            const r = qjs.JS_Call(ctx, func, global, 5, &argv);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+fn noopFreeArrayBuffer(_: ?*qjs.JSRuntime, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {}
+
+/// Dispatch a per-frame Effect render into JS. Wraps the CPU pixel buffer as
+/// an ArrayBuffer (zero-copy, the free_func is a no-op — Zig still owns the
+/// memory) and invokes `__dispatchEffectRender(id, buffer, w, h, stride, time,
+/// dt, mouse_x, mouse_y, mouse_inside, frame)`. After the JS call returns,
+/// the ArrayBuffer is detached so any references the JS handler kept around
+/// can't outlive the Zig-owned buffer.
+pub fn dispatchEffectRender(
+    id: u32,
+    buf_ptr: [*]u8,
+    buf_len: usize,
+    width: u32,
+    height: u32,
+    stride: u32,
+    time: f32,
+    dt: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_inside: bool,
+    frame: u32,
+) void {
+    if (comptime !HAS_QUICKJS) return;
+    const ctx = g_qjs_ctx orelse return;
+    // Recalibrate the QJS stack-overflow watermark. JS_NewRuntime captured
+    // stack_top near program start (shallow C stack). Paint → effects →
+    // here runs far deeper in the C stack — without this update, QJS's
+    // `sp < stack_limit` guard fires immediately and every JS call throws
+    // "Maximum call stack size exceeded" before the handler even runs.
+    if (g_qjs_rt) |rt| qjs.JS_UpdateStackTop(rt);
+    const global = qjs.JS_GetGlobalObject(ctx);
+    defer qjs.JS_FreeValue(ctx, global);
+    const func = qjs.JS_GetPropertyStr(ctx, global, "__dispatchEffectRender");
+    defer qjs.JS_FreeValue(ctx, func);
+    if (qjs.JS_IsUndefined(func) or !qjs.JS_IsFunction(ctx, func)) return;
+
+    const ab = qjs.JS_NewArrayBuffer(ctx, buf_ptr, buf_len, noopFreeArrayBuffer, null, false);
+
+    var argv = [_]qjs.JSValue{
+        qjs.JS_NewInt32(ctx, @intCast(id)),
+        ab,
+        qjs.JS_NewInt32(ctx, @intCast(width)),
+        qjs.JS_NewInt32(ctx, @intCast(height)),
+        qjs.JS_NewInt32(ctx, @intCast(stride)),
+        qjs.JS_NewFloat64(ctx, time),
+        qjs.JS_NewFloat64(ctx, dt),
+        qjs.JS_NewFloat64(ctx, mouse_x),
+        qjs.JS_NewFloat64(ctx, mouse_y),
+        jsBoolValue(mouse_inside),
+        qjs.JS_NewInt32(ctx, @intCast(frame)),
+    };
+    const r = qjs.JS_Call(ctx, func, global, argv.len, &argv);
+
+    // Detach the buffer so any JS-side references (the Uint8ClampedArray view,
+    // cached references) can't read stale Zig memory after we return.
+    qjs.JS_DetachArrayBuffer(ctx, ab);
+    qjs.JS_FreeValue(ctx, ab);
+
+    if (qjs.JS_IsException(r)) {
+        const ex = qjs.JS_GetException(ctx);
+        defer qjs.JS_FreeValue(ctx, ex);
+        const ex_str = qjs.JS_ToCString(ctx, ex);
+        if (ex_str) |s| {
+            defer qjs.JS_FreeCString(ctx, s);
+            std.debug.print("[effect dispatch error] {s}\n", .{std.mem.span(s)});
+        }
+    }
+    qjs.JS_FreeValue(ctx, r);
 }
 
 /// Evaluate a JS expression string (for multi-arg function calls from map handlers).
@@ -3491,6 +3766,7 @@ pub fn deinit() void {
         sess.deinit();
         g_kimi_session = null;
     }
+    kimiDeinitTurnBuffers();
     if (g_local_ai_session) |sess| {
         sess.destroy();
         g_local_ai_session = null;

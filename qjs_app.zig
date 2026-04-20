@@ -16,20 +16,36 @@ const layout = @import("framework/layout.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
+const effect_ctx = @import("framework/effect_ctx.zig");
 const input = @import("framework/input.zig");
 const state = @import("framework/state.zig");
 const events = @import("framework/events.zig");
 const engine = if (IS_LIB) struct {} else @import("framework/engine.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig");
+const qjs_bindings = @import("framework/qjs_bindings.zig");
+const fs_mod = @import("framework/fs.zig");
+const localstore = @import("framework/localstore.zig");
 comptime { if (!IS_LIB) _ = @import("framework/core.zig"); }
 
 const qjs = @cImport({
     @cInclude("quickjs.h");
 });
 
-// bundle.js is embedded at compile time — binary is self-contained, no CWD lookup.
-const BUNDLE_BYTES = @embedFile("bundle.js");
+// Per-cart bundle. Path is `bundle-<app-name>.js` so that two parallel ships
+// (different carts) don't race on a shared `bundle.js`. If you run
+// `zig build app` directly, make sure the matching bundle file exists.
+const BUNDLE_FILE_NAME = std.fmt.comptimePrint("bundle-{s}.js", .{build_options.app_name});
+const BUNDLE_BYTES = @embedFile(BUNDLE_FILE_NAME);
 const QJS_UNDEFINED: qjs.JSValue = .{ .u = .{ .int32 = 0 }, .tag = 3 };
+
+// Window title = the build's -Dapp-name (set by scripts/ship). Falls back to
+// "reactjit" for plain `zig build app` invocations that don't pass a name.
+const WINDOW_TITLE = std.fmt.comptimePrint("{s}", .{
+    if (@hasDecl(build_options, "app_name") and build_options.app_name.len > 0)
+        build_options.app_name
+    else
+        "reactjit",
+});
 
 // ── Globals ────────────────────────────────────────────────────────
 
@@ -43,6 +59,69 @@ var g_dirty: bool = true;
 var g_press_expr_pool: std.ArrayList([:0]u8) = .{};
 var g_input_slot_by_node_id: std.AutoHashMap(u32, u8) = undefined;
 var g_node_id_by_input_slot: [input.MAX_INPUTS]u32 = [_]u32{0} ** input.MAX_INPUTS;
+
+// Pending flush queue. host_flush is called mid-frame (from inside js_on_press
+// evals, or inside __dispatchEvent's React commit). Applying CMDs mid-frame
+// would destroy nodes whose heap memory is still referenced by the engine's
+// rendered g_root.children copy — use-after-free. So we queue bytes here and
+// drain at tick boundary before rebuildTree.
+var g_pending_flush: std.ArrayList([]u8) = .{};
+
+// ── Dev mode — hot reload of the JS bundle ──────────────────────────
+// When DEV_MODE is enabled (via -Ddev-mode=true), the binary reads bundle.js
+// from disk on startup and polls its mtime each tick. When the file changes
+// (esbuild watch mode rebundles it), we tear down the tree + the QuickJS
+// context, reinit, and re-eval the new bundle. React state resets on reload
+// in phase 1; phase 2 will use LuaJIT hotstate atoms to preserve it.
+const DEV_MODE = if (@hasDecl(build_options, "dev_mode")) build_options.dev_mode else false;
+const CUSTOM_CHROME_MODE = if (@hasDecl(build_options, "app_name"))
+    std.mem.eql(u8, build_options.app_name, "browser") or
+        std.mem.eql(u8, build_options.app_name, "cursor-ide")
+else
+    false;
+const BORDERLESS_MODE = DEV_MODE or CUSTOM_CHROME_MODE;
+const DEV_BUNDLE_PATH = "bundle.js";
+
+var g_dev_bundle_buf: []u8 = &.{};
+var g_last_bundle_mtime: i128 = 0;
+var g_mtime_poll_counter: u32 = 0;
+var g_reload_pending: bool = false;
+
+const dev_ipc = @import("framework/dev_ipc.zig");
+
+/// A dev-mode tab. Each tab has a human-readable name (cart name) and a
+/// heap-owned bundle. The active tab is the one currently evaluated in QJS;
+/// others sit dormant until re-activated via IPC push or (future) chrome click.
+const Tab = struct {
+    name: []u8, // owned
+    bundle: []u8, // owned
+};
+
+var g_tabs: std.ArrayList(Tab) = .{};
+var g_active_tab: usize = 0;
+
+const MAX_TABS = 16;
+
+/// Comptime-generated per-tab click handler. We can't close over an index at
+/// runtime in Zig, so we specialize one callback per slot ahead of time.
+fn makeTabClickCallback(comptime idx: usize) *const fn () void {
+    return struct {
+        fn callback() void {
+            if (idx < g_tabs.items.len and idx != g_active_tab) switchToTab(idx);
+        }
+    }.callback;
+}
+
+const g_tab_click_callbacks = blk: {
+    var arr: [MAX_TABS]*const fn () void = undefined;
+    for (0..MAX_TABS) |i| arr[i] = makeTabClickCallback(i);
+    break :blk arr;
+};
+
+const CHROME_HEIGHT: f32 = 32;
+const CHROME_PAD: f32 = 6;
+const TAB_PAD_H: f32 = 14;
+const TAB_PAD_V: f32 = 4;
 
 fn isInputType(type_name: []const u8) bool {
     return std.mem.eql(u8, type_name, "TextInput") or
@@ -113,10 +192,36 @@ fn dispatchInputKeyEvent(slot: u8, key: c_int, mods: u16) void {
     qjs_runtime.callGlobal("__endJsEvent");
 }
 
+fn dispatchInputCursorEvent(slot: u8) void {
+    const node_id = g_node_id_by_input_slot[slot];
+    if (node_id == 0) return;
+    const cursor = input.getCursorPos(slot);
+    const selection = input.getSelection(slot);
+    const has_selection = selection.hi > selection.lo;
+    qjs_runtime.callGlobal("__beginJsEvent");
+    qjs_runtime.callGlobal5Int(
+        "__dispatchInputCursor",
+        @intCast(node_id),
+        cursor,
+        selection.lo,
+        selection.hi,
+        if (has_selection) 1 else 0,
+    );
+    qjs_runtime.callGlobal("__endJsEvent");
+}
+
 fn makeInputKeyCallback(comptime slot: u8) *const fn (key: c_int, mods: u16) void {
     return struct {
         fn callback(key: c_int, mods: u16) void {
             dispatchInputKeyEvent(slot, key, mods);
+        }
+    }.callback;
+}
+
+fn makeInputCursorCallback(comptime slot: u8) *const fn () void {
+    return struct {
+        fn callback() void {
+            dispatchInputCursorEvent(slot);
         }
     }.callback;
 }
@@ -148,6 +253,12 @@ const g_input_blur_callbacks = blk: {
 const g_input_key_callbacks = blk: {
     var arr: [input.MAX_INPUTS]*const fn (key: c_int, mods: u16) void = undefined;
     for (0..input.MAX_INPUTS) |i| arr[i] = makeInputKeyCallback(@intCast(i));
+    break :blk arr;
+};
+
+const g_input_cursor_callbacks = blk: {
+    var arr: [input.MAX_INPUTS]*const fn () void = undefined;
+    for (0..input.MAX_INPUTS) |i| arr[i] = makeInputCursorCallback(@intCast(i));
     break :blk arr;
 };
 
@@ -183,6 +294,7 @@ fn ensureInputSlot(node: *Node, id: u32, type_name: []const u8) void {
     input.setOnFocus(sid, g_input_focus_callbacks[sid]);
     input.setOnBlur(sid, g_input_blur_callbacks[sid]);
     input.setOnKey(sid, g_input_key_callbacks[sid]);
+    input.setOnCursor(sid, g_input_cursor_callbacks[sid]);
     node.input_id = sid;
 }
 
@@ -216,6 +328,17 @@ fn jsonInt(v: std.json.Value) ?i64 {
     return switch (v) {
         .integer => |i| i,
         .float   => |f| @intFromFloat(f),
+        else => null,
+    };
+}
+
+// JSX idiom is `hoverable={1}` / `noWrap={0}` — accept bool or numeric 0/1 so
+// carts don't have to care which literal the reconciler happens to emit.
+fn jsonBool(v: std.json.Value) ?bool {
+    return switch (v) {
+        .bool => |b| b,
+        .integer => |i| i != 0,
+        .float => |f| f != 0,
         else => null,
     };
 }
@@ -391,6 +514,14 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
             else if (eq(u8, s, "column-reverse")) node.style.flex_direction = .column_reverse
             else node.style.flex_direction = .column;
         }
+    } else if (eq(u8, key, "flex")) {
+        // CSS shorthand: `flex: N` ≡ `flex: N 1 0%` → flexGrow=N, flexShrink=1, flexBasis=0.
+        // Full `flex: grow shrink basis` parsing not needed yet — apps write them separate.
+        if (jsonFloat(val)) |f| {
+            node.style.flex_grow = f;
+            node.style.flex_shrink = 1;
+            node.style.flex_basis = 0;
+        }
     } else if (eq(u8, key, "flexGrow")) {
         if (jsonFloat(val)) |f| node.style.flex_grow = f;
     } else if (eq(u8, key, "flexShrink")) {
@@ -498,6 +629,19 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
     } else if (eq(u8, key, "zIndex")) {
         if (jsonInt(val)) |i| node.style.z_index = @intCast(i);
     }
+    // Text-typography keys: also valid inside `style`, since React code
+    // (and hostConfig.ts's HTML heading defaults) routes them there. Without
+    // this block, `<Text style={{ fontSize: 14 }}>` and `<h1>...</h1>` both
+    // silently render at the default size.
+    else if (eq(u8, key, "fontSize")) {
+        if (jsonInt(val)) |i| node.font_size = @intCast(@max(i, 1));
+    } else if (eq(u8, key, "color")) {
+        if (val == .string) node.text_color = parseColor(val.string);
+    } else if (eq(u8, key, "letterSpacing")) {
+        if (jsonFloat(val)) |f| node.letter_spacing = f;
+    } else if (eq(u8, key, "lineHeight")) {
+        if (jsonFloat(val)) |f| node.line_height = f;
+    }
 }
 
 fn applyStyle(node: *Node, style_v: std.json.Value) void {
@@ -583,6 +727,7 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0
         else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0
         else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false
+        else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true
         else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null
         else if (std.mem.eql(u8, k, "value")) node.text = null
         else if (std.mem.eql(u8, k, "source")) node.image_src = null
@@ -590,7 +735,9 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         else if (std.mem.eql(u8, k, "tooltip")) node.tooltip = null
         else if (std.mem.eql(u8, k, "hoverable")) node.hoverable = false
         else if (std.mem.eql(u8, k, "debugName")) node.debug_name = null
-        else if (std.mem.eql(u8, k, "testID")) node.test_id = null;
+        else if (std.mem.eql(u8, k, "testID")) node.test_id = null
+        else if (std.mem.eql(u8, k, "windowDrag")) node.window_drag = false
+        else if (std.mem.eql(u8, k, "windowResize")) node.window_resize = false;
     }
 }
 
@@ -598,6 +745,14 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     const eq = std.mem.eql;
     if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
+    } else if (eq(u8, type_name, "Canvas")) {
+        // Infinite pan/zoom surface. `canvas_type` is what wires engine paint,
+        // hit-testing, drag-to-pan and wheel-to-zoom in events.zig / engine.zig.
+        node.canvas_type = "canvas";
+        node.graph_container = true;
+    } else if (eq(u8, type_name, "Graph")) {
+        // Static viewport — view transform only, no interaction.
+        node.graph_container = true;
     } else if (eq(u8, type_name, "Canvas.Node") or eq(u8, type_name, "Graph.Node")) {
         node.canvas_node = true;
     } else if (eq(u8, type_name, "Canvas.Path") or eq(u8, type_name, "Graph.Path")) {
@@ -627,7 +782,9 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         } else if (std.mem.eql(u8, k, "numberOfLines")) {
             if (jsonInt(v)) |i| node.number_of_lines = @intCast(@max(i, 0));
         } else if (std.mem.eql(u8, k, "noWrap")) {
-            if (v == .bool) node.no_wrap = v.bool;
+            if (jsonBool(v)) |b| node.no_wrap = b;
+        } else if (is_input and std.mem.eql(u8, k, "paintText")) {
+            if (jsonBool(v)) |b| node.input_paint_text = b;
         } else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
@@ -639,11 +796,15 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         } else if (std.mem.eql(u8, k, "tooltip")) {
             if (dupJsonText(v)) |s| node.tooltip = s;
         } else if (std.mem.eql(u8, k, "hoverable")) {
-            if (v == .bool) node.hoverable = v.bool;
+            if (jsonBool(v)) |b| node.hoverable = b;
         } else if (std.mem.eql(u8, k, "debugName")) {
             if (dupJsonText(v)) |s| node.debug_name = s;
         } else if (std.mem.eql(u8, k, "testID")) {
             if (dupJsonText(v)) |s| node.test_id = s;
+        } else if (std.mem.eql(u8, k, "windowDrag")) {
+            if (jsonBool(v)) |b| node.window_drag = b;
+        } else if (std.mem.eql(u8, k, "windowResize")) {
+            if (jsonBool(v)) |b| node.window_resize = b;
         }
         // ── Canvas / Graph props ──
         else if (std.mem.eql(u8, k, "gx")) {
@@ -668,9 +829,119 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| node.canvas_fill_effect = s;
         } else if (std.mem.eql(u8, k, "textEffect")) {
             if (dupJsonText(v)) |s| node.text_effect = s;
+        } else if (std.mem.eql(u8, k, "viewX")) {
+            // Initial camera — engine applies once per canvas instance, then
+            // user drag/scroll takes over (see paintCanvasContainer).
+            if (jsonFloat(v)) |f| { node.canvas_view_x = f; node.canvas_view_set = true; }
+        } else if (std.mem.eql(u8, k, "viewY")) {
+            if (jsonFloat(v)) |f| { node.canvas_view_y = f; node.canvas_view_set = true; }
+        } else if (std.mem.eql(u8, k, "viewZoom")) {
+            if (jsonFloat(v)) |f| { node.canvas_view_zoom = f; node.canvas_view_set = true; }
+        }
+        // ── Effect props ──
+        else if (std.mem.eql(u8, k, "name")) {
+            if (dupJsonText(v)) |s| node.effect_name = s;
+        } else if (std.mem.eql(u8, k, "background")) {
+            if (jsonBool(v)) |b| node.effect_background = b;
+        } else if (std.mem.eql(u8, k, "shader")) {
+            // WGSL fragment shader body. We prepend a standard header
+            // (uniforms struct, fullscreen-triangle vs_main) and the
+            // shared math library (snoise, fbm, hsv2rgb, hsl2rgb, …)
+            // before the user code so every cart sees the same surface.
+            if (v == .string) {
+                if (assembleEffectShader(v.string)) |wgsl| {
+                    node.effect_shader = .{ .wgsl = wgsl };
+                }
+            }
         }
     }
 }
+
+// WGSL header: uniforms + fullscreen-triangle vertex shader. Matches the
+// GpuUniforms layout in framework/effects.zig and the `vs_main`/`fs_main`
+// entry points renderGpu expects.
+const EFFECT_WGSL_HEADER: []const u8 =
+    \\struct Uniforms {
+    \\  size_w: f32,
+    \\  size_h: f32,
+    \\  time: f32,
+    \\  dt: f32,
+    \\  frame: f32,
+    \\  mouse_x: f32,
+    \\  mouse_y: f32,
+    \\  mouse_inside: f32,
+    \\};
+    \\@group(0) @binding(0) var<uniform> U: Uniforms;
+    \\
+    \\struct VsOut {
+    \\  @builtin(position) pos: vec4f,
+    \\  @location(0) uv: vec2f,
+    \\};
+    \\
+    \\@vertex fn vs_main(@builtin(vertex_index) i: u32) -> VsOut {
+    \\  let positions = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+    \\  // UV's Y is inverted relative to framebuffer: the image shader
+    \\  // (framework/gpu/shaders.zig image_wgsl) samples with `uv.y = 1 - corner.y`
+    \\  // to compensate for CPU-path flipRowsInPlace. To get the same top-down
+    \\  // display for shader-written textures, we map framebuffer y=0 → uv.y=1
+    \\  // (user's "bottom"), so that texture row 0 holds "bottom content" and the
+    \\  // image shader's flip displays "top content" at screen top.
+    \\  let uvs = array<vec2f, 3>(vec2f(0.0, 0.0), vec2f(2.0, 0.0), vec2f(0.0, 2.0));
+    \\  var out: VsOut;
+    \\  out.pos = vec4f(positions[i], 0.0, 1.0);
+    \\  out.uv = uvs[i];
+    \\  return out;
+    \\}
+    \\
+;
+
+const EFFECT_WGSL_MATH: []const u8 = @embedFile("framework/gpu/effect_math.wgsl");
+
+fn assembleEffectShader(user_wgsl: []const u8) ?[]const u8 {
+    const total = EFFECT_WGSL_HEADER.len + EFFECT_WGSL_MATH.len + user_wgsl.len + 2;
+    const out = g_alloc.alloc(u8, total) catch return null;
+    var i: usize = 0;
+    @memcpy(out[i .. i + EFFECT_WGSL_HEADER.len], EFFECT_WGSL_HEADER);
+    i += EFFECT_WGSL_HEADER.len;
+    @memcpy(out[i .. i + EFFECT_WGSL_MATH.len], EFFECT_WGSL_MATH);
+    i += EFFECT_WGSL_MATH.len;
+    out[i] = '\n';
+    i += 1;
+    @memcpy(out[i .. i + user_wgsl.len], user_wgsl);
+    i += user_wgsl.len;
+    return out[0..i];
+}
+
+// Called by effects.renderCpuNow when a node has node.effect_render pointing
+// at us. `ctx.user_data` carries the React fiber id (set on the Instance as
+// node_key = node.scroll_persist_slot, see effects.zig instanceKey). That id
+// is what handlerRegistry maps to the user's onRender closure.
+fn qjs_effect_shim(ctx: *effect_ctx.EffectContext) void {
+    const id_u: usize = ctx.user_data;
+    if (id_u == 0) return;
+    const id: u32 = @intCast(id_u);
+    const buf_len: usize = @as(usize, ctx.height) * @as(usize, ctx.stride);
+    qjs_runtime.dispatchEffectRender(
+        id,
+        ctx.buf,
+        buf_len,
+        ctx.width,
+        ctx.height,
+        ctx.stride,
+        ctx.time,
+        ctx.dt,
+        ctx.mouse_x,
+        ctx.mouse_y,
+        ctx.mouse_inside,
+        ctx.frame,
+    );
+}
+
+// Placeholder render_fn for shader-only effects. `paintCustomEffect` only
+// engages when node.effect_render is non-null, so shader-only nodes need a
+// real pointer here. The GPU path fires first (shouldTryGpu → renderGpu)
+// and the CPU path never actually calls this — it's just a gate.
+fn noop_effect_render(_: *effect_ctx.EffectContext) void {}
 
 // ── Event wiring: set js_on_press = `__dispatchEvent(<id>, 'onClick')` ───
 
@@ -703,6 +974,8 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
     node.handlers.js_on_hover_exit = null;
     node.handlers.on_scroll = null;
     node.handlers.on_right_click = null;
+    node.canvas_move_draggable = false;
+    node.effect_render = null;
 
     if (cmdHasAnyHandlerName(cmd, &.{ "onClick", "onPress" })) {
         node.handlers.js_on_press = installJsExpr("__dispatchEvent({d},'onClick')\x00", id);
@@ -719,6 +992,31 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
     if (cmdHasAnyHandlerName(cmd, &.{ "onRightClick", "onContextMenu" })) {
         node.handlers.on_right_click = qjs_runtime.dispatchPreparedRightClick;
     }
+    if (cmdHasAnyHandlerName(cmd, &.{"onMove"})) {
+        node.canvas_move_draggable = true;
+    }
+    // onRender wires this node into the Effect custom-render path. The React
+    // id is carried through materializeChildren via node.scroll_persist_slot
+    // and read back from ctx.user_data inside qjs_effect_shim.
+    if (cmdHasHandlerName(cmd, "onRender")) {
+        node.effect_render = &qjs_effect_shim;
+    } else if (node.effect_shader != null) {
+        // Shader-only effect — paintCustomEffect gates on effect_render being
+        // non-null. The GPU pipeline (shouldTryGpu → renderGpu) fires before
+        // the CPU path so this pointer is only a gate, never called.
+        node.effect_render = &noop_effect_render;
+    }
+}
+
+// Engine-owned Alt+drag writes the in-progress canvas_gx/gy straight into the
+// host Node pool so each motion picks up the new position without going through
+// a React setState (which would re-render the whole Canvas.Node subtree and
+// saturate __hostFlush with multi-KB UPDATE batches).
+fn setCanvasNodePosition(id: u32, gx: f32, gy: f32) void {
+    if (g_node_by_id.get(id)) |node| {
+        node.canvas_gx = gx;
+        node.canvas_gy = gy;
+    }
 }
 
 // ── Command application ─────────────────────────────────────────
@@ -731,6 +1029,21 @@ fn ensureNode(id: u32) !*Node {
     try g_node_by_id.put(id, n);
     try g_children_ids.put(id, .{});
     return n;
+}
+
+/// When a bare text node (created by CREATE_TEXT, i.e. React's TextInstance
+/// for a string child) is appended to a parent, copy the parent's typography
+/// so `<Text fontSize={17}>Hello</Text>` actually renders "Hello" at 17. The
+/// reconciler makes the parent Text and child TextInstance separate nodes;
+/// without this propagation the child inherits nothing and uses the default 16.
+fn inheritTypography(parent_id: u32, child_id: u32) void {
+    const parent = g_node_by_id.get(parent_id) orelse return;
+    const child = g_node_by_id.get(child_id) orelse return;
+    if (child.text == null) return;
+    child.font_size = parent.font_size;
+    if (parent.text_color) |c| child.text_color = c;
+    child.letter_spacing = parent.letter_spacing;
+    child.line_height = parent.line_height;
 }
 
 fn applyCommand(cmd: std.json.Value) !void {
@@ -760,6 +1073,7 @@ fn applyCommand(cmd: std.json.Value) !void {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
         _ = try ensureNode(pid); _ = try ensureNode(cid);
         if (g_children_ids.getPtr(pid)) |list| try list.append(g_alloc, cid);
+        inheritTypography(pid, cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "APPEND_TO_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
@@ -784,6 +1098,7 @@ fn applyCommand(cmd: std.json.Value) !void {
             for (list.items, 0..) |x, i| if (x == bid) { idx = i; break; };
             try list.insert(g_alloc, idx, cid);
         }
+        inheritTypography(pid, cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "REMOVE")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
@@ -803,6 +1118,11 @@ fn applyCommand(cmd: std.json.Value) !void {
             if (cmd.object.get("removeStyleKeys")) |keys| removeStyleKeys(n, keys);
             if (cmd.object.get("props")) |props| applyProps(n, props, null);
             applyHandlerFlags(n, id, cmd);
+            // Propagate typography to bare text children so dynamic fontSize
+            // changes on the parent flow through to the child TextInstances.
+            if (g_children_ids.get(id)) |children| {
+                for (children.items) |child_id| inheritTypography(id, child_id);
+            }
             g_dirty = true;
         }
     } else if (std.mem.eql(u8, op, "UPDATE_TEXT")) {
@@ -839,8 +1159,32 @@ export fn host_flush(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*
     if (c_str == null) return QJS_UNDEFINED;
     defer qjs.JS_FreeCString(ctx, c_str);
     const slice = std.mem.span(c_str);
-    applyCommandBatch(slice);
+    // Do not apply inline. host_flush fires inside js_on_press evals and
+    // React's commit-on-setState path — both mid-frame. Destroying nodes now
+    // frees memory the engine's current g_root.children slice still points at.
+    // Queue the bytes and drain in appTick before rebuildTree.
+    const owned = g_alloc.dupe(u8, slice) catch return QJS_UNDEFINED;
+    g_pending_flush.append(g_alloc, owned) catch {
+        g_alloc.free(owned);
+    };
+    g_dirty = true;
+    const preview_len: usize = @min(slice.len, 80);
+    std.debug.print("[host_flush] queued {d} bytes: {s}{s}\n", .{ slice.len, slice[0..preview_len], if (slice.len > 80) "..." else "" });
     return QJS_UNDEFINED;
+}
+
+fn drainPendingFlushes() void {
+    if (g_pending_flush.items.len == 0) return;
+    const count = g_pending_flush.items.len;
+    // Snapshot the pending list — applyCommandBatch can't re-enter host_flush
+    // from Zig, but defensive copy keeps the loop safe anyway.
+    const batches = g_pending_flush.toOwnedSlice(g_alloc) catch return;
+    defer {
+        for (batches) |bytes| g_alloc.free(bytes);
+        g_alloc.free(batches);
+    }
+    for (batches) |bytes| applyCommandBatch(bytes);
+    std.debug.print("[drain] applied {d} batches\n", .{count});
 }
 
 export fn host_get_input_text_for_node(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) qjs.JSValue {
@@ -927,22 +1271,363 @@ fn snapshotRuntimeState() void {
     for (g_root.children) |*child| syncRenderedNodeState(child);
 }
 
+/// Build the dev-mode tab strip as a row of arena-allocated Nodes. Returns
+/// a single Node (the row container) whose children are the individual tab
+/// buttons. Callers prepend this to g_root.children in rebuildTree.
+fn onWinMinimize() void { engine.windowMinimize(); }
+fn onWinMaximize() void { engine.windowMaximize(); }
+fn onWinClose() void { engine.windowClose(); }
+
+fn buildChromeNode(arena: std.mem.Allocator) ?Node {
+    // Filter out the "main" bootstrap tab (a duplicate of whatever was first pushed)
+    var visible: std.ArrayList(usize) = .{};
+    defer visible.deinit(arena);
+    for (g_tabs.items, 0..) |t, i| {
+        if (std.mem.eql(u8, t.name, "main")) continue;
+        visible.append(arena, i) catch return null;
+    }
+
+    // Chrome layout: [tab1, tab2, ..., spacer(flex), min, max, close]
+    // Even with zero visible tabs we still show the window controls so the
+    // borderless window is always closable.
+    const tab_count = visible.items.len;
+    const control_count: usize = 3;
+    const child_count = tab_count + 1 + control_count; // +1 = spacer
+    const children = arena.alloc(Node, child_count) catch return null;
+
+    for (visible.items, 0..) |tab_idx, i| {
+        children[i] = .{};
+        const name = arena.dupe(u8, g_tabs.items[tab_idx].name) catch g_tabs.items[tab_idx].name;
+        children[i].text = name;
+        children[i].font_size = 13;
+        children[i].text_color = layout.Color.rgb(230, 232, 237);
+        children[i].style.padding_left = TAB_PAD_H;
+        children[i].style.padding_right = TAB_PAD_H;
+        children[i].style.padding_top = TAB_PAD_V;
+        children[i].style.padding_bottom = TAB_PAD_V;
+        children[i].style.border_top_left_radius = 6;
+        children[i].style.border_top_right_radius = 6;
+        children[i].style.background_color = if (tab_idx == g_active_tab)
+            layout.Color.rgb(30, 40, 56)
+        else
+            layout.Color.rgb(17, 22, 30);
+        children[i].hoverable = true;
+        if (tab_idx < MAX_TABS) {
+            children[i].handlers.on_press = g_tab_click_callbacks[tab_idx];
+        }
+    }
+
+    // Spacer — flex-grows to push window controls to the right edge.
+    children[tab_count] = .{};
+    children[tab_count].style.flex_grow = 1;
+
+    // Window controls. Using unicode dashes/squares/X so we don't need icons.
+    const ctrl_labels = [_][]const u8{ "\u{2013}", "\u{25A1}", "\u{00D7}" };
+    const ctrl_handlers = [_]*const fn () void{ onWinMinimize, onWinMaximize, onWinClose };
+    const ctrl_hover_bg = [_]layout.Color{
+        layout.Color.rgb(40, 46, 56),
+        layout.Color.rgb(40, 46, 56),
+        layout.Color.rgb(200, 40, 40),
+    };
+    _ = ctrl_hover_bg; // future use — framework doesn't expose hover background yet
+    for (0..control_count) |k| {
+        const idx = tab_count + 1 + k;
+        children[idx] = .{};
+        children[idx].text = ctrl_labels[k];
+        children[idx].font_size = 16;
+        children[idx].text_color = layout.Color.rgb(200, 204, 212);
+        children[idx].style.width = 36;
+        children[idx].style.height = 26;
+        children[idx].style.padding_top = 2;
+        children[idx].style.align_items = .center;
+        children[idx].style.justify_content = .center;
+        children[idx].style.text_align = .center;
+        children[idx].style.border_top_left_radius = 4;
+        children[idx].style.border_top_right_radius = 4;
+        children[idx].hoverable = true;
+        children[idx].handlers.on_press = ctrl_handlers[k];
+    }
+
+    var chrome: Node = .{};
+    chrome.style.height = CHROME_HEIGHT;
+    chrome.style.flex_direction = .row;
+    chrome.style.align_items = .end;
+    chrome.style.gap = 3;
+    chrome.style.padding_left = CHROME_PAD;
+    chrome.style.padding_right = CHROME_PAD;
+    chrome.style.background_color = layout.Color.rgb(8, 11, 15);
+    // Empty chrome space drags the (borderless) window. Tab + control buttons
+    // have on_press which overrides drag in framework/engine.zig's hitTestChrome.
+    chrome.window_drag = true;
+    chrome.children = children;
+    return chrome;
+}
+
+/// Build four invisible absolute-positioned edge nodes with window_resize=true
+/// so the (borderless) window can still be resized by dragging its edges.
+/// Corners are auto-detected in chromeResizeEdge (framework/engine.zig) from
+/// cursor position within a 20px threshold of the window corners.
+fn buildResizeEdges(arena: std.mem.Allocator) ?[]Node {
+    const edges = arena.alloc(Node, 4) catch return null;
+
+    // Top — thin (3px) so it barely overlaps the chrome's click area.
+    edges[0] = .{};
+    edges[0].style.position = .absolute;
+    edges[0].style.top = 0;
+    edges[0].style.left = 0;
+    edges[0].style.right = 0;
+    edges[0].style.height = 3;
+    edges[0].window_resize = true;
+
+    // Bottom
+    edges[1] = .{};
+    edges[1].style.position = .absolute;
+    edges[1].style.bottom = 0;
+    edges[1].style.left = 0;
+    edges[1].style.right = 0;
+    edges[1].style.height = 6;
+    edges[1].window_resize = true;
+
+    // Left
+    edges[2] = .{};
+    edges[2].style.position = .absolute;
+    edges[2].style.top = 0;
+    edges[2].style.bottom = 0;
+    edges[2].style.left = 0;
+    edges[2].style.width = 6;
+    edges[2].window_resize = true;
+
+    // Right
+    edges[3] = .{};
+    edges[3].style.position = .absolute;
+    edges[3].style.top = 0;
+    edges[3].style.bottom = 0;
+    edges[3].style.right = 0;
+    edges[3].style.width = 6;
+    edges[3].window_resize = true;
+
+    return edges;
+}
+
 fn rebuildTree() void {
     _ = g_arena.reset(.retain_capacity);
     const arena = g_arena.allocator();
-    if (g_root_child_ids.items.len == 0) {
+
+    const chrome_opt = if (DEV_MODE) buildChromeNode(arena) else null;
+    const resize_edges = if (BORDERLESS_MODE) buildResizeEdges(arena) else null;
+    const cart_child_count = g_root_child_ids.items.len;
+    const chrome_count: usize = if (chrome_opt != null) 1 else 0;
+    const edge_count: usize = if (resize_edges) |e| e.len else 0;
+
+    if (cart_child_count == 0 and chrome_count == 0 and edge_count == 0) {
         g_root.children = &.{};
         return;
     }
-    const out = arena.alloc(Node, g_root_child_ids.items.len) catch return;
-    for (g_root_child_ids.items, 0..) |cid, i| {
-        const src = g_node_by_id.get(cid) orelse { out[i] = .{}; continue; };
-        out[i] = src.*;
-        out[i].children = materializeChildren(arena, cid);
+
+    g_root.style.flex_direction = .column;
+
+    // When the chrome exists, wrap the cart's top-level children in a
+    // flex-grow container so the cart's `height: '100%'` is relative to the
+    // remaining space (window - chrome), not the full window. Without this
+    // wrapper, chrome (32px) + cart (100% of full window) overflows and the
+    // cart's bottom toolbar disappears below the visible area.
+    const use_wrapper = chrome_count > 0 and cart_child_count > 0;
+    const wrapper_count: usize = if (use_wrapper) 1 else 0;
+    const flat_cart_count: usize = if (use_wrapper) 0 else cart_child_count;
+
+    const total = chrome_count + wrapper_count + flat_cart_count + edge_count;
+    const out = arena.alloc(Node, total) catch return;
+
+    if (chrome_opt) |c| out[0] = c;
+
+    if (use_wrapper) {
+        // Materialize the cart's children into the wrapper's children array.
+        const cart_nodes = arena.alloc(Node, cart_child_count) catch return;
+        for (g_root_child_ids.items, 0..) |cid, i| {
+            const src = g_node_by_id.get(cid) orelse { cart_nodes[i] = .{}; continue; };
+            cart_nodes[i] = src.*;
+            cart_nodes[i].children = materializeChildren(arena, cid);
+        }
+        var wrapper: Node = .{};
+        wrapper.style.flex_grow = 1;
+        wrapper.style.flex_direction = .column;
+        wrapper.style.overflow = .hidden;
+        wrapper.style.width = null;
+        wrapper.children = cart_nodes;
+        out[chrome_count] = wrapper;
+    } else {
+        // No chrome — keep the original flat layout used by non-dev builds.
+        for (g_root_child_ids.items, 0..) |cid, i| {
+            const dst_idx = chrome_count + i;
+            const src = g_node_by_id.get(cid) orelse { out[dst_idx] = .{}; continue; };
+            out[dst_idx] = src.*;
+            out[dst_idx].children = materializeChildren(arena, cid);
+        }
+    }
+
+    // Resize edges go LAST so hitTestChrome (which walks children in reverse)
+    // checks them first. A cursor near a window edge gets a resize cursor
+    // before the chrome's drag region takes over.
+    if (resize_edges) |edges| {
+        const base = chrome_count + wrapper_count + flat_cart_count;
+        for (edges, 0..) |edge, i| out[base + i] = edge;
     }
     g_root.children = out;
     g_root.style.width = null;
     g_root.style.height = null;
+}
+
+// ── Dev reload helpers ──────────────────────────────────────────
+
+fn readBundleFromDisk() ![]u8 {
+    const file = try std.fs.cwd().openFile(DEV_BUNDLE_PATH, .{});
+    defer file.close();
+    const stat = try file.stat();
+    const buf = try g_alloc.alloc(u8, stat.size);
+    errdefer g_alloc.free(buf);
+    const n = try file.readAll(buf);
+    return buf[0..n];
+}
+
+fn bundleMtimeOrZero() i128 {
+    const s = std.fs.cwd().statFile(DEV_BUNDLE_PATH) catch return 0;
+    return s.mtime;
+}
+
+fn maybeScheduleReload() void {
+    if (!DEV_MODE) return;
+    g_mtime_poll_counter +%= 1;
+    // Poll every 16 ticks (~250ms at 60fps) — cheap, responsive enough.
+    if (g_mtime_poll_counter & 0xF != 0) return;
+    const mt = bundleMtimeOrZero();
+    if (mt != 0 and mt != g_last_bundle_mtime) {
+        g_last_bundle_mtime = mt;
+        g_reload_pending = true;
+    }
+}
+
+fn clearTreeStateForReload() void {
+    // Drop the engine's reference to the current node tree BEFORE freeing any
+    // memory it points into. The engine paints from g_root.children each
+    // frame — leave it pointing at stale memory and we SIGSEGV on paint.
+    g_root.children = &.{};
+
+    for (g_press_expr_pool.items) |s| g_alloc.free(s);
+    g_press_expr_pool.clearRetainingCapacity();
+
+    for (g_pending_flush.items) |batch| g_alloc.free(batch);
+    g_pending_flush.clearRetainingCapacity();
+
+    // Unregister every live input slot so framework/input.zig doesn't keep
+    // dispatching callbacks that read into the freed Node pool.
+    var slot_it = g_input_slot_by_node_id.valueIterator();
+    while (slot_it.next()) |slot| input.unregister(slot.*);
+    g_input_slot_by_node_id.clearRetainingCapacity();
+    for (&g_node_id_by_input_slot) |*v| v.* = 0;
+
+    // Destroy every Node struct. node.text ownership is mixed (some g_alloc
+    // dupes, some slices into framework/input.zig's buffers) so we leak the
+    // text for dev-mode safety — kilobytes per reload, acceptable.
+    var node_it = g_node_by_id.valueIterator();
+    while (node_it.next()) |n_ptr| g_alloc.destroy(n_ptr.*);
+    g_node_by_id.clearRetainingCapacity();
+
+    var cid_it = g_children_ids.valueIterator();
+    while (cid_it.next()) |list| list.deinit(g_alloc);
+    g_children_ids.clearRetainingCapacity();
+
+    // The root-child list is populated by APPEND_ROOT; clear so new React
+    // mounts don't see stale IDs mixed with fresh ones.
+    g_root_child_ids.clearRetainingCapacity();
+
+    // Arena holds only materializeChildren output (rebuilt every frame from
+    // g_children_ids + g_node_by_id). Safe to reset now that g_root.children
+    // no longer references it.
+    _ = g_arena.reset(.retain_capacity);
+
+    g_dirty = true;
+}
+
+fn performReload() void {
+    // Re-read the active tab's source file. Only the first tab ("main") has a
+    // disk-backed source; others come from IPC pushes and have no disk file.
+    if (g_active_tab != 0) return;
+    const new_bundle = readBundleFromDisk() catch |e| {
+        std.log.warn("[dev] bundle read failed: {}, skipping reload", .{e});
+        return;
+    };
+    replaceActiveTabBundle(new_bundle);
+    evalActiveTab();
+    std.log.info("[dev] reloaded '{s}' ({d} bytes)", .{ tabName(g_active_tab), new_bundle.len });
+}
+
+/// Swap the active tab's stored bundle bytes for `new_bundle`. Frees the old
+/// storage. Takes ownership of `new_bundle`.
+fn replaceActiveTabBundle(new_bundle: []u8) void {
+    g_alloc.free(g_tabs.items[g_active_tab].bundle);
+    g_tabs.items[g_active_tab].bundle = new_bundle;
+    if (g_active_tab == 0) {
+        // Keep the legacy fields in sync for the disk-backed "main" tab.
+        g_dev_bundle_buf = new_bundle;
+    }
+}
+
+/// Tear down the JS world and re-eval the currently-active tab's bundle.
+fn evalActiveTab() void {
+    std.log.info("[dev] evalActiveTab: clearing tree", .{});
+    clearTreeStateForReload();
+    std.log.info("[dev] evalActiveTab: tearing down VM", .{});
+    qjs_runtime.teardownVM();
+    std.log.info("[dev] evalActiveTab: initVM", .{});
+    qjs_runtime.initVM();
+    std.log.info("[dev] evalActiveTab: appInit", .{});
+    appInit();
+    std.log.info("[dev] evalActiveTab: evalScript ({d} bytes)", .{g_tabs.items[g_active_tab].bundle.len});
+    qjs_runtime.evalScript(g_tabs.items[g_active_tab].bundle);
+    std.log.info("[dev] evalActiveTab: done", .{});
+}
+
+fn tabName(idx: usize) []const u8 {
+    return g_tabs.items[idx].name;
+}
+
+/// Find a tab by name. Returns its index or null.
+fn findTab(name: []const u8) ?usize {
+    for (g_tabs.items, 0..) |t, i| {
+        if (std.mem.eql(u8, t.name, name)) return i;
+    }
+    return null;
+}
+
+/// Install a tab. If one with `name` already exists, replaces its bundle.
+/// Otherwise appends a new tab. Takes ownership of both slices.
+fn upsertTab(name: []u8, bundle: []u8) !usize {
+    if (findTab(name)) |idx| {
+        g_alloc.free(name); // duplicate — free the new name
+        g_alloc.free(g_tabs.items[idx].bundle);
+        g_tabs.items[idx].bundle = bundle;
+        return idx;
+    }
+    try g_tabs.append(g_alloc, .{ .name = name, .bundle = bundle });
+    return g_tabs.items.len - 1;
+}
+
+fn switchToTab(idx: usize) void {
+    if (idx >= g_tabs.items.len) return;
+    g_active_tab = idx;
+    evalActiveTab();
+    std.log.info("[dev] active tab: '{s}'", .{tabName(idx)});
+}
+
+/// Pull any pending IPC push messages and act on them. Called each tick.
+fn processIncomingPushes() void {
+    while (dev_ipc.takeNext()) |msg| {
+        const idx = upsertTab(msg.name, msg.bundle) catch |e| {
+            std.log.warn("[dev] upsertTab failed: {}", .{e});
+            continue;
+        };
+        switchToTab(idx);
+    }
 }
 
 // ── init / tick ─────────────────────────────────────────────────
@@ -958,12 +1643,41 @@ fn appInit() void {
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
     qjs_runtime.registerHostFn("__hostFlush", @ptrCast(&host_flush), 1);
     qjs_runtime.registerHostFn("__getInputTextForNode", @ptrCast(&host_get_input_text_for_node), 1);
+
+    // Persistent-store substrate for runtime/hooks/localstore. Best-effort —
+    // if init fails the hooks gracefully no-op (see qjs_bindings.storeGet etc.).
+    fs_mod.init("reactjit") catch |e| std.log.warn("fs init failed: {}", .{e});
+    localstore.init() catch |e| std.log.warn("localstore init failed: {}", .{e});
 }
 
 fn appTick(now: u32) void {
+    // Dev-mode: accept incoming IPC pushes (may switch the active tab) and
+    // check the active tab's disk source for mtime-triggered reloads. Either
+    // path tears down the JS world and re-evals before the rest of the frame.
+    if (DEV_MODE) {
+        dev_ipc.pollOnce();
+        processIncomingPushes();
+    }
+    maybeScheduleReload();
+    if (g_reload_pending) {
+        g_reload_pending = false;
+        performReload();
+        return;
+    }
+
+    // Flush async hook events (http, future: process, ws). Fires __ffiEmit for
+    // any responses the background workers completed since the last tick.
+    qjs_bindings.tickDrain();
+
     // Fire any JS timers whose due-time has arrived. setTimeout/setInterval
     // in the bundle are implemented against this — see runtime/index.tsx.
+    // This may append new batches to g_pending_flush via React commits triggered
+    // from handlers that ran inside timers. Drain after.
     qjs_runtime.callGlobalInt("__jsTick", @intCast(now));
+
+    // Apply any CMD batches that accumulated during press events since last tick.
+    // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
+    drainPendingFlushes();
 
     if (g_dirty) {
         snapshotRuntimeState();
@@ -987,12 +1701,39 @@ pub fn main() !void {
 
     g_root = .{};
 
+    const initial_bundle: []const u8 = if (DEV_MODE) blk: {
+        g_dev_bundle_buf = readBundleFromDisk() catch |e| {
+            std.log.err("[dev] initial bundle.js read failed: {}", .{e});
+            return e;
+        };
+        g_last_bundle_mtime = bundleMtimeOrZero();
+
+        // Seed the tab registry with the disk-backed "main" tab.
+        const name_copy = try g_alloc.dupe(u8, "main");
+        try g_tabs.append(g_alloc, .{ .name = name_copy, .bundle = g_dev_bundle_buf });
+        g_active_tab = 0;
+
+        // dev_ipc must allocate push buffers with the SAME allocator qjs_app
+        // uses when it later frees them via upsertTab. Cross-allocator free is
+        // UB — this caller caused the SIGSEGV on re-push (2026-04-19 fix).
+        dev_ipc.setAllocator(g_alloc);
+        dev_ipc.start();
+
+        std.log.info("[dev] dev mode — watching bundle.js ({d} bytes), IPC @ {s}", .{ g_dev_bundle_buf.len, dev_ipc.SOCKET_PATH });
+        break :blk g_dev_bundle_buf;
+    } else BUNDLE_BYTES;
+
     try engine.run(.{
-        .title = "qjs-d152",
+        .title = WINDOW_TITLE,
         .root = &g_root,
-        .js_logic = BUNDLE_BYTES,
+        .js_logic = initial_bundle,
         .lua_logic = "",
         .init = appInit,
         .tick = appTick,
+        // In dev mode, strip the OS titlebar so our tab chrome sits in the
+        // titlebar position. Empty chrome area gets window_drag; tab buttons
+        // with on_press override drag so clicks still switch tabs.
+        .borderless = BORDERLESS_MODE,
+        .set_canvas_node_position = setCanvasNodePosition,
     });
 }

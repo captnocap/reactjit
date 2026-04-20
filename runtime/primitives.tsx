@@ -61,6 +61,23 @@ GraphBase.Path = (props: any) => React.createElement('Graph.Path', props, props.
 GraphBase.Node = (props: any) => React.createElement('Graph.Node', props, props.children);
 export const Graph: any = GraphBase;
 
+// ── Effect — per-pixel generative surface ─────────────────────
+//
+// The onRender callback fires each frame with an `e` context:
+//   e.width, e.height, e.time, e.dt, e.frame
+//   e.mouse_x, e.mouse_y, e.mouse_inside
+//   e.setPixel(x, y, r, g, b, a)  — floats 0..1
+//   e.sin/cos/sqrt/abs/clamp/mod
+//   e.noise2(x, y) / e.noise3(x, y, z) / e.fbm(x, y, octaves)
+//   e.hsv(h, s, v) / e.hsl(h, s, l)  — return [r, g, b]
+//   e.fade(alpha) / e.clearColor(r, g, b, a)
+//
+// Two modes:
+//   <Effect onRender={...} style={{...}} />     — draws in place
+//   <Effect onRender={...} background />        — paints behind parent's children
+//   <Effect onRender={...} name="myfx" />       — hidden surface referenced by fillEffect
+export const Effect: any = (props: any) => React.createElement('Effect', props, props.children);
+
 // ── Native — universal escape hatch for host-handled types ──
 //
 // Any type string the Zig host recognizes can be created without a JSX

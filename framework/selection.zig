@@ -76,7 +76,10 @@ pub fn resolvePending() void {
             clear();
             return;
         }
-        const node = hit.?;
+        const node = hit.?.node;
+        // Scroll-adjusted mouse coords (content-space, aligned with node.computed.x/y).
+        const adj_mx = pending_mx + hit.?.scroll_x;
+        const adj_my = pending_my + hit.?.scroll_y;
 
         // Double/triple click detection
         if (pending_now - sel_last_click < DOUBLE_CLICK_MS and sel_node == node) {
@@ -91,7 +94,7 @@ pub fn resolvePending() void {
         if (sel_click_count == 2) {
             // Double click — select word
             if (node.text) |txt| {
-                const idx = charIndexAtPos(txt, node, pending_mx, pending_my);
+                const idx = charIndexAtPos(txt, node, adj_mx, adj_my);
                 const word = wordBoundsAt(txt, idx);
                 sel_node = node;
                 sel_end_node = node;
@@ -118,7 +121,7 @@ pub fn resolvePending() void {
 
         // Single click — start new selection
         if (node.text) |_| {
-            const idx = charIndexAtPos(node.text.?, node, pending_mx, pending_my);
+            const idx = charIndexAtPos(node.text.?, node, adj_mx, adj_my);
             sel_node = node;
             sel_end_node = node;
             sel_start = idx;
@@ -138,12 +141,15 @@ pub fn resolvePending() void {
         // Hit-test for the text node under the current mouse position
         const drag_hit = hitTestText(root, pending_mx, pending_my);
 
-        if (drag_hit) |drag_node| {
+        if (drag_hit) |hit_res| {
+            const drag_node = hit_res.node;
             if (drag_node == anchor_node) {
                 // Same node — single-node selection
                 sel_end_node = anchor_node;
                 if (anchor_node.text) |_| {
-                    const idx = charIndexAtPos(anchor_node.text.?, anchor_node, pending_mx, pending_my);
+                    const adj_mx = pending_mx + hit_res.scroll_x;
+                    const adj_my = pending_my + hit_res.scroll_y;
+                    const idx = charIndexAtPos(anchor_node.text.?, anchor_node, adj_mx, adj_my);
                     sel_start = @min(sel_anchor, idx);
                     sel_end = @max(sel_anchor, idx);
                 }
@@ -160,9 +166,17 @@ pub fn resolvePending() void {
             }
         } else {
             // Mouse is not over any text node — keep current selection
-            // but extend within the anchor node if possible
+            // but extend within the anchor node if possible. Look up the
+            // anchor node's ancestor scroll offset so the extend logic
+            // still works while dragging outside any text (e.g. into padding
+            // or off the side of a scrolling container).
             if (anchor_node.text) |_| {
-                const idx = charIndexAtPos(anchor_node.text.?, anchor_node, pending_mx, pending_my);
+                var sx: f32 = 0;
+                var sy: f32 = 0;
+                _ = scrollOffsetForNode(root, anchor_node, &sx, &sy);
+                const adj_mx = pending_mx + sx;
+                const adj_my = pending_my + sy;
+                const idx = charIndexAtPos(anchor_node.text.?, anchor_node, adj_mx, adj_my);
                 sel_start = @min(sel_anchor, idx);
                 sel_end = @max(sel_anchor, idx);
             }
@@ -409,9 +423,19 @@ fn isWordBreak(ch: u8) bool {
         ch == '"' or ch == '\'' or ch == '/' or ch == '\\';
 }
 
-/// Hit test for text nodes — returns deepest node with text under (mx, my).
+const HitResult = struct {
+    node: *Node,
+    /// Accumulated scroll offset from all ancestor scroll containers.
+    /// Add these to the original screen-space mouse coords to get content-space coords
+    /// aligned with the hit node's `computed.x/y`.
+    scroll_x: f32,
+    scroll_y: f32,
+};
+
+/// Hit test for text nodes — returns deepest node with text under (mx, my)
+/// plus the cumulative scroll offset that was applied while descending into it.
 /// Scroll-aware: converts screen coords to content coords when entering scroll containers.
-fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
+fn hitTestText(node: *Node, mx: f32, my: f32) ?HitResult {
     if (node.style.display == .none) return null;
 
     // Scroll container: clip to visible bounds and adjust coords for children
@@ -429,14 +453,42 @@ fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        if (hitTestText(&node.children[i], child_mx, child_my)) |hit| return hit;
+        if (hitTestText(&node.children[i], child_mx, child_my)) |hit| {
+            var out = hit;
+            if (is_scroll) {
+                out.scroll_x += node.scroll_x;
+                out.scroll_y += node.scroll_y;
+            }
+            return out;
+        }
     }
     if (node.text != null) {
         if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
-            return node;
+            return .{ .node = node, .scroll_x = 0, .scroll_y = 0 };
         }
     }
     return null;
+}
+
+/// Walk from `node` to find `target`, accumulating scroll_x/y from every
+/// ancestor scroll container on the path. Returns true if target was found.
+/// On return, `sx.*` / `sy.*` hold the cumulative offset to add to a
+/// screen-space coord to make it content-space aligned with target.computed.
+fn scrollOffsetForNode(node: *Node, target: *Node, sx: *f32, sy: *f32) bool {
+    if (node == target) return true;
+    const ov = node.style.overflow;
+    const r = node.computed;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    for (node.children) |*child| {
+        if (scrollOffsetForNode(child, target, sx, sy)) {
+            if (is_scroll) {
+                sx.* += node.scroll_x;
+                sy.* += node.scroll_y;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Collect selected text into a buffer. Returns bytes written.

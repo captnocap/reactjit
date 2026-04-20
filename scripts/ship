@@ -40,17 +40,25 @@ if [[ -z "$NAME" ]]; then
     exit 1
 fi
 
-CART_FILE="cart/${NAME}.tsx"
-if [[ ! -f "$CART_FILE" ]]; then
-    echo "[ship] not found: $CART_FILE" >&2
+# Resolve cart entry: prefer cart/<name>/index.tsx (directory layout), fall
+# back to cart/<name>.tsx (single-file cart). Directory wins when both exist.
+if [[ -f "cart/${NAME}/index.tsx" ]]; then
+    CART_FILE="cart/${NAME}/index.tsx"
+elif [[ -f "cart/${NAME}.tsx" ]]; then
+    CART_FILE="cart/${NAME}.tsx"
+else
+    echo "[ship] not found: cart/${NAME}/index.tsx or cart/${NAME}.tsx" >&2
     exit 1
 fi
 
-# ── 1. Bundle cart/<name>.tsx via esbuild → bundle.js ────────────────
-echo "[ship] bundling $CART_FILE..."
-node scripts/build-bundle.mjs "$CART_FILE"
+# ── 1. Bundle cart entry via esbuild → bundle-<name>.js ──────────────
+# Per-cart bundle path means two parallel ships can't overwrite each other's
+# output. qjs_app.zig embeds `bundle-<app-name>.js` at compile time.
+BUNDLE_OUT="bundle-${NAME}.js"
+echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
 
-# ── 2. Compile qjs_app.zig (bundle.js embedded via @embedFile) ───────
+# ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
 if [[ "$DEBUG" -eq 1 ]]; then
     OPT_FLAG="-Doptimize=Debug"

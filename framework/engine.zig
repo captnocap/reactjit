@@ -608,6 +608,11 @@ pub const AppConfig = struct {
     /// Borderless window — removes OS window decorations (title bar, borders).
     /// The app must provide its own chrome using window_drag / window_resize nodes.
     borderless: bool = false,
+    /// Optional callback that writes canvas_gx/gy directly to the host's Node pool
+    /// (not the per-frame arena copy). Used by Alt+drag so the tile follows the
+    /// cursor without firing a per-motion setState through React (which would
+    /// re-render the entire Canvas.Node subtree every mouse event).
+    set_canvas_node_position: ?*const fn (id: u32, gx: f32, gy: f32) void = null,
 };
 
 // ── Text measurement (framework-owned) ──────────────────────────────────
@@ -769,6 +774,46 @@ fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
     return 0;
 }
 
+fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: f32, max_lines: u16, color: Color) f32 {
+    const final_a = @as(f32, @floatFromInt(color.a)) / 255.0 * g_paint_opacity;
+    gpu.resetInlineSlots();
+    if (node.text_effect) |ename| {
+        if (effects.getEffectFill(ename)) |info| {
+            gpu.setTextEffect(info.pixel_buf, info.width, info.height, info.screen_x, info.screen_y);
+        }
+    }
+    if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
+    const text_h = gpu.drawTextWrapped(
+        text, x, y, node.font_size, max_width,
+        @as(f32, @floatFromInt(color.r)) / 255.0,
+        @as(f32, @floatFromInt(color.g)) / 255.0,
+        @as(f32, @floatFromInt(color.b)) / 255.0,
+        final_a,
+        max_lines,
+    );
+    if (node.line_height > 0) gpu.setLineHeightOverride(0);
+    if (node.inline_glyphs) |glyphs| {
+        paintInlineGlyphs(glyphs, node.font_size);
+    }
+    if (node.text_effect != null) gpu.clearTextEffect();
+    if (node.href != null) {
+        const text_w = measureWidthOnly(text, node.font_size);
+        const underline_y = y + text_h - 2;
+        gpu.drawRect(
+            x,
+            underline_y,
+            text_w,
+            1,
+            @as(f32, @floatFromInt(color.r)) / 255.0,
+            @as(f32, @floatFromInt(color.g)) / 255.0,
+            @as(f32, @floatFromInt(color.b)) / 255.0,
+            final_a * 0.6,
+            0, 0, 0, 0, 0, 0,
+        );
+    }
+    return text_h;
+}
+
 fn measureImageCallback(_: []const u8) layout.ImageDims {
     return .{};
 }
@@ -842,12 +887,48 @@ var canvas_drag_node: ?*Node = null;
 var canvas_drag_last_x: f32 = 0;
 var canvas_drag_last_y: f32 = 0;
 
+// Canvas.Node move-drag state — Alt+drag on a Canvas.Node with onMove handler.
+// Per-motion updates go straight to the host Node pool (via AppConfig callback)
+// so the tile follows the cursor without firing a React setState on every
+// motion. One onMove dispatch fires on release to commit the final position
+// into React state. IDs (not pointers) because the arena is rebuilt per tick.
+var canvas_move_drag_id: u32 = 0;
+var canvas_move_drag_canvas_id: u32 = 0;
+var canvas_move_drag_offset_x: f32 = 0;
+var canvas_move_drag_offset_y: f32 = 0;
+var canvas_move_last_gx: f32 = 0;
+var canvas_move_last_gy: f32 = 0;
+
 // TextInput drag-select state
 var input_drag_active: bool = false;
 var input_drag_id: u8 = 0;
 var input_drag_node_x: f32 = 0; // node rect x (for computing local_x)
+var input_drag_node_y: f32 = 0; // node rect y (for computing local_y)
 var input_drag_node_pl: f32 = 0; // node padding-left
+var input_drag_node_pt: f32 = 0; // node padding-top
+var input_drag_max_width: f32 = 0;
 var input_drag_font_size: u16 = 0;
+
+fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32) u16 {
+    const typed = input.getText(id);
+    if (typed.len == 0) return 0;
+
+    if (g_text_engine) |te| {
+        const idx = if (input.isMultiline(id))
+            te.hitTestWrapped(
+                typed,
+                @max(@as(f32, 0), local_x),
+                @max(@as(f32, 0), local_y),
+                font_size,
+                @max(@as(f32, 1), max_width),
+            )
+        else
+            te.hitTestWrapped(typed, @max(@as(f32, 0), local_x), 0, font_size, 0);
+        return @intCast(@min(idx, typed.len));
+    }
+
+    return if (local_x <= 0) 0 else @intCast(@min(typed.len, @as(usize, std.math.maxInt(u16))));
+}
 
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; return; }
@@ -887,8 +968,7 @@ fn paintNode(node: *Node) void {
                 g_effect_bg_logged2 = true;
                 std.debug.print("[eng effect-bg-paint] firing rect={d}x{d}\n", .{ r.w, r.h });
             }
-            const _pce_ret = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
-            std.debug.print("[eng after-pce] ret={}\n", .{_pce_ret});
+            _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
         }
     }
 
@@ -1217,38 +1297,13 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
 
     if (node.text) |t| {
-        if (t.len > 0) {
+        // Skip text rendering for TextInput nodes — the input buffer paints instead
+        if (t.len > 0 and node.input_id == null) {
             const tc = node.text_color orelse Color.rgb(255, 255, 255);
             const pl = node.style.padLeft();
             const pt = node.style.padTop();
             const pr = node.style.padRight();
-            const final_a = @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity;
-            gpu.resetInlineSlots();
-            // Set up text effect if present
-            if (node.text_effect) |ename| {
-                if (effects.getEffectFill(ename)) |info| {
-                    gpu.setTextEffect(info.pixel_buf, info.width, info.height, info.screen_x, info.screen_y);
-                }
-            }
-            const text_h = gpu.drawTextWrapped(
-                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
-            );
-            // Render inline glyphs into recorded slot positions
-            if (node.inline_glyphs) |glyphs| {
-                paintInlineGlyphs(glyphs, node.font_size);
-            }
-            if (node.text_effect != null) gpu.clearTextEffect();
-            // Underline for href links — span text content width, not node width
-            if (node.href != null) {
-                const text_w = measureWidthOnly(t, node.font_size);
-                const underline_y = r.y + pt + text_h - 2;
-                gpu.drawRect(r.x + pl, underline_y, text_w, 1,
-                    @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
-                    @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
-                    0, 0, 0, 0, 0, 0);
-            }
+            _ = drawNodeTextCommon(node, t, r.x + pl, r.y + pt, @max(1.0, r.w - pl - pr), node.number_of_lines, tc);
         }
     }
 
@@ -1333,59 +1388,69 @@ fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
 /// Paint TextInput: typed text, placeholder, selection highlight, blinking cursor.
 noinline fn paintTextInput(node: *Node, id: u8) void {
     const r = node.computed;
+    const pl = node.style.padLeft();
+    const pt = node.style.padTop();
+    const pr = node.style.padRight();
+    const pb = node.style.padBottom();
+    const inner_h = @max(@as(f32, 0), r.h - pt - pb);
     if (input.isFocused(id)) {
         const pad: f32 = 4;
         gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30);
     }
     const typed = input.getText(id);
     const is_placeholder = typed.len == 0;
+    const is_multiline = input.isMultiline(id);
+    const max_w = @max(@as(f32, 1), r.w - pl - pr);
+    var text_y = r.y + pt;
+    if (!is_multiline) {
+        const metrics = measureCallback(
+            if (!is_placeholder) typed else (node.placeholder orelse ""),
+            node.font_size,
+            max_w,
+            node.letter_spacing,
+            node.line_height,
+            1,
+            true,
+        );
+        if (metrics.height > 0 and inner_h > metrics.height) {
+            text_y += @floor((inner_h - metrics.height) / 2);
+        }
+    }
+    text_y = @floor(text_y);
     if (!is_placeholder) {
         const sel = input.getSelection(id);
         if (sel.hi > sel.lo) {
-            const pl = node.style.padLeft();
-            const pt = node.style.padTop();
-            const pr = node.style.padRight();
-            gpu.drawSelectionRects(typed, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr), sel.lo, sel.hi);
+            if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
+            gpu.drawSelectionRects(typed, r.x + pl, text_y, node.font_size, max_w, sel.lo, sel.hi);
+            if (node.line_height > 0) gpu.setLineHeightOverride(0);
         }
     }
-    const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
-    if (display_text) |t| {
-        if (t.len > 0) {
-            const tc = if (is_placeholder)
-                Color.rgb(100, 100, 110)
-            else
-                (node.text_color orelse Color.rgb(220, 220, 220));
-            const pl = node.style.padLeft();
-            const pt = node.style.padTop();
-            const pr = node.style.padRight();
-            _ = gpu.drawTextWrapped(
-                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-                @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0, 0,
-            );
+    if (node.input_paint_text) {
+        const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
+        if (display_text) |t| {
+            if (t.len > 0) {
+                const tc = if (is_placeholder)
+                    Color.rgb(100, 100, 110)
+                else
+                    (node.text_color orelse Color.rgb(220, 220, 220));
+                const max_lines: u16 = if (is_multiline) 0 else 1;
+                _ = drawNodeTextCommon(node, t, r.x + pl, text_y, max_w, max_lines, tc);
+            }
         }
     }
     if (input.isFocused(id) and g_cursor_visible) {
         const cursor_pos = input.getCursorPos(id);
-        const pl = node.style.padLeft();
-        const pt = node.style.padTop();
-        const max_w = r.w - pl - node.style.padRight();
-        const is_multiline = input.isMultiline(id);
-        const metrics = measureCallback(
-            typed[0..cursor_pos],
-            node.font_size,
-            max_w,
-            0,
-            0,
-            if (is_multiline) 0 else 1,
-            !is_multiline,
-        );
-        const cx = r.x + pl + metrics.width;
-        // Cursor height = one line of text, not the full input height.
-        // For multi-line inputs, position cursor at the baseline of the current line.
+        var cursor_x: f32 = 0;
+        var cursor_y: f32 = 0;
+        if (g_text_engine) |te| {
+            const point = te.byteToPos(typed, @as(usize, cursor_pos), node.font_size, if (is_multiline) max_w else 0);
+            cursor_x = point.x;
+            cursor_y = point.y;
+        }
+        const cx = r.x + pl + cursor_x;
         const line_h: f32 = @as(f32, @floatFromInt(node.font_size)) * 1.3;
-        const cy = r.y + pt + metrics.height - line_h;
-        gpu.drawRect(cx, @max(cy, r.y + pt), 2, @max(line_h, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
+        const cy = text_y + cursor_y;
+        gpu.drawRect(cx, @max(cy, text_y), 2, @max(@min(line_h, inner_h), 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
     }
 }
 
@@ -1568,11 +1633,14 @@ fn paintCanvasChild(child: *Node, child_idx: u16, hovered: ?u16, selected: ?u16)
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
     const ct = node.canvas_type.?;
-    // Apply initial camera only once per canvas instance — re-renders from
-    // state updates rebuild the Node tree with canvas_view_set=true each time,
-    // which would otherwise reset the user's pan/zoom on every state change.
-    if (node.canvas_view_set and !canvas.cameraIsActive(node.canvas_id)) {
-        canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
+    // Honor cart-driven viewX/viewY/viewZoom updates, but only when the prop
+    // values have actually changed since the last paint — otherwise a routine
+    // re-render would snap the camera back and clobber user pan/zoom.
+    // applyPropView tracks per-canvas last-applied values and short-circuits
+    // when nothing changed. focusWorkerById (cart) calls setViewX/setViewY →
+    // prop changes → camera recentres on the newly selected card.
+    if (node.canvas_view_set) {
+        _ = canvas.applyPropView(node.canvas_id, node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
         node.canvas_view_set = false;
     }
     // Apply drift — continuous camera animation (pauses during drag or node selection)
@@ -1644,8 +1712,11 @@ pub fn run(config_in: AppConfig) !void {
     crashlog.ignoreSignal(15); // SIGTERM (catch and log instead of die)
     crashlog.ignoreSignal(20); // SIGTSTP
 
-    // External watchdog: monitors RSS spikes + heartbeat from a separate process
-    watchdog.init();
+    // External watchdog: monitors RSS spikes + heartbeat from a separate process.
+    // Skipped in dev mode — Debug builds allocate 50MB+ per click-driven React
+    // commit which trips the spike threshold and SIGKILLs the host silently.
+    const is_dev = if (@hasDecl(build_options, "dev_mode")) build_options.dev_mode else false;
+    if (!is_dev) watchdog.init();
 
     // Debug server — auto-start if TSZ_DEBUG=1 (before SDL so it works headless)
     debug_server.init(config.title);
@@ -1654,7 +1725,7 @@ pub fn run(config_in: AppConfig) !void {
     // Witness — record/replay for regression testing
     witness.init();
 
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO)) return error.SDLInitFailed;
     defer {
         c.SDL_Quit();
         watchdog.markCleanExit();
@@ -1830,6 +1901,8 @@ pub fn run(config_in: AppConfig) !void {
             if (check(&config)) {
                 // Reset stale pointers from the old .so
                 canvas_drag_node = null;
+                canvas_move_drag_id = 0;
+                canvas_move_drag_canvas_id = 0;
                 input_drag_active = false;
                 term_sel_dragging = false;
                 hovered_node = null;
@@ -1880,6 +1953,20 @@ pub fn run(config_in: AppConfig) !void {
                     geometry.save(window);
                 },
                 c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
+                    // Standard OS window behavior: double-click on a drag region
+                    // (the borderless app's titlebar) toggles maximize/restore.
+                    if (config.borderless and event.button.button == c.SDL_BUTTON_LEFT and event.button.clicks == 2) {
+                        if (g_chrome_root) |croot| {
+                            const dmx: f32 = event.button.x;
+                            const dmy: f32 = event.button.y;
+                            if (hitTestChrome(croot, dmx, dmy)) |ht| {
+                                if (ht == c.SDL_HITTEST_DRAGGABLE) {
+                                    windowMaximize();
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                     luajit_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface input forwarding (VNC mouse) — check first
                     {
@@ -1920,6 +2007,39 @@ pub fn run(config_in: AppConfig) !void {
                         const mx: f32 = event.button.x;
                         const my: f32 = event.button.y;
                         const events = @import("events.zig");
+                        // Alt+click on a Canvas.Node with canvas_move_draggable starts a
+                        // position-drag that the cart commits via onMove(gx, gy) on release.
+                        const mod_state = c.SDL_GetModState();
+                        if ((mod_state & c.SDL_KMOD_ALT) != 0) {
+                            if (events.findCanvasNode(config.root, mx, my)) |cn| {
+                                const vp_cx = cn.computed.x + cn.computed.w / 2;
+                                const vp_cy = cn.computed.y + cn.computed.h / 2;
+                                const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                                var target: ?*Node = null;
+                                for (cn.children) |*child| {
+                                    if (child.canvas_node and child.canvas_move_draggable and hoverTestCanvasNode(child, gpos)) {
+                                        target = child;
+                                        break;
+                                    } else if (!child.canvas_path and !child.canvas_clamp and !child.canvas_node) {
+                                        for (child.children) |*gc| {
+                                            if (gc.canvas_node and gc.canvas_move_draggable and hoverTestCanvasNode(gc, gpos)) {
+                                                target = gc;
+                                                break;
+                                            }
+                                        }
+                                        if (target != null) break;
+                                    }
+                                }
+                                if (target) |node| {
+                                    canvas_move_drag_id = node.scroll_persist_slot;
+                                    canvas_move_drag_canvas_id = cn.scroll_persist_slot;
+                                    canvas_move_drag_offset_x = node.canvas_gx - gpos[0];
+                                    canvas_move_drag_offset_y = node.canvas_gy - gpos[1];
+                                    input.unfocus();
+                                    continue;
+                                }
+                            }
+                        }
                         const hit = layout.hitTest(config.root, mx, my);
                         const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.handlers.lua_on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
@@ -1929,19 +2049,26 @@ pub fn run(config_in: AppConfig) !void {
                                 const clicks = input.trackClick(now_ms);
                                 input.focus(id);
                                 const pl = h.style.padLeft();
+                                const pt = h.style.padTop();
+                                const pr = h.style.padRight();
                                 const local_x = mx - h.computed.x - pl;
+                                const local_y = my - h.computed.y - pt;
+                                const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr);
                                 if (clicks == 3) {
                                     input.selectAll(id);
                                 } else if (clicks == 2) {
-                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    input.setCursorPos(id, cursor_pos);
                                     input.selectWord(id);
                                 } else {
-                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    input.setCursorPos(id, cursor_pos);
                                     input.startDrag(id);
                                     input_drag_active = true;
                                     input_drag_id = id;
                                     input_drag_node_x = h.computed.x;
+                                    input_drag_node_y = h.computed.y;
                                     input_drag_node_pl = pl;
+                                    input_drag_node_pt = pt;
+                                    input_drag_max_width = h.computed.w - pl - pr;
                                     input_drag_font_size = h.font_size;
                                 }
                             } else if (h.handlers.on_press) |handler| {
@@ -2009,12 +2136,20 @@ pub fn run(config_in: AppConfig) !void {
                                 if (h.input_id) |id| {
                                     input.focus(id);
                                     const pl = h.style.padLeft();
+                                    const pt = h.style.padTop();
+                                    const pr = h.style.padRight();
                                     const local_x = gpos[0] - h.computed.x - pl;
-                                    input.setCursorFromX(id, local_x, h.font_size);
+                                    const local_y = gpos[1] - h.computed.y - pt;
+                                    const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr);
+                                    input.setCursorPos(id, cursor_pos);
+                                    input.startDrag(id);
                                     input_drag_active = true;
                                     input_drag_id = id;
                                     input_drag_node_x = h.computed.x;
+                                    input_drag_node_y = h.computed.y;
                                     input_drag_node_pl = pl;
+                                    input_drag_node_pt = pt;
+                                    input_drag_max_width = h.computed.w - pl - pr;
                                     input_drag_font_size = h.font_size;
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
@@ -2107,7 +2242,9 @@ pub fn run(config_in: AppConfig) !void {
                     // TextInput drag selection
                     if (input_drag_active) {
                         const local_x = mx - input_drag_node_x - input_drag_node_pl;
-                        input.updateDrag(input_drag_id, local_x, input_drag_font_size);
+                        const local_y = my - input_drag_node_y - input_drag_node_pt;
+                        const cursor_pos = hitTestInputByte(input_drag_id, local_x, local_y, input_drag_font_size, input_drag_max_width);
+                        input.updateDragToPos(input_drag_id, cursor_pos);
                     }
                     updateHover(config.root, mx, my);
                     // Context menu hover tracking
@@ -2147,7 +2284,28 @@ pub fn run(config_in: AppConfig) !void {
                         }
                     }
                     const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
-                    if (dragging_left and canvas_drag_node != null) {
+                    if (dragging_left and canvas_move_drag_id != 0) {
+                        // Canvas.Node position drag — write the new graph coords straight
+                        // into the host Node pool (so next frame's materialized arena picks
+                        // them up). The React state commit happens once on mouse-up — going
+                        // through setState per motion re-renders the whole tile subtree and
+                        // floods the flush pipeline with multi-KB UPDATE batches.
+                        if (findNodeByScrollSlot(config.root, canvas_move_drag_canvas_id)) |cn| {
+                            const vp_cx = cn.computed.x + cn.computed.w / 2;
+                            const vp_cy = cn.computed.y + cn.computed.h / 2;
+                            const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
+                            canvas_move_last_gx = gpos[0] + canvas_move_drag_offset_x;
+                            canvas_move_last_gy = gpos[1] + canvas_move_drag_offset_y;
+                            if (config.set_canvas_node_position) |setFn| {
+                                setFn(canvas_move_drag_id, canvas_move_last_gx, canvas_move_last_gy);
+                            }
+                            if (findNodeByScrollSlot(config.root, canvas_move_drag_id)) |node| {
+                                node.canvas_gx = canvas_move_last_gx;
+                                node.canvas_gy = canvas_move_last_gy;
+                            }
+                            state_mod.markDirty();
+                        }
+                    } else if (dragging_left and canvas_drag_node != null) {
                         // Canvas pan — built-in
                         const dx = mx - canvas_drag_last_x;
                         const dy = my - canvas_drag_last_y;
@@ -2167,6 +2325,23 @@ pub fn run(config_in: AppConfig) !void {
                         if (render_surfaces.handleMouseUp(rmx, rmy, event.button.button)) continue;
                     }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
+                        // Commit Canvas.Node move-drag — fire onMove once with the final
+                        // pool-resident position so the cart's React state catches up.
+                        if (canvas_move_drag_id != 0) {
+                            var buf: [160]u8 = undefined;
+                            if (std.fmt.bufPrintZ(&buf, "__dispatchCanvasMove({d},{d},{d})", .{
+                                canvas_move_drag_id,
+                                canvas_move_last_gx,
+                                canvas_move_last_gy,
+                            })) |sentinel| {
+                                qjs_runtime.callGlobal("__beginJsEvent");
+                                qjs_runtime.evalExpr(sentinel);
+                                qjs_runtime.callGlobal("__endJsEvent");
+                                state_mod.markDirty();
+                            } else |_| {}
+                            canvas_move_drag_id = 0;
+                            canvas_move_drag_canvas_id = 0;
+                        }
                         physics2d.endDrag();
                         canvas_drag_node = null;
                         input_drag_active = false;
@@ -2403,12 +2578,15 @@ pub fn run(config_in: AppConfig) !void {
 
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| {
+            // Cache the stable slot id BEFORE tick runs — tick may rebuild the
+            // arena that hovered_node points into, leaving it dangling. Reading
+            // prev.scroll_persist_slot after tick is a use-after-free.
+            const prev_hover_slot: u32 = if (hovered_node) |p| p.scroll_persist_slot else 0;
             tickFn(@truncate(c.SDL_GetTicks()));
-            // Tick may rebuild arena-backed trees. Re-resolve the hovered node by its
-            // stable slot id when available so hover exit/enter continues to work.
-            if (hovered_node) |prev| {
-                hovered_node = findNodeByScrollSlot(config.root, prev.scroll_persist_slot);
-            }
+            hovered_node = if (prev_hover_slot != 0)
+                findNodeByScrollSlot(config.root, prev_hover_slot)
+            else
+                null;
         }
 
         // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
