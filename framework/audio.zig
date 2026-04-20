@@ -71,10 +71,12 @@ pub const ModuleType = enum(u8) {
     sequencer,
     sampler,
     custom,
+    pocket_voice,
 };
 
 pub const Module = struct {
     id: u32 = 0,
+    slot_index: u32 = 0,
     module_type: ModuleType = .oscillator,
     active: bool = false,
 
@@ -93,6 +95,9 @@ pub const Module = struct {
     filter_y2: f64 = 0,
     delay_write_pos: u32 = 0,
     delay_buffer: ?[*]f32 = null,
+    trigger_time: f64 = 0,
+    base_freq: f64 = 110,
+    noise_seed: u32 = 1,
 };
 
 // ── Connection ──────────────────────────────────────────────────────
@@ -278,6 +283,15 @@ fn initModulePorts(m: *Module) void {
             addParam(m, "loop", .bool_, 0, 1, 0);
         },
         .custom => {},
+        .pocket_voice => {
+            addPort(m, "audio_out", .audio, .out);
+            addParam(m, "voice", .enum_, 0, 4, 0); // kick, snare, hat, bass, lead
+            addParam(m, "tone", .float, 0, 1, 0.5);
+            addParam(m, "decay", .float, 0.02, 1.5, 0.25);
+            addParam(m, "color", .float, 0, 1, 0.4);
+            addParam(m, "drive", .float, 0, 1, 0.2);
+            addParam(m, "gain", .float, 0, 1.5, 0.8);
+        },
     }
 }
 
@@ -289,7 +303,7 @@ fn addPort(m: *Module, name: []const u8, port_type: PortType, direction: PortDir
     p.name_len = @intCast(len);
     p.port_type = port_type;
     p.direction = direction;
-    p.buffer = g_engine.buffer_pool.getBuffer(m.id, m.port_count);
+    p.buffer = g_engine.buffer_pool.getBuffer(m.slot_index, m.port_count);
     m.port_count += 1;
 }
 
@@ -359,6 +373,20 @@ fn generateSample(phase: f64, wf: Waveform) f64 {
             break :blk @as(f64, @floatFromInt(@as(i32, @bitCast(x *% 1103515245 +% 12345)))) / 2147483647.0;
         },
     };
+}
+
+fn wrapPhase(v: f64) f64 {
+    const wrapped = v - @floor(v);
+    return if (wrapped < 0) wrapped + 1.0 else wrapped;
+}
+
+fn nextNoise(seed: *u32) f64 {
+    seed.* = seed.* *% 1664525 +% 1013904223;
+    return (@as(f64, @floatFromInt(seed.* >> 1)) / 1073741824.0) - 1.0;
+}
+
+fn softClip(x: f64) f64 {
+    return x / (1.0 + @abs(x));
 }
 
 fn processFilter(m: *Module, num_samples: u32) void {
@@ -558,6 +586,116 @@ fn processSequencer(m: *Module, num_samples: u32) void {
     m.phase = phase;
 }
 
+fn processPocketVoice(m: *Module, num_samples: u32) void {
+    const out_buf = m.ports[0].buffer;
+    var stage = m.envelope_stage;
+    var env = m.envelope_level;
+
+    if (stage == 0 or env <= 0.00001) {
+        for (0..num_samples) |i| out_buf[i] = 0;
+        m.envelope_stage = 0;
+        m.envelope_level = 0;
+        return;
+    }
+
+    const voice: u8 = @intFromFloat(@min(4.0, @max(0.0, m.params[0].value)));
+    const tone = @min(1.0, @max(0.0, m.params[1].value));
+    const decay = @max(0.01, m.params[2].value);
+    const color = @min(1.0, @max(0.0, m.params[3].value));
+    const drive = @min(1.0, @max(0.0, m.params[4].value));
+    const gain = @max(0.0, m.params[5].value);
+    const decay_coeff = std.math.exp(-1.0 / (decay * @as(f64, @floatFromInt(SAMPLE_RATE))));
+    const dt = 1.0 / @as(f64, @floatFromInt(SAMPLE_RATE));
+
+    var phase = m.phase;
+    var phase2 = m.phase2;
+    var t = m.trigger_time;
+    const base_freq = if (m.base_freq > 0.0) m.base_freq else 110.0;
+    var lp = m.filter_y1;
+    var hp = m.filter_y2;
+    var seed = if (m.noise_seed == 0) @as(u32, 1) else m.noise_seed;
+
+    for (0..num_samples) |i| {
+        if (stage == 0 or env <= 0.00005) {
+            out_buf[i] = 0;
+            env = 0;
+            stage = 0;
+            continue;
+        }
+
+        const noise = nextNoise(&seed);
+        var sample: f64 = 0;
+
+        switch (voice) {
+            0 => { // kick
+                const drop = std.math.exp(-t * (18.0 + tone * 50.0));
+                const freq = 38.0 + tone * 82.0 + drop * (110.0 + color * 70.0) + base_freq * 0.06;
+                const body = @sin(phase * 2.0 * std.math.pi);
+                const click = noise * std.math.exp(-t * 120.0) * (0.04 + color * 0.12);
+                sample = (body * 1.15 + click) * env;
+                phase = wrapPhase(phase + freq * dt);
+            },
+            1 => { // snare
+                const freq = 150.0 + tone * 180.0 + base_freq * 0.04;
+                const ring = @sin(phase * 2.0 * std.math.pi) * 0.45 +
+                    @sin(phase2 * 2.0 * std.math.pi) * 0.2;
+                lp += (noise - lp) * (0.10 + tone * 0.12);
+                const bright = noise - lp * (0.25 + (1.0 - color) * 0.1);
+                sample = (bright * (0.75 + color * 0.45) + ring * (0.30 + (1.0 - color) * 0.20)) * env;
+                phase = wrapPhase(phase + freq * dt);
+                phase2 = wrapPhase(phase2 + freq * 1.77 * dt);
+            },
+            2 => { // hat
+                const freq1 = 2100.0 + tone * 2800.0;
+                const freq2 = 3200.0 + color * 3600.0;
+                lp += (noise - lp) * 0.05;
+                hp += ((noise - lp) - hp) * (0.35 + color * 0.25);
+                const metal = generateSample(phase, .square) * 0.35 +
+                    generateSample(phase2, .square) * 0.25;
+                sample = (hp * 0.9 + metal * 0.55) * env * (0.7 + color * 0.4);
+                phase = wrapPhase(phase + freq1 * dt);
+                phase2 = wrapPhase(phase2 + freq2 * dt);
+            },
+            3 => { // bass
+                const freq = @max(32.0, base_freq * (0.5 + tone * 0.8));
+                const wobble = 1.0 + std.math.exp(-t * 8.0) * 0.06;
+                const saw = generateSample(phase, .saw);
+                const sub = @sin(phase2 * 2.0 * std.math.pi);
+                sample = softClip((saw * (0.55 + tone * 0.20) + sub * 0.6) * (1.0 + drive * 4.0)) * env * (0.75 + color * 0.35);
+                phase = wrapPhase(phase + freq * wobble * dt);
+                phase2 = wrapPhase(phase2 + freq * 0.5 * dt);
+            },
+            else => { // lead
+                const freq = @max(70.0, base_freq * (0.85 + tone * 0.35));
+                const pulse = generateSample(phase, .square);
+                const saw = generateSample(phase2, .saw);
+                const vibrato = 1.0 + @sin(t * 7.0) * (0.002 + color * 0.01);
+                sample = softClip((pulse * (0.55 + color * 0.15) + saw * 0.45) * (1.0 + drive * 5.0)) * env;
+                phase = wrapPhase(phase + freq * vibrato * dt);
+                phase2 = wrapPhase(phase2 + freq * (1.002 + color * 0.01) * dt);
+            },
+        }
+
+        out_buf[i] = @floatCast(sample * gain);
+        env *= decay_coeff;
+        t += dt;
+
+        if (env <= 0.00005) {
+            env = 0;
+            stage = 0;
+        }
+    }
+
+    m.phase = phase;
+    m.phase2 = phase2;
+    m.trigger_time = t;
+    m.envelope_level = env;
+    m.envelope_stage = stage;
+    m.filter_y1 = lp;
+    m.filter_y2 = hp;
+    m.noise_seed = seed;
+}
+
 fn processModule(m: *Module, num_samples: u32) void {
     if (!m.active) return;
     switch (m.module_type) {
@@ -569,6 +707,7 @@ fn processModule(m: *Module, num_samples: u32) void {
         .lfo => processLfo(m, num_samples),
         .delay => processDelay(m, num_samples),
         .sequencer => processSequencer(m, num_samples),
+        .pocket_voice => processPocketVoice(m, num_samples),
         .sampler, .custom => {},
     }
 }
@@ -686,6 +825,7 @@ fn processCommands() void {
                 var m = &g_engine.modules[g_engine.module_count];
                 m.* = Module{};
                 m.id = cmd.module_id;
+                m.slot_index = g_engine.module_count;
                 m.module_type = cmd.module_type;
                 m.active = true;
                 initModulePorts(m);
@@ -738,11 +878,21 @@ fn processCommands() void {
                 if (findModule(cmd.module_id)) |m| {
                     // Set frequency from MIDI note and trigger gate
                     const note_freq = 440.0 * std.math.pow(f64, 2.0, (@as(f64, @floatFromInt(cmd.value_i)) - 69.0) / 12.0);
-                    // Set frequency param (index 1 for oscillator)
-                    if (m.param_count > 1) m.params[1].value = note_freq;
+                    switch (m.module_type) {
+                        .oscillator => {
+                            if (m.param_count > 1) m.params[1].value = note_freq;
+                        },
+                        .pocket_voice => {
+                            m.base_freq = note_freq;
+                            m.trigger_time = 0;
+                            m.noise_seed = m.noise_seed *% 1664525 +% 1013904223;
+                        },
+                        else => {},
+                    }
                     // Trigger envelope if connected
                     m.envelope_stage = 1;
                     m.envelope_level = 0;
+                    if (m.module_type == .pocket_voice) m.envelope_level = 1;
                 }
             },
             .note_off => {

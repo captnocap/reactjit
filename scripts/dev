@@ -1,0 +1,82 @@
+#!/bin/bash
+# dev — push a cart into the running reactjit dev host, or spawn one.
+#
+# Usage:  scripts/dev <cart-name>
+#
+# Flow:
+#   1. Bundle <cart> → .cache/bundle-<cart>.js
+#   2. If a host is running at /tmp/reactjit.sock, push the bundle and exit.
+#      The host upserts the tab and switches active to this cart.
+#   3. If no host is running, copy the bundle to ./bundle.js (bootstrap path),
+#      compile the dev binary if missing, launch it in the background, then
+#      enter a watch loop that re-pushes on every save.
+#
+# Phase 1 behavior: pushing switches the active tab. Swap between previously
+# pushed carts by re-running this command with the target cart's name.
+# Phase 2 will add a chrome strip + mouse/keyboard tab switching.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+NAME="${1:-}"
+if [[ -z "$NAME" ]]; then
+    echo "Usage: scripts/dev <cart-name>" >&2
+    echo "  Cart expected at: cart/<name>/index.tsx or cart/<name>.tsx" >&2
+    exit 1
+fi
+
+if [[ -f "cart/${NAME}/index.tsx" ]]; then
+    CART_FILE="cart/${NAME}/index.tsx"
+elif [[ -f "cart/${NAME}.tsx" ]]; then
+    CART_FILE="cart/${NAME}.tsx"
+else
+    echo "[dev] not found: cart/${NAME}/index.tsx or cart/${NAME}.tsx" >&2
+    exit 1
+fi
+
+SOCKET=/tmp/reactjit.sock
+PER_CART_BUNDLE=".cache/bundle-${NAME}.js"
+mkdir -p .cache
+
+echo "[dev] bundling ${CART_FILE} → ${PER_CART_BUNDLE}"
+node scripts/build-bundle.mjs "$CART_FILE" --out "$PER_CART_BUNDLE"
+
+# Fast path: host already running — push and exit.
+if [[ -S "$SOCKET" ]]; then
+    echo "[dev] host detected — pushing '${NAME}'"
+    if node scripts/push-bundle.mjs "$NAME" "$PER_CART_BUNDLE"; then
+        echo "[dev] host switched to tab '${NAME}'"
+        exit 0
+    fi
+    # Stale socket file — remove and fall through to spawn.
+    rm -f "$SOCKET"
+fi
+
+# Spawn path — bootstrap via bundle.js on disk, compile if needed, launch.
+cp "$PER_CART_BUNDLE" bundle.js
+
+BIN="zig-out/bin/reactjit-dev"
+if [[ ! -x "$BIN" ]]; then
+    # ReleaseFast: Debug builds silently exit on click (pre-existing framework
+    # issue — cockpit-raw reproduces it without dev mode). Dev-mode is a
+    # RUNTIME flag, it doesn't need Debug compilation. Smaller binary too.
+    echo "[dev] compiling dev binary ($BIN, ReleaseFast)..."
+    zig build app -Dapp-name="reactjit-dev" -Dapp-source=qjs_app.zig -Ddev-mode=true -Doptimize=ReleaseFast
+fi
+
+./"$BIN" &
+BIN_PID=$!
+
+cleanup() {
+    kill "$BIN_PID" 2>/dev/null || true
+    pkill -P $$ 2>/dev/null || true
+    exit 0
+}
+trap cleanup INT TERM EXIT
+
+echo "[dev] host PID=$BIN_PID — run 'scripts/dev <other>' from another terminal to add tabs"
+
+# Watch loop pushes each rebuild to the host over the socket.
+node scripts/watch-and-push.mjs "$NAME" "$CART_FILE" "$PER_CART_BUNDLE"

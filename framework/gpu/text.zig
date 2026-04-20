@@ -38,6 +38,14 @@ pub const MAX_GLYPHS = 32768;
 const ATLAS_SIZE = 2048;
 const MAX_ATLAS_GLYPHS = 2048;
 
+/// Line-height override for the next drawTextWrapped call. 0 = use FreeType natural.
+/// Set via setLineHeightOverride before the call; cleared automatically after one use.
+var g_line_height_override: f32 = 0;
+
+pub fn setLineHeightOverride(lh: f32) void {
+    g_line_height_override = lh;
+}
+
 fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
     if (i >= text.len) return 0;
     if (text[i] == 0x01) return 1;
@@ -231,13 +239,16 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     const face = g_ft_face;
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
 
-    // Pen position: transform the starting point, then advance in screen space.
-    // Round to integer pixels so glyph quads align to texel boundaries —
-    // fractional canvas translation (e.g. 0.5px from odd-dimension center)
-    // causes linear atlas sampling to blend edge rows with transparent
-    // background, visually clipping the top/bottom 1px of text.
-    var pen_x: f32 = if (has_transform) @round((x - transform.ox) * s + transform.ox + transform.tx) else x;
-    const start_y: f32 = if (has_transform) @round((y - transform.oy) * s + transform.oy + transform.ty) else y;
+    // Pen position: transform the starting point (when canvas is active),
+    // then advance in screen space. Always round to integer pixels —
+    // flex/centering routinely produces fractional x/y from layout, and a
+    // half-pixel offset at draw time makes the linear atlas sampler blend
+    // across neighbouring texel rows. That smear is invisible on small
+    // hinted glyphs (the hinter already snapped them to whole pixels) but
+    // softens every edge of larger sizes, producing the "small is crisp,
+    // big is blurry" effect.
+    var pen_x: f32 = @round(if (has_transform) (x - transform.ox) * s + transform.ox + transform.tx else x);
+    const start_y: f32 = @round(if (has_transform) (y - transform.oy) * s + transform.oy + transform.ty else y);
     const baseline_y = start_y + ascent;
 
     var i: usize = 0;
@@ -293,6 +304,56 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     }
 }
 
+fn measureTextLineWidth(text: []const u8, size_px: u16) f32 {
+    if (g_ft_face == null) return 0;
+
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+
+    var width: f32 = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const sentinel_len = inlineGlyphSentinelLen(text, i);
+        if (sentinel_len > 0) {
+            width += @floatFromInt(size_px);
+            i += sentinel_len;
+            continue;
+        }
+
+        const ch = decodeUtf8(text[i..]);
+        if (ch.codepoint == '\n') {
+            i += ch.len;
+            continue;
+        }
+        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+            width += @floatFromInt(glyph.advance);
+        }
+        i += ch.len;
+    }
+    return width;
+}
+
+pub fn drawColorTextRow(spans: []const node_layout.ColorTextSpan, x: f32, y: f32, size_px: u16, opacity: f32) void {
+    var pen_x = x;
+    for (spans) |span| {
+        const color = span.color;
+        const alpha = (@as(f32, @floatFromInt(color.a)) / 255.0) * opacity;
+        drawTextLine(
+            span.text,
+            pen_x,
+            y,
+            size_px,
+            @as(f32, @floatFromInt(color.r)) / 255.0,
+            @as(f32, @floatFromInt(color.g)) / 255.0,
+            @as(f32, @floatFromInt(color.b)) / 255.0,
+            alpha,
+        );
+        pen_x += measureTextLineWidth(span.text, size_px);
+    }
+}
+
 /// Draw text with word-wrapping at max_width. Returns total height drawn.
 pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32, max_lines: u16) f32 {
     if (g_ft_face == null or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return 0;
@@ -308,7 +369,8 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     }
 
     const face = g_ft_face;
-    const line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+    const natural_line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+    const line_h: f32 = if (g_line_height_override > 0) g_line_height_override else natural_line_h;
 
     var pen_x: f32 = 0;
     var pen_y: f32 = y;
@@ -430,7 +492,8 @@ pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_wi
     }
 
     const face = g_ft_face;
-    const line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+    const natural_line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+    const line_h: f32 = if (g_line_height_override > 0) g_line_height_override else natural_line_h;
 
     var pen_x: f32 = 0;
     var line_start: usize = 0;

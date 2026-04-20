@@ -90,7 +90,6 @@ fn findScript() ?[]const u8 {
     const candidates = [_][]const u8{
         "scripts/watchdog.sh",
         "../scripts/watchdog.sh",
-        "tsz/scripts/watchdog.sh",
     };
     for (candidates) |path| {
         std.fs.cwd().access(path, .{}) catch continue;

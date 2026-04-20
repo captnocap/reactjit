@@ -84,6 +84,9 @@ pub const Session = struct {
 
         stdin.writeAll(buf.items) catch |err| {
             std.log.err("claude_sdk: stdin writeAll failed: {s}", .{@errorName(err)});
+            self.closed = true;
+            stdin.close();
+            self.child.stdin = null;
             return error.WriteError;
         };
     }
@@ -113,7 +116,14 @@ pub const Session = struct {
                     return error.ReadError;
                 },
             };
-            if (n == 0) return null; // EOF — subprocess exited
+            if (n == 0) {
+                self.closed = true;
+                if (self.child.stdin) |stdin| {
+                    stdin.close();
+                    self.child.stdin = null;
+                }
+                return null; // EOF — subprocess exited
+            }
             try self.line_buf.append(self.chunk[0..n]);
         }
     }

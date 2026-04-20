@@ -58,6 +58,23 @@ What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, Zig compiles `q
 
 **No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
 
+## Dev Path (iterate without rebuilding)
+
+```bash
+./scripts/dev <cart-name>       # launches the dev host + watches <cart> for saves
+./scripts/dev <other-cart>      # from another terminal: pushes to running host, adds a tab
+```
+
+The dev host is a single persistent ReleaseFast binary with:
+- **Hot reload for React / TSX / TS** — editing any file under `cart/` or `runtime/` re-bundles through esbuild and pushes the new JS over `/tmp/reactjit.sock`. The host tears down the QJS context and re-evals in ~300ms. **You do NOT re-run `scripts/dev` or rebuild the binary for cart code changes.**
+- **Rebuild required for Zig / framework / build-pipeline changes** — anything under `framework/`, `qjs_app.zig`, `build.zig`, or `scripts/` needs the binary rebuilt (delete `zig-out/bin/reactjit-dev` then run `./scripts/dev <cart>` again, or `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`).
+- **Tabs in the titlebar** — the host is borderless; the top strip IS the window chrome. Each `./scripts/dev <cart>` push shows as a tab. Click a tab to switch active cart (full QJS teardown + re-eval each time). Double-click empty chrome toggles maximize. Drag empty chrome to move. Window controls (minimize / maximize / close) on the right.
+- **Debug builds silently crash on click.** Always use `ReleaseFast` (default in `scripts/dev`). Pre-existing framework bug in the Debug-mode click path; out of scope for dev-mode work.
+
+**State preservation across reloads is NOT working yet.** `useHotState` + `framework/hotstate.zig` are wired but in practice state still resets on every reload. Treat HMR as "save → see your change, lose local useState". Full fix is pending — don't assume atoms persist.
+
+See `runtime/hooks/README.md` for the async-subsystem tick-drain design, host bindings status, and the remaining pending hooks (websocket, process streaming, sqlite).
+
 ## Primitives
 
 `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, and `Native` (universal escape hatch).

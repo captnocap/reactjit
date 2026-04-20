@@ -30,6 +30,16 @@ pub const CanvasInstance = struct {
     cam_y: f32 = 0,
     cam_zoom: f32 = 1.0,
 
+    // Last (viewX/viewY/viewZoom) prop values applied from the cart. When
+    // paintCanvasContainer sees new prop values that differ from these, it
+    // re-centers the camera. This lets focusWorkerById / programmatic pans
+    // override user-driven pan/zoom — without clobbering the camera on every
+    // unrelated re-render.
+    last_applied_view_x: f32 = 0,
+    last_applied_view_y: f32 = 0,
+    last_applied_view_zoom: f32 = 1.0,
+    last_applied_valid: bool = false,
+
     // Selection
     hovered_node_idx: ?u16 = null,
     selected_node_idx: ?u16 = null,
@@ -105,6 +115,26 @@ pub fn setCameraFor(id: u8, cx: f32, cy: f32, zoom: f32) void {
     ci.cam_y = cy;
     ci.cam_zoom = zoom;
     ci.active = true;
+}
+
+/// Apply the cart-provided viewX/viewY/viewZoom props if and only if they've
+/// changed since the last application. This is how programmatic pans
+/// (focusWorkerById setting setViewX/setViewY) override user pan/zoom —
+/// re-renders that don't change the prop values leave user input alone.
+pub fn applyPropView(id: u8, vx: f32, vy: f32, vz: f32) bool {
+    const ci = inst(id);
+    if (ci.last_applied_valid and vx == ci.last_applied_view_x and vy == ci.last_applied_view_y and vz == ci.last_applied_view_zoom) {
+        return false;
+    }
+    ci.cam_x = vx;
+    ci.cam_y = vy;
+    ci.cam_zoom = vz;
+    ci.active = true;
+    ci.last_applied_view_x = vx;
+    ci.last_applied_view_y = vy;
+    ci.last_applied_view_zoom = vz;
+    ci.last_applied_valid = true;
+    return true;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────

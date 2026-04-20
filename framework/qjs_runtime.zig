@@ -2550,12 +2550,10 @@ fn hostFsReadfile(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     if (path_ptr == null) return QJS_UNDEFINED;
     defer qjs.JS_FreeCString(c2, path_ptr);
     const path = std.mem.span(path_ptr);
-
-    const file = std.fs.cwd().openFile(path, .{}) catch return qjs.JS_NewString(c2, "");
-    defer file.close();
-    var buf: [4096]u8 = undefined;
-    const n = file.readAll(&buf) catch return qjs.JS_NewString(c2, "");
-    return qjs.JS_NewStringLen(c2, &buf, @intCast(n));
+    const alloc = std.heap.page_allocator;
+    const data = std.fs.cwd().readFileAlloc(alloc, path, 16 * 1024 * 1024) catch return qjs.JS_NewString(c2, "");
+    defer alloc.free(data);
+    return qjs.JS_NewStringLen(c2, data.ptr, @intCast(data.len));
 }
 
 /// __getpid() → current process ID as number.
@@ -2904,7 +2902,7 @@ fn hostOpenWindow(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
 pub fn initVM() void {
     if (comptime !HAS_QUICKJS) return;
     const rt = qjs.JS_NewRuntime() orelse return;
-    qjs.JS_SetMemoryLimit(rt, 64 * 1024 * 1024);
+    qjs.JS_SetMemoryLimit(rt, 256 * 1024 * 1024);
     qjs.JS_SetMaxStackSize(rt, 1024 * 1024);
     const ctx = qjs.JS_NewContext(rt) orelse {
         qjs.JS_FreeRuntime(rt);

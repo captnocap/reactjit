@@ -69,6 +69,8 @@ pub const InlineGlyph = struct {
     scale: f32 = 1.0,
 };
 pub const InlineSlot = struct { x: f32 = 0, y: f32 = 0, size: f32 = 0, glyph_index: u8 = 0 };
+pub const ColorTextSpan = struct { text: []const u8 = "", color: Color = Color.rgb(255, 255, 255) };
+pub const ColorTextRow = struct { spans: []const ColorTextSpan = &.{} };
 pub const MAX_INLINE_SLOTS = 8;
 
 // ── Dependency types (inlined to avoid importing heavy modules) ────
@@ -217,6 +219,8 @@ pub const Node = struct {
     cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
+    input_paint_text: bool = true,
+    input_color_rows: ?[]const ColorTextRow = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,

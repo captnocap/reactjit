@@ -104,6 +104,30 @@ pub fn hitTestHoverable(node: *Node, mx: f32, my: f32) ?*Node {
         child_mx = mx + node.scroll_x;
     }
 
+    // Canvas container: Canvas.Node / Canvas.Path descendants have computed rects
+    // in graph space (positionOneCanvasNode in engine.zig shifts them pre-paint).
+    // Canvas.Clamp children stay in screen space. Bail if mouse is outside the
+    // canvas rect so the graph-space point doesn't leak and match a tile painted
+    // elsewhere on screen.
+    if (node.canvas_type != null) {
+        if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+        const canvas_mod = @import("canvas.zig");
+        const vp_cx = r.x + r.w / 2;
+        const vp_cy = r.y + r.h / 2;
+        const gpos = canvas_mod.screenToGraph(mx, my, vp_cx, vp_cy);
+        var ci = node.children.len;
+        while (ci > 0) {
+            ci -= 1;
+            const child = &node.children[ci];
+            if (child.canvas_clamp) {
+                if (hitTestHoverable(child, child_mx, child_my)) |hit| return hit;
+            } else {
+                if (hitTestHoverable(child, gpos[0], gpos[1])) |hit| return hit;
+            }
+        }
+        return node;
+    }
+
     var i = node.children.len;
     while (i > 0) {
         i -= 1;

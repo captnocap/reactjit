@@ -33,7 +33,9 @@ pub const drawRectShadow = rects.drawRectShadow;
 pub const drawRectGradient = rects.drawRectGradient;
 pub const drawTextLine = text.drawTextLine;
 pub const drawTextWrapped = text.drawTextWrapped;
+pub const drawColorTextRow = text.drawColorTextRow;
 pub const drawSelectionRects = text.drawSelectionRects;
+pub const getLineHeight = text.getLineHeight;
 pub const drawCurve = curves.drawCurve;
 pub const drawCubicCurve = curves.drawCubicCurve;
 pub const drawTri = polys.drawTri;
@@ -42,11 +44,11 @@ pub const initText = text.initText;
 pub const getCharAdvance = text.getCharAdvance;
 pub const getCharWidth = text.getCharWidth;
 pub const drawGlyphAt = text.drawGlyphAt;
-pub const getLineHeight = text.getLineHeight;
 const layout_types = @import("../layout.zig");
 pub const resetInlineSlots = text.resetInlineSlots;
 pub const setTextEffect = text.setTextEffect;
 pub const clearTextEffect = text.clearTextEffect;
+pub const setLineHeightOverride = text.setLineHeightOverride;
 pub fn getInlineSlotCount() u8 { return text.g_inline_slot_count; }
 pub fn getInlineSlots() *const [text.MAX_RECORDED_SLOTS]layout_types.InlineSlot { return &text.g_inline_slots; }
 
@@ -276,6 +278,13 @@ const MAX_SCISSOR_STACK = 16;
 var g_scissor_stack: [MAX_SCISSOR_STACK]ScissorSegment = undefined;
 var g_scissor_depth: usize = 0;
 
+pub const ActiveScissor = struct {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+};
+
 fn sameBoundary(a: ScissorSegment, b: ScissorSegment) bool {
     return a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h and
         a.rect_start == b.rect_start and a.glyph_start == b.glyph_start and
@@ -369,6 +378,12 @@ pub fn popScissor() void {
     } else {
         recordBoundary(0, 0, g_width, g_height, @intCast(images.count()));
     }
+}
+
+pub fn getActiveScissor() ?ActiveScissor {
+    if (g_scissor_depth == 0) return null;
+    const clip = g_scissor_stack[g_scissor_depth - 1];
+    return .{ .x = clip.x, .y = clip.y, .w = clip.w, .h = clip.h };
 }
 
 // ════════════════════════════════════════════════════════════════════════

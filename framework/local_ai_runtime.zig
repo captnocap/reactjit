@@ -134,6 +134,7 @@ const FnMemoryClear = *const fn (mem: *llama_memory, data: bool) callconv(.c) vo
 pub const SessionOptions = struct {
     cwd: ?[]const u8 = null,
     model_path: []const u8,
+    session_id: ?[]const u8 = null,
     system_prompt: ?[]const u8 = null,
     n_ctx: u32 = 2048,
     n_batch: u32 = 512,
@@ -541,6 +542,7 @@ pub const Session = struct {
             .options = .{
                 .cwd = if (options.cwd) |value| try allocator.dupe(u8, value) else null,
                 .model_path = try allocator.dupe(u8, options.model_path),
+                .session_id = if (options.session_id) |value| try allocator.dupe(u8, value) else null,
                 .system_prompt = if (options.system_prompt) |value| try allocator.dupe(u8, value) else null,
                 .n_ctx = options.n_ctx,
                 .n_batch = options.n_batch,
@@ -634,6 +636,7 @@ pub const Session = struct {
     fn deinitInternal(self: *Session) void {
         if (self.options.cwd) |value| self.allocator.free(value);
         self.allocator.free(self.options.model_path);
+        if (self.options.session_id) |value| self.allocator.free(value);
         if (self.options.system_prompt) |value| self.allocator.free(value);
 
         while (self.requests.pop()) |req| {
@@ -663,7 +666,10 @@ fn workerMain(session: *Session) void {
     };
 
     const model_label = basenameFromPath(state.resolved_model_path.?);
-    const session_id = std.fmt.allocPrint(session.allocator, "local:{s}", .{model_label}) catch null;
+    const session_id = if (session.options.session_id) |value|
+        session.allocator.dupe(u8, value) catch null
+    else
+        std.fmt.allocPrint(session.allocator, "local:{s}", .{model_label}) catch null;
     defer if (session_id) |value| session.allocator.free(value);
     if (session_id) |value| {
         session.pushSystem(state.resolved_model_path.?, value) catch {};

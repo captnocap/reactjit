@@ -1,24 +1,46 @@
-//! TextInput state management for the native engine
+//! TextInput state management — ported from love2d/examples/layout-stress/lua/textinput.lua
 //!
-//! Each <TextInput> gets a compile-time input ID. Text buffers, cursor
-//! position, and focus are managed here. SDL_TEXTINPUT and key events
-//! route through these functions.
+//! Design rule (copied verbatim from the lua source):
+//!   "All editing state (text, cursor, selection, blink) lives entirely in [the host].
+//!    The JS/TS side only hears about boundary events: focus, blur, submit, change."
+//!
+//! That rule is the reason this module does NOT notify JS on every cursor
+//! movement. Broadcasting cursor changes on each mouse-motion during a
+//! drag-select triggers a React re-render per motion event and collapses FPS.
+//! Carts that need cursor info can poll via getCursorPos(id).
+//!
+//! Each <TextInput> gets a compile-time slot id. Text buffers, cursor,
+//! selection, scrollX, and undo/redo live here. SDL text/key events route
+//! through handleTextInput / handleKey / handleCtrlKey.
 
 const std = @import("std");
 const c = @import("c.zig").imports;
 
 pub const MAX_INPUTS = 128;
-const BUF_SIZE = 4096;
+// Large editor surfaces like cursor-ide need materially more than 4 KiB or the
+// controlled input truncates immediately on mount.
+const BUF_SIZE = 256 * 1024;
 
 pub const InputState = struct {
     buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
-    len: u16 = 0,
-    cursor: u16 = 0,
-    sel_start: u16 = 0, // selection start (anchor)
-    sel_end: u16 = 0, // selection end (moves with cursor)
+    len: u32 = 0,
+    cursor: u32 = 0,
+    sel_start: u32 = 0,
+    sel_end: u32 = 0,
     has_selection: bool = false,
     active: bool = false,
     multiline: bool = false,
+    scroll_x: f32 = 0,
+    // syncValue tracks the last value prop we copied in, so we only overwrite
+    // the buffer when the cart's value genuinely changed — not every paint.
+    last_synced_len: u32 = 0,
+    last_synced_buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
+    last_synced_valid: bool = false,
+    // Props forwarded from the node side
+    editable: bool = true,
+    secure: bool = false,
+    max_length: u32 = 0, // 0 = unlimited
+    submit_on_enter: bool = false, // multiline only
 };
 
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;
@@ -30,12 +52,13 @@ var on_key_callbacks: [MAX_INPUTS]?*const fn (key: c_int, mods: u16) void = [_]?
 var focused_id: ?u8 = null;
 
 // ── Submit event bus ────────────────────────────────────────────────────
-// On Enter, captures the pre-clear text so cart JS can pick it up later via
-// consumeLastSubmit(). Works even when no onSubmit callback is registered,
-// letting non-soup-lane carts drive their own submit logic from a poll loop.
+// On Enter, captures the pre-submit text so carts can pick it up later via
+// consumeLastSubmit(). Unlike the previous implementation, we do NOT clear
+// the buffer here — carts that want chat-style clear-on-submit call
+// __setInputText(id, "") from their onSubmit.
 var g_last_submit_id: i16 = -1;
 var g_last_submit_buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE;
-var g_last_submit_len: u16 = 0;
+var g_last_submit_len: u32 = 0;
 
 pub const SubmitEvent = struct { id: u8, text: []const u8 };
 
@@ -46,90 +69,68 @@ pub fn consumeLastSubmit() ?SubmitEvent {
     g_last_submit_id = -1;
     return .{ .id = id, .text = text };
 }
+
 var cursor_blink: f32 = 0;
 var cursor_visible: bool = true;
 var measure_width_fn: ?*const fn ([]const u8, u16) f32 = null;
 
-/// Set the text width measurement callback (provided by engine.zig).
 pub fn setMeasureWidthFn(f: *const fn ([]const u8, u16) f32) void {
     measure_width_fn = f;
 }
 
 var last_click_ms: u32 = 0;
+var last_click_target: i16 = -1;
 var click_count: u8 = 0;
 
-/// Track click timing for double/triple click detection. Returns click count.
 pub fn trackClick(now_ms: u32) u8 {
+    const id = focused_id;
+    const tgt: i16 = if (id) |v| @intCast(v) else -1;
     const dt = now_ms -| last_click_ms;
-    if (dt < 400) {
+    if (dt < 400 and tgt == last_click_target) {
         click_count = if (click_count >= 3) 1 else click_count + 1;
     } else {
         click_count = 1;
     }
     last_click_ms = now_ms;
+    last_click_target = tgt;
     return click_count;
 }
 
-/// Register an input slot. Called at init time.
 pub fn register(id: u8) void {
-    if (id < MAX_INPUTS) {
-        inputs[id].active = true;
-        inputs[id].multiline = false;
-    }
+    if (id >= MAX_INPUTS) return;
+    inputs[id].active = true;
+    inputs[id].multiline = false;
 }
 
-/// Set a change callback for an input. Called when text content changes.
-pub fn setOnChange(id: u8, callback: *const fn () void) void {
-    if (id < MAX_INPUTS) {
-        on_change_callbacks[id] = callback;
-    }
-}
-
-/// Set a submit callback for an input. Called on Enter key (single-line only).
-pub fn setOnSubmit(id: u8, callback: *const fn () void) void {
-    if (id < MAX_INPUTS) {
-        on_submit_callbacks[id] = callback;
-    }
-}
-
-/// Set a focus callback for an input. Called when the input gains focus.
-pub fn setOnFocus(id: u8, callback: *const fn () void) void {
-    if (id < MAX_INPUTS) {
-        on_focus_callbacks[id] = callback;
-    }
-}
-
-/// Set a blur callback for an input. Called when the input loses focus.
-pub fn setOnBlur(id: u8, callback: *const fn () void) void {
-    if (id < MAX_INPUTS) {
-        on_blur_callbacks[id] = callback;
-    }
-}
-
-/// Set a key callback for an input. Called on key-down while focused.
-pub fn setOnKey(id: u8, callback: *const fn (key: c_int, mods: u16) void) void {
-    if (id < MAX_INPUTS) {
-        on_key_callbacks[id] = callback;
-    }
-}
-
-/// Register a multiline input slot (TextArea).
 pub fn registerMultiline(id: u8) void {
-    if (id < MAX_INPUTS) {
-        inputs[id].active = true;
-        inputs[id].multiline = true;
-    }
+    if (id >= MAX_INPUTS) return;
+    inputs[id].active = true;
+    inputs[id].multiline = true;
 }
 
-/// Release an input slot so it can be reused by a newly mounted field.
+pub fn setOnChange(id: u8, cb: *const fn () void) void {
+    if (id < MAX_INPUTS) on_change_callbacks[id] = cb;
+}
+pub fn setOnSubmit(id: u8, cb: *const fn () void) void {
+    if (id < MAX_INPUTS) on_submit_callbacks[id] = cb;
+}
+pub fn setOnFocus(id: u8, cb: *const fn () void) void {
+    if (id < MAX_INPUTS) on_focus_callbacks[id] = cb;
+}
+pub fn setOnBlur(id: u8, cb: *const fn () void) void {
+    if (id < MAX_INPUTS) on_blur_callbacks[id] = cb;
+}
+pub fn setOnKey(id: u8, cb: *const fn (c_int, u16) void) void {
+    if (id < MAX_INPUTS) on_key_callbacks[id] = cb;
+}
+
 pub fn unregister(id: u8) void {
     if (id >= MAX_INPUTS) return;
-    if (focused_id != null and focused_id.? == id) {
-        focused_id = null;
-    }
+    if (focused_id != null and focused_id.? == id) focused_id = null;
     if (undo_input_id != null and undo_input_id.? == id) {
         undo_input_id = null;
         undo_count = 0;
+        redo_count = 0;
     }
     if (g_last_submit_id >= 0 and @as(u8, @intCast(g_last_submit_id)) == id) {
         g_last_submit_id = -1;
@@ -143,19 +144,16 @@ pub fn unregister(id: u8) void {
     inputs[id] = .{};
 }
 
-/// Get the text content of an input.
 pub fn getText(id: u8) []const u8 {
     if (id >= MAX_INPUTS) return "";
     return inputs[id].buf[0..inputs[id].len];
 }
 
-/// Get the text as a null-terminated pointer (for rendering).
 pub fn getTextZ(id: u8) ?[]const u8 {
     if (id >= MAX_INPUTS or inputs[id].len == 0) return null;
     return inputs[id].buf[0..inputs[id].len];
 }
 
-/// Focus an input. Starts SDL text input.
 pub fn focus(id: u8) void {
     if (id >= MAX_INPUTS) return;
     if (focused_id != null and focused_id.? == id) {
@@ -172,11 +170,8 @@ pub fn focus(id: u8) void {
     cursor_blink = 0;
     cursor_visible = true;
     if (on_focus_callbacks[id]) |cb| cb();
-    // SDL3: text input is started once at engine init (requires window param)
 }
 
-/// Unfocus all inputs. Text input events continue flowing so terminals
-/// and other consumers (PTY, render surfaces) still receive SDL_TEXTINPUT.
 pub fn unfocus() void {
     if (focused_id) |prev| {
         focused_id = null;
@@ -188,7 +183,6 @@ pub fn unfocus() void {
     focused_id = null;
 }
 
-/// Check if a specific input is focused.
 pub fn isFocused(id: u8) bool {
     return focused_id != null and focused_id.? == id;
 }
@@ -198,177 +192,372 @@ pub fn isMultiline(id: u8) bool {
     return inputs[id].multiline;
 }
 
-/// Get the currently focused input ID, or null.
 pub fn getFocusedId() ?u8 {
     return focused_id;
 }
 
-/// Handle SDL_TEXTINPUT event — insert characters at cursor.
+// ── UTF-8 continuation-byte walkers ─────────────────────────────────
+
+fn isContByte(b: u8) bool { return b >= 0x80 and b < 0xC0; }
+
+/// Step one codepoint left from `pos` in `buf`. Returns the new byte position.
+fn stepLeft(buf: []const u8, pos: u32) u32 {
+    if (pos == 0) return 0;
+    var p = pos - 1;
+    while (p > 0 and isContByte(buf[p])) : (p -= 1) {}
+    return p;
+}
+
+/// Step one codepoint right from `pos` in `buf`. Returns the new byte position.
+fn stepRight(buf: []const u8, pos: u32) u32 {
+    if (pos >= buf.len) return @intCast(buf.len);
+    var p = pos + 1;
+    while (p < buf.len and isContByte(buf[p])) : (p += 1) {}
+    return p;
+}
+
+// ── Selection helpers ───────────────────────────────────────────────
+
+pub fn getSelection(id: u8) struct { lo: u32, hi: u32 } {
+    if (id >= MAX_INPUTS) return .{ .lo = 0, .hi = 0 };
+    const inp = &inputs[id];
+    if (!inp.has_selection) return .{ .lo = inp.cursor, .hi = inp.cursor };
+    return if (inp.sel_start <= inp.sel_end)
+        .{ .lo = inp.sel_start, .hi = inp.sel_end }
+    else
+        .{ .lo = inp.sel_end, .hi = inp.sel_start };
+}
+
+fn clearSelection(inp: *InputState) void {
+    inp.has_selection = false;
+    inp.sel_start = inp.cursor;
+    inp.sel_end = inp.cursor;
+}
+
+fn startOrExtendSelection(inp: *InputState) void {
+    if (!inp.has_selection) {
+        inp.sel_start = inp.cursor;
+    }
+}
+
+fn updateSelectionEnd(inp: *InputState) void {
+    inp.sel_end = inp.cursor;
+    inp.has_selection = inp.sel_start != inp.sel_end;
+}
+
+fn deleteSelection(inp: *InputState) bool {
+    if (!inp.has_selection) return false;
+    const lo = if (inp.sel_start <= inp.sel_end) inp.sel_start else inp.sel_end;
+    const hi = if (inp.sel_start <= inp.sel_end) inp.sel_end else inp.sel_start;
+    const del_len = hi - lo;
+    if (del_len == 0) {
+        inp.has_selection = false;
+        return false;
+    }
+    var i = lo;
+    while (i < inp.len - del_len) : (i += 1) {
+        inp.buf[i] = inp.buf[i + del_len];
+    }
+    inp.len -= del_len;
+    inp.cursor = lo;
+    inp.has_selection = false;
+    return true;
+}
+
+// ── Word-boundary helpers ───────────────────────────────────────────
+
+fn isWordChar(b: u8) bool {
+    return (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '_';
+}
+
+fn wordJumpLeft(inp: *InputState) void {
+    var p = inp.cursor;
+    while (p > 0 and !isWordChar(inp.buf[p - 1])) : (p -= 1) {}
+    while (p > 0 and isWordChar(inp.buf[p - 1])) : (p -= 1) {}
+    inp.cursor = p;
+}
+
+fn wordJumpRight(inp: *InputState) void {
+    var p = inp.cursor;
+    while (p < inp.len and !isWordChar(inp.buf[p])) : (p += 1) {}
+    while (p < inp.len and isWordChar(inp.buf[p])) : (p += 1) {}
+    inp.cursor = p;
+}
+
+// ── Undo / redo (one ring per focused input) ────────────────────────
+//
+// Scoped to the currently-focused input. Switching focus clears the ring.
+// That matches love2d's per-node semantics closely enough for our needs
+// without allocating 128 × 50 × 256 KB of per-slot snapshot buffers.
+
+const MAX_UNDO = 100;
+const UndoEntry = struct {
+    buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
+    len: u32 = 0,
+    cursor: u32 = 0,
+};
+
+var undo_stack: [MAX_UNDO]UndoEntry = [_]UndoEntry{.{}} ** MAX_UNDO;
+var redo_stack: [MAX_UNDO]UndoEntry = [_]UndoEntry{.{}} ** MAX_UNDO;
+var undo_count: u16 = 0;
+var redo_count: u16 = 0;
+var undo_input_id: ?u8 = null;
+
+fn snapshotInto(dst: *UndoEntry, inp: *const InputState) void {
+    @memcpy(dst.buf[0..inp.len], inp.buf[0..inp.len]);
+    dst.len = inp.len;
+    dst.cursor = inp.cursor;
+}
+
+fn restoreFrom(entry: *const UndoEntry, inp: *InputState) void {
+    @memcpy(inp.buf[0..entry.len], entry.buf[0..entry.len]);
+    inp.len = entry.len;
+    inp.cursor = entry.cursor;
+    inp.has_selection = false;
+}
+
+fn pushUndo(id: u8, inp: *const InputState) void {
+    if (undo_input_id != null and undo_input_id.? != id) {
+        undo_count = 0;
+        redo_count = 0;
+    }
+    undo_input_id = id;
+    // New edit invalidates the redo stack (standard text-editor semantics).
+    redo_count = 0;
+    if (undo_count < MAX_UNDO) {
+        snapshotInto(&undo_stack[undo_count], inp);
+        undo_count += 1;
+    } else {
+        // Shift ring left to make room — oldest entry falls off.
+        var i: u16 = 0;
+        while (i + 1 < MAX_UNDO) : (i += 1) {
+            @memcpy(undo_stack[i].buf[0..undo_stack[i + 1].len], undo_stack[i + 1].buf[0..undo_stack[i + 1].len]);
+            undo_stack[i].len = undo_stack[i + 1].len;
+            undo_stack[i].cursor = undo_stack[i + 1].cursor;
+        }
+        snapshotInto(&undo_stack[MAX_UNDO - 1], inp);
+    }
+}
+
+fn doUndo(id: u8, inp: *InputState) bool {
+    if (undo_input_id != null and undo_input_id.? != id) return false;
+    if (undo_count == 0) return false;
+    // Push current state onto redo before reverting.
+    if (redo_count < MAX_UNDO) {
+        snapshotInto(&redo_stack[redo_count], inp);
+        redo_count += 1;
+    }
+    undo_count -= 1;
+    restoreFrom(&undo_stack[undo_count], inp);
+    return true;
+}
+
+fn doRedo(id: u8, inp: *InputState) bool {
+    if (undo_input_id != null and undo_input_id.? != id) return false;
+    if (redo_count == 0) return false;
+    if (undo_count < MAX_UNDO) {
+        snapshotInto(&undo_stack[undo_count], inp);
+        undo_count += 1;
+    }
+    redo_count -= 1;
+    restoreFrom(&redo_stack[redo_count], inp);
+    return true;
+}
+
+// ── Insertion ───────────────────────────────────────────────────────
+
+fn insertBytes(inp: *InputState, bytes: []const u8) bool {
+    var to_insert = bytes;
+    if (inp.max_length > 0) {
+        // Count existing + incoming codepoints; trim incoming if over.
+        const cur_cp = utf8Count(inp.buf[0..inp.len]);
+        if (cur_cp >= inp.max_length) return false;
+        const allowed_cp = inp.max_length - cur_cp;
+        const incoming_cp = utf8Count(bytes);
+        if (incoming_cp > allowed_cp) {
+            to_insert = trimToCodepoints(bytes, allowed_cp);
+        }
+    }
+    if (to_insert.len == 0) return false;
+    if (inp.len + to_insert.len > BUF_SIZE - 1) return false;
+
+    // Shift right to make room
+    if (inp.cursor < inp.len) {
+        var i: u32 = inp.len;
+        while (i > inp.cursor) : (i -= 1) {
+            inp.buf[i + @as(u32, @intCast(to_insert.len)) - 1] = inp.buf[i - 1];
+        }
+    }
+    for (to_insert, 0..) |b, j| {
+        inp.buf[inp.cursor + @as(u32, @intCast(j))] = b;
+    }
+    inp.len += @intCast(to_insert.len);
+    inp.cursor += @intCast(to_insert.len);
+    return true;
+}
+
+fn utf8Count(bytes: []const u8) u32 {
+    var count: u32 = 0;
+    var i: usize = 0;
+    while (i < bytes.len) {
+        if (!isContByte(bytes[i])) count += 1;
+        i += 1;
+    }
+    return count;
+}
+
+fn trimToCodepoints(bytes: []const u8, max_cp: u32) []const u8 {
+    var count: u32 = 0;
+    var i: usize = 0;
+    while (i < bytes.len) {
+        if (!isContByte(bytes[i])) {
+            if (count == max_cp) break;
+            count += 1;
+        }
+        i += 1;
+    }
+    return bytes[0..i];
+}
+
+// ── SDL event handlers ──────────────────────────────────────────────
+
 pub fn handleTextInput(text: [*:0]const u8) void {
     const id = focused_id orelse return;
     if (id >= MAX_INPUTS) return;
-    var inp = &inputs[id];
+    const inp = &inputs[id];
+    if (!inp.editable) return;
 
-    // Delete selection if any (typing replaces selection)
-    if (inp.has_selection) {
-        pushUndo(id, inp);
-        deleteSelection(inp);
-    }
+    var text_len: u32 = 0;
+    while (text[text_len] != 0 and text_len < 64) : (text_len += 1) {}
+    if (text_len == 0) return;
+    const bytes = text[0..text_len];
 
-    // Get the length of the input text
-    var text_len: u16 = 0;
-    while (text[text_len] != 0 and text_len < 32) : (text_len += 1) {}
-
-    if (inp.len + text_len > BUF_SIZE - 1) return; // buffer full
-
-    // Shift chars right from cursor to make room
-    if (inp.cursor < inp.len) {
-        var i: u16 = inp.len;
-        while (i > inp.cursor) {
-            inp.buf[i + text_len - 1] = inp.buf[i - 1];
-            i -= 1;
+    // Strip newlines in single-line mode
+    if (!inp.multiline) {
+        var has_newline = false;
+        for (bytes) |b| if (b == '\n' or b == '\r') { has_newline = true; break; };
+        if (has_newline) {
+            pushUndo(id, inp);
+            if (inp.has_selection) _ = deleteSelection(inp);
+            for (bytes) |b| {
+                if (b == '\n' or b == '\r') continue;
+                var tmp: [1]u8 = .{b};
+                _ = insertBytes(inp, tmp[0..]);
+            }
+            cursor_blink = 0; cursor_visible = true;
+            if (on_change_callbacks[id]) |cb| cb();
+            return;
         }
     }
 
-    // Insert
-    for (0..text_len) |j| {
-        inp.buf[inp.cursor + @as(u16, @intCast(j))] = text[j];
+    pushUndo(id, inp);
+    if (inp.has_selection) _ = deleteSelection(inp);
+    if (insertBytes(inp, bytes)) {
+        cursor_blink = 0; cursor_visible = true;
+        if (on_change_callbacks[id]) |cb| cb();
     }
-    inp.len += text_len;
-    inp.cursor += text_len;
-    cursor_blink = 0;
-    cursor_visible = true;
-    if (on_change_callbacks[id]) |cb| cb();
 }
 
-/// Handle key events for the focused input.
 pub fn handleKey(sym: c_int, mods: u16) bool {
     const id = focused_id orelse return false;
     if (id >= MAX_INPUTS) return false;
     if (on_key_callbacks[id]) |cb| cb(sym, mods);
-    var inp = &inputs[id];
+    const inp = &inputs[id];
     const prev_len = inp.len;
+    const shift = (mods & c.SDL_KMOD_SHIFT) != 0;
 
-    if (sym == c.SDLK_BACKSPACE) {
-        if (inp.has_selection) {
-            pushUndo(id, inp);
-            deleteSelection(inp);
-        } else if (inp.cursor > 0) {
-            pushUndo(id, inp);
-            var i = inp.cursor - 1;
-            while (i < inp.len - 1) : (i += 1) {
-                inp.buf[i] = inp.buf[i + 1];
-            }
-            inp.len -= 1;
-            inp.cursor -= 1;
-        }
-        cursor_blink = 0;
-        cursor_visible = true;
-        return true;
-    }
-
-    if (sym == c.SDLK_DELETE) {
-        if (inp.cursor < inp.len) {
-            var i = inp.cursor;
-            while (i < inp.len - 1) : (i += 1) {
-                inp.buf[i] = inp.buf[i + 1];
-            }
-            inp.len -= 1;
-        }
-        return true;
-    }
-
+    // ── Movement ──
     if (sym == c.SDLK_LEFT) {
-        if (inp.cursor > 0) inp.cursor -= 1;
-        clearSelection(inp);
-        cursor_blink = 0;
-        cursor_visible = true;
+        if (shift) startOrExtendSelection(inp);
+        if (!shift and inp.has_selection) {
+            const sel = getSelection(id);
+            inp.cursor = sel.lo;
+            clearSelection(inp);
+        } else {
+            inp.cursor = stepLeft(inp.buf[0..inp.len], inp.cursor);
+        }
+        if (shift) updateSelectionEnd(inp) else if (!inp.has_selection) clearSelection(inp);
+        cursor_blink = 0; cursor_visible = true;
         return true;
     }
-
     if (sym == c.SDLK_RIGHT) {
-        if (inp.cursor < inp.len) inp.cursor += 1;
-        clearSelection(inp);
-        cursor_blink = 0;
-        cursor_visible = true;
+        if (shift) startOrExtendSelection(inp);
+        if (!shift and inp.has_selection) {
+            const sel = getSelection(id);
+            inp.cursor = sel.hi;
+            clearSelection(inp);
+        } else {
+            inp.cursor = stepRight(inp.buf[0..inp.len], inp.cursor);
+        }
+        if (shift) updateSelectionEnd(inp) else if (!inp.has_selection) clearSelection(inp);
+        cursor_blink = 0; cursor_visible = true;
         return true;
     }
-
     if (sym == c.SDLK_HOME) {
+        if (shift) startOrExtendSelection(inp) else clearSelection(inp);
         inp.cursor = 0;
-        clearSelection(inp);
-        cursor_blink = 0;
-        cursor_visible = true;
+        if (shift) updateSelectionEnd(inp);
+        cursor_blink = 0; cursor_visible = true;
         return true;
     }
-
     if (sym == c.SDLK_END) {
+        if (shift) startOrExtendSelection(inp) else clearSelection(inp);
         inp.cursor = inp.len;
-        clearSelection(inp);
-        cursor_blink = 0;
-        cursor_visible = true;
+        if (shift) updateSelectionEnd(inp);
+        cursor_blink = 0; cursor_visible = true;
         return true;
     }
 
+    // ── Enter ──
     if (sym == c.SDLK_RETURN or sym == c.SDLK_KP_ENTER) {
-        if (inp.multiline) {
-            // Insert newline
-            if (inp.len < BUF_SIZE - 1) {
-                // Shift right
-                if (inp.cursor < inp.len) {
-                    var i: u16 = inp.len;
-                    while (i > inp.cursor) {
-                        inp.buf[i] = inp.buf[i - 1];
-                        i -= 1;
-                    }
+        if (inp.multiline and inp.editable) {
+            // submitOnEnter: Enter submits, Shift+Enter inserts newline
+            if (inp.submit_on_enter and !shift) {
+                if (inp.len > 0) {
+                    @memcpy(g_last_submit_buf[0..inp.len], inp.buf[0..inp.len]);
+                    g_last_submit_len = inp.len;
+                    g_last_submit_id = @intCast(id);
                 }
-                inp.buf[inp.cursor] = '\n';
-                inp.len += 1;
-                inp.cursor += 1;
-                cursor_blink = 0;
-                cursor_visible = true;
+                if (on_submit_callbacks[id]) |cb| cb();
+                return true;
+            }
+            pushUndo(id, inp);
+            if (inp.has_selection) _ = deleteSelection(inp);
+            var nl: [1]u8 = .{'\n'};
+            _ = insertBytes(inp, nl[0..]);
+            cursor_blink = 0; cursor_visible = true;
+            if (inp.len != prev_len) {
+                if (on_change_callbacks[id]) |cb| cb();
             }
             return true;
         }
-        // Single-line: capture the pre-clear text for the submit bus,
-        // fire submit callback, then clear input.
+        // Single-line: capture text for submit bus, fire onSubmit.
+        // Buffer is NOT cleared here — controlled inputs round-trip through
+        // React state; carts that want clear-on-submit call __setInputText.
         if (inp.len > 0) {
             @memcpy(g_last_submit_buf[0..inp.len], inp.buf[0..inp.len]);
             g_last_submit_len = inp.len;
             g_last_submit_id = @intCast(id);
         }
         if (on_submit_callbacks[id]) |cb| cb();
-        // Clear the input after submit
-        inp.len = 0;
-        inp.cursor = 0;
-        if (on_change_callbacks[id]) |ccb| ccb();
         return true;
     }
 
+    // ── Tab ──
     if (sym == c.SDLK_TAB) {
-        if (inp.multiline) {
-            // Insert 4 spaces
-            const spaces = "    ";
-            if (inp.len + 4 <= BUF_SIZE - 1) {
-                if (inp.cursor < inp.len) {
-                    var i: u16 = inp.len + 3;
-                    while (i > inp.cursor + 3) {
-                        inp.buf[i] = inp.buf[i - 4];
-                        i -= 1;
-                    }
-                }
-                for (0..4) |j| {
-                    inp.buf[inp.cursor + @as(u16, @intCast(j))] = spaces[j];
-                }
-                inp.len += 4;
-                inp.cursor += 4;
-                cursor_blink = 0;
-                cursor_visible = true;
+        if (inp.multiline and inp.editable) {
+            pushUndo(id, inp);
+            if (inp.has_selection) _ = deleteSelection(inp);
+            var spaces: [4]u8 = .{' ',' ',' ',' '};
+            _ = insertBytes(inp, spaces[0..]);
+            cursor_blink = 0; cursor_visible = true;
+            if (inp.len != prev_len) {
+                if (on_change_callbacks[id]) |cb| cb();
             }
             return true;
         }
-        // Single-line: cycle to next/previous active input
-        const reverse = (mods & c.SDL_KMOD_SHIFT) != 0;
+        // Single-line: cycle focus to next/prev active input
+        const reverse = shift;
         const current = id;
         var next = current;
         var tried: u8 = 0;
@@ -392,111 +581,91 @@ pub fn handleKey(sym: c_int, mods: u16) bool {
         return true;
     }
 
-    if (inp.len != prev_len) {
-        if (on_change_callbacks[id]) |cb| cb();
+    // ── Editing ──
+    if (!inp.editable) return true;
+
+    if (sym == c.SDLK_BACKSPACE) {
+        pushUndo(id, inp);
+        if (inp.has_selection) {
+            _ = deleteSelection(inp);
+        } else if (inp.cursor > 0) {
+            const new_pos = stepLeft(inp.buf[0..inp.len], inp.cursor);
+            const del_len = inp.cursor - new_pos;
+            var i = new_pos;
+            while (i < inp.len - del_len) : (i += 1) {
+                inp.buf[i] = inp.buf[i + del_len];
+            }
+            inp.len -= del_len;
+            inp.cursor = new_pos;
+        }
+        cursor_blink = 0; cursor_visible = true;
+        if (inp.len != prev_len) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
+        return true;
+    }
+
+    if (sym == c.SDLK_DELETE) {
+        pushUndo(id, inp);
+        if (inp.has_selection) {
+            _ = deleteSelection(inp);
+        } else if (inp.cursor < inp.len) {
+            const end = stepRight(inp.buf[0..inp.len], inp.cursor);
+            const del_len = end - inp.cursor;
+            var i = inp.cursor;
+            while (i < inp.len - del_len) : (i += 1) {
+                inp.buf[i] = inp.buf[i + del_len];
+            }
+            inp.len -= del_len;
+        }
+        cursor_blink = 0; cursor_visible = true;
+        if (inp.len != prev_len) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
+        return true;
     }
 
     return false;
 }
 
-// ── Selection helpers ────────────────────────────────────────────────
-
-/// Get the selection range (lo, hi) ordered.
-pub fn getSelection(id: u8) struct { lo: u16, hi: u16 } {
-    if (id >= MAX_INPUTS) return .{ .lo = 0, .hi = 0 };
-    const inp = &inputs[id];
-    if (!inp.has_selection) return .{ .lo = inp.cursor, .hi = inp.cursor };
-    return if (inp.sel_start <= inp.sel_end)
-        .{ .lo = inp.sel_start, .hi = inp.sel_end }
-    else
-        .{ .lo = inp.sel_end, .hi = inp.sel_start };
-}
-
-/// Delete the selected range and collapse cursor to the start.
-fn deleteSelection(inp: *InputState) void {
-    if (!inp.has_selection) return;
-    const lo = if (inp.sel_start <= inp.sel_end) inp.sel_start else inp.sel_end;
-    const hi = if (inp.sel_start <= inp.sel_end) inp.sel_end else inp.sel_start;
-    const del_len = hi - lo;
-    if (del_len == 0) return;
-    // Shift left
-    var i = lo;
-    while (i < inp.len - del_len) : (i += 1) {
-        inp.buf[i] = inp.buf[i + del_len];
-    }
-    inp.len -= del_len;
-    inp.cursor = lo;
-    inp.has_selection = false;
-}
-
-fn clearSelection(inp: *InputState) void {
-    inp.has_selection = false;
-    inp.sel_start = inp.cursor;
-    inp.sel_end = inp.cursor;
-}
-
-// ── Undo state ──────────────────────────────────────────────────────
-
-const MAX_UNDO = 32;
-const UndoEntry = struct {
-    buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
-    len: u16 = 0,
-    cursor: u16 = 0,
-};
-
-var undo_stack: [MAX_UNDO]UndoEntry = [_]UndoEntry{.{}} ** MAX_UNDO;
-var undo_count: u16 = 0;
-var undo_input_id: ?u8 = null; // which input the undo stack belongs to
-
-fn pushUndo(id: u8, inp: *const InputState) void {
-    if (undo_input_id != null and undo_input_id.? != id) {
-        // Different input — reset undo stack
-        undo_count = 0;
-    }
-    undo_input_id = id;
-    if (undo_count < MAX_UNDO) {
-        @memcpy(undo_stack[undo_count].buf[0..inp.len], inp.buf[0..inp.len]);
-        undo_stack[undo_count].len = inp.len;
-        undo_stack[undo_count].cursor = inp.cursor;
-        undo_count += 1;
-    }
-}
-
-fn popUndo(inp: *InputState) void {
-    if (undo_count > 0) {
-        undo_count -= 1;
-        const entry = &undo_stack[undo_count];
-        @memcpy(inp.buf[0..entry.len], entry.buf[0..entry.len]);
-        inp.len = entry.len;
-        inp.cursor = entry.cursor;
-        inp.has_selection = false;
-    }
-}
-
-// ── Ctrl+Key handler ────────────────────────────────────────────────
-
-/// Handle Ctrl+key combinations. Returns true if handled.
 pub fn handleCtrlKey(sym: c_int, mods: u16) bool {
     const id = focused_id orelse return false;
     if (id >= MAX_INPUTS) return false;
     if (on_key_callbacks[id]) |cb| cb(sym, mods);
-    var inp = &inputs[id];
+    const inp = &inputs[id];
+    const shift = (mods & c.SDL_KMOD_SHIFT) != 0;
+    const prev_len = inp.len;
+
+    // Ctrl+Arrow = word jump (with optional shift-extend)
+    if (sym == c.SDLK_LEFT) {
+        if (shift) startOrExtendSelection(inp) else clearSelection(inp);
+        wordJumpLeft(inp);
+        if (shift) updateSelectionEnd(inp);
+        cursor_blink = 0; cursor_visible = true;
+        return true;
+    }
+    if (sym == c.SDLK_RIGHT) {
+        if (shift) startOrExtendSelection(inp) else clearSelection(inp);
+        wordJumpRight(inp);
+        if (shift) updateSelectionEnd(inp);
+        cursor_blink = 0; cursor_visible = true;
+        return true;
+    }
 
     // Ctrl+A — select all
     if (sym == c.SDLK_A) {
         inp.sel_start = 0;
         inp.sel_end = inp.len;
-        inp.has_selection = true;
+        inp.has_selection = inp.len > 0;
         inp.cursor = inp.len;
         return true;
     }
 
-    // Ctrl+C — copy selection to clipboard
+    // Ctrl+C — copy selection
     if (sym == c.SDLK_C) {
         if (inp.has_selection) {
             const sel = getSelection(id);
             if (sel.hi > sel.lo) {
-                // Null-terminate for SDL
                 var clip_buf: [BUF_SIZE + 1]u8 = undefined;
                 const clip_len = sel.hi - sel.lo;
                 @memcpy(clip_buf[0..clip_len], inp.buf[sel.lo..sel.hi]);
@@ -509,107 +678,221 @@ pub fn handleCtrlKey(sym: c_int, mods: u16) bool {
 
     // Ctrl+X — cut selection
     if (sym == c.SDLK_X) {
-        if (inp.has_selection) {
+        if (inp.editable and inp.has_selection) {
             const sel = getSelection(id);
             if (sel.hi > sel.lo) {
-                // Copy first
                 var clip_buf: [BUF_SIZE + 1]u8 = undefined;
                 const clip_len = sel.hi - sel.lo;
                 @memcpy(clip_buf[0..clip_len], inp.buf[sel.lo..sel.hi]);
                 clip_buf[clip_len] = 0;
                 _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
-                // Then delete
                 pushUndo(id, inp);
-                deleteSelection(inp);
+                _ = deleteSelection(inp);
+                if (on_change_callbacks[id]) |cb| cb();
             }
         }
         return true;
     }
 
-    // Ctrl+V — paste from clipboard
+    // Ctrl+V — paste
     if (sym == c.SDLK_V) {
+        if (!inp.editable) return true;
         const clip = c.SDL_GetClipboardText();
         if (clip != null) {
-            pushUndo(id, inp);
-            // Delete selection first if any
-            if (inp.has_selection) deleteSelection(inp);
-            // Insert clipboard text
-            handleTextInput(clip);
-            c.SDL_free(@ptrCast(clip));
+            defer c.SDL_free(@ptrCast(clip));
+            const span = std.mem.span(clip);
+            if (span.len > 0) {
+                pushUndo(id, inp);
+                if (inp.has_selection) _ = deleteSelection(inp);
+                // Strip newlines in single-line mode
+                if (!inp.multiline) {
+                    for (span) |b| {
+                        if (b == '\n' or b == '\r') {
+                            var tmp: [1]u8 = .{' '};
+                            _ = insertBytes(inp, tmp[0..]);
+                        } else {
+                            var tmp: [1]u8 = .{b};
+                            _ = insertBytes(inp, tmp[0..]);
+                        }
+                    }
+                } else {
+                    _ = insertBytes(inp, span);
+                }
+                cursor_blink = 0; cursor_visible = true;
+                if (inp.len != prev_len) {
+                    if (on_change_callbacks[id]) |cb| cb();
+                }
+            }
         }
         return true;
     }
 
-    // Ctrl+Z — undo
+    // Ctrl+Z — undo; Ctrl+Shift+Z / Ctrl+Y — redo
     if (sym == c.SDLK_Z) {
-        pushUndo(id, inp); // save current for redo (simplified)
-        popUndo(inp);
+        if (!inp.editable) return true;
+        const did = if (shift) doRedo(id, inp) else doUndo(id, inp);
+        if (did) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
+        return true;
+    }
+    if (sym == c.SDLK_Y) {
+        if (!inp.editable) return true;
+        if (doRedo(id, inp)) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
+        return true;
+    }
+
+    // Ctrl+Backspace — delete word left
+    if (sym == c.SDLK_BACKSPACE) {
+        if (!inp.editable) return true;
+        pushUndo(id, inp);
+        if (inp.has_selection) {
+            _ = deleteSelection(inp);
+        } else if (inp.cursor > 0) {
+            const old = inp.cursor;
+            wordJumpLeft(inp);
+            const new_pos = inp.cursor;
+            const del_len = old - new_pos;
+            var i = new_pos;
+            while (i < inp.len - del_len) : (i += 1) {
+                inp.buf[i] = inp.buf[i + del_len];
+            }
+            inp.len -= del_len;
+        }
+        cursor_blink = 0; cursor_visible = true;
+        if (inp.len != prev_len) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
+        return true;
+    }
+
+    // Ctrl+Delete — delete word right
+    if (sym == c.SDLK_DELETE) {
+        if (!inp.editable) return true;
+        pushUndo(id, inp);
+        if (inp.has_selection) {
+            _ = deleteSelection(inp);
+        } else if (inp.cursor < inp.len) {
+            const start = inp.cursor;
+            wordJumpRight(inp);
+            const end = inp.cursor;
+            inp.cursor = start;
+            const del_len = end - start;
+            var i = start;
+            while (i < inp.len - del_len) : (i += 1) {
+                inp.buf[i] = inp.buf[i + del_len];
+            }
+            inp.len -= del_len;
+        }
+        cursor_blink = 0; cursor_visible = true;
+        if (inp.len != prev_len) {
+            if (on_change_callbacks[id]) |cb| cb();
+        }
         return true;
     }
 
     return false;
 }
-/// Returns whether the cursor should be visible.
-pub fn tickBlink(dt: f32) bool {
-    cursor_blink += dt;
-    if (cursor_blink >= 1.6) {
-        cursor_blink = 0;
-        cursor_visible = !cursor_visible;
-    }
-    return cursor_visible;
-}
 
-/// Get cursor position in an input (character index).
-pub fn getCursorPos(id: u8) u16 {
-    if (id >= MAX_INPUTS) return 0;
-    return inputs[id].cursor;
-}
+// ── External buffer management ──────────────────────────────────────
 
-/// Clear an input's text.
+/// Blow away the buffer. Carts call this from onSubmit to clear.
 pub fn clear(id: u8) void {
     if (id >= MAX_INPUTS) return;
     inputs[id].len = 0;
     inputs[id].cursor = 0;
+    inputs[id].has_selection = false;
+    inputs[id].scroll_x = 0;
+    inputs[id].last_synced_valid = false;
 }
 
-/// Set text programmatically (e.g. from state restoration).
+/// Set text programmatically, cursor goes to end. Use syncValue() instead
+/// from prop-update paths — this one is for explicit resets.
 pub fn setText(id: u8, text: []const u8) void {
     if (id >= MAX_INPUTS) return;
-    var inp = &inputs[id];
-    const copy_len: u16 = @intCast(@min(text.len, BUF_SIZE - 1));
+    const inp = &inputs[id];
+    const copy_len: u32 = @intCast(@min(text.len, BUF_SIZE - 1));
     @memcpy(inp.buf[0..copy_len], text[0..copy_len]);
     inp.len = copy_len;
     inp.cursor = copy_len;
     inp.has_selection = false;
+    // Snapshot the sync baseline so a subsequent syncValue(same text) no-ops.
+    @memcpy(inp.last_synced_buf[0..copy_len], text[0..copy_len]);
+    inp.last_synced_len = copy_len;
+    inp.last_synced_valid = true;
 }
 
-// ── Telemetry ────────────────────────────────────────────────────────────
+/// Controlled-value sync — call from prop-update or paint-time paths.
+/// Only writes the buffer when the new value differs from what was last
+/// synced (not from the current buffer), so user edits aren't clobbered
+/// by a paint-driven re-sync of an unchanged prop.
+///
+/// When the synced value does change (cart rewrote it), we preserve the
+/// cursor position relatively: clamp to new length.
+pub fn syncValue(id: u8, text: []const u8) void {
+    if (id >= MAX_INPUTS) return;
+    const inp = &inputs[id];
+    const new_len: u32 = @intCast(@min(text.len, BUF_SIZE - 1));
 
-pub const TelemetryInputStats = struct {
-    focused_id: i8,
-    active_count: u32,
-};
+    if (inp.last_synced_valid and inp.last_synced_len == new_len and
+        std.mem.eql(u8, inp.last_synced_buf[0..inp.last_synced_len], text[0..new_len]))
+    {
+        return;
+    }
 
-var drag_id: ?u8 = null;
-var drag_font_size: u16 = 0;
+    // Real change from the cart side — rewrite buffer, keep cursor clamped.
+    @memcpy(inp.buf[0..new_len], text[0..new_len]);
+    inp.len = new_len;
+    if (inp.cursor > new_len) inp.cursor = new_len;
+    if (inp.sel_start > new_len) inp.sel_start = new_len;
+    if (inp.sel_end > new_len) inp.sel_end = new_len;
+    inp.has_selection = inp.has_selection and inp.sel_start != inp.sel_end;
+    @memcpy(inp.last_synced_buf[0..new_len], text[0..new_len]);
+    inp.last_synced_len = new_len;
+    inp.last_synced_valid = true;
+}
 
-/// Select all text in the given input.
+pub fn getCursorPos(id: u8) u32 {
+    if (id >= MAX_INPUTS) return 0;
+    return inputs[id].cursor;
+}
+
+pub fn setCursorPos(id: u8, pos: u32) void {
+    if (id >= MAX_INPUTS) return;
+    const s = &inputs[id];
+    const clamped = @min(pos, s.len);
+    s.cursor = clamped;
+    s.has_selection = false;
+    s.sel_start = clamped;
+    s.sel_end = clamped;
+}
+
+pub fn updateDragToPos(id: u8, pos: u32) void {
+    if (id >= MAX_INPUTS) return;
+    const s = &inputs[id];
+    const clamped = @min(pos, s.len);
+    s.sel_end = clamped;
+    s.cursor = clamped;
+    s.has_selection = s.sel_start != s.sel_end;
+}
+
 pub fn selectAll(id: u8) void {
     if (id >= MAX_INPUTS) return;
     const s = &inputs[id];
     s.sel_start = 0;
     s.sel_end = s.len;
-    s.has_selection = true;
+    s.has_selection = s.len > 0;
     s.cursor = s.len;
 }
 
-/// Select the word at the cursor position.
 pub fn selectWord(id: u8) void {
     if (id >= MAX_INPUTS) return;
     const s = &inputs[id];
     const buf = s.buf[0..s.len];
-    var start: u16 = s.cursor;
-    var end: u16 = s.cursor;
+    var start: u32 = s.cursor;
+    var end: u32 = s.cursor;
     while (start > 0 and isWordChar(buf[start - 1])) start -= 1;
     while (end < s.len and isWordChar(buf[end])) end += 1;
     s.sel_start = start;
@@ -618,58 +901,87 @@ pub fn selectWord(id: u8) void {
     s.cursor = end;
 }
 
-fn isWordChar(ch: u8) bool {
-    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
-}
-
-/// Set cursor position from a pixel X offset using the measure callback.
+/// O(N) click-to-cursor: single running-width walk instead of measuring
+/// every prefix. The old path called measure_width_fn N times per click.
 pub fn setCursorFromX(id: u8, local_x: f32, font_size: u16) void {
     if (id >= MAX_INPUTS or measure_width_fn == null) return;
     const s = &inputs[id];
     const mfn = measure_width_fn.?;
-    var best: u16 = 0;
-    var best_dist: f32 = @abs(local_x);
-    for (1..@as(usize, s.len) + 1) |i| {
-        const w = mfn(s.buf[0..i], font_size);
-        const dist = @abs(local_x - w);
-        if (dist < best_dist) {
-            best_dist = dist;
-            best = @intCast(i);
+    // Walk codepoints left→right; stop when cursor_x passes local_x, pick
+    // the nearer boundary.
+    var p: u32 = 0;
+    var prev_w: f32 = 0;
+    while (p < s.len) {
+        const next = stepRight(s.buf[0..s.len], p);
+        const w = mfn(s.buf[0..next], font_size);
+        if (w >= local_x) {
+            if (local_x - prev_w < w - local_x) {
+                s.cursor = p;
+            } else {
+                s.cursor = next;
+            }
+            s.has_selection = false;
+            return;
         }
+        prev_w = w;
+        p = next;
     }
-    s.cursor = best;
+    s.cursor = s.len;
     s.has_selection = false;
 }
 
-/// Begin a drag selection from current cursor position.
 pub fn startDrag(id: u8) void {
     if (id >= MAX_INPUTS) return;
-    drag_id = id;
     const s = &inputs[id];
     s.sel_start = s.cursor;
     s.sel_end = s.cursor;
     s.has_selection = false;
 }
 
-/// Update drag selection to new X position.
 pub fn updateDrag(id: u8, local_x: f32, font_size: u16) void {
     if (id >= MAX_INPUTS or measure_width_fn == null) return;
+    setCursorFromX(id, local_x, font_size);
     const s = &inputs[id];
-    const mfn = measure_width_fn.?;
-    var best: u16 = 0;
-    var best_dist: f32 = @abs(local_x);
-    for (1..@as(usize, s.len) + 1) |i| {
-        const w = mfn(s.buf[0..i], font_size);
-        const dist = @abs(local_x - w);
-        if (dist < best_dist) {
-            best_dist = dist;
-            best = @intCast(i);
-        }
-    }
-    s.sel_end = best;
-    s.cursor = best;
+    s.sel_end = s.cursor;
     s.has_selection = s.sel_start != s.sel_end;
 }
+
+// ── Props (settable per slot) ───────────────────────────────────────
+
+pub fn setEditable(id: u8, editable: bool) void {
+    if (id < MAX_INPUTS) inputs[id].editable = editable;
+}
+pub fn setSecure(id: u8, secure: bool) void {
+    if (id < MAX_INPUTS) inputs[id].secure = secure;
+}
+pub fn setMaxLength(id: u8, max: u32) void {
+    if (id < MAX_INPUTS) inputs[id].max_length = max;
+}
+pub fn setSubmitOnEnter(id: u8, v: bool) void {
+    if (id < MAX_INPUTS) inputs[id].submit_on_enter = v;
+}
+pub fn isSecure(id: u8) bool {
+    if (id >= MAX_INPUTS) return false;
+    return inputs[id].secure;
+}
+
+// ── Blink ───────────────────────────────────────────────────────────
+
+pub fn tickBlink(dt: f32) bool {
+    cursor_blink += dt;
+    if (cursor_blink >= 0.53) {
+        cursor_blink = 0;
+        cursor_visible = !cursor_visible;
+    }
+    return cursor_visible;
+}
+
+// ── Telemetry ───────────────────────────────────────────────────────
+
+pub const TelemetryInputStats = struct {
+    focused_id: i8,
+    active_count: u32,
+};
 
 pub fn telemetryStats() TelemetryInputStats {
     var count: u32 = 0;

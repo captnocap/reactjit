@@ -294,6 +294,41 @@ export function flushToHost(): void {
   pendingCommands.length = 0;
 }
 
+// ── Flush scheduling ─────────────────────────────────────
+//
+// A single user event can trigger a chain of commits: click sets tab, effect
+// syncs derived state, memo invalidates, another effect fires, … React calls
+// resetAfterCommit per commit. Flushing synchronously there turns one event
+// into N separate __hostFlush calls (10+ seen in the cursor-ide tab switch),
+// each with its own JSON.stringify + FFI crossing + Zig-side queue entry.
+//
+// Deferring the flush to a microtask lets all commits in the current
+// synchronous span accumulate into pendingCommands first; coalesceCommands
+// then merges same-id UPDATEs across commits, and a single bridge call
+// leaves the VM. When JS returns to Zig, microtasks drain, Zig sees one
+// batch instead of ten.
+//
+// QuickJS doesn't expose queueMicrotask, but Promise microtasks are drained
+// at every JS→native boundary via JS_ExecutePendingJob — which means a
+// Promise.resolve().then callback runs after the current JS synchronous span
+// returns and before Zig regains control. That's exactly the scheduling point
+// we want: all commits from a single event accumulate into pendingCommands,
+// then one flush happens on the way out.
+let flushScheduled = false;
+const microtask: (fn: () => void) => void =
+  typeof (globalThis as any).queueMicrotask === 'function'
+    ? (globalThis as any).queueMicrotask.bind(globalThis)
+    : (fn: () => void) => { Promise.resolve().then(fn); };
+
+export function scheduleFlush(): void {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  microtask(() => {
+    flushScheduled = false;
+    flushToHost();
+  });
+}
+
 /**
  * Separate on* handler props from regular props.
  * Handlers stay in JS; only clean props cross the bridge.
@@ -352,14 +387,26 @@ export function shallowEqual(
 }
 
 /**
- * Compare two handler maps by reference equality of each handler.
+ * Compare two handler maps by the *set of handler names* only.
+ *
+ * Function-identity changes alone never need to cross the bridge: the JS-side
+ * handlerRegistry is updated unconditionally in commitUpdate, so when Zig
+ * dispatches a press it always walks through the latest closure. Emitting an
+ * UPDATE just because `oldProps.onPress !== newProps.onPress` is pure waste —
+ * and a parent that rerenders with inline arrow handlers cascades into O(N)
+ * UPDATEs per frame across every Pressable in the subtree. That turns a
+ * harmless ancestor rerender into a bridge flood (see the cursor-ide tab
+ * switch incident).
+ *
+ * Genuine adds/removes (onHoverEnter appearing, onPress disappearing) still
+ * return false → Zig learns about them via the __handlersOnly UPDATE branch.
  */
 function handlersEqual(a: Record<string, Function>, b: Record<string, Function>): boolean {
   const keysA = Object.keys(a);
   const keysB = Object.keys(b);
   if (keysA.length !== keysB.length) return false;
   for (const k of keysA) {
-    if (a[k] !== b[k]) return false;
+    if (!(k in b)) return false;
   }
   return true;
 }
@@ -799,7 +846,7 @@ export const hostConfig: HostConfig<
   },
 
   resetAfterCommit() {
-    flushToHost();
+    scheduleFlush();
   },
 
   // ── Misc required methods ────────────────────────────

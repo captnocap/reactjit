@@ -300,7 +300,14 @@ pub const Session = struct {
                 error.WouldBlock => return null,
                 else => return error.ReadError,
             };
-            if (n == 0) return null;
+            if (n == 0) {
+                self.closed = true;
+                if (self.child.stdin) |stdin| {
+                    stdin.close();
+                    self.child.stdin = null;
+                }
+                return null;
+            }
             try self.line_buf.append(self.chunk[0..n]);
             if (self.line_buf.buffer.items.len > self.options.max_line_bytes) return error.LineTooLong;
         }

@@ -314,27 +314,6 @@ function eventAliases(type: string): string[] {
   }
 };
 
-(globalThis as any).__dispatchInputCursor = (id: number, cursor: number, selectionStart: number, selectionEnd: number, hasSelection: number) => {
-  try {
-    const text = getInputTextForNode(id);
-    const payload = {
-      targetId: id,
-      text,
-      cursor,
-      selectionStart,
-      selectionEnd,
-      hasSelection: !!hasSelection,
-    };
-    const handlers = handlerRegistry.get(id);
-    if (!handlers) return;
-    if (typeof handlers.onCursorChange === 'function') handlers.onCursorChange(payload);
-    if (typeof handlers.onSelectionChange === 'function') handlers.onSelectionChange(payload);
-    if (payload.hasSelection && typeof handlers.onSelect === 'function') handlers.onSelect(payload);
-  } catch (e) {
-    // swallow — host prints nothing for eval exceptions except via QJS itself
-  }
-};
-
 (globalThis as any).__dispatchRightClick = (id: number) => {
   try {
     const payload = { targetId: id, ...getPreparedRightClickPayload() };

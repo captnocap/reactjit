@@ -110,6 +110,15 @@ pub const InlineSlot = struct {
     glyph_index: u8 = 0,
 };
 
+pub const ColorTextSpan = struct {
+    text: []const u8 = "",
+    color: Color = Color.rgb(255, 255, 255),
+};
+
+pub const ColorTextRow = struct {
+    spans: []const ColorTextSpan = &.{},
+};
+
 pub const MAX_INLINE_SLOTS = 8;
 pub const ImageDims = struct {
     width: f32 = 0,
@@ -276,6 +285,8 @@ pub const Node = struct {
     cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
+    input_paint_text: bool = true,
+    input_color_rows: ?[]const ColorTextRow = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,
@@ -370,6 +381,7 @@ pub const Node = struct {
     canvas_gy: f32 = 0, // graph-space Y (center)
     canvas_gw: f32 = 0, // graph-space width (0 = auto from content)
     canvas_gh: f32 = 0, // graph-space height (0 = auto from content)
+    canvas_move_draggable: bool = false, // true = Alt+drag on this node fires onMove (for cart-driven reposition)
     // Canvas.Path fields — SVG path drawing
     canvas_clamp: bool = false, // true = this is a Canvas.Clamp (viewport-pinned)
     canvas_path: bool = false, // true = this is a Canvas.Path
@@ -745,7 +757,7 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
         return dims.height + pt + pb;
     }
     if (node.input_id != null) {
-        return @as(f32, @floatFromInt(node.font_size)) + pt + pb;
+        return @as(f32, @floatFromInt(node.font_size)) * 1.4 + pt + pb;
     }
     if (node.children.len == 0) {
         return pt + pb;
@@ -1255,7 +1267,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (numLines > 1 and freeCross > 0) {
         switch (s.align_content) {
             .center => {
-                crossOffset = freeCross / 2;
+                crossOffset = @floor(freeCross / 2);
             },
             .end => {
                 crossOffset = freeCross;
@@ -1265,11 +1277,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             },
             .space_around => {
                 extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines));
-                crossOffset = extraCrossGap / 2;
+                crossOffset = @floor(extraCrossGap / 2);
             },
             .space_evenly => {
                 extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines + 1));
-                crossOffset = extraCrossGap;
+                crossOffset = @floor(extraCrossGap);
             },
             .stretch => {
                 // Distribute extra space equally to each line
@@ -1524,13 +1536,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     .space_around => {
                         if (lc > 0) {
                             extraGap = freeMain / @as(f32, @floatFromInt(lc));
-                            mainOffset = extraGap / 2;
+                            mainOffset = @floor(extraGap / 2);
                         }
                     },
                     .space_evenly => {
                         if (lc > 0) {
                             extraGap = freeMain / @as(f32, @floatFromInt((lc + 1)));
-                            mainOffset = extraGap;
+                            mainOffset = @floor(extraGap);
                         }
                     },
                     .start => {},

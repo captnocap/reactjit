@@ -3,6 +3,9 @@
     .name = .reactjit,
     .version = "0.0.0",
     .dependencies = .{
+        .tls_zig = .{
+            .path = "deps/tls.zig",
+        },
         .wgpu_native_zig = .{
             .path = "deps/wgpu_native_zig",
         },

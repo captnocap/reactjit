@@ -58,6 +58,25 @@ What happens:
 
 **No `.tsz`. No Smith. No d-suite.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
 
+## Dev Path (iterate without rebuilding)
+
+```bash
+./scripts/dev <cart-name>       # launches persistent dev host + watches for saves
+./scripts/dev <other-cart>      # second terminal: pushes to running host, adds tab
+```
+
+**When to rebuild:**
+- Cart `.tsx` / `.ts`, anything under `runtime/` or `renderer/` — **no rebuild needed**. The dev host watches saves, re-bundles via esbuild, pushes the new JS over `/tmp/reactjit.sock`, and re-evals. ~300ms save → visible change.
+- Zig (`framework/`, `qjs_app.zig`, `build.zig`), `scripts/` — **rebuild required**. Delete `zig-out/bin/reactjit-dev` and re-run `./scripts/dev <cart>`, or explicitly: `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`.
+
+**Dev host is always `-Doptimize=ReleaseFast`.** The Debug build has a pre-existing framework bug that silently crashes on any click. Do not switch the dev compile to Debug without fixing that first.
+
+**Window chrome.** The host is borderless; the top strip IS the OS titlebar. Each `scripts/dev <cart>` invocation registers a tab (bootstrap `main` tab is hidden). Click a tab to switch (full QJS teardown + re-eval). Double-click chrome → maximize/restore toggle. Drag empty chrome → move window. Min/Max/Close buttons on the right. Resize edges at 6px left/right/bottom, 3px top.
+
+**useHotState state preservation: NOT working yet.** The scaffold exists (`runtime/hooks/useHotState.ts` + `framework/hotstate.zig` + `__hot_get/__hot_set` host fns) but in practice state still resets on every hot reload. Do NOT assume atoms persist. Tell users if they ask.
+
+See `runtime/hooks/README.md` for the current matrix of which host bindings are live (fs / localstore / crypto / sqlite / http sync+async / env / exit all live; websocket + process spawn streaming pending).
+
 ## Primitives (runtime/primitives.tsx)
 
 `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, `Native`.

@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     const app_name = b.option([]const u8, "app-name", "Output binary name") orelse "app";
     const app_source = b.option([]const u8, "app-source", "Root Zig source file") orelse "qjs_app.zig";
     const sysroot = b.option([]const u8, "sysroot", "Optional sysroot for cross-builds");
+    const dev_mode = b.option(bool, "dev-mode", "Read bundle.js from disk and hot-reload on change") orelse false;
 
     // ── wgpu-native ────────────────────────────────────────────
     const wgpu_dep = b.dependency("wgpu_native_zig", .{
@@ -23,6 +24,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const wgpu_mod = wgpu_dep.module("wgpu");
+
+    // ── tls.zig (browser page fetch path) ───────────────────────
+    const tls_dep = b.dependency("tls_zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const tls_mod = b.createModule(.{
+        .root_source_file = tls_dep.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // ── zluajit (LuaJIT worker compute) ────────────────────────
     const zluajit_dep = b.dependency("zluajit", .{
@@ -34,6 +46,8 @@ pub fn build(b: *std.Build) void {
     // ── Build options ──────────────────────────────────────────
     const options = b.addOptions();
     options.addOption(bool, "is_lib", false);
+    options.addOption([]const u8, "app_name", app_name);
+    options.addOption(bool, "dev_mode", dev_mode);
     options.addOption(bool, "has_quickjs", true);
     options.addOption(bool, "has_physics", true);
     options.addOption(bool, "has_terminal", true);
@@ -45,7 +59,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_transitions", true);
     options.addOption(bool, "has_networking", true);
     options.addOption(bool, "has_crypto", true);
-    options.addOption(bool, "has_blend2d", true);
+    options.addOption(bool, "has_blend2d", false);
     options.addOption(bool, "has_debug_server", true);
 
     const root_mod = b.createModule(.{
@@ -55,13 +69,17 @@ pub fn build(b: *std.Build) void {
     });
     root_mod.addOptions("build_options", options);
     root_mod.addImport("wgpu", wgpu_mod);
+    root_mod.addImport("tls", tls_mod);
     root_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
 
     const exe = b.addExecutable(.{
         .name = app_name,
         .root_module = root_mod,
     });
-    exe.stack_size = 16 * 1024 * 1024; // 16MB — deep component trees
+    // 64MB stack. Debug frames are massive (SDL_Event union + engine.run locals
+    // alone burn through the old 16MB), and recursive hitTest/paint walks on
+    // deep trees compound fast. VA-only; no RSS cost until used.
+    exe.stack_size = 64 * 1024 * 1024;
 
     // ── Always linked ──────────────────────────────────────────
     exe.linkLibC();
@@ -112,14 +130,11 @@ pub fn build(b: *std.Build) void {
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
 
-    // ── stb image ──────────────────────────────────────────────
-    root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+    // ── stb image write ────────────────────────────────────────
     root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
 
     // ── Framework FFI shims ────────────────────────────────────
-    root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
 
     // ── System libraries ──────────────────────────────────────
@@ -127,16 +142,10 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("vterm");
     exe.linkSystemLibrary("curl");
-    exe.linkSystemLibrary("archive");
 
-    // ── Blend2D (2D vector graphics — present in framework, not heavily used) ──
-    root_mod.addIncludePath(b.path("blend2d"));
-    exe.addObjectFile(b.path("blend2d/build/libblend2d_full.a"));
-    root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+    // ── C++ runtime ────────────────────────────────────────────
+    // physics_shim.cpp still requires the C++ runtime even with Blend2D gone.
     exe.linkLibCpp();
-
-    // ── Vello CPU (Rust FFI — imported but unused in current runtime) ──
-    exe.addObjectFile(b.path("deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
     if (os_tag == .linux) {
         if (sysroot) |sr| {

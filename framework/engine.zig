@@ -908,8 +908,46 @@ var input_drag_node_pl: f32 = 0; // node padding-left
 var input_drag_node_pt: f32 = 0; // node padding-top
 var input_drag_max_width: f32 = 0;
 var input_drag_font_size: u16 = 0;
+// Coalesced drag position — set per SDL_EVENT_MOUSE_MOTION, consumed once
+// per frame after the event pump. Avoids N hit-tests per frame when SDL
+// delivers a burst of motion events during rapid dragging.
+var input_drag_pending: bool = false;
+var input_drag_pending_x: f32 = 0;
+var input_drag_pending_y: f32 = 0;
 
-fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32) u16 {
+// Input-to-present latency probe. Stamped on the SDL event that produces
+// a text/cursor change; logged once the next frame has finished painting.
+// Answers "how long from keypress/drag to pixels on screen?".
+var g_input_latency_ts_us: i64 = 0;
+var g_input_latency_kind: []const u8 = "";
+var g_input_latency_event_count: u32 = 0; // events batched into this frame
+
+fn stampInputLatency(kind: []const u8) void {
+    if (g_input_latency_ts_us == 0) {
+        g_input_latency_ts_us = std.time.microTimestamp();
+        g_input_latency_kind = kind;
+    }
+    g_input_latency_event_count += 1;
+}
+
+fn scrollOffsetForNode(node: *Node, target: *Node, sx: *f32, sy: *f32) bool {
+    if (node == target) return true;
+    const ov = node.style.overflow;
+    const r = node.computed;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    for (node.children) |*child| {
+        if (scrollOffsetForNode(child, target, sx, sy)) {
+            if (is_scroll) {
+                sx.* += node.scroll_x;
+                sy.* += node.scroll_y;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32) u32 {
     const typed = input.getText(id);
     if (typed.len == 0) return 0;
 
@@ -927,7 +965,7 @@ fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_widt
         return @intCast(@min(idx, typed.len));
     }
 
-    return if (local_x <= 0) 0 else @intCast(@min(typed.len, @as(usize, std.math.maxInt(u16))));
+    return if (local_x <= 0) 0 else @intCast(@min(typed.len, @as(usize, std.math.maxInt(u32))));
 }
 
 fn paintNode(node: *Node) void {
@@ -1309,10 +1347,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
 
     if (node.input_id) |id| {
         if (node.text) |t| {
-            const current = input.getText(id);
-            if (!input.isFocused(id) and !std.mem.eql(u8, current, t)) {
-                input.setText(id, t);
-            }
+            // Controlled-value reconciliation: safe while focused because
+            // syncValue only rewrites the buffer when the cart's value
+            // genuinely changed since the last sync — user keystrokes don't
+            // get clobbered by paint-driven resyncs of an unchanged prop.
+            input.syncValue(id, t);
         }
         paintTextInput(node, id);
     }
@@ -1393,7 +1432,8 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
     const pr = node.style.padRight();
     const pb = node.style.padBottom();
     const inner_h = @max(@as(f32, 0), r.h - pt - pb);
-    if (input.isFocused(id)) {
+    const show_focus_ring = input.isFocused(id) and !input.isMultiline(id) and node.input_color_rows == null;
+    if (show_focus_ring) {
         const pad: f32 = 4;
         gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30);
     }
@@ -1425,7 +1465,41 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
             if (node.line_height > 0) gpu.setLineHeightOverride(0);
         }
     }
-    if (node.input_paint_text) {
+    if (!is_placeholder) {
+        if (node.input_color_rows) |rows| {
+            const line_h: f32 = if (node.line_height > 0) node.line_height else gpu.getLineHeight(node.font_size);
+            var start_row: usize = 0;
+            var end_row: usize = rows.len;
+            if (is_multiline) {
+                if (gpu.getActiveScissor()) |clip| {
+                    const clip_top = @as(f32, @floatFromInt(clip.y));
+                    const clip_bottom = clip_top + @as(f32, @floatFromInt(clip.h));
+                    const visible_top = (clip_top - text_y) / line_h;
+                    const visible_bottom = (clip_bottom - text_y) / line_h;
+                    if (visible_bottom <= 0) {
+                        end_row = 0;
+                    } else {
+                        start_row = if (visible_top > 0) @intFromFloat(@floor(visible_top)) else 0;
+                        end_row = @min(rows.len, @as(usize, @intFromFloat(@ceil(@max(visible_bottom, 0)))) + 1);
+                    }
+                }
+            }
+            var row_y = text_y + line_h * @as(f32, @floatFromInt(start_row));
+            for (rows[start_row..end_row]) |row| {
+                gpu.drawColorTextRow(row.spans, r.x + pl, row_y, node.font_size, g_paint_opacity);
+                row_y += line_h;
+            }
+        } else if (node.input_paint_text) {
+            const display_text: ?[]const u8 = typed;
+            if (display_text) |t| {
+                if (t.len > 0) {
+                    const tc = node.text_color orelse Color.rgb(220, 220, 220);
+                    const max_lines: u16 = if (is_multiline) 0 else 1;
+                    _ = drawNodeTextCommon(node, t, r.x + pl, text_y, max_w, max_lines, tc);
+                }
+            }
+        }
+    } else if (node.input_paint_text) {
         const display_text: ?[]const u8 = if (!is_placeholder) typed else node.placeholder;
         if (display_text) |t| {
             if (t.len > 0) {
@@ -1904,6 +1978,7 @@ pub fn run(config_in: AppConfig) !void {
                 canvas_move_drag_id = 0;
                 canvas_move_drag_canvas_id = 0;
                 input_drag_active = false;
+                input_drag_pending = false;
                 term_sel_dragging = false;
                 hovered_node = null;
                 g_hover_changed = true;
@@ -2051,8 +2126,11 @@ pub fn run(config_in: AppConfig) !void {
                                 const pl = h.style.padLeft();
                                 const pt = h.style.padTop();
                                 const pr = h.style.padRight();
-                                const local_x = mx - h.computed.x - pl;
-                                const local_y = my - h.computed.y - pt;
+                                var scroll_x: f32 = 0;
+                                var scroll_y: f32 = 0;
+                                _ = scrollOffsetForNode(config.root, h, &scroll_x, &scroll_y);
+                                const local_x = mx + scroll_x - h.computed.x - pl;
+                                const local_y = my + scroll_y - h.computed.y - pt;
                                 const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr);
                                 if (clicks == 3) {
                                     input.selectAll(id);
@@ -2064,8 +2142,8 @@ pub fn run(config_in: AppConfig) !void {
                                     input.startDrag(id);
                                     input_drag_active = true;
                                     input_drag_id = id;
-                                    input_drag_node_x = h.computed.x;
-                                    input_drag_node_y = h.computed.y;
+                                    input_drag_node_x = h.computed.x - scroll_x;
+                                    input_drag_node_y = h.computed.y - scroll_y;
                                     input_drag_node_pl = pl;
                                     input_drag_node_pt = pt;
                                     input_drag_max_width = h.computed.w - pl - pr;
@@ -2239,12 +2317,16 @@ pub fn run(config_in: AppConfig) !void {
                             term_sel_active = (term_sel_start_row != term_sel_end_row or term_sel_start_col != term_sel_end_col);
                         }
                     }
-                    // TextInput drag selection
+                    // TextInput drag selection — latch latest position only.
+                    // We used to call hitTestInputByte per motion event, but
+                    // hitTestWrapped on a 143 KB buffer dominates the frame
+                    // when SDL delivers 4000+ motion events in a burst. Coalesce
+                    // into one hit-test after the event pump (see below).
                     if (input_drag_active) {
-                        const local_x = mx - input_drag_node_x - input_drag_node_pl;
-                        const local_y = my - input_drag_node_y - input_drag_node_pt;
-                        const cursor_pos = hitTestInputByte(input_drag_id, local_x, local_y, input_drag_font_size, input_drag_max_width);
-                        input.updateDragToPos(input_drag_id, cursor_pos);
+                        input_drag_pending = true;
+                        input_drag_pending_x = mx;
+                        input_drag_pending_y = my;
+                        stampInputLatency("drag");
                     }
                     updateHover(config.root, mx, my);
                     // Context menu hover tracking
@@ -2345,6 +2427,7 @@ pub fn run(config_in: AppConfig) !void {
                         physics2d.endDrag();
                         canvas_drag_node = null;
                         input_drag_active = false;
+                        input_drag_pending = false;
                         term_sel_dragging = false;
                         selection.onMouseUp();
                     }
@@ -2364,6 +2447,7 @@ pub fn run(config_in: AppConfig) !void {
                     }
                     // Render surface text input forwarding
                     if (render_surfaces.handleTextInput(text_ptr)) continue;
+                    if (input.getFocusedId() != null) stampInputLatency("type");
                     input.handleTextInput(text_ptr);
                 },
                 c.SDL_EVENT_KEY_DOWN => {
@@ -2431,6 +2515,7 @@ pub fn run(config_in: AppConfig) !void {
                             (if (ctrl) input.handleCtrlKey(sym, mod) else input.handleKey(sym, mod))
                         else
                             false;
+                        if (input_consumed) stampInputLatency("key");
                         if (!input_consumed and !videos.handleKey(sym)) {
                             selection.onKeyDown(config.root, sym, mod);
                             qjs_runtime.callGlobalInt("__ifttt_onKeyDown", packed_key);
@@ -2661,6 +2746,18 @@ pub fn run(config_in: AppConfig) !void {
             }
         }
 
+        // Coalesced TextInput drag hit-test — runs once per frame regardless
+        // of how many SDL_EVENT_MOUSE_MOTION events were pumped. hitTestWrapped
+        // on a large buffer is O(n) shape+wrap; without coalescing a fast drag
+        // over a 143 KB file saturates the frame with redundant hit-tests.
+        if (input_drag_pending) {
+            input_drag_pending = false;
+            const local_x = input_drag_pending_x - input_drag_node_x - input_drag_node_pl;
+            const local_y = input_drag_pending_y - input_drag_node_y - input_drag_node_pt;
+            const cursor_pos = hitTestInputByte(input_drag_id, local_x, local_y, input_drag_font_size, input_drag_max_width);
+            input.updateDragToPos(input_drag_id, cursor_pos);
+        }
+
         // Layout (main window) — skip full flex pass when nothing invalidated geometry
         const t2 = std.time.microTimestamp();
         const app_h = win_h;
@@ -2742,6 +2839,21 @@ pub fn run(config_in: AppConfig) !void {
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
 
         gpu.frame(0.051, 0.067, 0.090);
+
+        // Input-to-present latency: time from first SDL input event in this
+        // frame's cycle to post-present. Prints every time so a live typing
+        // or drag session produces a running latency trace in stderr.
+        if (g_input_latency_ts_us != 0) {
+            const latency_us = std.time.microTimestamp() - g_input_latency_ts_us;
+            std.debug.print("[input-latency] {s}: {d}ms (batched {d} event{s})\n", .{
+                g_input_latency_kind,
+                @divTrunc(latency_us, 1000),
+                g_input_latency_event_count,
+                if (g_input_latency_event_count == 1) "" else "s",
+            });
+            g_input_latency_ts_us = 0;
+            g_input_latency_event_count = 0;
+        }
 
         // Capture — screenshot/recording (fires inside gpu.frame via callback)
         if (capture.tick(config.root)) {

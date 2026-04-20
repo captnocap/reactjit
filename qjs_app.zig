@@ -192,36 +192,10 @@ fn dispatchInputKeyEvent(slot: u8, key: c_int, mods: u16) void {
     qjs_runtime.callGlobal("__endJsEvent");
 }
 
-fn dispatchInputCursorEvent(slot: u8) void {
-    const node_id = g_node_id_by_input_slot[slot];
-    if (node_id == 0) return;
-    const cursor = input.getCursorPos(slot);
-    const selection = input.getSelection(slot);
-    const has_selection = selection.hi > selection.lo;
-    qjs_runtime.callGlobal("__beginJsEvent");
-    qjs_runtime.callGlobal5Int(
-        "__dispatchInputCursor",
-        @intCast(node_id),
-        cursor,
-        selection.lo,
-        selection.hi,
-        if (has_selection) 1 else 0,
-    );
-    qjs_runtime.callGlobal("__endJsEvent");
-}
-
 fn makeInputKeyCallback(comptime slot: u8) *const fn (key: c_int, mods: u16) void {
     return struct {
         fn callback(key: c_int, mods: u16) void {
             dispatchInputKeyEvent(slot, key, mods);
-        }
-    }.callback;
-}
-
-fn makeInputCursorCallback(comptime slot: u8) *const fn () void {
-    return struct {
-        fn callback() void {
-            dispatchInputCursorEvent(slot);
         }
     }.callback;
 }
@@ -253,12 +227,6 @@ const g_input_blur_callbacks = blk: {
 const g_input_key_callbacks = blk: {
     var arr: [input.MAX_INPUTS]*const fn (key: c_int, mods: u16) void = undefined;
     for (0..input.MAX_INPUTS) |i| arr[i] = makeInputKeyCallback(@intCast(i));
-    break :blk arr;
-};
-
-const g_input_cursor_callbacks = blk: {
-    var arr: [input.MAX_INPUTS]*const fn () void = undefined;
-    for (0..input.MAX_INPUTS) |i| arr[i] = makeInputCursorCallback(@intCast(i));
     break :blk arr;
 };
 
@@ -294,17 +262,13 @@ fn ensureInputSlot(node: *Node, id: u32, type_name: []const u8) void {
     input.setOnFocus(sid, g_input_focus_callbacks[sid]);
     input.setOnBlur(sid, g_input_blur_callbacks[sid]);
     input.setOnKey(sid, g_input_key_callbacks[sid]);
-    input.setOnCursor(sid, g_input_cursor_callbacks[sid]);
     node.input_id = sid;
 }
 
 fn syncInputValue(node: *Node, text: []const u8) void {
     node.text = text;
     if (node.input_id) |slot| {
-        const current = input.getText(slot);
-        if (!std.mem.eql(u8, current, text)) {
-            input.setText(slot, text);
-        }
+        input.syncValue(slot, text);
     }
 }
 
@@ -439,6 +403,40 @@ fn parseColor(s: []const u8) ?Color {
     if (eq(u8, s, "magenta")) return Color.rgb(220, 80, 200);
     if (eq(u8, s, "transparent")) return Color.rgba(0, 0, 0, 0);
     return null;
+}
+
+fn parseColorTextRows(v: std.json.Value) ?[]const layout.ColorTextRow {
+    if (v != .array) return null;
+
+    const rows = g_alloc.alloc(layout.ColorTextRow, v.array.items.len) catch return null;
+    for (v.array.items, 0..) |row_v, row_idx| {
+        if (row_v != .array) {
+            rows[row_idx] = .{};
+            continue;
+        }
+
+        const spans = g_alloc.alloc(layout.ColorTextSpan, row_v.array.items.len) catch {
+            rows[row_idx] = .{};
+            continue;
+        };
+
+        var span_count: usize = 0;
+        for (row_v.array.items) |span_v| {
+            if (span_v != .object) continue;
+            const text_v = span_v.object.get("text") orelse continue;
+            const color_v = span_v.object.get("color") orelse continue;
+            if (text_v != .string or color_v != .string) continue;
+
+            spans[span_count] = .{
+                .text = g_alloc.dupe(u8, text_v.string) catch "",
+                .color = parseColor(color_v.string) orelse Color.rgb(255, 255, 255),
+            };
+            span_count += 1;
+        }
+
+        rows[row_idx] = .{ .spans = spans[0..span_count] };
+    }
+    return rows;
 }
 
 fn parseOverflow(s: []const u8) layout.Overflow {
@@ -728,6 +726,7 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0
         else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false
         else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true
+        else if (std.mem.eql(u8, k, "colorRows")) node.input_color_rows = null
         else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null
         else if (std.mem.eql(u8, k, "value")) node.text = null
         else if (std.mem.eql(u8, k, "source")) node.image_src = null
@@ -785,6 +784,8 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.no_wrap = b;
         } else if (is_input and std.mem.eql(u8, k, "paintText")) {
             if (jsonBool(v)) |b| node.input_paint_text = b;
+        } else if (is_input and std.mem.eql(u8, k, "colorRows")) {
+            node.input_color_rows = parseColorTextRows(v);
         } else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {

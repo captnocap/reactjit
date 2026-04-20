@@ -1,59 +1,46 @@
 # ReactJIT
+
 its react! (kinda) its fast! (really fast) hi. all the code in this project is an accident from a bad joke. the code is not a joke, how it came to be was though. also, i didnt write a single line of code in here, and this readme is also ai generated after i finish my brief intro. this is really now just one big experiment that started from asking how i could put the react based game i was making, inside of a monitor in cs_office, things really got out of hand after that. this is a series of fortunate (or unfortunate) events that all came from asking 'how' and then following with 'if that worked, what about this'. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
+
 ---
-Write React. Get a native binary. **No virtual DOM, no reconciler.** Layout and painting are **native Zig** (flex + wgpu). **Smith emits `LUA_LOGIC` by default** (lua-tree: Lua tables → Zig stamps `Node`). **QuickJS** runs **`JS_LOGIC`**, **`__eval`**, **`evalLuaMapData`**, and **`js_on_press`**. **Runtime split (details):** [tsz/docs/ARCHITECTURE.md](tsz/docs/ARCHITECTURE.md) — **Zig** = engine, hit-test, layout, paint, dirty, final graph; **Lua** = most emitted UI logic + Lua-local state; **QJS** = JS vars/expressions + eval bridges. App state is **not** only Zig `state.zig` slots.
+
+Write React. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags (`<div>`, `<button>`, `<h1>`), setState, useEffect — all work. Layout, paint, hit-test, events, input, text, GPU are native Zig. React runs inside the framework's in-process QuickJS VM, drives a Zig-owned `Node` pool via a react-reconciler host. No virtual DOM on the output side — React's mutations land directly as CREATE/UPDATE/APPEND commands against real Nodes.
 
 ```
-app.tsz (TypeScript + JSX)
-   |
-   v
-Forge (Zig kernel) + Smith (JS compiler brain, runs in QuickJS)
-   |
-   v
-generated Zig glue + LUA_LOGIC (+ JS_LOGIC if script)
-   |        \
-   v         v
-native      LuaJIT + QuickJS (lua-tree + handlers + script + eval bridges)
-binary
-(SDL3 + wgpu + FreeType + QuickJS + LuaJIT)
+cart/my_app.tsx (standard React + JSX + hooks)
+   │
+   ▼
+esbuild → bundle.js
+   │
+   ▼
+@embedFile into qjs_app.zig
+   │
+   ▼
+zig build → ELF + framework/ (layout, GPU, events, text, effects)
+   │
+   ▼
+scripts/ship packages with ld-linux + all .so deps
+   │
+   ▼
+self-extracting single-file binary (runs anywhere, no system deps)
 ```
 
 ```tsx
-// ── State — standard React useState, lives at the top level ──
-const [count, setCount] = useState(0);
-const [fps, setFps] = useState(0);
+// cart/counter.tsx
+import { useState } from 'react';
+import { Box, Text, Pressable } from '../runtime/primitives';
 
-// ── useEffect — same as React, but compiles to native Zig ──
-useEffect(() => {
-  setCount(count + 1);
-});
+export default function Counter() {
+  const [count, setCount] = useState(0);
 
-// ── <script> — inline JS that runs in QuickJS at runtime ──
-<script>
-setInterval(function() {
-  setFps(getFps());
-}, 250);
-</script>
-
-// ── <zscript> — inline Zig emitted directly into the binary ──
-<zscript>
-fn computeHeavy(n: i64) i64 {
-    var sum: i64 = 0;
-    var i: i64 = 0;
-    while (i < n) : (i += 1) sum += i;
-    return sum;
-}
-</zscript>
-
-// ── JSX — your UI, same syntax as React ──
-function App() {
   return (
-    <Box style={{ padding: 32, gap: 16, backgroundColor: '#1e1e2a' }}>
+    <Box className="p-8 gap-4 bg-slate-900">
       <Text fontSize={28} color="#ffffff">Counter</Text>
-      <Text fontSize={48} color="#ff79c6">{`${count}`}</Text>
-      <Text fontSize={12} color="#8b949e">{`${fps} fps`}</Text>
-      <Pressable onPress={() => { setCount(count + 1) }}
-        style={{ padding: 16, backgroundColor: '#4ec9b0', borderRadius: 8 }}>
+      <Text fontSize={48} color="#ff79c6">{String(count)}</Text>
+      <Pressable
+        onPress={() => setCount(count + 1)}
+        className="p-4 bg-teal-500 rounded-lg"
+      >
         <Text fontSize={16} color="#ffffff">+ Increment</Text>
       </Pressable>
     </Box>
@@ -61,317 +48,236 @@ function App() {
 }
 ```
 
-That's one file. State, effects, JS scripting, native Zig, and JSX — all compile to a single native binary.
+One file. `./scripts/ship counter`. Done — `zig-out/bin/counter` is shippable anywhere.
 
 ---
-
-## Three Pillars
-
-### `tsz/` — Compiler + Framework (active)
-
-The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to Zig source that links against the framework runtime.
-
-The compiler is split into two parts:
-
-- **Forge** — small Zig kernel (~595 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~43,200 lines across 354 files in 48 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `patterns/` (140 JSX pattern recognizers), `parse/` (element/brace/map/template parsing), `emit_atoms/` (structured Zig codegen atoms), `emit_ops/` (emit helpers), `emit/` (top-level emitters), `collect/` (preflight collection passes), `preflight/` (tier detection + validation), `lanes/` (app/page/module/soup dispatch), `mod/` (module block compiler), `resolve/` (expression resolution), `contract/` (three-phase Lua emit contracts). Edit without rebuilding Forge.
-
-```
-app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
-```
-
-Smith emits **`LUA_LOGIC` by default** for app UI and handlers (lua-tree): `.map()`, closures, and per-item dispatch live in LuaJIT. Example: `.map()` handlers become Lua functions like `__mapPress_0_0(idx)` with `lua_on_press` strings baked per item — no Zig closures. **`<script>`** blocks add **`JS_LOGIC`** on QuickJS; **`__eval`** / **`evalLuaMapData`** also use QuickJS from Lua. The author writes plain `.tsz`; the stack is **Lua-first for UI logic**, Zig for layout/paint/stamping.
-
-- **Compiler** — 6 Zig modules (~3,084 lines) + 354 JS modules (Smith, ~43,200 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread, 140 pattern recognizers
-- **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
-- **Layout engine** — Flexbox (1,787 lines), CSS-spec-aligned, 76 WPT tests passing
-- **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
-- **Cryptography** — HMAC-SHA256 (RFC 4231), HKDF-SHA256 (RFC 5869), Shamir Secret Sharing (GF256), XChaCha20-Poly1305 envelope encryption, PII detection + sanitization
-- **Physics** — Box2D 2.4.1 (2D) and 3D rigid body simulation
-- **3D** — Inline 3D viewports with camera, lights, and mesh primitives (box, sphere, plane, cylinder)
-- **Audio** — SDL3 audio subsystem with modular DSP engine, delay, sequencer, LuaJIT DSP bridge
-- **Terminal** — PTY terminal emulator with cell-grid rendering, scrollback, text selection, copy/paste (Ctrl+Shift+C/V), semantic classifiers
-- **Canvas** — Infinite canvas with zoom/pan/drift, SVG path nodes, graph visualization
-- **Inspector** — Tools cart + **IPC** to running apps (tree, styles, perf); embedded `devtools.zig` is a thin/no-op stub when using standalone tools
-- **Transitions** — CSS-style animations with timing and spring physics
-- **Themes** — 19 built-in themes: Dracula, Catppuccin, Nord, Gruvbox, Solarized, Tokyo Night, One Dark, Monokai, GitHub, Rosé Pine, Everforest, Kanagawa, Ayu, Synthwave, Palenight, Material, Night Owl + custom BIOS and Win95 themes
-
-### `love2d/` — Lua Reference Stack
-
-The original proof of concept. React reconciler → QuickJS → Lua layout → Love2D painter. Mature, full-featured: 30+ packages, storybook, HMR, test runner, CLI with `rjit convert`, theme system, 3D, audio, terminal emulator. The native engine ports features from here.
-
-### `os/` — CartridgeOS + Exodia (future)
-
-Operating system shell and app distribution layer. CartridgeOS manages windows, permissions, and app lifecycle. Exodia is the network layer for cart distribution and discovery.
-
----
-
-## What Are .tsz Files?
-
-`.tsz` is TypeScript + JSX that compiles to native code. No bundler, no transpiler chain — one compiler, one output.
-
-| Extension | What | Example |
-|-----------|------|---------|
-| `.tsz` | App entry point | `Counter.tsz` |
-| `_c.tsz` / `.c.tsz` | App component | `Button_c.tsz` |
-| `_cls.tsz` / `.cls.tsz` | App classifiers | `styles_cls.tsz` |
-| `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
-| `_cmod.tsz` / `.cmod.tsz` | Module component | `Badge_cmod.tsz` |
-| `_clsmod.tsz` / `.clsmod.tsz` | Module classifiers | `theme_clsmod.tsz` |
-| `_script.tsz` / `.script.tsz` | QuickJS runtime script | `data_script.tsz` |
-| `_zscript.tsz` / `.zscript.tsz` | Imperative Zig module (no JSX) | `logic_zscript.tsz` |
-| `_lscript.tsz` / `.lscript.tsz` | LuaJIT runtime script | `logic_lscript.tsz` |
-| `_effects.tsz` / `.effects.tsz` | GPU effect shaders | `fire_effects.tsz` |
-| `_glyphs.tsz` / `.glyphs.tsz` | Named glyph assets | `icons_glyphs.tsz` |
-| `_tcls.tsz` / `.tcls.tsz` | Theme tokens (colors, spacing) | `theme_tcls.tsz` |
-| `_vcls.tsz` / `.vcls.tsz` | Variants (per-theme overrides) | `dark_vcls.tsz` |
-
-Legacy dot-prefix forms (`.c.tsz`, `.cls.tsz`, `.script.tsz`, `.zscript.tsz`, `.lscript.tsz`) are also accepted.
-
-### `<script>` vs `<lscript>` vs `<zscript>` vs `<ascript>` — when to use which
-
-Four script runtimes, each with different tradeoffs.
-
-| | `<script>` / `.script.tsz` | `<lscript>` | `<zscript>` / `.zscript.tsz` | `<ascript>` |
-|---|---|---|---|---|
-| **Runs in** | QuickJS (JS runtime) | LuaJIT (main-thread VM) | Native Zig (compiled into binary) | NSAppleScript (macOS FFI) |
-| **When** | Runtime — after app starts | Runtime — after app starts | Compile time — baked into the binary | Runtime — on press |
-| **Good for** | Timers, async fetches, dynamic data, mock data | Handler logic, conditionals, .map() logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access | macOS automation — control any app, read iMessage, Finder, notifications |
-| **Speed** | 52M ops/sec — hits the wall there | 2–11x faster than QuickJS (JIT-compiled, traces warm after ~50 calls) | No ceiling — native Zig, keeps scaling | Depends on target app |
-
-We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. LuaJIT beats QuickJS across every test category: host calls, state bridge, conditionals, .map(), string templates, component render, pure compute, and event handlers. The widest gap is on nested ternary conditionals — the exact pattern Smith generates for dynamic styles and handler routing — where LuaJIT is **11.1x faster** (`cb47b7a1`). Use `<lscript>` when the logic is complex or runs frequently. Use `<zscript>` when you need direct Zig type system access, FFI, or you're writing test assertions.
-
-Key commits:
-- `f662eb0d` — FFI option 1: JS host functions, proved the bridge works but showed overhead for tight FFI
-- `8b7451b1` — Bridge benchmark: 52M calls/sec, proved JS→Zig bridge is not a bottleneck
-- `cb47b7a1` — QuickJS vs LuaJIT head-to-head: LuaJIT wins every test, 2–11x faster, 11.1x on nested ternaries
-- `3c7b6b78` — `<zscript>` inline Zig blocks, for when you need zero overhead
-- `205e2505` — `_zscript.tsz` imperative mode, compiles TypeScript-like code directly to `.zig` modules
-
-### `<script>` — JS at runtime (QuickJS)
-
-Inline JavaScript that runs in the QuickJS runtime. Use for timers, async data, or anything dynamic.
-
-```tsx
-<script>
-setInterval(function() {
-  setFps(getFps());
-  setLayoutUs(getLayoutUs());
-  setPaintUs(getPaintUs());
-}, 250);
-</script>
-```
-
-### `.script.tsz` — JS as a file
-
-Same as `<script>` but in its own file. Good for mock data, initialization logic, or separating runtime behavior from layout.
-
-```js
-// dashboard.script.tsz
-var items = [
-  { title: 'Customers', amount: '39,354', percentage: '-4%' },
-  { title: 'Products', amount: '4,396', percentage: '+23%' },
-];
-setEarningData(items);
-```
-
-### `<lscript>` — Lua at runtime (LuaJIT)
-
-Inline Lua that runs in the main-thread LuaJIT VM. 2–11x faster than QuickJS. Use for handler logic, .map() callbacks, conditionals, DSP, or anything that runs frequently.
-
-```tsx
-<lscript>
-function onItemPress(idx)
-  local item = items[idx]
-  setSelected(item.title)
-  __hostLog('selected: ' .. item.title)
-end
-</lscript>
-```
-
-LuaJIT traces warm after ~50 calls and JIT-compiles hot paths. The widest speedup over QuickJS is on nested ternary conditionals (11.1x) — the exact pattern Smith generates for dynamic styles.
-
-### `<zscript>` — Zig at compile time
-
-Inline Zig code emitted directly into the generated source. Runs at native speed. Use for performance-critical logic, test functions, or direct framework access.
-
-```tsx
-<zscript>
-fn test_counter_increments() !void {
-    const state = @import("state.zig");
-    state.setSlot(0, 42);
-    try std.testing.expectEqual(@as(i64, 42), state.getSlot(0));
-}
-</zscript>
-```
-
-### `.zscript.tsz` — Zig as a file
-
-Standalone imperative Zig module — no JSX, compiles TypeScript-like code directly to a `.zig` module. Use for utility modules, math, data processing, or anything that should be pure native Zig with no runtime overhead.
-
-### `<ascript>` — AppleScript at runtime (macOS)
-
-Execute AppleScript from any `.tsz` app via NSAppleScript FFI. No subprocess — runs in-process through the ObjC runtime. Wraps its children as a pressable.
-
-```tsx
-<ascript run='tell application "Messages" to get every chat' onResult={setResult}>
-  <Text color="#aaaadd">Get iMessage Chats</Text>
-</ascript>
-
-<ascript run='display notification "Hello" with title "ReactJIT"' onResult={setResult}>
-  <Text color="#aaaadd">Send Notification</Text>
-</ascript>
-```
-
-`run` is the AppleScript string. `onResult` is a state setter that receives the result. Also available as a runtime function from JS/Lua: `__applescript('the clipboard')`.
-
-Demo: `carts/applescript-demo/`
 
 ## Quick Start
 
 ```bash
-cd tsz
+# Build a cart into a self-extracting native binary:
+./scripts/ship counter          # cart/counter.tsx → zig-out/bin/counter
 
-# Build a cart (forge + zig + luajit link)
-./scripts/build carts/conformance/soup/s01a_counter.tsz
+# Debug build (raw ELF for gdb/ldd inspection, at zig-out/bin/<name>-raw):
+./scripts/ship counter -d
 
-# Or with the alias (if set up):
-tsz-build carts/conformance/soup/s01a_counter.tsz
+# Release, raw ELF (no self-extracting wrapper), for ldd inspection:
+./scripts/ship counter --raw
 
-# Debug build (unoptimized, faster compile):
-./scripts/build carts/conformance/soup/s01a_counter.tsz --debug
-
-# Output: zig-out/bin/s01a_counter
+# Directory-based cart layout also works (cart/counter/index.tsx):
+./scripts/ship counter
 ```
 
-### Build Pipeline
+The `ship` pipeline:
+1. **esbuild** bundles `cart/<name>.tsx` + `runtime/` + `renderer/` into `bundle.js`.
+2. **Zig build** compiles `qjs_app.zig` (the reconciler host) with `bundle.js` embedded via `@embedFile` — the binary carries its own JS.
+3. **Package** (Linux): `ldd` walks deps, bundles every non-system `.so` + `ld-linux` into a lib/ dir, prepends a self-extracting shell wrapper that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run.
+4. **macOS**: `.app` bundle with `Frameworks/` dylib rewrites, ad-hoc codesigned.
 
-```
-.tsz source
-   |
-   v
-Forge + Smith (2ms) — .tsz → generated .zig
-   |
-   v
-zig build-obj (60-500ms) — .zig → .o (Zig's x86 backend, no LLVM)
-   |
-   v
-LuaJIT link.lua (50-80ms) — .o + engine .so → native binary
-```
+Result: **one file, no system dependencies, runs anywhere.**
 
-The engine (layout, GPU, state, networking, everything) is compiled once into a cached `.so` with full LLVM optimization. Cart builds skip LLVM entirely — Zig's fast x86 backend compiles only the cart code, then LuaJIT links it against the cached engine. Result: ~500ms from `.tsz` to clickable binary.
+---
+
+## Dev Loop (hot reload)
 
 ```bash
-# Rebuild forge after editing Smith JS files
-zig build forge
-
-# Rebuild Smith bundle only
-zig build smith-bundle
+./scripts/dev cockpit           # launches persistent dev host, watches cart/cockpit
+./scripts/dev inspector         # in a second terminal: pushes to running host, adds a tab
+./scripts/dev cockpit           # re-push cockpit → switches back to that tab
 ```
 
-Cart binaries are ~23MB (engine is shared, not embedded). Updating the engine doesn't require rebuilding any carts — the next launch picks up the new `.so` automatically.
+One persistent ReleaseFast binary at `zig-out/bin/reactjit-dev` hosts every cart you push. The dev host is borderless — the top strip IS the window chrome, with tabs for each pushed cart, window controls on the right, double-click to maximize, drag empty chrome to move, edge-drag to resize.
+
+**When to rebuild:**
+
+| What you changed | Action |
+|---|---|
+| `cart/**`, `runtime/**`, `renderer/**` (React / TSX / TS) | **Nothing.** Save the file — esbuild rebundles and pushes over `/tmp/reactjit.sock`, host tears down QJS + re-evals in ~300ms. |
+| `framework/**`, `qjs_app.zig`, `build.zig`, `scripts/**` | **Rebuild the dev binary.** Delete `zig-out/bin/reactjit-dev` then re-run `./scripts/dev <cart>`, or explicitly: `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`. |
+
+Tab switching tears down the QJS context fully and re-evals the target cart's bundle — React state (`useState` / `useRef`) resets on every reload. A `useHotState` hook + `framework/hotstate.zig` scaffold exists for state preservation but **isn't working yet** — don't rely on atoms surviving reloads.
+
+Dev mode always compiles `-Doptimize=ReleaseFast`; the Debug build has a pre-existing framework bug that silently crashes on any click.
+
+---
+
+## What's Real on the .tsx Side
+
+### Works out of the box (copy-paste from any React project)
+
+- **All standard hooks** — `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, custom hooks
+- **HTML tags** — `<div>`, `<span>`, `<p>`, `<button>`, `<a>`, `<img>`, `<input>`, `<h1>`–`<h6>`, `<section>`, `<nav>`, `<header>`, `<footer>`, `<ul>`, `<li>`, `<table>`, and friends. Remapped to native primitives in `renderer/hostConfig.ts`. HTML-only attrs (`alt`, `htmlFor`, `aria-*`, `data-*`, `tabIndex`) stripped before the bridge. Headings auto-size (h1=32, h2=28, …, h6=16).
+- **Tailwind via `className`** — full utility coverage via `runtime/tw.ts` (ported from love2d): spacing (`p-4`, `mx-8`), sizing (`w-full`, `h-[300]`), flex (`flex-row`, `gap-2`, `justify-center`, `items-start`), colors (`bg-blue-500`, `text-slate-200`), radius (`rounded-lg`), borders (`border-2`), typography (`text-xl`, `font-bold`), arbitrary bracket values (`p-[20]`, `bg-[#ff6600]`).
+- **Style props + `className` together** — mix freely, `style` wins on conflicts.
+- **Timers** — `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `performance.now()` all real, backed by the engine's frame clock.
+- **Events** — `onClick`, `onPress`, `onChangeText`, `onSubmit`, `onHoverEnter`/`onHoverExit`, `onKeyDown`, `onScroll`, `onRightClick`/`onContextMenu`. Bidirectional: press → Zig hit-test → `js_on_press` eval → React handler → state change → commit → new mutations → same Node pool.
+
+### Works via hooks (`runtime/hooks/`)
+
+Shipped surfaces you can import directly — see `runtime/hooks/README.md` for the full matrix.
+
+- **`fs`** — `readFile`, `writeFile`, `exists`, `listDir`, `mkdir`, `remove`, `stat` (absolute or CWD-relative paths)
+- **`localstore`** — persistent key/value via SQLite under the app data dir. `installLocalStorageShim()` aliases it to `globalThis.localStorage`.
+- **`sqlite`** — handle registry, JSON param binding, `query_json` → typed row objects
+- **`http`** — `get/post` sync (via `curl` subprocess) and `getAsync/postAsync` (libcurl worker pool, drained each tick). `installFetchShim()` aliases it to `globalThis.fetch`.
+- **`crypto`** — `randomBytes`, HMAC-SHA256, HKDF-SHA256, XChaCha20-Poly1305 encrypt/decrypt (base64-encoded across the bridge)
+- **`clipboard`** — system clipboard get/set
+- **`process.envGet`/`envSet`/`exit`** — `std.posix` / libc wrappers
+
+`runtime/hooks/index.ts` has a `installBrowserShims()` one-liner that installs `fetch` + `localStorage` globals for copy-pasted code.
+
+### Still missing (framework exists, Zig binding pending)
+
+- **`WebSocket`** — `framework/net/websocket.zig` needs a small Zig 0.15 writer-API migration before its hooks can land. `installWebSocketShim()` is a no-op stub today.
+- **Long-running subprocess with stdout/stderr streaming** — `framework/process.zig` has spawn/kill but no pipes; per-child read-thread infra pending.
+- **Shamir secret split/combine** — framework has it (hex I/O); hook wrapper not yet written.
+
+### Doesn't work (no browser context)
+
+- **No `window`/`document`/`navigator`/`location`** — minimal shims exist so copy-pasted code doesn't crash, but DOM manipulation is a no-op.
+- **No `sessionStorage`, `IndexedDB`, cookies** — out of scope; use `localstore` for persistent state.
+- **No `XMLHttpRequest`, `URL`, `Blob`, `FormData`, `FileReader`** — undefined.
+- **Inline `<svg>` with `<path>`/`<circle>`/`<rect>`** — not remapped. Use `<Canvas.Path d="..." />` or `<Graph.Path>` instead.
+- **CSS `@media`, CSS Grid, CSS `:hover`/`:focus` pseudo-classes, CSS transitions/animations** — not parsed. Use `useEffect` + interval for animations, `onHoverEnter`/`onHoverExit` for hover state.
+- **Images** — png/jpg/bmp/tga/gif via stb_image only. No blob URLs.
+
+### Library compatibility
+
+- **Pure-JS state libs** (zustand, jotai, xstate, redux, immer) — work.
+- **react-query / swr** — work, once you `installFetchShim()` (or swap their fetcher for the `http` hook).
+- **Headless component libs** (Radix, Headless UI, React Aria) — don't work (DOM refs).
+- **Styled component libs** (MUI, Chakra, Ant Design, Tailwind UI) — don't work (DOM CSS cascade).
+- **Animation libs** (framer-motion, react-spring) — partial; hook state works, imperative DOM manipulation doesn't.
+- **react-router** — memory mode works.
+- **React Native libs** — port naturally (same flex layout + primitive model).
+
+This is closer to React Native than browser React. Great for dashboards, forms, internal tools, games, visualizers, music apps, chat UIs, creative coding. Not for e-commerce checkout flows.
+
+---
 
 ## Primitives
 
-`Box` `Text` `Image` `Video` `Render` `Pressable` `ScrollView` `TextInput` `TextArea` `Glyph` `Cartridge` `ascript`
+From `runtime/primitives.tsx`:
 
-System surfaces: `Canvas` `Graph` `Physics` `Scene3d` `ThreeD` `Effect` `Terminal` `Audio`
+- **Layout / text**: `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`
+- **Canvas** (pan/zoomable surface): `Canvas`, `Canvas.Node`, `Canvas.Path`, `Canvas.Clamp` — with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` props on paths
+- **Graph** (static-viewport chart surface): `Graph`, `Graph.Path`, `Graph.Node`
+- **Native** — universal escape hatch: `<Native type="Audio" src="song.mp3" />`, `<Native type="Video" src="clip.mp4" />`, `<Native type="Cartridge" src="sidebar.so" />`
 
-Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `header` `footer` `img` `input` — mapped to primitives automatically.
+Custom host-handled types (Audio, Video, Cartridge, LLMAgent, RigidBody, etc.) use `Native` — the reconciler emits CREATE with that type string, the Zig host handles it. Exposing these each as first-class JSX primitives is incremental work.
 
-## Carts
+---
 
-Apps are called "carts." Each is a `.tsz` entry point with optional components, classifiers, and scripts. Most former standalone carts have been absorbed into the conformance suite — if something compiled, it belongs there as a test.
+## Runtime Shims
 
-```
-carts/
-  conformance/          Conformance test suites, organized by lane:
-    mixed/              Exhaustive feature + torture tests (263 tests)
-    wpt-flex/           W3C Web Platform Tests for flexbox (76 tests)
-    chad/               Intent dictionary syntax tests — apps, libs, widgets (27 tests)
-    soup/               End-to-end apps in real-world syntax (25 tests)
-    ws/                 WebSocket conformance (Autobahn + protocol)
-    http/               HTTP conformance test harness
-    ipc/                IPC conformance tests
-    socks5/             SOCKS5 conformance tests
-  storybook/            Component catalog + infinite canvas + theme demo
-  inspector/            Built-in devtools (element tree, styles, perf)
-  supervisor-dashboard/ Task board, terminal, search, violations
-  benchmarks/           Subsystem benchmarks (layout, render, state, script)
-  effect-bench/         Effect subsystem benchmarks
-  catalog/              Component catalog
-  claude-canvas/        Canvas playground
-  theme-creator/        Interactive theme builder
-  remote-chat/          WebSocket chat demo
-  cursor-ide-hell/      Stress-test IDE clone with heavy content
-  web-demo/             Web runtime demo
-  window-paths/         Windowing path tests
-  hotreload-test/       Hot reload experiments
-  ipc-test/             IPC test harness
-  tools/                Developer utilities
-```
+Ported from love2d's runtime (`love2d/packages/core/src/`):
+
+- **`runtime/classifier.tsx`** — global classifier registry. Define once at app init, use everywhere:
+  ```ts
+  classifier({
+    Card: { type: 'Box', style: { padding: 16, borderRadius: 8, backgroundColor: 'theme:surface' } },
+    Title: { type: 'Text', size: 24, bold: true, color: 'theme:text' },
+  });
+  // Then: import { classifiers as C } from '../../runtime/classifier';
+  //       <C.Card><C.Title>Hi</C.Title></C.Card>
+  ```
+  Supports static defaults, `'theme:*'` token resolution, and hook-powered defaults via a `use` field.
+
+- **`runtime/theme.tsx`** — `<ThemeProvider colors={...}>` + `useThemeColors()` / `useThemeColorsOptional()`. Minimal (single colors map, no multi-theme switching); extend when needed.
+
+- **`runtime/tw.ts`** — tailwind class-to-style parser, 819 lines.
+
+---
 
 ## Framework Modules
 
-88 modules in the framework runtime (~45,055 lines of Zig):
+The Zig runtime at `framework/` — ~45k lines across categories:
 
 | Category | Modules |
 |----------|---------|
-| Core | engine, engine_paint, state, events, input, layout, text, geometry, math, random, lib |
-| Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello, engine_web |
-| UI | theme, classifier, selection, tooltip, context_menu, router, query, windows, applescript |
-| Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state, api, core |
-| Terminal | pty, pty_client, pty_remote, vterm, semantic |
-| Networking | qjs_ipc |
-| Media | audio, player, videos, recorder, capture |
-| Data | fs, fswatch, sqlite, localstore, archive, crypto, privacy |
-| Scripting | qjs_runtime, qjs_value, qjs_semantic, qjs_c, luajit_runtime, luajit_worker, lua_guard |
-| Agent | agent_core, agent_session, agent_spawner |
-| Tools | tool_framework, tools_builtin |
-| Dev | telemetry, log, log_export, testharness, testdriver, testassert, debug_client, debug_server, watchdog, witness |
-| Automation | ifttt |
-| System | process, child_engine, physics2d, physics3d, filedrop, breakpoint, crashlog, c |
+| Core | `engine`, `engine_paint`, `state`, `events`, `input`, `layout`, `text`, `geometry`, `math`, `random`, `lib` |
+| Rendering | `gpu/`, `render_surfaces`, `render_surfaces_vm`, `effects`, `effect_ctx`, `effect_shader`, `easing`, `transition`, `canvas`, `svg_path`, `blend2d`, `vello`, `engine_web` |
+| UI | `theme`, `classifier`, `selection`, `tooltip`, `context_menu`, `router`, `query`, `windows`, `applescript` |
+| Cartridge | `cartridge`, `cartpack`, `dev_shell`, `devtools`, `devtools_state`, `api`, `core` |
+| Terminal | `pty`, `pty_client`, `pty_remote`, `vterm`, `semantic` |
+| Networking | `qjs_ipc`, `net/` |
+| Media | `audio`, `player`, `videos`, `recorder`, `capture` |
+| Data | `fs`, `fswatch`, `sqlite`, `localstore`, `archive`, `crypto`, `privacy` |
+| Scripting | `qjs_runtime`, `qjs_value`, `qjs_semantic`, `qjs_c`, `luajit_runtime`, `luajit_worker`, `lua_guard` |
+| Agent | `agent_core`, `agent_session`, `agent_spawner` |
+| Tools | `tool_framework`, `tools_builtin` |
+| Dev | `telemetry`, `log`, `log_export`, `testharness`, `testdriver`, `testassert`, `debug_client`, `debug_server`, `watchdog`, `witness` |
+| System | `process`, `child_engine`, `physics2d`, `physics3d`, `filedrop`, `breakpoint`, `crashlog`, `c` |
 
-## Conformance
+Most subsystems **exist in Zig but aren't yet exposed as JSX primitives**. Window chrome (drag/resize regions), terminal, video, audio, 3D rendering, physics, LLM/Claude/Codex/AppleScript — the framework implements them; wiring them into `qjs_app.zig`'s CREATE path + exposing as primitives is incremental work. `<Native type="X" />` is the universal bridge until they get first-class wrappers.
 
-| Suite | Disk | Compiled | Verified | What |
-|-------|------|----------|----------|------|
-| Mixed (feature + torture) | 263 | 243 | 139 | Exhaustive compiler coverage |
-| WPT Flexbox | 76 | 76 | 76 | W3C CSS flex spec |
-| Chad (intent syntax) | 27 | 6 | 6 | Dictionary-based intent syntax |
-| Soup (real-world) | 25 | 19 | 3 | End-to-end apps in messy real-world syntax |
-| **Overall** | **391** | **344 (88%)** | **224** | |
-
-11,028 total builds in the conformance database. 262 automated pixel-verification tests (`tests/*.autotest`).
-
-Conformance is tracked by a SQLite-backed build ledger (`conformance.db`). Every `scripts/build` on a conformance cart auto-records pass/fail with engine and compiler SHAs. Two-channel blessing system: engine and compiler are independently verified. `--proveIBrokeIt` tests against the blessed engine, `--proveMyCompilerBrokeIt` tests against the blessed compiler.
+---
 
 ## Performance
 
-### Build
+Vsync-locked to monitor refresh by default (`.fifo` present mode). Uncap with `ZIGOS_VSYNC=0 ./zig-out/bin/<app>` for profiling.
 
-| Phase | Time | What |
-|-------|------|------|
-| Compile + link (simple, ~50 lines) | ~90-110ms | zig build-obj + link against engine .so |
-| Compile + link (typical, ~100 lines) | ~150-160ms | maps, state, components |
-| Compile + link (complex, ~200-350 lines) | ~250-570ms | nested maps, ternaries, heavy codegen |
-| End-to-end script | ~2.1-3.1s | includes forge lex/emit + zig build + packaging |
-| Engine rebuild | ~24s | one-time |
+**Build**:
+- esbuild bundle: ~30–100ms
+- zig build (cached engine): ~1–3s
+- packaging (ldd walk + tarball): ~500ms
 
-### Runtime
+**Runtime** (representative: spinner cart, 240Hz monitor, vsync on):
+- FPS: 240 (vsync-locked)
+- Layout: sub-ms
+- Paint: ~250µs
+- QJS→Zig bridge: 52M setState calls/sec (not a bottleneck; layout is)
 
-At 4096 mapped items (5139 visible nodes):
-- Layout: ~3.3ms
-- Paint: ~260us
-- Bridge: 57M setState calls/s with zero impact on layout
+**Binary size**: ~24MB self-extracting (compressed tarball with ~57 bundled `.so` libs + ld-linux + ELF).
+
+---
+
+## Repository Layout
+
+Active stack at the root:
 
 ```
-[telemetry] FPS: 258 | layout: 3268us | paint: 263us | visible: 5139 | bridge: 57671729/s
+framework/         Zig runtime (layout, engine, GPU, events, input, state,
+                   effects, text, windows, QuickJS bridge). ~45k lines.
+qjs_app.zig        React-reconciler host. Loads embedded bundle.js into
+                   framework's in-process QuickJS, owns Node pool, wires events.
+runtime/           JS entry (index.tsx), timer subsystem, primitives,
+                   classifier, theme, tw (tailwind parser), JSX shim,
+                   window/document shims.
+renderer/          react-reconciler host config. Emits CMD JSON via
+                   __hostFlush. HTML tag remap, className parsing, handler
+                   extraction, subscription manager.
+cart/              .tsx apps. Single-file (cart/foo.tsx) or directory-based
+                   (cart/foo/index.tsx) layouts both work.
+scripts/           ship (one-command build), build-bundle.mjs (esbuild wrapper).
+build.zig          Root build, linking parity with Smith-era app target.
+stb/               stb_image headers (needed by framework GPU).
 ```
 
-## `archive/` Purpose
+Frozen reference directories — **read-only, do not modify**:
 
-`archive/` contains `tsz/` (v1) and `tsz-gen/` (v2) — earlier iterations of the compiler and runtime. These are frozen references, not active code. The v1 stack was a hand-written Zig runtime. The v2 stack added `.mod.tsz → .gen.zig` compilation. Both are superseded by the current `tsz/` (v3) which has the multi-phase compiler, QuickJS bridge, inspector, and full networking stack.
+```
+tsz/               Smith-era stack (50-day experiment). .tsz compiler,
+                   d-suite conformance, cockpit/Sweatshop .tsz carts,
+                   InspectorTsz tools. Useful for screenshots + porting
+                   reference.
+love2d/            The proven reconciler-on-Lua stack. 30+ packages, a full
+                   storybook, classifier + theme + tw + hooks all battle-
+                   tested. Primary reference for any runtime pattern.
+archive/           Old compiler iterations (v1/v2 tsz).
+os/                Future (CartridgeOS). Mostly stubs.
+game/              Dead Internet Game. Separate project.
+```
+
+---
+
+## Why This Shape
+
+For 50 days this project built `.tsz` — a custom DSL that compiled via Smith (a JS compiler running in QuickJS hosted by a Zig kernel called Forge) to generated Zig. The theory: AOT compilation would produce a faster-feeling UI than running React-reconciler in QuickJS at runtime.
+
+The theory was wrong. A reconciler-over-QuickJS spike (`qjs_app.zig`) was written to compare, and it matched Smith's runtime feel exactly — because QJS→Zig is 52M calls/sec and **layout is the bottleneck, not JS execution**. AOT compilation bought nothing user-facing. Meanwhile, love2d had already shipped a full storybook in 30 days with the same reconciler-over-VM shape.
+
+So the Smith-era stack is frozen at `tsz/` (treated like `love2d/` and `archive/` — reference only, do not modify). The active stack at the root is the reconciler path: write `.tsx`, ship a native binary. The ergonomics land in the same place — with the added bonus that copy-pasting React code from anywhere just works.
 
 ---
 
@@ -379,77 +285,9 @@ At 4096 mapped items (5139 visible nodes):
 
 **Be conservative in what you send, be liberal in what you accept.**
 
-The compiler accepts anything — HTML divs, `onClick`, `className`, CSS imports, inline styles, React patterns. If a 1.5B parameter model generates soup, it should still compile and render. The framework is liberal in what it accepts.
+The runtime accepts anything React emits. HTML tags. `className` with tailwind. Inline styles with arbitrary CSS-shaped objects. Handler props named any way you like (`onPress`, `onClick`, `onMouseEnter` — aliases normalize). `style.flex: 1` shorthand works. If something a model hallucinates parses as valid JSX, it should still render.
 
-But the golden path is conservative. First-party code uses strict semantic zones, theme tokens, named shapes, and classifier-driven views. The framework's own code is the style guide.
-
-### Three Tiers
-
-Conformance tests are organized into lanes under `carts/conformance/`:
-
-| Lane | What it proves |
-|------|----------------|
-| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (25 tests) |
-| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (263 tests) |
-| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (27 tests) |
-
-Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
-
-### File Taxonomy (Chad Tier)
-
-```
-app.tsz           — the page/widget (structure + logic + view)
-app.cls.tsz       — base classifiers (what components ARE)
-app.tcls.tsz      — theme tokens (colors, spacing, radii)
-app.vcls.tsz      — variants (per-theme structural overrides)
-app.effects.tsz   — named effect sources (GPU pixel shaders)
-app.glyphs.tsz    — named inline assets (vector shapes, compositions)
-```
-
-### Intent Syntax (Implemented)
-
-The chad tier uses an intent-driven syntax where file structure dictates compiler behavior. The page block compiler handles `<var>`, `<state>`, `<functions>`, and `<types>` blocks, with support for `<if>` guards, composition (`addNote: validate + append + clear`), ambient namespace reads (`sys.*`, `device.*`), and the `exact` keyword:
-
-```
-<notes page>
-  <var>
-    input is ''
-    notes
-    count is 0
-  </var>
-
-  <state>
-    set_input
-    set_notes
-    set_count
-  </state>
-
-  <functions>
-    addNote:
-      <if input exact ''>
-        stop
-      </if>
-      set_notes is notes.concat([input])
-      set_count is count + 1
-      set_input is ''
-
-    clearNotes:
-      set_notes is array
-      set_count is 0
-  </functions>
-
-  return(
-    <C.Page>
-      <C.Title>Notes</C.Title>
-      <For each=notes>
-        <C.ListItem><C.Body>{item}</C.Body></C.ListItem>
-      </For>
-    </C.Page>
-  )
-</notes>
-```
-
-Each `<tag>` is a parser scope — the compiler switches to a minimal grammar per zone. `<var>` only parses declarations. `<state>` only parses setter names. `<functions>` parses linear chains with `<if>` guards and composition (`addNote: validate + append + clear`). The return block is pure JSX with classifiers. No ambiguity, no surprises, linear top-to-bottom comprehension.
+But the golden path is conservative. First-party code uses classifiers, theme tokens, semantic primitives, and the framework's style guide. The framework's own Zig code is strict and explicit. The freedom is at the boundary where external code enters the system.
 
 ---
 
