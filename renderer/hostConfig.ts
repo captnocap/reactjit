@@ -238,11 +238,18 @@ function coalesceCommands(commands: Command[]): Command[] {
       const existingIdx = updateMap.get(cmd.id);
       if (existingIdx !== undefined) {
         const existing = output[existingIdx];
-        // Merge props
+        // Snapshot the existing style BEFORE the shallow merge overwrites it.
+        // Without this, two UPDATE ops that each carry a single style key
+        // (e.g. first {style:{height:N}}, then {style:{width:M}}) would lose
+        // the earlier key: the spread on the next line replaces the whole
+        // `style` sub-object with `cmd.props.style`, and then the "merge"
+        // below sees the same reference on both sides and does nothing.
+        const prevStyle = existing.props.style;
+        // Merge props (shallow)
         existing.props = { ...existing.props, ...cmd.props };
-        // Merge style sub-objects
-        if (existing.props.style && cmd.props.style) {
-          existing.props.style = { ...existing.props.style, ...cmd.props.style };
+        // Merge style sub-objects — use the pre-merge snapshot as the base
+        if (prevStyle && cmd.props.style) {
+          existing.props.style = { ...prevStyle, ...cmd.props.style };
         }
         // Merge removal arrays
         if (cmd.removeKeys) {

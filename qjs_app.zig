@@ -1044,7 +1044,11 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
     child.font_size = parent.font_size;
     if (parent.text_color) |c| child.text_color = c;
     child.letter_spacing = parent.letter_spacing;
-    child.line_height = parent.line_height;
+    // Only propagate line_height when the parent explicitly set one. Without
+    // this guard, a child with its own `lineHeight` style would get stomped
+    // back to 0 by any parent UPDATE (the default), which desynchronises
+    // paint (uses node.line_height) from hit-test (uses node.line_height).
+    if (parent.line_height > 0) child.line_height = parent.line_height;
 }
 
 fn applyCommand(cmd: std.json.Value) !void {

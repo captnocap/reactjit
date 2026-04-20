@@ -1027,13 +1027,24 @@ pub const TextEngine = struct {
     /// index in the text. Accounts for word wrapping, UTF-8, and alignment.
     /// Returns the byte index closest to the click position.
     pub fn hitTestWrapped(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32) usize {
-        return self.hitTestWrappedAligned(text, local_x, local_y, size_px, max_width, .left);
+        return self.hitTestWrappedAlignedLH(text, local_x, local_y, size_px, max_width, .left, 0);
     }
 
     pub fn hitTestWrappedAligned(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32, text_align: layout.TextAlign) usize {
+        return self.hitTestWrappedAlignedLH(text, local_x, local_y, size_px, max_width, text_align, 0);
+    }
+
+    /// Hit-test with an explicit line-height override. When the caller has
+    /// set a non-default lineHeight on the node (e.g. cursor-ide passes
+    /// `lineHeight: 17` for a 13px font), paint and hit-test MUST use the
+    /// same line pitch or drag selection drifts — a ~7px font metric
+    /// divided into 17px-spaced lines puts the resolved line 2.4× below the
+    /// actual click. Pass 0 to keep font-metric line height.
+    pub fn hitTestWrappedAlignedLH(self: *TextEngine, text: []const u8, local_x: f32, local_y: f32, size_px: u16, max_width: f32, text_align: layout.TextAlign, line_height_override: f32) usize {
         if (text.len == 0) return 0;
 
         const lm = self.lineMetrics(size_px);
+        const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
         const wrap = if (max_width > 0)
             self.wordWrap(text, size_px, max_width)
         else blk: {
@@ -1044,8 +1055,8 @@ pub const TextEngine = struct {
 
         // Determine which wrapped line was clicked
         var line_idx: usize = 0;
-        if (lm.height > 0) {
-            const li = @as(usize, @intFromFloat(@max(0, local_y) / lm.height));
+        if (effective_lh > 0) {
+            const li = @as(usize, @intFromFloat(@max(0, local_y) / effective_lh));
             line_idx = @min(li, if (wrap.count > 0) wrap.count - 1 else 0);
         }
 
@@ -1099,9 +1110,19 @@ pub const TextEngine = struct {
     /// Get the x offset of a byte index within the text, on its wrapped line.
     /// Returns {x_offset, line_y} relative to text origin.
     pub fn byteToPos(self: *TextEngine, text: []const u8, byte_idx: usize, size_px: u16, max_width: f32) struct { x: f32, y: f32 } {
+        return self.byteToPosLH(text, byte_idx, size_px, max_width, 0);
+    }
+
+    /// Variant accepting an explicit line-height override. Callers with a
+    /// non-default lineHeight style (e.g. TextEditor: 18px for a 13px font)
+    /// MUST pass it here, or the returned y will be placed at the font's
+    /// natural metric height instead of the stride the paint path uses —
+    /// cursor caret drifts up off its line.
+    pub fn byteToPosLH(self: *TextEngine, text: []const u8, byte_idx: usize, size_px: u16, max_width: f32, line_height_override: f32) struct { x: f32, y: f32 } {
         if (text.len == 0) return .{ .x = 0, .y = 0 };
 
         const lm = self.lineMetrics(size_px);
+        const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
         const wrap = if (max_width > 0)
             self.wordWrap(text, size_px, max_width)
         else blk: {
@@ -1140,7 +1161,7 @@ pub const TextEngine = struct {
 
         return .{
             .x = pen_x,
-            .y = lm.height * @as(f32, @floatFromInt(line_idx)),
+            .y = effective_lh * @as(f32, @floatFromInt(line_idx)),
         };
     }
 

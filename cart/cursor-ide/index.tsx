@@ -1112,7 +1112,7 @@ function SearchSurface(props: any) {
           </Row>
         ) : null}
       </Col>
-      <ScrollView style={{ flexGrow: 1, height: '100%', padding: 12 }}>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
         <Col style={{ gap: 8 }}>
           {props.results.map((result: SearchResult) => (
             <Pressable key={result.file + ':' + result.line + ':' + result.text} onPress={() => props.onOpenResult(result.file, result.line)} style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
@@ -1195,7 +1195,7 @@ function ChatSurface(props: any) {
         </Row>
       ) : null}
 
-      <ScrollView style={{ flexGrow: 1, height: '100%', padding: 12 }}>
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
         <Col style={{ gap: 10 }}>
           {!minimumBand ? (
             <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
@@ -1322,7 +1322,7 @@ function ChatSurface(props: any) {
             style={{ height: 84, borderWidth: 0, backgroundColor: 'transparent' }}
           />
 
-          <Row style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Col style={{ gap: 8 }}>
             <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pressable onPress={props.onAttachCurrentFile}><Text fontSize={10} color={COLORS.blue}>File</Text></Pressable>
               <Pressable onPress={props.onAttachSymbol}><Text fontSize={10} color={COLORS.blue}>Symbol</Text></Pressable>
@@ -1331,14 +1331,14 @@ function ChatSurface(props: any) {
               <Pressable onPress={props.onToggleTermAccess}><Text fontSize={10} color={props.termAccess ? COLORS.blue : COLORS.textDim}>Term</Text></Pressable>
               <Pressable onPress={props.onToggleAutoApply}><Text fontSize={10} color={props.autoApply ? COLORS.blue : COLORS.textDim}>Auto</Text></Pressable>
             </Row>
-            <Row style={{ gap: 8, alignItems: 'center' }}>
+            <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {props.inputTokenEstimate > 0 ? <Text fontSize={10} color={props.inputTokenEstimate > 16000 ? COLORS.red : props.inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{props.inputTokenEstimate + ' tkns'}</Text> : null}
               <Pressable onPress={props.onCycleModel}><Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text></Pressable>
-              <Pressable onPress={props.onSend} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
-                <Text fontSize={10} color={COLORS.blue}>{sendLabel}</Text>
+              <Pressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+                <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{sendLabel}</Text>
               </Pressable>
             </Row>
-          </Row>
+          </Col>
         </Box>
 
         {props.agentMode === 'task' ? <Text fontSize={10} color={COLORS.yellow}>Task mode can read the workspace, inspect git, and use the terminal.</Text> : null}

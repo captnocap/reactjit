@@ -908,6 +908,7 @@ var input_drag_node_pl: f32 = 0; // node padding-left
 var input_drag_node_pt: f32 = 0; // node padding-top
 var input_drag_max_width: f32 = 0;
 var input_drag_font_size: u16 = 0;
+var input_drag_line_height: f32 = 0; // node.line_height at drag-start — paint/hit-test must agree
 // Coalesced drag position — set per SDL_EVENT_MOUSE_MOTION, consumed once
 // per frame after the event pump. Avoids N hit-tests per frame when SDL
 // delivers a burst of motion events during rapid dragging.
@@ -947,21 +948,23 @@ fn scrollOffsetForNode(node: *Node, target: *Node, sx: *f32, sy: *f32) bool {
     return false;
 }
 
-fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32) u32 {
+fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32, line_height: f32) u32 {
     const typed = input.getText(id);
     if (typed.len == 0) return 0;
 
     if (g_text_engine) |te| {
         const idx = if (input.isMultiline(id))
-            te.hitTestWrapped(
+            te.hitTestWrappedAlignedLH(
                 typed,
                 @max(@as(f32, 0), local_x),
                 @max(@as(f32, 0), local_y),
                 font_size,
                 @max(@as(f32, 1), max_width),
+                .left,
+                line_height,
             )
         else
-            te.hitTestWrapped(typed, @max(@as(f32, 0), local_x), 0, font_size, 0);
+            te.hitTestWrappedAlignedLH(typed, @max(@as(f32, 0), local_x), 0, font_size, 0, .left, line_height);
         return @intCast(@min(idx, typed.len));
     }
 
@@ -1517,7 +1520,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         var cursor_x: f32 = 0;
         var cursor_y: f32 = 0;
         if (g_text_engine) |te| {
-            const point = te.byteToPos(typed, @as(usize, cursor_pos), node.font_size, if (is_multiline) max_w else 0);
+            const point = te.byteToPosLH(typed, @as(usize, cursor_pos), node.font_size, if (is_multiline) max_w else 0, node.line_height);
             cursor_x = point.x;
             cursor_y = point.y;
         }
@@ -2131,7 +2134,7 @@ pub fn run(config_in: AppConfig) !void {
                                 _ = scrollOffsetForNode(config.root, h, &scroll_x, &scroll_y);
                                 const local_x = mx + scroll_x - h.computed.x - pl;
                                 const local_y = my + scroll_y - h.computed.y - pt;
-                                const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr);
+                                const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr, h.line_height);
                                 if (clicks == 3) {
                                     input.selectAll(id);
                                 } else if (clicks == 2) {
@@ -2148,6 +2151,7 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_node_pt = pt;
                                     input_drag_max_width = h.computed.w - pl - pr;
                                     input_drag_font_size = h.font_size;
+                                    input_drag_line_height = h.line_height;
                                 }
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
@@ -2218,7 +2222,7 @@ pub fn run(config_in: AppConfig) !void {
                                     const pr = h.style.padRight();
                                     const local_x = gpos[0] - h.computed.x - pl;
                                     const local_y = gpos[1] - h.computed.y - pt;
-                                    const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr);
+                                    const cursor_pos = hitTestInputByte(id, local_x, local_y, h.font_size, h.computed.w - pl - pr, h.line_height);
                                     input.setCursorPos(id, cursor_pos);
                                     input.startDrag(id);
                                     input_drag_active = true;
@@ -2229,6 +2233,7 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_node_pt = pt;
                                     input_drag_max_width = h.computed.w - pl - pr;
                                     input_drag_font_size = h.font_size;
+                                    input_drag_line_height = h.line_height;
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
                                     handler();
@@ -2754,7 +2759,7 @@ pub fn run(config_in: AppConfig) !void {
             input_drag_pending = false;
             const local_x = input_drag_pending_x - input_drag_node_x - input_drag_node_pl;
             const local_y = input_drag_pending_y - input_drag_node_y - input_drag_node_pt;
-            const cursor_pos = hitTestInputByte(input_drag_id, local_x, local_y, input_drag_font_size, input_drag_max_width);
+            const cursor_pos = hitTestInputByte(input_drag_id, local_x, local_y, input_drag_font_size, input_drag_max_width, input_drag_line_height);
             input.updateDragToPos(input_drag_id, cursor_pos);
         }
 
