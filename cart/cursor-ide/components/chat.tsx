@@ -6,6 +6,7 @@ import { baseName, COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
 import { getModelIconInfo } from '../model-icons';
 import { expandVariables, hasVariables, type ExpansionResult } from '../variables';
+import { usePulse } from '../anim';
 
 export function ToolCallCard(props: any) {
   const execItem = props.exec;
@@ -87,6 +88,35 @@ function fuzzyMatch(query: string, path: string): boolean {
     pi = idx + 1;
   }
   return true;
+}
+
+function GeneratingIndicator(props: { toolExecutions: any[] }) {
+  const pulse = usePulse(0.5, 1, 1200);
+  return (
+    <Col style={{ gap: 8 }}>
+      {props.toolExecutions.length > 0 ? (
+        <Box style={{ gap: 8 }}>
+          <Text fontSize={10} color={COLORS.textDim}>Live tool calls</Text>
+          {props.toolExecutions.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
+        </Box>
+      ) : null}
+      <Row style={{ gap: 8, alignItems: 'center' }}>
+        <Box style={{ opacity: pulse }}>
+          <Glyph icon="bot" tone={COLORS.green} backgroundColor="#143120" tiny={true} />
+        </Box>
+        <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
+          <Text fontSize={10} color={COLORS.textDim}>
+            {props.toolExecutions.some((item: any) => item.status === 'running') ? 'running tool chain' : 'thinking'}
+          </Text>
+        </Box>
+        <Row style={{ gap: 2 }}>
+          {[0, 1, 2].map(i => (
+            <Box key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.green, opacity: (Date.now() / 400 + i) % 3 > 1.5 ? 1 : 0.3 }} />
+          ))}
+        </Row>
+      </Row>
+    </Col>
+  );
 }
 
 export function ChatSurface(props: any) {
@@ -232,22 +262,7 @@ export function ChatSurface(props: any) {
           })}
 
           {props.isGenerating ? (
-            <Col style={{ gap: 8 }}>
-              {props.toolExecutions.length > 0 ? (
-                <Box style={{ gap: 8 }}>
-                  <Text fontSize={10} color={COLORS.textDim}>Live tool calls</Text>
-                  {props.toolExecutions.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
-                </Box>
-              ) : null}
-              <Row style={{ gap: 8, alignItems: 'center' }}>
-                <Glyph icon="bot" tone={COLORS.green} backgroundColor="#143120" tiny={true} />
-                <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
-                  <Text fontSize={10} color={COLORS.textDim}>
-                    {props.toolExecutions.some((item: any) => item.status === 'running') ? 'running tool chain' : 'thinking'}
-                  </Text>
-                </Box>
-              </Row>
-            </Col>
+            <GeneratingIndicator toolExecutions={props.toolExecutions} />
           ) : null}
         </Col>
       </ScrollView>
