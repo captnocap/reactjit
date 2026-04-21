@@ -5,6 +5,7 @@ import { Box, Col, Pressable, Row, ScrollView, Text, TextArea } from '../../../r
 import { baseName, COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
 import { getModelIconInfo } from '../model-icons';
+import { findModelById } from '../providers';
 import { expandVariables, hasVariables, type ExpansionResult } from '../variables';
 import { usePulse } from '../anim';
 
@@ -88,6 +89,26 @@ function fuzzyMatch(query: string, path: string): boolean {
     pi = idx + 1;
   }
   return true;
+}
+
+function ContextMeter(props: { messages: any[]; modelId: string }) {
+  const model = findModelById(props.modelId);
+  const limit = model?.contextWindow || 200000;
+  // Rough token estimate: 1 token ≈ 4 chars
+  const textLength = props.messages.reduce((sum: number, m: any) => sum + (m.text?.length || 0), 0);
+  const tokens = Math.ceil(textLength / 4);
+  const pct = Math.min(100, Math.round((tokens / limit) * 100));
+  const color = pct > 80 ? COLORS.red : pct > 50 ? COLORS.yellow : COLORS.green;
+  return (
+    <Row style={{ alignItems: 'center', gap: 4 }}>
+      <Box style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: color, justifyContent: 'center', alignItems: 'center' }}>
+        <Text fontSize={7} color={color} style={{ fontWeight: 'bold' }}>{pct}%</Text>
+      </Box>
+      {!props.messages.length || props.messages.length < 2 ? null : (
+        <Text fontSize={9} color={COLORS.textDim}>{tokens.toLocaleString()} / {limit.toLocaleString()}</Text>
+      )}
+    </Row>
+  );
 }
 
 function GeneratingIndicator(props: { toolExecutions: any[] }) {
@@ -189,6 +210,7 @@ export function ChatSurface(props: any) {
             <ModelIconBadge modelId={props.selectedModel} />
             <Pill label={props.selectedModel} color={COLORS.blue} tiny={true} />
           </Row>
+          <ContextMeter messages={props.messages} modelId={props.selectedModel} />
         </Row>
         <Row style={{ gap: 8 }}>
           <Pressable onPress={props.onNewConversation}><Text fontSize={10} color={COLORS.blue}>New</Text></Pressable>
