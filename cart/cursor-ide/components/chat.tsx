@@ -1,4 +1,5 @@
 const React: any = require('react');
+const { useState, useEffect } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextArea } from '../../../runtime/primitives';
 import { baseName, COLORS } from '../theme';
@@ -56,22 +57,98 @@ function VariablePreview(props: { results: ExpansionResult[] }) {
   );
 }
 
+const SLASH_COMMANDS = [
+  { cmd: '/model', desc: 'Cycle through enabled models' },
+  { cmd: '/plan', desc: 'Switch to plan mode' },
+  { cmd: '/default', desc: 'Use default model' },
+  { cmd: '/clear', desc: 'Clear conversation' },
+  { cmd: '/index', desc: 'Index workspace' },
+  { cmd: '/git', desc: 'Show git status' },
+  { cmd: '/help', desc: 'List commands' },
+];
+
+function getActiveToken(input: string): { token: string; startIndex: number } {
+  const lastSpace = input.lastIndexOf(' ');
+  if (lastSpace >= 0) {
+    return { token: input.slice(lastSpace + 1), startIndex: lastSpace + 1 };
+  }
+  return { token: input, startIndex: 0 };
+}
+
+function fuzzyMatch(query: string, path: string): boolean {
+  const q = query.toLowerCase();
+  const p = path.toLowerCase();
+  if (p.includes(q)) return true;
+  // Simple fuzzy: every char in query appears in order in path
+  let pi = 0;
+  for (let i = 0; i < q.length; i++) {
+    const idx = p.indexOf(q[i], pi);
+    if (idx < 0) return false;
+    pi = idx + 1;
+  }
+  return true;
+}
+
 export function ChatSurface(props: any) {
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
   const focusLabel = props.currentFilePath === '__landing__' ? props.workspaceName : props.currentFilePath === '__settings__' ? 'Settings' : props.currentFilePath;
   const sendLabel = props.agentMode === 'agent' ? 'Launch' : props.agentMode === 'task' ? 'Run Task' : props.agentMode === 'plan' ? 'Plan' : 'Send';
-  const filteredSlash = [
-    { cmd: '/fix', desc: 'Fix current file' },
-    { cmd: '/review', desc: 'Review recent changes' },
-    { cmd: '/plan', desc: 'Plan the next edit' },
-    { cmd: '/docs', desc: 'Draft docs' },
-    { cmd: '/commit', desc: 'Draft commit message' },
-  ].filter((item) => props.currentInput === '/' || item.cmd.startsWith(props.currentInput));
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
 
   // Variable expansion preview
   const varResults: ExpansionResult[] = props.variablePreview || [];
   const showVarPreview = hasVariables(props.currentInput) && varResults.length > 0;
+
+  // ── Composer menu state ──
+  const { token, startIndex } = getActiveToken(props.currentInput);
+  const menuType = token.startsWith('/') ? 'slash' : token.startsWith('@') ? 'at' : null;
+  const query = token.slice(1);
+
+  let menuItems: Array<{ label: string; desc: string; value: string }> = [];
+  if (menuType === 'slash') {
+    menuItems = SLASH_COMMANDS
+      .filter((item) => query.length === 0 || item.cmd.slice(1).toLowerCase().includes(query.toLowerCase()))
+      .map((item) => ({ label: item.cmd, desc: item.desc, value: item.cmd + ' ' }));
+  } else if (menuType === 'at') {
+    const files = props.workspaceFiles || [];
+    menuItems = files
+      .filter((path: string) => query.length === 0 || fuzzyMatch(query, path))
+      .slice(0, 8)
+      .map((path: string) => ({ label: path, desc: baseName(path), value: '@' + path + ' ' }));
+  }
+
+  const menuOpen = menuItems.length > 0;
+  const safeHighlight = menuItems.length > 0 ? Math.min(highlightedIndex, menuItems.length - 1) : 0;
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [props.currentInput]);
+
+  function insertMenuItem(value: string) {
+    const before = props.currentInput.slice(0, startIndex);
+    props.onInputChange(before + value);
+  }
+
+  function handleComposerKey(payload: any) {
+    if (!menuOpen) return;
+    const key = payload.keyCode;
+    // Enter = 13, Escape = 27, Up = 82 (SDLK_UP), Down = 81 (SDLK_DOWN)
+    if (key === 13) {
+      const item = menuItems[safeHighlight];
+      if (item) insertMenuItem(item.value);
+    } else if (key === 27) {
+      // Close menu by replacing token with nothing
+      const before = props.currentInput.slice(0, startIndex);
+      props.onInputChange(before);
+    } else if (key === 81) {
+      // Down
+      setHighlightedIndex((prev) => Math.min(prev + 1, menuItems.length - 1));
+    } else if (key === 82) {
+      // Up
+      setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+    }
+  }
 
   return (
     <Col style={{ width: props.style?.width || '100%', height: '100%', backgroundColor: COLORS.panelBg, borderLeftWidth: 1, borderColor: COLORS.border }}>
@@ -199,19 +276,6 @@ export function ChatSurface(props: any) {
           ))}
         </Row>
 
-        {props.currentInput.startsWith('/') && filteredSlash.length > 0 ? (
-          <Col style={{ gap: 6 }}>
-            {filteredSlash.map((cmd) => (
-              <Pressable key={cmd.cmd} onPress={() => props.onSelectSlash(cmd.cmd)} style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
-                <Row style={{ gap: 8, alignItems: 'center' }}>
-                  <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{cmd.cmd}</Text>
-                  <Text fontSize={10} color={COLORS.textDim}>{cmd.desc}</Text>
-                </Row>
-              </Pressable>
-            ))}
-          </Col>
-        ) : null}
-
         <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 8 }}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <Text fontSize={10} color={COLORS.textBright}>{focusLabel}</Text>
@@ -230,9 +294,42 @@ export function ChatSurface(props: any) {
             </Row>
           ) : null}
 
+          {menuOpen ? (
+            <Col style={{
+              maxHeight: 200,
+              gap: 2,
+              padding: 6,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: COLORS.border,
+              backgroundColor: COLORS.panelAlt,
+            }}>
+              <Text fontSize={9} color={COLORS.textDim} style={{ paddingLeft: 4, paddingBottom: 4 }}>
+                {menuType === 'slash' ? 'Commands' : 'Files'}
+              </Text>
+              {menuItems.map((item, idx) => (
+                <Pressable
+                  key={item.label}
+                  onPress={() => insertMenuItem(item.value)}
+                  style={{
+                    padding: 8,
+                    borderRadius: 6,
+                    backgroundColor: idx === safeHighlight ? COLORS.blueDeep : 'transparent',
+                  }}
+                >
+                  <Row style={{ gap: 8, alignItems: 'center' }}>
+                    <Text fontSize={10} color={idx === safeHighlight ? COLORS.blue : COLORS.textBright} style={{ fontWeight: 'bold' }}>{item.label}</Text>
+                    <Text fontSize={10} color={COLORS.textDim}>{item.desc}</Text>
+                  </Row>
+                </Pressable>
+              ))}
+            </Col>
+          ) : null}
+
           <TextArea
             value={props.currentInput}
             onChange={props.onInputChange}
+            onKeyDown={handleComposerKey}
             fontSize={11}
             color={COLORS.text}
             style={{ height: 84, borderWidth: 0, backgroundColor: 'transparent' }}
