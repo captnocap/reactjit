@@ -317,6 +317,21 @@ local function buildObject()
     return obj
   end)
 
+  -- We don't track enumerability — treat getOwnPropertyNames the same as keys.
+  Object.getOwnPropertyNames = Object.keys
+  Object.getOwnPropertyDescriptor = Values.newNativeFunction(function(args)
+    local target, key = args[1], args[2]
+    if type(target) ~= "table" then return Values.UNDEFINED end
+    local v = rawget(target, key)
+    if v == nil then return Values.UNDEFINED end
+    local desc = Values.newObject()
+    desc.value = v
+    desc.writable = true
+    desc.enumerable = true
+    desc.configurable = true
+    return desc
+  end)
+
   Object.getPrototypeOf = Values.newNativeFunction(function(args)
     local v = args[1]
     if type(v) ~= "table" then return Values.NULL end
