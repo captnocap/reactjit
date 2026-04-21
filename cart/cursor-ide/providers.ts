@@ -27,18 +27,25 @@ export interface ProviderConfig {
 
 // ── Anthropic ────────────────────────────────────────────────────────────────
 
+// Aligned with cart/cockpit LIVE_MODELS. Claude Code CLI + Kimi CLI are wired
+// through __claude_* / __kimi_* host FFI; Codex lane is listed but offline
+// until the CLI ships.
 const ANTHROPIC_MODELS: ModelConfig[] = [
-  { id: 'claude-opus-4-20250514', provider: 'anthropic', displayName: 'Claude Opus 4', contextWindow: 200000, maxOutput: 32000, supportsVision: true, supportsTools: true, inputPrice: 15, outputPrice: 75 },
-  { id: 'claude-sonnet-4-20250514', provider: 'anthropic', displayName: 'Claude Sonnet 4', contextWindow: 200000, maxOutput: 64000, supportsVision: true, supportsTools: true, inputPrice: 3, outputPrice: 15 },
-  { id: 'claude-3-5-haiku-20241022', provider: 'anthropic', displayName: 'Claude 3.5 Haiku', contextWindow: 200000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.25, outputPrice: 1.25 },
+  { id: 'claude-opus-4-7',    provider: 'anthropic', displayName: 'Claude Opus 4.7',        contextWindow: 200000, maxOutput: 32000, supportsVision: true, supportsTools: true, inputPrice: 15,   outputPrice: 75 },
+  { id: 'claude-opus-4-7-1m', provider: 'anthropic', displayName: 'Claude Opus 4.7 [1M]',   contextWindow: 1000000, maxOutput: 32000, supportsVision: true, supportsTools: true, inputPrice: 15,  outputPrice: 75 },
+  { id: 'claude-opus-4-6',    provider: 'anthropic', displayName: 'Claude Opus 4.6',        contextWindow: 200000, maxOutput: 32000, supportsVision: true, supportsTools: true, inputPrice: 15,   outputPrice: 75 },
+  { id: 'claude-sonnet-4-6',  provider: 'anthropic', displayName: 'Claude Sonnet 4.6',      contextWindow: 200000, maxOutput: 64000, supportsVision: true, supportsTools: true, inputPrice: 3,    outputPrice: 15 },
+  { id: 'claude-sonnet-4-5',  provider: 'anthropic', displayName: 'Claude Sonnet 4.5',      contextWindow: 200000, maxOutput: 64000, supportsVision: true, supportsTools: true, inputPrice: 3,    outputPrice: 15 },
+  { id: 'claude-haiku-4-5',   provider: 'anthropic', displayName: 'Claude Haiku 4.5',       contextWindow: 200000, maxOutput: 8192,  supportsVision: true, supportsTools: true, inputPrice: 1,    outputPrice: 5 },
 ];
 
 // ── OpenAI ───────────────────────────────────────────────────────────────────
 
 const OPENAI_MODELS: ModelConfig[] = [
-  { id: 'gpt-4o', provider: 'openai', displayName: 'GPT-4o', contextWindow: 128000, maxOutput: 16384, supportsVision: true, supportsTools: true, inputPrice: 2.5, outputPrice: 10 },
-  { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini', contextWindow: 128000, maxOutput: 16384, supportsVision: true, supportsTools: true, inputPrice: 0.15, outputPrice: 0.6 },
-  { id: 'o1', provider: 'openai', displayName: 'o1', contextWindow: 200000, maxOutput: 100000, supportsVision: true, supportsTools: false, inputPrice: 15, outputPrice: 60 },
+  { id: 'gpt-5-codex',    provider: 'openai', displayName: 'GPT-5 Codex',     contextWindow: 400000, maxOutput: 16384, supportsVision: true,  supportsTools: true,  inputPrice: 0,    outputPrice: 0 },
+  { id: 'gpt-5.4',        provider: 'openai', displayName: 'GPT-5.4',         contextWindow: 400000, maxOutput: 16384, supportsVision: true,  supportsTools: true,  inputPrice: 0,    outputPrice: 0 },
+  { id: 'gpt-5.4-mini',   provider: 'openai', displayName: 'GPT-5.4 mini',    contextWindow: 400000, maxOutput: 16384, supportsVision: true,  supportsTools: true,  inputPrice: 0,    outputPrice: 0 },
+  { id: 'codex',          provider: 'openai', displayName: 'Codex (legacy)',  contextWindow: 0,      maxOutput: 0,     supportsVision: false, supportsTools: false, inputPrice: 0,    outputPrice: 0 },
 ];
 
 // ── Google ───────────────────────────────────────────────────────────────────
@@ -98,13 +105,21 @@ const ALIBABA_MODELS: ModelConfig[] = [
 // ── Kimi ─────────────────────────────────────────────────────────────────────
 
 const KIMI_MODELS: ModelConfig[] = [
-  { id: 'kimi-k1.5', provider: 'kimi', displayName: 'Kimi K1.5', contextWindow: 256000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.5, outputPrice: 2 },
+  { id: 'kimi-k2.5',                 provider: 'kimi', displayName: 'Kimi K2.5',          contextWindow: 256000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.5, outputPrice: 2 },
+  { id: 'kimi-k2',                   provider: 'kimi', displayName: 'Kimi K2',            contextWindow: 256000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.5, outputPrice: 2 },
+  { id: 'kimi-k2-thinking',          provider: 'kimi', displayName: 'Kimi K2 Thinking',   contextWindow: 256000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.5, outputPrice: 2 },
+  { id: 'kimi-code/kimi-for-coding', provider: 'kimi', displayName: 'Kimi for Coding',    contextWindow: 256000, maxOutput: 8192, supportsVision: true, supportsTools: true, inputPrice: 0.5, outputPrice: 2 },
 ];
 
 // ── Local / QJS (runtime-only, no network models) ────────────────────────────
 
+// Local OpenAI-compatible endpoint (LM Studio / Ollama / llama.cpp). Actual
+// model ids are discovered at runtime via listLocalModels(); entries here are
+// defaults for the two lanes we care about (chat + embeddings).
 const LOCAL_MODELS: ModelConfig[] = [
-  { id: 'local-heuristics', provider: 'local', displayName: 'Local Heuristics', contextWindow: 0, maxOutput: 0, supportsVision: false, supportsTools: false, inputPrice: 0, outputPrice: 0 },
+  { id: 'local/chat',       provider: 'local', displayName: 'Local Chat (LM Studio)',      contextWindow: 32768, maxOutput: 4096, supportsVision: false, supportsTools: true,  inputPrice: 0, outputPrice: 0 },
+  { id: 'local/embeddings', provider: 'local', displayName: 'Local Embeddings (LM Studio)', contextWindow: 8192,  maxOutput: 0,    supportsVision: false, supportsTools: false, inputPrice: 0, outputPrice: 0 },
+  { id: 'local-heuristics', provider: 'local', displayName: 'Local Heuristics',             contextWindow: 0,     maxOutput: 0,    supportsVision: false, supportsTools: false, inputPrice: 0, outputPrice: 0 },
 ];
 
 const QJS_MODELS: ModelConfig[] = [
@@ -114,8 +129,8 @@ const QJS_MODELS: ModelConfig[] = [
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
-  anthropic: { type: 'anthropic', enabled: true, baseUrl: 'https://api.anthropic.com/v1', apiVersion: '2023-06-01', defaultModel: 'claude-sonnet-4-20250514', models: ANTHROPIC_MODELS },
-  openai: { type: 'openai', enabled: true, baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o', models: OPENAI_MODELS },
+  anthropic: { type: 'anthropic', enabled: true, baseUrl: 'https://api.anthropic.com/v1', apiVersion: '2023-06-01', defaultModel: 'claude-sonnet-4-6', models: ANTHROPIC_MODELS },
+  openai: { type: 'openai', enabled: true, baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-5-codex', models: OPENAI_MODELS },
   google: { type: 'google', enabled: true, baseUrl: 'https://generativelanguage.googleapis.com/v1beta', defaultModel: 'gemini-2.0-flash', models: GOOGLE_MODELS },
   deepseek: { type: 'deepseek', enabled: false, baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', models: DEEPSEEK_MODELS },
   meta: { type: 'meta', enabled: false, baseUrl: '', defaultModel: 'llama-3.3-70b-instruct', models: META_MODELS },
@@ -129,8 +144,8 @@ export const PROVIDER_CONFIGS: Record<ProviderType, ProviderConfig> = {
   perplexity: { type: 'perplexity', enabled: false, baseUrl: '', defaultModel: '', models: [] },
   together: { type: 'together', enabled: false, baseUrl: '', defaultModel: '', models: [] },
   fireworks: { type: 'fireworks', enabled: false, baseUrl: '', defaultModel: '', models: [] },
-  kimi: { type: 'kimi', enabled: false, baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k1.5', models: KIMI_MODELS },
-  local: { type: 'local', enabled: true, baseUrl: '', defaultModel: 'local-heuristics', models: LOCAL_MODELS },
+  kimi: { type: 'kimi', enabled: true, baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2.5', models: KIMI_MODELS },
+  local: { type: 'local', enabled: true, baseUrl: 'http://localhost:1234/v1', defaultModel: 'local/chat', models: LOCAL_MODELS },
   qjs: { type: 'qjs', enabled: true, baseUrl: '', defaultModel: 'qjs-plugin', models: QJS_MODELS },
 };
 
@@ -183,5 +198,6 @@ export function backendForModel(modelId: string): string {
   if (modelId.startsWith('claude-')) return 'claude';
   if (modelId.startsWith('kimi-')) return 'kimi';
   if (modelId.startsWith('gpt-') || modelId.startsWith('o1') || modelId.startsWith('o3')) return 'openai';
+  if (modelId.startsWith('local/') || modelId === 'local-heuristics') return 'local';
   return 'claude';
 }

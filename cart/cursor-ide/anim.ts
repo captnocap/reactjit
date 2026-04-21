@@ -12,7 +12,7 @@ export function useTween(target: number, durationMs: number = 200): number {
   const [value, setValue] = useState(target);
   const startRef = useRef(target);
   const startTimeRef = useRef(Date.now());
-  const rafRef = useRef<any>(null);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     startRef.current = value;
@@ -26,13 +26,13 @@ export function useTween(target: number, durationMs: number = 200): number {
       const next = startRef.current + (target - startRef.current) * eased;
       setValue(next);
       if (t < 1) {
-        rafRef.current = requestAnimationFrame(tick);
+        timerRef.current = setTimeout(tick, 16);
       }
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    timerRef.current = setTimeout(tick, 16);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [target, durationMs]);
 
@@ -41,7 +41,7 @@ export function useTween(target: number, durationMs: number = 200): number {
 
 export function usePulse(min: number = 0.4, max: number = 1, durationMs: number = 1500): number {
   const [value, setValue] = useState(min);
-  const rafRef = useRef<any>(null);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -49,11 +49,10 @@ export function usePulse(min: number = 0.4, max: number = 1, durationMs: number 
       const sine = Math.sin(t * Math.PI * 2);
       const normalized = (sine + 1) / 2;
       setValue(min + (max - min) * normalized);
-      rafRef.current = requestAnimationFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    timerRef.current = setInterval(tick, 50);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [min, max, durationMs]);
 

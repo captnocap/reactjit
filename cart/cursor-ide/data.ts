@@ -7,7 +7,7 @@ export const SETTINGS_PROVIDERS = [
     status: 'ready',
     driver: 'remote API / policy aware',
     env: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6',
     route: 'ask / plan / task / agent',
     summary: 'Current live chat path in the TSX cart. This is the baseline provider surface that should grow into a full routing matrix.',
     detail: 'Needs auth state, per-mode routing, retry policy, and provider-local settings components.',

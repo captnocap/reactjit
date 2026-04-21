@@ -188,6 +188,7 @@ export default function CursorIdeApp() {
   const [pluginRegistry, setPluginRegistry] = useState<PluginRegistry | null>(null);
   const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
   const [showPalette, setShowPalette] = useState(0);
+  const [dockPanels, setDockPanels] = usePersistentState<string[]>('cursor-ide.dockPanels', ['files', 'source-control']);
 
   // ── New ported state ─────────────────────────────────────────────────
   const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('cursor-ide.providerConfigs', Object.values(PROVIDER_CONFIGS));
@@ -204,7 +205,6 @@ export default function CursorIdeApp() {
   const stateRef = useRef<any>({});
 
   const execCacheRef = useRef<Record<string, string>>({});
-  const terminalDockResizeRef = useRef<any>(null);
   function execCached(cmd: string): string {
     const cache = execCacheRef.current;
     if (cache[cmd] !== undefined) return cache[cmd];
@@ -216,6 +216,31 @@ export default function CursorIdeApp() {
     execCacheRef.current = {};
   }
 
+  function normalizeDockPanels(list: string[]): string[] {
+    const next: string[] = [];
+    const seen: Record<string, number> = {};
+    for (const panelId of list) {
+      if (!panelId || seen[panelId]) continue;
+      next.push(panelId);
+      seen[panelId] = 1;
+    }
+    return next.length > 0 ? next : ['files'];
+  }
+
+  function focusDockPanel(panelId: string) {
+    setDockPanels((prev) => {
+      const base = normalizeDockPanels(prev);
+      return [panelId, ...base.filter((id) => id !== panelId)].slice(0, 4);
+    });
+  }
+
+  function closeDockPanel(panelId: string) {
+    setDockPanels((prev) => {
+      const next = normalizeDockPanels(prev).filter((id) => id !== panelId);
+      return next.length > 0 ? next : ['files'];
+    });
+  }
+
   const cursorPosition = { line: 1, column: 1 };
 
   stateRef.current = {
@@ -225,7 +250,11 @@ export default function CursorIdeApp() {
     editorContent, files, gitBranch, gitRemote, modelDisplayName, openTabs,
     searchQuery, selectedModel, stagedCount, workDir, widthBand, windowHeight,
     windowWidth, workspaceName, showSearch, showChat, showTerminal, showHotPanel, showGitPanel, showPlanPanel,
-    defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight,
+    defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight, dockPanels,
+  };
+
+  host.__setTerminalDockHeight = (value: number) => {
+    setTerminalDockHeight(clampTerminalDockHeight(Number(value)));
   };
 
   function clampTerminalDockHeight(value: number): number {
@@ -1034,45 +1063,16 @@ export default function CursorIdeApp() {
   }
 
   function stopTerminalDockResize() {
-    const current = terminalDockResizeRef.current;
-    if (!current) return;
-    if (current.interval != null) clearInterval(current.interval);
-    terminalDockResizeRef.current = null;
+    if (typeof host.__endTerminalDockResize === 'function') {
+      host.__endTerminalDockResize();
+    }
   }
 
   function beginTerminalDockResize() {
-    if (terminalDockResizeRef.current) return;
+    const begin = typeof host.__beginTerminalDockResize === 'function' ? host.__beginTerminalDockResize : null;
     const getMouseY = typeof host.getMouseY === 'function' ? host.getMouseY : null;
-    const getMouseDown = typeof host.getMouseDown === 'function' ? host.getMouseDown : null;
-    if (!getMouseY || !getMouseDown) return;
-
-    const startY = Number(getMouseY());
-    const startHeight = clampTerminalDockHeight(stateRef.current.terminalDockHeight || 250);
-    const session = {
-      startY,
-      startHeight,
-      lastHeight: startHeight,
-      interval: null as any,
-    };
-    terminalDockResizeRef.current = session;
-
-    const tick = () => {
-      const current = terminalDockResizeRef.current;
-      if (!current) return;
-      if (!getMouseDown()) {
-        stopTerminalDockResize();
-        return;
-      }
-      const currentY = Number(getMouseY());
-      const nextHeight = clampTerminalDockHeight(current.startHeight + (current.startY - currentY));
-      if (nextHeight !== current.lastHeight) {
-        current.lastHeight = nextHeight;
-        setTerminalDockHeight(nextHeight);
-      }
-    };
-
-    session.interval = setInterval(tick, 16);
-    tick();
+    if (!begin || !getMouseY) return;
+    begin(Number(getMouseY()), clampTerminalDockHeight(stateRef.current.terminalDockHeight || 250));
   }
 
   function toggleTerminalRecording() {
@@ -1368,10 +1368,14 @@ export default function CursorIdeApp() {
                 currentFilePath={currentFilePath}
                 widthBand={widthBand}
                 style={{ width: '100%', borderRightWidth: 0 }}
+                multiPanel={false}
+                dockPanels={dockPanels}
                 onOpenHome={openLandingPage}
                 onRefreshWorkspace={refreshWorkspace}
                 onSelectPath={openFileByPath}
                 onCreateFile={createNewFile}
+                onFocusDockPanel={focusDockPanel}
+                onCloseDockPanel={closeDockPanel}
               />
             ) : null}
 
@@ -1459,7 +1463,27 @@ export default function CursorIdeApp() {
           </Col>
         ) : (
           <Row style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
-            <Sidebar files={files} tabs={openTabs} gitChanges={gitChanges} workspaceName={workspaceName} workDir={workDir} gitBranch={gitBranch} changedCount={changedCount} stagedCount={stagedCount} currentFilePath={currentFilePath} widthBand={widthBand} style={mediumMode ? { width: 248 } : undefined} onOpenHome={openLandingPage} onRefreshWorkspace={refreshWorkspace} onSelectPath={openFileByPath} onCreateFile={createNewFile} />
+            <Sidebar
+              files={files}
+              tabs={openTabs}
+              gitChanges={gitChanges}
+              workspaceName={workspaceName}
+              workDir={workDir}
+              gitBranch={gitBranch}
+              changedCount={changedCount}
+              stagedCount={stagedCount}
+              currentFilePath={currentFilePath}
+              widthBand={widthBand}
+              style={mediumMode ? { width: 304 } : undefined}
+              multiPanel={true}
+              dockPanels={dockPanels}
+              onOpenHome={openLandingPage}
+              onRefreshWorkspace={refreshWorkspace}
+              onSelectPath={openFileByPath}
+              onCreateFile={createNewFile}
+              onFocusDockPanel={focusDockPanel}
+              onCloseDockPanel={closeDockPanel}
+            />
 
             {showNewFileInput ? (
               <Box style={{ position: 'absolute', left: 12, top: 60, width: 260, padding: 12, gap: 8, backgroundColor: COLORS.panelRaised, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, zIndex: 10 }}>

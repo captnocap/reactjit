@@ -45,18 +45,18 @@ export interface DefaultModelsSettings {
 // ── System defaults ──────────────────────────────────────────────────────────
 
 export const DEFAULT_MODELS: DefaultModelsSettings = {
-  textModel: { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514' },
-  visionProxy: { enabled: true, provider: 'anthropic', modelId: 'claude-sonnet-4-20250514' },
-  shadowModel: { provider: 'anthropic', modelId: 'claude-3-5-haiku-20241022' },
+  textModel: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+  visionProxy: { enabled: true, provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+  shadowModel: { provider: 'anthropic', modelId: 'claude-haiku-4-5' },
   research: {
-    orchestrator: { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514' },
+    orchestrator: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
     runners: {
       count: 3,
       mode: 'uniform',
-      uniformModel: { provider: 'anthropic', modelId: 'claude-3-5-haiku-20241022' },
+      uniformModel: { provider: 'anthropic', modelId: 'claude-haiku-4-5' },
       individualModels: [],
     },
-    reader: { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514' },
+    reader: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
   },
   imageGen: { modelId: 'seedream-v4' },
 };

@@ -8,6 +8,8 @@ import { getModelIconInfo } from '../model-icons';
 import { findModelById } from '../providers';
 import { expandVariables, hasVariables, type ExpansionResult } from '../variables';
 import { usePulse } from '../anim';
+import { useComposerHistory, useMessageSearch, useTypingDots } from '../chat-hooks';
+import { exportConversation, copyToClipboard, saveConversationToFile } from '../chat-export';
 
 export function ToolCallCard(props: any) {
   const execItem = props.exec;
@@ -146,6 +148,10 @@ export function ChatSurface(props: any) {
   const focusLabel = props.currentFilePath === '__landing__' ? props.workspaceName : props.currentFilePath === '__settings__' ? 'Settings' : props.currentFilePath;
   const sendLabel = props.agentMode === 'agent' ? 'Launch' : props.agentMode === 'task' ? 'Run Task' : props.agentMode === 'plan' ? 'Plan' : 'Send';
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const { push: pushHistory, navigate: navigateHistory, reset: resetHistory } = useComposerHistory();
+  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, active: searchActive } = useMessageSearch(props.messages || []);
 
   // Variable expansion preview
   const varResults: ExpansionResult[] = props.variablePreview || [];
@@ -182,23 +188,36 @@ export function ChatSurface(props: any) {
   }
 
   function handleComposerKey(payload: any) {
-    if (!menuOpen) return;
     const key = payload.keyCode;
-    // Enter = 13, Escape = 27, Up = 82 (SDLK_UP), Down = 81 (SDLK_DOWN)
-    if (key === 13) {
-      const item = menuItems[safeHighlight];
-      if (item) insertMenuItem(item.value);
-    } else if (key === 27) {
-      // Close menu by replacing token with nothing
-      const before = props.currentInput.slice(0, startIndex);
-      props.onInputChange(before);
-    } else if (key === 81) {
-      // Down
-      setHighlightedIndex((prev) => Math.min(prev + 1, menuItems.length - 1));
-    } else if (key === 82) {
-      // Up
-      setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+    if (menuOpen) {
+      // Enter = 13, Escape = 27, Up = 82 (SDLK_UP), Down = 81 (SDLK_DOWN)
+      if (key === 13) {
+        const item = menuItems[safeHighlight];
+        if (item) insertMenuItem(item.value);
+      } else if (key === 27) {
+        const before = props.currentInput.slice(0, startIndex);
+        props.onInputChange(before);
+      } else if (key === 81) {
+        setHighlightedIndex((prev) => Math.min(prev + 1, menuItems.length - 1));
+      } else if (key === 82) {
+        setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+      }
+      return;
     }
+    // History navigation when not in menu
+    if (key === 82) { // Up
+      const { text, moved } = navigateHistory('up', props.currentInput);
+      if (moved) props.onInputChange(text);
+    } else if (key === 81) { // Down
+      const { text, moved } = navigateHistory('down', props.currentInput);
+      if (moved) props.onInputChange(text);
+    }
+  }
+
+  function doSend() {
+    pushHistory(props.currentInput);
+    resetHistory();
+    props.onSend();
   }
 
   return (
@@ -213,10 +232,47 @@ export function ChatSurface(props: any) {
           <ContextMeter messages={props.messages} modelId={props.selectedModel} />
         </Row>
         <Row style={{ gap: 8 }}>
+          <Pressable onPress={() => setShowSearch(!showSearch)}><Text fontSize={10} color={showSearch ? COLORS.blue : COLORS.textDim}>Search</Text></Pressable>
+          <Pressable onPress={() => setShowExportMenu(!showExportMenu)}><Text fontSize={10} color={showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text></Pressable>
           <Pressable onPress={props.onNewConversation}><Text fontSize={10} color={COLORS.blue}>New</Text></Pressable>
-          <Pressable onPress={props.onIndex}><Text fontSize={10} color={COLORS.blue}>Index</Text></Pressable>
         </Row>
       </Row>
+
+      {showSearch ? (
+        <Row style={{ padding: 10, gap: 8, alignItems: 'center', borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
+          <Text fontSize={10} color={COLORS.textDim}>Search:</Text>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search messages..."
+            fontSize={11}
+            color={COLORS.text}
+            style={{ flexGrow: 1, height: 28, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, paddingLeft: 8 }}
+          />
+          <Text fontSize={10} color={COLORS.textDim}>{searchResults.length} matches</Text>
+          <Pressable onPress={() => { setShowSearch(false); setSearchQuery(''); }}><Text fontSize={10} color={COLORS.textDim}>✕</Text></Pressable>
+        </Row>
+      ) : null}
+
+      {showExportMenu ? (
+        <Col style={{ gap: 4, padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
+          <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Export Conversation</Text>
+          <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Pressable onPress={() => { copyToClipboard(exportConversation(props.messages, { format: 'markdown' })); setShowExportMenu(false); }}>
+              <Pill label="Copy Markdown" color={COLORS.blue} tiny={true} />
+            </Pressable>
+            <Pressable onPress={() => { copyToClipboard(exportConversation(props.messages, { format: 'text' })); setShowExportMenu(false); }}>
+              <Pill label="Copy Text" color={COLORS.blue} tiny={true} />
+            </Pressable>
+            <Pressable onPress={() => { const r = saveConversationToFile(props.messages, props.workDir || '.', { format: 'markdown' }); setShowExportMenu(false); }}>
+              <Pill label="Save .md" color={COLORS.green} tiny={true} />
+            </Pressable>
+            <Pressable onPress={() => { const r = saveConversationToFile(props.messages, props.workDir || '.', { format: 'json' }); setShowExportMenu(false); }}>
+              <Pill label="Save .json" color={COLORS.green} tiny={true} />
+            </Pressable>
+          </Row>
+        </Col>
+      ) : null}
 
       <Row style={{ padding: compactBand ? 10 : 12, gap: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft, flexWrap: 'wrap' }}>
         {props.widthBand !== 'narrow' && props.widthBand !== 'widget' && props.widthBand !== 'minimum' ? <Pill label={'view ' + props.activeView} color={COLORS.textMuted} tiny={true} /> : null}

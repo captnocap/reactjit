@@ -82,38 +82,32 @@ export function TerminalPanel(props: any) {
 
   return (
     <Col style={{ backgroundColor: COLORS.panelBg, borderTopWidth: 1, borderColor: COLORS.borderSoft, height: props.height || '100%', minHeight: 0 }}>
+      {!compactBand && !props.expanded && props.onBeginResize ? (
+        <Pressable
+          onMouseDown={props.onBeginResize}
+          style={{
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 6,
+            paddingBottom: 6,
+            borderBottomWidth: 1,
+            borderColor: COLORS.borderSoft,
+            backgroundColor: COLORS.panelBg,
+          }}
+        >
+          <Col style={{ gap: 4 }}>
+            <Box style={{ width: '100%', height: 4, borderRadius: 2, backgroundColor: COLORS.border }} />
+            <Text fontSize={9} color={COLORS.textDim}>drag to resize</Text>
+          </Col>
+        </Pressable>
+      ) : null}
       <Row style={{ justifyContent: 'space-between', alignItems: 'center', padding: compactBand ? 10 : 12, borderBottomWidth: 1, borderColor: COLORS.borderSoft, gap: 8, flexWrap: 'wrap' }}>
-        {!compactBand && !props.expanded && props.onBeginResize ? (
-          <Pressable
-            onMouseDown={props.onBeginResize}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              flexGrow: 1,
-              flexBasis: 0,
-              minWidth: 0,
-              paddingTop: 2,
-              paddingBottom: 2,
-            }}
-          >
-            <Box style={{ width: 44, height: 4, borderRadius: 2, backgroundColor: COLORS.border }} />
-            <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', flexGrow: 1, flexBasis: 0 }}>
-              <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Terminal</Text>
-              <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
-              <Text fontSize={10} color={COLORS.textDim}>{props.workDir}</Text>
-              {isRecording ? <Pill label={'rec ' + recordFrames + 'f'} color={COLORS.red} tiny={true} /> : null}
-              <Text fontSize={9} color={COLORS.textDim}>drag to resize</Text>
-            </Row>
-          </Pressable>
-        ) : (
-          <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', flexGrow: 1, flexBasis: 0 }}>
-            <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Terminal</Text>
-            <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
-            {!compactBand ? <Text fontSize={10} color={COLORS.textDim}>{props.workDir}</Text> : null}
-            {isRecording ? <Pill label={'rec ' + recordFrames + 'f'} color={COLORS.red} tiny={true} /> : null}
-          </Row>
-        )}
+        <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', flexGrow: 1, flexBasis: 0 }}>
+          <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Terminal</Text>
+          <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
+          {!compactBand ? <Text fontSize={10} color={COLORS.textDim}>{props.workDir}</Text> : null}
+          {isRecording ? <Pill label={'rec ' + recordFrames + 'f'} color={COLORS.red} tiny={true} /> : null}
+        </Row>
         <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {!compactBand && props.onToggleExpanded ? (
             <Pressable onPress={props.onToggleExpanded}>
