@@ -154,6 +154,38 @@ fn hostGetInputText(L: ?*lua.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+/// __setInputText(id, text) — write to the framework input buffer directly.
+/// Used to clear an input from Lua after a button-driven submit. Mirrors
+/// the QJS version in qjs_runtime.zig so cart code calls the same name.
+fn hostSetInputText(L: ?*lua.lua_State) callconv(.c) c_int {
+    const id = lua.lua_tointeger(L, 1);
+    var len: usize = 0;
+    const ptr = lua.lua_tolstring(L, 2, &len);
+    if (ptr == null) {
+        input_mod.setText(@intCast(@max(0, id)), "");
+        return 0;
+    }
+    const s: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+    input_mod.setText(@intCast(@max(0, id)), s);
+    return 0;
+}
+
+/// __pollInputSubmit() -> { id = number, text = string } | nil
+/// Drains the framework's "last Enter submit" one-shot so tick-loop carts can
+/// pick up Enter submissions when the compiler didn't wire onSubmit directly.
+fn hostPollInputSubmit(L: ?*lua.lua_State) callconv(.c) c_int {
+    const evt = input_mod.consumeLastSubmit() orelse {
+        lua.lua_pushnil(L);
+        return 1;
+    };
+    lua.lua_newtable(L);
+    lua.lua_pushinteger(L, @intCast(evt.id));
+    lua.lua_setfield(L, -2, "id");
+    lua.lua_pushlstring(L, evt.text.ptr, @intCast(evt.text.len));
+    lua.lua_setfield(L, -2, "text");
+    return 1;
+}
+
 // ── Mouse/keyboard polling ──────────────────────────────────────────────
 
 var g_mouse_x: f32 = 0;
@@ -1107,6 +1139,8 @@ pub fn initVM() void {
         .{ .name = "__markDirty", .func = &hostMarkDirty },
         .{ .name = "__hostLog", .func = &hostLog },
         .{ .name = "getInputText", .func = &hostGetInputText },
+        .{ .name = "__setInputText", .func = &hostSetInputText },
+        .{ .name = "__pollInputSubmit", .func = &hostPollInputSubmit },
         .{ .name = "getMouseX", .func = &hostGetMouseX },
         .{ .name = "getMouseY", .func = &hostGetMouseY },
         .{ .name = "getMouseDown", .func = &hostGetMouseDown },
@@ -1236,6 +1270,23 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushinteger(L, @intCast(arg));
         if (lua.lua_pcall(L, 1, 0, 0) != 0) {
+            logLuaError(L, std.mem.span(name));
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
+    }
+}
+
+/// Call a global Lua function with three integer arguments (used for keyboard events)
+pub fn callGlobal3Int(name: [*:0]const u8, arg0: i64, arg1: i64, arg2: i64) void {
+    const L = g_lua orelse return;
+    _ = lua.lua_getglobal(L, name);
+    if (lua.lua_isfunction(L, -1)) {
+        lua.lua_pushinteger(L, @intCast(arg0));
+        lua.lua_pushinteger(L, @intCast(arg1));
+        lua.lua_pushinteger(L, @intCast(arg2));
+        if (lua.lua_pcall(L, 3, 0, 0) != 0) {
             logLuaError(L, std.mem.span(name));
             lua.lua_pop(L, 1);
         }
