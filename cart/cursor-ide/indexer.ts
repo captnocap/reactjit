@@ -5,6 +5,7 @@
 const host: any = globalThis;
 
 const STORE_INDEX_KEY = 'cursor-ide.fileIndex';
+const DEFAULT_EXCLUDES = ['.git', 'node_modules', '.zig-cache', 'zig-out', 'dist', '.cache'];
 
 function storeGet(key: string): string | null {
   try { return host.__store_get(key); } catch { return null; }
@@ -44,6 +45,17 @@ export interface IndexStats {
   languages: Record<string, number>;
 }
 
+export interface IndexProgress {
+  active: boolean;
+  workDir: string;
+  totalFiles: number;
+  scannedFiles: number;
+  currentFile: string;
+  startedAt: number;
+  updatedAt: number;
+  rate: number;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function hashContent(content: string): string {
@@ -69,6 +81,33 @@ const LANG_MAP: Record<string, string> = {
 function langFromPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return LANG_MAP[ext] || 'unknown';
+}
+
+function shellQuote(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+}
+
+let currentProgress: IndexProgress = {
+  active: false,
+  workDir: '',
+  totalFiles: 0,
+  scannedFiles: 0,
+  currentFile: '',
+  startedAt: 0,
+  updatedAt: 0,
+  rate: 0,
+};
+
+function updateProgress(next: Partial<IndexProgress>): void {
+  currentProgress = { ...currentProgress, ...next };
+}
+
+function sleep0(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export function getIndexProgress(): IndexProgress {
+  return { ...currentProgress };
 }
 
 // ── Core API ─────────────────────────────────────────────────────────────────
@@ -116,31 +155,71 @@ export function indexFile(path: string): IndexedFile | null {
   };
 }
 
-export function indexWorkspace(workDir: string, options?: { exclude?: string[] }): IndexStats {
+export async function indexWorkspace(workDir: string, options?: { exclude?: string[] }): Promise<IndexStats> {
   const exclude = new Set([
-    '.git', 'node_modules', '.zig-cache', 'zig-out', 'dist', '.cache',
+    ...DEFAULT_EXCLUDES,
     ...(options?.exclude || []),
   ]);
-  const excludes = Array.from(exclude).map(e => `-not -path '*/${e}/*'`).join(' ');
-  const findOut = execCmd(`find "${workDir}" -type f ${excludes} 2>/dev/null`);
-  const paths = findOut.split('\n').filter(p => p.trim());
+  const excludes = Array.from(exclude).map((e) => `-not -path "*/${shellQuote(e)}/*"`).join(' ');
+  const findOut = execCmd(`find "${shellQuote(workDir)}" -type f ${excludes} 2>/dev/null`);
+  const paths = findOut.split('\n').filter((p) => p.trim());
 
   const existing = new Map(loadIndex().map(f => [f.path, f]));
   const updated: IndexedFile[] = [];
+  const startedAt = Date.now();
 
-  for (const path of paths) {
+  updateProgress({
+    active: true,
+    workDir,
+    totalFiles: paths.length,
+    scannedFiles: 0,
+    currentFile: '',
+    startedAt,
+    updatedAt: startedAt,
+    rate: 0,
+  });
+
+  for (let i = 0; i < paths.length; i++) {
+    const path = paths[i];
     const stat = fsStat(path);
     const prev = existing.get(path);
     if (prev && stat && prev.metadata.lastModified >= stat.mtimeMs) {
       updated.push(prev);
-      continue;
+    } else {
+      const indexed = indexFile(path);
+      if (indexed) updated.push(indexed);
     }
-    const indexed = indexFile(path);
-    if (indexed) updated.push(indexed);
+
+    const now = Date.now();
+    const scannedFiles = i + 1;
+    const elapsedSeconds = Math.max((now - startedAt) / 1000, 0.001);
+    updateProgress({
+      active: true,
+      workDir,
+      totalFiles: paths.length,
+      scannedFiles,
+      currentFile: path,
+      updatedAt: now,
+      rate: scannedFiles / elapsedSeconds,
+    });
+
+    if (scannedFiles % 24 === 0) {
+      await sleep0();
+    }
   }
 
   saveIndex(updated);
-  return getIndexStats();
+  const stats = getIndexStats();
+  updateProgress({
+    active: false,
+    workDir,
+    totalFiles: stats.totalFiles,
+    scannedFiles: stats.totalFiles,
+    currentFile: '',
+    updatedAt: Date.now(),
+    rate: 0,
+  });
+  return stats;
 }
 
 export function searchIndex(query: string): IndexedFile[] {
@@ -155,6 +234,16 @@ export function removeFromIndex(path: string): void {
 
 export function clearIndex(): void {
   saveIndex([]);
+  updateProgress({
+    active: false,
+    workDir: '',
+    totalFiles: 0,
+    scannedFiles: 0,
+    currentFile: '',
+    startedAt: 0,
+    updatedAt: Date.now(),
+    rate: 0,
+  });
 }
 
 export function getFileContent(path: string): string {

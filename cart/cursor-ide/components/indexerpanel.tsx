@@ -7,45 +7,70 @@ const { useState, useEffect } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
-import { indexWorkspace, loadIndex, getIndexStats, searchIndex, clearIndex, type IndexStats, type IndexedFile } from '../indexer';
+import {
+  indexWorkspace,
+  loadIndex,
+  getIndexStats,
+  getIndexProgress,
+  searchIndex,
+  clearIndex,
+  type IndexStats,
+  type IndexedFile,
+  type IndexProgress,
+} from '../indexer';
 
 export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const [stats, setStats] = useState<IndexStats | null>(null);
+  const [progress, setProgress] = useState<IndexProgress>(getIndexProgress());
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IndexedFile[]>([]);
   const [indexing, setIndexing] = useState(false);
 
   useEffect(() => {
-    setStats(getIndexStats());
-    setResults(loadIndex());
-  }, []);
+    const refresh = () => {
+      setStats(getIndexStats());
+      setProgress(getIndexProgress());
+      setResults(query.trim() ? searchIndex(query) : loadIndex());
+    };
+    refresh();
+    const id = setInterval(refresh, 300);
+    return () => clearInterval(id);
+  }, [props.workDir, query]);
 
-  function doIndex() {
+  async function doIndex() {
     setIndexing(true);
-    const s = indexWorkspace(props.workDir);
-    setStats(s);
-    setResults(loadIndex());
-    setIndexing(false);
-    props.onIndex?.();
+    try {
+      const s = await indexWorkspace(props.workDir);
+      setStats(s);
+      setResults(query.trim() ? searchIndex(query) : loadIndex());
+      props.onIndex?.();
+    } finally {
+      setIndexing(false);
+      setProgress(getIndexProgress());
+    }
   }
 
   function doSearch(q: string) {
     setQuery(q);
-    if (!q.trim()) {
-      setResults(loadIndex());
-    } else {
-      setResults(searchIndex(q));
-    }
+    setResults(q.trim() ? searchIndex(q) : loadIndex());
   }
 
   function doClear() {
     clearIndex();
     setStats(getIndexStats());
+    setProgress(getIndexProgress());
     setResults([]);
     props.onIndex?.();
   }
 
   const langEntries = stats ? Object.entries(stats.languages).sort((a, b) => b[1] - a[1]) : [];
+  const progressLabel = progress.totalFiles > 0
+    ? `${progress.scannedFiles}/${progress.totalFiles} files`
+    : '0 files';
+  const progressRate = progress.rate > 0 ? `${progress.rate.toFixed(1)} files/s` : '0 files/s';
+  const currentFileLabel = progress.currentFile
+    ? progress.currentFile.replace(props.workDir.endsWith('/') ? props.workDir : `${props.workDir}/`, '')
+    : 'Waiting for scan';
 
   return (
     <Col style={{ gap: 14 }}>
@@ -62,14 +87,26 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           </Pressable>
         </Row>
 
-        {stats && stats.totalFiles > 0 && (
-          <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Pill label={`${stats.totalFiles} files`} color={COLORS.green} tiny={true} />
-            <Pill label={`${stats.totalTokens.toLocaleString()} tokens`} color={COLORS.blue} tiny={true} />
-            {langEntries.slice(0, 5).map(([lang, count]) => (
-              <Pill key={lang} label={`${lang}: ${count}`} tiny={true} />
-            ))}
-          </Row>
+        {progress.active ? (
+          <Col style={{ gap: 8 }}>
+            <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+              <Pill label={progressLabel} color={COLORS.yellow} tiny={true} />
+              <Pill label={progressRate} color={COLORS.blue} tiny={true} />
+              <Pill label={`current: ${currentFileLabel}`} color={COLORS.textBright} tiny={true} />
+            </Row>
+            <Text fontSize={10} color={COLORS.textDim}>Scanning in progress. The rate updates as files are indexed.</Text>
+          </Col>
+        ) : (
+          <Col style={{ gap: 8 }}>
+            <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+              <Pill label={`${stats?.totalFiles || 0} files`} color={COLORS.green} tiny={true} />
+              <Pill label={`${stats ? stats.totalTokens.toLocaleString() : 0} tokens`} color={COLORS.blue} tiny={true} />
+              {langEntries.slice(0, 5).map(([lang, count]) => (
+                <Pill key={lang} label={`${lang}: ${count}`} tiny={true} />
+              ))}
+            </Row>
+            <Text fontSize={10} color={COLORS.textDim}>Index files for semantic search, context injection, and code intelligence.</Text>
+          </Col>
         )}
       </Box>
 
