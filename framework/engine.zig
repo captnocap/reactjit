@@ -1108,7 +1108,7 @@ fn nodedumpMaybeEmit(root: *Node, win_w: f32, win_h: f32) void {
         @as(i32, @intFromFloat(win_h)),
     });
     var count: u32 = 0;
-    nodedumpWalk(root, &count, 50);
+    nodedumpWalk(root, &count, 500);
 }
 
 // Canvas drag state — tracks which canvas is being dragged for pan
