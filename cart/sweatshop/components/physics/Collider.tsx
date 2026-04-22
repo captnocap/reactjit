@@ -2,7 +2,7 @@
 // Renders nothing; registers a ShapeSpec with the parent body via
 // RigidBodyCtx. Supports circle and rectangle.
 
-const React: any = require('react');
+import * as React from 'react';
 const { useContext, useEffect } = React;
 
 import { RigidBodyCtx } from './RigidBody';

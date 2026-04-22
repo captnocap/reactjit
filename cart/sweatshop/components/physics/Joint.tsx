@@ -5,7 +5,7 @@
 // kind='rope'     — max-length limiter (no pull force under the limit)
 // kind='weld'     — hard coincidence of anchor points (glue)
 
-const React: any = require('react');
+import * as React from 'react';
 const { useEffect } = React;
 
 import { usePhysicsCtx } from './PhysicsContext';
