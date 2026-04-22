@@ -2,7 +2,7 @@ const React: any = require('react');
 const { useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
-import { COLORS, fileGlyph, fileTone, inferFileType } from '../theme';
+import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType } from '../theme';
 import { Glyph } from './shared';
 
 function crumbPath(items: any[], idx: number): string {
@@ -86,7 +86,7 @@ export function BreadcrumbBar(props: any) {
                 paddingRight: compact ? 4 : 6,
                 paddingTop: 3,
                 paddingBottom: 3,
-                borderRadius: 6,
+                borderRadius: TOKENS.radiusSm,
                 backgroundColor: dropdownOpen ? COLORS.panelHover : 'transparent',
               }}
             >
@@ -103,7 +103,7 @@ export function BreadcrumbBar(props: any) {
                 top: 26,
                 left: 0,
                 backgroundColor: COLORS.panelRaised,
-                borderRadius: 8,
+                borderRadius: TOKENS.radiusMd,
                 borderWidth: 1,
                 borderColor: COLORS.border,
                 minWidth: 180,
@@ -147,7 +147,7 @@ export function BreadcrumbBar(props: any) {
                 top: 26,
                 left: 0,
                 backgroundColor: COLORS.panelRaised,
-                borderRadius: 8,
+                borderRadius: TOKENS.radiusMd,
                 borderWidth: 1,
                 borderColor: COLORS.border,
                 minWidth: 200,

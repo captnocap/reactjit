@@ -1,7 +1,7 @@
 const React: any = require('react');
 const { useState, useCallback, useMemo } = React;
 import { Box, Col, Pressable, Row, Text, TextInput, Canvas } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import {
   authorColor,
   authorLabel,
@@ -48,11 +48,11 @@ function PlanNode(props: any) {
   if (selected) {
     return (
       <Canvas.Node gx={item.x} gy={item.y} gw={SEL_W} gh={SEL_H} onMove={(e: any) => onMove(e.gx, e.gy)}>
-        <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelRaised, borderRadius: 8, borderWidth: 1, borderColor: COLORS.blue, paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8, gap: 5 }}>
+        <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelRaised, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.blue, paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8, gap: 5 }}>
           <Row style={{ gap: 5, alignItems: 'center' }}>
             {STATUSES.map((s) => (
               <Pressable key={s} onPress={() => onUpdate({ status: s })}>
-                <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: statusColor(s), borderWidth: item.status === s ? 2 : 0, borderColor: '#fff' }} />
+                <Box style={{ width: 10, height: 10, borderRadius: TOKENS.radiusSm, backgroundColor: statusColor(s), borderWidth: item.status === s ? 2 : 0, borderColor: '#fff' }} />
               </Pressable>
             ))}
             <Box style={{ flexGrow: 1 }} />
@@ -61,27 +61,27 @@ function PlanNode(props: any) {
           <TextInput
             value={item.text}
             onChangeText={(t: string) => onUpdate({ text: t })}
-            style={{ fontSize: 11, color: COLORS.textBright, backgroundColor: COLORS.panelBg, borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3 }}
+            style={{ fontSize: 11, color: COLORS.textBright, backgroundColor: COLORS.panelBg, borderRadius: TOKENS.radiusXs, paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3 }}
           />
           <TextInput
             value={item.note || ''}
             placeholder="note..."
             onChangeText={(t: string) => onUpdate({ note: t })}
-            style={{ fontSize: 10, color: COLORS.textMuted, backgroundColor: COLORS.panelBg, borderRadius: 4, paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3 }}
+            style={{ fontSize: 10, color: COLORS.textMuted, backgroundColor: COLORS.panelBg, borderRadius: TOKENS.radiusXs, paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3 }}
           />
           <Row style={{ gap: 5, flexWrap: 'wrap' }}>
             <Pressable onPress={onAddChild}>
-              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: COLORS.blueDeep }}>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.blueDeep }}>
                 <Text fontSize={9} color={COLORS.blue}>+ child</Text>
               </Box>
             </Pressable>
             <Pressable onPress={onLinkFile}>
-              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: item.linkedFile ? COLORS.greenDeep : COLORS.grayChip }}>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusXs, backgroundColor: item.linkedFile ? COLORS.greenDeep : COLORS.grayChip }}>
                 <Text fontSize={9} color={item.linkedFile ? COLORS.green : COLORS.textDim}>{item.linkedFile ? item.linkedFile.split('/').pop() : 'link'}</Text>
               </Box>
             </Pressable>
             <Pressable onPress={onDelete}>
-              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: COLORS.redDeep }}>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.redDeep }}>
                 <Text fontSize={9} color={COLORS.red}>del</Text>
               </Box>
             </Pressable>
@@ -94,9 +94,9 @@ function PlanNode(props: any) {
   return (
     <Canvas.Node gx={item.x} gy={item.y} gw={NODE_W} gh={NODE_H} onMove={(e: any) => onMove(e.gx, e.gy)}>
       <Pressable onPress={onSelect} style={{ width: '100%', height: '100%' }}>
-        <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelRaised, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 3 }}>
+        <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelRaised, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6, gap: 3 }}>
           <Row style={{ gap: 5, alignItems: 'center' }}>
-            <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sColor }} />
+            <Box style={{ width: 8, height: 8, borderRadius: TOKENS.radiusXs, backgroundColor: sColor }} />
             <Text fontSize={10} color={COLORS.textBright} style={{ fontWeight: 'bold', flexGrow: 1 }} numberOfLines={1}>
               {item.text}
             </Text>
@@ -105,7 +105,7 @@ function PlanNode(props: any) {
           {item.tags.length > 0 && (
             <Row style={{ gap: 3, flexWrap: 'wrap' }}>
               {item.tags.slice(0, 3).map((tag: string) => (
-                <Box key={tag} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 3, backgroundColor: COLORS.grayChip }}>
+                <Box key={tag} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.grayChip }}>
                   <Text fontSize={7} color={COLORS.textMuted}>{tag}</Text>
                 </Box>
               ))}
@@ -217,7 +217,7 @@ export function PlanCanvas(props: PlanCanvasProps) {
         .filter((i) => i.author === 'ai')
         .map((i) => (
           <Canvas.Node key={`glow-${i.id}`} gx={i.x - 4} gy={i.y - 4} gw={NODE_W + 8} gh={NODE_H + 8}>
-            <Box style={{ width: '100%', height: '100%', borderRadius: 8, backgroundColor: 'rgba(210,168,255,0.06)' }} />
+            <Box style={{ width: '100%', height: '100%', borderRadius: TOKENS.radiusMd, backgroundColor: 'rgba(210,168,255,0.06)' }} />
           </Canvas.Node>
         ))}
       {connections}
@@ -240,19 +240,19 @@ export function PlanCanvas(props: PlanCanvasProps) {
             <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{plan.title}</Text>
             <Row style={{ gap: 5, flexWrap: 'wrap' }}>
               <Pressable onPress={handleAddIdea}>
-                <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 6, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+                <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
                   <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>+ Add Idea</Text>
                 </Box>
               </Pressable>
               {(['all', 'idea', 'todo', 'doing', 'done', 'blocked', 'review'] as const).map((s) => (
                 <Pressable key={s} onPress={() => setFilter(s)}>
-                  <Box style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4, borderRadius: 5, backgroundColor: filter === s ? COLORS.grayDeep : COLORS.panelAlt, borderWidth: 1, borderColor: filter === s ? statusColor(s) : COLORS.border }}>
+                  <Box style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 4, paddingBottom: 4, borderRadius: TOKENS.radiusSm, backgroundColor: filter === s ? COLORS.grayDeep : COLORS.panelAlt, borderWidth: 1, borderColor: filter === s ? statusColor(s) : COLORS.border }}>
                     <Text fontSize={9} color={filter === s ? statusColor(s) : COLORS.textDim}>{s}</Text>
                   </Box>
                 </Pressable>
               ))}
               <Pressable onPress={handleAskAI}>
-                <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 6, backgroundColor: COLORS.purpleDeep, borderWidth: 1, borderColor: COLORS.purple }}>
+                <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.purpleDeep, borderWidth: 1, borderColor: COLORS.purple }}>
                   <Text fontSize={10} color={COLORS.purple} style={{ fontWeight: 'bold' }}>Ask AI</Text>
                 </Box>
               </Pressable>
