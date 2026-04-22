@@ -38,10 +38,41 @@ export function telSystem(): { window_w?: number; window_h?: number } | null {
   }
 }
 
-export function ptyOpen(cols: number, rows: number): void {
+export function ptyOpen(cols: number, rows: number, cwd?: string): number {
   try {
-    if (typeof host.__pty_open === 'function') host.__pty_open(cols, rows);
+    if (typeof host.__pty_open !== 'function') return -1;
+    const out = host.__pty_open(cols, rows, cwd || '');
+    if (typeof out === 'number' && Number.isFinite(out)) return out;
+    const value = Number(out);
+    return Number.isFinite(value) ? value : -1;
+  } catch {
+    return -1;
+  }
+}
+
+export function ptyRead(handle: number): string {
+  try {
+    if (typeof host.__pty_read !== 'function') return '';
+    const out = host.__pty_read(handle);
+    return typeof out === 'string' ? out : String(out ?? '');
+  } catch {
+    return '';
+  }
+}
+
+export function ptyWrite(handle: number, data: string): void {
+  try {
+    if (typeof host.__pty_write === 'function') host.__pty_write(handle, data);
   } catch {}
+}
+
+export function ptyAlive(handle: number): boolean {
+  try {
+    if (typeof host.__pty_alive !== 'function') return true;
+    return !!host.__pty_alive(handle);
+  } catch {
+    return false;
+  }
 }
 
 export function closeWindow(): void {
