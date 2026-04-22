@@ -2,6 +2,7 @@ const React: any = require('react');
 
 import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
+import { Icon } from './icons';
 
 function StatusSegment(props: any) {
   return (
@@ -48,7 +49,7 @@ export function StatusBar(props: any) {
       <Row style={{ gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
         {/* Git branch */}
         <StatusSegment onPress={props.onOpenGitPanel}>
-          <Dot color={COLORS.green} />
+          <Icon name="git-branch" size={12} color={COLORS.green} />
           <Text fontSize={10} color={COLORS.textBright}>{props.gitBranch}</Text>
           {!compactBand ? <Text fontSize={10} color={COLORS.textDim}>{props.gitRemote}</Text> : null}
         </StatusSegment>
@@ -63,8 +64,10 @@ export function StatusBar(props: any) {
 
         {/* Dirty / Staged */}
         <StatusSegment onPress={props.onOpenGitPanel}>
-          {props.changedCount > 0 ? <Text fontSize={10} color={COLORS.yellow}>{'M' + props.changedCount}</Text> : null}
-          {!mediumBand && props.stagedCount > 0 ? <Text fontSize={10} color={COLORS.green}>{'S' + props.stagedCount}</Text> : null}
+          {props.changedCount > 0 ? <Icon name="warn" size={12} color={COLORS.yellow} /> : null}
+          {props.changedCount > 0 ? <Text fontSize={10} color={COLORS.yellow}>{props.changedCount}</Text> : null}
+          {!mediumBand && props.stagedCount > 0 ? <Icon name="error" size={12} color={COLORS.green} /> : null}
+          {!mediumBand && props.stagedCount > 0 ? <Text fontSize={10} color={COLORS.green}>{props.stagedCount}</Text> : null}
         </StatusSegment>
 
         {/* Indexing status */}
@@ -144,6 +147,13 @@ export function StatusBar(props: any) {
             {props.agentStatusText || 'idle'}
           </Text>
         </StatusSegment>
+
+        {props.onOpenSettings ? (
+          <StatusSegment onPress={() => props.onOpenSettings('providers')}>
+            <Icon name="settings" size={12} color={COLORS.textDim} />
+            {!compactBand ? <Text fontSize={10} color={COLORS.textDim}>Settings</Text> : null}
+          </StatusSegment>
+        ) : null}
       </Row>
     </Row>
   );
