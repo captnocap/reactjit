@@ -146,7 +146,7 @@ function probeSystemInfo(): SystemInfoSnapshot {
         echo 0
       fi
     `), '0'),
-    shell: trimOr(sh(`printf '%s' "${SHELL:-}" | sed 's#.*/##'`), 'unknown'),
+    shell: trimOr(sh(`printf '%s' "\${SHELL:-}" | sed 's#.*/##'`), 'unknown'),
     resolution: trimOr(sh(`
       if command -v xrandr >/dev/null 2>&1; then
         xrandr --current 2>/dev/null | awk '/\\*/ {print $1; exit}'
@@ -156,25 +156,25 @@ function probeSystemInfo(): SystemInfoSnapshot {
         echo unknown
       fi
     `), 'unknown'),
-    de: trimOr(sh(`printf '%s' "${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-unknown}}"`), 'unknown'),
+    de: trimOr(sh(`printf '%s' "\${XDG_CURRENT_DESKTOP:-\${DESKTOP_SESSION:-unknown}}"`), 'unknown'),
     wm: trimOr(sh(`
       if command -v wmctrl >/dev/null 2>&1; then
         wmctrl -m 2>/dev/null | awk -F': ' '/Name/ {print $2; exit}'
-      elif [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+      elif [ -n "\${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
         echo Hyprland
-      elif [ -n "${SWAYSOCK:-}" ]; then
+      elif [ -n "\${SWAYSOCK:-}" ]; then
         echo Sway
       else
         echo unknown
       fi
     `), 'unknown'),
-    theme: trimOr(sh(`printf '%s' "${GTK_THEME:-${QT_STYLE_OVERRIDE:-unknown}}"`), 'unknown'),
-    icons: trimOr(sh(`printf '%s' "${XDG_ICON_THEME:-${ICON_THEME:-unknown}}"`), 'unknown'),
+    theme: trimOr(sh(`printf '%s' "\${GTK_THEME:-\${QT_STYLE_OVERRIDE:-unknown}}"`), 'unknown'),
+    icons: trimOr(sh(`printf '%s' "\${XDG_ICON_THEME:-\${ICON_THEME:-unknown}}"`), 'unknown'),
     terminal: trimOr(sh(`
       parent="$(ps -p "$(ps -o ppid= -p $$ | tr -d ' ')" -o comm= 2>/dev/null | head -n1 | tr -d ' ')"
-      if [ -n "${TERM_PROGRAM:-}" ]; then
+      if [ -n "\${TERM_PROGRAM:-}" ]; then
         printf '%s' "$TERM_PROGRAM"
-      elif [ -n "${TERMINAL:-}" ]; then
+      elif [ -n "\${TERMINAL:-}" ]; then
         printf '%s' "$TERMINAL"
       elif [ -n "$parent" ]; then
         printf '%s' "$parent"
@@ -199,7 +199,7 @@ function probeSystemInfo(): SystemInfoSnapshot {
         cap="$(cat "$b/capacity" 2>/dev/null)"
         status="$(cat "$b/status" 2>/dev/null)"
         if [ -n "$cap" ]; then
-          printf '%s %s%%' "${status:-Battery}" "$cap"
+          printf '%s %s%%' "\${status:-Battery}" "$cap"
           exit
         fi
       done
