@@ -12,7 +12,7 @@ const React: any = require('react');
 const { useEffect, useMemo, useRef, useState } = React;
 
 import { Box, Canvas, Col, Text } from '../../../runtime/primitives';
-import { COLORS, TOKENS } from '../theme';
+import { COLORS, TOKENS } from '../../theme';
 import type { MeshNode, Scene3DProps, Vec3 } from './types';
 import {
   Scene3DContext,

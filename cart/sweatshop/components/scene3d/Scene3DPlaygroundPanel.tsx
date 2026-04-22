@@ -17,7 +17,7 @@ const React: any = require('react');
 const { useEffect, useState } = React;
 
 import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
-import { COLORS, TOKENS } from '../theme';
+import { COLORS, TOKENS } from '../../theme';
 import { Scene3D } from './Scene3D';
 import { Camera } from './Camera';
 import { Mesh } from './Mesh';
