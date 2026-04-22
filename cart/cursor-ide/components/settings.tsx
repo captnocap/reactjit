@@ -1117,12 +1117,85 @@ function PluginsPanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function AboutPanel() {
+function readHostString(key: string, fallback: string): string {
+  try {
+    const h: any = globalThis;
+    const v = h[key];
+    if (typeof v === 'string' && v.length > 0) return v;
+    if (typeof h.__env_get === 'function') {
+      const env = h.__env_get(key);
+      if (typeof env === 'string' && env.length > 0) return env;
+    }
+  } catch {}
+  return fallback;
+}
+
+function AboutPanel(props: { query: string }) {
+  const version    = readHostString('__app_version', 'dev');
+  const buildSha   = readHostString('__app_build_sha', 'unknown');
+  const buildTime  = readHostString('__app_build_time', 'unknown');
+  const platform   = readHostString('__env_platform', 'unknown');
+  const runtime    = readHostString('__runtime_name', 'jsrt');
+  const reactVer   = readHostString('__react_version', '18');
+  const esbuildVer = readHostString('__esbuild_version', 'bundled');
+  const home       = readHostString('__env_home', '/home/siah');
+
+  const rows: Array<{ label: string; value: string; tone?: string }> = [
+    { label: 'Version',       value: version,    tone: COLORS.blue },
+    { label: 'Build SHA',     value: buildSha,   tone: COLORS.green },
+    { label: 'Built',         value: buildTime },
+    { label: 'Platform',      value: platform },
+    { label: 'Runtime',       value: runtime,    tone: COLORS.purple },
+    { label: 'React',         value: reactVer },
+    { label: 'esbuild',       value: esbuildVer },
+    { label: 'Home',          value: home },
+  ];
+
+  const capabilities: Array<{ name: string; present: boolean }> = [
+    { name: '__store_*',      present: typeof (globalThis as any).__store_get === 'function' },
+    { name: '__fs_*',         present: typeof (globalThis as any).__fs_read === 'function' },
+    { name: '__exec_async',   present: typeof (globalThis as any).__exec_async === 'function' },
+    { name: '__claude_*',     present: typeof (globalThis as any).__claude_init === 'function' },
+    { name: '__kimi_*',       present: typeof (globalThis as any).__kimi_init === 'function' },
+    { name: '__localai_*',    present: typeof (globalThis as any).__localai_init === 'function' },
+  ];
+
+  const q = (props.query || '').toLowerCase();
+  const rowsFiltered = q ? rows.filter(r => (r.label + ' ' + r.value).toLowerCase().indexOf(q) >= 0) : rows;
+  const capsFiltered = q ? capabilities.filter(c => c.name.toLowerCase().indexOf(q) >= 0) : capabilities;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="About" description="Version, build, capabilities." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>About panel coming in a later commit.</Text>
+      <SectionTitle title="About" description="Version, build info, and detected host capabilities." />
+
+      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>cursor-ide</Text>
+        <Text fontSize={10} color={COLORS.textDim}>A React-native-feel IDE surface running on the JSRT runtime.</Text>
+        <Col style={{ gap: 4 }}>
+          {rowsFiltered.map(r => (
+            <Row key={r.label} style={{ alignItems: 'center', gap: 10 }}>
+              <Text fontSize={10} color={COLORS.textDim} style={{ width: 90 }}>{r.label}</Text>
+              <Text fontSize={11} color={r.tone || COLORS.text} style={{ fontFamily: 'monospace' }}>{r.value}</Text>
+            </Row>
+          ))}
+        </Col>
+      </Box>
+
+      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Host capabilities</Text>
+        <Text fontSize={10} color={COLORS.textDim}>Detected FFI surfaces. Missing bindings simply gate the UI that needs them.</Text>
+        <Row style={{ gap: 6, flexWrap: 'wrap' }}>
+          {capsFiltered.map(c => (
+            <Pill key={c.name} label={c.name} color={c.present ? COLORS.green : COLORS.textMuted}
+              borderColor={c.present ? COLORS.green : COLORS.border}
+              backgroundColor={c.present ? COLORS.greenDeep : COLORS.panelAlt} tiny={true} />
+          ))}
+        </Row>
+      </Box>
+
+      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
+        <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Links</Text>
+        <Text fontSize={10} color={COLORS.textDim}>Report issues via the in-app feedback command in the palette.</Text>
       </Box>
     </Col>
   );
@@ -1312,7 +1385,7 @@ export function SettingsSurface(props: any) {
     />;
     if (active === 'memory')      return <MemoryPanel query={query} resetToken={resetToken} />;
     if (active === 'plugins')     return <PluginsPanel query={query} resetToken={resetToken} />;
-    return <AboutPanel />;
+    return <AboutPanel query={query} />;
   }
 
   return (
