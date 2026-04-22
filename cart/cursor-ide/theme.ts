@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { THEMES, THEME_ORDER, type Theme, type ThemePalette, type ThemeTokens } from './themes';
+import { THEMES, THEME_ORDER, buildCustomTheme, type CustomThemeOverrides, type Theme, type ThemePalette, type ThemeTokens } from './themes';
 
 export type WidthBand = 'minimum' | 'widget' | 'narrow' | 'medium' | 'desktop';
 
@@ -36,6 +36,38 @@ export function getActiveThemeName(): string {
 export function getThemeNames(): string[] {
   return THEME_ORDER.slice();
 }
+
+function persistCustom(overrides: CustomThemeOverrides): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('cursor-ide-theme-custom', JSON.stringify(overrides));
+  } catch (_e) {}
+}
+
+function restoreCustom(): CustomThemeOverrides {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('cursor-ide-theme-custom');
+      if (v) return JSON.parse(v);
+    }
+  } catch (_e) {}
+  return {};
+}
+
+let customOverrides: CustomThemeOverrides = restoreCustom();
+
+export function getCustomOverrides(): CustomThemeOverrides {
+  return customOverrides;
+}
+
+export function setCustomOverrides(next: CustomThemeOverrides): void {
+  customOverrides = next || {};
+  THEMES.custom = buildCustomTheme(customOverrides);
+  persistCustom(customOverrides);
+  if (activeThemeName === 'custom') applyTheme('custom');
+}
+
+// Bootstrap custom theme from persisted overrides.
+THEMES.custom = buildCustomTheme(customOverrides);
 
 export function applyTheme(name: string): void {
   const theme: Theme | undefined = THEMES[name];

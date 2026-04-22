@@ -354,10 +354,86 @@ export const THEME_STUDIO: Theme = {
   },
 };
 
+// 'high-contrast' — accessible WCAG-oriented palette. Square corners,
+// max-contrast foreground/background, brighter accents, thick hairlines.
+export const THEME_HIGH_CONTRAST: Theme = {
+  tokens: {
+    ...THEME_SHARP.tokens,
+    name: 'high-contrast',
+    label: 'High Contrast',
+    corner: 'square',
+    density: 'comfortable',
+    radiusMd: 0,
+    radiusLg: 0,
+    radiusPill: 0,
+    borderW: 2,
+    shadowDepth: 0,
+    fontMd: 13,
+    fontLg: 15,
+    fontXl: 18,
+    typeBase: 13,
+    typeLg: 15,
+    typeXl: 18,
+  },
+  palette: {
+    appBg: '#000000',
+    panelBg: '#000000',
+    panelRaised: '#0a0a0a',
+    panelAlt: '#0a0a0a',
+    panelHover: '#1a1a1a',
+    border: '#ffffff',
+    borderSoft: '#8a8a8a',
+    text: '#ffffff',
+    textBright: '#ffffff',
+    textDim: '#c0c0c0',
+    textMuted: '#d0d0d0',
+    blue: '#5ec8ff',
+    blueDeep: '#001b3d',
+    green: '#70ff90',
+    greenDeep: '#002a10',
+    yellow: '#ffe066',
+    yellowDeep: '#2a2000',
+    orange: '#ffb870',
+    orangeDeep: '#2a1200',
+    red: '#ff8078',
+    redDeep: '#2a0a0a',
+    purple: '#e4b8ff',
+    purpleDeep: '#1a002a',
+    grayChip: '#1a1a1a',
+    grayDeep: '#0f0f0f',
+  },
+};
+
+// 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
+// overrides are merged on top via setCustomTheme().
+export const THEME_CUSTOM_BASE: Theme = {
+  tokens: { ...THEME_SOFT.tokens, name: 'custom', label: 'Custom' },
+  palette: { ...THEME_SOFT.palette },
+};
+
 export const THEMES: Record<string, Theme> = {
   soft: THEME_SOFT,
   sharp: THEME_SHARP,
   studio: THEME_STUDIO,
+  'high-contrast': THEME_HIGH_CONTRAST,
+  custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'custom'];
+
+// Custom theme overrides — partial token + palette patches applied on top
+// of a chosen base. Persisted separately in theme.ts.
+export type CustomThemeOverrides = {
+  base?: string; // name of the theme to inherit from (default: 'soft')
+  tokens?: Partial<ThemeTokens>;
+  palette?: Partial<ThemePalette>;
+};
+
+export function buildCustomTheme(overrides: CustomThemeOverrides): Theme {
+  const baseName = overrides.base && THEMES[overrides.base] ? overrides.base : 'soft';
+  const base = THEMES[baseName];
+  return {
+    tokens: { ...base.tokens, ...(overrides.tokens || {}), name: 'custom', label: 'Custom' },
+    palette: { ...base.palette, ...(overrides.palette || {}) },
+  };
+}
