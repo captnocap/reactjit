@@ -31,7 +31,7 @@ export const KEYBINDING_COMMANDS: KeybindingSpec[] = [
   { id: 'agent.stop', label: 'Stop Agent', description: 'Stop the active agent turn.', category: 'Agent', defaultChord: 'Ctrl+.' },
 ];
 
-const STORAGE_KEY = 'sweatshop.keybind-editor';
+const STORAGE_PREFIX = 'sweatshop.settings.keybindings.';
 
 const BASE_BINDINGS: KeybindingMap = KEYBINDING_COMMANDS.reduce((acc, spec) => {
   acc[spec.id] = spec.defaultChord;
@@ -53,33 +53,35 @@ function hostStoreSet(key: string, value: string): void {
   } catch {}
 }
 
+function hostStoreDel(key: string): void {
+  try {
+    const h = globalThis as any;
+    if (typeof h.__store_del === 'function') h.__store_del(key);
+  } catch {}
+}
+
 function cloneBindings(bindings: KeybindingMap): KeybindingMap {
   return { ...bindings };
 }
 
 function loadStoredState(): { preset: KeybindPresetName; bindings: KeybindingMap } {
-  const raw = hostStoreGet(STORAGE_KEY);
-  if (!raw) return { preset: 'default', bindings: {} };
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { preset: 'default', bindings: {} };
-    const preset = typeof parsed.preset === 'string' && parsed.preset in PRESET_OVERRIDES ? parsed.preset as KeybindPresetName : 'default';
-    const bindings: KeybindingMap = {};
-    if (parsed.bindings && typeof parsed.bindings === 'object') {
-      for (const spec of KEYBINDING_COMMANDS) {
-        const value = (parsed.bindings as any)[spec.id];
-        if (typeof value === 'string') bindings[spec.id] = normalizeChord(value);
-      }
-    }
-    return { preset, bindings };
-  } catch {
-    return { preset: 'default', bindings: {} };
+  const bindings: KeybindingMap = {};
+  for (const spec of KEYBINDING_COMMANDS) {
+    const raw = hostStoreGet(STORAGE_PREFIX + spec.id);
+    if (raw === null || raw === undefined || raw === '') continue;
+    bindings[spec.id] = normalizeChord(raw);
   }
+  return { preset: detectPreset(bindings), bindings };
 }
 
 function saveStoredState(state: { preset: KeybindPresetName; bindings: KeybindingMap }): void {
   try {
-    hostStoreSet(STORAGE_KEY, JSON.stringify(state));
+    for (const spec of KEYBINDING_COMMANDS) {
+      const value = state.bindings[spec.id];
+      if (!value) hostStoreDel(STORAGE_PREFIX + spec.id);
+      else if (value === spec.defaultChord) hostStoreDel(STORAGE_PREFIX + spec.id);
+      else hostStoreSet(STORAGE_PREFIX + spec.id, value);
+    }
   } catch {}
 }
 
@@ -257,9 +259,7 @@ export function useKeybindStore() {
       const next = { ...prev.bindings };
       const spec = KEYBINDING_COMMANDS.find((item) => item.id === id);
       const defaultChord = spec ? spec.defaultChord : '';
-      if (!normalized) {
-        next[id] = '';
-      } else if (normalized === defaultChord) {
+      if (!normalized || normalized === defaultChord) {
         delete next[id];
       } else {
         next[id] = normalized;
