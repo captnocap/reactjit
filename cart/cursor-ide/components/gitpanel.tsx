@@ -72,6 +72,9 @@ export function GitPanel(props: {
   const [stashes, setStashes] = useState<GitStashEntry[]>([]);
   const [graph, setGraph] = useState<GitGraphLine[]>([]);
   const [cherryPickHash, setCherryPickHash] = useState<string | null>(null);
+  const [stagedDiffs, setStagedDiffs] = useState<GitDiff[]>([]);
+  const [commitOutput, setCommitOutput] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showSuggest, setShowSuggest] = useState(false);
   const [branchAheadBehind, setBranchAheadBehind] = useState<Record<string, { ahead: number; behind: number }>>({});
   const [errorBanner, setErrorBanner] = useState('');
 
@@ -106,6 +109,7 @@ export function GitPanel(props: {
 
     const allDiffs = gitDiff(workDir);
     setDiffs(allDiffs);
+    setStagedDiffs(gitDiff(workDir, true));
 
     setDiffStats(gitDiffStats(workDir));
     setLogs(gitLog(workDir, 50));
@@ -136,8 +140,10 @@ export function GitPanel(props: {
       return;
     }
     const res = gitCommit(workDir, commitMessage.trim());
+    setCommitOutput({ ok: res.ok, text: res.output || '' });
     if (!res.ok) {
-      setErrorBanner(res.error || 'Commit failed');
+      setErrorBanner(res.error || 'Commit failed (see hook output below)');
+      refresh();
       return;
     }
     setCommitMessage('');
@@ -437,7 +443,10 @@ export function GitPanel(props: {
           <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
             <TextInput
               value={commitMessage}
-              onChangeText={setCommitMessage}
+              onChangeText={(t: string) => {
+                setCommitMessage(t);
+                setShowSuggest(t.trim().length > 0);
+              }}
               placeholder="Commit message (summary of staged changes)"
               fontSize={11}
               color={COLORS.text}
@@ -494,6 +503,126 @@ export function GitPanel(props: {
             </Box>
           </Pressable>
         </Row>
+
+        {/* Autocomplete suggestions from recent subjects */}
+        {showSuggest ? (() => {
+          const needle = commitMessage.trim().toLowerCase();
+          const suggestions = Array.from(
+            new Set(
+              logs.slice(0, 30)
+                .map((l) => l.message)
+                .filter((m) => m && m.toLowerCase().includes(needle) && m !== commitMessage),
+            ),
+          ).slice(0, 6);
+          if (suggestions.length === 0) return null;
+          return (
+            <Col
+              style={{
+                gap: 2,
+                padding: 6,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                backgroundColor: COLORS.panelRaised,
+              }}
+            >
+              <Row style={{ justifyContent: 'space-between', alignItems: 'center', paddingLeft: 4, paddingRight: 4 }}>
+                <Text fontSize={9} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
+                  RECENT SUBJECTS
+                </Text>
+                <Pressable onPress={() => setShowSuggest(false)}>
+                  <Text fontSize={9} color={COLORS.textDim}>
+                    hide
+                  </Text>
+                </Pressable>
+              </Row>
+              {suggestions.map((s, i) => (
+                <Pressable
+                  key={i}
+                  onPress={() => {
+                    setCommitMessage(s);
+                    setShowSuggest(false);
+                  }}
+                  style={{ padding: 6, borderRadius: 6 }}
+                >
+                  <Text fontSize={10} color={COLORS.text}>
+                    {s}
+                  </Text>
+                </Pressable>
+              ))}
+            </Col>
+          );
+        })() : null}
+
+        {/* Pre-commit hook / commit output */}
+        {commitOutput && commitOutput.text ? (
+          <Col
+            style={{
+              gap: 4,
+              padding: 8,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: commitOutput.ok ? COLORS.border : COLORS.red,
+              backgroundColor: commitOutput.ok ? COLORS.panelRaised : COLORS.redDeep,
+            }}
+          >
+            <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text fontSize={9} color={commitOutput.ok ? COLORS.textMuted : COLORS.red} style={{ fontWeight: 'bold' }}>
+                {commitOutput.ok ? 'COMMIT OUTPUT' : 'COMMIT REJECTED (hook output)'}
+              </Text>
+              <Pressable onPress={() => setCommitOutput(null)}>
+                <Text fontSize={9} color={COLORS.textDim}>
+                  dismiss
+                </Text>
+              </Pressable>
+            </Row>
+            <Text
+              fontSize={9}
+              color={commitOutput.ok ? COLORS.textDim : COLORS.red}
+              style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}
+            >
+              {commitOutput.text}
+            </Text>
+          </Col>
+        ) : null}
+
+        {/* Staged diff preview */}
+        {stagedDiffs.length > 0 ? (
+          <Col
+            style={{
+              gap: 6,
+              padding: 8,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: COLORS.borderSoft,
+              backgroundColor: COLORS.panelBg,
+              maxHeight: 220,
+            }}
+          >
+            <Text fontSize={9} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
+              STAGED DIFF ({stagedDiffs.length})
+            </Text>
+            <ScrollView style={{ flexGrow: 1 }}>
+              <Col style={{ gap: 6 }}>
+                {stagedDiffs.map((d) => (
+                  <Col key={d.path} style={{ gap: 2 }}>
+                    <Row style={{ gap: 6, alignItems: 'center' }}>
+                      <Pill label={d.status} color={COLORS.yellow} tiny={true} />
+                      <Text fontSize={10} color={COLORS.textBright} style={{ flexShrink: 1, flexBasis: 0 }}>
+                        {d.path}
+                      </Text>
+                      <Pill label={'+' + d.additions} color={COLORS.green} tiny={true} />
+                      <Pill label={'-' + d.deletions} color={COLORS.red} tiny={true} />
+                    </Row>
+                    <Text fontSize={9} color={COLORS.textDim} style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                      {d.patch.length > 2000 ? d.patch.slice(0, 2000) + '\n… (truncated)' : d.patch}
+                    </Text>
+                  </Col>
+                ))}
+              </Col>
+            </ScrollView>
+          </Col>
+        ) : null}
       </Col>
 
       {/* File lists */}

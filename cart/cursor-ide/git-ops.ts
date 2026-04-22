@@ -30,13 +30,17 @@ function trimLines(raw: string): string[] {
     .filter((l) => l.length > 0);
 }
 
-export function gitCommit(workDir: string, message: string): { ok: boolean; error?: string } {
+export function gitCommit(workDir: string, message: string): { ok: boolean; output: string; error?: string } {
   try {
     const escaped = message.replace(/'/g, "'\\''");
-    execRaw(`cd "${workDir}" && git commit -m '${escaped}' 2>&1`);
-    return { ok: true };
+    const raw = execRaw(`cd "${workDir}" && { git commit -m '${escaped}' 2>&1; echo __RC=$?; }`);
+    const m = raw.match(/__RC=(-?\d+)\s*$/);
+    const rc = m ? parseInt(m[1], 10) : -1;
+    const output = m ? raw.slice(0, raw.length - m[0].length).trimEnd() : raw.trimEnd();
+    if (rc === 0) return { ok: true, output };
+    return { ok: false, output, error: output.split('\n').slice(-1)[0] || 'commit failed' };
   } catch (e: any) {
-    return { ok: false, error: e?.message || String(e) };
+    return { ok: false, output: '', error: e?.message || String(e) };
   }
 }
 
