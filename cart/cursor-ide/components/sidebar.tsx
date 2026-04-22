@@ -589,6 +589,7 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
     <ScrollFrame
       style={{ flexGrow: 1, height: '100%' }}
       scrollStyle={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
+      scrollY={scrollY}
       contentHeight={Math.max(FILE_VIEWPORT_ESTIMATE, total * FILE_ROW_HEIGHT + 24)}
       viewportHeight={FILE_VIEWPORT_ESTIMATE}
       onScroll={(payload: any) => {

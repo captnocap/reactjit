@@ -3,9 +3,10 @@
 const React: any = require('react');
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '../../runtime/primitives';
 import { COLORS } from '../theme';
 import { readFile as hostReadFile } from '../host';
+import { ScrollFrame } from './scrollbar';
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
@@ -433,7 +434,12 @@ export function CommandPalette({
         </Box>
 
         {/* Results */}
-        <ScrollView style={{ flexGrow: 1, maxHeight: previewLines.length > 0 ? 260 : 380 }}>
+        <ScrollFrame
+          style={{ flexGrow: 1, maxHeight: previewLines.length > 0 ? 260 : 380 }}
+          scrollStyle={{}}
+          viewportHeight={previewLines.length > 0 ? 260 : 380}
+          contentHeight={Math.max(220, filtered.length * 46 + 24)}
+        >
           {filtered.length === 0 ? (
             <Box style={{ padding: 24, alignItems: 'center' }}>
               <Text style={{ fontSize: 12, color: COLORS.textMuted }}>
@@ -519,7 +525,7 @@ export function CommandPalette({
               return rows;
             })
           )}
-        </ScrollView>
+        </ScrollFrame>
 
         {/* File preview */}
         {previewLines.length > 0 ? (

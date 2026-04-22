@@ -1,10 +1,11 @@
 const React: any = require('react');
-import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { FadeIn } from '../../anim';
 import { MessageBubble } from './MessageBubble';
 import { GeneratingIndicator } from './GeneratingIndicator';
 import { ScrollToBottomFab } from './ScrollToBottomFab';
+import { ScrollFrame } from '../scrollbar';
 
 export function MessageList(props: {
   messages: any[];
@@ -21,7 +22,12 @@ export function MessageList(props: {
 }) {
   return (
     <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, position: 'relative' }}>
-      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
+      <ScrollFrame
+        style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
+        scrollStyle={{ padding: 12 }}
+        viewportHeight={540}
+        contentHeight={Math.max(480, props.messages.length * (props.compactBand ? 132 : 164) + (props.isGenerating ? 96 : 48))}
+      >
         <Col style={{ gap: 10 }}>
           {!props.minimumBand ? (
             <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
@@ -50,7 +56,7 @@ export function MessageList(props: {
             <GeneratingIndicator toolExecutions={props.toolExecutions} />
           ) : null}
         </Col>
-      </ScrollView>
+      </ScrollFrame>
 
       <ScrollToBottomFab visible={props.showScrollButton} onPress={props.onScrollToBottom} />
     </Box>

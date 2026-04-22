@@ -1,11 +1,12 @@
 const React: any = require('react');
 const { useRef, useState, useMemo, memo, useEffect } = React;
 
-import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
+import { Box, Col, CodeGutter, Minimap, Pressable, Row, Text, TextEditor } from '../../../runtime/primitives';
 import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
 import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';
 import { Pill } from './shared';
+import { ScrollFrame } from './scrollbar';
 
 function EditorSurfaceImpl(props: any) {
   const _rT0 = Date.now();
@@ -29,6 +30,7 @@ function EditorSurfaceImpl(props: any) {
   const editorHeight = Math.max(220, props.totalLines * lineStride + topPad + bottomPad);
   const canvasWidth = gutterWidth + editorWidth;
   const [editorScrollY, setEditorScrollY] = useState(0);
+  const [editorScrollX, setEditorScrollX] = useState(0);
   const lastScrollStateTimeRef = useRef(0);
   const lastScrollYRef = useRef(0);
   const activePathRef = useRef(props.currentFilePath);
@@ -37,6 +39,7 @@ function EditorSurfaceImpl(props: any) {
     if (activePathRef.current !== props.currentFilePath) {
       activePathRef.current = props.currentFilePath;
       setEditorScrollY(0);
+      setEditorScrollX(0);
       lastScrollStateTimeRef.current = 0;
       lastScrollYRef.current = 0;
     }
@@ -80,7 +83,9 @@ function EditorSurfaceImpl(props: any) {
   }
 
   function syncEditorScroll(payload: any) {
+    const nextX = typeof payload?.scrollX === 'number' ? payload.scrollX : 0;
     const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
+    setEditorScrollX(nextX);
     if (Math.abs(next - lastScrollYRef.current) < lineStride * 0.5) return;
     const now = Date.now();
     if (now - lastScrollStateTimeRef.current < 50) return;
@@ -126,7 +131,17 @@ function EditorSurfaceImpl(props: any) {
             {!minimumBand ? <Text fontSize={10} color={COLORS.textDim}>{props.currentFilePath}</Text> : null}
           </Row>
 
-          <ScrollView onScroll={syncEditorScroll} style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17' }}>
+          <ScrollFrame
+            onScroll={syncEditorScroll}
+            dragToScroll={true}
+            scrollX={editorScrollX}
+            scrollY={editorScrollY}
+            viewportHeight={estimatedViewportHeight}
+            viewportWidth={compactBand ? 760 : 1020}
+            contentHeight={editorHeight}
+            contentWidth={canvasWidth}
+            style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17' }}
+          >
             <Row style={{ minHeight: editorHeight, width: canvasWidth, alignItems: 'flex-start' }}>
               {showGutter ? (
                 <CodeGutter
@@ -166,7 +181,7 @@ function EditorSurfaceImpl(props: any) {
                 />
               </Box>
             </Row>
-          </ScrollView>
+          </ScrollFrame>
         </Col>
 
         {showMinimap ? (

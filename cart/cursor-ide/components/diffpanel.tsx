@@ -1,11 +1,12 @@
 const React: any = require('react');
 const { useState, useMemo, useCallback, useEffect } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { Glyph, Pill } from './shared';
 import type { Checkpoint, CheckpointDiff } from '../checkpoint';
 import { parseSideBySide, hunkToText, copyToClipboard, type DiffHunk, type SideBySideRow } from '../app/diff-helpers';
+import { ScrollFrame } from './scrollbar';
 
 interface DiffPanelProps {
   checkpoints: Checkpoint[];
@@ -214,7 +215,13 @@ export function DiffPanel(props: DiffPanelProps) {
       </Row>
 
       {/* Turn strip */}
-      <ScrollView horizontal={true} style={{ maxHeight: 48 }}>
+      <ScrollFrame
+        horizontal={true}
+        style={{ maxHeight: 48 }}
+        scrollStyle={{}}
+        viewportWidth={600}
+        contentWidth={Math.max(600, diffs.length * 120)}
+      >
         <Row
           style={{
             alignItems: 'center',
@@ -241,7 +248,7 @@ export function DiffPanel(props: DiffPanelProps) {
             />
           ))}
         </Row>
-      </ScrollView>
+      </ScrollFrame>
 
       {/* Main content */}
       <Row style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
@@ -258,7 +265,12 @@ export function DiffPanel(props: DiffPanelProps) {
               FILES ({diffs.length})
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+          <ScrollFrame
+            style={{ flexGrow: 1 }}
+            scrollStyle={{ padding: 8 }}
+            viewportHeight={VIEWPORT_ESTIMATE}
+            contentHeight={Math.max(VIEWPORT_ESTIMATE, diffs.length * 42 + 24)}
+          >
             <Col style={{ gap: 4 }}>
               {diffs.map((d) => (
                 <Pressable
@@ -308,7 +320,7 @@ export function DiffPanel(props: DiffPanelProps) {
                 </Text>
               ) : null}
             </Col>
-          </ScrollView>
+          </ScrollFrame>
         </Col>
 
         {/* Diff view */}
@@ -320,7 +332,13 @@ export function DiffPanel(props: DiffPanelProps) {
           </Box>
           {selectedDiff ? (
             stackedView ? (
-              <ScrollView style={{ flexGrow: 1, padding: 10 }}>
+              <ScrollFrame
+                style={{ flexGrow: 1 }}
+                scrollStyle={{ padding: 10 }}
+                scrollY={scrollY}
+                viewportHeight={VIEWPORT_ESTIMATE}
+                contentHeight={Math.max(VIEWPORT_ESTIMATE, totalRows * ROW_HEIGHT + 24)}
+              >
                 <Col style={{ gap: 4 }}>
                   <Row style={{ gap: 6, marginBottom: 6 }}>
                     <Pill label={selectedDiff.status} color={statusColor(selectedDiff.status)} tiny={true} />
@@ -335,10 +353,14 @@ export function DiffPanel(props: DiffPanelProps) {
                     {selectedDiff.patch}
                   </Text>
                 </Col>
-              </ScrollView>
+              </ScrollFrame>
             ) : (
-              <ScrollView
+              <ScrollFrame
                 style={{ flexGrow: 1 }}
+                scrollStyle={{}}
+                scrollY={scrollY}
+                viewportHeight={VIEWPORT_ESTIMATE}
+                contentHeight={Math.max(VIEWPORT_ESTIMATE, totalRows * ROW_HEIGHT + 24)}
                 onScroll={(payload: any) => {
                   const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
                   if (Math.abs(next - scrollY) >= ROW_HEIGHT / 2) setScrollY(next);
@@ -376,7 +398,7 @@ export function DiffPanel(props: DiffPanelProps) {
                   })}
                   {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
                 </Col>
-              </ScrollView>
+              </ScrollFrame>
             )
           ) : (
             <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>

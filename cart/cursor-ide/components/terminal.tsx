@@ -1,12 +1,13 @@
 const React: any = require('react');
 const { useCallback, useEffect, useRef, useState } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Terminal, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { HoverPressable, Pill } from './shared';
 import { Icon } from './icons';
 import { useHover } from '../anim';
 import { useTerminalDockDrag } from '../hooks/useTerminalDockDrag';
+import { ScrollFrame } from './scrollbar';
 
 const host: any = globalThis as any;
 const CTRL_MOD = 192;
@@ -644,11 +645,16 @@ export function TerminalPanel(props: any) {
               <Text fontSize={10} color={COLORS.textDim}>
                 {history.length > 0 ? 'Recent terminal events and saved snapshots live in localstore.' : 'No saved terminal history yet.'}
               </Text>
-              <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
+              <ScrollFrame
+                style={{ flexGrow: 1, minHeight: 0 }}
+                scrollStyle={{}}
+                viewportHeight={280}
+                contentHeight={Math.max(240, history.length * 38 + 24)}
+              >
                 <Col style={{ gap: 8 }}>
                   {history.length > 0 ? history.map((entry: any) => HistoryEntryRow(entry)) : null}
                 </Col>
-              </ScrollView>
+              </ScrollFrame>
             </Col>
           ) : null}
 
@@ -713,7 +719,12 @@ export function TerminalPanel(props: any) {
                   </HoverPressable>
                 </Row>
               </Row>
-              <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
+              <ScrollFrame
+                style={{ flexGrow: 1, minHeight: 0 }}
+                scrollStyle={{}}
+                viewportHeight={320}
+                contentHeight={Math.max(280, searchLines.length * 28 + 32)}
+              >
                 <Col style={{ gap: 8, padding: 10 }}>
                   {searchLines.length > 0 ? searchLines.map((item) => {
                     return SearchResultRow(activeSession || sessions[0], item.line, item.index, true);
@@ -721,7 +732,7 @@ export function TerminalPanel(props: any) {
                     <Text fontSize={10} color={COLORS.textDim}>No matches yet. Open a session and keep typing.</Text>
                   )}
                 </Col>
-              </ScrollView>
+              </ScrollFrame>
             </Col>
           ) : null}
         </Box>
