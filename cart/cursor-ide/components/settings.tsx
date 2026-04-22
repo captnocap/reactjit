@@ -666,13 +666,116 @@ function EditorPanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function TerminalSettingsPanel() {
+const TERMINAL_DEFAULTS = {
+  shell: '/bin/bash',
+  fontSize: 12,
+  fontFamily: 'JetBrains Mono',
+  cursorStyle: 'block',
+  cursorBlink: true,
+  scrollback: 5000,
+  bellSound: false,
+  copyOnSelect: true,
+};
+
+function TerminalSettingsPanel(props: { query: string; resetToken: number }) {
+  const [shell, setShellS]             = useState<string>(sget('terminal.shell', TERMINAL_DEFAULTS.shell));
+  const [fontSize, setFontSizeS]       = useState<number>(sget('terminal.fontSize', TERMINAL_DEFAULTS.fontSize));
+  const [fontFamily, setFontFamilyS]   = useState<string>(sget('terminal.fontFamily', TERMINAL_DEFAULTS.fontFamily));
+  const [cursorStyle, setCursorStyleS] = useState<string>(sget('terminal.cursorStyle', TERMINAL_DEFAULTS.cursorStyle));
+  const [cursorBlink, setCursorBlinkS] = useState<boolean>(sget('terminal.cursorBlink', TERMINAL_DEFAULTS.cursorBlink));
+  const [scrollback, setScrollbackS]   = useState<number>(sget('terminal.scrollback', TERMINAL_DEFAULTS.scrollback));
+  const [bellSound, setBellSoundS]     = useState<boolean>(sget('terminal.bellSound', TERMINAL_DEFAULTS.bellSound));
+  const [copyOnSelect, setCopyS]       = useState<boolean>(sget('terminal.copyOnSelect', TERMINAL_DEFAULTS.copyOnSelect));
+
+  useEffect(() => {
+    setShellS(sget('terminal.shell', TERMINAL_DEFAULTS.shell));
+    setFontSizeS(sget('terminal.fontSize', TERMINAL_DEFAULTS.fontSize));
+    setFontFamilyS(sget('terminal.fontFamily', TERMINAL_DEFAULTS.fontFamily));
+    setCursorStyleS(sget('terminal.cursorStyle', TERMINAL_DEFAULTS.cursorStyle));
+    setCursorBlinkS(sget('terminal.cursorBlink', TERMINAL_DEFAULTS.cursorBlink));
+    setScrollbackS(sget('terminal.scrollback', TERMINAL_DEFAULTS.scrollback));
+    setBellSoundS(sget('terminal.bellSound', TERMINAL_DEFAULTS.bellSound));
+    setCopyS(sget('terminal.copyOnSelect', TERMINAL_DEFAULTS.copyOnSelect));
+  }, [props.resetToken]);
+
+  const setShell = (v: string) => { setShellS(v); sset('terminal.shell', v); };
+  const setFontSize = (v: number) => { setFontSizeS(v); sset('terminal.fontSize', v); };
+  const setFontFamily = (v: string) => { setFontFamilyS(v); sset('terminal.fontFamily', v); };
+  const setCursorStyle = (v: string) => { setCursorStyleS(v); sset('terminal.cursorStyle', v); };
+  const setCursorBlink = (v: boolean) => { setCursorBlinkS(v); sset('terminal.cursorBlink', v); };
+  const setScrollback = (v: number) => { setScrollbackS(v); sset('terminal.scrollback', v); };
+  const setBellSound = (v: boolean) => { setBellSoundS(v); sset('terminal.bellSound', v); };
+  const setCopyOnSelect = (v: boolean) => { setCopyS(v); sset('terminal.copyOnSelect', v); };
+
+  function doReset() {
+    setShell(TERMINAL_DEFAULTS.shell);
+    setFontSize(TERMINAL_DEFAULTS.fontSize);
+    setFontFamily(TERMINAL_DEFAULTS.fontFamily);
+    setCursorStyle(TERMINAL_DEFAULTS.cursorStyle);
+    setCursorBlink(TERMINAL_DEFAULTS.cursorBlink);
+    setScrollback(TERMINAL_DEFAULTS.scrollback);
+    setBellSound(TERMINAL_DEFAULTS.bellSound);
+    setCopyOnSelect(TERMINAL_DEFAULTS.copyOnSelect);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const match = (kw: string) => !q || kw.toLowerCase().indexOf(q) >= 0;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Terminal" description="Shell, font, cursor, scrollback." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>Terminal settings coming in a later commit.</Text>
-      </Box>
+      <SectionTitle title="Terminal" description="Shell binary, font, cursor, and scrollback." onReset={doReset} />
+
+      {match('shell bash zsh binary path') ? (
+        <SettingRow title="Shell" description="Path to the shell binary the terminal should launch.">
+          <TextField value={shell} onChange={setShell} placeholder="/bin/bash" width={220} mono={true} />
+        </SettingRow>
+      ) : null}
+
+      {match('font family monospace typeface') ? (
+        <SettingRow title="Font family" description="Monospace font used inside the terminal pane.">
+          <TextField value={fontFamily} onChange={setFontFamily} placeholder="JetBrains Mono" width={220} mono={true} />
+        </SettingRow>
+      ) : null}
+
+      {match('font size scale') ? (
+        <SettingRow title="Font size" description="Point size for terminal text.">
+          <Stepper value={fontSize} onChange={setFontSize} min={8} max={24} step={1} suffix="pt" />
+        </SettingRow>
+      ) : null}
+
+      {match('cursor shape block underline bar') ? (
+        <SettingRow title="Cursor style" description="Shape of the terminal caret.">
+          <PillSelect value={cursorStyle} onChange={setCursorStyle} options={[
+            { value: 'block',     label: 'Block'     },
+            { value: 'underline', label: 'Underline' },
+            { value: 'bar',       label: 'Bar'       },
+          ]} />
+        </SettingRow>
+      ) : null}
+
+      {match('cursor blink blinking') ? (
+        <SettingRow title="Cursor blink" description="Pulse the terminal caret on and off.">
+          <Toggle value={cursorBlink} onChange={setCursorBlink} />
+        </SettingRow>
+      ) : null}
+
+      {match('scrollback lines buffer history') ? (
+        <SettingRow title="Scrollback" description="Number of past lines kept in the terminal buffer.">
+          <Stepper value={scrollback} onChange={setScrollback} min={500} max={50000} step={500} />
+        </SettingRow>
+      ) : null}
+
+      {match('bell beep alert') ? (
+        <SettingRow title="Bell sound" description="Audible beep on terminal bell escape.">
+          <Toggle value={bellSound} onChange={setBellSound} />
+        </SettingRow>
+      ) : null}
+
+      {match('copy selection clipboard') ? (
+        <SettingRow title="Copy on select" description="Copy selected text to the clipboard automatically.">
+          <Toggle value={copyOnSelect} onChange={setCopyOnSelect} />
+        </SettingRow>
+      ) : null}
     </Col>
   );
 }
@@ -810,7 +913,7 @@ export function SettingsSurface(props: any) {
   function renderPanel() {
     if (active === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
     if (active === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
-    if (active === 'terminal')    return <TerminalSettingsPanel />;
+    if (active === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
     if (active === 'keybindings') return <KeybindingsPanel />;
     if (active === 'providers')   return <ProvidersPanel
       providerConfigs={props.providerConfigs || []}
