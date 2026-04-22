@@ -573,6 +573,118 @@ export const THEME_NGARDEN_RETRO_CLASSIC: Theme = {
   },
 };
 
+// 'orionMonitor' — CRT terminal skin with phosphor greens, amber readouts,
+// and dark glass panels.
+export const THEME_ORION_MONITOR: Theme = {
+  tokens: {
+    ...THEME_SHARP.tokens,
+    name: 'orionMonitor',
+    label: 'Orion Monitor',
+    corner: 'square',
+    density: 'compact',
+    radiusXs: 0,
+    radiusSm: 0,
+    radiusMd: 0,
+    radiusLg: 0,
+    radiusPill: 0,
+    borderW: 1,
+    shadowDepth: 0,
+    fontUI: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontMono: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontXs: 10,
+    fontSm: 11,
+    fontMd: 12,
+    fontLg: 13,
+    fontXl: 16,
+    typeBase: 12,
+    typeLg: 13,
+    typeXl: 16,
+  },
+  palette: {
+    appBg: '#050806',
+    panelBg: '#091210',
+    panelRaised: '#0d1815',
+    panelAlt: '#0b1411',
+    panelHover: '#12201c',
+    border: '#3b6b5f',
+    borderSoft: '#24443d',
+    text: '#c5f7dd',
+    textBright: '#f5fff9',
+    textDim: '#7ea496',
+    textMuted: '#9cc1b4',
+    blue: '#77d7ff',
+    blueDeep: '#09283a',
+    green: '#7cffb8',
+    greenDeep: '#0b2318',
+    yellow: '#d7ff6a',
+    yellowDeep: '#2a3107',
+    orange: '#ffcf73',
+    orangeDeep: '#3a2208',
+    red: '#ff7d7d',
+    redDeep: '#351111',
+    purple: '#8ef0d5',
+    purpleDeep: '#102a26',
+    grayChip: '#13221d',
+    grayDeep: '#0a1412',
+  },
+};
+
+// 'psychedelicDither' — saturated blue-violet-pink dither palette with
+// cold phosphor highlights and dark carrier surfaces.
+export const THEME_PSYCHEDELIC_DITHER: Theme = {
+  tokens: {
+    ...THEME_SOFT.tokens,
+    name: 'psychedelicDither',
+    label: 'Psychedelic Dither',
+    corner: 'soft',
+    density: 'comfortable',
+    radiusXs: 1,
+    radiusSm: 2,
+    radiusMd: 3,
+    radiusLg: 5,
+    radiusPill: 9999,
+    borderW: 1,
+    shadowDepth: 1,
+    fontUI: 'system-ui, -apple-system, sans-serif',
+    fontMono: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontXs: 10,
+    fontSm: 11,
+    fontMd: 13,
+    fontLg: 15,
+    fontXl: 18,
+    typeBase: 13,
+    typeLg: 15,
+    typeXl: 18,
+  },
+  palette: {
+    appBg: '#04030a',
+    panelBg: '#09101a',
+    panelRaised: '#0c1422',
+    panelAlt: '#101827',
+    panelHover: '#122034',
+    border: '#9af7ff70',
+    borderSoft: '#5b6f8f66',
+    text: '#f4fbff',
+    textBright: '#ffffff',
+    textDim: '#9eb8da',
+    textMuted: '#c4d6ef',
+    blue: '#9af7ff',
+    blueDeep: '#071a33',
+    green: '#7dffcf',
+    greenDeep: '#0a1f10',
+    yellow: '#ffd166',
+    yellowDeep: '#2a1d00',
+    orange: '#ff8fe4',
+    orangeDeep: '#331233',
+    red: '#ff5577',
+    redDeep: '#341316',
+    purple: '#c654ff',
+    purpleDeep: '#241233',
+    grayChip: '#161d28',
+    grayDeep: '#141a24',
+  },
+};
+
 // 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
 // overrides are merged on top via setCustomTheme().
 export const THEME_CUSTOM_BASE: Theme = {
@@ -588,10 +700,12 @@ export const THEMES: Record<string, Theme> = {
   aptioSetup: THEME_APTIO_SETUP,
   ditherKit: THEME_DITHER_KIT,
   ngardenRetroClassic: THEME_NGARDEN_RETRO_CLASSIC,
+  orionMonitor: THEME_ORION_MONITOR,
+  psychedelicDither: THEME_PSYCHEDELIC_DITHER,
   custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'ngardenRetroClassic', 'custom'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'ngardenRetroClassic', 'orionMonitor', 'psychedelicDither', 'custom'];
 
 // Custom theme overrides — partial token + palette patches applied on top
 // of a chosen base. Persisted separately in theme.ts.
