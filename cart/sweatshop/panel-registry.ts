@@ -82,6 +82,7 @@ require('./panels/apis.panel');
 require('./panels/scene3d.panel');
 require('./panels/ai.panel');
 require('./panels/emulator.panel');
+require('./panels/gpio.panel');
 require('./panels/audio-capture.panel');
 require('./panels/noise.panel');
 require('./panels/system-info.panel');
