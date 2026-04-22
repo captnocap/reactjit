@@ -49,16 +49,29 @@ const cartEntryPlugin = {
   },
 };
 
+// Ambient primitives (Phase 1): every named export in framework/ambient.ts
+// becomes a free-identifier candidate esbuild injects on demand. A .tsx file
+// referencing `Box`, `Text`, `useState`, etc. without importing them gets the
+// equivalent of a named import from framework/ambient.ts inserted at bundle
+// time. Additive — existing imports keep working.
+//
+// Kept classic JSX (jsxFactory: 'h') on purpose. Flipping to jsx: 'automatic'
+// would swap the runtime to `react/jsx-runtime` imports and defeat the
+// direct-require workaround in runtime/jsx_shim.ts that avoids Hermes/JSRT's
+// __toESM mishandling of the react default export.
+const ambientInject = path.join(rootDir, 'framework', 'ambient.ts');
+
 const esbuildOpts = {
   absWorkingDir: rootDir,
   entryPoints: [path.join(runtimeDir, 'index.tsx')],
   bundle: true,
   outfile: bundlePath,
   format: 'iife',
-  inject: [path.join(runtimeDir, 'jsx_shim.ts')],
+  inject: [path.join(runtimeDir, 'jsx_shim.ts'), ambientInject],
   jsxFactory: 'h',
   jsxFragment: 'Fragment',
   alias: { '@reactjit/core': './runtime/core_stub.ts' },
+  external: ['path', 'typescript'],
   plugins: [cartEntryPlugin],
 };
 
