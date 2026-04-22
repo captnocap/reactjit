@@ -18,7 +18,8 @@
 #   scripts/ship <cart-name>          # release, self-extracting
 #   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
 #   scripts/ship <cart-name> --raw    # release, skips packaging (raw ELF for ldd)
-#   scripts/ship <cart-name> --jsrt   # build the JSRT runtime path instead of QJS
+#   scripts/ship <cart-name> --jsrt   # build the JSRT runtime path instead of V8/QJS
+#   scripts/ship <cart-name> --qjs    # build the legacy QJS runtime path instead of V8
 
 set -euo pipefail
 
@@ -29,18 +30,18 @@ NAME="${1:-}"
 DEBUG=0
 RAW=0
 JSRT=0
-V8=0
+QJS=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
         --raw)      RAW=1 ;;
         --jsrt)     JSRT=1 ;;
-        --v8)       V8=1 ;;
+        --qjs)      QJS=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--raw|--jsrt]" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--raw|--jsrt|--qjs]" >&2
     echo "  Cart expected at: cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -67,7 +68,7 @@ fi
 
 # ── 1b. Bundle cart entry via esbuild → bundle-<name>.js ─────────────
 # Per-cart bundle path means two parallel ships can't overwrite each other's
-# output. qjs_app.zig embeds `bundle-<app-name>.js` at compile time.
+# output. v8_app.zig / qjs_app.zig embed `bundle-<app-name>.js` at compile time.
 BUNDLE_OUT="bundle-${NAME}.js"
 
 AST_OUT=""
@@ -95,15 +96,16 @@ if [[ "$DEBUG" -eq 1 ]]; then
 fi
 
 echo "[ship] compiling native binary..."
-APP_SOURCE="qjs_app.zig"
-V8_FLAG=""
+APP_SOURCE="v8_app.zig"
+QJS_FLAG="-Duse-v8=true"
 if [[ "$JSRT" -eq 1 ]]; then
     APP_SOURCE="jsrt_app.zig"
-elif [[ "$V8" -eq 1 ]]; then
-    APP_SOURCE="v8_app.zig"
-    V8_FLAG="-Duse-v8=true"
+    QJS_FLAG=""
+elif [[ "$QJS" -eq 1 ]]; then
+    APP_SOURCE="qjs_app.zig"
+    QJS_FLAG=""
 fi
-zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $V8_FLAG $OPT_FLAG
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $OPT_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then
