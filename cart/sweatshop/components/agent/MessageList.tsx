@@ -1,4 +1,5 @@
 const React: any = require('react');
+const { forwardRef, useCallback, useRef } = React;
 import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { FadeIn } from '../../anim';
@@ -7,7 +8,18 @@ import { GeneratingIndicator } from './GeneratingIndicator';
 import { ScrollToBottomFab } from './ScrollToBottomFab';
 import { useDragToScroll } from '../../hooks/useDragToScroll';
 
-export function MessageList(props: {
+function assignRef(target: any, value: any) {
+  if (!target) return;
+  if (typeof target === 'function') {
+    target(value);
+    return;
+  }
+  try {
+    target.current = value;
+  } catch {}
+}
+
+export const MessageList = forwardRef(function MessageList(props: {
   messages: any[];
   workspaceName: string;
   gitBranch: string;
@@ -19,8 +31,12 @@ export function MessageList(props: {
   toolExecutions: any[];
   showScrollButton: boolean;
   onScrollToBottom: () => void;
-}) {
-  const scrollRef = React.useRef(null);
+}, forwardedRef: any) {
+  const scrollRef = useRef(null);
+  const setScrollViewRef = useCallback((node: any) => {
+    scrollRef.current = node;
+    assignRef(forwardedRef, node);
+  }, [forwardedRef]);
   const scroll = useDragToScroll(scrollRef, {
     axis: 'y',
     inertia: false,
@@ -30,7 +46,7 @@ export function MessageList(props: {
   return (
     <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, position: 'relative' }}>
       <ScrollView
-        ref={scrollRef}
+        ref={setScrollViewRef}
         showScrollbar={true}
         onScroll={scroll.onScroll}
         onMouseDown={scroll.onMouseDown}
@@ -71,4 +87,4 @@ export function MessageList(props: {
       <ScrollToBottomFab visible={props.showScrollButton} onPress={props.onScrollToBottom} />
     </Box>
   );
-}
+});
