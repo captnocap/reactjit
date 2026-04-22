@@ -1,11 +1,11 @@
 const React: any = require('react');
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS, useTheme } from '../theme';
 import { THEME_ORDER, THEMES } from '../themes';
 import { Glyph, Pill } from './shared';
-import { FadeIn } from '../anim';
+import { FadeIn, PageModeTransition } from '../anim';
 import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { ModelReference } from '../default-models';
@@ -1759,12 +1759,12 @@ export function SettingsSurface(props: any) {
     }
   }
 
-  function renderPanel() {
-    if (active === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
-    if (active === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
-    if (active === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
-    if (active === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
-    if (active === 'providers')   return <ProvidersPanel
+  function renderPanel(section: SectionId) {
+    if (section === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
+    if (section === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
+    if (section === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
+    if (section === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
+    if (section === 'providers')   return <ProvidersPanel
       query={query}
       providerConfigs={props.providerConfigs || []}
       selectedProviderId={props.selectedProviderId}
@@ -1774,8 +1774,8 @@ export function SettingsSurface(props: any) {
       onUpdateProvider={props.onUpdateProvider || (() => {})}
       onSelectModel={props.onSelectModel || (() => {})}
     />;
-    if (active === 'memory')      return <MemoryPanel query={query} resetToken={resetToken} />;
-    if (active === 'plugins')     return <PluginsPanel query={query} resetToken={resetToken} />;
+    if (section === 'memory')      return <MemoryPanel query={query} resetToken={resetToken} />;
+    if (section === 'plugins')     return <PluginsPanel query={query} resetToken={resetToken} />;
     return <AboutPanel query={query} />;
   }
 
@@ -1806,7 +1806,12 @@ export function SettingsSurface(props: any) {
             ))}
           </Col>
           <Col style={{ flexGrow: 1, flexBasis: 0, gap: 14 }}>
-            {renderPanel()}
+            <PageModeTransition
+              mode={active}
+              durationMs={180}
+              style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}
+              renderPage={(mode) => renderPanel(mode as SectionId)}
+            />
           </Col>
         </Box>
       </Col>
