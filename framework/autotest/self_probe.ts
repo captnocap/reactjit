@@ -27,8 +27,18 @@ type ProbeNode = {
 
 type HostProbe = {
   __probe_tree?: () => ProbeNode[];
+  __probe_click?: (id?: string) => unknown;
+  __probe_type?: (id?: string, text?: string) => unknown;
+  __probe_drag?: (id?: string, dx?: number, dy?: number) => unknown;
+  __probe_scroll?: (id?: string, dy?: number) => unknown;
   __probe_hash?: () => string;
 };
+
+// One animation frame at 60Hz. Sleeping between ops lets the reconciler
+// commit + the Zig host layout/paint before we snapshot the hash.
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 16));
+}
 
 export async function __self_probe_main(): Promise<void> {
   const g = globalThis as unknown as HostProbe;
@@ -48,8 +58,20 @@ export async function __self_probe_main(): Promise<void> {
     estimated_ops: pressables.length + inputs.length + scrollables.length * 3,
   }));
 
-  const hash = (g.__probe_hash && g.__probe_hash()) || '00000000';
-  console.log(JSON.stringify({ event: 'initial-hash', hash }));
+  const initialHash = (g.__probe_hash && g.__probe_hash()) || '00000000';
+  console.log(JSON.stringify({ event: 'initial-hash', hash: initialHash }));
+
+  // Pressables — one click each, one-frame wait, hash after. Inputs +
+  // scrollables land in follow-up turns once we confirm this loop shape
+  // plays nicely with the reconciler commit cycle.
+  for (const node of pressables) {
+    if (g.__probe_click) g.__probe_click(node.id);
+    await nextFrame();
+    const hash = (g.__probe_hash && g.__probe_hash()) || '00000000';
+    console.log(JSON.stringify({ event: 'click', id: node.id, hash }));
+  }
+
+  console.log(JSON.stringify({ event: 'self-probe-pressables-complete', count: pressables.length }));
 }
 
 // Register globally so v8_app.zig can invoke it when --self-probe is set.
