@@ -69,7 +69,7 @@ export function AgentHeader(props: {
             <Text fontSize={10} color={props.showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text>
           </HoverPressable>
         </Tooltip>
-        <Tooltip label="Start a new conversation" side="bottom">
+        <Tooltip label="Start a new conversation" side="bottom" shortcut="Ctrl+Shift+N">
           <HoverPressable onPress={props.onNewConversation} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
             <Text fontSize={10} color={COLORS.blue}>New</Text>
           </HoverPressable>

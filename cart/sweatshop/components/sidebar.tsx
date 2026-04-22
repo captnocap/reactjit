@@ -183,12 +183,12 @@ function FilesPanel(props: any) {
       </Tooltip>
 
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Tooltip label="Refresh workspace tree" side="bottom">
+        <Tooltip label="Refresh workspace tree" side="bottom" shortcut="Ctrl+Shift+R">
           <HoverPressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
             <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
           </HoverPressable>
         </Tooltip>
-        <Tooltip label="Create a new file" side="bottom">
+        <Tooltip label="Create a new file" side="bottom" shortcut="Ctrl+N">
           <HoverPressable onPress={props.onCreateFile} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
             <Text fontSize={10} color={COLORS.green}>New File</Text>
           </HoverPressable>
@@ -291,7 +291,7 @@ function SourceControlPanel(props: any) {
       </Box>
 
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Tooltip label="Refresh workspace tree" side="bottom">
+        <Tooltip label="Refresh workspace tree" side="bottom" shortcut="Ctrl+Shift+R">
           <Pressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
             <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
           </Pressable>
@@ -348,8 +348,8 @@ function SidebarImpl(props: any) {
             {compactBand ? 'FILES' : 'WORKSPACE'}
           </Text>
           <Row style={{ gap: 8 }}>
-            <Tooltip label="Refresh workspace tree" side="bottom"><Pressable onPress={props.onRefreshWorkspace}><Text fontSize={10} color={COLORS.blue}>RF</Text></Pressable></Tooltip>
-            <Tooltip label="Create a new file" side="bottom"><Pressable onPress={props.onCreateFile}><Text fontSize={10} color={COLORS.blue}>+</Text></Pressable></Tooltip>
+            <Tooltip label="Refresh workspace tree" side="bottom" shortcut="Ctrl+Shift+R"><Pressable onPress={props.onRefreshWorkspace}><Text fontSize={10} color={COLORS.blue}>RF</Text></Pressable></Tooltip>
+            <Tooltip label="Create a new file" side="bottom" shortcut="Ctrl+N"><Pressable onPress={props.onCreateFile}><Text fontSize={10} color={COLORS.blue}>+</Text></Pressable></Tooltip>
           </Row>
         </Row>
 
@@ -443,7 +443,20 @@ function SidebarImpl(props: any) {
     );
   }
 
-  const panelOrder = (props.dockPanels || ['files', 'source-control']).filter((panelId: string, idx: number, list: string[]) => panelId && list.indexOf(panelId) === idx);
+  const defaultDockPanels = useMemo(() => {
+    const defaults = (props.panelDefs || [])
+      .filter((panel: any) => panel.defaultSlot === 'left' && panel.defaultOpen)
+      .map((panel: any) => panel.id);
+    if (defaults.length > 0) return defaults;
+    return (props.panelDefs || [])
+      .filter((panel: any) => panel.defaultSlot === 'left')
+      .slice(0, 1)
+      .map((panel: any) => panel.id);
+  }, [props.panelDefs]);
+  const panelOrder = (props.dockPanels || defaultDockPanels).filter((panelId: string, idx: number, list: string[]) => panelId && list.indexOf(panelId) === idx);
+  const leftRailPanels = useMemo(() => {
+    return (props.panelDefs || []).filter((panel: any) => panel.defaultSlot === 'left' && panel.userVisible !== false);
+  }, [props.panelDefs]);
   const openEditorCount = props.tabs.filter((tab: any) => tab.path !== '__landing__').length;
   const changeCount = props.gitChanges.length;
 
@@ -471,24 +484,18 @@ function SidebarImpl(props: any) {
           borderColor: COLORS.borderSoft,
         }}
       >
-        <DockButton
-          active={panelOrder[0] === 'files'}
-          count={String(openEditorCount)}
-          icon="folder"
-          label="Files"
-          tone={COLORS.blue}
-          tooltip="Show file browser"
-          onPress={() => props.onFocusDockPanel('files')}
-        />
-        <DockButton
-          active={panelOrder[0] === 'source-control'}
-          count={String(changeCount)}
-          icon="git-branch"
-          label="Git"
-          tone={COLORS.green}
-          tooltip="Show source control"
-          onPress={() => props.onFocusDockPanel('source-control')}
-        />
+        {leftRailPanels.map((panel: any) => (
+          <DockButton
+            key={panel.id}
+            active={panelOrder[0] === panel.id}
+            count={panel.id === 'files' ? String(openEditorCount) : panel.id === 'source-control' ? String(changeCount) : undefined}
+            icon={panel.icon}
+            label={panel.title}
+            tone={panel.id === 'files' ? COLORS.blue : panel.id === 'source-control' ? COLORS.green : COLORS.textMuted}
+            tooltip={'Show ' + panel.title.toLowerCase()}
+            onPress={() => props.onFocusDockPanel(panel.id)}
+          />
+        ))}
         <Box style={{ flexGrow: 1 }} />
         <DockButton
           active={false}

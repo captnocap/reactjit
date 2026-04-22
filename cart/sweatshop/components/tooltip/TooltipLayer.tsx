@@ -72,8 +72,8 @@ function TooltipOverlay(props: { active: TooltipState | null; viewport: TooltipV
           shadowRadius: 6,
           shadowOffset: { width: 0, height: 2 },
         }}>
-          <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Text fontSize={9} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
+          <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <Text fontSize={9} color={COLORS.textBright} style={{ fontWeight: 'bold', flexShrink: 1 }}>
               {active.label}
             </Text>
             {active.shortcut ? <ShortcutChip chord={active.shortcut} /> : null}

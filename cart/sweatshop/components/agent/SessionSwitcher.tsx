@@ -18,7 +18,7 @@ export function SessionSwitcher(props: {
     <Col style={{ width: 180, borderRightWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, padding: 8, gap: 6 }}>
       <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Conversations</Text>
-        <Tooltip label="New conversation" side="right">
+        <Tooltip label="New conversation" side="right" shortcut="Ctrl+Shift+N">
           <HoverPressable onPress={props.onNew} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 6, backgroundColor: COLORS.blueDeep }}>
             <Icon name="plus" size={12} color={COLORS.blue} />
           </HoverPressable>

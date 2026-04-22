@@ -146,6 +146,7 @@ export function StatusBar(props: any) {
           <StatusSegment
             onPress={props.onOpenSettings ? () => props.onOpenSettings('index') : undefined}
             tooltip={`Indexed: ${indexStats.totalFiles} files`}
+            shortcut="Ctrl+Shift+I"
           >
             <XPBar
               fill={Math.min(1, indexStats.totalFiles / 500)}
@@ -241,7 +242,7 @@ export function StatusBar(props: any) {
         ) : null}
 
         {/* Agent status */}
-        <StatusSegment onPress={props.onOpenChat} tooltip={`Agent status — click to open chat`}>
+          <StatusSegment onPress={props.onOpenChat} tooltip={`Agent status — click to open chat`} shortcut="Ctrl+L">
           <Dot color={agentColor} />
           <Text fontSize={10} color={agentColor}>
             {props.agentStatusText || 'idle'}
@@ -249,7 +250,7 @@ export function StatusBar(props: any) {
         </StatusSegment>
 
         {props.onOpenSettings ? (
-          <StatusSegment onPress={() => props.onOpenSettings('providers')} tooltip="Settings">
+          <StatusSegment onPress={() => props.onOpenSettings('providers')} tooltip="Settings" shortcut="Ctrl+,">
             <Icon name="settings" size={12} color={COLORS.textDim} />
             {!compactBand ? <Text fontSize={10} color={COLORS.textDim}>Settings</Text> : null}
           </StatusSegment>

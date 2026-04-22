@@ -117,7 +117,7 @@ export function TabBar(props: TabBarProps) {
                 ) : null}
                 {!compact && tab.git ? <Pill label={tab.git} color={COLORS.blue} tiny={true} /> : null}
                 {!compact && !tab.pinned ? (
-                  <Tooltip label={'Close ' + tab.name} side="bottom">
+                  <Tooltip label={'Close ' + tab.name} side="bottom" shortcut="Ctrl+W">
                     <Pressable onPress={() => onClose(tab.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
                       <Text fontSize={10} color={COLORS.textDim}>×</Text>
                     </Pressable>

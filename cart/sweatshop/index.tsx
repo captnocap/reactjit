@@ -87,6 +87,8 @@ import { ChatSurface } from './components/chat';
 import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
 import { MermaidPanel } from './components/mermaidpanel';
+import { GraphPanelSurface } from './components/graphpanel';
+import { DiffPanel } from './components/diffpanel';
 import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
 import { FadeIn, PageModeTransition, SlideIn } from './anim';
 import { TooltipLayer } from './components/tooltip';
@@ -100,6 +102,7 @@ import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/commandpalette';
 import type { MenuBarSection } from './components/menubar';
+import { buildWindowMenuSection, getDefaultOpenPanelIds, useRegisteredPanels } from './panel-registry';
 import { getIndexStats } from './indexer';
 
 export default function CursorIdeApp() {
@@ -199,6 +202,8 @@ export default function CursorIdeApp() {
   const [showHotPanel, setShowHotPanel] = usePersistentState('sweatshop.showHotPanel', 0);
   const [showGitPanel, setShowGitPanel] = usePersistentState('sweatshop.showGitPanel', 0);
   const [showPlanPanel, setShowPlanPanel] = usePersistentState('sweatshop.showPlanPanel', 0);
+  const [showGraphPanel, setShowGraphPanel] = usePersistentState('sweatshop.showGraphPanel', 0);
+  const [showDiffPanel, setShowDiffPanel] = usePersistentState('sweatshop.showDiffPanel', 0);
   const [activePlanId, setActivePlanId] = usePersistentState('sweatshop.activePlan', '');
   const [terminalRecording, setTerminalRecording] = useState(0);
   const [terminalRecordFrames, setTerminalRecordFrames] = useState(0);
@@ -207,7 +212,7 @@ export default function CursorIdeApp() {
   const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
   const [showPalette, setShowPalette] = useState(0);
   const openPalette = useCallback(() => setShowPalette(1), []);
-  const [dockPanels, setDockPanels] = usePersistentState<string[]>('sweatshop.dockPanels', ['files', 'source-control']);
+  const [dockPanels, setDockPanels] = usePersistentState<string[]>('sweatshop.dockPanels', getDefaultOpenPanelIds());
 
   // ── New ported state ─────────────────────────────────────────────────
   const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('sweatshop.providerConfigs', Object.values(PROVIDER_CONFIGS));
@@ -242,7 +247,8 @@ export default function CursorIdeApp() {
       next.push(panelId);
       seen[panelId] = 1;
     }
-    return next.length > 0 ? next : ['files'];
+    const defaults = getDefaultOpenPanelIds();
+    return next.length > 0 ? next : (defaults.length > 0 ? defaults : []);
   }, []);
 
     const focusDockPanel = useCallback((panelId: string) => {
@@ -255,7 +261,8 @@ export default function CursorIdeApp() {
     const closeDockPanel = useCallback((panelId: string) => {
     setDockPanels((prev) => {
       const next = normalizeDockPanels(prev).filter((id) => id !== panelId);
-      return next.length > 0 ? next : ['files'];
+      const defaults = getDefaultOpenPanelIds();
+      return next.length > 0 ? next : (defaults.length > 0 ? defaults : []);
     });
   }, []);
 
@@ -268,7 +275,7 @@ export default function CursorIdeApp() {
     editorContent, files, gitBranch, gitRemote, modelDisplayName, openTabs,
     searchQuery, selectedModel, stagedCount, workDir, widthBand, windowHeight,
     windowWidth, workspaceName, showSearch, showChat, showTerminal, showHotPanel, showGitPanel, showPlanPanel,
-    defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight, dockPanels,
+    showGraphPanel, defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight, dockPanels, showDiffPanel,
   };
 
   host.__setTerminalDockHeight = (value: number) => {
@@ -1276,6 +1283,7 @@ export default function CursorIdeApp() {
 
   const mainSurface = primaryMainView(activeView, currentFilePath);
   const compactMode = widthBand === 'narrow' || widthBand === 'widget' || widthBand === 'minimum';
+  const registeredPanels = useRegisteredPanels();
 
   // ── Command palette commands ───────────────────────────────────────
   const paletteCommands: PaletteCommand[] = [
@@ -1289,6 +1297,7 @@ export default function CursorIdeApp() {
     { id: 'nav.hot', label: 'Toggle Hot Panel', category: 'Navigation', action: () => { setShowHotPanel(showHotPanel ? 0 : 1); } },
     { id: 'nav.git', label: 'Toggle Git Panel', category: 'Navigation', action: () => { setShowGitPanel(showGitPanel ? 0 : 1); } },
     { id: 'nav.plan', label: 'Toggle Plan Canvas', category: 'Navigation', action: () => { setShowPlanPanel(showPlanPanel ? 0 : 1); } },
+    { id: 'nav.graph', label: 'Toggle Dependency Graph', category: 'Navigation', action: () => { setShowGraphPanel(showGraphPanel ? 0 : 1); } },
 
     { id: 'file.new', label: 'New File', category: 'File', action: createNewFile },
     { id: 'file.save', label: 'Save Current File', category: 'File', action: saveCurrentFile },
@@ -1344,8 +1353,10 @@ export default function CursorIdeApp() {
   const showTerminalPanel = showTerminal === 1 && !compactMode;
   const showDockedHot = showHotPanel === 1 && !compactMode;
   const showDockedGit = showGitPanel === 1 && !compactMode;
+  const showDockedDiff = showDiffPanel === 1 && !compactMode;
   const showDockedPlan = showPlanPanel === 1 && !compactMode;
-  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : 'editor';
+  const showDockedGraph = showGraphPanel === 1 && !compactMode;
+  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : compactSurface === 'graph' ? 'graph' : 'editor';
   const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
   const todoAction = useCallback((label: string) => () => {
     console.log('[sweatshop] TODO: ' + label);
@@ -1387,12 +1398,21 @@ export default function CursorIdeApp() {
       else { setShowPlanPanel(1); setCompactSurface('plan'); }
     } else { setShowPlanPanel(showPlanPanel ? 0 : 1); }
   }, [compactMode, compactSurface, mainSurface, showPlanPanel]);
+  const toggleGraphSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'graph') { setShowGraphPanel(0); setCompactSurface(mainSurface); }
+      else { setShowGraphPanel(1); setCompactSurface('graph'); }
+    } else { setShowGraphPanel(showGraphPanel ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showGraphPanel]);
   const toggleChatSurface = useCallback(() => {
     if (compactMode) {
       if (compactSurface === 'agent') { setShowChat(0); setCompactSurface(mainSurface); }
       else { setShowChat(1); setCompactSurface('agent'); }
     } else { setShowChat(showChat ? 0 : 1); }
   }, [compactMode, compactSurface, mainSurface, showChat]);
+  const toggleDiffSurface = useCallback(() => {
+    setShowDiffPanel(showDiffPanel ? 0 : 1);
+  }, [showDiffPanel]);
   const toggleSidebarSurface = useCallback(() => {
     console.log('[sweatshop] TODO: View > Toggle Sidebar');
   }, []);
@@ -1411,6 +1431,58 @@ export default function CursorIdeApp() {
   const showAbout = useCallback(() => {
     console.log('[sweatshop] TODO: Help > About');
   }, []);
+  const togglePanelById = useCallback((panelId: string) => {
+    if (panelId === 'files') {
+      if (dockPanels.indexOf(panelId) >= 0) closeDockPanel(panelId);
+      else focusDockPanel(panelId);
+      return;
+    }
+    if (panelId === 'source-control') {
+      if (dockPanels.indexOf(panelId) >= 0) closeDockPanel(panelId);
+      else focusDockPanel(panelId);
+      return;
+    }
+    if (panelId === 'terminal') { toggleTerminalSurface(); return; }
+    if (panelId === 'chat') { toggleChatSurface(); return; }
+    if (panelId === 'hot') { toggleHotSurface(); return; }
+    if (panelId === 'git') { toggleGitSurface(); return; }
+    if (panelId === 'plan') { togglePlanSurface(); return; }
+    if (panelId === 'settings') {
+      if (activeView === 'settings' || currentFilePath === '__settings__') openLandingPage();
+      else openSettingsSurface();
+      return;
+    }
+    if (panelId === 'cockpit') {
+      if (activeView === 'cockpit' || currentFilePath === '__cockpit__') openLandingPage();
+      else openCockpitSurface();
+      return;
+    }
+    if (panelId === 'mermaid') {
+      if (currentFilePath === '__mermaid__') openLandingPage();
+      else openMermaidSurface();
+      return;
+    }
+    if (panelId === 'diff') { toggleDiffSurface(); return; }
+    console.log('[sweatshop] TODO: toggle panel ' + panelId);
+  }, [
+    activeView,
+    closeDockPanel,
+    currentFilePath,
+    dockPanels,
+    focusDockPanel,
+    openCockpitSurface,
+    openLandingPage,
+    openMermaidSurface,
+    openSettingsSurface,
+    showDiffPanel,
+    toggleChatSurface,
+    toggleDiffSurface,
+    toggleGitSurface,
+    toggleHotSurface,
+    togglePlanSurface,
+    toggleTerminalSurface,
+  ]);
+  const windowMenuSection = useMemo(() => buildWindowMenuSection(togglePanelById), [togglePanelById]);
   const menuSections: MenuBarSection[] = [
     {
       label: 'File',
@@ -1439,6 +1511,7 @@ export default function CursorIdeApp() {
         { label: 'Toggle Sidebar', action: toggleSidebarSurface },
         { label: 'Toggle Terminal', action: toggleTerminalSurface },
         { label: 'Mermaid Canvas', action: openMermaidSurface },
+        { label: 'Dependency Graph', action: toggleGraphSurface },
         { label: 'Command Palette', shortcut: 'Ctrl+K', action: () => setShowPalette(1) },
         { kind: 'separator', label: '' },
         { label: 'Zoom In', shortcut: 'Ctrl++', action: zoomIn },
@@ -1446,6 +1519,7 @@ export default function CursorIdeApp() {
         { label: 'Reset Zoom', shortcut: 'Ctrl+0', action: resetZoom },
       ],
     },
+    windowMenuSection,
     {
       label: 'Help',
       items: [
@@ -1466,7 +1540,7 @@ export default function CursorIdeApp() {
     { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
     { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
   ];
-  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit') => {
+  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit' | 'graph') => {
     if (mode === 'cockpit') {
       return <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}><WorkerCanvas widthBand={widthBand} windowHeight={windowHeight} /></FadeIn>;
     }
@@ -1482,6 +1556,21 @@ export default function CursorIdeApp() {
       return (
         <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
           <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={settingsSections} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
+        </FadeIn>
+      );
+    }
+
+    if (mode === 'graph') {
+      return (
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+          <GraphPanelSurface
+            currentFilePath={currentFilePath}
+            currentSource={editorContent}
+            workDir={workDir}
+            widthBand={widthBand}
+            onOpenPath={openFileByPath}
+            onClose={() => { setShowGraphPanel(0); setCompactSurface(mainSurface); }}
+          />
         </FadeIn>
       );
     }
@@ -1538,16 +1627,16 @@ export default function CursorIdeApp() {
           <Col style={{ flexGrow: 1, flexBasis: 0 }}>
             <Row style={{ gap: 8, padding: 10, borderBottomWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg }}>
               <CompactSurfaceButton label="Files" showLabel={!minimumMode} active={compactSurface === 'explorer'} onPress={() => setCompactSurface('explorer')} icon="folder" />
-              {mainSurface === 'landing' ? <CompactSurfaceButton label="Projects" showLabel={!minimumMode} active={compactSurface === 'landing'} onPress={openLandingPage} icon="house" /> : null}
+              {mainSurface === 'landing' ? <CompactSurfaceButton label="Projects" showLabel={!minimumMode} active={compactSurface === 'landing'} onPress={openLandingPage} icon="house" shortcut="Ctrl+P" /> : null}
               {mainSurface === 'editor' ? <CompactSurfaceButton label="Editor" showLabel={!minimumMode} active={compactSurface === 'editor'} onPress={() => setCompactSurface('editor')} icon="panel-left" /> : null}
-              <CompactSurfaceButton label="Settings" showLabel={!minimumMode} active={compactSurface === 'settings'} onPress={openSettingsSurface} icon="palette" />
+              <CompactSurfaceButton label="Settings" showLabel={!minimumMode} active={compactSurface === 'settings'} onPress={openSettingsSurface} icon="palette" shortcut="Ctrl+," />
               <CompactSurfaceButton label="Cockpit" showLabel={!minimumMode} active={compactSurface === 'cockpit'} onPress={openCockpitSurface} icon="grid" />
-              <CompactSurfaceButton label="Search" showLabel={!minimumMode} active={compactSurface === 'search'} onPress={() => { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }} icon="search" />
-              <CompactSurfaceButton label="Term" showLabel={!minimumMode} active={compactSurface === 'terminal'} onPress={() => { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }} icon="terminal" />
-              <CompactSurfaceButton label="Hot" showLabel={!minimumMode} active={compactSurface === 'hot'} onPress={() => { setShowHotPanel(1); setCompactSurface('hot'); }} icon="flame" />
+              <CompactSurfaceButton label="Search" showLabel={!minimumMode} active={compactSurface === 'search'} onPress={() => { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }} icon="search" shortcut="Ctrl+Shift+F" />
+              <CompactSurfaceButton label="Term" showLabel={!minimumMode} active={compactSurface === 'terminal'} onPress={() => { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }} icon="terminal" shortcut="Ctrl+`" />
+              <CompactSurfaceButton label="Hot" showLabel={!minimumMode} active={compactSurface === 'hot'} onPress={() => { setShowHotPanel(1); setCompactSurface('hot'); }} icon="flame" shortcut="Ctrl+H" />
               <CompactSurfaceButton label="Git" showLabel={!minimumMode} active={compactSurface === 'git'} onPress={() => { setShowGitPanel(1); setCompactSurface('git'); }} icon="git-branch" />
               <CompactSurfaceButton label="Plan" showLabel={!minimumMode} active={compactSurface === 'plan'} onPress={() => { setShowPlanPanel(1); setCompactSurface('plan'); }} icon="map" />
-              <CompactSurfaceButton label="Agent" showLabel={!minimumMode} active={compactSurface === 'agent'} onPress={() => { setShowChat(1); setCompactSurface('agent'); }} icon="message" />
+              <CompactSurfaceButton label="Agent" showLabel={!minimumMode} active={compactSurface === 'agent'} onPress={() => { setShowChat(1); setCompactSurface('agent'); }} icon="message" shortcut="Ctrl+L" />
             </Row>
 
             {compactSurface === 'explorer' ? (
@@ -1560,16 +1649,17 @@ export default function CursorIdeApp() {
                 gitBranch={gitBranch}
                 changedCount={changedCount}
                 stagedCount={stagedCount}
-                currentFilePath={currentFilePath}
-                widthBand={widthBand}
-                style={sidebarStyle}
-                multiPanel={false}
-                dockPanels={dockPanels}
-                onOpenHome={openLandingPage}
-                onRefreshWorkspace={refreshWorkspace}
-                onSelectPath={openFileByPath}
-                onCreateFile={createNewFile}
-                onFocusDockPanel={focusDockPanel}
+              currentFilePath={currentFilePath}
+              widthBand={widthBand}
+              style={sidebarStyle}
+              multiPanel={false}
+              dockPanels={dockPanels}
+              panelDefs={registeredPanels}
+              onOpenHome={openLandingPage}
+              onRefreshWorkspace={refreshWorkspace}
+              onSelectPath={openFileByPath}
+              onCreateFile={createNewFile}
+              onFocusDockPanel={focusDockPanel}
                 onCloseDockPanel={closeDockPanel}
               />
             ) : null}
@@ -1653,6 +1743,7 @@ export default function CursorIdeApp() {
               style={mediumMode ? { width: 304 } : undefined}
               multiPanel={true}
               dockPanels={dockPanels}
+              panelDefs={registeredPanels}
               onOpenHome={openLandingPage}
               onRefreshWorkspace={refreshWorkspace}
               onSelectPath={openFileByPath}
@@ -1745,6 +1836,16 @@ export default function CursorIdeApp() {
             ) : null}
             {showDockedGit ? (
               <GitPanel workDir={workDir} gitBranch={gitBranch} changedCount={changedCount} stagedCount={stagedCount} onRefresh={refreshWorkspace} />
+            ) : null}
+            {showDockedDiff ? (
+              <SlideIn from="right" delay={0} durationMs={180} style={{ width: '100%', maxWidth: 460, height: '100%' }}>
+                <DiffPanel
+                  checkpoints={loadCheckpoints()}
+                  activeCheckpointId={undefined}
+                  onSelectCheckpoint={() => {}}
+                  onClose={() => setShowDiffPanel(0)}
+                />
+              </SlideIn>
             ) : null}
             {showDockedPlan ? (
               <PlanPanelWrapper workDir={workDir} activePlanId={activePlanId} onChange={(id) => setActivePlanId(id)} onSendToAI={sendMessage} />

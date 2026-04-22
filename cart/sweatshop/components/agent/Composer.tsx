@@ -153,10 +153,10 @@ export function Composer(props: {
           </Row>
           <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {props.inputTokenEstimate > 0 ? <Text fontSize={10} color={props.inputTokenEstimate > 16000 ? COLORS.red : props.inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{props.inputTokenEstimate + ' tkns'}</Text> : null}
-            <Tooltip label="Cycle the active model" side="bottom"><HoverPressable onPress={props.onCycleModel} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Tooltip label="Cycle the active model" side="bottom" shortcut="Ctrl+/"><HoverPressable onPress={props.onCycleModel} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
               <Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text>
             </HoverPressable></Tooltip>
-            <Tooltip label="Send the message" side="bottom"><HoverPressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+            <Tooltip label="Send the message" side="bottom" shortcut="Ctrl+Enter"><HoverPressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
               <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{props.sendLabel}</Text>
             </HoverPressable></Tooltip>
           </Row>

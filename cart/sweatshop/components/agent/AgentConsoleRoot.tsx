@@ -76,7 +76,7 @@ function AgentStatusBar(props: {
         {props.agentStatusText === 'streaming' ? 'streaming response' : props.agentStatusText === 'executing' ? 'running tools' : 'background agent active'}
       </Text>
       {props.activeAgentId ? (
-        <Tooltip label="Stop the active agent" side="bottom">
+        <Tooltip label="Stop the active agent" side="bottom" shortcut="Ctrl+." >
           <HoverPressable onPress={props.onStopAgent} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
             <Text fontSize={10} color={COLORS.red}>Stop</Text>
           </HoverPressable>

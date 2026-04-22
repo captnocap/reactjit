@@ -286,7 +286,7 @@ export function MenuBar(props: MenuBarProps) {
                 {item.kind === 'separator' ? (
                   menuSeparator()
                 ) : (
-                  <Tooltip label={item.disabled ? item.label + ' (disabled)' : 'Run ' + item.label} side="right">
+                  <Tooltip label={item.disabled ? item.label + ' (disabled)' : 'Run ' + item.label} side="right" shortcut={item.shortcut}>
                     <Pressable
                       onPress={() => {
                         if (item.disabled) return;
