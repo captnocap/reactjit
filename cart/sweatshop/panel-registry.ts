@@ -81,3 +81,4 @@ require('./panels/scene3d.panel');
 require('./panels/ai.panel');
 require('./panels/emulator.panel');
 require('./panels/noise.panel');
+require('./panels/system-info.panel');
