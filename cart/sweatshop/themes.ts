@@ -2,6 +2,7 @@
 // Three built-in themes: 'sharp' (terminal-feel, square, high contrast),
 // 'soft' (the previous default, lightly tuned, crisp corners),
 // 'studio' (pro-tool muted, tight density, square).
+// Plus themed ports from tsz references.
 //
 // A theme is a flat token map. Components read tokens from the live `TOKENS`
 // object and palette via the live `COLORS` object (both re-exported from
@@ -404,6 +405,62 @@ export const THEME_HIGH_CONTRAST: Theme = {
   },
 };
 
+// 'aptioSetup' — BIOS/setup wizard blue with flat gray panels and
+// stark white borders. Classic firmware UI, businesslike and utilitarian.
+export const THEME_APTIO_SETUP: Theme = {
+  tokens: {
+    ...THEME_SHARP.tokens,
+    name: 'aptioSetup',
+    label: 'Aptio Setup',
+    corner: 'square',
+    density: 'comfortable',
+    radiusXs: 0,
+    radiusSm: 0,
+    radiusMd: 0,
+    radiusLg: 0,
+    radiusPill: 0,
+    borderW: 1,
+    shadowDepth: 0,
+    fontUI: 'system-ui, -apple-system, sans-serif',
+    fontMono: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontXs: 10,
+    fontSm: 11,
+    fontMd: 12,
+    fontLg: 13,
+    fontXl: 16,
+    typeBase: 12,
+    typeLg: 13,
+    typeXl: 16,
+  },
+  palette: {
+    appBg: '#0000aa',
+    panelBg: '#c6c6c6',
+    panelRaised: '#d6d6d6',
+    panelAlt: '#bfbfbf',
+    panelHover: '#e6e6e6',
+    border: '#ffffff',
+    borderSoft: '#7f7f7f',
+    text: '#d6d6d6',
+    textBright: '#ffffff',
+    textDim: '#555555',
+    textMuted: '#8a8a8a',
+    blue: '#0000aa',
+    blueDeep: '#000066',
+    green: '#008000',
+    greenDeep: '#003300',
+    yellow: '#ffd54a',
+    yellowDeep: '#4a4200',
+    orange: '#ff9900',
+    orangeDeep: '#4a1e00',
+    red: '#c00000',
+    redDeep: '#4a0000',
+    purple: '#6e3cff',
+    purpleDeep: '#26104a',
+    grayChip: '#a8a8a8',
+    grayDeep: '#808080',
+  },
+};
+
 // 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
 // overrides are merged on top via setCustomTheme().
 export const THEME_CUSTOM_BASE: Theme = {
@@ -416,10 +473,11 @@ export const THEMES: Record<string, Theme> = {
   sharp: THEME_SHARP,
   studio: THEME_STUDIO,
   'high-contrast': THEME_HIGH_CONTRAST,
+  aptioSetup: THEME_APTIO_SETUP,
   custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'custom'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'custom'];
 
 // Custom theme overrides — partial token + palette patches applied on top
 // of a chosen base. Persisted separately in theme.ts.
