@@ -10,6 +10,10 @@ export type BrowserFetchState = {
   error: string | null;
 };
 
+export type BrowserPageState = BrowserFetchState & {
+  loading: boolean;
+};
+
 export function normalizeBrowserUrl(input: string): string {
   const next = String(input || '').trim();
   if (!next) return '';
