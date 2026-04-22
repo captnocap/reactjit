@@ -85,6 +85,7 @@ import { SearchSurface } from './components/search';
 import { ChatSurface } from './components/chat';
 import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
+import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
 import { PageModeTransition } from './anim';
 
 import { usePersistentState } from './hooks/usePersistentState';
@@ -683,7 +684,21 @@ export default function CursorIdeApp() {
     setActiveTabId(tabId); buildBreadcrumbs('__settings__'); markSelectedPath('__landing__');
   }, []);
 
+    const openCockpitSurface = useCallback(() => {
+    let nextTabs = ensureHomeTab([...stateRef.current.openTabs]);
+    let tabId = 'cockpit';
+    if (!nextTabs.some((tab) => tab.path === '__cockpit__')) {
+      nextTabs.push({ id: 'cockpit', name: 'Cockpit', path: '__cockpit__', type: 'cockpit', modified: 0, pinned: 1, git: '' });
+    } else { const t = nextTabs.find((tab) => tab.path === '__cockpit__'); if (t) tabId = t.id; }
+    setOpenTabs(nextTabs); setActiveView('cockpit');
+    if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('cockpit');
+    setCurrentFilePath('__cockpit__'); editorContentRef.current = ''; setEditorContent('');
+    setEditorRows([]); setEditorColorRows(null); setEditorLargeFileMode(0); setEditorModified(0); setTotalLines(0); setLanguageMode('Cockpit');
+    setActiveTabId(tabId); buildBreadcrumbs('__cockpit__'); markSelectedPath('__landing__');
+  }, []);
+
     const loadFileByPath = useCallback((path: string) => {
+    if (path === '__cockpit__') { openCockpitSurface(); return; }
     if (path === '__settings__') { openSettingsSurface(); return; }
     if (path === '__landing__' || path === '.' || inferFileType(path) === 'workspace') { openLandingPage(); return; }
     let content = fileContentsRef.current[path];
@@ -701,6 +716,7 @@ export default function CursorIdeApp() {
     const activateTab = useCallback((id: string) => {
     if (id === 'home') { openLandingPage(); return; }
     if (id === 'settings') { openSettingsSurface(); return; }
+    if (id === 'cockpit') { openCockpitSurface(); return; }
     const tab = stateRef.current.openTabs.find((item: Tab) => item.id === id);
     if (tab) loadFileByPath(tab.path);
   }, []);
@@ -1246,6 +1262,7 @@ export default function CursorIdeApp() {
   const paletteCommands: PaletteCommand[] = [
     { id: 'nav.home', label: 'Open Projects', category: 'Navigation', action: openLandingPage },
     { id: 'nav.settings', label: 'Open Settings', category: 'Navigation', action: openSettingsSurface },
+    { id: 'nav.cockpit', label: 'Open Cockpit (Worker Supervisor)', category: 'Navigation', action: openCockpitSurface },
     { id: 'nav.search', label: 'Toggle Search', category: 'Navigation', action: () => { setShowSearch(showSearch ? 0 : 1); if (!showSearch) searchProject(searchQuery); } },
     { id: 'nav.terminal', label: 'Toggle Terminal', category: 'Navigation', action: () => { if (showTerminal) closeTerminalSurface('palette toggle off'); else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); } } },
     { id: 'nav.chat', label: 'Toggle Agent Chat', category: 'Navigation', action: () => { setShowChat(showChat ? 0 : 1); } },
@@ -1308,7 +1325,7 @@ export default function CursorIdeApp() {
   const showDockedHot = showHotPanel === 1 && !compactMode;
   const showDockedGit = showGitPanel === 1 && !compactMode;
   const showDockedPlan = showPlanPanel === 1 && !compactMode;
-  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : 'editor';
+  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : 'editor';
   const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
   const todoAction = useCallback((label: string) => () => {
     console.log('[cursor-ide] TODO: ' + label);
@@ -1428,7 +1445,10 @@ export default function CursorIdeApp() {
     { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
     { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
   ];
-  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor') => {
+  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit') => {
+    if (mode === 'cockpit') {
+      return <WorkerCanvas widthBand={widthBand} windowHeight={windowHeight} />;
+    }
     if (mode === 'landing') {
       return (
         <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
@@ -1485,6 +1505,7 @@ export default function CursorIdeApp() {
               {mainSurface === 'landing' ? <CompactSurfaceButton label="Projects" showLabel={!minimumMode} active={compactSurface === 'landing'} onPress={openLandingPage} icon="house" /> : null}
               {mainSurface === 'editor' ? <CompactSurfaceButton label="Editor" showLabel={!minimumMode} active={compactSurface === 'editor'} onPress={() => setCompactSurface('editor')} icon="panel-left" /> : null}
               <CompactSurfaceButton label="Settings" showLabel={!minimumMode} active={compactSurface === 'settings'} onPress={openSettingsSurface} icon="palette" />
+              <CompactSurfaceButton label="Cockpit" showLabel={!minimumMode} active={compactSurface === 'cockpit'} onPress={openCockpitSurface} icon="grid" />
               <CompactSurfaceButton label="Search" showLabel={!minimumMode} active={compactSurface === 'search'} onPress={() => { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }} icon="search" />
               <CompactSurfaceButton label="Term" showLabel={!minimumMode} active={compactSurface === 'terminal'} onPress={() => { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }} icon="terminal" />
               <CompactSurfaceButton label="Hot" showLabel={!minimumMode} active={compactSurface === 'hot'} onPress={() => { setShowHotPanel(1); setCompactSurface('hot'); }} icon="flame" />
