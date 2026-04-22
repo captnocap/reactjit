@@ -100,7 +100,7 @@ import { HotPanel } from './components/hotpanel';
 import { GitPanel } from './components/git/GitPanel';
 import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
-import { CommandPalette, type PaletteCommand } from './components/commandpalette';
+import { CommandPalette, type PaletteCommand } from './components/palette';
 import type { MenuBarSection } from './components/menubar';
 import { buildWindowMenuSection, getDefaultOpenPanelIds, useRegisteredPanels } from './panel-registry';
 import { getIndexStats } from './indexer';
