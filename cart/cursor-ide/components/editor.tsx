@@ -43,22 +43,9 @@ function EditorSurfaceImpl(props: any) {
   }, [props.currentFilePath]);
 
   const estimatedViewportHeight = Math.max(160, props.windowHeight - (compactBand ? 260 : 300));
-  const overscanRows = 8;
-  const visibleRowCount = Math.ceil(estimatedViewportHeight / lineStride) + overscanRows * 2;
-  // Virtualize the gutter whenever the file exceeds the viewport. Gating
-  // this on largeFileMode caused ~4600 host nodes to mount for a ~1200-line
-  // file (under the large-file threshold), blowing the click-to-paint
-  // bridge flush to 1.5 MB and freezing the frame for 3 seconds.
-  const shouldVirtualizeChrome = props.totalLines > visibleRowCount;
-  const visibleStart = shouldVirtualizeChrome ? Math.max(0, Math.floor(Math.max(0, editorScrollY - topPad) / lineStride) - overscanRows) : 0;
-  const visibleEnd = shouldVirtualizeChrome ? Math.min(props.editorRows.length, visibleStart + visibleRowCount) : props.editorRows.length;
-  // Virtualized slice of rows for the gutter, then memoized transform to the
-  // {line, marker} shape CodeGutter wants. Two wins combined: (a) virtualization
-  // shrinks the 1000-line array to ~80 visible rows, (b) memo keeps the array
-  // reference stable across re-renders when the slice window + editorRows
-  // don't change — so React skips the 1MB prop-diff bridge cross that was
-  // dominating click latency on large files.
-  const gutterRowsSlice = shouldVirtualizeChrome ? props.editorRows.slice(visibleStart, visibleEnd) : props.editorRows;
+  // The gutter needs to stay fully addressable so line numbers stay correct
+  // on very large files. Minimap stays sampled.
+  const gutterRowsSlice = props.editorRows;
   const gutterRows = useMemo(
     () => gutterRowsSlice.map((row: any) => ({
       line: row.line,
