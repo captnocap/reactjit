@@ -77,7 +77,7 @@ import type { Tab, FileItem, Breadcrumb, SearchResult, ToolExecution, Message, T
 
 import { CompactSurfaceButton, TopBar } from './components/toolbar';
 import { TabBar } from './components/tabbar';
-import { BreadcrumbBar } from './components/breadcrumbs';
+import { BreadcrumbBar } from './components/breadcrumbs/index';
 import { StatusBar } from './components/statusbar';
 import { TerminalPanel } from './components/terminal';
 import { Sidebar } from './components/sidebar';
@@ -1691,7 +1691,7 @@ export default function CursorIdeApp() {
             {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' || compactSurface === 'graph' ? (
               <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
                 <TabBar tabs={tabsForBar} activeId={activeTabId} compact={true} onActivate={activateTab} onClose={closeTab} />
-                <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={true} onOpenHome={openLandingPage} />
+                <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={true} onOpenHome={openLandingPage} onSelectPath={openFileByPath} files={files} fileContent={editorContent} />
                 <PageModeTransition mode={compactMainView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
               </Col>
             ) : null}
@@ -1778,7 +1778,7 @@ export default function CursorIdeApp() {
 
             <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
               <TabBar tabs={tabsForBar} activeId={activeTabId} compact={false} onActivate={activateTab} onClose={closeTab} />
-              <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={false} onOpenHome={openLandingPage} />
+              <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={false} onOpenHome={openLandingPage} onSelectPath={openFileByPath} files={files} fileContent={editorContent} />
               <Box style={{ display: showTerminalPanel && terminalDockExpanded ? 'none' : 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
                 <PageModeTransition mode={activeView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
               </Box>
