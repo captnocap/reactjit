@@ -14,6 +14,8 @@ export interface Worker {
   heartbeat: number;
   x: number;
   y: number;
+  blockedOn?: string | null;
+  assignedTask?: string | null;
 }
 
 const STATUS_TONE: Record<WorkerStatus, { label: string; color: string; glow: string }> = {
@@ -67,6 +69,14 @@ export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
       <Box style={{ backgroundColor: '#05090f', borderRadius: 6, padding: 8, flexGrow: 1 }}>
         <Text style={{ color: tone.color, fontSize: 11 }}>{worker.latestTool}</Text>
       </Box>
+      {worker.blockedOn ? (
+        <Row style={{ alignItems: 'center', gap: 6 }}>
+          <Box style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#3a1616' }}>
+            <Text style={{ color: '#ff6b6b', fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>BLOCKED ON</Text>
+          </Box>
+          <Text style={{ color: '#ff9b9b', fontSize: 10 }}>worker-{worker.blockedOn}</Text>
+        </Row>
+      ) : null}
       <Row style={{ gap: 4, alignItems: 'center' }}>
         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
           <Box key={i} style={{
