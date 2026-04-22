@@ -410,20 +410,126 @@ function SearchBar(props: { query: string; onQuery: (q: string) => void }) {
 
 // ── Panels ───────────────────────────────────────────────────────────────────
 
-function AppearancePanel() {
+const APPEARANCE_DEFAULTS = {
+  uiScale: 100,
+  accent: 'blue',
+  animations: true,
+  compactChrome: false,
+  showFileGlyphs: true,
+  showMinimap: false,
+};
+
+const ACCENT_OPTIONS: Array<{ value: string; label: string; swatch: string }> = [
+  { value: 'blue',   label: 'Blue',   swatch: COLORS.blue },
+  { value: 'green',  label: 'Green',  swatch: COLORS.green },
+  { value: 'purple', label: 'Purple', swatch: COLORS.purple },
+  { value: 'orange', label: 'Orange', swatch: COLORS.orange },
+  { value: 'red',    label: 'Red',    swatch: COLORS.red },
+  { value: 'yellow', label: 'Yellow', swatch: COLORS.yellow },
+];
+
+function AppearancePanel(props: { query: string; resetToken: number }) {
   const { name, setTheme } = useTheme();
+  const [uiScale, setUiScaleState]         = useState<number>(sget('appearance.uiScale', APPEARANCE_DEFAULTS.uiScale));
+  const [accent, setAccentState]           = useState<string>(sget('appearance.accent', APPEARANCE_DEFAULTS.accent));
+  const [animations, setAnimationsState]   = useState<boolean>(sget('appearance.animations', APPEARANCE_DEFAULTS.animations));
+  const [compactChrome, setCompactState]   = useState<boolean>(sget('appearance.compactChrome', APPEARANCE_DEFAULTS.compactChrome));
+  const [showFileGlyphs, setGlyphsState]   = useState<boolean>(sget('appearance.showFileGlyphs', APPEARANCE_DEFAULTS.showFileGlyphs));
+  const [showMinimap, setMinimapState]     = useState<boolean>(sget('appearance.showMinimap', APPEARANCE_DEFAULTS.showMinimap));
+
+  useEffect(() => {
+    setUiScaleState(sget('appearance.uiScale', APPEARANCE_DEFAULTS.uiScale));
+    setAccentState(sget('appearance.accent', APPEARANCE_DEFAULTS.accent));
+    setAnimationsState(sget('appearance.animations', APPEARANCE_DEFAULTS.animations));
+    setCompactState(sget('appearance.compactChrome', APPEARANCE_DEFAULTS.compactChrome));
+    setGlyphsState(sget('appearance.showFileGlyphs', APPEARANCE_DEFAULTS.showFileGlyphs));
+    setMinimapState(sget('appearance.showMinimap', APPEARANCE_DEFAULTS.showMinimap));
+  }, [props.resetToken]);
+
+  const setUiScale = (v: number) => { setUiScaleState(v); sset('appearance.uiScale', v); };
+  const setAccent = (v: string) => { setAccentState(v); sset('appearance.accent', v); };
+  const setAnimations = (v: boolean) => { setAnimationsState(v); sset('appearance.animations', v); };
+  const setCompact = (v: boolean) => { setCompactState(v); sset('appearance.compactChrome', v); };
+  const setGlyphs = (v: boolean) => { setGlyphsState(v); sset('appearance.showFileGlyphs', v); };
+  const setMinimap = (v: boolean) => { setMinimapState(v); sset('appearance.showMinimap', v); };
+
+  function doReset() {
+    setTheme('soft');
+    setUiScale(APPEARANCE_DEFAULTS.uiScale);
+    setAccent(APPEARANCE_DEFAULTS.accent);
+    setAnimations(APPEARANCE_DEFAULTS.animations);
+    setCompact(APPEARANCE_DEFAULTS.compactChrome);
+    setGlyphs(APPEARANCE_DEFAULTS.showFileGlyphs);
+    setMinimap(APPEARANCE_DEFAULTS.showMinimap);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const match = (kw: string) => !q || kw.toLowerCase().indexOf(q) >= 0;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Appearance" description="Theme, density, and visual tokens." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
-        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Theme</Text>
-        <Text fontSize={10} color={COLORS.textDim}>Sharp is terminal-feel with square corners. Soft is the tuned default. Studio is pro-tool muted and tight.</Text>
-        <Row style={{ gap: 10, flexWrap: 'wrap' }}>
-          {THEME_ORDER.map((n: string) => (
-            <ThemeSwatch key={n} name={n} active={n === name} onPress={() => setTheme(n)} />
-          ))}
-        </Row>
-      </Box>
+      <SectionTitle title="Appearance" description="Theme, density, font scale, and chrome." onReset={doReset} />
+
+      {match('theme dark light sharp soft studio') ? (
+        <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Theme</Text>
+          <Text fontSize={10} color={COLORS.textDim}>Sharp is terminal-feel with square corners. Soft is the tuned default. Studio is pro-tool muted and tight.</Text>
+          <Row style={{ gap: 10, flexWrap: 'wrap' }}>
+            {THEME_ORDER.map((n: string) => (
+              <ThemeSwatch key={n} name={n} active={n === name} onPress={() => setTheme(n)} />
+            ))}
+          </Row>
+        </Box>
+      ) : null}
+
+      {match('ui scale font size zoom density') ? (
+        <SettingRow title="UI scale" description="Scales all chrome fonts and padding (80–150%).">
+          <Stepper value={uiScale} onChange={setUiScale} min={80} max={150} step={10} suffix="%" />
+        </SettingRow>
+      ) : null}
+
+      {match('accent color highlight') ? (
+        <SettingRow title="Accent color" description="Used for selection highlights and active states.">
+          <Row style={{ gap: 6 }}>
+            {ACCENT_OPTIONS.map(opt => {
+              const active = opt.value === accent;
+              return (
+                <Pressable key={opt.value} onPress={() => setAccent(opt.value)} style={{
+                  width: 24, height: 24,
+                  borderRadius: TOKENS.radiusPill,
+                  backgroundColor: opt.swatch,
+                  borderWidth: active ? 3 : 1,
+                  borderColor: active ? COLORS.textBright : COLORS.border,
+                }} />
+              );
+            })}
+          </Row>
+        </SettingRow>
+      ) : null}
+
+      {match('animations motion reduce') ? (
+        <SettingRow title="Animations" description="Fade and transition effects across the chrome.">
+          <Toggle value={animations} onChange={setAnimations} />
+        </SettingRow>
+      ) : null}
+
+      {match('compact chrome titlebar density') ? (
+        <SettingRow title="Compact chrome" description="Tighter titlebar, shorter tab strip.">
+          <Toggle value={compactChrome} onChange={setCompact} />
+        </SettingRow>
+      ) : null}
+
+      {match('file glyphs icons sidebar') ? (
+        <SettingRow title="Show file glyphs" description="Type letters shown next to files in the sidebar.">
+          <Toggle value={showFileGlyphs} onChange={setGlyphs} />
+        </SettingRow>
+      ) : null}
+
+      {match('minimap code overview') ? (
+        <SettingRow title="Show minimap" description="Overview strip down the right edge of the editor.">
+          <Toggle value={showMinimap} onChange={setMinimap} />
+        </SettingRow>
+      ) : null}
     </Col>
   );
 }
@@ -567,6 +673,7 @@ export function SettingsSurface(props: any) {
 
   const [internalSection, setInternalSection] = useState<SectionId>(incomingSection);
   const [query, setQuery] = useState('');
+  const [resetToken, setResetToken] = useState(0);
 
   useEffect(() => { setInternalSection(incomingSection); }, [props.activeSection]);
 
@@ -580,7 +687,7 @@ export function SettingsSurface(props: any) {
   }
 
   function renderPanel() {
-    if (active === 'appearance')  return <AppearancePanel />;
+    if (active === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
     if (active === 'editor')      return <EditorPanel />;
     if (active === 'terminal')    return <TerminalSettingsPanel />;
     if (active === 'keybindings') return <KeybindingsPanel />;
