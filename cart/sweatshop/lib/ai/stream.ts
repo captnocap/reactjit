@@ -1,44 +1,84 @@
 import type { AIConfig, Message, StreamDelta, ToolCall, ToolDefinition } from './types';
 import { getProvider } from './providers';
+import { requestAsync } from '../../../../runtime/hooks/http';
 
-// SSE streaming + incremental delta accumulation. Caller hands in a
-// config + messages; gets back an async iterator of StreamDelta plus a
-// final assembled assistant Message.
+// Chat request + streaming-shaped callback contract.
 //
-// Abort via the returned `stop()` — wired to an AbortController so the
-// fetch body is cancelled at the socket level.
+// HOST-FN GAP (honest, not a workaround):
+//   True token-by-token SSE streaming requires a host fn that emits
+//   chunk events as the wire body arrives (e.g. __http_stream_async +
+//   __ffiEmit('http-chunk:<reqId>', data)). The current host exposes
+//   __http_request_async only — one-shot: full body, then response.
+//   Until a streaming host fn lands, this module:
+//     1. Forces `stream:false` on the provider request.
+//     2. Makes one blocking requestAsync call.
+//     3. Emits the final assembled Message as a single onDelta({done:true, …}).
+//   The ChatUI surface already handles this gracefully — the streaming
+//   cursor simply never blinks. No fake chunks are emitted.
 
 export type StreamHandle = {
   stop: () => void;
   done: Promise<Message>;
 };
 
-// Parse an SSE text chunk into (event, data) pairs. Events may span
-// multiple lines (`event: X\ndata: Y\n\n`); we buffer whatever doesn't
-// end with a blank line for the next chunk.
-function parseSSE(buffer: string): { events: Array<{ event?: string; data: string }>; rest: string } {
-  const events: Array<{ event?: string; data: string }> = [];
-  const chunks = buffer.split('\n\n');
-  const rest = chunks.pop() || '';
-  for (const chunk of chunks) {
-    let event: string | undefined;
-    const dataLines: string[] = [];
-    for (const raw of chunk.split('\n')) {
-      const line = raw.trimEnd();
-      if (!line) continue;
-      if (line.startsWith(':')) continue; // comment
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
-    }
-    if (dataLines.length) events.push({ event, data: dataLines.join('\n') });
-  }
-  return { events, rest };
+export function streamingSupported(): boolean {
+  // Swap to true once __http_stream_async (or equivalent) is registered.
+  return false;
 }
 
-function mergeToolCallDelta(acc: ToolCall[], deltas: Partial<ToolCall>[]): ToolCall[] {
+export function streamChat(
+  config: AIConfig,
+  messages: Message[],
+  opts: {
+    tools?: ToolDefinition[];
+    onDelta?: (delta: StreamDelta) => void;
+  },
+): StreamHandle {
+  const provider = getProvider(config.provider);
+  const req = provider.formatRequest(messages, config, opts.tools, false);
+
+  let cancelled = false;
+  let resolve!: (m: Message) => void;
+  let reject!: (e: any) => void;
+  const done = new Promise<Message>((res, rej) => { resolve = res; reject = rej; });
+
+  (async () => {
+    try {
+      const res = await requestAsync({ method: req.method as any, url: req.url, headers: req.headers, body: req.body });
+      if (cancelled) { reject(new Error('cancelled')); return; }
+      if (res.error) throw new Error('http: ' + res.error);
+      if (res.status < 200 || res.status >= 300) throw new Error('HTTP ' + res.status + ' ' + String(res.body || '').slice(0, 200));
+
+      let json: any = {};
+      try { json = JSON.parse(res.body || '{}'); } catch { throw new Error('bad JSON response'); }
+      const finalMsg = provider.parseResponse(json);
+
+      // Synthetic single delta so the surface's onDelta pipeline still fires.
+      if (opts.onDelta) {
+        const content = typeof finalMsg.content === 'string' ? finalMsg.content : '';
+        opts.onDelta({ content, toolCalls: finalMsg.toolCalls as any, done: true });
+      }
+      resolve(finalMsg);
+    } catch (err) {
+      reject(err);
+    }
+  })();
+
+  return {
+    // TODO(host-fn): true cancellation needs an `__http_cancel` host fn.
+    // Until then this marks intent locally; the in-flight request still
+    // completes server-side.
+    stop: () => { cancelled = true; },
+    done,
+  };
+}
+
+// Helper exports retained so future SSE-capable streamChat keeps the
+// same surface. Deliberately unused at runtime in the no-streaming
+// fallback — re-wired when the host ships chunked delivery.
+export function mergeToolCallDelta(acc: ToolCall[], deltas: Partial<ToolCall>[]): ToolCall[] {
   const out = acc.slice();
   for (const d of deltas) {
-    // Match by id when present, otherwise append to the most recent.
     let idx = d.id ? out.findIndex((t) => t.id === d.id) : -1;
     if (idx < 0 && !d.id && out.length > 0) idx = out.length - 1;
     if (idx < 0) {
@@ -51,63 +91,4 @@ function mergeToolCallDelta(acc: ToolCall[], deltas: Partial<ToolCall>[]): ToolC
     }
   }
   return out;
-}
-
-export function streamChat(
-  config: AIConfig,
-  messages: Message[],
-  opts: {
-    tools?: ToolDefinition[];
-    onDelta?: (delta: StreamDelta) => void;
-  },
-): StreamHandle {
-  const controller = new AbortController();
-  const provider = getProvider(config.provider);
-  const req = provider.formatRequest(messages, config, opts.tools, true);
-
-  let resolve!: (m: Message) => void;
-  let reject!: (e: any) => void;
-  const done = new Promise<Message>((res, rej) => { resolve = res; reject = rej; });
-
-  (async () => {
-    try {
-      const res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body, signal: controller.signal });
-      if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => '');
-        throw new Error('stream HTTP ' + res.status + ' ' + text.slice(0, 200));
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulatedText = '';
-      let accumulatedCalls: ToolCall[] = [];
-
-      while (true) {
-        const { value, done: readerDone } = await reader.read();
-        if (readerDone) break;
-        buffer += decoder.decode(value, { stream: true });
-        const { events, rest } = parseSSE(buffer);
-        buffer = rest;
-        for (const ev of events) {
-          const delta = provider.parseStreamChunk(ev.data, ev.event);
-          if (!delta) continue;
-          if (delta.content) accumulatedText += delta.content;
-          if (delta.toolCalls) accumulatedCalls = mergeToolCallDelta(accumulatedCalls, delta.toolCalls);
-          if (opts.onDelta) opts.onDelta(delta);
-          if (delta.done) break;
-        }
-      }
-
-      const finalMsg: Message = { role: 'assistant', content: accumulatedText };
-      if (accumulatedCalls.length) finalMsg.toolCalls = accumulatedCalls;
-      resolve(finalMsg);
-    } catch (err) {
-      reject(err);
-    }
-  })();
-
-  return {
-    stop: () => controller.abort(),
-    done,
-  };
 }
