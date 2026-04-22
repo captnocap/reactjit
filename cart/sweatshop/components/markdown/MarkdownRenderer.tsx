@@ -1,6 +1,6 @@
 const React: any = require('react');
 
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { CodeFence } from './CodeFence';
 import { InlineCode } from './InlineCode';
@@ -51,7 +51,7 @@ function renderInline(nodes: MarkdownInlineNode[], opts: { basePath: string; onO
   return nodes.map((node, index) => <React.Fragment key={`${opts.prefix}-${index}`}>{renderInlineNode(node, { ...opts, keyPrefix: `${opts.prefix}-${index}` })}</React.Fragment>);
 }
 
-function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?: (path: string) => void; fontSize: number; lineWidth: number; query: string; onHeadingLayout?: (id: string, y: number) => void }) {
+function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?: (path: string) => void; onAnchorPress?: (id: string) => void; fontSize: number; lineWidth: number; query: string; onHeadingLayout?: (id: string, y: number) => void }) {
   switch (block.type) {
     case 'heading': {
       const sizes = [0, 20, 18, 16, 14, 13, 12];
@@ -62,9 +62,19 @@ function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?
           onLayout={(rect: any) => { if (opts.onHeadingLayout) opts.onHeadingLayout(block.id, rect?.y || 0); }}
           style={{ gap: 4, paddingTop: 8, paddingBottom: 2 }}
         >
-          <Text fontSize={size} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-            {renderInline(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: size, query: opts.query, prefix: block.id })}
-          </Text>
+          <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {opts.onAnchorPress ? (
+              <Pressable
+                onPress={() => opts.onAnchorPress?.(block.id)}
+                style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}
+              >
+                <Text fontSize={9} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>#</Text>
+              </Pressable>
+            ) : null}
+            <Text fontSize={size} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
+              {renderInline(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: size, query: opts.query, prefix: block.id })}
+            </Text>
+          </Row>
         </Box>
       );
     }
@@ -118,6 +128,7 @@ export function MarkdownRenderer(props: {
   onScroll: (y: number) => void;
   onHeadingLayout: (id: string, y: number) => void;
   onOpenPath?: (path: string) => void;
+  onAnchorPress?: (id: string) => void;
 }) {
   return (
     <ScrollView
@@ -134,6 +145,7 @@ export function MarkdownRenderer(props: {
           {props.ast.blocks.map((block) => renderBlock(block, {
             basePath: props.basePath,
             onOpenPath: props.onOpenPath,
+            onAnchorPress: props.onAnchorPress,
             fontSize: props.fontSize,
             lineWidth: props.lineWidth,
             query: props.query,
