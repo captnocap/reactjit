@@ -124,5 +124,66 @@ export function Icon(props: { name: IconName; size?: number; color?: string }) {
 }
 
 export function IconGallery() {
-  return <Box />;
+  return (
+    <Box
+      style={{
+        padding: 12,
+        gap: 12,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#273142',
+        backgroundColor: '#0f141c',
+      }}
+    >
+      <Col style={{ gap: 4 }}>
+        <Text fontSize={13} color="#e6edf3" style={{ fontWeight: 'bold' }}>
+          Icon Gallery
+        </Text>
+        <Text fontSize={10} color="#8b949e">
+          Smoke test for the cursor-ide icon catalog.
+        </Text>
+      </Col>
+      <Row
+        style={{
+          flexWrap: 'wrap',
+          gap: 8,
+          alignItems: 'flex-start',
+        }}
+      >
+        {ICON_CATALOG.map((entry) => (
+          <Box
+            key={entry.name}
+            style={{
+              width: 108,
+              padding: 10,
+              gap: 8,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: '#243041',
+              backgroundColor: '#121926',
+            }}
+          >
+            <Box
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#182233',
+              }}
+            >
+              <Icon name={entry.name} size={18} color="#d7dde8" />
+            </Box>
+            <Text fontSize={10} color="#c9d1d9" style={{ fontWeight: 'bold' }}>
+              {entry.name}
+            </Text>
+            <Text fontSize={9} color="#8b949e">
+              {entry.glyph}
+            </Text>
+          </Box>
+        ))}
+      </Row>
+    </Box>
+  );
 }
