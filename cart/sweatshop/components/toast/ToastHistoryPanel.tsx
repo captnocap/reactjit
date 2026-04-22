@@ -4,7 +4,6 @@ const { useMemo } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { Icon } from '../icons';
-import { register } from '../../panel-registry';
 import { useToastStore, type ToastFilterLevel, type ToastLevel, type ToastPosition } from './useToast';
 
 const LEVELS: Array<{ value: ToastFilterLevel; label: string; tone: string }> = [
@@ -32,13 +31,6 @@ function toneForLevel(level: ToastLevel): string {
   return COLORS.blue;
 }
 
-function surfaceForLevel(level: ToastLevel): string {
-  if (level === 'success') return COLORS.greenDeep;
-  if (level === 'warn') return COLORS.yellowDeep;
-  if (level === 'error') return COLORS.redDeep;
-  return COLORS.blueDeep;
-}
-
 function timeLabel(timestamp: number): string {
   try {
     const date = new Date(timestamp);
@@ -60,7 +52,7 @@ function ToneChip(props: { active?: boolean; label: string; tone: string; onPres
         borderRadius: 999,
         borderWidth: 1,
         borderColor: props.active ? props.tone : COLORS.border,
-        backgroundColor: props.active ? surfaceForLevel('info') : COLORS.panelAlt,
+        backgroundColor: props.active ? COLORS.panelRaised : COLORS.panelAlt,
       }}
     >
       <Text fontSize={9} color={props.active ? props.tone : COLORS.textMuted} style={{ fontWeight: 'bold' }}>
@@ -253,13 +245,3 @@ export function ToastHistoryPanel() {
     </Col>
   );
 }
-
-register({
-  id: 'toast-history',
-  title: 'Notifications',
-  defaultSlot: 'center',
-  icon: 'clock',
-  component: ToastHistoryPanel,
-  userVisible: true,
-  defaultOpen: false,
-});
