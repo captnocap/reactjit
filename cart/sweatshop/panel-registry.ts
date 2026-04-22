@@ -76,3 +76,4 @@ require('./panels/charts.panel');
 require('./panels/toast-history.panel');
 require('./panels/logviewer.panel');
 require('./panels/rssreader.panel');
+require('./panels/apis.panel');
