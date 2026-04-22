@@ -25,6 +25,7 @@ const qjs_runtime = @import("framework/qjs_runtime.zig"); // kept for non-VM sta
 const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
 const v8_bindings_fs = @import("framework/v8_bindings_fs.zig");
+const v8_bindings_autotest = @import("framework/v8_bindings_autotest.zig");
 // v8_bindings_telemetry + v8_bindings_sdk: deferred (see appInit comment).
 const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
@@ -1725,6 +1726,7 @@ fn appInit() void {
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
     v8_bindings_core.registerCore({});
     v8_bindings_fs.registerFs({});
+    v8_bindings_autotest.registerAutotest({});
     // MVP: telemetry + sdk bindings disabled. Sweatshop baseline doesn't need
     // them; they have latent type errors from the initial port that we'll
     // revisit after the click-latency measurement lands.
