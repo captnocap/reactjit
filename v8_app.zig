@@ -26,6 +26,7 @@ const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
 const v8_bindings_fs = @import("framework/v8_bindings_fs.zig");
 const v8_bindings_autotest = @import("framework/v8_bindings_autotest.zig");
+const v8_bindings_websocket = @import("framework/v8_bindings_websocket.zig");
 // v8_bindings_telemetry + v8_bindings_sdk: deferred (see appInit comment).
 const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
@@ -1727,6 +1728,7 @@ fn appInit() void {
     v8_bindings_core.registerCore({});
     v8_bindings_fs.registerFs({});
     v8_bindings_autotest.registerAutotest({});
+    v8_bindings_websocket.registerWebSocket({});
     // MVP: telemetry + sdk bindings disabled. Sweatshop baseline doesn't need
     // them; they have latent type errors from the initial port that we'll
     // revisit after the click-latency measurement lands.
@@ -1814,6 +1816,9 @@ fn appTick(now: u32) void {
     // from handlers that ran inside timers. Drain after.
     v8_runtime.callGlobalInt("__jsTick", @intCast(now));
 
+    // Poll active WebSocket connections and emit open/message/close/error events.
+    v8_bindings_websocket.tickDrain();
+
     // Apply any CMD batches that accumulated during press events since last tick.
     // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
     drainPendingFlushes();
@@ -1873,6 +1878,31 @@ pub fn main() !void {
         std.log.info("[dev] dev mode — watching bundle.js ({d} bytes), IPC @ {s}", .{ g_dev_bundle_buf.len, dev_ipc.SOCKET_PATH });
         break :blk g_dev_bundle_buf;
     } else BUNDLE_BYTES;
+
+    // ── ZIGOS_AUTOTEST short-circuit ──────────────────────────────────
+    // When set (any non-empty value other than "0"), skip engine.run's
+    // frame loop. Replicate the init → evalScript sequence engine.run
+    // would do, then invoke globalThis.__self_probe_main() and exit.
+    // Follows the ZIGOS_HEADLESS/ZIGOS_WITNESS env-var pattern used
+    // elsewhere in the framework.
+    if (std.posix.getenv("ZIGOS_AUTOTEST")) |env| {
+        const enabled = env.len > 0 and !std.mem.eql(u8, env, "0");
+        if (enabled) {
+            std.log.info("[self-probe] ZIGOS_AUTOTEST set — running probe then exiting", .{});
+            v8_runtime.initVM();
+            appInit();
+            v8_runtime.evalScript(initial_bundle);
+            // Guard: the bundle only includes self_probe.ts when esbuild
+            // inject pulls it in. If it's missing, surface that loudly
+            // (ship's runtime-error gate greps this stderr) rather than
+            // exiting 0 silently.
+            v8_runtime.evalScript(
+                "if (typeof __self_probe_main === 'function') { try { __self_probe_main(); } catch (e) { console.error('[self-probe] threw: ' + (e && e.stack || e)); } } else { console.error('[self-probe] __self_probe_main not defined in bundle'); }",
+            );
+            v8_runtime.teardownVM();
+            return;
+        }
+    }
 
     try engine.run(.{
         .title = WINDOW_TITLE,
