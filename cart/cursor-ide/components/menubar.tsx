@@ -42,13 +42,15 @@ function menuSeparator() {
 }
 
 export function MenuBar(props: MenuBarProps) {
+  const [menuVisible, setMenuVisible] = useState(0);
   const [openSection, setOpenSection] = useState('');
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
   const [altHeld, setAltHeld] = useState(false);
   const openIndex = useMemo(() => {
+    if (!menuVisible) return -1;
     if (!openSection) return -1;
     return props.sections.findIndex((section) => section.label === openSection);
-  }, [openSection, props.sections]);
+  }, [menuVisible, openSection, props.sections]);
   const openItems = useMemo(() => {
     if (openIndex < 0) return [];
     return props.sections[openIndex].items;
@@ -74,6 +76,7 @@ export function MenuBar(props: MenuBarProps) {
   const openMenu = useCallback((label: string) => {
     const index = props.sections.findIndex((section) => section.label === label);
     if (index < 0) return;
+    setMenuVisible(1);
     setOpenSection(label);
     const first = firstSelectableIndex(props.sections[index].items);
     setSelectedItemIndex(first >= 0 ? first : 0);
@@ -84,20 +87,25 @@ export function MenuBar(props: MenuBarProps) {
     const currentIndex = openIndex >= 0 ? openIndex : 0;
     const nextIndex = (currentIndex + delta + props.sections.length) % props.sections.length;
     const nextSection = props.sections[nextIndex];
+    setMenuVisible(1);
     setOpenSection(nextSection.label);
     const first = firstSelectableIndex(nextSection.items);
     setSelectedItemIndex(first >= 0 ? first : 0);
   }, [firstSelectableIndex, openIndex, props.sections]);
 
   const closeMenu = useCallback(() => setOpenSection(''), []);
+  const hideMenuBar = useCallback(() => {
+    setOpenSection('');
+    setMenuVisible(0);
+  }, []);
 
   const activateSelected = useCallback(() => {
     if (openIndex < 0) return;
     const item = openItems[selectedItemIndex];
     if (!item || item.kind === 'separator' || item.disabled || !item.action) return;
-    closeMenu();
+    hideMenuBar();
     item.action();
-  }, [closeMenu, openIndex, openItems, selectedItemIndex]);
+  }, [hideMenuBar, openIndex, openItems, selectedItemIndex]);
 
   const moveSelection = useCallback((delta: number) => {
     if (openIndex < 0 || openItems.length === 0) return;
@@ -120,13 +128,20 @@ export function MenuBar(props: MenuBarProps) {
       const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
       const alt = !!event.altKey;
 
-      if (alt && !event.ctrlKey && !event.metaKey) {
-        setAltHeld(true);
+      if (event.repeat) return;
+
+      if (key === 'alt' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault?.();
+        if (menuVisible) hideMenuBar();
+        else {
+          setMenuVisible(1);
+          setAltHeld(true);
+        }
+        return;
       }
 
-      if (key === 'alt') {
+      if (alt && !event.ctrlKey && !event.metaKey) {
         setAltHeld(true);
-        return;
       }
 
       if (alt && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
@@ -136,13 +151,17 @@ export function MenuBar(props: MenuBarProps) {
         if (key === 'h') { event.preventDefault?.(); openMenu('Help'); return; }
       }
 
-      if (openIndex < 0) {
+      if (!menuVisible || openIndex < 0) {
+        if (key === 'escape' && menuVisible) {
+          event.preventDefault?.();
+          hideMenuBar();
+        }
         return;
       }
 
       if (key === 'escape') {
         event.preventDefault?.();
-        closeMenu();
+        hideMenuBar();
         return;
       }
 
@@ -187,7 +206,7 @@ export function MenuBar(props: MenuBarProps) {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keyup', upHandler);
     };
-  }, [activateSelected, closeMenu, cycleMenu, moveSelection, openIndex, openMenu]);
+  }, [activateSelected, cycleMenu, hideMenuBar, menuVisible, moveSelection, openIndex, openMenu]);
 
   const renderMenuLabel = useCallback((label: string) => {
     if (!label) return null;
@@ -205,10 +224,10 @@ export function MenuBar(props: MenuBarProps) {
     );
   }, [altHeld]);
 
-  if (!props.sections || props.sections.length === 0) return null;
+  if (!props.sections || props.sections.length === 0 || !menuVisible) return null;
 
   return (
-    <Col style={{ position: 'relative', zIndex: 120, overflow: 'visible', backgroundColor: COLORS.panelBg, borderBottomWidth: 1, borderColor: COLORS.border }}>
+    <Col style={{ position: 'absolute', left: 0, right: 0, top: 42, zIndex: 2200, overflow: 'visible', backgroundColor: COLORS.panelBg, borderBottomWidth: 1, borderColor: COLORS.border }}>
       <Row style={{ alignItems: 'center', gap: 2, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, minHeight: 28 }}>
         {props.sections.map((section, index) => {
           const open = openSection === section.label;
@@ -240,9 +259,9 @@ export function MenuBar(props: MenuBarProps) {
         })}
       </Row>
 
-      {openIndex >= 0 ? (
-        <Box style={{ position: 'absolute', left: 0, right: 0, top: 28, bottom: 0, zIndex: 999, overflow: 'visible' }}>
-          <Pressable onPress={closeMenu} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      <Box style={{ position: 'absolute', left: 0, right: 0, top: 28, bottom: 0, zIndex: 2300, overflow: 'visible' }}>
+        <Pressable onPress={hideMenuBar} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+        {openIndex >= 0 ? (
           <Col
             style={{
               position: 'absolute',
@@ -256,7 +275,7 @@ export function MenuBar(props: MenuBarProps) {
               borderColor: COLORS.border,
               borderRadius: 12,
               overflow: 'hidden',
-              zIndex: 1000,
+              zIndex: 2400,
             }}
           >
             {openItems.map((item, index) => (
@@ -268,7 +287,7 @@ export function MenuBar(props: MenuBarProps) {
                     onPress={() => {
                       if (item.disabled) return;
                       if (!item.action) return;
-                      closeMenu();
+                      hideMenuBar();
                       item.action();
                     }}
                     style={{
@@ -285,8 +304,8 @@ export function MenuBar(props: MenuBarProps) {
               </React.Fragment>
             ))}
           </Col>
-        </Box>
-      ) : null}
+        ) : null}
+      </Box>
     </Col>
   );
 }
