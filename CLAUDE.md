@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Claude-Code Specific Warnings
+
+**Task tool is forbidden.** Do not use the `Agent` / `Explore` / `Task` tools. They go blind to supervisor context and have produced materially false reports in this repo (e.g., claimed frozen `tsz/` had `.map()` when it did not; ~57% false-claim rate on prior audits). Read files directly with Read / Grep / Glob / Bash. Treat "does this exist?" as source verification, not delegation.
+
+**Memory persistence:** Claude Code's memory system lives at `~/.claude-overflow/projects/<project-name>/memory/`. Session hints are written to `session-env task.json` for inter-session continuity. If you need to leave a breadcrumb for the next session, write it there.
+
+**This repo uses the supervisor + worker pattern.** Multiple agent sessions run in parallel across kitty terminal panes. The supervisor pane orchestrates workers. If `git status` is unexpectedly clean, run `git log --oneline -5` ONCE — another you committed it. Move on. Do not loop on `git status`.
+
+---
+
 # HARD RULE: DO NOT CHMOD, UNLOCK, OR MODIFY FROZEN DIRECTORIES
 
 The following directories are READ-ONLY and FROZEN:
@@ -9,40 +19,51 @@ The following directories are READ-ONLY and FROZEN:
 - `love2d/` — Lua reference stack. Read for porting reference, do not modify.
 - `tsz/` — Smith-era stack (.tsz compiler, d-suite conformance, cockpit/Sweatshop .tsz carts, InspectorTsz tools). Read for porting reference, do not modify. Same treatment as `love2d/`.
 
+---
+
+# HARD RULE: V8 IS THE DEFAULT RUNTIME
+
+The default JS runtime is **V8** (embedded via zig-v8). `scripts/ship` builds V8. `--qjs` is legacy opt-in. `--jsrt` is the LuaJIT evaluator alternate path.
+
+The "V8 has baggage" myth is fake. The baggage is Chromium (~200MB CEF), not V8 itself (~6MB standalone). We measured it.
+
+**How we got here:** For several days we chased phantom performance problems through multiple architecture refactors. The actual bottleneck was a synchronous `npx tsc` call in the React reconciler path, blocking every click. Once async'd, clicks dropped from ~1800ms to ~40ms — a 75× improvement. V8 gave headroom QJS couldn't. Don't assume V8 is slow; assume the bug is somewhere else.
+
+Do not build new features on `qjs_app.zig` or QJS bindings. QJS is maintenance-only legacy.
+
+---
+
 # HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
-For feature verification, compiler capability checks, and architecture comparisons in this repo:
+
+For feature verification, compiler capability checks, and architecture comparisons:
 - NEVER invoke the built-in Explore agent.
 - Read files directly with Read / Grep / Glob / Bash.
 - Treat "does this exist?" and "what is missing?" as source-verification tasks.
-Measured evidence in this repo:
+
+Measured evidence:
 - Direct Opus read: ~1m13s, correct result
 - Explore-agent path: ~3m46s, incorrect result
-- Explore has already produced materially false feature reports here (example: claimed tsz had .map() when it did not)
-- Prior tested feature audit showed ~57.5% false-claim rate from Explore on this codebase
-Why:
-- This repo contains a custom compiler, DSL, and runtime not represented in training data.
-- Explore summaries are less reliable than direct source inspection here.
-- Delegation is slower and increases hallucination risk.
+- Explore has produced materially false feature reports here
+
+Why: this repo contains a custom compiler, DSL, and runtime not represented in training data. Explore summaries are less reliable than direct source inspection.
+
+---
 
 # HARD RULE: JSRT — JS INSIDE LUA, NOT JS TURNING INTO LUA
 
-The decided VM direction is **JSRT**: a JavaScript evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage. There is no tool anywhere in the pipeline that translates JS to Lua. If you see one, or propose one, you are looking at the trap.
+JSRT at `framework/lua/jsrt/` is a JavaScript evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage. There is no tool anywhere in the pipeline that translates JS to Lua.
 
-**The distinction that matters is scope, not label.** Transpiler / compiler / codegen are the same activity with different marketing. The real question is: does the tool know about React, or does it stop at ECMAScript?
-
-- **JS inside Lua (JSRT — what we build):** JS is *data*. A Lua evaluator reads the JS (or its AST) and executes JS semantics. Semantics live in ONE place (the evaluator + runtime helpers). JS features = evaluator work, bounded by ECMAScript (finite, stable). LuaJIT trace-JITs the evaluator loop → effectively JITs the JS running through it. Nothing emits Lua code. Ever.
-
-- **JS turning into Lua (the trap — DO NOT BUILD):** An emitter reads JS and produces Lua source. Every JS feature becomes emitter code. Semantics scattered across every translated file. Drift vector: the emitter reaches above JS into framework territory (hooks / JSX / components) and grows unbounded. The former `deps/eqjs/eqjs_transpiler.zig` was this shape (deleted 2026-04-21 along with all EQJS sources). `/home/siah/eqjs/compiler/` still exists outside the repo, quarantined. **Do not resurrect either.**
-
-**Scope guardrail for JSRT:** the evaluator implements ECMAScript semantics (var/let/const, function calls, closures, prototype chain, this, try/catch, Map/Set/WeakMap, Symbol, iterators). It does NOT know about React, hooks, JSX, components, or reconcilers. esbuild lowers JSX to `React.createElement(...)` calls before JSRT sees anything. The React library code is indistinguishable from any other JS program at the evaluator's level. **If you catch yourself writing evaluator code that names `useState`, `hook`, `fiber`, `component`, or any React concept — STOP. That is the trap.**
+**The distinction that matters is scope.** The evaluator implements ECMAScript semantics (var/let/const, closures, prototype chain, this, try/catch, Map/Set/WeakMap, Symbol, iterators, destructuring). It does NOT know about React, hooks, JSX, components, or reconcilers. esbuild lowers JSX to `React.createElement(...)` before the evaluator ever sees a bundle. If you catch yourself writing evaluator code that names `useState`, `hook`, `fiber`, `component`, or any React concept — STOP. That's the trap.
 
 Live files: `framework/lua/jsrt/` — see `README.md` for the manifesto and `TARGET.md` for the 13 ordered milestones. Progress check:
 
-```
+```bash
 ./framework/lua/jsrt/test/run_targets.sh
 ```
 
 When asked "where are we on JSRT," run that — don't guess.
+
+---
 
 ## Who Maintains This
 
@@ -50,89 +71,73 @@ When asked "where are we on JSRT," run that — don't guess.
 
 **Committing:** If you commit on your own, only commit your own work. If prompted to commit, commit everything unaccounted for.
 
+---
+
 ## What This Is (active shape)
 
 ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild.
 
-**Cart runtime:** JSRT — a JS evaluator in Lua, running inside LuaJIT. See `framework/lua/jsrt/`. JS source stays JS at every stage; the evaluator reads it as data and executes it. LuaJIT's trace JIT optimizes the evaluator's hot paths, effectively JITting the JS running through it. No tool ever translates JS to Lua. See the HARD RULE above.
+**Cart runtime:** V8 is default. JSRT is the alternate LuaJIT path. QJS is legacy maintenance-only.
 
-React's reconciler (running through the evaluator) emits CREATE/APPEND/UPDATE mutation commands; the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes them.
+React's reconciler emits CREATE/APPEND/UPDATE mutation commands; the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes them.
 
-`qjs_app.zig` at the repo root is **legacy** — a prior QuickJS-based host that hit a 2000ms-per-click ceiling on large React trees. Not extended. Do not build new work there.
-
-- **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows, LuaJIT runtime.
-- **`framework/lua/jsrt/`** — JSRT: the JS evaluator + builtins + host FFI. Cart runtime lives here.
-- **`runtime/`** — JS entry point, JSX shim, primitives, host globals.
-- **`renderer/`** — reconciler host config (`hostConfig.lua` + `reconciler.lua`). Receives the mutation command stream JSRT emits.
-- **`cart/`** — `.tsx` apps.
+- **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows.
+- **`framework/lua/jsrt/`** — JSRT evaluator. Alternate path, not the default.
+- **`runtime/`** — JS entry point, JSX shim, primitives, host globals, hooks.
+- **`renderer/`** — reconciler host config. Mutation command stream.
+- **`cart/`** — `.tsx` apps. `cart/sweatshop/` (was `cursor-ide`) is the active IDE cart.
 - **`scripts/build-bundle.mjs`** — esbuild bundler.
 - **`scripts/build-jsast.mjs`** — acorn JS → Lua AST literal. JSRT's input.
 - **`tsz/`** — FROZEN. Smith compiler + Smith-era carts. Reference only.
-- **`love2d/`** — FROZEN. The proven reconciler-on-Lua stack. Reference for every runtime pattern we need.
+- **`love2d/`** — FROZEN. The proven reconciler-on-Lua stack. Reference for any runtime pattern.
 - **`os/`** — CartridgeOS + Exodia (future).
 
-## Ship Path (the only path)
+---
 
-One command — no steps to remember:
+## Ship Path (the only path)
 
 ```bash
 ./scripts/ship <cart-name>          # cart/<name>.tsx → zig-out/bin/<name> (self-extracting)
 ./scripts/ship <cart-name> -d       # debug build, raw ELF
-./scripts/ship <cart-name> --raw    # release, raw ELF (for ldd inspection)
+./scripts/ship <cart-name> --raw    # release, raw ELF
 ```
 
-What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, `scripts/build-jsast.mjs` emits `bundle.ast.lua` (AST as data), Zig compiles the cart host with the AST embedded via `@embedFile`, Linux packaging wraps the ELF + all its `.so` deps + `ld-linux` into a self-extracting tarball that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run. macOS produces a `.app` bundle with `Frameworks/` dylib rewrites. Result: a single-file shippable binary with zero system dependencies.
+What happens: esbuild bundles TSX → `bundle.js`, Zig compiles the cart host with the bundle embedded via `@embedFile`, Linux packaging bundles all `.so` deps into a self-extracting shell wrapper, macOS produces a `.app` bundle.
 
-**No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
+**No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx`.
+
+---
 
 ## Dev Path (iterate without rebuilding)
 
 ```bash
-./scripts/dev <cart-name>       # launches the dev host + watches <cart> for saves
-./scripts/dev <other-cart>      # from another terminal: pushes to running host, adds a tab
+./scripts/dev <cart-name>       # launches the dev host + watches <cart>
+./scripts/dev <other-cart>      # second terminal: pushes to running host, adds tab
 ```
 
-The dev host is a single persistent ReleaseFast binary with:
-- **Hot reload for React / TSX / TS** — editing any file under `cart/` or `runtime/` re-bundles through esbuild and pushes the new bundle over `/tmp/reactjit.sock`. The host re-evals in ~300ms. **You do NOT re-run `scripts/dev` or rebuild the binary for cart code changes.**
-- **Rebuild required for Zig / framework / build-pipeline changes** — anything under `framework/`, `build.zig`, or `scripts/` needs the binary rebuilt (delete `zig-out/bin/reactjit-dev` then run `./scripts/dev <cart>` again, or `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`).
-- **Tabs in the titlebar** — the host is borderless; the top strip IS the window chrome. Each `./scripts/dev <cart>` push shows as a tab. Click a tab to switch active cart (the cart bundle re-evals from scratch each time). Double-click empty chrome toggles maximize. Drag empty chrome to move. Window controls (minimize / maximize / close) on the right.
-- **Debug builds silently crash on click.** Always use `ReleaseFast` (default in `scripts/dev`). Pre-existing framework bug in the Debug-mode click path; out of scope for dev-mode work.
+The dev host is a single persistent ReleaseFast binary:
+- **Hot reload for React / TSX / TS** — editing files under `cart/` or `runtime/` re-bundles and re-evals in ~300ms. No rebuild needed.
+- **Rebuild required for Zig / framework / build-pipeline changes** — anything under `framework/`, `build.zig`, or `scripts/` needs the binary rebuilt.
+- **Tabs in the titlebar** — borderless host, top strip IS window chrome. Click tab to switch. Double-click empty chrome toggles maximize. Drag to move.
+- **Debug builds silently crash on click.** Always use `ReleaseFast` (default in `scripts/dev`).
 
-**State preservation across reloads is NOT working yet.** `useHotState` + `framework/hotstate.zig` are wired but in practice state still resets on every reload. Treat HMR as "save → see your change, lose local useState". Full fix is pending — don't assume atoms persist.
+**State preservation across reloads is NOT working yet.** `useHotState` + `framework/hotstate.zig` are wired but state resets on every reload.
 
-See `runtime/hooks/README.md` for the async-subsystem tick-drain design, host bindings status, and the remaining pending hooks (websocket, process streaming, sqlite).
+---
 
 ## Primitives
 
-`Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, and `Native` (universal escape hatch).
+`Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, `Native`.
 
-`Canvas` and `Graph` pan-zoomable and static-viewport surfaces respectively, with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` props on paths.
+`Canvas` and `Graph` are pan-zoomable and static-viewport surfaces with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` on paths.
 
-Custom host-handled types (Audio, Video, Cartridge, LLMAgent, etc.) use `<Native type="X" {...props} />` — the reconciler emits CREATE with that type, the Zig host handles it.
+`<Native type="X" />` is the universal escape hatch — the reconciler emits CREATE with that type string, the Zig host handles it.
 
-### HTML tags work too
+HTML tags work: `renderer/hostConfig.ts` remaps common tags to primitives. Copy-paste standard React markup and it works.
 
-`renderer/hostConfig.ts` has `HTML_TYPE_MAP` that remaps all common HTML tags before CREATE. You can copy-paste standard React markup and it just works:
+Tailwind via `className`: parsed by `runtime/tw.ts` at CREATE time. Full utility coverage.
 
-```tsx
-<div className="p-4 flex-row gap-2">
-  <h1>Hello</h1>
-  <p>World</p>
-  <button onClick={...}>Go</button>
-</div>
-```
-
-Mapped: `div/section/article/main/nav/header/footer/form/ul/li/table/tr/td/a/button/dialog/menu → View`; `span/p/label/h1-6/strong/b/em/i/code/small → Text`; `img → Image`; `input/textarea → TextInput/TextEditor`; `pre → CodeBlock`; `video → Video`. HTML-only attrs (`alt`, `htmlFor`, `aria-*`, `data-*`, `tabIndex`, etc.) are stripped before the bridge. Headings get auto font-sizes (h1=32, h2=28, …, h6=16).
-
-### Tailwind via `className`
-
-`className` strings are parsed by `runtime/tw.ts` (ported from `love2d/packages/core/src/tw.ts`) and merged into `style` at CREATE time. Full utility coverage: spacing (`p-4`, `mx-8`), sizing (`w-full`, `h-[300]`), flex (`flex-row`, `gap-2`, `justify-center`, `items-start`), colors (`bg-blue-500`, `text-slate-200`), radius (`rounded-lg`), borders (`border-2`, `border-blue-400`), typography (`text-xl`, `font-bold`), and arbitrary values via brackets (`p-[20]`, `bg-[#ff6600]`, `w-[240]`).
-
-`style` props win on conflicts — mix them freely:
-
-```tsx
-<Box className="p-4 bg-blue-500 rounded-lg" style={{ borderWidth: 2 }}>
-```
+---
 
 ## Layout Rules
 
@@ -145,46 +150,52 @@ Pixel-perfect flex, shared logic with love2d's layout engine.
 
 ### Rules that still cause bugs
 - Root containers need `width: '100%', height: '100%'`
-- Use `flexGrow: 1` for space-filling elements, never hardcoded pixel heights
-- ScrollView needs explicit height (excluded from proportional fallback)
+- Use `flexGrow: 1` for space-filling, never hardcoded pixel heights
+- `ScrollView` needs explicit height (excluded from proportional fallback)
 - Don't mix text and expressions in `<Text>` — use template literals
+
+---
 
 ## One-Liner Design Philosophy
 
 Every capability should be usable in one line by someone who doesn't code. The target user knows their domain (music, art, data, games) but doesn't know internals. An AI should be able to discover and control it without documentation.
 
+---
+
 ## Model Selection
 
 **Always use Opus 4.6 (`claude-opus-4-6`) for debugging.** Sonnet is fine for scaffolding and routine tasks. When tracking down layout bugs, coordinate mismatches, or anything structural — use Opus.
+
+---
 
 ## Git Discipline (CRITICAL)
 
 **Commit early and often. Do not leave work uncommitted.**
 
 ### MAIN ONLY — NO BRANCHES
+**Do not create branches. Do not checkout branches. Do not use git switch.** Commit and push to `main`.
 
-**Do not create branches. Do not checkout branches. Do not use git switch.** Commit and push to `main`. That's it. No feature branches, no PRs, no selective staging workflows. This is a solo project — branch workflows waste time and `git checkout` / `git stash` / `git reset` destroy work.
-
-The only safe git commands are: `git add`, `git commit`, `git push`, `git status`, `git log`, `git diff`.
+The only safe git commands: `git add`, `git commit`, `git push`, `git status`, `git log`, `git diff`.
 
 ### When to commit
 - After completing each logical unit of work
-- Before risky operations (refactoring core files, changing build pipeline)
+- Before risky operations
 - When you've touched 3+ files
-- At natural breakpoints in multi-step work
-- When the human gives positive feedback ("nice", "cool", "ok", thumbs up) — that IS the approval signal
 - When in doubt, commit
 
 ### How to commit
-- Descriptive conventional-commit messages: `feat: add inspector elements panel`
+- Descriptive conventional-commit messages: `feat: ...`, `fix: ...`, `refactor: ...`
 - One logical change per commit
 - Never leave a session with uncommitted work
+- **Never `git add -A` or `git commit -a`.** Stage explicit paths only.
 
-### Parallel sessions ("empty fridge" problem)
+### Parallel sessions
 Multiple Claude instances work simultaneously. If `git status` is unexpectedly clean:
 1. Run `git log --oneline -5` ONCE
 2. Another you committed it. Move on.
 3. Do NOT loop on `git status`
+
+---
 
 ## Documentation Workflow
 
@@ -193,6 +204,8 @@ Documentation is a completion criterion. After major features:
 2. Update affected docs
 3. Commit code + docs together
 
+---
+
 ## Skills & Agents
 
-Love2D-specific skills live in `love2d/.claude/` and only apply when working inside the frozen love2d/ tree. The Smith-era skills (`flight-check-loop`, `chad-audit`, `conformance`) are retained only for reference while touching the frozen `tsz/` tree; do not invoke them against root-level work.
+Love2D-specific skills live in `love2d/.claude/` and only apply when working inside the frozen `love2d/` tree. The Smith-era skills (`flight-check-loop`, `chad-audit`, `conformance`) are retained only for reference while touching the frozen `tsz/` tree; do not invoke them against root-level work.
