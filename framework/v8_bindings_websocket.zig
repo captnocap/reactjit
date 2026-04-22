@@ -26,7 +26,7 @@ const Conn = struct {
     ws: websocket.WebSocket,
 };
 
-var g_conns: std.ArrayList(Conn) = .{};
+var g_conns: std.ArrayList(Conn) = undefined;
 
 fn ensureConns() void {
     if (g_conns.items.len == 0 and g_conns.capacity == 0) {
