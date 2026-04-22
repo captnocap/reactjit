@@ -6,6 +6,7 @@ import { HoverPressable } from '../shared';
 import { ModePicker } from './ModePicker';
 import { AttachmentRail } from './AttachmentRail';
 import { VariablePreview } from './VariablePreview';
+import { Tooltip } from '../tooltip';
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Cycle through enabled models' },
@@ -115,16 +116,17 @@ export function Composer(props: {
               {menuType === 'slash' ? 'Commands' : 'Files'}
             </Text>
             {menuItems.map((item, idx) => (
-              <HoverPressable
-                key={item.label}
-                onPress={() => insertMenuItem(item.value)}
-                style={{ padding: 8, borderRadius: 6, backgroundColor: idx === safeHighlight ? COLORS.blueDeep : 'transparent' }}
-              >
-                <Row style={{ gap: 8, alignItems: 'center' }}>
-                  <Text fontSize={10} color={idx === safeHighlight ? COLORS.blue : COLORS.textBright} style={{ fontWeight: 'bold' }}>{item.label}</Text>
-                  <Text fontSize={10} color={COLORS.textDim}>{item.desc}</Text>
-                </Row>
-              </HoverPressable>
+              <Tooltip key={item.label} label={item.desc} side="right">
+                <HoverPressable
+                  onPress={() => insertMenuItem(item.value)}
+                  style={{ padding: 8, borderRadius: 6, backgroundColor: idx === safeHighlight ? COLORS.blueDeep : 'transparent' }}
+                >
+                  <Row style={{ gap: 8, alignItems: 'center' }}>
+                    <Text fontSize={10} color={idx === safeHighlight ? COLORS.blue : COLORS.textBright} style={{ fontWeight: 'bold' }}>{item.label}</Text>
+                    <Text fontSize={10} color={COLORS.textDim}>{item.desc}</Text>
+                  </Row>
+                </HoverPressable>
+              </Tooltip>
             ))}
           </Col>
         ) : null}
@@ -142,21 +144,21 @@ export function Composer(props: {
 
         <Col style={{ gap: 8 }}>
           <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <HoverPressable onPress={props.onAttachCurrentFile} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>File</Text></HoverPressable>
-            <HoverPressable onPress={props.onAttachSymbol} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Symbol</Text></HoverPressable>
-            <HoverPressable onPress={props.onAttachGit} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Git</Text></HoverPressable>
-            <HoverPressable onPress={props.onToggleWebSearch} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Web</Text></HoverPressable>
-            <HoverPressable onPress={props.onToggleTermAccess} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>Term</Text></HoverPressable>
-            <HoverPressable onPress={props.onToggleAutoApply} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>Auto</Text></HoverPressable>
+            <Tooltip label="Attach the current file" side="bottom"><HoverPressable onPress={props.onAttachCurrentFile} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>File</Text></HoverPressable></Tooltip>
+            <Tooltip label="Attach a symbol reference" side="bottom"><HoverPressable onPress={props.onAttachSymbol} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Symbol</Text></HoverPressable></Tooltip>
+            <Tooltip label="Attach git changes" side="bottom"><HoverPressable onPress={props.onAttachGit} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Git</Text></HoverPressable></Tooltip>
+            <Tooltip label="Toggle web search" side="bottom"><HoverPressable onPress={props.onToggleWebSearch} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Web</Text></HoverPressable></Tooltip>
+            <Tooltip label="Toggle terminal access" side="bottom"><HoverPressable onPress={props.onToggleTermAccess} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>Term</Text></HoverPressable></Tooltip>
+            <Tooltip label="Toggle auto apply" side="bottom"><HoverPressable onPress={props.onToggleAutoApply} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>Auto</Text></HoverPressable></Tooltip>
           </Row>
           <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {props.inputTokenEstimate > 0 ? <Text fontSize={10} color={props.inputTokenEstimate > 16000 ? COLORS.red : props.inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{props.inputTokenEstimate + ' tkns'}</Text> : null}
-            <HoverPressable onPress={props.onCycleModel} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Tooltip label="Cycle the active model" side="bottom"><HoverPressable onPress={props.onCycleModel} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
               <Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text>
-            </HoverPressable>
-            <HoverPressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+            </HoverPressable></Tooltip>
+            <Tooltip label="Send the message" side="bottom"><HoverPressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
               <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{props.sendLabel}</Text>
-            </HoverPressable>
+            </HoverPressable></Tooltip>
           </Row>
         </Col>
       </Col>

@@ -4,6 +4,7 @@ import { COLORS } from '../../theme';
 import { HoverPressable, Pill } from '../shared';
 import { ContextMeter } from './ContextMeter';
 import { getModelIconInfo } from '../../model-icons';
+import { Tooltip } from '../tooltip';
 
 function ModelIconBadge(props: { modelId: string; size?: number }) {
   const info = getModelIconInfo(props.modelId);
@@ -47,22 +48,32 @@ export function AgentHeader(props: {
       </Row>
       <Row style={{ gap: 8 }}>
         {!props.compactBand ? (
-          <HoverPressable onPress={props.onToggleSidebar} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-            <Text fontSize={10} color={props.showSidebar ? COLORS.blue : COLORS.textDim}>History</Text>
-          </HoverPressable>
+          <Tooltip label="Show conversation history" side="bottom">
+            <HoverPressable onPress={props.onToggleSidebar} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+              <Text fontSize={10} color={props.showSidebar ? COLORS.blue : COLORS.textDim}>History</Text>
+            </HoverPressable>
+          </Tooltip>
         ) : null}
-        <HoverPressable onPress={props.onToggleSearch} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-          <Text fontSize={10} color={props.showSearch ? COLORS.blue : COLORS.textDim}>Search</Text>
-        </HoverPressable>
-        <HoverPressable onPress={props.onExportMarkdown} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-          <Text fontSize={10} color={COLORS.blue}>Export .md</Text>
-        </HoverPressable>
-        <HoverPressable onPress={props.onToggleExportMenu} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-          <Text fontSize={10} color={props.showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text>
-        </HoverPressable>
-        <HoverPressable onPress={props.onNewConversation} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-          <Text fontSize={10} color={COLORS.blue}>New</Text>
-        </HoverPressable>
+        <Tooltip label="Search messages" side="bottom">
+          <HoverPressable onPress={props.onToggleSearch} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Text fontSize={10} color={props.showSearch ? COLORS.blue : COLORS.textDim}>Search</Text>
+          </HoverPressable>
+        </Tooltip>
+        <Tooltip label="Export conversation as markdown" side="bottom">
+          <HoverPressable onPress={props.onExportMarkdown} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Text fontSize={10} color={COLORS.blue}>Export .md</Text>
+          </HoverPressable>
+        </Tooltip>
+        <Tooltip label="Open export menu" side="bottom">
+          <HoverPressable onPress={props.onToggleExportMenu} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Text fontSize={10} color={props.showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text>
+          </HoverPressable>
+        </Tooltip>
+        <Tooltip label="Start a new conversation" side="bottom">
+          <HoverPressable onPress={props.onNewConversation} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Text fontSize={10} color={COLORS.blue}>New</Text>
+          </HoverPressable>
+        </Tooltip>
       </Row>
     </Row>
   );

@@ -12,6 +12,7 @@ import { ExportMenu } from './ExportMenu';
 import { SessionSwitcher } from './SessionSwitcher';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
+import { Tooltip } from '../tooltip';
 
 function SearchBar(props: {
   query: string;
@@ -31,9 +32,11 @@ function SearchBar(props: {
         style={{ flexGrow: 1, height: 28, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, paddingLeft: 8 }}
       />
       <Text fontSize={10} color={COLORS.textDim}>{props.matches} matches</Text>
-      <HoverPressable onPress={props.onClose} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-        <Text fontSize={10} color={COLORS.textDim}>✕</Text>
-      </HoverPressable>
+      <Tooltip label="Close search" side="bottom">
+        <HoverPressable onPress={props.onClose} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+          <Text fontSize={10} color={COLORS.textDim}>✕</Text>
+        </HoverPressable>
+      </Tooltip>
     </Row>
   );
 }
@@ -73,9 +76,11 @@ function AgentStatusBar(props: {
         {props.agentStatusText === 'streaming' ? 'streaming response' : props.agentStatusText === 'executing' ? 'running tools' : 'background agent active'}
       </Text>
       {props.activeAgentId ? (
-        <HoverPressable onPress={props.onStopAgent} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
-          <Text fontSize={10} color={COLORS.red}>Stop</Text>
-        </HoverPressable>
+        <Tooltip label="Stop the active agent" side="bottom">
+          <HoverPressable onPress={props.onStopAgent} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
+            <Text fontSize={10} color={COLORS.red}>Stop</Text>
+          </HoverPressable>
+        </Tooltip>
       ) : null}
     </Row>
   );
