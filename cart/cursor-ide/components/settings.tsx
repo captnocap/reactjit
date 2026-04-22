@@ -9,6 +9,7 @@ import { FadeIn } from '../anim';
 import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { ModelReference } from '../default-models';
+import { deleteApiKey, getApiKey, hasApiKey, listApiKeys, setApiKey, validateApiKey } from '../api-keys';
 
 // =============================================================================
 // SETTINGS — 8-section surface: Appearance, Editor, Terminal, Keybindings,
@@ -915,7 +916,64 @@ function AboutPanel() {
   );
 }
 
+function ApiKeyField(props: { provider: string; onChange: () => void }) {
+  const [draft, setDraft]   = useState<string>('');
+  const [reveal, setReveal] = useState<boolean>(false);
+  const [error, setError]   = useState<string>('');
+  const stored = hasApiKey(props.provider);
+  const current = stored ? (getApiKey(props.provider) || '') : '';
+  const display = reveal ? current : (current ? '•'.repeat(Math.min(current.length, 20)) : '');
+
+  function doSave() {
+    const value = draft.trim();
+    if (!value) { setError('Key cannot be empty'); return; }
+    const v = validateApiKey(props.provider, value);
+    if (!v.valid) { setError(v.error || 'invalid key'); return; }
+    setApiKey(props.provider, value);
+    setDraft(''); setError('');
+    props.onChange();
+  }
+  function doDelete() {
+    deleteApiKey(props.provider);
+    setDraft(''); setError('');
+    props.onChange();
+  }
+
+  return (
+    <Col style={{ gap: 6 }}>
+      <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>API Key</Text>
+        <Pill label={stored ? 'stored' : 'not set'} color={stored ? COLORS.green : COLORS.textMuted} tiny={true} />
+        {stored ? (
+          <Pressable onPress={() => setReveal(!reveal)}>
+            <Pill label={reveal ? 'hide' : 'reveal'} color={COLORS.blue} tiny={true} />
+          </Pressable>
+        ) : null}
+      </Row>
+      {stored && display ? (
+        <Box style={{ padding: 8, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg }}>
+          <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{display}</Text>
+        </Box>
+      ) : null}
+      <Row style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <TextInput value={draft} onChangeText={setDraft} placeholder={stored ? 'Replace key…' : 'Paste provider key…'}
+          style={{ flexGrow: 1, flexBasis: 0, minWidth: 220, height: 32, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+        <Pressable onPress={doSave} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+          <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{stored ? 'Replace' : 'Save'}</Text>
+        </Pressable>
+        {stored ? (
+          <Pressable onPress={doDelete} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+            <Text fontSize={10} color={COLORS.red} style={{ fontWeight: 'bold' }}>Delete</Text>
+          </Pressable>
+        ) : null}
+      </Row>
+      {error ? <Text fontSize={10} color={COLORS.red}>{error}</Text> : null}
+    </Col>
+  );
+}
+
 function ProvidersPanel(props: {
+  query: string;
   providerConfigs: ProviderConfig[];
   selectedProviderId: string;
   selectedModel: string;
@@ -924,46 +982,70 @@ function ProvidersPanel(props: {
   onUpdateProvider: (id: string, patch: any) => void;
   onSelectModel: (id: string, displayName: string, providerType: string) => void;
 }) {
+  const [keyVersion, setKeyVersion] = useState(0);
   const p = props.providerConfigs || [];
-  const selectedProvider = p.find(x => x.type === props.selectedProviderId) || p[0];
+  const q = (props.query || '').toLowerCase();
+  const filtered = q
+    ? p.filter(x => {
+        const name = (getProviderIconInfo(x.type).name + ' ' + x.type + ' ' + (x.baseUrl || '')).toLowerCase();
+        return name.indexOf(q) >= 0;
+      })
+    : p;
+  const selectedProvider = filtered.find(x => x.type === props.selectedProviderId) || filtered[0] || p[0];
+  const storedKeyCount = listApiKeys().length;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Providers" description="Model providers, API keys, default routing." />
+      <SectionTitle title="Providers" description="Model providers, API keys, and default routing." />
       <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
-        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Model Providers</Text>
+        <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Model Providers</Text>
+          <Pill label={p.filter(x => x.enabled).length + '/' + p.length + ' enabled'} color={COLORS.blue} tiny={true} />
+          <Pill label={storedKeyCount + ' key' + (storedKeyCount === 1 ? '' : 's')} color={storedKeyCount > 0 ? COLORS.green : COLORS.textMuted} tiny={true} />
+        </Row>
         <Text fontSize={10} color={COLORS.textDim}>Select a provider to view and configure its models. Disabled providers stay visible so routing changes are reversible.</Text>
         <Col style={{ gap: 10 }}>
-          {p.map(provider => (
-            <ProviderCardCompact key={provider.type} provider={provider}
+          {filtered.map(provider => (
+            <ProviderCardCompact key={provider.type + '_' + keyVersion} provider={provider}
               active={provider.type === props.selectedProviderId}
               onSelect={props.onSelectProvider} onToggleEnabled={props.onToggleProvider} />
           ))}
+          {filtered.length === 0 ? (
+            <Text fontSize={10} color={COLORS.textDim}>No providers match "{props.query}".</Text>
+          ) : null}
         </Col>
       </Box>
       {selectedProvider ? (
         <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: getProviderIconInfo(selectedProvider.type).color || COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12, overflow: 'visible' }}>
           <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{getProviderIconInfo(selectedProvider.type).name} Models</Text>
+            <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{getProviderIconInfo(selectedProvider.type).name}</Text>
             <Pressable onPress={() => props.onToggleProvider(selectedProvider.type)}>
               <Pill label={selectedProvider.enabled ? 'enabled' : 'disabled'} color={selectedProvider.enabled ? COLORS.green : COLORS.textMuted} tiny={true} />
             </Pressable>
+            <Pill label={hasApiKey(selectedProvider.type) ? 'key stored' : 'no key'} color={hasApiKey(selectedProvider.type) ? COLORS.green : COLORS.textMuted} tiny={true} />
           </Row>
+
+          <ApiKeyField provider={selectedProvider.type} onChange={() => setKeyVersion(v => v + 1)} />
+
           <Row style={{ gap: 10, flexWrap: 'wrap', overflow: 'visible' }}>
             <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220, overflow: 'visible' }}>
-              <Text fontSize={10} color={COLORS.textDim}>Base URL</Text>
+              <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Base URL</Text>
+              <Text fontSize={10} color={COLORS.textDim}>Provider endpoint host. Leave blank for embedded / local providers.</Text>
               <TextInput value={selectedProvider.baseUrl || ''}
                 onChangeText={(value: string) => props.onUpdateProvider(selectedProvider.type, { baseUrl: value })}
                 style={{ height: 34, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg }} />
             </Col>
             <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220, overflow: 'visible' }}>
               <ModelSelector label="Default Model"
-                description="Provider default model used when a task does not specify one"
+                description="Provider default model used when a task does not specify one."
                 value={{ provider: selectedProvider.type, modelId: selectedProvider.defaultModel }}
                 onChange={(ref) => props.onUpdateProvider(selectedProvider.type, { defaultModel: ref.modelId })}
                 providers={[selectedProvider]} allowDisabledProviders={true} />
             </Col>
           </Row>
+
           <Col style={{ gap: 8, overflow: 'visible' }}>
+            <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Models</Text>
             {(selectedProvider.models || []).map(model => (
               <ModelRow key={model.id} model={model}
                 selected={props.selectedModel === model.id}
@@ -1007,6 +1089,7 @@ export function SettingsSurface(props: any) {
     if (active === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
     if (active === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
     if (active === 'providers')   return <ProvidersPanel
+      query={query}
       providerConfigs={props.providerConfigs || []}
       selectedProviderId={props.selectedProviderId}
       selectedModel={props.selectedModel}
