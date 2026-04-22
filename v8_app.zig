@@ -69,11 +69,7 @@ var g_node_id_by_input_slot: [input.MAX_INPUTS]u32 = [_]u32{0} ** input.MAX_INPU
 // context, reinit, and re-eval the new bundle. React state resets on reload
 // in phase 1; phase 2 will use LuaJIT hotstate atoms to preserve it.
 const DEV_MODE = if (@hasDecl(build_options, "dev_mode")) build_options.dev_mode else false;
-const CUSTOM_CHROME_MODE = if (@hasDecl(build_options, "app_name"))
-    std.mem.eql(u8, build_options.app_name, "browser") or
-        std.mem.eql(u8, build_options.app_name, "cursor-ide")
-else
-    false;
+const CUSTOM_CHROME_MODE = if (@hasDecl(build_options, "custom_chrome")) build_options.custom_chrome else false;
 const BORDERLESS_MODE = DEV_MODE or CUSTOM_CHROME_MODE;
 const DEV_BUNDLE_PATH = "bundle.js";
 

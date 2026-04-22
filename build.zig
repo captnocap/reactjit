@@ -19,6 +19,7 @@ pub fn build(b: *std.Build) void {
     const app_source = b.option([]const u8, "app-source", "Root Zig source file") orelse default_src;
     const sysroot = b.option([]const u8, "sysroot", "Optional sysroot for cross-builds");
     const dev_mode = b.option(bool, "dev-mode", "Read bundle.js from disk and hot-reload on change") orelse false;
+    const custom_chrome = b.option(bool, "custom-chrome", "Cart draws its own window chrome (borderless)") orelse false;
     const prebuilt_v8_path = b.option(
         []const u8,
         "prebuilt_v8_path",
@@ -55,6 +56,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "is_lib", false);
     options.addOption([]const u8, "app_name", app_name);
     options.addOption(bool, "dev_mode", dev_mode);
+    options.addOption(bool, "custom_chrome", custom_chrome);
     options.addOption(bool, "has_quickjs", true);
     options.addOption(bool, "has_physics", true);
     options.addOption(bool, "has_terminal", true);
