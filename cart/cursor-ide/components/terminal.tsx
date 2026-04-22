@@ -1,9 +1,9 @@
 const React: any = require('react');
 const { useCallback, useEffect, useRef, useState } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Terminal, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
-import { Pill } from './shared';
+import { HoverPressable, Pill } from './shared';
 
 const host: any = globalThis as any;
 const CTRL_MOD = 192;
@@ -356,7 +356,7 @@ export function TerminalPanel(props: any) {
   function TabButton(tab: string, label: string, meta?: string) {
     const active = activePane === tab;
     return (
-      <Pressable
+      <HoverPressable
         key={tab}
         onPress={() => props.onSetPane?.(tab)}
         style={{
@@ -375,7 +375,7 @@ export function TerminalPanel(props: any) {
       >
         <Text fontSize={10} color={active ? COLORS.blue : COLORS.text} style={{ fontWeight: 'bold' }}>{label}</Text>
         {meta ? <Text fontSize={9} color={COLORS.textDim}>{meta}</Text> : null}
-      </Pressable>
+      </HoverPressable>
     );
   }
 
@@ -397,13 +397,13 @@ export function TerminalPanel(props: any) {
           backgroundColor: active ? COLORS.blueDeep : COLORS.panelAlt,
         }}
       >
-        <Pressable onPress={() => focusSession(session.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <HoverPressable onPress={() => focusSession(session.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Pill label={session.name} color={active ? COLORS.blue : COLORS.textBright} tiny={true} />
           <Text fontSize={9} color={COLORS.textDim}>{'pty ' + String(session.ptyHandle)}</Text>
-        </Pressable>
-        <Pressable onPress={() => closeSession(session.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1 }}>
+        </HoverPressable>
+        <HoverPressable onPress={() => closeSession(session.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 1, paddingBottom: 1 }}>
           <Text fontSize={10} color={COLORS.textDim}>x</Text>
-        </Pressable>
+        </HoverPressable>
       </Row>
     );
   }
@@ -453,7 +453,7 @@ export function TerminalPanel(props: any) {
   function SearchResultRow(session: TerminalSession, line: string, lineIndex: number, matchesQuery: boolean) {
     const selected = selectedSearchLine?.sessionId === session.id && selectedSearchLine.lineIndex === lineIndex;
     return (
-      <Pressable
+      <HoverPressable
         key={session.id + '_' + lineIndex}
         onPress={() => {
           const nextSelection = { sessionId: session.id, lineIndex };
@@ -488,7 +488,7 @@ export function TerminalPanel(props: any) {
             </Text>
           ))}
         </Text>
-      </Pressable>
+      </HoverPressable>
     );
   }
 
@@ -512,7 +512,7 @@ export function TerminalPanel(props: any) {
       }}
     >
       {!compactBand && !props.expanded && props.onBeginResize ? (
-        <Pressable
+        <HoverPressable
           onMouseDown={props.onBeginResize}
           style={{
             paddingLeft: 12,
@@ -528,7 +528,7 @@ export function TerminalPanel(props: any) {
             <Box style={{ width: '100%', height: 4, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.border }} />
             <Text fontSize={9} color={COLORS.textDim}>drag to resize</Text>
           </Col>
-        </Pressable>
+        </HoverPressable>
       ) : null}
 
       <Row style={{ justifyContent: 'space-between', alignItems: 'center', padding: compactBand ? 10 : 12, borderBottomWidth: 1, borderColor: COLORS.borderSoft, gap: 8, flexWrap: 'wrap' }}>
@@ -541,21 +541,21 @@ export function TerminalPanel(props: any) {
           <Pill label={String(sessions.length) + ' tabs'} color={COLORS.blue} tiny={true} />
         </Row>
         <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Pressable onPress={() => setFindOpen((value) => !value)}>
+          <HoverPressable onPress={() => setFindOpen((value) => !value)}>
             <Text fontSize={10} color={findOpen ? COLORS.blue : COLORS.textDim}>Find</Text>
-          </Pressable>
+          </HoverPressable>
           {!compactBand && props.onToggleExpanded ? (
-            <Pressable onPress={props.onToggleExpanded}>
+            <HoverPressable onPress={props.onToggleExpanded}>
               <Text fontSize={10} color={COLORS.textDim}>{props.expanded ? 'Restore dock' : 'Take over'}</Text>
-            </Pressable>
+            </HoverPressable>
           ) : null}
-          {props.onClose ? <Pressable onPress={props.onClose}><Text fontSize={10} color={COLORS.textDim}>X</Text></Pressable> : null}
+          {props.onClose ? <HoverPressable onPress={props.onClose}><Text fontSize={10} color={COLORS.textDim}>X</Text></HoverPressable> : null}
         </Row>
       </Row>
 
       <Row style={{ padding: compactBand ? 8 : 10, gap: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft, flexWrap: 'wrap', alignItems: 'center' }}>
         {sessions.map((session) => SessionTab(session))}
-        <Pressable
+        <HoverPressable
           onPress={() => {
             ensureSession(true);
             if (props.onSetPane) props.onSetPane('live');
@@ -572,7 +572,7 @@ export function TerminalPanel(props: any) {
           }}
         >
           <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>+</Text>
-        </Pressable>
+        </HoverPressable>
       </Row>
 
       <Row style={{ padding: compactBand ? 8 : 10, gap: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft, flexWrap: 'wrap' }}>
@@ -603,7 +603,7 @@ export function TerminalPanel(props: any) {
           )) : (
             <Col style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <Text fontSize={11} color={COLORS.textDim}>No terminal sessions yet.</Text>
-              <Pressable
+              <HoverPressable
                 onPress={() => ensureSession(true)}
                 style={{
                   paddingLeft: 10,
@@ -617,7 +617,7 @@ export function TerminalPanel(props: any) {
                 }}
               >
                 <Text fontSize={10} color={COLORS.textBright}>Spawn shell</Text>
-              </Pressable>
+              </HoverPressable>
             </Col>
           )}
         </Box>
@@ -641,16 +641,16 @@ export function TerminalPanel(props: any) {
               </Row>
               <Row style={{ gap: 8, alignItems: 'center' }}>
                 <Text fontSize={10} color={COLORS.textDim}>Scrollback</Text>
-                <Pressable onPress={() => setScrollbackLimit((value) => clampScrollback(value - 250))}>
+                <HoverPressable onPress={() => setScrollbackLimit((value) => clampScrollback(value - 250))}>
                   <Text fontSize={11} color={COLORS.textBright}>-</Text>
-                </Pressable>
+                </HoverPressable>
                 <Text fontSize={10} color={COLORS.textBright}>{String(scrollbackLimit)}</Text>
-                <Pressable onPress={() => setScrollbackLimit((value) => clampScrollback(value + 250))}>
+                <HoverPressable onPress={() => setScrollbackLimit((value) => clampScrollback(value + 250))}>
                   <Text fontSize={11} color={COLORS.textBright}>+</Text>
-                </Pressable>
-                <Pressable onPress={() => setFindOpen(false)}>
+                </HoverPressable>
+                <HoverPressable onPress={() => setFindOpen(false)}>
                   <Text fontSize={10} color={COLORS.textDim}>Close</Text>
-                </Pressable>
+                </HoverPressable>
               </Row>
             </Row>
             <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
@@ -670,8 +670,8 @@ export function TerminalPanel(props: any) {
             <Row style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Session history</Text>
               <Row style={{ gap: 8, alignItems: 'center' }}>
-                <Pressable onPress={props.onJumpLive}><Text fontSize={10} color={COLORS.textDim}>Live</Text></Pressable>
-                <Pressable onPress={props.onClearHistory}><Text fontSize={10} color={COLORS.textDim}>Clear</Text></Pressable>
+                <HoverPressable onPress={props.onJumpLive}><Text fontSize={10} color={COLORS.textDim}>Live</Text></HoverPressable>
+                <HoverPressable onPress={props.onClearHistory}><Text fontSize={10} color={COLORS.textDim}>Clear</Text></HoverPressable>
               </Row>
             </Row>
             <Text fontSize={10} color={COLORS.textDim}>
@@ -692,21 +692,21 @@ export function TerminalPanel(props: any) {
               <PlaybackSummary />
             </Row>
             <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-              <Pressable onPress={props.onToggleRecording} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: isRecording ? COLORS.redDeep : COLORS.panelAlt, borderWidth: 1, borderColor: isRecording ? COLORS.red : COLORS.border }}>
+              <HoverPressable onPress={props.onToggleRecording} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: isRecording ? COLORS.redDeep : COLORS.panelAlt, borderWidth: 1, borderColor: isRecording ? COLORS.red : COLORS.border }}>
                 <Text fontSize={10} color={isRecording ? COLORS.red : COLORS.textBright}>{isRecording ? 'Stop recording' : 'Start recording'}</Text>
-              </Pressable>
-              <Pressable onPress={props.onSaveSnapshot} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              </HoverPressable>
+              <HoverPressable onPress={props.onSaveSnapshot} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Save snapshot</Text>
-              </Pressable>
-              <Pressable onPress={props.onLoadPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              </HoverPressable>
+              <HoverPressable onPress={props.onLoadPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Load playback</Text>
-              </Pressable>
-              <Pressable onPress={props.onTogglePlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              </HoverPressable>
+              <HoverPressable onPress={props.onTogglePlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Play / pause</Text>
-              </Pressable>
-              <Pressable onPress={props.onStepPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              </HoverPressable>
+              <HoverPressable onPress={props.onStepPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Step</Text>
-              </Pressable>
+              </HoverPressable>
             </Row>
             <Box style={{ padding: 10, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelAlt, gap: 4 }}>
               <Text fontSize={10} color={COLORS.textDim}>Recording stays local to the current terminal session. Saving snapshots adds an entry to the history tab.</Text>
