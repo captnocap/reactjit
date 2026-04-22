@@ -1010,13 +1010,109 @@ function MemoryPanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function PluginsPanel() {
+interface PluginDescriptor {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+}
+
+function pluginDir(): string {
+  const h: any = globalThis;
+  const home = h.__env_home || '/home/siah';
+  return home + '/.cursor-ide/plugins';
+}
+
+function scanPlugins(): PluginDescriptor[] {
+  const h: any = globalThis;
+  const dir = pluginDir();
+  const out: PluginDescriptor[] = [];
+  try {
+    if (typeof h.__fs_list_json !== 'function') return out;
+    const raw = h.__fs_list_json(dir);
+    const list: string[] = JSON.parse(typeof raw === 'string' ? raw : '[]');
+    for (const filename of list) {
+      if (!filename.endsWith('.js')) continue;
+      const path = dir + '/' + filename;
+      let code = '';
+      try { code = typeof h.__fs_read === 'function' ? (h.__fs_read(path) || '') : ''; } catch {}
+      const nameMatch = code.match(/@plugin\s+name\s+(.+)/);
+      const versionMatch = code.match(/@plugin\s+version\s+(.+)/);
+      out.push({
+        id: filename.replace(/\.js$/, ''),
+        name: nameMatch ? nameMatch[1].trim() : filename.replace(/\.js$/, ''),
+        version: versionMatch ? versionMatch[1].trim() : '0.0.1',
+        path,
+      });
+    }
+  } catch {}
+  return out;
+}
+
+function PluginsPanel(props: { query: string; resetToken: number }) {
+  const [version, setVersion] = useState(0);
+  const plugins = scanPlugins();
+  const q = (props.query || '').toLowerCase();
+  const filtered = q
+    ? plugins.filter(p => (p.name + ' ' + p.id + ' ' + p.version).toLowerCase().indexOf(q) >= 0)
+    : plugins;
+
+  function enabledFor(id: string): boolean {
+    return sget('plugins.enabled.' + id, true);
+  }
+  function setEnabled(id: string, on: boolean) {
+    sset('plugins.enabled.' + id, on);
+    setVersion(v => v + 1);
+  }
+  function doReset() {
+    for (const p of plugins) sdel('plugins.enabled.' + p.id);
+    setVersion(v => v + 1);
+  }
+
+  useEffect(() => { setVersion(v => v + 1); }, [props.resetToken]);
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Plugins" description="Installed plugins, enable / disable." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>Plugins panel coming in a later commit.</Text>
+      <SectionTitle title="Plugins" description="JS plugins loaded from ~/.cursor-ide/plugins." onReset={doReset} />
+
+      <Box style={{ padding: 12, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
+        <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Plugin directory</Text>
+          <Pill label={plugins.length + ' found'} color={plugins.length > 0 ? COLORS.green : COLORS.textMuted} tiny={true} />
+          <Pressable onPress={() => setVersion(v => v + 1)}>
+            <Pill label="rescan" color={COLORS.blue} tiny={true} />
+          </Pressable>
+        </Row>
+        <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{pluginDir()}</Text>
       </Box>
+
+      {filtered.length === 0 ? (
+        <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
+          <Text fontSize={11} color={COLORS.textDim}>{q ? `No plugins match "${props.query}".` : 'No plugins found. Drop a .js file into the plugin directory and restart.'}</Text>
+        </Box>
+      ) : null}
+
+      {filtered.map(plugin => {
+        const on = enabledFor(plugin.id);
+        return (
+          <Row key={plugin.id + '_' + version} style={{
+            padding: 12, gap: 12, alignItems: 'center', flexWrap: 'wrap',
+            borderRadius: TOKENS.radiusMd, borderWidth: 1,
+            borderColor: on ? COLORS.border : COLORS.borderSoft,
+            backgroundColor: on ? COLORS.panelRaised : COLORS.panelAlt,
+          }}>
+            <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 200, gap: 3 }}>
+              <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text fontSize={12} color={on ? COLORS.textBright : COLORS.textDim} style={{ fontWeight: 'bold' }}>{plugin.name}</Text>
+                <Pill label={'v' + plugin.version} color={COLORS.blue} tiny={true} />
+                <Pill label={plugin.id} tiny={true} />
+              </Row>
+              <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{plugin.path}</Text>
+            </Col>
+            <Toggle value={on} onChange={(v) => setEnabled(plugin.id, v)} onLabel="ENABLED" offLabel="DISABLED" />
+          </Row>
+        );
+      })}
     </Col>
   );
 }
@@ -1215,7 +1311,7 @@ export function SettingsSurface(props: any) {
       onSelectModel={props.onSelectModel || (() => {})}
     />;
     if (active === 'memory')      return <MemoryPanel query={query} resetToken={resetToken} />;
-    if (active === 'plugins')     return <PluginsPanel />;
+    if (active === 'plugins')     return <PluginsPanel query={query} resetToken={resetToken} />;
     return <AboutPanel />;
   }
 
