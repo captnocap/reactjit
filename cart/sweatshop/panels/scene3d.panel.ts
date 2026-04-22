@@ -1,4 +1,4 @@
-import { Scene3DPlaygroundPanel } from '../components/scene3d/Scene3DPlaygroundPanel';
+import { Scene3DPanel } from '../components/scene3d/Scene3DPanel';
 import { register } from '../panel-registry';
 
 register({
@@ -6,7 +6,7 @@ register({
   title: '3D',
   defaultSlot: 'center',
   icon: 'palette',
-  component: Scene3DPlaygroundPanel,
+  component: Scene3DPanel,
   userVisible: true,
   defaultOpen: false,
 });

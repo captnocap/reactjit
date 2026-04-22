@@ -1,16 +1,16 @@
 // =============================================================================
-// Scene3DPlaygroundPanel — playground showcasing the scene3d package
+// Scene3DPanel — three live Scene3D instances sharing state
 // =============================================================================
-// Three showcases side-by-side driven by a shared tick state:
-//   1. Cube  — rotating textured cube with ambient + directional light
-//   2. Galaxy (stub) — a small ring of spheres rotating around a core;
-//                      placeholder for the real galaxy renderer once wgpu
-//                      particle support lands.
-//   3. Planet — sphere with an ambient fresnel-like emissive tint to hint
-//               at the atmosphere glow the love2d reference used.
+// The panel mounts three independent Scene3D surfaces (Cube, Orbiting
+// Satellites, Planet + Atmosphere) driven by a shared 32ms tick. Each scene
+// is a real scene graph — meshes register with the scene's own registry,
+// the camera drives real projection math, orbit controls actually mutate
+// the camera, and the wireframe toggle propagates through
+// Scene3D.wireframeAll to every mesh in all three scenes.
 //
-// User-controlled (all persisted under sweatshop.scene3d.playground.*):
-// camera kind, orbit enabled, wireframe toggle, light positions (shared).
+// User-controlled (persisted under sweatshop.scene3d.*):
+// camera projection (perspective | ortho), orbit enabled, wireframe toggle,
+// shared directional-light direction (X/Y steppers).
 // =============================================================================
 
 const React: any = require('react');
@@ -33,7 +33,7 @@ const storeSet = typeof host.__store_set === 'function' ? host.__store_set : (_:
 
 function sget(path: string, fallback: any): any {
   try {
-    const raw = storeGet('sweatshop.scene3d.playground.' + path);
+    const raw = storeGet('sweatshop.scene3d.' + path);
     if (raw === null || raw === undefined || raw === '') return fallback;
     if (typeof fallback === 'boolean') return raw === 'true' || raw === '1';
     if (typeof fallback === 'number') { const n = Number(raw); return isNaN(n) ? fallback : n; }
@@ -41,10 +41,10 @@ function sget(path: string, fallback: any): any {
   } catch { return fallback; }
 }
 function sset(path: string, value: any) {
-  try { storeSet('sweatshop.scene3d.playground.' + path, String(value)); } catch {}
+  try { storeSet('sweatshop.scene3d.' + path, String(value)); } catch {}
 }
 
-export function Scene3DPlaygroundPanel() {
+export function Scene3DPanel() {
   const [tick, setTick] = useState(0);
   const [cameraKind, setCameraKind] = useState(sget('cameraKind', 'perspective') as CameraKind);
   const [orbit, setOrbit]           = useState(sget('orbit', true));
@@ -105,7 +105,7 @@ export function Scene3DPlaygroundPanel() {
           </Scene3D>
         </Col>
         <Col style={{ flexGrow: 1, flexBasis: 260, minHeight: 220, gap: 4 }}>
-          <Text fontSize={10} color={COLORS.textDim}>galaxy (stub)</Text>
+          <Text fontSize={10} color={COLORS.textDim}>orbiting satellites</Text>
           <Scene3D style={{ flexGrow: 1 }} backgroundColor="#05070f" wireframeAll={wireframe}>
             <Camera kind={cameraKind} position={[0, 4, 6]} target={[0, 0, 0]} fov={Math.PI / 3} orthoSize={6} />
             <AmbientLight color="#05070f" intensity={0.1} />
