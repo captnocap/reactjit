@@ -333,15 +333,15 @@ function ProviderCardCompact(props: { provider: ProviderConfig; active: boolean;
   const p = props.provider;
   const icon = getProviderIconInfo(p.type);
   return (
-    <Row style={{ gap: 8, alignItems: 'stretch' }}>
+    <Row style={{ gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
       <Pressable onPress={() => props.onSelect(p.type)} style={{
-        flexGrow: 1, flexBasis: 0, padding: 12, borderRadius: TOKENS.radiusMd,
+        flexGrow: 1, flexBasis: 220, flexShrink: 1, padding: 12, borderRadius: TOKENS.radiusMd,
         borderWidth: 1, borderColor: props.active ? icon.color : COLORS.border,
         backgroundColor: props.active ? COLORS.panelHover : COLORS.panelRaised, gap: 8,
       }}>
-        <Row style={{ alignItems: 'center', gap: 8 }}>
+        <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <IconBadge providerId={p.type} />
-          <Col style={{ gap: 2, flexGrow: 1, flexBasis: 0 }}>
+          <Col style={{ gap: 2, flexGrow: 1, flexBasis: 0, minWidth: 120 }}>
             <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{icon.name}</Text>
             <Text fontSize={10} color={COLORS.textDim}>{p.baseUrl || 'embedded runtime'}</Text>
           </Col>
@@ -353,8 +353,9 @@ function ProviderCardCompact(props: { provider: ProviderConfig; active: boolean;
         </Row>
       </Pressable>
       <Pressable onPress={() => props.onToggleEnabled(p.type)} style={{
-        width: 92, padding: 12, borderRadius: TOKENS.radiusMd,
-        borderWidth: 1, borderColor: p.enabled ? COLORS.green : COLORS.border,
+        flexShrink: 0, paddingLeft: 14, paddingRight: 14, paddingTop: 12, paddingBottom: 12,
+        borderRadius: TOKENS.radiusMd, borderWidth: 1,
+        borderColor: p.enabled ? COLORS.green : COLORS.border,
         backgroundColor: p.enabled ? COLORS.greenDeep : COLORS.panelRaised,
         justifyContent: 'center', alignItems: 'center',
       }}>
@@ -424,16 +425,15 @@ function ThemeSwatch(props: { name: string; active: boolean; onPress: () => void
   const p = theme.palette;
   const t = theme.tokens;
   return (
-    <Pressable onPress={props.onPress}>
+    <Pressable onPress={props.onPress} style={{ flexShrink: 1, flexGrow: 0, flexBasis: 120, maxWidth: 200 }}>
       <Col style={{
         padding: 10, gap: 8,
         borderRadius: t.radiusMd,
         borderWidth: props.active ? 2 : 1,
         borderColor: props.active ? p.blue : COLORS.border,
         backgroundColor: COLORS.panelRaised,
-        minWidth: 140,
       }}>
-        <Row style={{ alignItems: 'center', gap: 6 }}>
+        <Row style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.appBg, borderWidth: 1, borderColor: p.border }} />
           <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.panelRaised, borderWidth: 1, borderColor: p.border }} />
           <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.blue }} />
@@ -781,10 +781,10 @@ function AppearancePanel(props: { query: string; resetToken: number }) {
       <SectionTitle title="Appearance" description="Theme, density, font scale, and chrome." onReset={doReset} />
 
       {match('theme dark light sharp soft studio') ? (
-        <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+        <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10, overflow: 'hidden' }}>
           <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Theme</Text>
           <Text fontSize={10} color={COLORS.textDim}>Sharp is terminal-feel with square corners. Soft is the tuned default. Studio is pro-tool muted and tight.</Text>
-          <Row style={{ gap: 10, flexWrap: 'wrap' }}>
+          <Row style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {THEME_ORDER.map((n: string) => (
               <ThemeSwatch key={n} name={n} active={n === name} onPress={() => setTheme(n)} />
             ))}
@@ -1267,15 +1267,17 @@ function KeybindingsPanel(props: { query: string; resetToken: number }) {
                   backgroundColor: justFlashed ? COLORS.greenDeep : COLORS.panelBg,
                 }}>
                   <Row style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 200, gap: 2 }}>
+                    <Col style={{ flexGrow: 1, flexBasis: 160, flexShrink: 1, gap: 2 }}>
                       <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{spec.label}</Text>
                       <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{spec.id}</Text>
                     </Col>
                     <Box style={{
-                      minWidth: 140, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
+                      flexShrink: 1, minWidth: 100, maxWidth: 220,
+                      paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
                       borderRadius: TOKENS.radiusSm, borderWidth: 1,
                       borderColor: isRecording ? COLORS.orange : COLORS.border,
                       backgroundColor: isRecording ? COLORS.orangeDeep : COLORS.panelAlt,
+                      overflow: 'hidden',
                     }}>
                       <Text fontSize={11} color={isRecording ? COLORS.orange : COLORS.textBright} style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
                         {isRecording ? 'press keys…' : (current || 'unbound')}
@@ -2101,9 +2103,9 @@ function LocalEndpointsSection(props: { query: string; version: number; onBump: 
         <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Add custom endpoint</Text>
         <Row style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <TextInput value={customLabel} onChangeText={setCustomLabel} placeholder="Label (e.g. My server)"
-            style={{ flexGrow: 1, flexBasis: 0, minWidth: 180, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg }} />
+            style={{ flexGrow: 1, flexBasis: 140, flexShrink: 1, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg }} />
           <TextInput value={customUrl} onChangeText={setCustomUrl} placeholder="http://host:port"
-            style={{ flexGrow: 1, flexBasis: 0, minWidth: 220, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+            style={{ flexGrow: 1, flexBasis: 180, flexShrink: 1, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
           <Pressable onPress={addCustom} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
             <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>Add</Text>
           </Pressable>
@@ -2179,13 +2181,13 @@ function ApiKeyField(props: { provider: string; onChange: () => void }) {
         ) : null}
       </Row>
       {stored && display ? (
-        <Box style={{ padding: 8, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg }}>
+        <Box style={{ padding: 8, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, overflow: 'hidden' }}>
           <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{display}</Text>
         </Box>
       ) : null}
       <Row style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextInput value={draft} onChangeText={setDraft} placeholder={stored ? 'Replace key…' : 'Paste provider key…'}
-          style={{ flexGrow: 1, flexBasis: 0, minWidth: 220, height: 32, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          style={{ flexGrow: 1, flexBasis: 180, flexShrink: 1, height: 32, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
         <Pressable onPress={doSave} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
           <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{stored ? 'Replace' : 'Save'}</Text>
         </Pressable>
