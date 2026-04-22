@@ -96,6 +96,7 @@ import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/commandpalette';
 import type { MenuBarSection } from './components/menubar';
+import { getIndexStats } from './indexer';
 
 export default function CursorIdeApp() {
   const [activeTabId, setActiveTabId] = useState('home');
@@ -1681,7 +1682,33 @@ export default function CursorIdeApp() {
         ) : null}
 
         {showStatusBar ? (
-          <StatusBar gitBranch={gitBranch} gitStatus={gitStatus} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} languageMode={languageMode} errors={errors} warnings={warnings} modified={editorModified} fileName={currentFilePath} workDir={workDir} selectedModel={modelDisplayName} agentStatusText={agentStatusText} widthBand={widthBand} />
+          <StatusBar
+            gitBranch={gitBranch}
+            gitStatus={gitStatus}
+            gitRemote={gitRemote}
+            branchAhead={branchAhead}
+            branchBehind={branchBehind}
+            changedCount={changedCount}
+            stagedCount={stagedCount}
+            cursorLine={cursorPosition.line}
+            cursorColumn={cursorPosition.column}
+            languageMode={languageMode}
+            errors={errors}
+            warnings={warnings}
+            modified={editorModified}
+            fileName={currentFilePath}
+            workDir={workDir}
+            selectedModel={modelDisplayName}
+            agentStatusText={agentStatusText}
+            widthBand={widthBand}
+            indexStats={getIndexStats()}
+            inputTokenEstimate={inputTokenEstimate}
+            lineEnding={editorContent.includes('\r\n') ? 'CRLF' : 'LF'}
+            encoding="UTF-8"
+            onOpenGitPanel={() => setShowGitPanel(1)}
+            onOpenChat={() => setShowChat(1)}
+            onOpenSettings={(section: string) => { setActiveView('settings'); setSettingsSection(section); }}
+          />
         ) : null}
 
         <CommandPalette open={showPalette === 1} onClose={() => setShowPalette(0)} commands={paletteCommands} />
