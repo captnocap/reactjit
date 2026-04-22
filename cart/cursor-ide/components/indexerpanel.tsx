@@ -68,6 +68,12 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     ? `${progress.scannedFiles}/${progress.totalFiles} files`
     : '0 files';
   const progressRate = progress.rate > 0 ? `${progress.rate.toFixed(1)} files/s` : '0 files/s';
+  const lastIndexedLabel = stats && stats.lastIndexedAt > 0
+    ? new Date(stats.lastIndexedAt).toLocaleString()
+    : 'never';
+  const indexSizeLabel = stats
+    ? `${stats.totalTokens.toLocaleString()} tokens`
+    : '0 tokens';
   const currentFileLabel = progress.currentFile
     ? progress.currentFile.replace(props.workDir.endsWith('/') ? props.workDir : `${props.workDir}/`, '')
     : 'Waiting for scan';
@@ -80,7 +86,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
 
         <Row style={{ gap: 8, flexWrap: 'wrap' }}>
           <Pressable onPress={doIndex} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.blueDeep }}>
-            <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{indexing ? 'Indexing...' : 'Index Workspace'}</Text>
+            <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{indexing ? 'Indexing...' : 'Re-index'}</Text>
           </Pressable>
           <Pressable onPress={doClear} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
             <Text fontSize={11} color={COLORS.textDim}>Clear</Text>
@@ -100,12 +106,13 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           <Col style={{ gap: 8 }}>
             <Row style={{ gap: 8, flexWrap: 'wrap' }}>
               <Pill label={`${stats?.totalFiles || 0} files`} color={COLORS.green} tiny={true} />
-              <Pill label={`${stats ? stats.totalTokens.toLocaleString() : 0} tokens`} color={COLORS.blue} tiny={true} />
+              <Pill label={indexSizeLabel} color={COLORS.blue} tiny={true} />
+              <Pill label={`last indexed ${lastIndexedLabel}`} color={COLORS.yellow} tiny={true} />
               {langEntries.slice(0, 5).map(([lang, count]) => (
                 <Pill key={lang} label={`${lang}: ${count}`} tiny={true} />
               ))}
             </Row>
-            <Text fontSize={10} color={COLORS.textDim}>Index files for semantic search, context injection, and code intelligence.</Text>
+            <Text fontSize={10} color={COLORS.textDim}>Idle until the next re-index. The last snapshot stays in local store.</Text>
           </Col>
         )}
       </Box>
