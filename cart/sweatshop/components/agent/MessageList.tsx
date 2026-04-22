@@ -1,12 +1,14 @@
 const React: any = require('react');
 const { forwardRef, useCallback, useRef } = React;
-import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { FadeIn } from '../../anim';
 import { MessageBubble } from './MessageBubble';
 import { GeneratingIndicator } from './GeneratingIndicator';
 import { ScrollToBottomFab } from './ScrollToBottomFab';
 import { useDragToScroll } from '../../hooks/useDragToScroll';
+
+const ScrollViewHost: any = 'ScrollView';
 
 function assignRef(target: any, value: any) {
   if (!target) return;
@@ -45,7 +47,7 @@ export const MessageList = forwardRef(function MessageList(props: {
   });
   return (
     <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, position: 'relative' }}>
-      <ScrollView
+      <ScrollViewHost
         ref={setScrollViewRef}
         showScrollbar={true}
         onScroll={scroll.onScroll}
@@ -82,7 +84,7 @@ export const MessageList = forwardRef(function MessageList(props: {
             <GeneratingIndicator toolExecutions={props.toolExecutions} />
           ) : null}
         </Col>
-      </ScrollView>
+      </ScrollViewHost>
 
       <ScrollToBottomFab visible={props.showScrollButton} onPress={props.onScrollToBottom} />
     </Box>
