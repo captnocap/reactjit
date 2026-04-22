@@ -29,7 +29,7 @@ targets=(
   "10_ast_preparser_bridge"
   "11_real_react_createElement"
   "12_useState_counter"
-  "13_cursor_ide_file_click"
+  "13_sweatshop_file_click"
 )
 
 printf '%-4s %-32s %s\n' "num" "target" "status"

@@ -1725,7 +1725,7 @@ fn appInit() void {
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
     v8_bindings_core.registerCore({});
     v8_bindings_fs.registerFs({});
-    // MVP: telemetry + sdk bindings disabled. Cursor-ide baseline doesn't need
+    // MVP: telemetry + sdk bindings disabled. Sweatshop baseline doesn't need
     // them; they have latent type errors from the initial port that we'll
     // revisit after the click-latency measurement lands.
     // v8_bindings_telemetry.registerTelemetry({});
