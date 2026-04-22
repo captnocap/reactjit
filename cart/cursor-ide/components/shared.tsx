@@ -1,7 +1,7 @@
 const React: any = require('react');
 
 import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import { iconLabel } from '../utils';
 
 export function Glyph(props: { icon: string; tone?: string; backgroundColor?: string; tiny?: boolean }) {
@@ -12,7 +12,7 @@ export function Glyph(props: { icon: string; tone?: string; backgroundColor?: st
         paddingRight: props.tiny ? 4 : 5,
         paddingTop: props.tiny ? 2 : 3,
         paddingBottom: props.tiny ? 2 : 3,
-        borderRadius: props.tiny ? 4 : 5,
+        borderRadius: props.tiny ? TOKENS.radiusSm : TOKENS.radiusMd,
         backgroundColor: props.backgroundColor || COLORS.grayChip,
         alignItems: 'center',
         justifyContent: 'center',
@@ -34,8 +34,8 @@ export function Pill(props: { label: string; color?: string; borderColor?: strin
         paddingRight: props.tiny ? 6 : 8,
         paddingTop: props.tiny ? 3 : 5,
         paddingBottom: props.tiny ? 3 : 5,
-        borderRadius: 999,
-        borderWidth: 1,
+        borderRadius: TOKENS.radiusPill,
+        borderWidth: TOKENS.borderW,
         borderColor: props.borderColor || COLORS.border,
         backgroundColor: props.backgroundColor || COLORS.panelAlt,
       }}
@@ -60,8 +60,8 @@ export function HeaderButton(props: any) {
         paddingRight: props.compact ? 8 : 10,
         paddingTop: 7,
         paddingBottom: 7,
-        borderRadius: 10,
-        borderWidth: 1,
+        borderRadius: TOKENS.radiusLg,
+        borderWidth: TOKENS.borderW,
         borderColor: active ? COLORS.blue : COLORS.border,
         backgroundColor: active ? COLORS.blueDeep : COLORS.panelAlt,
       }}
