@@ -9,6 +9,15 @@ import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { ModelReference } from '../default-models';
 import { deleteApiKey, getApiKey, hasApiKey, listApiKeys, setApiKey, validateApiKey } from '../api-keys';
+import {
+  SETTINGS_SECTIONS,
+  countSettingsSectionMatches,
+  type SettingsSectionDef,
+  type SettingsSectionId,
+  searchSettingsIndex,
+} from '../lib/settings/search-index';
+import { SettingsSearchInput } from './settings/SettingsSearchInput';
+import { SettingsSearchResults } from './settings/SettingsSearchResults';
 
 // =============================================================================
 // SETTINGS — 8-section surface: Appearance, Editor, Terminal, Keybindings,
@@ -43,122 +52,8 @@ function sdel(path: string) { try { storeDel(KEY + '.' + path); } catch {} }
 
 // ── Section Definitions ──────────────────────────────────────────────────────
 
-type SectionId = 'appearance' | 'editor' | 'scrolling' | 'terminal' | 'keybindings' | 'providers' | 'memory' | 'plugins' | 'about';
-
-interface SectionDef {
-  id: SectionId;
-  label: string;
-  description: string;
-  icon: string;
-  tone: string;
-}
-
-function sectionList(): SectionDef[] {
-  return [
-    { id: 'appearance',  label: 'Appearance',  description: 'Theme, density, font scale',           icon: 'palette',  tone: COLORS.purple },
-    { id: 'editor',      label: 'Editor',      description: 'Font size, tabs, wrap, line numbers',  icon: 'braces',   tone: COLORS.blue   },
-    { id: 'scrolling',   label: 'Scrolling',   description: 'Scrollbars, drag panning, sync',      icon: 'mouse',    tone: COLORS.green  },
-    { id: 'terminal',    label: 'Terminal',    description: 'Shell, font, cursor, scrollback',      icon: 'command',  tone: COLORS.green  },
-    { id: 'keybindings', label: 'Keybindings', description: 'Shortcuts and command palette',        icon: 'command',  tone: COLORS.orange },
-    { id: 'providers',   label: 'Providers',   description: 'Models, API keys, default routing',    icon: 'globe',    tone: COLORS.blue   },
-    { id: 'memory',      label: 'Memory',      description: 'Variables, checkpoints, context',      icon: 'bot',      tone: COLORS.purple },
-    { id: 'plugins',     label: 'Plugins',     description: 'Installed plugins, enable / disable',  icon: 'sparkles', tone: COLORS.orange },
-    { id: 'about',       label: 'About',       description: 'Version, build, capabilities',         icon: 'folder',   tone: COLORS.yellow },
-  ];
-}
-
-// Keyword index used by the top-level search to surface nav-row match counts
-// without having to mount every panel. Each section lists the strings its
-// individual SettingRow entries match against; the counts stay roughly in
-// sync as panels evolve (exact per-row filtering still happens inside each
-// panel so the displayed results always match the count).
-const SECTION_KEYWORDS: Record<SectionId, string[]> = {
-  appearance: [
-    'theme dark light sharp soft studio',
-    'ui scale font size zoom density',
-    'accent color highlight',
-    'animations motion reduce',
-    'compact chrome titlebar density',
-    'file glyphs icons sidebar',
-    'minimap code overview',
-  ],
-  editor: [
-    'font family monospace typeface',
-    'font size type scale',
-    'line height spacing leading',
-    'tab size indent width',
-    'insert spaces tabs indent character',
-    'word wrap soft line break',
-    'line numbers gutter',
-    'whitespace dots invisible characters',
-    'trim trailing whitespace',
-    'format on save prettier',
-    'scrollbars drag scroll panning sync',
-  ],
-  scrolling: [
-    'scrollbars overlay drag panning sync',
-    'terminal scrollback drag scroll history',
-    'chat message list drag scroll',
-    'search results drag scroll',
-    'diff side by side gutters sync',
-    'git commit list history drag scroll',
-  ],
-  terminal: [
-    'shell bash zsh binary path',
-    'font family monospace typeface',
-    'font size scale',
-    'cursor shape block underline bar',
-    'cursor blink blinking',
-    'scrollback lines buffer history',
-    'bell beep alert',
-    'copy selection clipboard',
-  ],
-  keybindings: [
-    'open settings command palette projects',
-    'toggle search terminal chat hot panel',
-    'new file save',
-    'refresh index workspace',
-    'new conversation send cycle stop agent',
-  ],
-  providers: [
-    'backend api cli claude kimi codex local',
-    'claude code cli anthropic messages',
-    'openai codex local ai',
-    'kimi moonshot k2',
-    'local endpoints ollama lmstudio llama.cpp vllm',
-    'http providers base url api key',
-    'default model routing',
-  ],
-  memory: [
-    'memory provider backend local sqlite session',
-    'context size tokens window',
-    'retention days age history',
-    'checkpoint limit cap history turns',
-    'auto checkpoint save on turn',
-    'semantic search embeddings',
-    'clear memory erase reset storage',
-  ],
-  plugins: [
-    'plugin directory scan rescan enable disable',
-    'javascript plugin loader manifest',
-  ],
-  about: [
-    'version build sha platform runtime react esbuild home',
-    'host capabilities ffi store fs exec claude kimi localai',
-  ],
-};
-
-function countSectionMatches(id: SectionId, q: string): number {
-  if (!q) return 0;
-  const needle = q.toLowerCase();
-  const rows = SECTION_KEYWORDS[id] || [];
-  let n = 0;
-  for (const row of rows) if (row.toLowerCase().indexOf(needle) >= 0) n++;
-  if (id === 'providers' && 'http providers'.indexOf(needle) < 0) {
-    // also surface when a user searches for a provider name we can't keyword-index
-  }
-  return n;
-}
+type SectionId = SettingsSectionId;
+type SectionDef = SettingsSectionDef;
 
 const LEGACY_SECTION_MAP: Record<string, SectionId> = {
   providers: 'providers',
@@ -482,26 +377,6 @@ function NavRow(props: { section: SectionDef; active: boolean; onSelect: (id: Se
 }
 
 // ── Search Bar ───────────────────────────────────────────────────────────────
-
-function SearchBar(props: { query: string; onQuery: (q: string) => void }) {
-  return (
-    <Row style={{
-      alignItems: 'center', gap: 8,
-      padding: 10, borderRadius: TOKENS.radiusMd,
-      borderWidth: 1, borderColor: COLORS.border,
-      backgroundColor: COLORS.panelBg,
-    }}>
-      <Text fontSize={12} color={COLORS.textDim}>⌕</Text>
-      <TextInput value={props.query} onChangeText={props.onQuery} placeholder="Search settings..."
-        style={{ flexGrow: 1, height: 24, backgroundColor: 'transparent' }} />
-      {props.query ? (
-        <Pressable onPress={() => props.onQuery('')} style={{ paddingLeft: 8, paddingRight: 8 }}>
-          <Text fontSize={10} color={COLORS.textDim}>clear</Text>
-        </Pressable>
-      ) : null}
-    </Row>
-  );
-}
 
 // ── Export / Import ──────────────────────────────────────────────────────────
 // Dumps and restores every panel's settings. Reads through sget/sdel so we
@@ -2405,7 +2280,7 @@ function ProvidersPanel(props: {
 
 export function SettingsSurface(props: any) {
   const stacked = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
-  const sections = sectionList();
+  const sections = SETTINGS_SECTIONS;
   const incomingSection: SectionId =
     LEGACY_SECTION_MAP[props.activeSection as string] ||
     (sections.find(s => s.id === props.activeSection)?.id as SectionId) ||
@@ -2447,6 +2322,9 @@ export function SettingsSurface(props: any) {
     return <AboutPanel query={query} />;
   }
 
+  const trimmedQuery = query.trim();
+  const searchResults = trimmedQuery ? searchSettingsIndex(trimmedQuery) : [];
+
   return (
     <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
       <Col style={{ padding: stacked ? 12 : 18, gap: 16 }}>
@@ -2462,26 +2340,36 @@ export function SettingsSurface(props: any) {
             <Pill label={props.gitBranch || 'main'} color={COLORS.green} />
             <Pill label={props.selectedModelName || 'no model'} color={COLORS.red} borderColor="#5a1f24" backgroundColor="#181015" />
           </Row>
-          <SearchBar query={query} onQuery={setQuery} />
+          <SettingsSearchInput query={query} onQueryChange={setQuery} />
         </Box>
 
-        <Box style={{ flexDirection: stacked ? 'column' : 'row', gap: 14, alignItems: 'flex-start' }}>
-          <Col style={{ width: stacked ? '100%' : 240, gap: 8 }}>
-            {sections.map(section => (
-              <NavRow key={section.id} section={section} active={section.id === active}
-                matchCount={countSectionMatches(section.id, query)}
-                onSelect={selectSection} />
-            ))}
-          </Col>
-          <Col style={{ flexGrow: 1, flexBasis: 0, gap: 14 }}>
-            <PageModeTransition
-              mode={active}
-              durationMs={180}
-              style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}
-              renderPage={(mode) => renderPanel(mode as SectionId)}
-            />
-          </Col>
-        </Box>
+        {trimmedQuery ? (
+          <SettingsSearchResults
+            query={trimmedQuery}
+            results={searchResults}
+            activeSection={active}
+            onOpenSection={selectSection}
+            onClearQuery={() => setQuery('')}
+          />
+        ) : (
+          <Box style={{ flexDirection: stacked ? 'column' : 'row', gap: 14, alignItems: 'flex-start' }}>
+            <Col style={{ width: stacked ? '100%' : 240, gap: 8 }}>
+              {sections.map(section => (
+                <NavRow key={section.id} section={section} active={section.id === active}
+                  matchCount={countSettingsSectionMatches(section.id, query)}
+                  onSelect={selectSection} />
+              ))}
+            </Col>
+            <Col style={{ flexGrow: 1, flexBasis: 0, gap: 14 }}>
+              <PageModeTransition
+                mode={active}
+                durationMs={180}
+                style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}
+                renderPage={(mode) => renderPanel(mode as SectionId)}
+              />
+            </Col>
+          </Box>
+        )}
       </Col>
     </ScrollView>
   );
