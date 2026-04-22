@@ -461,6 +461,62 @@ export const THEME_APTIO_SETUP: Theme = {
   },
 };
 
+// 'ditherKit' — 1-bit dither kit: monochrome carrier with bright,
+// high-signal accent colors and hard UI edges.
+export const THEME_DITHER_KIT: Theme = {
+  tokens: {
+    ...THEME_SHARP.tokens,
+    name: 'ditherKit',
+    label: 'Dither Kit',
+    corner: 'square',
+    density: 'compact',
+    radiusXs: 0,
+    radiusSm: 0,
+    radiusMd: 0,
+    radiusLg: 0,
+    radiusPill: 0,
+    borderW: 1,
+    shadowDepth: 0,
+    fontUI: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontMono: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontXs: 10,
+    fontSm: 11,
+    fontMd: 12,
+    fontLg: 13,
+    fontXl: 16,
+    typeBase: 12,
+    typeLg: 13,
+    typeXl: 16,
+  },
+  palette: {
+    appBg: '#0b0b0b',
+    panelBg: '#111111',
+    panelRaised: '#181818',
+    panelAlt: '#1a1a1a',
+    panelHover: '#232323',
+    border: '#f2f2f2',
+    borderSoft: '#8f8f8f',
+    text: '#f4f4f4',
+    textBright: '#ffffff',
+    textDim: '#bcbcbc',
+    textMuted: '#d8d8d8',
+    blue: '#9af7ff',
+    blueDeep: '#0a1630',
+    green: '#7dffcf',
+    greenDeep: '#0c2218',
+    yellow: '#ffd166',
+    yellowDeep: '#2a2000',
+    orange: '#ffb060',
+    orangeDeep: '#311608',
+    red: '#ff5577',
+    redDeep: '#2f1017',
+    purple: '#c654ff',
+    purpleDeep: '#220f33',
+    grayChip: '#202020',
+    grayDeep: '#141414',
+  },
+};
+
 // 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
 // overrides are merged on top via setCustomTheme().
 export const THEME_CUSTOM_BASE: Theme = {
@@ -474,10 +530,11 @@ export const THEMES: Record<string, Theme> = {
   studio: THEME_STUDIO,
   'high-contrast': THEME_HIGH_CONTRAST,
   aptioSetup: THEME_APTIO_SETUP,
+  ditherKit: THEME_DITHER_KIT,
   custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'custom'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'custom'];
 
 // Custom theme overrides — partial token + palette patches applied on top
 // of a chosen base. Persisted separately in theme.ts.
