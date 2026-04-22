@@ -87,6 +87,16 @@ export function ptyFocus(handle: number): void {
   } catch {}
 }
 
+export function ptyCwd(handle: number): string {
+  try {
+    if (typeof host.__pty_cwd !== 'function') return '';
+    const out = host.__pty_cwd(handle);
+    return typeof out === 'string' ? out : String(out ?? '');
+  } catch {
+    return '';
+  }
+}
+
 export function closeWindow(): void {
   try {
     if (typeof host.__windowClose === 'function') host.__windowClose();

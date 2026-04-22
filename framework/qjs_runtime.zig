@@ -2544,6 +2544,24 @@ fn hostPtyFocus(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     return QJS_UNDEFINED;
 }
 
+fn hostPtyCwd(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewString(ctx, "");
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    if (ptyFromHandle(value)) |*p| {
+        var path_buf: [64]u8 = undefined;
+        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
+            return qjs.JS_NewString(ctx, "");
+        };
+        var cwd_buf: [4096]u8 = undefined;
+        const cwd = std.posix.readlink(path, &cwd_buf) catch {
+            return qjs.JS_NewString(ctx, "");
+        };
+        return qjs.JS_NewStringLen(ctx, cwd.ptr, @intCast(cwd.len));
+    }
+    return qjs.JS_NewString(ctx, "");
+}
+
 fn hostPtyClose(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 1) return QJS_UNDEFINED;
     var value: i32 = 0;
@@ -3140,6 +3158,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_close", qjs.JS_NewCFunction(ctx, hostPtyClose, "__pty_close", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_focus", qjs.JS_NewCFunction(ctx, hostPtyFocus, "__pty_focus", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_cwd", qjs.JS_NewCFunction(ctx, hostPtyCwd, "__pty_cwd", 1));
 
     // Claude Code SDK — subprocess session in stream-json mode
     _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_init", qjs.JS_NewCFunction(ctx, hostClaudeInit, "__claude_init", 2));

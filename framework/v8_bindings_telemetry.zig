@@ -615,6 +615,28 @@ fn ptyFocusCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     retUndefined(info_c);
 }
 
+fn ptyCwdCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            var path_buf: [64]u8 = undefined;
+            const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
+                setStringReturn(info, "");
+                return;
+            };
+            var cwd_buf: [4096]u8 = undefined;
+            const cwd = std.posix.readlink(path, &cwd_buf) catch {
+                setStringReturn(info, "");
+                return;
+            };
+            setStringReturn(info, cwd);
+            return;
+        }
+    }
+    setStringReturn(info, "");
+}
+
 fn readProcField(pid: u32, field: []const u8, buf: []u8) ![]const u8 {
     var path_buf: [256]u8 = undefined;
     const path = try std.fmt.bufPrintZ(&path_buf, "/proc/{d}/{s}", .{ pid, field });
@@ -1245,6 +1267,7 @@ pub fn registerTelemetry(_: anytype) void {
     v8rt.registerHostFn("__pty_alive", ptyAliveCb);
     v8rt.registerHostFn("__pty_close", ptyCloseCb);
     v8rt.registerHostFn("__pty_focus", ptyFocusCb);
+    v8rt.registerHostFn("__pty_cwd", ptyCwdCb);
 
     v8rt.registerHostFn("__store_set", storeSetCb);
     v8rt.registerHostFn("__store_get", storeGetCb);
