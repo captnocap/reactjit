@@ -1,10 +1,9 @@
 const React: any = require('react');
 const { useState } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
-import { COLORS, TOKENS, fileTone } from '../theme';
-import { Icon } from './icons';
-import { Pill } from './shared';
+import { Box, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { COLORS, fileGlyph, fileTone } from '../theme';
+import { Glyph, Pill } from './shared';
 
 interface TabBarProps {
   tabs: any[];
@@ -29,7 +28,7 @@ export function TabBar(props: TabBarProps) {
   const moveTabToIndex = (id: string, targetIdx: number) => {
     if (!onReorder) return;
     const fromIdx = tabs.findIndex((t: any) => t.id === id);
-    if (fromIdx < 0 || fromIdx === targetIdx || targetIdx < 0 || targetIdx > tabs.length) return;
+    if (fromIdx < 0 || targetIdx < 0 || targetIdx > tabs.length) return;
     const next = [...tabs];
     const [moved] = next.splice(fromIdx, 1);
     const insertIdx = targetIdx > fromIdx ? targetIdx - 1 : targetIdx;
@@ -42,14 +41,18 @@ export function TabBar(props: TabBarProps) {
       key={key}
       onPress={() => { if (dragTabId) { moveTabToIndex(dragTabId, beforeIdx); setDragTabId(null); } }}
       style={{
-        width: 4,
+        width: 6,
         alignSelf: 'stretch',
         backgroundColor: dragTabId ? COLORS.blue : 'transparent',
-        borderRadius: TOKENS.radiusXs,
+        borderRadius: 3,
         marginLeft: 2,
         marginRight: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
       }}
-    />
+    >
+      {dragTabId ? <Text fontSize={8} color={COLORS.panelBg}>▸</Text> : null}
+    </Pressable>
   );
 
   return (
@@ -96,22 +99,22 @@ export function TabBar(props: TabBarProps) {
                     paddingRight: 2,
                     paddingTop: 1,
                     paddingBottom: 1,
-                    borderRadius: TOKENS.radiusXs,
+                    borderRadius: 3,
                     backgroundColor: draggingThis ? COLORS.blue : 'transparent',
                   }}
                 >
                   <Text fontSize={9} color={draggingThis ? COLORS.textBright : COLORS.textDim}>≡</Text>
                 </Pressable>
               ) : null}
-              <Icon name={tab.type === 'dir' ? 'folder' : 'file'} size={14} color={fileTone(tab.type)} />
+              <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
               <Text fontSize={11} color={active ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
-              {!compact && tab.git ? <Pill label={tab.git} color={COLORS.blue} tiny={true} /> : null}
               {tab.modified ? (
-                <Box style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.yellow, marginLeft: 1 }} />
+                <Text fontSize={9} color={COLORS.yellow} style={{ marginLeft: 1 }}>●</Text>
               ) : null}
+              {!compact && tab.git ? <Pill label={tab.git} color={COLORS.blue} tiny={true} /> : null}
               {!compact && !tab.pinned ? (
-                <Pressable onPress={() => onClose(tab.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 2, paddingBottom: 2, borderRadius: TOKENS.radiusSm }}>
-                  <Icon name="x" size={14} color={COLORS.textDim} />
+                <Pressable onPress={() => onClose(tab.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+                  <Text fontSize={10} color={COLORS.textDim}>×</Text>
                 </Pressable>
               ) : null}
             </Pressable>
@@ -133,7 +136,7 @@ export function TabBar(props: TabBarProps) {
               borderColor: COLORS.borderSoft,
             }}
           >
-            <Text fontSize={11} color={COLORS.textDim}>▼ {overflow.length}</Text>
+            <Text fontSize={11} color={COLORS.textDim}>{'>>'}{overflow.length > 9 ? '9+' : overflow.length}</Text>
           </Pressable>
           {overflowOpen ? (
             <Box style={{
@@ -141,7 +144,7 @@ export function TabBar(props: TabBarProps) {
               top: 32,
               right: 0,
               backgroundColor: COLORS.panelRaised,
-              borderRadius: TOKENS.radiusMd,
+              borderRadius: 8,
               borderWidth: 1,
               borderColor: COLORS.border,
               minWidth: 160,
@@ -162,9 +165,9 @@ export function TabBar(props: TabBarProps) {
                       paddingBottom: 8,
                     }}
                   >
-                    <Icon name={tab.type === 'dir' ? 'folder' : 'file'} size={14} color={fileTone(tab.type)} />
+                    <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
                     <Text fontSize={11} color={tab.id === activeId ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
-                    {tab.modified ? <Box style={{ width: 6, height: 6, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.yellow }} /> : null}
+                    {tab.modified ? <Text fontSize={9} color={COLORS.yellow}>●</Text> : null}
                   </Pressable>
                 ))}
               </ScrollView>
