@@ -1,0 +1,74 @@
+const React: any = require('react');
+const { useMemo } = React;
+
+export type PanelSlot = 'left' | 'right' | 'bottom' | 'center';
+
+export type PanelRegistration = {
+  id: string;
+  title: string;
+  defaultSlot: PanelSlot;
+  icon: string;
+  component: any;
+  userVisible: boolean;
+  defaultOpen: boolean;
+};
+
+const registeredPanels: PanelRegistration[] = [];
+
+export function register(panel: PanelRegistration): PanelRegistration {
+  const next = { ...panel };
+  const existingIndex = registeredPanels.findIndex((item) => item.id === next.id);
+  if (existingIndex >= 0) registeredPanels[existingIndex] = next;
+  else registeredPanels.push(next);
+  return next;
+}
+
+export function getRegisteredPanels(): PanelRegistration[] {
+  return registeredPanels.slice();
+}
+
+export function useRegisteredPanels(): PanelRegistration[] {
+  return useMemo(() => registeredPanels.slice(), []);
+}
+
+export function getPanelsBySlot(slot: PanelSlot): PanelRegistration[] {
+  return registeredPanels.filter((panel) => panel.defaultSlot === slot);
+}
+
+export function getDefaultOpenPanelIds(): string[] {
+  return registeredPanels.filter((panel) => panel.defaultOpen).map((panel) => panel.id);
+}
+
+export function buildWindowMenuSection(togglePanel: (panelId: string) => void) {
+  const slotOrder: PanelSlot[] = ['left', 'right', 'bottom', 'center'];
+  const items: Array<{ kind?: 'item' | 'separator'; label: string; action?: () => void }> = [];
+
+  for (const slot of slotOrder) {
+    const panels = registeredPanels.filter((panel) => panel.userVisible !== false && panel.defaultSlot === slot);
+    if (panels.length === 0) continue;
+    if (items.length > 0) {
+      items.push({ kind: 'separator', label: '' });
+    }
+    for (const panel of panels) {
+      items.push({
+        label: panel.title,
+        action: () => togglePanel(panel.id),
+      });
+    }
+  }
+
+  return { label: 'Window', items };
+}
+
+require('./panels/sidebar.panel');
+require('./panels/diff.panel');
+require('./panels/git.panel');
+require('./panels/terminal.panel');
+require('./panels/chat.panel');
+require('./panels/settings.panel');
+require('./panels/plan.panel');
+require('./panels/cockpit.panel');
+require('./panels/mermaid.panel');
+require('./panels/hot.panel');
+require('./panels/graph.panel');
+require('./panels/media.panel');
