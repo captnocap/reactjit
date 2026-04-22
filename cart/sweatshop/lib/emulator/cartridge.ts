@@ -1,11 +1,13 @@
 /**
  * Cartridge — iNES / NES2.0 ROM parser + mappers
  *
- * Supports: NROM (mapper 0), MMC1 (mapper 1).
- * TODO: UxROM (mapper 2), CNROM (mapper 3), MMC3 (mapper 4), etc.
+ * Supports: NROM (mapper 0), MMC1 (mapper 1), UxROM (mapper 2), CNROM (mapper 3).
+ * TODO: MMC3 (mapper 4), etc.
  */
 
 import type { MirrorMode } from './ppu';
+import { MapperUxROM } from './mappers/uxrom';
+import { MapperCNROM } from './mappers/cnrom';
 
 export interface Mapper {
   readPRG(addr: number): number;
@@ -94,6 +96,10 @@ export class Cartridge {
         return new Cartridge(prgROM, chrROM, new MapperNROM(prgROM, chrROM, mirror), prgRAMSize);
       case 1:
         return new Cartridge(prgROM, chrROM, new MapperMMC1(prgROM, chrROM, mirror), prgRAMSize);
+      case 2:
+        return new Cartridge(prgROM, chrROM, new MapperUxROM(prgROM, chrROM, mirror), prgRAMSize);
+      case 3:
+        return new Cartridge(prgROM, chrROM, new MapperCNROM(prgROM, chrROM, mirror), prgRAMSize);
       default:
         console.warn(`[emulator] Unsupported mapper: ${number}. Falling back to NROM (game may not work).`);
         return new Cartridge(prgROM, chrROM, new MapperNROM(prgROM, chrROM, mirror), prgRAMSize);
