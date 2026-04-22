@@ -73,6 +73,7 @@ function PanelShell(props: {
   return (
     <Box
       style={{
+        position: 'relative',
         borderWidth: 1,
         borderColor: active ? props.tone : COLORS.border,
         borderRadius: 14,
@@ -82,6 +83,10 @@ function PanelShell(props: {
     >
       <Row
         style={{
+          position: 'relative',
+          zIndex: 2,
+          width: '100%',
+          alignSelf: 'stretch',
           alignItems: 'center',
           gap: 8,
           paddingLeft: 10,
@@ -101,13 +106,27 @@ function PanelShell(props: {
           </Row>
           {props.subtitle ? <Text fontSize={9} color={COLORS.textDim}>{props.subtitle}</Text> : null}
         </Col>
-        {props.onClose ? (
-          <Pressable onPress={props.onClose} style={{ padding: 4, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
-            <Icon name="x" size={14} color={COLORS.textMuted} />
-          </Pressable>
-        ) : null}
+          {props.onClose ? (
+            <Pressable onPress={props.onClose} style={{ padding: 4, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Icon name="x" size={14} color={COLORS.textMuted} />
+            </Pressable>
+          ) : null}
       </Row>
-      <Col style={{ padding: 12, gap: 10 }}>
+      <Col
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          alignSelf: 'stretch',
+          marginTop: -1,
+          paddingTop: 13,
+          paddingLeft: 12,
+          paddingRight: 12,
+          paddingBottom: 12,
+          gap: 10,
+          backgroundColor: active ? COLORS.panelRaised : COLORS.panelBg,
+        }}
+      >
         {props.children}
       </Col>
     </Box>
