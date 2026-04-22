@@ -1719,6 +1719,195 @@ function hostHasAll(fns: string[]): boolean {
   return true;
 }
 
+// Known model catalogs per backend. Sourced from cart/cursor-ide/providers.ts
+// (Claude API + Claude CLI share the Anthropic set) and cart/cockpit/index.tsx
+// (Kimi, Codex/local backends). Codex entries are augmented at runtime via
+// the local endpoint scanner below, so the dropdown shows both hardcoded
+// hosted models and whatever an Ollama / LM Studio instance is serving.
+
+interface ModelOption { id: string; label: string; note?: string }
+
+const MODEL_CATALOG: Record<string, ModelOption[]> = {
+  'claude-api': [
+    { id: 'claude-opus-4-7',    label: 'Claude Opus 4.7',      note: '200k · $15/$75' },
+    { id: 'claude-opus-4-7-1m', label: 'Claude Opus 4.7 [1M]', note: '1M · $15/$75' },
+    { id: 'claude-opus-4-6',    label: 'Claude Opus 4.6',      note: '200k · $15/$75' },
+    { id: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6',    note: '200k · $3/$15' },
+    { id: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5',    note: '200k · $3/$15' },
+    { id: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5',     note: '200k · $1/$5' },
+  ],
+  'claude-cli': [
+    { id: 'claude-opus-4-7',    label: 'Claude Opus 4.7' },
+    { id: 'claude-opus-4-7-1m', label: 'Claude Opus 4.7 [1M]' },
+    { id: 'claude-opus-4-6',    label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6' },
+    { id: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5' },
+  ],
+  'codex-cli': [
+    { id: 'gpt-5-codex',        label: 'GPT-5 Codex',          note: '400k · code' },
+    { id: 'gpt-5.4',            label: 'GPT-5.4',              note: '400k' },
+    { id: 'gpt-5.4-mini',       label: 'GPT-5.4 mini',         note: '400k · fast' },
+    { id: 'codex',              label: 'Codex (legacy)' },
+    { id: 'gemini-2.5-pro',     label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash',   label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+  ],
+  'kimi-cli': [
+    { id: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding', note: '256k · code' },
+    { id: 'kimi-k2.5',                 label: 'Kimi K2.5',       note: '256k' },
+    { id: 'kimi-k2',                   label: 'Kimi K2',         note: '256k' },
+    { id: 'kimi-k2-thinking',          label: 'Kimi K2 Thinking',note: '256k · reason' },
+  ],
+};
+
+// Probe local endpoints for served models. Ollama exposes /api/tags with a
+// `models[].name` shape; OpenAI-compatible servers (LM Studio, llama.cpp,
+// vLLM) expose /v1/models with an `data[].id` shape. Results are merged,
+// deduplicated, and tagged with their endpoint label so the picker can
+// indicate origin.
+async function scanLocalModels(): Promise<ModelOption[]> {
+  const h: any = globalThis;
+  const out: ModelOption[] = [];
+  const seen = new Set<string>();
+  if (typeof h.__fetch_async !== 'function') return out;
+
+  const customs: LocalEndpoint[] = sget('providers.local.custom', [] as LocalEndpoint[]);
+  const endpoints = LOCAL_ENDPOINTS_KNOWN.concat(customs);
+
+  for (const ep of endpoints) {
+    const url = ep.kind === 'ollama' ? ep.url + '/api/tags' : ep.url + '/v1/models';
+    let res: any = null;
+    try { res = await h.__fetch_async(url, { method: 'GET', timeoutMs: 1500 }); } catch { res = null; }
+    if (!res || !res.body) continue;
+    let parsed: any = null;
+    try { parsed = typeof res.body === 'string' ? JSON.parse(res.body) : res.body; } catch { continue; }
+    const raw = ep.kind === 'ollama'
+      ? (parsed && Array.isArray(parsed.models) ? parsed.models : [])
+      : (parsed && Array.isArray(parsed.data)   ? parsed.data   : []);
+    for (const m of raw) {
+      const id = ep.kind === 'ollama' ? String(m.name || '') : String(m.id || '');
+      if (!id) continue;
+      const tagged = ep.id + ':' + id;
+      if (seen.has(tagged)) continue;
+      seen.add(tagged);
+      out.push({ id, label: id, note: ep.label });
+    }
+  }
+  return out;
+}
+
+function ModelDropdown(props: {
+  value: string;
+  options: ModelOption[];
+  onChange: (id: string) => void;
+  discovered?: ModelOption[];
+  onRefreshDiscovered?: () => void;
+  refreshing?: boolean;
+  placeholder?: string;
+}) {
+  const [open, setOpen]     = useState(false);
+  const [custom, setCustom] = useState(false);
+  const combined: ModelOption[] = [];
+  const seen = new Set<string>();
+  for (const opt of (props.options || [])) {
+    if (seen.has(opt.id)) continue;
+    seen.add(opt.id);
+    combined.push(opt);
+  }
+  for (const opt of (props.discovered || [])) {
+    if (seen.has(opt.id)) continue;
+    seen.add(opt.id);
+    combined.push(opt);
+  }
+  const current = combined.find(o => o.id === props.value);
+  const knownId = !!current;
+  const displayLabel = current ? current.label : (props.value || props.placeholder || 'select a model…');
+
+  return (
+    <Col style={{ gap: 6, position: 'relative', zIndex: open ? 9999 : 0, overflow: 'visible' }}>
+      <Box style={{ position: 'relative', zIndex: open ? 9999 : 0, overflow: 'visible' }}>
+        <Pressable onPress={() => setOpen(!open)} style={{
+          padding: 8, borderRadius: TOKENS.radiusSm, borderWidth: 1,
+          borderColor: knownId ? COLORS.border : (props.value ? COLORS.orange : COLORS.border),
+          backgroundColor: COLORS.panelBg, gap: 8,
+        }}>
+          <Row style={{ alignItems: 'center', gap: 8 }}>
+            <Col style={{ flexGrow: 1, flexBasis: 0, gap: 1 }}>
+              <Text fontSize={11} color={COLORS.text} style={{ fontFamily: 'monospace' }}>{displayLabel}</Text>
+              {current && current.note ? <Text fontSize={9} color={COLORS.textDim}>{current.note}</Text> : null}
+              {!knownId && props.value ? <Text fontSize={9} color={COLORS.orange}>custom · {props.value}</Text> : null}
+            </Col>
+            <Text fontSize={10} color={COLORS.textDim}>{open ? '▲' : '▼'}</Text>
+          </Row>
+        </Pressable>
+        {open ? (
+          <Col style={{
+            position: 'absolute', left: 0, right: 0, top: 40,
+            gap: 4, padding: 6, maxHeight: 260, overflow: 'scroll', zIndex: 10000,
+            borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm,
+            backgroundColor: COLORS.panelRaised,
+          }}>
+            {combined.length === 0 ? (
+              <Text fontSize={10} color={COLORS.textDim}>No models available.</Text>
+            ) : null}
+            {combined.map(opt => {
+              const active = opt.id === props.value;
+              return (
+                <Pressable key={opt.id} onPress={() => { props.onChange(opt.id); setCustom(false); setOpen(false); }} style={{
+                  padding: 8, borderRadius: TOKENS.radiusSm,
+                  borderWidth: 1, borderColor: active ? COLORS.blue : 'transparent',
+                  backgroundColor: active ? COLORS.panelHover : COLORS.panelBg,
+                }}>
+                  <Row style={{ alignItems: 'center', gap: 6 }}>
+                    <Col style={{ flexGrow: 1, flexBasis: 0, gap: 1 }}>
+                      <Text fontSize={11} color={active ? COLORS.blue : COLORS.textBright} style={{ fontFamily: 'monospace', fontWeight: active ? 'bold' : 'normal' }}>{opt.label}</Text>
+                      {opt.note ? <Text fontSize={9} color={COLORS.textDim}>{opt.note}</Text> : null}
+                    </Col>
+                  </Row>
+                </Pressable>
+              );
+            })}
+            <Pressable onPress={() => { setCustom(true); setOpen(false); }} style={{
+              padding: 8, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt,
+            }}>
+              <Text fontSize={10} color={COLORS.textDim}>Custom…</Text>
+            </Pressable>
+          </Col>
+        ) : null}
+      </Box>
+      <Row style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {props.onRefreshDiscovered ? (
+          <Pressable onPress={props.onRefreshDiscovered} style={{
+            paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4,
+            borderRadius: TOKENS.radiusSm, borderWidth: 1,
+            borderColor: props.refreshing ? COLORS.border : COLORS.blue,
+            backgroundColor: props.refreshing ? COLORS.panelAlt : COLORS.blueDeep,
+          }}>
+            <Text fontSize={10} color={props.refreshing ? COLORS.textDim : COLORS.blue} style={{ fontWeight: 'bold' }}>
+              {props.refreshing ? 'scanning…' : 'Refresh local models'}
+            </Text>
+          </Pressable>
+        ) : null}
+        {props.discovered && props.discovered.length > 0 ? (
+          <Pill label={props.discovered.length + ' discovered'} color={COLORS.green} tiny={true} />
+        ) : null}
+        <Pressable onPress={() => setCustom(!custom)}>
+          <Text fontSize={10} color={COLORS.textDim}>{custom ? 'hide custom' : 'custom…'}</Text>
+        </Pressable>
+      </Row>
+      {custom || (!knownId && props.value) ? (
+        <Col style={{ gap: 4 }}>
+          <Text fontSize={9} color={COLORS.textDim}>Custom model id (advanced):</Text>
+          <TextInput value={props.value} onChangeText={props.onChange}
+            placeholder={props.placeholder || 'e.g. my-org/my-model'}
+            style={{ height: 28, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+        </Col>
+      ) : null}
+    </Col>
+  );
+}
+
 function BackendCard(props: { entry: BackendEntry; enabled: boolean; onToggle: () => void; version: number }) {
   const e = props.entry;
   const reachable = hostHasAll(e.hostFns);
@@ -1726,15 +1915,34 @@ function BackendCard(props: { entry: BackendEntry; enabled: boolean; onToggle: (
   const [draftUrl, setDraftUrl]   = useState<string>(sget('providers.' + e.id + '.baseUrl',     e.defaults.baseUrl     || ''));
   const [draftModel, setDraftMod] = useState<string>(sget('providers.' + e.id + '.defaultModel', e.defaults.defaultModel || ''));
   const [draftDir, setDraftDir]   = useState<string>(sget('providers.' + e.id + '.workingDir',  e.defaults.workingDir  || ''));
+  const [discovered, setDiscovered] = useState<ModelOption[]>(sget('providers.' + e.id + '.discovered', [] as ModelOption[]));
+  const [scanning, setScanning]     = useState<boolean>(false);
 
   useEffect(() => {
     setDraftCli(sget('providers.' + e.id + '.cliPath', e.defaults.cliPath || ''));
     setDraftUrl(sget('providers.' + e.id + '.baseUrl', e.defaults.baseUrl || ''));
     setDraftMod(sget('providers.' + e.id + '.defaultModel', e.defaults.defaultModel || ''));
     setDraftDir(sget('providers.' + e.id + '.workingDir', e.defaults.workingDir || ''));
+    setDiscovered(sget('providers.' + e.id + '.discovered', [] as ModelOption[]));
   }, [props.version]);
 
   function save(field: string, value: string) { sset('providers.' + e.id + '.' + field, value); }
+  function setModel(id: string) { setDraftMod(id); save('defaultModel', id); }
+
+  async function refreshDiscovered() {
+    setScanning(true);
+    const found = await scanLocalModels();
+    setDiscovered(found);
+    sset('providers.' + e.id + '.discovered', found);
+    setScanning(false);
+  }
+
+  const catalog: ModelOption[] = MODEL_CATALOG[e.id] || [];
+  // The codex/local backend is the one the user explicitly asked to be able
+  // to populate from Ollama / LM Studio. Other backends talk to named
+  // services — exposing a refresh button there would mislead, so keep it
+  // codex-only.
+  const supportsDiscovery = e.id === 'codex-cli';
 
   return (
     <Box style={{
@@ -1758,10 +1966,6 @@ function BackendCard(props: { entry: BackendEntry; enabled: boolean; onToggle: (
           <TextInput value={draftUrl} onChangeText={(v: string) => { setDraftUrl(v); save('baseUrl', v); }}
             placeholder={e.defaults.baseUrl}
             style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
-          <Text fontSize={10} color={COLORS.textDim}>Default model</Text>
-          <TextInput value={draftModel} onChangeText={(v: string) => { setDraftMod(v); save('defaultModel', v); }}
-            placeholder={e.defaults.defaultModel}
-            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
         </Col>
       ) : null}
 
@@ -1771,16 +1975,22 @@ function BackendCard(props: { entry: BackendEntry; enabled: boolean; onToggle: (
           <TextInput value={draftCli} onChangeText={(v: string) => { setDraftCli(v); save('cliPath', v); }}
             placeholder={e.defaults.cliPath}
             style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
-          <Text fontSize={10} color={COLORS.textDim}>Default model</Text>
-          <TextInput value={draftModel} onChangeText={(v: string) => { setDraftMod(v); save('defaultModel', v); }}
-            placeholder={e.defaults.defaultModel}
-            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
           <Text fontSize={10} color={COLORS.textDim}>Working directory (optional)</Text>
           <TextInput value={draftDir} onChangeText={(v: string) => { setDraftDir(v); save('workingDir', v); }}
             placeholder="cwd for CLI invocations"
             style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
         </Col>
       ) : null}
+
+      <Col style={{ gap: 4 }}>
+        <Text fontSize={10} color={COLORS.textDim}>Default model</Text>
+        <ModelDropdown value={draftModel} options={catalog}
+          discovered={supportsDiscovery ? discovered : undefined}
+          onRefreshDiscovered={supportsDiscovery ? refreshDiscovered : undefined}
+          refreshing={scanning}
+          onChange={setModel}
+          placeholder={e.defaults.defaultModel} />
+      </Col>
 
       <Row style={{ gap: 4, flexWrap: 'wrap' }}>
         {e.hostFns.map(fn => (
