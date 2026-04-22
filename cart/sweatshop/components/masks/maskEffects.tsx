@@ -16,7 +16,8 @@ export type MaskKind =
   | 'vignette'
   | 'rgb-shift'
   | 'duotone-map'
-  | 'halftone';
+  | 'halftone'
+  | 'dither';
 
 export type MaskRenderResult = { underlay: any[]; overlay: any[] };
 
@@ -291,6 +292,31 @@ function renderHalftone(props: MaskRenderProps): MaskRenderResult {
   return { underlay: [], overlay };
 }
 
+function renderDither(props: MaskRenderProps): MaskRenderResult {
+  const levels = Math.max(2, Math.round(Number(props.levels ?? 4)));
+  const scale = Math.max(1, Math.round(Number(props.scale ?? 2)));
+  const cols = Math.max(4, Math.round(props.width / (scale * 4)));
+  const rows = Math.max(4, Math.round(props.height / (scale * 4)));
+  // 4x4 Bayer matrix
+  const bayer = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+  ];
+  const overlay = boxGrid(props.width, props.height, cols, rows, (col, row, x, y, w, h) => {
+    const threshold = bayer[row % 4][col % 4] / 16;
+    const alpha = (0.04 + threshold * 0.18) * (1 - 0.06 * levels);
+    return (
+      <Box
+        key={`dither-${col}-${row}`}
+        style={{ position: 'absolute', left: x, top: y, width: Math.max(1, w - 1), height: Math.max(1, h - 1), backgroundColor: COLORS.textBright, opacity: alpha }}
+      />
+    );
+  });
+  return { underlay: [], overlay };
+}
+
 export function renderMaskEffect(kind: MaskKind, props: MaskRenderProps, child: any): MaskRenderResult {
   switch (kind) {
     case 'blur': return renderBlur(props, child);
@@ -307,6 +333,7 @@ export function renderMaskEffect(kind: MaskKind, props: MaskRenderProps, child: 
     case 'rgb-shift': return renderRGBShift(props, child);
     case 'duotone-map': return renderDuotoneMap(props);
     case 'halftone': return renderHalftone(props);
+    case 'dither': return renderDither(props);
     default: return { underlay: [], overlay: [] };
   }
 }

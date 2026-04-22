@@ -7,6 +7,7 @@ import { FilmGrain } from './FilmGrain';
 import { Glitch } from './Glitch';
 import { Glow } from './Glow';
 import { Halftone } from './Halftone';
+import { Dither } from './Dither';
 import { Kaleidoscope } from './Kaleidoscope';
 import { PaperBurn } from './PaperBurn';
 import { Pixelate } from './Pixelate';
@@ -57,6 +58,7 @@ const MASK_DEFS: MaskDef[] = [
   { id: 'rgb-shift', label: 'RGB Shift', Component: RGBShift, desc: 'Hard split of red, green, and blue layers.', props: [{ name: 'offset', kind: 'num', defaultVal: 4, step: 1, min: 0, max: 18 }, { name: 'spread', kind: 'num', defaultVal: 1, step: 0.5, min: 0, max: 8 }] },
   { id: 'duotone-map', label: 'Duotone Map', Component: DuotoneMap, desc: 'Two-color tone remapping.', props: [{ name: 'lightColor', kind: 'enum', defaultVal: COLORS.blue, options: [COLORS.blue, COLORS.green, COLORS.purple, COLORS.orange, COLORS.yellow] }, { name: 'darkColor', kind: 'enum', defaultVal: COLORS.panelBg, options: [COLORS.panelBg, COLORS.panelAlt, COLORS.grayDeep, '#10151d'] }, { name: 'mix', kind: 'num', defaultVal: 0.55, step: 0.05, min: 0, max: 1 }] },
   { id: 'halftone', label: 'Halftone', Component: Halftone, desc: 'Dot-pattern stylization over the live source.', props: [{ name: 'cellSize', kind: 'num', defaultVal: 10, step: 1, min: 4, max: 24 }, { name: 'dotSize', kind: 'num', defaultVal: 4, step: 1, min: 1, max: 10 }, { name: 'tint', kind: 'enum', defaultVal: COLORS.textBright, options: [COLORS.textBright, COLORS.blue, COLORS.green, COLORS.orange, COLORS.purple] }] },
+  { id: 'dither', label: 'Dither', Component: Dither, desc: 'Ordered Bayer-matrix dithering for retro pixel-art aesthetic.', props: [{ name: 'levels', kind: 'num', defaultVal: 4, step: 1, min: 2, max: 8 }, { name: 'scale', kind: 'num', defaultVal: 2, step: 1, min: 1, max: 6 }] },
 ];
 
 let maskSeq = 0;
