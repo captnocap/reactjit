@@ -4,11 +4,10 @@
 const React: any = require('react');
 const { useState, useEffect } = React;
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
 import { RenamePanel } from './renamepanel';
-import { ScrollFrame } from './scrollbar';
 import {
   indexWorkspace,
   loadIndex,
@@ -239,12 +238,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           <Pill label={`${directories.length} dirs`} tiny={true} />
         </Row>
         <Text fontSize={10} color={COLORS.textDim}>Toggle directories to include or exclude them from the next index run.</Text>
-        <ScrollFrame
-          style={{ maxHeight: 180 }}
-          scrollStyle={{}}
-          viewportHeight={180}
-          contentHeight={Math.max(180, directories.length * 38 + 8)}
-        >
+        <ScrollView style={{ maxHeight: 180 }}>
           <Col style={{ gap: 6 }}>
             {directories.map((dir) => (
               <Pressable
@@ -267,7 +261,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
               </Pressable>
             ))}
           </Col>
-        </ScrollFrame>
+        </ScrollView>
       </Box>
 
       <RenamePanel workDir={props.workDir} onApplied={props.onIndex} />
@@ -282,12 +276,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
         <Text fontSize={10} color={COLORS.textDim}>{results.length} hit{results.length !== 1 ? 's' : ''}</Text>
 
         <Col style={{ gap: 8, maxHeight: 320 }}>
-          <ScrollFrame
-            style={{ flexGrow: 1 }}
-            scrollStyle={{}}
-            viewportHeight={320}
-            contentHeight={Math.max(320, results.length * 78 + 16)}
-          >
+          <ScrollView style={{ flexGrow: 1 }}>
             {results.map((hit) => {
               const relativePath = hit.path.replace(props.workDir + '/', '');
               const symbolNames = hit.symbols.slice(0, 4);
@@ -316,7 +305,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
                 </Box>
               );
             })}
-          </ScrollFrame>
+          </ScrollView>
         </Col>
       </Box>
     </Col>

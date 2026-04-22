@@ -1,7 +1,7 @@
 const React: any = require('react');
 const { useState, useEffect, useRef } = React;
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS, useTheme } from '../theme';
 import { THEME_ORDER, THEMES } from '../themes';
 import { Glyph, Pill } from './shared';
@@ -10,7 +10,6 @@ import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { ModelReference } from '../default-models';
 import { deleteApiKey, getApiKey, hasApiKey, listApiKeys, setApiKey, validateApiKey } from '../api-keys';
-import { ScrollFrame } from './scrollbar';
 
 // =============================================================================
 // SETTINGS — 8-section surface: Appearance, Editor, Terminal, Keybindings,
@@ -2350,12 +2349,7 @@ export function SettingsSurface(props: any) {
   }
 
   return (
-    <ScrollFrame
-      style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}
-      scrollStyle={{}}
-      viewportHeight={stacked ? 620 : 760}
-      contentHeight={stacked ? 2600 : 2200}
-    >
+    <ScrollView style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
       <Col style={{ padding: stacked ? 12 : 18, gap: 16 }}>
         <Box style={{ padding: stacked ? 14 : 18, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
           <Text fontSize={10} color={COLORS.blue} style={{ letterSpacing: 0.8, fontWeight: 'bold' }}>SETTINGS</Text>
@@ -2390,6 +2384,6 @@ export function SettingsSurface(props: any) {
           </Col>
         </Box>
       </Col>
-    </ScrollFrame>
+    </ScrollView>
   );
 }

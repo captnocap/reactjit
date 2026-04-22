@@ -1,10 +1,9 @@
 const React: any = require('react');
 const { memo } = React;
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { Pill } from './shared';
-import { ScrollFrame } from './scrollbar';
 
 function SearchSurfaceImpl(props: any) {
   (globalThis as any).__hostLog?.(0, "[render] SearchSurface");
@@ -29,12 +28,7 @@ function SearchSurfaceImpl(props: any) {
           </Row>
         ) : null}
       </Col>
-      <ScrollFrame
-        style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}
-        scrollStyle={{ padding: 12 }}
-        viewportHeight={360}
-        contentHeight={Math.max(240, props.results.length * 54 + 24)}
-      >
+      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
         <Col style={{ gap: 8 }}>
           {props.results.map((result: any) => (
             <Pressable key={result.file + ':' + result.line + ':' + result.text} onPress={() => props.onOpenResult(result.file, result.line)} style={{ padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
@@ -48,7 +42,7 @@ function SearchSurfaceImpl(props: any) {
             </Pressable>
           ))}
         </Col>
-      </ScrollFrame>
+      </ScrollView>
       {!minimumBand ? (
         <Row style={{ justifyContent: 'space-between', alignItems: 'center', padding: 12, borderTopWidth: 1, borderColor: COLORS.borderSoft }}>
           <Text fontSize={10} color={COLORS.textDim}>results in workspace</Text>

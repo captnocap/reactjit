@@ -1,12 +1,11 @@
 const React: any = require('react');
 const { useRef, useState, useMemo, memo, useEffect } = React;
 
-import { Box, Col, CodeGutter, Minimap, Pressable, Row, Text, TextEditor } from '../../../runtime/primitives';
+import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
 import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
 import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';
 import { Pill } from './shared';
-import { ScrollFrame } from './scrollbar';
 
 function EditorSurfaceImpl(props: any) {
   const _rT0 = Date.now();
@@ -131,17 +130,7 @@ function EditorSurfaceImpl(props: any) {
             {!minimumBand ? <Text fontSize={10} color={COLORS.textDim}>{props.currentFilePath}</Text> : null}
           </Row>
 
-          <ScrollFrame
-            onScroll={syncEditorScroll}
-            dragToScroll={true}
-            scrollX={editorScrollX}
-            scrollY={editorScrollY}
-            viewportHeight={estimatedViewportHeight}
-            viewportWidth={compactBand ? 760 : 1020}
-            contentHeight={editorHeight}
-            contentWidth={canvasWidth}
-            style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17' }}
-          >
+          <ScrollView onScroll={syncEditorScroll} style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17' }}>
             <Row style={{ minHeight: editorHeight, width: canvasWidth, alignItems: 'flex-start' }}>
               {showGutter ? (
                 <CodeGutter
@@ -181,7 +170,7 @@ function EditorSurfaceImpl(props: any) {
                 />
               </Box>
             </Row>
-          </ScrollFrame>
+          </ScrollView>
         </Col>
 
         {showMinimap ? (

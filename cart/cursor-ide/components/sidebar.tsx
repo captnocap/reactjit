@@ -2,12 +2,11 @@ const React: any = require('react');
 const { useMemo, useState } = React;
 const { memo } = React;
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, fileTone, samePath } from '../theme';
 import { Icon } from './icons';
 import { HoverPressable, Pill } from './shared';
 import { Tooltip } from './tooltip';
-import { ScrollFrame } from './scrollbar';
 
 // File-tree virtualization constants. Each row is ~34px (padding 6+6 +
 // ~11px text + gap). Overscan keeps scrolling smooth by rendering a bit
@@ -509,13 +508,8 @@ function SidebarImpl(props: any) {
         />
       </Col>
 
-      <ScrollFrame
-        style={{ flexGrow: 1, height: '100%' }}
-        scrollStyle={{ padding: 10, gap: 10 }}
-        contentHeight={Math.max(900, panelOrder.length * 460)}
-        viewportHeight={Math.max(540, FILE_VIEWPORT_ESTIMATE + 80)}
-      >
-        <Col style={{ gap: 10 }}>
+      <ScrollView style={{ flexGrow: 1, height: '100%' }}>
+        <Col style={{ padding: 10, gap: 10 }}>
           {panelOrder.map((panelId: string) => {
             if (panelId === 'files') {
               return (
@@ -561,7 +555,7 @@ function SidebarImpl(props: any) {
             return null;
           })}
         </Col>
-      </ScrollFrame>
+      </ScrollView>
     </Row>
   );
 }
@@ -586,12 +580,8 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
   const bottomSpacer = Math.max(0, (total - endIndex) * FILE_ROW_HEIGHT);
 
   return (
-    <ScrollFrame
-      style={{ flexGrow: 1, height: '100%' }}
-      scrollStyle={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
-      scrollY={scrollY}
-      contentHeight={Math.max(FILE_VIEWPORT_ESTIMATE, total * FILE_ROW_HEIGHT + 24)}
-      viewportHeight={FILE_VIEWPORT_ESTIMATE}
+    <ScrollView
+      style={{ flexGrow: 1, height: '100%', paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
       onScroll={(payload: any) => {
         const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
         if (Math.abs(next - scrollY) >= FILE_ROW_HEIGHT / 2) setScrollY(next);
@@ -634,7 +624,7 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
         })}
         {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
       </Col>
-    </ScrollFrame>
+    </ScrollView>
   );
 }
 
