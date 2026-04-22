@@ -534,13 +534,134 @@ function AppearancePanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function EditorPanel() {
+const EDITOR_DEFAULTS = {
+  fontSize: 13,
+  lineHeight: 1.5,
+  tabSize: 2,
+  insertSpaces: true,
+  wordWrap: true,
+  showLineNumbers: true,
+  showWhitespace: false,
+  trimTrailingWhitespace: true,
+  formatOnSave: false,
+  fontFamily: 'JetBrains Mono',
+};
+
+function EditorPanel(props: { query: string; resetToken: number }) {
+  const [fontSize, setFontSizeS]             = useState<number>(sget('editor.fontSize', EDITOR_DEFAULTS.fontSize));
+  const [lineHeight, setLineHeightS]         = useState<number>(sget('editor.lineHeight', EDITOR_DEFAULTS.lineHeight));
+  const [tabSize, setTabSizeS]               = useState<number>(sget('editor.tabSize', EDITOR_DEFAULTS.tabSize));
+  const [insertSpaces, setInsertSpacesS]     = useState<boolean>(sget('editor.insertSpaces', EDITOR_DEFAULTS.insertSpaces));
+  const [wordWrap, setWordWrapS]             = useState<boolean>(sget('editor.wordWrap', EDITOR_DEFAULTS.wordWrap));
+  const [showLineNumbers, setLineNumS]       = useState<boolean>(sget('editor.showLineNumbers', EDITOR_DEFAULTS.showLineNumbers));
+  const [showWhitespace, setWsS]             = useState<boolean>(sget('editor.showWhitespace', EDITOR_DEFAULTS.showWhitespace));
+  const [trimTrailing, setTrimS]             = useState<boolean>(sget('editor.trimTrailingWhitespace', EDITOR_DEFAULTS.trimTrailingWhitespace));
+  const [formatOnSave, setFmtS]              = useState<boolean>(sget('editor.formatOnSave', EDITOR_DEFAULTS.formatOnSave));
+  const [fontFamily, setFontFamilyS]         = useState<string>(sget('editor.fontFamily', EDITOR_DEFAULTS.fontFamily));
+
+  useEffect(() => {
+    setFontSizeS(sget('editor.fontSize', EDITOR_DEFAULTS.fontSize));
+    setLineHeightS(sget('editor.lineHeight', EDITOR_DEFAULTS.lineHeight));
+    setTabSizeS(sget('editor.tabSize', EDITOR_DEFAULTS.tabSize));
+    setInsertSpacesS(sget('editor.insertSpaces', EDITOR_DEFAULTS.insertSpaces));
+    setWordWrapS(sget('editor.wordWrap', EDITOR_DEFAULTS.wordWrap));
+    setLineNumS(sget('editor.showLineNumbers', EDITOR_DEFAULTS.showLineNumbers));
+    setWsS(sget('editor.showWhitespace', EDITOR_DEFAULTS.showWhitespace));
+    setTrimS(sget('editor.trimTrailingWhitespace', EDITOR_DEFAULTS.trimTrailingWhitespace));
+    setFmtS(sget('editor.formatOnSave', EDITOR_DEFAULTS.formatOnSave));
+    setFontFamilyS(sget('editor.fontFamily', EDITOR_DEFAULTS.fontFamily));
+  }, [props.resetToken]);
+
+  const setFontSize = (v: number) => { setFontSizeS(v); sset('editor.fontSize', v); };
+  const setLineHeight = (v: number) => { setLineHeightS(v); sset('editor.lineHeight', v); };
+  const setTabSize = (v: number) => { setTabSizeS(v); sset('editor.tabSize', v); };
+  const setInsertSpaces = (v: boolean) => { setInsertSpacesS(v); sset('editor.insertSpaces', v); };
+  const setWordWrap = (v: boolean) => { setWordWrapS(v); sset('editor.wordWrap', v); };
+  const setLineNum = (v: boolean) => { setLineNumS(v); sset('editor.showLineNumbers', v); };
+  const setWs = (v: boolean) => { setWsS(v); sset('editor.showWhitespace', v); };
+  const setTrim = (v: boolean) => { setTrimS(v); sset('editor.trimTrailingWhitespace', v); };
+  const setFmt = (v: boolean) => { setFmtS(v); sset('editor.formatOnSave', v); };
+  const setFontFamily = (v: string) => { setFontFamilyS(v); sset('editor.fontFamily', v); };
+
+  function doReset() {
+    setFontSize(EDITOR_DEFAULTS.fontSize);
+    setLineHeight(EDITOR_DEFAULTS.lineHeight);
+    setTabSize(EDITOR_DEFAULTS.tabSize);
+    setInsertSpaces(EDITOR_DEFAULTS.insertSpaces);
+    setWordWrap(EDITOR_DEFAULTS.wordWrap);
+    setLineNum(EDITOR_DEFAULTS.showLineNumbers);
+    setWs(EDITOR_DEFAULTS.showWhitespace);
+    setTrim(EDITOR_DEFAULTS.trimTrailingWhitespace);
+    setFmt(EDITOR_DEFAULTS.formatOnSave);
+    setFontFamily(EDITOR_DEFAULTS.fontFamily);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const match = (kw: string) => !q || kw.toLowerCase().indexOf(q) >= 0;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Editor" description="Font size, tabs, wrap, line numbers." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>Editor settings coming in a later commit.</Text>
-      </Box>
+      <SectionTitle title="Editor" description="Typography, indentation, and save behaviour." onReset={doReset} />
+
+      {match('font family monospace typeface') ? (
+        <SettingRow title="Font family" description="Monospace font used across the editor surface.">
+          <TextField value={fontFamily} onChange={setFontFamily} placeholder="JetBrains Mono" width={220} mono={true} />
+        </SettingRow>
+      ) : null}
+
+      {match('font size type scale') ? (
+        <SettingRow title="Font size" description="Point size for editor text.">
+          <Stepper value={fontSize} onChange={setFontSize} min={8} max={28} step={1} suffix="pt" />
+        </SettingRow>
+      ) : null}
+
+      {match('line height spacing leading') ? (
+        <SettingRow title="Line height" description="Line-height multiplier relative to font size.">
+          <Stepper value={Math.round(lineHeight * 10)} onChange={(v) => setLineHeight(v / 10)} min={10} max={25} step={1} suffix="/10" />
+        </SettingRow>
+      ) : null}
+
+      {match('tab size indent width') ? (
+        <SettingRow title="Tab size" description="How many spaces a tab renders as.">
+          <Stepper value={tabSize} onChange={setTabSize} min={1} max={8} step={1} />
+        </SettingRow>
+      ) : null}
+
+      {match('insert spaces tabs indent character') ? (
+        <SettingRow title="Insert spaces" description="Use spaces for indentation instead of real tab characters.">
+          <Toggle value={insertSpaces} onChange={setInsertSpaces} onLabel="SPACES" offLabel="TABS" />
+        </SettingRow>
+      ) : null}
+
+      {match('word wrap soft line break') ? (
+        <SettingRow title="Word wrap" description="Wrap long lines at the viewport edge.">
+          <Toggle value={wordWrap} onChange={setWordWrap} />
+        </SettingRow>
+      ) : null}
+
+      {match('line numbers gutter') ? (
+        <SettingRow title="Line numbers" description="Show the gutter number on every line.">
+          <Toggle value={showLineNumbers} onChange={setLineNum} />
+        </SettingRow>
+      ) : null}
+
+      {match('whitespace dots invisible characters') ? (
+        <SettingRow title="Render whitespace" description="Draw faint dots for spaces and arrows for tabs.">
+          <Toggle value={showWhitespace} onChange={setWs} />
+        </SettingRow>
+      ) : null}
+
+      {match('trim trailing whitespace') ? (
+        <SettingRow title="Trim trailing whitespace" description="Strip trailing spaces from every line on save.">
+          <Toggle value={trimTrailing} onChange={setTrim} />
+        </SettingRow>
+      ) : null}
+
+      {match('format on save prettier') ? (
+        <SettingRow title="Format on save" description="Run the formatter when a file is saved.">
+          <Toggle value={formatOnSave} onChange={setFmt} />
+        </SettingRow>
+      ) : null}
     </Col>
   );
 }
@@ -688,7 +809,7 @@ export function SettingsSurface(props: any) {
 
   function renderPanel() {
     if (active === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
-    if (active === 'editor')      return <EditorPanel />;
+    if (active === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
     if (active === 'terminal')    return <TerminalSettingsPanel />;
     if (active === 'keybindings') return <KeybindingsPanel />;
     if (active === 'providers')   return <ProvidersPanel
