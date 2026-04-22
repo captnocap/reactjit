@@ -2,8 +2,10 @@ const React: any = require('react');
 const { useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS, useTheme } from '../theme';
+import { THEME_ORDER, THEMES } from '../themes';
 import { Glyph, Pill } from './shared';
+import { FadeIn } from '../anim';
 import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { AnyVariable, AppLevelVariable, WildcardVariable } from '../variables';
@@ -223,10 +225,10 @@ function ModelSelector(props: {
   const icon = selectedModel ? getModelIconInfo(selectedModel.id) : getProviderIconInfo(props.value.provider);
 
   return (
-    <Col style={{ gap: 6 }}>
+    <Col style={{ gap: 6, position: 'relative', zIndex: open ? 9999 : 0, overflow: 'visible' }}>
       {props.label ? <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.label}</Text> : null}
       {props.description ? <Text fontSize={10} color={COLORS.textDim}>{props.description}</Text> : null}
-      <Box style={{ position: 'relative' }}>
+      <Box style={{ position: 'relative', zIndex: open ? 9999 : 0, overflow: 'visible' }}>
         <Pressable onPress={() => setOpen(!open)} style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, gap: 8 }}>
           <Row style={{ alignItems: 'center', gap: 8 }}>
             <Box style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: icon.color, justifyContent: 'center', alignItems: 'center' }}>
@@ -238,7 +240,7 @@ function ModelSelector(props: {
           </Row>
         </Pressable>
         {open ? (
-          <Col style={{ position: 'absolute', left: 0, right: 0, top: 46, gap: 6, maxHeight: 280, overflow: 'scroll', zIndex: 20 }}>
+          <Col style={{ position: 'absolute', left: 0, right: 0, top: 46, gap: 6, maxHeight: 280, overflow: 'scroll', zIndex: 10000 }}>
             {props.providers.filter(p => (p.enabled || props.allowDisabledProviders) && p.models.length > 0).map(provider => (
               <Col key={provider.type} style={{ gap: 4 }}>
                 <Row style={{ alignItems: 'center', gap: 6, paddingLeft: 4 }}>
@@ -619,6 +621,53 @@ function ProxyPanel(props: { configs: ProxyConfig[]; status: any; onChange: () =
   );
 }
 
+// ── Appearance Panel (theme switcher) ────────────────────────────────────────
+
+function ThemeSwatch(props: { name: string; active: boolean; onPress: () => void }) {
+  const theme = THEMES[props.name];
+  const p = theme.palette;
+  const t = theme.tokens;
+  return (
+    <Pressable onPress={props.onPress}>
+      <Col style={{
+        padding: 10,
+        gap: 8,
+        borderRadius: t.radiusMd,
+        borderWidth: props.active ? 2 : 1,
+        borderColor: props.active ? p.blue : COLORS.border,
+        backgroundColor: COLORS.panelRaised,
+        minWidth: 140,
+      }}>
+        <Row style={{ alignItems: 'center', gap: 6 }}>
+          <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.appBg, borderWidth: 1, borderColor: p.border }} />
+          <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.panelRaised, borderWidth: 1, borderColor: p.border }} />
+          <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.blue }} />
+          <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.green }} />
+          <Box style={{ width: 10, height: 10, borderRadius: t.radiusSm, backgroundColor: p.red }} />
+        </Row>
+        <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{t.label}</Text>
+        <Text fontSize={9} color={COLORS.textDim}>{t.corner} · {t.density} · r{t.radiusMd}</Text>
+      </Col>
+    </Pressable>
+  );
+}
+
+function AppearancePanel() {
+  const { name, setTheme } = useTheme();
+  return (
+    <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+      <Text fontSize={10} color={COLORS.purple} style={{ letterSpacing: 0.8, fontWeight: 'bold' }}>APPEARANCE</Text>
+      <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Theme</Text>
+      <Text fontSize={10} color={COLORS.textDim}>Sharp is terminal-feel with square corners. Soft is the tuned default. Studio is pro-tool muted and tight.</Text>
+      <Row style={{ gap: 10, flexWrap: 'wrap' }}>
+        {THEME_ORDER.map((n: string) => (
+          <ThemeSwatch key={n} name={n} active={n === name} onPress={() => setTheme(n)} />
+        ))}
+      </Row>
+    </Box>
+  );
+}
+
 // ── Settings Surface ─────────────────────────────────────────────────────────
 
 export function SettingsSurface(props: any) {
@@ -630,9 +679,11 @@ export function SettingsSurface(props: any) {
       <Col style={{ padding: stacked ? 12 : 18, gap: 16 }}>
         <Box style={{ padding: stacked ? 14 : 18, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
           <Text fontSize={10} color={COLORS.blue} style={{ letterSpacing: 0.8, fontWeight: 'bold' }}>SETTINGS SURFACE</Text>
-          <Text fontSize={stacked ? 20 : 24} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-            Provider routing, context layers, memory, and plugin runtimes
-          </Text>
+          <FadeIn delay={60}>
+            <Text fontSize={stacked ? 20 : 24} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
+              Provider routing, context layers, memory, and plugin runtimes
+            </Text>
+          </FadeIn>
           <Row style={{ gap: 8, flexWrap: 'wrap' }}>
             <Pill label="model" color={COLORS.red} borderColor="#5a1f24" backgroundColor="#181015" />
             <Pill label={props.selectedModelName} color={COLORS.red} borderColor="#5a1f24" backgroundColor="#181015" />
@@ -650,6 +701,7 @@ export function SettingsSurface(props: any) {
           </Col>
 
           <Col style={{ flexGrow: 1, flexBasis: 0, gap: 14 }}>
+            <AppearancePanel />
             {props.activeSection === 'providers' ? (
               <Col style={{ gap: 14 }}>
                 <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
@@ -668,15 +720,15 @@ export function SettingsSurface(props: any) {
                   </Col>
                 </Box>
                 {selectedProvider ? (
-                  <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: getProviderIconInfo(selectedProvider.type).color || COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
+                  <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: getProviderIconInfo(selectedProvider.type).color || COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12, overflow: 'visible' }}>
                     <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{getProviderIconInfo(selectedProvider.type).name} Models</Text>
                       <Pressable onPress={() => props.onToggleProvider(selectedProvider.type)}>
                         <Pill label={selectedProvider.enabled ? 'enabled' : 'disabled'} color={selectedProvider.enabled ? COLORS.green : COLORS.textMuted} tiny={true} />
                       </Pressable>
                     </Row>
-                    <Row style={{ gap: 10, flexWrap: 'wrap' }}>
-                      <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220 }}>
+                    <Row style={{ gap: 10, flexWrap: 'wrap', overflow: 'visible' }}>
+                      <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220, overflow: 'visible' }}>
                         <Text fontSize={10} color={COLORS.textDim}>Base URL</Text>
                         <TextInput
                           value={selectedProvider.baseUrl || ''}
@@ -684,7 +736,7 @@ export function SettingsSurface(props: any) {
                           style={{ height: 34, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingLeft: 8, backgroundColor: COLORS.panelBg }}
                         />
                       </Col>
-                      <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220 }}>
+                      <Col style={{ gap: 6, flexGrow: 1, flexBasis: 0, minWidth: 220, overflow: 'visible' }}>
                         <ModelSelector
                           label="Default Model"
                           description="Provider default model used when a task does not specify one"
@@ -695,7 +747,7 @@ export function SettingsSurface(props: any) {
                         />
                       </Col>
                     </Row>
-                    <Col style={{ gap: 8 }}>
+                    <Col style={{ gap: 8, overflow: 'visible' }}>
                       {(selectedProvider.models || []).map((model: ModelConfig) => (
                         <ModelRow
                           key={model.id}
