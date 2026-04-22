@@ -2,98 +2,15 @@ import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { HoverPressable, Pill } from '../shared';
 import { Icon } from '../icons';
+import { ChatMessageMarkdown } from '../chat/ChatMessageMarkdown';
 import { RoleAvatar } from './RoleAvatar';
 import { MessageTimestamp } from './MessageTimestamp';
 import { MessageActions } from './MessageActions';
 import { MessageReactions } from './MessageReactions';
-import { CodeBlock } from './CodeBlock';
-import { InlineRender } from './InlineRender';
 import { StreamIndicator } from './StreamIndicator';
 import { ToolCallBadge } from './ToolCallBadge';
 import { copyToClipboard } from './clipboard';
-import { parseMarkdownInternal } from './markdown';
 import type { Message } from '../../types';
-import type { MarkdownNode, InternalNode } from './markdown';
-
-function renderMarkdownNodes(nodes: InternalNode[], onCopyCode: (code: string) => void) {
-  const result: any[] = [];
-  let inlineBuffer: MarkdownNode[] = [];
-  function flushInline() {
-    if (inlineBuffer.length === 0) return;
-    result.push(
-      <Row key={result.length} style={{ flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-        <InlineRender nodes={inlineBuffer} />
-      </Row>
-    );
-    inlineBuffer = [];
-  }
-  for (const node of nodes) {
-    if (node.type === 'paragraph') {
-      flushInline();
-      continue;
-    }
-    switch (node.type) {
-      case 'text':
-      case 'bold':
-      case 'italic':
-      case 'code':
-      case 'link':
-        inlineBuffer.push(node);
-        break;
-      case 'codeblock': {
-        flushInline();
-        result.push(
-          <CodeBlock key={result.length} language={node.language} content={node.content} />
-        );
-        break;
-      }
-      case 'heading': {
-        flushInline();
-        const headingSize = node.level === 1 ? 18 : node.level === 2 ? 15 : node.level === 3 ? 13 : 11;
-        result.push(
-          <Text key={result.length} fontSize={headingSize} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-            {node.content}
-          </Text>
-        );
-        break;
-      }
-      case 'list': {
-        flushInline();
-        result.push(
-          <Col key={result.length} style={{ gap: 4, paddingLeft: 4 }}>
-            {node.items.map((item, idx) => (
-              <Row key={idx} style={{ gap: 8, alignItems: 'flex-start' }}>
-                <Text fontSize={11} color={COLORS.textMuted}>{node.ordered ? `${idx + 1}.` : '•'}</Text>
-                <Row style={{ flexWrap: 'wrap', gap: 2, alignItems: 'center', flexShrink: 1 }}>
-                  <InlineRender nodes={require('./markdown').parseInline(item)} />
-                </Row>
-              </Row>
-            ))}
-          </Col>
-        );
-        break;
-      }
-      case 'quote': {
-        flushInline();
-        result.push(
-          <Box key={result.length} style={{ paddingLeft: 10, borderLeftWidth: 3, borderColor: COLORS.blue, marginLeft: 4 }}>
-            <Row style={{ flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-              <InlineRender nodes={require('./markdown').parseInline(node.content)} baseColor={COLORS.textMuted} />
-            </Row>
-          </Box>
-        );
-        break;
-      }
-      case 'rule': {
-        flushInline();
-        result.push(<Box key={result.length} style={{ height: 1, backgroundColor: COLORS.border }} />);
-        break;
-      }
-    }
-  }
-  flushInline();
-  return result;
-}
 
 export function MessageBubble(props: {
   message: Message;
@@ -110,14 +27,10 @@ export function MessageBubble(props: {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const [hovered, setHovered] = useState(false);
-  const mdNodes = useMemo(() => parseMarkdownInternal(message.text || ''), [message.text]);
 
   function handleCopyMessage() {
     copyToClipboard(message.text || '');
     if (onCopy) onCopy();
-  }
-  function handleCopyCode(code: string) {
-    copyToClipboard(code);
   }
 
   return (
@@ -154,7 +67,13 @@ export function MessageBubble(props: {
         gap: 8,
       }}>
         <Col style={{ gap: 6 }}>
-          {renderMarkdownNodes(mdNodes, handleCopyCode)}
+          {isAssistant ? (
+            <ChatMessageMarkdown text={message.text || ''} color={COLORS.text} />
+          ) : (
+            <Text fontSize={11} color={COLORS.text} style={{ whiteSpace: 'pre-wrap', minWidth: 0 }}>
+              {message.text || ''}
+            </Text>
+          )}
           {isStreaming ? <StreamIndicator /> : null}
         </Col>
 
