@@ -99,6 +99,7 @@ import { loadPlugins, type PluginRegistry } from './plugin';
 import { HotPanel } from './components/hotpanel';
 import { GitPanel } from './components/git/GitPanel';
 import { PlanPanelWrapper } from './components/planwrapper';
+import { PresentationPanel } from './components/presentation/PresentationPanel';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/palette';
 import { ToastProvider } from './components/toast/ToastProvider';
@@ -206,6 +207,7 @@ export default function CursorIdeApp() {
   const [showPlanPanel, setShowPlanPanel] = usePersistentState('sweatshop.showPlanPanel', 0);
   const [showGraphPanel, setShowGraphPanel] = usePersistentState('sweatshop.showGraphPanel', 0);
   const [showDiffPanel, setShowDiffPanel] = usePersistentState('sweatshop.showDiffPanel', 0);
+  const [showPresentationPanel, setShowPresentationPanel] = usePersistentState('sweatshop.showPresentationPanel', 0);
   const [activePlanId, setActivePlanId] = usePersistentState('sweatshop.activePlan', '');
   const [terminalRecording, setTerminalRecording] = useState(0);
   const [terminalRecordFrames, setTerminalRecordFrames] = useState(0);
@@ -277,6 +279,7 @@ export default function CursorIdeApp() {
     searchQuery, selectedModel, stagedCount, workDir, widthBand, windowHeight,
     windowWidth, workspaceName, showSearch, showChat, showTerminal, showHotPanel, showGitPanel, showPlanPanel,
     showGraphPanel, defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight, dockPanels, showDiffPanel,
+    showPresentationPanel,
   };
 
   host.__setTerminalDockHeight = (value: number) => {
@@ -330,7 +333,7 @@ export default function CursorIdeApp() {
     if (h !== stateRef.current.windowHeight) setWindowHeight(h);
     if (band !== stateRef.current.widthBand) setWidthBand(band);
     if (band === 'narrow' || band === 'widget' || band === 'minimum') {
-      let nextSurface = stateRef.current.compactSurface || mainSurface;
+      let nextSurface = stateRef.current.showPresentationPanel ? 'presentation' : (stateRef.current.compactSurface || mainSurface);
       if (nextSurface === 'editor' && mainSurface === 'landing') nextSurface = 'landing';
       if (nextSurface === 'landing' && mainSurface === 'editor') nextSurface = 'editor';
       if ((nextSurface === 'landing' || nextSurface === 'editor' || nextSurface === 'settings') && mainSurface === 'settings') nextSurface = 'settings';
@@ -1289,6 +1292,7 @@ export default function CursorIdeApp() {
   const mainSurface = primaryMainView(activeView, currentFilePath);
   const compactMode = widthBand === 'narrow' || widthBand === 'widget' || widthBand === 'minimum';
   const registeredPanels = useRegisteredPanels();
+  const restoreCompactSurface = showPresentationPanel ? 'presentation' : mainSurface;
 
   // ── Command palette commands ───────────────────────────────────────
   const paletteCommands: PaletteCommand[] = [
@@ -1318,6 +1322,15 @@ export default function CursorIdeApp() {
       paletteCommands.push({ id, label: cmd.label, category: 'Plugins', action: cmd.callback });
     });
   }
+  registeredPanels.forEach((panel) => {
+    if (panel.userVisible === false) return;
+    paletteCommands.push({
+      id: 'window.' + panel.id,
+      label: 'Toggle ' + panel.title,
+      category: 'Window',
+      action: () => togglePanelById(panel.id),
+    });
+  });
   const widgetMode = widthBand === 'widget';
   const minimumMode = widthBand === 'minimum';
   const mediumMode = widthBand === 'medium';
@@ -1333,7 +1346,7 @@ export default function CursorIdeApp() {
   const closeSearchToMainSurface = useCallback(() => {
     setShowSearch(0);
     const ms = primaryMainView(stateRef.current.activeView, stateRef.current.currentFilePath);
-    setCompactSurface(ms);
+    setCompactSurface(stateRef.current.showPresentationPanel ? 'presentation' : ms);
   }, []);
   const closeSearchOnly = useCallback(() => setShowSearch(0), []);
   const onChatInputChange = useCallback((value: string) => replaceComposer(value), []);
@@ -1361,60 +1374,66 @@ export default function CursorIdeApp() {
   const showDockedDiff = showDiffPanel === 1 && !compactMode;
   const showDockedPlan = showPlanPanel === 1 && !compactMode;
   const showDockedGraph = showGraphPanel === 1 && !compactMode;
-  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : compactSurface === 'graph' ? 'graph' : 'editor';
+  const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : compactSurface === 'graph' ? 'graph' : compactSurface === 'presentation' ? 'presentation' : 'editor';
   const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
   const todoAction = useCallback((label: string) => () => {
     console.log('[sweatshop] TODO: ' + label);
   }, []);
   const toggleSearchSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'search') { setShowSearch(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'search') { setShowSearch(0); setCompactSurface(restoreCompactSurface); }
       else { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }
     } else {
       const next = showSearch ? 0 : 1;
       setShowSearch(next);
       if (next) searchProject(searchQuery);
     }
-  }, [compactMode, compactSurface, mainSurface, searchProject, searchQuery, setShowSearch, showSearch]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, searchProject, searchQuery, setShowSearch, showSearch]);
   const toggleTerminalSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'terminal') { closeTerminalSurface('compact close'); setCompactSurface(mainSurface); }
+      if (compactSurface === 'terminal') { closeTerminalSurface('compact close'); setCompactSurface(restoreCompactSurface); }
       else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }
     } else {
       if (showTerminal) { closeTerminalSurface('toggle off'); }
       else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); }
     }
-  }, [closeTerminalSurface, compactMode, compactSurface, mainSurface, openTerminal, showTerminal]);
+  }, [closeTerminalSurface, compactMode, compactSurface, mainSurface, openTerminal, restoreCompactSurface, showTerminal]);
   const toggleHotSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'hot') { setShowHotPanel(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'hot') { setShowHotPanel(0); setCompactSurface(restoreCompactSurface); }
       else { setShowHotPanel(1); setCompactSurface('hot'); }
     } else { setShowHotPanel(showHotPanel ? 0 : 1); }
-  }, [compactMode, compactSurface, mainSurface, showHotPanel]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, showHotPanel]);
   const toggleGitSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'git') { setShowGitPanel(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'git') { setShowGitPanel(0); setCompactSurface(restoreCompactSurface); }
       else { setShowGitPanel(1); setCompactSurface('git'); }
     } else { setShowGitPanel(showGitPanel ? 0 : 1); }
-  }, [compactMode, compactSurface, mainSurface, showGitPanel]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, showGitPanel]);
   const togglePlanSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'plan') { setShowPlanPanel(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'plan') { setShowPlanPanel(0); setCompactSurface(restoreCompactSurface); }
       else { setShowPlanPanel(1); setCompactSurface('plan'); }
     } else { setShowPlanPanel(showPlanPanel ? 0 : 1); }
-  }, [compactMode, compactSurface, mainSurface, showPlanPanel]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, showPlanPanel]);
   const toggleGraphSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'graph') { setShowGraphPanel(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'graph') { setShowGraphPanel(0); setCompactSurface(restoreCompactSurface); }
       else { setShowGraphPanel(1); setCompactSurface('graph'); }
     } else { setShowGraphPanel(showGraphPanel ? 0 : 1); }
-  }, [compactMode, compactSurface, mainSurface, showGraphPanel]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, showGraphPanel]);
+  const togglePresentationSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'presentation') { setShowPresentationPanel(0); setCompactSurface(mainSurface); }
+      else { setShowPresentationPanel(1); setCompactSurface('presentation'); }
+    } else { setShowPresentationPanel(showPresentationPanel ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showPresentationPanel]);
   const toggleChatSurface = useCallback(() => {
     if (compactMode) {
-      if (compactSurface === 'agent') { setShowChat(0); setCompactSurface(mainSurface); }
+      if (compactSurface === 'agent') { setShowChat(0); setCompactSurface(restoreCompactSurface); }
       else { setShowChat(1); setCompactSurface('agent'); }
     } else { setShowChat(showChat ? 0 : 1); }
-  }, [compactMode, compactSurface, mainSurface, showChat]);
+  }, [compactMode, compactSurface, mainSurface, restoreCompactSurface, showChat]);
   const toggleDiffSurface = useCallback(() => {
     setShowDiffPanel(showDiffPanel ? 0 : 1);
   }, [showDiffPanel]);
@@ -1453,6 +1472,7 @@ export default function CursorIdeApp() {
     if (panelId === 'git') { toggleGitSurface(); return; }
     if (panelId === 'plan') { togglePlanSurface(); return; }
     if (panelId === 'graph') { toggleGraphSurface(); return; }
+    if (panelId === 'presentation') { togglePresentationSurface(); return; }
     if (panelId === 'settings') {
       if (activeView === 'settings' || currentFilePath === '__settings__') openLandingPage();
       else openSettingsSurface();
@@ -1486,6 +1506,7 @@ export default function CursorIdeApp() {
     toggleGitSurface,
     toggleHotSurface,
     toggleGraphSurface,
+    togglePresentationSurface,
     togglePlanSurface,
     toggleTerminalSurface,
   ]);
@@ -1547,7 +1568,7 @@ export default function CursorIdeApp() {
     { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
     { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
   ];
-  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit' | 'graph') => {
+  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit' | 'graph' | 'presentation') => {
     if (mode === 'cockpit') {
       return <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}><WorkerCanvas widthBand={widthBand} windowHeight={windowHeight} /></FadeIn>;
     }
@@ -1578,6 +1599,14 @@ export default function CursorIdeApp() {
             onOpenPath={openFileByPath}
             onClose={() => { setShowGraphPanel(0); setCompactSurface(mainSurface); }}
           />
+        </FadeIn>
+      );
+    }
+
+    if (mode === 'presentation') {
+      return (
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+          <PresentationPanel currentFilePath={currentFilePath} onOpenPath={openFileByPath} onClose={() => { setShowPresentationPanel(0); setCompactSurface(mainSurface); }} />
         </FadeIn>
       );
     }
@@ -1688,7 +1717,7 @@ export default function CursorIdeApp() {
               </Box>
             ) : null}
 
-            {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' || compactSurface === 'graph' ? (
+            {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' || compactSurface === 'graph' || compactSurface === 'presentation' ? (
               <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
                 <TabBar tabs={tabsForBar} activeId={activeTabId} compact={true} onActivate={activateTab} onClose={closeTab} />
                 <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={true} onOpenHome={openLandingPage} onSelectPath={openFileByPath} files={files} fileContent={editorContent} />
@@ -1780,7 +1809,7 @@ export default function CursorIdeApp() {
               <TabBar tabs={tabsForBar} activeId={activeTabId} compact={false} onActivate={activateTab} onClose={closeTab} />
               <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={false} onOpenHome={openLandingPage} onSelectPath={openFileByPath} files={files} fileContent={editorContent} />
               <Box style={{ display: showTerminalPanel && terminalDockExpanded ? 'none' : 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
-                <PageModeTransition mode={activeView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
+              <PageModeTransition mode={(showPresentationPanel ? 'presentation' : activeView) as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
               </Box>
               {showTerminalPanel ? (
                 terminalDockExpanded ? (
