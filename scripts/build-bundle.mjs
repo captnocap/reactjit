@@ -65,6 +65,11 @@ const ambientInject = path.join(rootDir, 'framework', 'ambient.ts');
 // (react/index.js body → init_ambient → init_primitives → require('react')
 // → partial {} → React3.memo undefined at runtime).
 const ambientPrimitivesInject = path.join(rootDir, 'framework', 'ambient_primitives.ts');
+// Self-probe entry — exports __self_probe_main and registers it on
+// globalThis so v8_app.zig can invoke it when the --self-probe argv
+// flag lands. Inject pulls this in any time a cart references the
+// __self_probe_main free identifier.
+const selfProbeInject = path.join(rootDir, 'framework', 'autotest', 'self_probe.ts');
 
 const esbuildOpts = {
   absWorkingDir: rootDir,
@@ -72,7 +77,7 @@ const esbuildOpts = {
   bundle: true,
   outfile: bundlePath,
   format: 'iife',
-  inject: [path.join(runtimeDir, 'jsx_shim.ts'), ambientInject, ambientPrimitivesInject],
+  inject: [path.join(runtimeDir, 'jsx_shim.ts'), ambientInject, ambientPrimitivesInject, selfProbeInject],
   jsxFactory: 'h',
   jsxFragment: 'Fragment',
   alias: { '@reactjit/core': './runtime/core_stub.ts' },
