@@ -12,6 +12,7 @@ import {
   loadIndex,
   getIndexStats,
   getIndexProgress,
+  getStaleIndexCount,
   listIndexDirectories,
   setDirectoryIncluded,
   searchIndex,
@@ -25,6 +26,7 @@ import {
 export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const [stats, setStats] = useState<IndexStats | null>(null);
   const [progress, setProgress] = useState<IndexProgress>(getIndexProgress());
+  const [staleCount, setStaleCount] = useState(0);
   const [directories, setDirectories] = useState<IndexDirectory[]>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IndexedFile[]>([]);
@@ -34,6 +36,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     const refresh = () => {
       setStats(getIndexStats());
       setProgress(getIndexProgress());
+      setStaleCount(getStaleIndexCount(props.workDir));
       setResults(query.trim() ? searchIndex(query) : loadIndex());
     };
     refresh();
@@ -87,6 +90,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const indexSizeLabel = stats
     ? `${stats.totalTokens.toLocaleString()} tokens`
     : '0 tokens';
+  const staleLabel = staleCount > 0 ? `${staleCount} stale` : 'fresh';
   const currentFileLabel = progress.currentFile
     ? progress.currentFile.replace(props.workDir.endsWith('/') ? props.workDir : `${props.workDir}/`, '')
     : 'Waiting for scan';
@@ -121,6 +125,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
               <Pill label={`${stats?.totalFiles || 0} files`} color={COLORS.green} tiny={true} />
               <Pill label={indexSizeLabel} color={COLORS.blue} tiny={true} />
               <Pill label={`last indexed ${lastIndexedLabel}`} color={COLORS.yellow} tiny={true} />
+              <Pill label={staleLabel} color={staleCount > 0 ? COLORS.red : COLORS.green} tiny={true} />
               {langEntries.slice(0, 5).map(([lang, count]) => (
                 <Pill key={lang} label={`${lang}: ${count}`} tiny={true} />
               ))}

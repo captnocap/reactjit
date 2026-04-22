@@ -200,6 +200,18 @@ export function getDirectoryIncluded(dir: string): boolean {
   return rules[key] !== false;
 }
 
+export function getStaleIndexCount(workDir: string): number {
+  const root = workDir.endsWith('/') ? workDir : `${workDir}/`;
+  let stale = 0;
+  for (const entry of loadIndex()) {
+    if (!entry.path.startsWith(root)) continue;
+    const stat = fsStat(entry.path);
+    if (!stat) continue;
+    if (stat.mtimeMs > entry.indexedAt) stale++;
+  }
+  return stale;
+}
+
 function sleep0(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
