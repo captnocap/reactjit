@@ -89,6 +89,7 @@ import { LandingSurface } from './components/landing';
 import { MermaidPanel } from './components/mermaidpanel';
 import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
 import { FadeIn, PageModeTransition, SlideIn } from './anim';
+import { TooltipLayer } from './components/tooltip';
 
 import { usePersistentState } from './hooks/usePersistentState';
 import { useFileContent } from '../../runtime/hooks/useFileContent';
@@ -1503,8 +1504,9 @@ export default function CursorIdeApp() {
   };
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
-      <Col style={{ width: '100%', height: '100%' }}>
+    <TooltipLayer>
+      <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
+        <Col style={{ width: '100%', height: '100%' }}>
         <TopBar
           menuSections={menuSections}
           displayTitle={currentFilePath === '__landing__' ? 'Project landing' : currentFilePath === '__settings__' ? 'Settings' : currentFilePath === '__mermaid__' ? 'Mermaid' : minimumMode ? baseName(currentFilePath) : currentFilePath}
@@ -1809,7 +1811,8 @@ export default function CursorIdeApp() {
             setSettingsSection(sectionId);
           }}
         />
-      </Col>
-    </Box>
+        </Col>
+      </Box>
+    </TooltipLayer>
   );
 }
