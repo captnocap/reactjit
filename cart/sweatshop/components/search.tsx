@@ -1,14 +1,22 @@
 const React: any = require('react');
-const { memo } = React;
+const { memo, useRef } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { Pill } from './shared';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 
 function SearchSurfaceImpl(props: any) {
   (globalThis as any).__hostLog?.(0, "[render] SearchSurface");
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
+  const scrollRef = useRef(null);
+  const scroll = useDragToScroll(scrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.searchDragToScroll',
+  });
   return (
     <Col style={{ width: props.style?.width || '100%', height: '100%', backgroundColor: COLORS.panelBg, borderLeftWidth: 1, borderColor: COLORS.border }}>
       <Col style={{ padding: compactBand ? 12 : 14, gap: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
@@ -28,7 +36,15 @@ function SearchSurfaceImpl(props: any) {
           </Row>
         ) : null}
       </Col>
-      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
+      <ScrollView
+        ref={scrollRef}
+        showScrollbar={true}
+        onScroll={scroll.onScroll}
+        onMouseDown={scroll.onMouseDown}
+        onMouseUp={scroll.onMouseUp}
+        scrollY={scroll.scrollY}
+        style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12, cursor: scroll.cursor }}
+      >
         <Col style={{ gap: 8 }}>
           {props.results.map((result: any) => (
             <Pressable key={result.file + ':' + result.line + ':' + result.text} onPress={() => props.onOpenResult(result.file, result.line)} style={{ padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>

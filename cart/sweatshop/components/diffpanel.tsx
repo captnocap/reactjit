@@ -1,11 +1,13 @@
 const React: any = require('react');
-const { useState, useMemo, useCallback, useEffect } = React;
+const { useState, useMemo, useCallback, useEffect, useRef } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { Glyph, Pill } from './shared';
 import type { Checkpoint, CheckpointDiff } from '../checkpoint';
 import { parseSideBySide, hunkToText, copyToClipboard, type DiffHunk, type SideBySideRow } from '../app/diff-helpers';
+import { useDragToScroll } from '../hooks/useDragToScroll';
+import { useScrollSync } from '../hooks/useScrollSync';
 
 interface DiffPanelProps {
   checkpoints: Checkpoint[];
@@ -58,8 +60,31 @@ export function DiffPanel(props: DiffPanelProps) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [wordWrap, setWordWrap] = useState(true);
   const [stackedView, setStackedView] = useState(false);
-  const [scrollY, setScrollY] = useState(0);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(new Set());
+  const stackedScrollRef = useRef(null);
+  const stackedScroll = useDragToScroll(stackedScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.diffDragToScroll',
+  });
+  const splitScroll = useScrollSync();
+  const oldScrollRef = useRef(null);
+  const oldScroll = useDragToScroll(oldScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.diffDragToScroll',
+    sync: splitScroll,
+  });
+  const newScrollRef = useRef(null);
+  const newScroll = useDragToScroll(newScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.diffDragToScroll',
+    sync: splitScroll,
+  });
 
   const viewMode = activeCheckpointId || ALL_TURNS_ID;
   const isAllTurns = viewMode === ALL_TURNS_ID;
@@ -128,11 +153,12 @@ export function DiffPanel(props: DiffPanelProps) {
   const totalRows = virtualRows.length;
   const shouldVirtualize = totalRows > VIRTUALIZE_THRESHOLD;
 
+  const activeScrollY = stackedView ? stackedScroll.scrollY : splitScroll.scrollY;
   const startIndex = shouldVirtualize
-    ? Math.max(0, Math.floor(scrollY / ROW_HEIGHT) - OVERSCAN)
+    ? Math.max(0, Math.floor(activeScrollY / ROW_HEIGHT) - OVERSCAN)
     : 0;
   const endIndex = shouldVirtualize
-    ? Math.min(totalRows, Math.ceil((scrollY + VIEWPORT_ESTIMATE) / ROW_HEIGHT) + OVERSCAN)
+    ? Math.min(totalRows, Math.ceil((activeScrollY + VIEWPORT_ESTIMATE) / ROW_HEIGHT) + OVERSCAN)
     : totalRows;
   const visibleWindow = virtualRows.slice(startIndex, endIndex);
   const topSpacer = startIndex * ROW_HEIGHT;
@@ -214,7 +240,7 @@ export function DiffPanel(props: DiffPanelProps) {
       </Row>
 
       {/* Turn strip */}
-      <ScrollView horizontal={true} style={{ maxHeight: 48 }}>
+      <ScrollView horizontal={true} showScrollbar={true} scrollbarSide="bottom" style={{ maxHeight: 48 }}>
         <Row
           style={{
             alignItems: 'center',
@@ -258,7 +284,7 @@ export function DiffPanel(props: DiffPanelProps) {
               FILES ({diffs.length})
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1, padding: 8 }}>
             <Col style={{ gap: 4 }}>
               {diffs.map((d) => (
                 <Pressable
@@ -320,7 +346,15 @@ export function DiffPanel(props: DiffPanelProps) {
           </Box>
           {selectedDiff ? (
             stackedView ? (
-              <ScrollView style={{ flexGrow: 1, padding: 10 }}>
+              <ScrollView
+                ref={stackedScrollRef}
+                showScrollbar={true}
+                onScroll={stackedScroll.onScroll}
+                onMouseDown={stackedScroll.onMouseDown}
+                onMouseUp={stackedScroll.onMouseUp}
+                scrollY={stackedScroll.scrollY}
+                style={{ flexGrow: 1, padding: 10, cursor: stackedScroll.cursor }}
+              >
                 <Col style={{ gap: 4 }}>
                   <Row style={{ gap: 6, marginBottom: 6 }}>
                     <Pill label={selectedDiff.status} color={statusColor(selectedDiff.status)} tiny={true} />
@@ -337,46 +371,33 @@ export function DiffPanel(props: DiffPanelProps) {
                 </Col>
               </ScrollView>
             ) : (
-              <ScrollView
-                style={{ flexGrow: 1 }}
-                onScroll={(payload: any) => {
-                  const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
-                  if (Math.abs(next - scrollY) >= ROW_HEIGHT / 2) setScrollY(next);
-                }}
-              >
-                <Col>
-                  {topSpacer > 0 ? <Box style={{ height: topSpacer }} /> : null}
-                  {visibleWindow.map((vr) => {
-                    if (vr.type === 'hunk-header') {
-                      return (
-                        <HunkHeader
-                          key={vr.key}
-                          hunk={vr.hunk}
-                          collapsed={collapsedHunks.has(vr.hunkIndex)}
-                          onToggle={() => toggleHunk(vr.hunkIndex)}
-                          onCopy={() => copyToClipboard(hunkToText(vr.hunk))}
-                        />
-                      );
-                    }
-                    if (vr.type === 'hunk-summary') {
-                      return (
-                        <HunkSummary
-                          key={vr.key}
-                          hiddenCount={vr.hiddenCount}
-                          onToggle={() => toggleHunk(vr.hunkIndex)}
-                        />
-                      );
-                    }
-                    return (
-                      <SideBySideDiffRow
-                        key={vr.key}
-                        row={vr.row}
-                      />
-                    );
-                  })}
-                  {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
-                </Col>
-              </ScrollView>
+              <Row style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
+                <DiffPane
+                  title="OLD"
+                  side="old"
+                  rows={visibleWindow}
+                  topSpacer={topSpacer}
+                  bottomSpacer={bottomSpacer}
+                  collapsedHunks={collapsedHunks}
+                  onToggleHunk={toggleHunk}
+                  onCopyHunk={(hunk) => copyToClipboard(hunkToText(hunk))}
+                  scrollRef={oldScrollRef}
+                  scroll={oldScroll}
+                />
+                <Box style={{ width: 1, backgroundColor: COLORS.borderSoft }} />
+                <DiffPane
+                  title="NEW"
+                  side="new"
+                  rows={visibleWindow}
+                  topSpacer={topSpacer}
+                  bottomSpacer={bottomSpacer}
+                  collapsedHunks={collapsedHunks}
+                  onToggleHunk={toggleHunk}
+                  onCopyHunk={(hunk) => copyToClipboard(hunkToText(hunk))}
+                  scrollRef={newScrollRef}
+                  scroll={newScroll}
+                />
+              </Row>
             )
           ) : (
             <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -560,6 +581,149 @@ function SideBySideDiffRow(props: { row: SideBySideRow }) {
       >
         <Text fontSize={9} color={newFg} style={{ whiteSpace: 'pre' }}>
           {row.newText}
+        </Text>
+      </Box>
+    </Row>
+  );
+}
+
+function DiffPane(props: {
+  title: string;
+  side: 'old' | 'new';
+  rows: Array<
+    | { type: 'hunk-header'; hunkIndex: number; hunk: DiffHunk; key: string }
+    | { type: 'diff-row'; hunkIndex: number; row: SideBySideRow; key: string }
+    | { type: 'hunk-summary'; hunkIndex: number; hiddenCount: number; key: string }
+  >;
+  topSpacer: number;
+  bottomSpacer: number;
+  collapsedHunks: Set<number>;
+  onToggleHunk: (hunkIndex: number) => void;
+  onCopyHunk: (hunk: DiffHunk) => void;
+  scrollRef: any;
+  scroll: {
+    onScroll: (payload: any) => void;
+    onMouseDown: () => void;
+    onMouseUp: () => void;
+    scrollY: number;
+    cursor?: string;
+  };
+}) {
+  return (
+    <Col style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
+      <Box style={{ padding: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
+        <Text fontSize={9} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>
+          {props.title}
+        </Text>
+      </Box>
+      <ScrollView
+        ref={props.scrollRef}
+        showScrollbar={true}
+        onScroll={props.scroll.onScroll}
+        onMouseDown={props.scroll.onMouseDown}
+        onMouseUp={props.scroll.onMouseUp}
+        scrollY={props.scroll.scrollY}
+        style={{ flexGrow: 1, minHeight: 0, cursor: props.scroll.cursor }}
+      >
+        <Col>
+          {props.topSpacer > 0 ? <Box style={{ height: props.topSpacer }} /> : null}
+          {props.rows.map((vr) => {
+            if (vr.type === 'hunk-header') {
+              return (
+                <HunkHeader
+                  key={vr.key}
+                  hunk={vr.hunk}
+                  collapsed={props.collapsedHunks.has(vr.hunkIndex)}
+                  onToggle={() => props.onToggleHunk(vr.hunkIndex)}
+                  onCopy={() => props.onCopyHunk(vr.hunk)}
+                />
+              );
+            }
+            if (vr.type === 'hunk-summary') {
+              return (
+                <HunkSummary
+                  key={vr.key}
+                  hiddenCount={vr.hiddenCount}
+                  onToggle={() => props.onToggleHunk(vr.hunkIndex)}
+                />
+              );
+            }
+            return (
+              <DiffPaneRow
+                key={vr.key}
+                row={vr.row}
+                side={props.side}
+              />
+            );
+          })}
+          {props.bottomSpacer > 0 ? <Box style={{ height: props.bottomSpacer }} /> : null}
+        </Col>
+      </ScrollView>
+    </Col>
+  );
+}
+
+function DiffPaneRow(props: { row: SideBySideRow; side: 'old' | 'new' }) {
+  const { row, side } = props;
+  const isOld = side === 'old';
+  const line = isOld ? row.oldLine : row.newLine;
+  const text = isOld ? row.oldText : row.newText;
+  const bg =
+    row.kind === 'both'
+      ? isOld
+        ? COLORS.redDeep
+        : COLORS.greenDeep
+      : isOld
+        ? row.kind === 'old'
+          ? COLORS.redDeep
+          : 'transparent'
+        : row.kind === 'new'
+          ? COLORS.greenDeep
+          : 'transparent';
+  const fg =
+    row.kind === 'both'
+      ? isOld
+        ? COLORS.red
+        : COLORS.green
+      : isOld
+        ? row.kind === 'old'
+          ? COLORS.red
+          : COLORS.text
+        : row.kind === 'new'
+          ? COLORS.green
+          : COLORS.text;
+
+  return (
+    <Row style={{ height: ROW_HEIGHT, alignItems: 'center' }}>
+      <Box
+        style={{
+          width: 44,
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+          paddingRight: 6,
+          backgroundColor: bg,
+        }}
+      >
+        <Text fontSize={9} color={COLORS.textDim}>
+          {line ?? ''}
+        </Text>
+      </Box>
+      <Box
+        style={{
+          flexGrow: 1,
+          flexShrink: 1,
+          flexBasis: 0,
+          minWidth: 0,
+          height: '100%',
+          justifyContent: 'center',
+          backgroundColor: bg,
+          paddingLeft: 4,
+          overflow: 'hidden',
+        }}
+      >
+        <Text fontSize={9} color={fg} style={{ whiteSpace: 'pre' }}>
+          {text}
         </Text>
       </Box>
     </Row>

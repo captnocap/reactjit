@@ -6,6 +6,7 @@ import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, ba
 import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';
 import { Pill } from './shared';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 
 function EditorSurfaceImpl(props: any) {
   const _rT0 = Date.now();
@@ -28,21 +29,21 @@ function EditorSurfaceImpl(props: any) {
   const editorWidth = Math.max(compactBand ? 620 : 860, longestColumns * (compactBand ? 6.9 : 7.35) + leftPad + rightPad);
   const editorHeight = Math.max(220, props.totalLines * lineStride + topPad + bottomPad);
   const canvasWidth = gutterWidth + editorWidth;
-  const [editorScrollY, setEditorScrollY] = useState(0);
-  const [editorScrollX, setEditorScrollX] = useState(0);
-  const lastScrollStateTimeRef = useRef(0);
-  const lastScrollYRef = useRef(0);
   const activePathRef = useRef(props.currentFilePath);
+  const editorScrollRef = useRef(null);
+  const editorScroll = useDragToScroll(editorScrollRef, {
+    axis: 'both',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.editorDragToScroll',
+  });
 
   useEffect(() => {
     if (activePathRef.current !== props.currentFilePath) {
       activePathRef.current = props.currentFilePath;
-      setEditorScrollY(0);
-      setEditorScrollX(0);
-      lastScrollStateTimeRef.current = 0;
-      lastScrollYRef.current = 0;
+      editorScroll.setScroll(0, 0);
     }
-  }, [props.currentFilePath]);
+  }, [editorScroll, props.currentFilePath]);
 
   const estimatedViewportHeight = Math.max(160, props.windowHeight - (compactBand ? 260 : 300));
   // The gutter needs to stay fully addressable so line numbers stay correct
@@ -79,18 +80,6 @@ function EditorSurfaceImpl(props: any) {
         marker: marker ? editorAccentTone(marker, false) : null,
       });
     }
-  }
-
-  function syncEditorScroll(payload: any) {
-    const nextX = typeof payload?.scrollX === 'number' ? payload.scrollX : 0;
-    const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
-    setEditorScrollX(nextX);
-    if (Math.abs(next - lastScrollYRef.current) < lineStride * 0.5) return;
-    const now = Date.now();
-    if (now - lastScrollStateTimeRef.current < 50) return;
-    lastScrollStateTimeRef.current = now;
-    lastScrollYRef.current = next;
-    setEditorScrollY(next);
   }
 
   return (
@@ -130,7 +119,16 @@ function EditorSurfaceImpl(props: any) {
             {!minimumBand ? <Text fontSize={10} color={COLORS.textDim}>{props.currentFilePath}</Text> : null}
           </Row>
 
-          <ScrollView onScroll={syncEditorScroll} style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17' }}>
+          <ScrollView
+            ref={editorScrollRef}
+            showScrollbar={true}
+            onScroll={editorScroll.onScroll}
+            onMouseDown={editorScroll.onMouseDown}
+            onMouseUp={editorScroll.onMouseUp}
+            scrollX={editorScroll.scrollX}
+            scrollY={editorScroll.scrollY}
+            style={{ flexGrow: 1, height: '100%', backgroundColor: '#0a0f17', cursor: editorScroll.cursor }}
+          >
             <Row style={{ minHeight: editorHeight, width: canvasWidth, alignItems: 'flex-start' }}>
               {showGutter ? (
                 <CodeGutter

@@ -33,6 +33,7 @@ import {
   type GitGraphLine,
   type GitStashEntry,
 } from '../git-ops';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 
 function execRaw(cmd: string): string {
   const host: any = globalThis as any;
@@ -77,6 +78,13 @@ export function GitPanel(props: {
   const [showSuggest, setShowSuggest] = useState(false);
   const [branchAheadBehind, setBranchAheadBehind] = useState<Record<string, { ahead: number; behind: number }>>({});
   const [errorBanner, setErrorBanner] = useState('');
+  const graphScrollRef = React.useRef(null);
+  const graphScroll = useDragToScroll(graphScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.gitDragToScroll',
+  });
 
   function loadAheadBehind() {
     const counts = execRaw(`cd "${workDir}" && git rev-list --left-right --count @{upstream}...HEAD 2>/dev/null`).trim();
@@ -332,7 +340,7 @@ export function GitPanel(props: {
               maxHeight: 200,
             }}
           >
-            <ScrollView style={{ flexGrow: 1 }}>
+            <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
               <Col style={{ gap: 4 }}>
                 {branches.filter((b) => !b.startsWith('remotes/')).map((b) => {
                   const ab = branchAheadBehind[b] || { ahead: 0, behind: 0 };
@@ -602,7 +610,7 @@ export function GitPanel(props: {
             <Text fontSize={9} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
               STAGED DIFF ({stagedDiffs.length})
             </Text>
-            <ScrollView style={{ flexGrow: 1 }}>
+            <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
               <Col style={{ gap: 6 }}>
                 {stagedDiffs.map((d) => (
                   <Col key={d.path} style={{ gap: 2 }}>
@@ -634,7 +642,7 @@ export function GitPanel(props: {
               STAGED ({stagedFiles.length})
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1, padding: 8 }}>
             <Col style={{ gap: 4 }}>
               {stagedFiles.map((f) => (
                 <FileRow
@@ -661,7 +669,7 @@ export function GitPanel(props: {
               CHANGES ({unstagedFiles.length})
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1, padding: 8 }}>
             <Col style={{ gap: 4 }}>
               {unstagedFiles.map((f) => (
                 <FileRow
@@ -688,7 +696,7 @@ export function GitPanel(props: {
               DIFF
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 10 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1, padding: 10 }}>
             {selectedDiff() ? (
               <Col style={{ gap: 4 }}>
                 <Row style={{ gap: 6, marginBottom: 6 }}>
@@ -719,7 +727,15 @@ export function GitPanel(props: {
             COMMIT GRAPH ({graph.length})
           </Text>
         </Box>
-        <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+        <ScrollView
+          ref={graphScrollRef}
+          showScrollbar={true}
+          onScroll={graphScroll.onScroll}
+          onMouseDown={graphScroll.onMouseDown}
+          onMouseUp={graphScroll.onMouseUp}
+          scrollY={graphScroll.scrollY}
+          style={{ flexGrow: 1, padding: 8, cursor: graphScroll.cursor }}
+        >
           <Col style={{ gap: 2 }}>
             {/* Working tree (dirty state) entry at top */}
             {(stagedFiles.length > 0 || unstagedFiles.length > 0) ? (
@@ -833,7 +849,7 @@ export function GitPanel(props: {
               STASHES ({stashes.length})
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1, padding: 8 }}>
             <Col style={{ gap: 4 }}>
               {stashes.map((s) => (
                 <Row

@@ -7,6 +7,7 @@ import { HoverPressable, Pill } from './shared';
 import { Icon } from './icons';
 import { useHover } from '../anim';
 import { useTerminalDockDrag } from '../hooks/useTerminalDockDrag';
+import { useDragToScroll } from '../hooks/useDragToScroll';
 
 const host: any = globalThis as any;
 const CTRL_MOD = 192;
@@ -208,6 +209,20 @@ export function TerminalPanel(props: any) {
   const dockDrag = useTerminalDockDrag({
     minHeight: compactBand ? 180 : 220,
     maxHeight: 1600,
+  });
+  const historyScrollRef = useRef(null);
+  const historyScroll = useDragToScroll(historyScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.terminalDragToScroll',
+  });
+  const findScrollRef = useRef(null);
+  const findScroll = useDragToScroll(findScrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.terminalDragToScroll',
   });
 
   const sessionsRef = useRef<TerminalSession[]>([]);
@@ -644,7 +659,15 @@ export function TerminalPanel(props: any) {
               <Text fontSize={10} color={COLORS.textDim}>
                 {history.length > 0 ? 'Recent terminal events and saved snapshots live in localstore.' : 'No saved terminal history yet.'}
               </Text>
-              <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
+              <ScrollView
+                ref={historyScrollRef}
+                showScrollbar={true}
+                onScroll={historyScroll.onScroll}
+                onMouseDown={historyScroll.onMouseDown}
+                onMouseUp={historyScroll.onMouseUp}
+                scrollY={historyScroll.scrollY}
+                style={{ flexGrow: 1, minHeight: 0, cursor: historyScroll.cursor }}
+              >
                 <Col style={{ gap: 8 }}>
                   {history.length > 0 ? history.map((entry: any) => HistoryEntryRow(entry)) : null}
                 </Col>
@@ -713,7 +736,15 @@ export function TerminalPanel(props: any) {
                   </HoverPressable>
                 </Row>
               </Row>
-              <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
+              <ScrollView
+                ref={findScrollRef}
+                showScrollbar={true}
+                onScroll={findScroll.onScroll}
+                onMouseDown={findScroll.onMouseDown}
+                onMouseUp={findScroll.onMouseUp}
+                scrollY={findScroll.scrollY}
+                style={{ flexGrow: 1, minHeight: 0, cursor: findScroll.cursor }}
+              >
                 <Col style={{ gap: 8, padding: 10 }}>
                   {searchLines.length > 0 ? searchLines.map((item) => {
                     return SearchResultRow(activeSession || sessions[0], item.line, item.index, true);

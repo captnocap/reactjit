@@ -5,6 +5,7 @@ import { FadeIn } from '../../anim';
 import { MessageBubble } from './MessageBubble';
 import { GeneratingIndicator } from './GeneratingIndicator';
 import { ScrollToBottomFab } from './ScrollToBottomFab';
+import { useDragToScroll } from '../../hooks/useDragToScroll';
 
 export function MessageList(props: {
   messages: any[];
@@ -19,9 +20,24 @@ export function MessageList(props: {
   showScrollButton: boolean;
   onScrollToBottom: () => void;
 }) {
+  const scrollRef = React.useRef(null);
+  const scroll = useDragToScroll(scrollRef, {
+    axis: 'y',
+    inertia: false,
+    grabCursor: true,
+    surfaceKey: 'scrolling.chatDragToScroll',
+  });
   return (
     <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, position: 'relative' }}>
-      <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
+      <ScrollView
+        ref={scrollRef}
+        showScrollbar={true}
+        onScroll={scroll.onScroll}
+        onMouseDown={scroll.onMouseDown}
+        onMouseUp={scroll.onMouseUp}
+        scrollY={scroll.scrollY}
+        style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12, cursor: scroll.cursor }}
+      >
         <Col style={{ gap: 10 }}>
           {!props.minimumBand ? (
             <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
