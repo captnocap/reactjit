@@ -83,3 +83,4 @@ require('./panels/emulator.panel');
 require('./panels/noise.panel');
 require('./panels/system-info.panel');
 require('./panels/finance.panel');
+require('./panels/gamepad.panel');
