@@ -249,11 +249,62 @@ pub fn callGlobal5Int(name: [*:0]const u8, a: i64, b: i64, c: i64, d: i64, e: i6
     });
 }
 
+fn appendV8ErrorLog(tag: []const u8, message: []const u8) void {
+    const home = std.process.getEnvVarOwned(std.heap.c_allocator, "HOME") catch return;
+    defer std.heap.c_allocator.free(home);
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_path = std.fmt.bufPrint(&path_buf, "{s}/.cache/reactjit", .{home}) catch return;
+    std.fs.cwd().makePath(dir_path) catch {};
+    const file_path = std.fmt.bufPrint(&path_buf, "{s}/.cache/reactjit/v8-errors.jsonl", .{home}) catch return;
+    var file = std.fs.cwd().openFile(file_path, .{ .mode = .write_only }) catch |e| blk: {
+        if (e == error.FileNotFound) {
+            break :blk std.fs.cwd().createFile(file_path, .{}) catch return;
+        } else return;
+    };
+    defer file.close();
+    file.seekFromEnd(0) catch return;
+    var json_buf: [2048]u8 = undefined;
+    const ts = std.time.milliTimestamp();
+    const json = std.fmt.bufPrint(&json_buf, "{{\"ts\":{d},\"tag\":\"{s}\",\"msg\":\"", .{ ts, tag }) catch return;
+    file.writeAll(json) catch return;
+    // Escape the message for JSON
+    for (message) |ch| {
+        switch (ch) {
+            '\\' => file.writeAll("\\\\") catch return,
+            '"' => file.writeAll("\\\"") catch return,
+            '\n' => file.writeAll("\\n") catch return,
+            '\r' => file.writeAll("\\r") catch return,
+            '\t' => file.writeAll("\\t") catch return,
+            0x00...0x08, 0x0b, 0x0c, 0x0e...0x1f => {
+                var hex_buf: [6]u8 = undefined;
+                const hex = std.fmt.bufPrint(&hex_buf, "\\u{x:0>4}", .{ch}) catch return;
+                file.writeAll(hex) catch return;
+            },
+            else => file.writeAll(&[_]u8{ch}) catch return,
+        }
+    }
+    file.writeAll("\"}}\n") catch return;
+}
+
 fn logException(iso: v8.Isolate, ctx: v8.Context, try_catch: v8.TryCatch, tag: []const u8) void {
     const ex = try_catch.getException() orelse return;
     const str = ex.toString(ctx) catch return;
     var buf: [512]u8 = undefined;
     const n = @min(str.lenUtf8(iso), buf.len);
     _ = str.writeUtf8(iso, buf[0..n]);
+    var stack_buf: [4096]u8 = undefined;
+    var stack_msg: []const u8 = "";
+    if (try_catch.getStackTrace(ctx)) |stack_val| {
+        const stack_str = stack_val.toString(ctx) catch null;
+        if (stack_str) |s| {
+            const sn = @min(s.lenUtf8(iso), stack_buf.len);
+            _ = s.writeUtf8(iso, stack_buf[0..sn]);
+            stack_msg = stack_buf[0..sn];
+        }
+    }
     std.log.err("[v8 {s}] {s}", .{ tag, buf[0..n] });
+    if (stack_msg.len > 0) {
+        std.log.err("[v8 {s} stack] {s}", .{ tag, stack_msg });
+    }
+    appendV8ErrorLog(tag, buf[0..n]);
 }
