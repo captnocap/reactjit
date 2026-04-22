@@ -1,32 +1,64 @@
+import { useEffect, useState } from 'react';
+import { THEMES, THEME_ORDER, type Theme, type ThemePalette, type ThemeTokens } from './themes';
+
 export type WidthBand = 'minimum' | 'widget' | 'narrow' | 'medium' | 'desktop';
 
-export const COLORS = {
-  appBg: '#090d13',
-  panelBg: '#0d1015',
-  panelRaised: '#10151d',
-  panelAlt: '#11161f',
-  panelHover: '#121a24',
-  border: '#1f2935',
-  borderSoft: '#18202b',
-  text: '#c9d2df',
-  textBright: '#eef2f8',
-  textDim: '#5d6a7c',
-  textMuted: '#8ca0b8',
-  blue: '#79c0ff',
-  blueDeep: '#10213d',
-  green: '#7ee787',
-  greenDeep: '#102214',
-  yellow: '#e6b450',
-  yellowDeep: '#332200',
-  orange: '#ffa657',
-  orangeDeep: '#331608',
-  red: '#ff7b72',
-  redDeep: '#341316',
-  purple: '#d2a8ff',
-  purpleDeep: '#241233',
-  grayChip: '#1d2330',
-  grayDeep: '#1a1f2b',
-};
+// Live palette + token objects. Properties are mutated in place when
+// applyTheme() switches themes, so any component reading COLORS.x or
+// TOKENS.x during render gets the current theme's values.
+export const COLORS: ThemePalette = { ...THEMES.soft.palette };
+export const TOKENS: ThemeTokens = { ...THEMES.soft.tokens };
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+let activeThemeName = 'soft';
+
+function persist(name: string) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('cursor-ide-theme', name);
+  } catch (_e) {}
+}
+
+function restore(): string {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('cursor-ide-theme');
+      if (v && THEMES[v]) return v;
+    }
+  } catch (_e) {}
+  return 'soft';
+}
+
+export function getActiveThemeName(): string {
+  return activeThemeName;
+}
+
+export function getThemeNames(): string[] {
+  return THEME_ORDER.slice();
+}
+
+export function applyTheme(name: string): void {
+  const theme: Theme | undefined = THEMES[name];
+  if (!theme) return;
+  activeThemeName = name;
+  Object.assign(COLORS, theme.palette);
+  Object.assign(TOKENS, theme.tokens);
+  persist(name);
+  for (const fn of listeners) fn();
+}
+
+// Initialize from persisted choice on module load.
+applyTheme(restore());
+
+export function useTheme(): { name: string; tokens: ThemeTokens; colors: ThemePalette; setTheme: (n: string) => void } {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const fn = () => tick((x) => x + 1);
+    listeners.add(fn);
+    return () => { listeners.delete(fn); };
+  }, []);
+  return { name: activeThemeName, tokens: TOKENS, colors: COLORS, setTheme: applyTheme };
+}
 
 export function widthBandForSize(w: number, h: number): WidthBand {
   if (w <= 360 || h <= 250) return 'minimum';
