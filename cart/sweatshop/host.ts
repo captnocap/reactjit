@@ -81,6 +81,12 @@ export function ptyClose(handle: number): void {
   } catch {}
 }
 
+export function ptyFocus(handle: number): void {
+  try {
+    if (typeof host.__pty_focus === 'function') host.__pty_focus(handle);
+  } catch {}
+}
+
 export function closeWindow(): void {
   try {
     if (typeof host.__windowClose === 'function') host.__windowClose();
