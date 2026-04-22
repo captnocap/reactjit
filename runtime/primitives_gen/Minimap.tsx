@@ -11,5 +11,6 @@
  *   activeColor
  *   inactiveColor
  */
-const React: any = require('react');
-export const Minimap: any = (props: any) => React.createElement('Minimap', props);
+// Lazy require — see runtime/primitives.tsx header for why init-time capture
+// of React breaks under esbuild's inject/react-body cycle.
+export const Minimap: any = (props: any) => require('react').createElement('Minimap', props);

@@ -5,34 +5,44 @@
  * The hostConfig (renderer/hostConfig.ts) relays the type through to Zig
  * via CREATE commands. Unknown types pass through unchanged — that's what
  * makes <Native type="Audio" />, <Canvas.Node>, <Graph.Path> etc. work.
+ *
+ * Every React call is LAZY — a fresh `require('react')` at render time,
+ * not a top-level capture. The esbuild inject of `init_ambient_primitives`
+ * into react/index.js's own body causes this module to init recursively
+ * during require_react's first call, at which point mod.exports is still
+ * the partial `{}`. Capturing React.createElement / React.memo at init
+ * time would store undefined forever. Deferring the lookup to render time
+ * (after require_react's body finishes) resolves to the real React.
  */
 
-const React: any = require('react');
+function h(type: any, props: any, ...children: any[]): any {
+  return require('react').createElement(type, props, ...children);
+}
 
 // ── Core building blocks ────────────────────────────────────
 
-export const Box: any = (props: any) => React.createElement('View', props, props.children);
+export const Box: any = (props: any) => h('View', props, props.children);
 
 /** Row — Box with flexDirection: 'row' pre-applied. */
 export const Row: any = (props: any) => {
   const style = { flexDirection: 'row', ...(props.style ?? {}) };
-  return React.createElement('View', { ...props, style }, props.children);
+  return h('View', { ...props, style }, props.children);
 };
 
 /** Col — Box with flexDirection: 'column' pre-applied (same as Box default, for symmetry with Row). */
 export const Col: any = (props: any) => {
   const style = { flexDirection: 'column', ...(props.style ?? {}) };
-  return React.createElement('View', { ...props, style }, props.children);
+  return h('View', { ...props, style }, props.children);
 };
 
-export const Text: any = (props: any) => React.createElement('Text', props, props.children);
-export const Image: any = (props: any) => React.createElement('Image', props, props.children);
-export const Pressable: any = (props: any) => React.createElement('Pressable', props, props.children);
-export const ScrollView: any = (props: any) => React.createElement('ScrollView', props, props.children);
-export const TextInput: any = (props: any) => React.createElement('TextInput', props, props.children);
-export const TextArea: any = (props: any) => React.createElement('TextArea', props, props.children);
-export const TextEditor: any = (props: any) => React.createElement('TextEditor', props, props.children);
-export const Terminal: any = (props: any) => React.createElement('Terminal', props, props.children);
+export const Text: any = (props: any) => h('Text', props, props.children);
+export const Image: any = (props: any) => h('Image', props, props.children);
+export const Pressable: any = (props: any) => h('Pressable', props, props.children);
+export const ScrollView: any = (props: any) => h('ScrollView', props, props.children);
+export const TextInput: any = (props: any) => h('TextInput', props, props.children);
+export const TextArea: any = (props: any) => h('TextArea', props, props.children);
+export const TextEditor: any = (props: any) => h('TextEditor', props, props.children);
+export const Terminal: any = (props: any) => h('Terminal', props, props.children);
 export const terminal: any = Terminal;
 
 // ── Generated bulk-rendering primitives ─────────────────────
@@ -45,65 +55,28 @@ export { CodeGutter } from './primitives_gen/CodeGutter';
 export { Minimap } from './primitives_gen/Minimap';
 
 // ── Canvas — pan/zoomable node surface ──────────────────────
-//
-// Usage:
-//   <Canvas style={{ flexGrow: 1 }} viewX={0} viewY={0} viewZoom={1}>
-//     <Canvas.Node gx={24} gy={24} gw={500} gh={460}>...</Canvas.Node>
-//     <Canvas.Path d="M 0 0 L 100 100" stroke="#f00" strokeWidth={2} />
-//     <Canvas.Clamp>...viewport-pinned overlay...</Canvas.Clamp>
-//   </Canvas>
 
-const CanvasBase: any = (props: any) => React.createElement('Canvas', props, props.children);
-CanvasBase.Node = (props: any) => React.createElement('Canvas.Node', props, props.children);
-CanvasBase.Path = (props: any) => React.createElement('Canvas.Path', props, props.children);
-CanvasBase.Clamp = (props: any) => React.createElement('Canvas.Clamp', props, props.children);
+const CanvasBase: any = (props: any) => h('Canvas', props, props.children);
+CanvasBase.Node = (props: any) => h('Canvas.Node', props, props.children);
+CanvasBase.Path = (props: any) => h('Canvas.Path', props, props.children);
+CanvasBase.Clamp = (props: any) => h('Canvas.Clamp', props, props.children);
 export const Canvas: any = CanvasBase;
 
 // ── Graph — lightweight charting surface (no pan/zoom/drag) ──
-//
-// Usage:
-//   <Graph style={{ flexGrow: 1 }} viewX={0} viewY={0} viewZoom={1}>
-//     <Graph.Path d="M -270,110 L 270,110" stroke="#30363d" strokeWidth={1} />
-//     <Graph.Node gx={0} gy={0} gw={20} gh={20}>...</Graph.Node>
-//   </Graph>
 
-const GraphBase: any = (props: any) => React.createElement('Graph', props, props.children);
-GraphBase.Path = (props: any) => React.createElement('Graph.Path', props, props.children);
-GraphBase.Node = (props: any) => React.createElement('Graph.Node', props, props.children);
+const GraphBase: any = (props: any) => h('Graph', props, props.children);
+GraphBase.Path = (props: any) => h('Graph.Path', props, props.children);
+GraphBase.Node = (props: any) => h('Graph.Node', props, props.children);
 export const Graph: any = GraphBase;
 
 // ── Render — external display/app capture surface ─────────────
-//
-// Usage:
-//   <Render renderSrc="app:firefox" style={{ flexGrow: 1 }} />
-//   <Render renderSrc="display" style={{ width: 800, height: 600 }} />
 
-export const Render: any = (props: any) => React.createElement('Render', props, props.children);
+export const Render: any = (props: any) => h('Render', props, props.children);
 
 // ── Effect — per-pixel generative surface ─────────────────────
-//
-// The onRender callback fires each frame with an `e` context:
-//   e.width, e.height, e.time, e.dt, e.frame
-//   e.mouse_x, e.mouse_y, e.mouse_inside
-//   e.setPixel(x, y, r, g, b, a)  — floats 0..1
-//   e.sin/cos/sqrt/abs/clamp/mod
-//   e.noise2(x, y) / e.noise3(x, y, z) / e.fbm(x, y, octaves)
-//   e.hsv(h, s, v) / e.hsl(h, s, l)  — return [r, g, b]
-//   e.fade(alpha) / e.clearColor(r, g, b, a)
-//
-// Two modes:
-//   <Effect onRender={...} style={{...}} />     — draws in place
-//   <Effect onRender={...} background />        — paints behind parent's children
-//   <Effect onRender={...} name="myfx" />       — hidden surface referenced by fillEffect
-export const Effect: any = (props: any) => React.createElement('Effect', props, props.children);
+export const Effect: any = (props: any) => h('Effect', props, props.children);
 
 // ── Native — universal escape hatch for host-handled types ──
-//
-// Any type string the Zig host recognizes can be created without a JSX
-// component. Audio, Video, Cartridge, LLMAgent, RigidBody, etc.
-//
-//   <Native type="Audio" src="song.mp3" onEnded={...} />
-//   <Native type="Cartridge" src="sidebar.so" style={{ width: 250 }} />
 
 function nativePropsEqual(prev: any, next: any): boolean {
   const prevKeys = Object.keys(prev);
@@ -120,6 +93,20 @@ function nativePropsEqual(prev: any, next: any): boolean {
   return true;
 }
 
-export const Native: any = React.memo(function Native({ type, ...props }: any) {
-  return React.createElement(type, props);
-}, nativePropsEqual);
+// React.memo deferred to first render — calling require('react').memo at
+// module init time captures undefined (see header comment). First render
+// memoizes the inner component; subsequent renders reuse the cached memo
+// component, so equality comparisons fire as usual.
+let _NativeMemoized: any = null;
+function getNativeMemoized(): any {
+  if (_NativeMemoized) return _NativeMemoized;
+  const R: any = require('react');
+  _NativeMemoized = R.memo(function NativeInner({ type, ...props }: any) {
+    return R.createElement(type, props);
+  }, nativePropsEqual);
+  return _NativeMemoized;
+}
+
+export const Native: any = function Native(props: any) {
+  return h(getNativeMemoized(), props);
+};
