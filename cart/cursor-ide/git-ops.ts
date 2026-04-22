@@ -175,6 +175,67 @@ export function gitLog(workDir: string, count?: number): GitCommitInfo[] {
   }
 }
 
+export interface GitGraphLine {
+  graph: string;
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
+export function gitLogGraph(workDir: string, count?: number): GitGraphLine[] {
+  try {
+    const n = count || 50;
+    const SEP = '\x1f';
+    const fmt = `${SEP}%H${SEP}%h${SEP}%s${SEP}%an${SEP}%ad`;
+    const raw = execRaw(
+      `cd "${workDir}" && git log --graph --all --date=short --pretty=format:"${fmt}" -n ${n} 2>/dev/null`,
+    );
+    const out: GitGraphLine[] = [];
+    for (const line of raw.split('\n')) {
+      const idx = line.indexOf(SEP);
+      if (idx < 0) {
+        // Pure graph line (merge bracket, empty, etc.)
+        const g = line.replace(/\s+$/, '');
+        if (g.length > 0) out.push({ graph: g, hash: '', shortHash: '', message: '', author: '', date: '' });
+        continue;
+      }
+      const graph = line.slice(0, idx).replace(/\s+$/, '');
+      const parts = line.slice(idx + 1).split(SEP);
+      out.push({
+        graph,
+        hash: parts[0] || '',
+        shortHash: parts[1] || '',
+        message: parts[2] || '',
+        author: parts[3] || '',
+        date: parts[4] || '',
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function gitCherryPick(workDir: string, hash: string): { ok: boolean; error?: string } {
+  try {
+    execRaw(`cd "${workDir}" && git cherry-pick "${hash}" 2>&1`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+export function gitRevert(workDir: string, hash: string): { ok: boolean; error?: string } {
+  try {
+    execRaw(`cd "${workDir}" && git revert --no-edit "${hash}" 2>&1`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export function gitStash(workDir: string, message?: string): { ok: boolean; error?: string } {
   try {
     const msg = message ? `-m '${message.replace(/'/g, "'\\''")}'` : '';

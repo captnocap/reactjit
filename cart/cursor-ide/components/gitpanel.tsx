@@ -11,14 +11,17 @@ import {
   gitBranchDelete,
   gitBranchList,
   gitCheckout,
+  gitCherryPick,
   gitCommit,
   gitDiff,
   gitDiscard,
   gitDiffStats,
   gitLog,
+  gitLogGraph,
   gitPull,
   gitPush,
   gitReset,
+  gitRevert,
   gitStash,
   gitStashApply,
   gitStashDrop,
@@ -27,6 +30,7 @@ import {
   gitStatusList,
   type GitCommitInfo,
   type GitDiff,
+  type GitGraphLine,
   type GitStashEntry,
 } from '../git-ops';
 
@@ -66,6 +70,8 @@ export function GitPanel(props: {
 
   const [logs, setLogs] = useState<GitCommitInfo[]>([]);
   const [stashes, setStashes] = useState<GitStashEntry[]>([]);
+  const [graph, setGraph] = useState<GitGraphLine[]>([]);
+  const [cherryPickHash, setCherryPickHash] = useState<string | null>(null);
   const [branchAheadBehind, setBranchAheadBehind] = useState<Record<string, { ahead: number; behind: number }>>({});
   const [errorBanner, setErrorBanner] = useState('');
 
@@ -103,6 +109,7 @@ export function GitPanel(props: {
 
     setDiffStats(gitDiffStats(workDir));
     setLogs(gitLog(workDir, 50));
+    setGraph(gitLogGraph(workDir, 50));
     setStashes(gitStashList(workDir));
     const ab: Record<string, { ahead: number; behind: number }> = {};
     for (const b of branchInfo.branches) {
@@ -191,6 +198,26 @@ export function GitPanel(props: {
     const res = gitStashApply(workDir, ref);
     if (!res.ok) setErrorBanner(res.error || 'Stash apply failed');
     else refresh();
+  }
+
+  function handleCherryPick(hash: string, targetBranch: string) {
+    if (targetBranch && targetBranch !== currentBranch) {
+      const co = gitCheckout(workDir, targetBranch);
+      if (!co.ok) {
+        setErrorBanner(co.error || 'Checkout target failed');
+        return;
+      }
+    }
+    const res = gitCherryPick(workDir, hash);
+    setCherryPickHash(null);
+    if (!res.ok) setErrorBanner(res.error || 'Cherry-pick failed');
+    refresh();
+  }
+
+  function handleRevert(hash: string) {
+    const res = gitRevert(workDir, hash);
+    if (!res.ok) setErrorBanner(res.error || 'Revert failed');
+    refresh();
   }
 
   function handleStashDrop(ref: string) {
@@ -557,40 +584,114 @@ export function GitPanel(props: {
       </Row>
 
       {/* Recent commits */}
-      <Col style={{ borderTopWidth: 1, borderColor: COLORS.borderSoft, maxHeight: 280 }}>
+      <Col style={{ borderTopWidth: 1, borderColor: COLORS.borderSoft, maxHeight: 320 }}>
         <Box style={{ padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
           <Text fontSize={10} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
-            RECENT COMMITS ({logs.length})
+            COMMIT GRAPH ({graph.length})
           </Text>
         </Box>
         <ScrollView style={{ flexGrow: 1, padding: 8 }}>
-          <Col style={{ gap: 4 }}>
-            {logs.map((log) => (
+          <Col style={{ gap: 2 }}>
+            {/* Working tree (dirty state) entry at top */}
+            {(stagedFiles.length > 0 || unstagedFiles.length > 0) ? (
               <Row
-                key={log.hash}
                 style={{
                   alignItems: 'center',
                   gap: 8,
                   padding: 8,
                   borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: COLORS.yellow,
                   backgroundColor: COLORS.panelRaised,
                 }}
               >
-                <Text fontSize={9} color={COLORS.blue} style={{ fontWeight: 'bold' }}>
-                  {log.shortHash}
+                <Text fontSize={10} color={COLORS.yellow} style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                  ●
+                </Text>
+                <Text fontSize={9} color={COLORS.yellow} style={{ fontWeight: 'bold' }}>
+                  WIP
                 </Text>
                 <Text fontSize={10} color={COLORS.textBright} style={{ flexShrink: 1, flexBasis: 0 }}>
-                  {log.message}
+                  Working tree — {stagedFiles.length} staged, {unstagedFiles.length} unstaged (+{diffStats.additions}/-{diffStats.deletions})
                 </Text>
                 <Box style={{ flexGrow: 1 }} />
-                <Text fontSize={9} color={COLORS.textDim}>
-                  {log.author}
-                </Text>
-                <Text fontSize={9} color={COLORS.textDim}>
-                  {log.date}
-                </Text>
+                <Pill label={currentBranch} color={COLORS.green} tiny={true} />
               </Row>
-            ))}
+            ) : null}
+
+            {graph.map((g, i) => {
+              const isHeadCommit = g.hash && logs.length > 0 && g.hash === logs[0].hash;
+              if (!g.hash) {
+                return (
+                  <Row key={'gfx-' + i} style={{ alignItems: 'center', paddingLeft: 8 }}>
+                    <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>
+                      {g.graph || ' '}
+                    </Text>
+                  </Row>
+                );
+              }
+              const isOpen = cherryPickHash === g.hash;
+              return (
+                <Col key={g.hash} style={{ gap: 2 }}>
+                  <Row
+                    style={{
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: 6,
+                      borderRadius: 6,
+                      backgroundColor: isHeadCommit ? COLORS.panelHover : COLORS.panelRaised,
+                    }}
+                  >
+                    <Text fontSize={10} color={COLORS.blue} style={{ fontFamily: 'monospace' }}>
+                      {g.graph || '*'}
+                    </Text>
+                    <Text fontSize={9} color={COLORS.blue} style={{ fontWeight: 'bold' }}>
+                      {g.shortHash}
+                    </Text>
+                    <Text fontSize={10} color={COLORS.textBright} style={{ flexShrink: 1, flexBasis: 0 }}>
+                      {g.message}
+                    </Text>
+                    <Box style={{ flexGrow: 1 }} />
+                    <Text fontSize={9} color={COLORS.textDim}>
+                      {g.author}
+                    </Text>
+                    <Text fontSize={9} color={COLORS.textDim}>
+                      {g.date}
+                    </Text>
+                    <Pressable onPress={() => setCherryPickHash(isOpen ? null : g.hash)}>
+                      <Pill label="pick" color={COLORS.green} tiny={true} />
+                    </Pressable>
+                    <Pressable onPress={() => handleRevert(g.hash)}>
+                      <Pill label="revert" color={COLORS.orange} tiny={true} />
+                    </Pressable>
+                  </Row>
+                  {isOpen ? (
+                    <Row
+                      style={{
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingLeft: 24,
+                        paddingRight: 8,
+                        paddingBottom: 6,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <Text fontSize={9} color={COLORS.textMuted}>
+                        Cherry-pick {g.shortHash} onto:
+                      </Text>
+                      {branches.filter((b) => !b.startsWith('remotes/')).map((b) => (
+                        <Pressable key={b} onPress={() => handleCherryPick(g.hash, b)}>
+                          <Pill label={b} color={b === currentBranch ? COLORS.green : COLORS.blue} tiny={true} />
+                        </Pressable>
+                      ))}
+                      <Pressable onPress={() => setCherryPickHash(null)}>
+                        <Pill label="cancel" color={COLORS.textDim} tiny={true} />
+                      </Pressable>
+                    </Row>
+                  ) : null}
+                </Col>
+              );
+            })}
           </Col>
         </ScrollView>
       </Col>
