@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+const React: any = require('react');
+const { useState, useCallback } = React;
 
 export interface CodeHistory {
   value: string;

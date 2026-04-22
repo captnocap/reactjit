@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+const React: any = require('react');
+const { useState, useMemo, useCallback } = React;
 import { Row, Box, TextEditor } from '../../../../runtime/primitives';
 import { editorTokenTone } from '../../utils';
 import { COLORS } from '../../theme';

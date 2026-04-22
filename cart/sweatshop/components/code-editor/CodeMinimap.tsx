@@ -1,4 +1,5 @@
-import { memo, useMemo } from 'react';
+const React: any = require('react');
+const { memo, useMemo } = React;
 import { Col, Box } from '../../../../runtime/primitives';
 import { editorTokenTone } from '../../utils';
 import { Token } from './languages/ts';

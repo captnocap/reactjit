@@ -1,4 +1,5 @@
-import { memo } from 'react';
+const React: any = require('react');
+const { memo } = React;
 import { Box } from '../../../../runtime/primitives';
 
 export interface SelectionRange {
