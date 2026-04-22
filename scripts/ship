@@ -105,7 +105,22 @@ elif [[ "$QJS" -eq 1 ]]; then
     APP_SOURCE="qjs_app.zig"
     QJS_FLAG=""
 fi
-zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $OPT_FLAG
+
+# Cart-declared capabilities (cart/<name>/cart.json). Currently only
+# `customChrome: true` is honoured — the runtime reads it as
+# build_options.custom_chrome to decide borderless vs windowed chrome.
+# Missing cart.json → no flag passed → default false.
+CUSTOM_CHROME_FLAG=""
+CART_MANIFEST="cart/${NAME}/cart.json"
+if [[ -f "$CART_MANIFEST" ]]; then
+    CUSTOM_CHROME=$(node -e "try{const m=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(m.customChrome===true?'true':'false')}catch(e){process.stdout.write('false')}" "$CART_MANIFEST")
+    if [[ "$CUSTOM_CHROME" == "true" ]]; then
+        CUSTOM_CHROME_FLAG="-Dcustom-chrome=true"
+        echo "[ship] cart manifest: customChrome=true"
+    fi
+fi
+
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then
