@@ -111,6 +111,20 @@ export function StatusBar(props: any) {
           </StatusSegment>
         ) : null}
 
+        {/* Line ending */}
+        {!compactBand ? (
+          <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('providers') : undefined}>
+            <Text fontSize={10} color={COLORS.textDim}>{props.lineEnding || 'LF'}</Text>
+          </StatusSegment>
+        ) : null}
+
+        {/* Encoding */}
+        {!compactBand ? (
+          <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('providers') : undefined}>
+            <Text fontSize={10} color={COLORS.textDim}>{props.encoding || 'UTF-8'}</Text>
+          </StatusSegment>
+        ) : null}
+
         {/* Language */}
         <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('providers') : undefined}>
           <Text fontSize={10} color={COLORS.textDim}>{props.languageMode}</Text>
