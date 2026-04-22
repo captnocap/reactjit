@@ -1,6 +1,6 @@
 const React: any = require('react');
 
-import { ChartsDemoPanel } from '../components/charts/ChartsDemoPanel';
+import { ChartsPanel } from '../components/charts/ChartsPanel';
 import { register } from '../panel-registry';
 
 register({
@@ -8,7 +8,7 @@ register({
   title: 'Charts',
   defaultSlot: 'center',
   icon: 'graph',
-  component: ChartsDemoPanel,
+  component: ChartsPanel,
   userVisible: true,
   defaultOpen: false,
 });
