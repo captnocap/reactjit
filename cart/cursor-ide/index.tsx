@@ -197,6 +197,7 @@ export default function CursorIdeApp() {
   const [pluginRegistry, setPluginRegistry] = useState<PluginRegistry | null>(null);
   const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
   const [showPalette, setShowPalette] = useState(0);
+  const openPalette = useCallback(() => setShowPalette(1), []);
   const [dockPanels, setDockPanels] = usePersistentState<string[]>('cursor-ide.dockPanels', ['files', 'source-control']);
 
   // ── New ported state ─────────────────────────────────────────────────
@@ -1711,7 +1712,20 @@ export default function CursorIdeApp() {
           />
         ) : null}
 
-        <CommandPalette open={showPalette === 1} onClose={() => setShowPalette(0)} commands={paletteCommands} />
+        <CommandPalette
+          open={showPalette === 1}
+          onClose={() => setShowPalette(0)}
+          onOpen={openPalette}
+          commands={paletteCommands}
+          files={cachedTreePathsRef.current}
+          settingsSections={settingsSections.map((s: any) => ({ id: s.id, label: s.label }))}
+          menuSections={menuSections}
+          onOpenFile={loadFileByPath}
+          onJumpToSettingsSection={(sectionId: string) => {
+            openSettingsSurface();
+            setSettingsSection(sectionId);
+          }}
+        />
       </Col>
     </Box>
   );
