@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useMemo, useCallback, useEffect } = React;
 
 import type { Checkpoint, CheckpointDiff } from '../../checkpoint';
 import { parseSideBySide, type ParsedDiff } from '../../app/diff-helpers';

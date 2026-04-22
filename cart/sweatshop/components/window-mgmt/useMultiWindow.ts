@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useState } = React;
 
 import { getRegisteredPanels } from '../../panel-registry';
 

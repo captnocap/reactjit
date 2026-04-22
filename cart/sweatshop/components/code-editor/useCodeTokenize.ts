@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo } = React;
 import { tokenizeTS, Token } from './languages/ts';
 import { tokenizeJS } from './languages/js';
 import { tokenizeLua } from './languages/lua';

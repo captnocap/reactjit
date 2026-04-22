@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 import { exec } from '../../host';
 import { stat } from '../../../../runtime/hooks/fs';

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useRef, useState, useCallback } = React;
 
 export type ControllerBindings = {
   up: string;

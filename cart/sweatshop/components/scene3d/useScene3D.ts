@@ -16,8 +16,6 @@
 // the registry shape stays; only Scene3D.tsx's renderer changes.
 // =============================================================================
 
-const React: any = require('react');
-const { createContext, useContext } = React;
 
 import type {
   AmbientLightNode,

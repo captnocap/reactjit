@@ -1,5 +1,3 @@
-const { useState, useMemo, useCallback } = require('react');
-
 import { Box, Col, ScrollView } from '../../../../runtime/primitives';
 import { LogRow } from './LogRow';
 import type { LogEntry } from './useLogStream';

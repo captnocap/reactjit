@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo, useEffect, useState, useCallback } = React;
 
 import { DocStore } from './doc-store';
 import type { DocStoreOptions } from './doc-store';

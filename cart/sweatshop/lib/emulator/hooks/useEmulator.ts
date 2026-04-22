@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useRef, useCallback } = React;
 
 import { Bus } from '../bus';
 import { Cartridge } from '../cartridge';

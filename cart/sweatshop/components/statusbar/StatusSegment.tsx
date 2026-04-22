@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { Pressable } from '../../../runtime/primitives';
 import { Tooltip } from '../tooltip';

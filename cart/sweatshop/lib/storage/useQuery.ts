@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useEffect, useCallback } = React;
 
 import type { Query } from './types';
 import type { DocStore } from './doc-store';

@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { GraphPanel } from './graph/GraphPanel';
 

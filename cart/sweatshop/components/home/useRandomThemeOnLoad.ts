@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useRef } = React;
 import { applyTheme } from '../../theme';
 
 let didRoll = false;

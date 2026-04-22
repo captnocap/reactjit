@@ -1,8 +1,6 @@
 // useMIDI — initializes the MIDI bus on mount, exposes inputs/outputs and a
 // subscribe handle for message-driven components.
 
-const React: any = require('react');
-const { useState, useEffect, useCallback } = React;
 
 import { midiBus, type MidiMessage, type MidiPort } from '../midi';
 

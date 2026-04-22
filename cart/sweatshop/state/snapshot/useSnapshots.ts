@@ -2,8 +2,6 @@
 // SnapshotMeta) stays tiny so listing stays fast; individual bodies live under
 // per-id keys so loading one doesn't parse them all.
 
-const React: any = require('react');
-const { useState, useCallback, useEffect } = React;
 
 import { capture, restore, type CaptureOptions, type RestoreOptions, type RestoreResult, type Snapshot, type SnapshotMeta } from './SnapshotEngine';
 

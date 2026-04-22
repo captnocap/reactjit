@@ -2,8 +2,6 @@
 // AmbientLight — uniform base illumination
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 import type { AmbientLightProps } from './types';
 import { useScene3D } from './useScene3D';

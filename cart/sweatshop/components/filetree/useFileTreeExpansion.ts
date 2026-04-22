@@ -1,7 +1,5 @@
 // ── Persisted Expand/Collapse State ──────────────────────────────────
 
-const React: any = require('react');
-const { useCallback, useRef } = React;
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;

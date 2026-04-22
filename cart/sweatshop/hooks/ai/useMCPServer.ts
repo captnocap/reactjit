@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useRef, useState } = React;
 
 import { MCPClient, websocketTransport, type MCPServerInfo, type MCPToolSchema } from '../../lib/ai/mcp';
 

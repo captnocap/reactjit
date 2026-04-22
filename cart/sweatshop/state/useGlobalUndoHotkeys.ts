@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect } = React;
 
 import { undo, redo } from './undoStack';
 

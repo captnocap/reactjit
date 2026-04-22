@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo } = React;
 
 import { readFile } from '../../host';
 import { baseName, fileGlyph, fileTone, inferFileType, stripDotSlash } from '../../theme';

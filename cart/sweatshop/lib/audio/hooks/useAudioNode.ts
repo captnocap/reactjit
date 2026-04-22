@@ -2,8 +2,6 @@
 // (Knob, Fader, etc.) can write params without dragging the whole rack api
 // through props. Returns a live view of the module + stable setters.
 
-const React: any = require('react');
-const { useMemo, useCallback } = React;
 
 import type { AudioRackApi } from './useAudioRack';
 import type { Module, ParamSpec } from '../types';

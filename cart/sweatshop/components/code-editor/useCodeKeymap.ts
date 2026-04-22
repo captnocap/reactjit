@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 export type KeymapMode = 'default' | 'vim' | 'emacs';
 

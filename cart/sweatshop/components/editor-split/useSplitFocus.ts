@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useMemo, useCallback, useEffect } = React;
 
 import type { SplitNode } from './SplitLayoutEngine';
 import { flattenPanes } from './SplitLayoutEngine';

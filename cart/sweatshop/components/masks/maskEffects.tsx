@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { cloneElement, Children } = React;
 
 import { Box, Canvas } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';

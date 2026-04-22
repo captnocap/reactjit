@@ -5,8 +5,6 @@
 // The interval is coarse on purpose: capture() walks every registered slice
 // and stringifies for the store, so sub-minute cadences are discouraged.
 
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 import { useSnapshots } from './useSnapshots';
 

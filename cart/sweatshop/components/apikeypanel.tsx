@@ -1,8 +1,6 @@
 // ── API Key Panel ────────────────────────────────────────────────────────────
 // Settings panel for managing provider API keys with obfuscated storage.
 
-const React: any = require('react');
-const { useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';

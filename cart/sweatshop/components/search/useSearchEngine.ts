@@ -3,8 +3,6 @@
 // through requestIdleCallback-style setTimeout chunks, and callers see results
 // populate via setResults.
 
-const React: any = require('react');
-const { useState, useRef, useCallback } = React;
 
 export type SearchMode = 'literal' | 'regex' | 'word';
 

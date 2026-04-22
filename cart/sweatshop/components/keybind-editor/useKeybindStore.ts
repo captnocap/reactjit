@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useMemo, useState } = React;
 
 export type KeybindPresetName = 'default' | 'vim' | 'vscode' | 'emacs' | 'custom';
 

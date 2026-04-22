@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo, useEffect } = React;
 
 import { SQLiteDB, type SQLiteOptions } from './sqlite';
 

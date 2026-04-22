@@ -1,4 +1,3 @@
-const React: any = require('react');
 import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import type { SearchScope as Scope } from './useSearchEngine';

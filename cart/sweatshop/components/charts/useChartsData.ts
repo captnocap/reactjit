@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useMemo, useState } = React;
 
 import { COLORS } from '../../theme';
 import { exec } from '../../host';

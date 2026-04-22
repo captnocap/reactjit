@@ -11,8 +11,6 @@
 // target) distance between minDistance and maxDistance.
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 import { Pressable } from '../../../runtime/primitives';
 import type { OrbitControlsProps, Vec3 } from './types';

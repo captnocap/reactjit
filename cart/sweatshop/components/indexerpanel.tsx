@@ -1,8 +1,6 @@
 // ── Indexer Panel ────────────────────────────────────────────────────────────
 // Workspace file indexing UI: index, search, stats, manage indexed files.
 
-const React: any = require('react');
-const { useState, useEffect } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';

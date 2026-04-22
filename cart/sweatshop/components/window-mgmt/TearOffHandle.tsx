@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { Box, Pressable, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';

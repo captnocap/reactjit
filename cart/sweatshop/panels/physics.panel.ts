@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { PhysicsPanel } from '../components/physics/PhysicsPanel';
 import { register } from '../panel-registry';

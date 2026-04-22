@@ -1,7 +1,5 @@
 // ── Windowing Hook ───────────────────────────────────────────────────
 
-const React: any = require('react');
-const { useMemo, useState } = React;
 
 export interface VirtualWindow<T> {
   items: T[];

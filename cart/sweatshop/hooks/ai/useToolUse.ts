@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
 
 import type { ToolDefinition } from '../../lib/ai/types';
 import { registerTool, listTools, subscribeTools } from '../../lib/ai/tools';

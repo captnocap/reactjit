@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useCallback } = React;
 
 export interface CodeHistory {
   value: string;

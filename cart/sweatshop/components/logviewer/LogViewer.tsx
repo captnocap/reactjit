@@ -1,6 +1,4 @@
-const { useState, useMemo, useCallback, useEffect, useRef } = require('react');
-
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { useLogStream } from './useLogStream';
 import { useLogFilters } from './useLogFilters';
@@ -103,7 +101,3 @@ export function LogViewer(props: LogViewerProps) {
   );
 }
 
-function Text(props: any) {
-  const React: any = require('react');
-  return React.createElement('Text', props, props.children);
-}

@@ -3,7 +3,7 @@
 // Ported from love2d/examples/hot-code/src/App.tsx
 
 const React: any = require('react');
-const ts: any = require('typescript');
+import * as ts from 'typescript';
 const { useEffect, useRef, useState, useCallback } = React;
 
 import {

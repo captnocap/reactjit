@@ -1,7 +1,5 @@
 // ── Command Palette ──────────────────────────────────────────────────
 
-const React: any = require('react');
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 import { Box, Col } from '../../../runtime/primitives';
 import { COLORS } from '../../theme';

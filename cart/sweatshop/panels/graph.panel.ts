@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { GraphPanelSurface } from '../components/graphpanel';
 import { register } from '../panel-registry';

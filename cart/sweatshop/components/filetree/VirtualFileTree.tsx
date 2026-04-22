@@ -1,7 +1,5 @@
 // ── Virtual File Tree ────────────────────────────────────────────────
 
-const React: any = require('react');
-const { useCallback, useMemo, useState } = React;
 
 import { Box, Col, ScrollView } from '../../../runtime/primitives';
 import { FileItemLike, rebuildVisibleFromFlat } from './FileTreeFlatten';

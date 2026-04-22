@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo, useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';

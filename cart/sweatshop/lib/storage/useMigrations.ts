@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useEffect, useCallback } = React;
 
 import { SQLiteDB } from './sqlite';
 

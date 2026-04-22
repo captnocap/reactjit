@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo } = React;
 
 import type { Message } from '../../lib/ai/types';
 

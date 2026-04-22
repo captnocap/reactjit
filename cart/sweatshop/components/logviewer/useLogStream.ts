@@ -1,5 +1,3 @@
-const { useState, useEffect, useRef } = require('react');
-
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface LogEntry {

@@ -1,4 +1,3 @@
-const { useState, useCallback, useMemo } = require('react');
 import type { LogEntry, LogLevel } from './useLogStream';
 
 export interface LogFilterState {

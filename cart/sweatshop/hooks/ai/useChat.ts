@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useMemo, useRef, useState } = React;
 
 import type { ChatOptions, ChatResult, Message, ToolCall, ToolDefinition } from '../../lib/ai/types';
 import { streamChat, type StreamHandle } from '../../lib/ai/stream';

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useMemo, useState } = React;
 
 const host: any = globalThis as any;
 

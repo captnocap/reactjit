@@ -1,4 +1,3 @@
-const React: any = require('react');
 import { Box, Row, ScrollView, Text, Pressable } from '../../../../runtime/primitives';
 import type { Worker, WorkerStatus } from './WorkerTile';
 

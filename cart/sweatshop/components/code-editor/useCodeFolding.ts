@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useMemo, useCallback } = React;
 
 export interface FoldRange {
   startLine: number;

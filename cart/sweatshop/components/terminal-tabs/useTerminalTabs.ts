@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useMemo, useState } = React;
 
 import { baseName, stripDotSlash } from '../../theme';
 

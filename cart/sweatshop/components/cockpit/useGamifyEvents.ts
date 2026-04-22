@@ -2,8 +2,6 @@
 // via a simple callback surface (record()), runs them through LevelCalc, and
 // persists session state in localStorage so xp survives reloads.
 
-const React: any = require('react');
-const { useState, useRef, useCallback, useEffect } = React;
 
 import {
   computeLevelState,

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback } = React;
 
 import type { SplitNode } from './SplitLayoutEngine';
 

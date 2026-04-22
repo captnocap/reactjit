@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useMemo } = React;
 
 export type ChartScaleMode = 'linear' | 'log';
 

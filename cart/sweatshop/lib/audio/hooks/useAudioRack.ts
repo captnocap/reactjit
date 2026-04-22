@@ -1,8 +1,6 @@
 // useAudioRack — holds a single Rack state. Returns a stable api so UI
 // components can add/remove/connect without threading props through.
 
-const React: any = require('react');
-const { useState, useRef, useCallback, useEffect } = React;
 
 import {
   createRack, addModule, removeModule, reorderModule,

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useRef, useState } = React;
 
 import type { CompletionOptions, CompletionResult } from '../../lib/ai/types';
 import { streamChat, type StreamHandle } from '../../lib/ai/stream';

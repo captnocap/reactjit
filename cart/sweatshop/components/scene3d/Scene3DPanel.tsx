@@ -13,8 +13,6 @@
 // shared directional-light direction (X/Y steppers).
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useState } = React;
 
 import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';

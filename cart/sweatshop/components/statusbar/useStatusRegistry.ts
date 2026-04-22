@@ -1,5 +1,3 @@
-const { useState, useEffect } = require('react');
-
 export type SegmentPosition = 'left' | 'center' | 'right';
 
 export interface SegmentDef {

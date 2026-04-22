@@ -6,8 +6,6 @@
 // position, colour, intensity, and max range (falloff zero at r>range).
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 import type { PointLightProps, Vec3 } from './types';
 import { useScene3D } from './useScene3D';

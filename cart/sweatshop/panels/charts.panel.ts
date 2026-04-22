@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { ChartsPanel } from '../components/charts/ChartsPanel';
 import { register } from '../panel-registry';

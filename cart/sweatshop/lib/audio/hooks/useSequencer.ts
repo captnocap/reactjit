@@ -1,8 +1,6 @@
 // useSequencer — drives a sequencer module's step state via requestAnimationFrame
 // so UIs can light the current step and edit per-step notes/gates/velocities.
 
-const React: any = require('react');
-const { useEffect, useRef, useState, useCallback } = React;
 
 import type { AudioRackApi } from './useAudioRack';
 import type { SeqStepData, SeqRuntime } from '../modules/Sequencer';

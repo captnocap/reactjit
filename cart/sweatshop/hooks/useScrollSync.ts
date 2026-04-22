@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useState } = React;
 
 export interface ScrollSyncState {
   scrollX: number;

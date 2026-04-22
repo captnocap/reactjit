@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useContext, useEffect, useMemo, useRef, useState } = React;
 
 import { Box } from '../../../../runtime/primitives';
 import { useHover } from '../../anim';

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 import type { ScrollSyncState } from './useScrollSync';
 

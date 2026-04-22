@@ -2,8 +2,6 @@
 // path exists in the rack (VCO → VCF → VCA + LFO → VCF, Env → VCA) and exposes
 // noteOn/noteOff helpers so a keyboard or MIDI listener can trigger the voice.
 
-const React: any = require('react');
-const { useEffect, useMemo, useCallback, useState } = React;
 
 import type { AudioRackApi } from './useAudioRack';
 import { noteToFreq } from '../midi';

@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { Row } from '../../../runtime/primitives';
 import { COLORS } from '../../theme';

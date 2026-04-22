@@ -32,8 +32,6 @@
 //   that should ideally come from COLORS too.
 // ────────────────────────────────────────────────────────────────────
 
-const React: any = require('react');
-const { useEffect, useState } = React;
 import { THEMES, THEME_ORDER, buildCustomTheme, type CustomThemeOverrides, type Theme, type ThemePalette, type ThemeTokens } from './themes';
 
 export type WidthBand = 'minimum' | 'widget' | 'narrow' | 'medium' | 'desktop';

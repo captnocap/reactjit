@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useEffect, useCallback, useRef } = React;
 
 import { parseFeed } from './parser';
 import type { Feed, FeedItem, FeedStreamOptions, FeedStreamResult, FeedAggregateOptions, FeedAggregateResult } from './types';

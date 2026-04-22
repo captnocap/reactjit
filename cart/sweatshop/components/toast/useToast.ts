@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { createContext, useContext, useEffect, useMemo, useState } = React;
 
 export type ToastLevel = 'info' | 'success' | 'warn' | 'error';
 export type ToastPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

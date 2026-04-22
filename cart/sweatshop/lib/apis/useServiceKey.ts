@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 export interface ServiceKeys {
   [field: string]: string | undefined;

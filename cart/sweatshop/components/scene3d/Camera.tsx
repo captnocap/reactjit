@@ -9,8 +9,6 @@
 // supervisor's brief.
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect } = React;
 
 import type { CameraProps } from './types';
 import { DEFAULT_CAMERA, useScene3D } from './useScene3D';

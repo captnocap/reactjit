@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useState } = React;
 
 import { getCustomOverrides, setCustomOverrides, applyTheme, getActiveThemeName } from '../../theme';
 import { THEMES, type CustomThemeOverrides, type ThemePalette, type ThemeTokens } from '../../themes';

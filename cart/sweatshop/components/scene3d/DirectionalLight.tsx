@@ -2,8 +2,6 @@
 // DirectionalLight — sun-like directional light
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useRef } = React;
 
 import type { DirectionalLightProps, Vec3 } from './types';
 import { useScene3D } from './useScene3D';

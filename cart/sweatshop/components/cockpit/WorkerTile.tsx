@@ -1,4 +1,3 @@
-const React: any = require('react');
 import { Box, Row, Text, Pressable } from '../../../../runtime/primitives';
 import { useTransition as useAnimatedTransition } from '../../anim';
 

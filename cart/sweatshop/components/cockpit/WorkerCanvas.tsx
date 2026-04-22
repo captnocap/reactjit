@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useState, useMemo, useCallback, useEffect } = React;
 import { Box, Col, Row, Text, Pressable, Canvas } from '../../../../runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';

@@ -1,8 +1,6 @@
 // Recent-queries store. Persisted via __store_* with localStorage fallback so
 // history survives reloads. Capped to 40 entries; most-recent first.
 
-const React: any = require('react');
-const { useState, useCallback, useEffect } = React;
 
 const STORE_KEY = 'sweatshop.search.history.v1';
 const MAX_ENTRIES = 40;

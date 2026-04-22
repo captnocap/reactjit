@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { useTheme } from '../../theme';
 import { LaTeXBlock } from './LaTeXBlock';

@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
 
 import { Col, Row } from '../../../../runtime/primitives';
 import { CommandList } from './CommandList';

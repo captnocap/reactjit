@@ -4,8 +4,6 @@
 // and expose Prev / Next / Jump controls. This keeps 100k+ result sets
 // responsive since only the current page mounts at a time.
 
-const React: any = require('react');
-const { useMemo, useState, useEffect } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';

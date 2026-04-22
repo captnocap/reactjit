@@ -1,4 +1,3 @@
-const React: any = require('react');
 
 import { MasksPanel } from '../components/masks/MasksPanel';
 import { register } from '../panel-registry';

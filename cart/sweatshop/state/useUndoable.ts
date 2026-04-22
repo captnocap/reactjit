@@ -1,5 +1,3 @@
-const React: any = require('react');
-const { useCallback, useEffect, useRef, useState } = React;
 
 import { push, undo as stackUndo, redo as stackRedo, subscribe, getUndoDepth, getRedoDepth } from './undoStack';
 
