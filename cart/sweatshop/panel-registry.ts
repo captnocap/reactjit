@@ -101,3 +101,4 @@ require('./panels/gamepad.panel');
 require('./panels/a11y.panel');
 require('./panels/automation.panel');
 require('./panels/llm-studio.panel');
+require('./panels/tor.panel');
