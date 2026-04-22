@@ -31,6 +31,12 @@ export function PieChart(props: {
   showAxisLabels?: boolean;
   valueFormat?: (value: number) => string;
   innerRadius?: number;
+  /** Accepted for API parity with Line/Area/Bar. PieChart's geometry is
+   *  angular, not Cartesian — zoom/pan/brush don't map. The built-in
+   *  per-slice hover tooltip already covers the crosshair role, so this
+   *  prop is a no-op here but kept so callers can pass the same
+   *  interactions={} object to every chart unconditionally. */
+  interactions?: Record<string, any>;
 }) {
   const width = props.width ?? 520;
   const height = props.height ?? 240;
