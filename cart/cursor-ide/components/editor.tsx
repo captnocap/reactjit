@@ -183,7 +183,7 @@ function EditorSurfaceImpl(props: any) {
         </Col>
 
         {showMinimap ? (
-          <Col style={{ width: 90, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelRaised, padding: 8, gap: 3 }}>
+          <Col style={{ width: 90, flexShrink: 0, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelRaised, padding: 8, gap: 3 }}>
             <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <Text fontSize={10} color={COLORS.textDim}>overview</Text>
               <Text fontSize={10} color={COLORS.textDim}>{props.totalLines}</Text>
@@ -194,7 +194,7 @@ function EditorSurfaceImpl(props: any) {
               rowGap={1}
               activeColor={COLORS.blue}
               inactiveColor="#30363d"
-              style={{ flexGrow: 1, flexBasis: 0 }}
+              style={{ flexGrow: 1, flexBasis: 0, overflow: 'hidden' }}
             />
           </Col>
         ) : null}
