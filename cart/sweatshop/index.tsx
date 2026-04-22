@@ -1447,6 +1447,7 @@ export default function CursorIdeApp() {
     if (panelId === 'hot') { toggleHotSurface(); return; }
     if (panelId === 'git') { toggleGitSurface(); return; }
     if (panelId === 'plan') { togglePlanSurface(); return; }
+    if (panelId === 'graph') { toggleGraphSurface(); return; }
     if (panelId === 'settings') {
       if (activeView === 'settings' || currentFilePath === '__settings__') openLandingPage();
       else openSettingsSurface();
@@ -1479,6 +1480,7 @@ export default function CursorIdeApp() {
     toggleDiffSurface,
     toggleGitSurface,
     toggleHotSurface,
+    toggleGraphSurface,
     togglePlanSurface,
     toggleTerminalSurface,
   ]);
@@ -1636,6 +1638,7 @@ export default function CursorIdeApp() {
               <CompactSurfaceButton label="Hot" showLabel={!minimumMode} active={compactSurface === 'hot'} onPress={() => { setShowHotPanel(1); setCompactSurface('hot'); }} icon="flame" shortcut="Ctrl+H" />
               <CompactSurfaceButton label="Git" showLabel={!minimumMode} active={compactSurface === 'git'} onPress={() => { setShowGitPanel(1); setCompactSurface('git'); }} icon="git-branch" />
               <CompactSurfaceButton label="Plan" showLabel={!minimumMode} active={compactSurface === 'plan'} onPress={() => { setShowPlanPanel(1); setCompactSurface('plan'); }} icon="map" />
+              <CompactSurfaceButton label="Graph" showLabel={!minimumMode} active={compactSurface === 'graph'} onPress={() => { setShowGraphPanel(1); setCompactSurface('graph'); }} icon="git-branch" />
               <CompactSurfaceButton label="Agent" showLabel={!minimumMode} active={compactSurface === 'agent'} onPress={() => { setShowChat(1); setCompactSurface('agent'); }} icon="message" shortcut="Ctrl+L" />
             </Row>
 
@@ -1679,7 +1682,7 @@ export default function CursorIdeApp() {
               </Box>
             ) : null}
 
-            {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' ? (
+            {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' || compactSurface === 'graph' ? (
               <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
                 <TabBar tabs={tabsForBar} activeId={activeTabId} compact={true} onActivate={activateTab} onClose={closeTab} />
                 <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={true} onOpenHome={openLandingPage} />
@@ -1849,6 +1852,16 @@ export default function CursorIdeApp() {
             ) : null}
             {showDockedPlan ? (
               <PlanPanelWrapper workDir={workDir} activePlanId={activePlanId} onChange={(id) => setActivePlanId(id)} onSendToAI={sendMessage} />
+            ) : null}
+            {showDockedGraph ? (
+              <GraphPanelSurface
+                currentFilePath={currentFilePath}
+                currentSource={editorContent}
+                workDir={workDir}
+                widthBand={widthBand}
+                onOpenPath={openFileByPath}
+                onClose={() => setShowGraphPanel(0)}
+              />
             ) : null}
             {showDockedChat ? (
               <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={chatWideStyle} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} workspaceFiles={cachedTreePathsRef.current} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={onChatInputChange} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
