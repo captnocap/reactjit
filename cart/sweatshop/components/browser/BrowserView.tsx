@@ -1,11 +1,11 @@
 import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { BrowserTabState } from '../../lib/browser/tabs';
-import type { BrowserFetchState } from '../../lib/browser/navigation';
+import type { BrowserPageState } from '../../lib/browser/navigation';
 
 export function BrowserView(props: {
   tab: BrowserTabState | null;
-  page: BrowserFetchState | null;
+  page: BrowserPageState | null;
   httpAvailable: boolean;
 }) {
   return (
@@ -46,6 +46,10 @@ export function BrowserView(props: {
               <Text fontSize={10} color={COLORS.textBright} style={{ fontFamily: TOKENS.fontMono, whiteSpace: 'pre-wrap' }}>{props.page.body || '(empty body)'}</Text>
             </Box>
           </Col>
+        ) : props.tab?.url ? (
+          <Box style={{ padding: 16, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
+            <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Press Fetch to load raw body.</Text>
+          </Box>
         ) : (
           <Box style={{ padding: 16, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
             <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Enter a URL to fetch.</Text>
