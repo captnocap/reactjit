@@ -3,11 +3,17 @@
 // <Fragment> at bundle time. This file is inject'd into every build so
 // those identifiers are always in scope without an explicit import.
 //
-// MUST use require('react'), not ESM named imports. ESM re-exports from
-// 'react' create a circular dependency in the bundle (jsx_shim → ambient →
-// __toESM(require_react()) → init_jsx_shim() again) that causes
-// require_react() to return a partial module at runtime in V8, producing
-// 'TypeError: React3.memo is not a function'.
-const React: any = require('react');
-export const h = React.createElement;
-export const Fragment = React.Fragment;
+// MUST use lazy require('react') for h. When esbuild injects this file into
+// react/index.js's own CJS body, require('react') returns the partial {}
+// module. Capturing React.createElement at init time stores undefined.
+// Deferring to JSX execution time resolves to the real React.
+//
+// Fragment uses Symbol.for("react.fragment") directly — it is the stable
+// well-known symbol React uses, so it needs no runtime lookup and avoids
+// the circular-init problem entirely.
+
+export const h = function h(...a: any[]) {
+  return (require('react') as any).createElement(...a);
+};
+
+export const Fragment: any = Symbol.for('react.fragment');
