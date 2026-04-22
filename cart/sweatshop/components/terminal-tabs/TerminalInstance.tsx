@@ -172,6 +172,7 @@ export function TerminalInstance(props: {
     cwd: props.tab.cwd,
     cols: 120,
     rows: compactBand ? 26 : 30,
+    focused: props.tab.active,
     onOutput: (chunk: string) => {
       appendTranscript(chunk);
       props.onMarkDirty?.(props.tab.id, !props.tab.active);
