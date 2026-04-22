@@ -2,7 +2,8 @@ const React: any = require('react');
 const { useState, useEffect } = React;
 const { memo } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextArea } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextArea, TextInput } from '../../../runtime/primitives';
+import { ChatMessage } from './chatmessage';
 import { baseName, COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
 import { getModelIconInfo } from '../model-icons';
@@ -324,41 +325,16 @@ function ChatSurfaceImpl(props: any) {
             </Box>
           ) : null}
 
-          {messages.map((msg: any, idx: number) => {
-            const isUser = msg.role === 'user';
-            const msgText = typeof msg.text === 'string' ? msg.text : '';
-            return (
-              <Col key={msg.role + '_' + idx + '_' + msgText.slice(0, 16)} style={{ gap: 6 }}>
-                <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <Glyph icon={isUser ? 'message' : 'bot'} tone={isUser ? COLORS.blue : COLORS.green} backgroundColor={isUser ? '#17345d' : '#143120'} tiny={true} />
-                  <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{isUser ? 'You' : 'Agent'}</Text>
-                  <Text fontSize={10} color={COLORS.textDim}>{msg.time}</Text>
-                  {msg.mode ? <Pill label={msg.mode} color={COLORS.blue} tiny={true} /> : null}
-                  {msg.model ? (
-                    <Row style={{ alignItems: 'center', gap: 4 }}>
-                      <ModelIconBadge modelId={msg.model} />
-                      <Pill label={msg.model} color={COLORS.textMuted} tiny={true} />
-                    </Row>
-                  ) : null}
-                </Row>
-                <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: isUser ? '#20324f' : '#1c2531', backgroundColor: isUser ? '#101827' : '#10141c', gap: 8 }}>
-                  <Text fontSize={11} color={COLORS.text}>{msgText}</Text>
-                  {Array.isArray(msg.attachments) && msg.attachments.length > 0 ? (
-                    <Row style={{ gap: 6, flexWrap: 'wrap' }}>
-                      {msg.attachments.map((attachment: any) => (
-                        <Pill key={attachment.id} label={attachment.name} color={COLORS.blue} tiny={true} />
-                      ))}
-                    </Row>
-                  ) : null}
-                  {Array.isArray(msg.toolSnapshot) && msg.toolSnapshot.length > 0 ? (
-                    <Col style={{ gap: 8 }}>
-                      {msg.toolSnapshot.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
-                    </Col>
-                  ) : null}
-                </Box>
-              </Col>
-            );
-          })}
+          {messages.map((msg: any, idx: number) => (
+            <ChatMessage
+              key={msg.role + '_' + idx + '_' + (msg.text || '').slice(0, 16)}
+              message={msg}
+              index={idx}
+              isLast={idx === messages.length - 1}
+              compact={compactBand}
+              isStreaming={idx === messages.length - 1 && props.isGenerating && msg.role === 'assistant'}
+            />
+          ))}
 
           {props.isGenerating ? (
             <GeneratingIndicator toolExecutions={toolExecutions} />

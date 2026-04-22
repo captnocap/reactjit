@@ -251,6 +251,45 @@ function ModelIconBadge(props: { modelId: string; size?: number }) {
   );
 }
 
+// ── Role avatar ───────────────────────────────────────────────
+
+function RoleAvatar(props: { role: string; modelId?: string; size?: number }) {
+  const size = props.size || 20;
+  if (props.role === 'user') {
+    return (
+      <Box style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: COLORS.blueDeep,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.blue,
+      }}>
+        <Text fontSize={size * 0.45} color={COLORS.blue} style={{ fontWeight: 'bold' }}>U</Text>
+      </Box>
+    );
+  }
+  if (props.role === 'system') {
+    return (
+      <Box style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: COLORS.grayDeep,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+      }}>
+        <Text fontSize={size * 0.45} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>S</Text>
+      </Box>
+    );
+  }
+  return <ModelIconBadge modelId={props.modelId || 'unknown'} size={size} />;
+}
+
 // ── ToolCallCard (mirrors chat.tsx) ───────────────────────────
 
 export function ToolCallCard(props: { exec: ToolExecution }) {
@@ -258,7 +297,7 @@ export function ToolCallCard(props: { exec: ToolExecution }) {
   const statusColor =
     execItem.status === 'completed' ? COLORS.green : execItem.status === 'error' ? COLORS.red : COLORS.blue;
   return (
-    <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, gap: 6 }}>
+    <Box style={{ padding: 10, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, gap: 6 }}>
       <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Text fontSize={10} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
           {execItem.name}
@@ -334,10 +373,10 @@ function renderMarkdownNodes(nodes: InternalNode[], onCopyCode: (code: string) =
           <Box
             key={result.length}
             style={{
-              borderRadius: 8,
+              borderRadius: 6,
               borderWidth: 1,
               borderColor: COLORS.border,
-              backgroundColor: COLORS.panelAlt,
+              backgroundColor: '#080b10',
               overflow: 'hidden',
             }}
           >
@@ -452,6 +491,7 @@ export function ChatMessage(props: {
   const { message, isLast, onCopy, onRetry, onDelete, onEdit, compact, isStreaming } = props;
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
+  const [hovered, setHovered] = useState(false);
 
   const mdNodes = useMemo(() => parseMarkdownInternal(message.text || ''), [message.text]);
 
@@ -465,20 +505,22 @@ export function ChatMessage(props: {
   }
 
   return (
-    <Col style={{ gap: 6 }}>
+    <Col
+      style={{ gap: 6 }}
+      onHoverEnter={() => setHovered(true)}
+      onHoverExit={() => setHovered(false)}
+    >
       {/* Header */}
       <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {isUser ? (
-          <Glyph icon="message" tone={COLORS.blue} backgroundColor="#17345d" tiny={true} />
-        ) : (
-          <ModelIconBadge modelId={message.model || 'unknown'} />
-        )}
+        <RoleAvatar role={message.role} modelId={message.model} size={20} />
         <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-          {isUser ? 'You' : 'Agent'}
+          {isUser ? 'You' : isAssistant ? 'Agent' : 'System'}
         </Text>
-        <Text fontSize={10} color={COLORS.textDim}>
-          {message.time}
-        </Text>
+        {hovered || compact ? (
+          <Text fontSize={9} color={COLORS.textDim}>
+            {message.time}
+          </Text>
+        ) : null}
         {message.mode ? <Pill label={message.mode} color={COLORS.blue} tiny={true} /> : null}
         {isAssistant && message.model ? (
           <Row style={{ alignItems: 'center', gap: 4 }}>
@@ -486,16 +528,24 @@ export function ChatMessage(props: {
             <Pill label={message.model} color={COLORS.textMuted} tiny={true} />
           </Row>
         ) : null}
+        {hovered ? (
+          <Pressable onPress={handleCopyMessage}>
+            <Row style={{ gap: 4, alignItems: 'center' }}>
+              <Glyph icon="copy" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
+              <Text fontSize={9} color={COLORS.textDim}>Copy</Text>
+            </Row>
+          </Pressable>
+        ) : null}
       </Row>
 
       {/* Content */}
       <Box
         style={{
           padding: compact ? 8 : 12,
-          borderRadius: 12,
+          borderRadius: 8,
           borderWidth: 1,
-          borderColor: isUser ? '#20324f' : '#1c2531',
-          backgroundColor: isUser ? '#101827' : '#10141c',
+          borderColor: isUser ? '#1e3a5f' : '#1c2834',
+          backgroundColor: isUser ? '#0f1724' : '#0d1117',
           gap: 8,
         }}
       >
