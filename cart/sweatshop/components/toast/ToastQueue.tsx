@@ -33,7 +33,7 @@ export function ToastQueue() {
   const layout = positionStyle(settings.position);
 
   return (
-    <Box style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 5400, overflow: 'visible' }}>
+    <Box style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 12050, overflow: 'visible' }}>
       <Col
         style={{
           position: 'absolute',
