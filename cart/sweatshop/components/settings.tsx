@@ -6,6 +6,7 @@ import { COLORS, TOKENS, useTheme } from '../theme';
 import { THEME_ORDER, THEMES } from '../themes';
 import { Glyph, Pill } from './shared';
 import { FadeIn, PageModeTransition } from '../anim';
+import { KeybindEditor } from './keybind-editor/KeybindEditor';
 import { getProviderIconInfo, getModelIconInfo } from '../model-icons';
 import type { ProviderConfig, ModelConfig } from '../providers';
 import type { ModelReference } from '../default-models';
@@ -2432,7 +2433,7 @@ export function SettingsSurface(props: any) {
     if (section === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
     if (section === 'scrolling')   return <ScrollingPanel query={query} resetToken={resetToken} />;
     if (section === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
-    if (section === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
+    if (section === 'keybindings') return <KeybindEditor query={query} resetToken={resetToken} />;
     if (section === 'providers')   return <ProvidersPanel
       query={query}
       providerConfigs={props.providerConfigs || []}
