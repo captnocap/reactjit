@@ -3,53 +3,10 @@ const React: any = require('react');
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { CodeFence } from './CodeFence';
-import { InlineCode } from './InlineCode';
 import { MarkdownImage } from './MarkdownImage';
-import { MarkdownLink } from './MarkdownLink';
 import { MarkdownTable } from './MarkdownTable';
-import type { MarkdownAst, MarkdownBlock, MarkdownInlineNode } from './useMarkdownAst';
-
-function highlightText(text: string, query: string, fontSize: number, color: string, keyPrefix: string) {
-  const q = query.trim();
-  if (!q) return <Text fontSize={fontSize} color={color}>{text}</Text>;
-  const lower = text.toLowerCase();
-  const needle = q.toLowerCase();
-  const out: any[] = [];
-  let start = 0;
-  while (true) {
-    const idx = lower.indexOf(needle, start);
-    if (idx < 0) break;
-    if (idx > start) out.push(<Text key={`${keyPrefix}-${start}`} fontSize={fontSize} color={color}>{text.slice(start, idx)}</Text>);
-    out.push(<Text key={`${keyPrefix}-m-${idx}`} fontSize={fontSize} color={COLORS.blue} style={{ backgroundColor: COLORS.blueDeep }}>{text.slice(idx, idx + q.length)}</Text>);
-    start = idx + q.length;
-  }
-  if (start < text.length) out.push(<Text key={`${keyPrefix}-end`} fontSize={fontSize} color={color}>{text.slice(start)}</Text>);
-  return out;
-}
-
-function renderInlineNode(node: MarkdownInlineNode, opts: { basePath: string; onOpenPath?: (path: string) => void; fontSize: number; query: string; keyPrefix: string }) {
-  const { basePath, onOpenPath, fontSize, query, keyPrefix } = opts;
-  switch (node.type) {
-    case 'text':
-      return highlightText(node.content, query, fontSize, COLORS.text, keyPrefix);
-    case 'code':
-      return <InlineCode fontSize={fontSize}>{node.content}</InlineCode>;
-    case 'strong':
-      return <Text fontSize={fontSize} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{node.content}</Text>;
-    case 'em':
-      return <Text fontSize={fontSize} color={COLORS.text} style={{ fontStyle: 'italic' }}>{node.content}</Text>;
-    case 'link':
-      return <MarkdownLink basePath={basePath} url={node.url} onOpenPath={onOpenPath}>{node.text}</MarkdownLink>;
-    case 'image':
-      return <MarkdownImage alt={node.alt} src={node.src} />;
-    default:
-      return null;
-  }
-}
-
-function renderInline(nodes: MarkdownInlineNode[], opts: { basePath: string; onOpenPath?: (path: string) => void; fontSize: number; query: string; prefix: string }) {
-  return nodes.map((node, index) => <React.Fragment key={`${opts.prefix}-${index}`}>{renderInlineNode(node, { ...opts, keyPrefix: `${opts.prefix}-${index}` })}</React.Fragment>);
-}
+import { renderMarkdownInlineNodes } from './inlineRenderer';
+import type { MarkdownAst, MarkdownBlock } from './useMarkdownAst';
 
 function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?: (path: string) => void; onAnchorPress?: (id: string) => void; fontSize: number; lineWidth: number; query: string; onHeadingLayout?: (id: string, y: number) => void }) {
   switch (block.type) {
@@ -72,7 +29,7 @@ function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?
               </Pressable>
             ) : null}
             <Text fontSize={size} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-              {renderInline(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: size, query: opts.query, prefix: block.id })}
+              {renderMarkdownInlineNodes(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: size, query: opts.query, keyPrefix: block.id })}
             </Text>
           </Row>
         </Box>
@@ -81,7 +38,7 @@ function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?
     case 'paragraph':
       return (
         <Row key={`${block.type}-${block.line}`} style={{ flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
-          {renderInline(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, prefix: `p-${block.line}` })}
+          {renderMarkdownInlineNodes(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, keyPrefix: `p-${block.line}` })}
         </Row>
       );
     case 'list':
@@ -91,7 +48,7 @@ function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?
             <Row key={index} style={{ gap: 8, alignItems: 'flex-start' }}>
               <Text fontSize={opts.fontSize} color={COLORS.textDim}>{block.ordered ? `${index + 1}.` : '•'}</Text>
               <Row style={{ flexWrap: 'wrap', gap: 2, alignItems: 'flex-start', flexGrow: 1, flexBasis: 0 }}>
-                {renderInline(item, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, prefix: `li-${block.line}-${index}` })}
+                {renderMarkdownInlineNodes(item, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, keyPrefix: `li-${block.line}-${index}` })}
               </Row>
             </Row>
           ))}
@@ -101,14 +58,14 @@ function renderBlock(block: MarkdownBlock, opts: { basePath: string; onOpenPath?
       return (
         <Box key={`${block.type}-${block.line}`} style={{ paddingLeft: 10, borderLeftWidth: 3, borderColor: COLORS.blue, marginLeft: 4 }}>
           <Row style={{ flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
-            {renderInline(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, prefix: `q-${block.line}` })}
+            {renderMarkdownInlineNodes(block.content, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, keyPrefix: `q-${block.line}` })}
           </Row>
         </Box>
       );
     case 'codeblock':
       return <CodeFence key={`${block.type}-${block.line}`} language={block.language} content={block.content} fontSize={opts.fontSize} />;
     case 'table':
-      return <MarkdownTable key={`${block.type}-${block.line}`} header={block.header} rows={block.rows} fontSize={opts.fontSize} renderInline={(nodes) => <Row style={{ flexWrap: 'wrap', gap: 2 }}>{renderInline(nodes, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, prefix: `t-${block.line}` })}</Row>} />;
+      return <MarkdownTable key={`${block.type}-${block.line}`} header={block.header} rows={block.rows} fontSize={opts.fontSize} renderInline={(nodes) => <Row style={{ flexWrap: 'wrap', gap: 2 }}>{renderMarkdownInlineNodes(nodes, { basePath: opts.basePath, onOpenPath: opts.onOpenPath, fontSize: opts.fontSize, query: opts.query, keyPrefix: `t-${block.line}` })}</Row>} />;
     case 'image':
       return <MarkdownImage key={`${block.type}-${block.line}`} alt={block.alt} src={block.src} />;
     case 'hr':

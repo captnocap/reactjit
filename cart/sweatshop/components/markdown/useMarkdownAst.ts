@@ -79,6 +79,10 @@ function parseInline(text: string): MarkdownInlineNode[] {
   return nodes;
 }
 
+export function parseInlineMarkdown(text: string): MarkdownInlineNode[] {
+  return parseInline(text);
+}
+
 function splitTableRow(line: string): string[] {
   return line
     .trim()
