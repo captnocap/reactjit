@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useRef, useState, useMemo, memo } = React;
+const { useRef, useState, useMemo, memo, useEffect } = React;
 
 import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
 import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
@@ -31,6 +31,17 @@ function EditorSurfaceImpl(props: any) {
   const [editorScrollY, setEditorScrollY] = useState(0);
   const lastScrollStateTimeRef = useRef(0);
   const lastScrollYRef = useRef(0);
+  const activePathRef = useRef(props.currentFilePath);
+
+  useEffect(() => {
+    if (activePathRef.current !== props.currentFilePath) {
+      activePathRef.current = props.currentFilePath;
+      setEditorScrollY(0);
+      lastScrollStateTimeRef.current = 0;
+      lastScrollYRef.current = 0;
+    }
+  }, [props.currentFilePath]);
+
   const estimatedViewportHeight = Math.max(160, props.windowHeight - (compactBand ? 260 : 300));
   const overscanRows = 8;
   const visibleRowCount = Math.ceil(estimatedViewportHeight / lineStride) + overscanRows * 2;
@@ -55,8 +66,6 @@ function EditorSurfaceImpl(props: any) {
     })),
     [gutterRowsSlice]
   );
-  const gutterTopSpacer = shouldVirtualizeChrome ? topPad + visibleStart * lineStride : topPad;
-  const gutterBottomSpacer = shouldVirtualizeChrome ? bottomPad + Math.max(0, props.totalLines - visibleEnd) * lineStride : bottomPad;
   // Cap the minimap sample count regardless of large-file mode; otherwise a
   // 1000-line file mounts 1000 minimap nodes (4 host nodes each), blowing
   // the click-to-paint flush.
