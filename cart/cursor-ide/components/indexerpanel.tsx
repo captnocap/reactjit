@@ -12,16 +12,20 @@ import {
   loadIndex,
   getIndexStats,
   getIndexProgress,
+  listIndexDirectories,
+  setDirectoryIncluded,
   searchIndex,
   clearIndex,
   type IndexStats,
   type IndexedFile,
   type IndexProgress,
+  type IndexDirectory,
 } from '../indexer';
 
 export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const [stats, setStats] = useState<IndexStats | null>(null);
   const [progress, setProgress] = useState<IndexProgress>(getIndexProgress());
+  const [directories, setDirectories] = useState<IndexDirectory[]>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<IndexedFile[]>([]);
   const [indexing, setIndexing] = useState(false);
@@ -36,6 +40,10 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     const id = setInterval(refresh, 300);
     return () => clearInterval(id);
   }, [props.workDir, query]);
+
+  useEffect(() => {
+    setDirectories(listIndexDirectories(props.workDir));
+  }, [props.workDir]);
 
   async function doIndex() {
     setIndexing(true);
@@ -61,6 +69,11 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     setProgress(getIndexProgress());
     setResults([]);
     props.onIndex?.();
+  }
+
+  function toggleDirectory(dir: IndexDirectory) {
+    setDirectoryIncluded(dir.path, !dir.included);
+    setDirectories(listIndexDirectories(props.workDir));
   }
 
   const langEntries = stats ? Object.entries(stats.languages).sort((a, b) => b[1] - a[1]) : [];
@@ -115,6 +128,38 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
             <Text fontSize={10} color={COLORS.textDim}>Idle until the next re-index. The last snapshot stays in local store.</Text>
           </Col>
         )}
+      </Box>
+
+      <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+        <Row style={{ alignItems: 'center', gap: 8 }}>
+          <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Directory filters</Text>
+          <Pill label={`${directories.length} dirs`} tiny={true} />
+        </Row>
+        <Text fontSize={10} color={COLORS.textDim}>Toggle directories to include or exclude them from the next index run.</Text>
+        <ScrollView style={{ maxHeight: 180 }}>
+          <Col style={{ gap: 6 }}>
+            {directories.map((dir) => (
+              <Pressable
+                key={dir.path}
+                onPress={() => toggleDirectory(dir)}
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: dir.included ? COLORS.border : COLORS.red,
+                  backgroundColor: dir.included ? COLORS.panelAlt : COLORS.redDeep,
+                }}
+              >
+                <Row style={{ alignItems: 'center', gap: 8 }}>
+                  <Text fontSize={10} color={COLORS.textBright} style={{ flexGrow: 1, flexBasis: 0 }} numberOfLines={1}>
+                    {dir.path}
+                  </Text>
+                  <Pill label={dir.included ? 'include' : 'exclude'} color={dir.included ? COLORS.green : COLORS.red} tiny={true} />
+                </Row>
+              </Pressable>
+            ))}
+          </Col>
+        </ScrollView>
       </Box>
 
       <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>

@@ -56,6 +56,11 @@ export interface IndexProgress {
   rate: number;
 }
 
+export interface IndexDirectory {
+  path: string;
+  included: boolean;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function hashContent(content: string): string {
@@ -87,6 +92,10 @@ function shellQuote(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$');
 }
 
+function normalizeDir(path: string): string {
+  return path.replace(/^\.?\//, '').replace(/\/+$/, '');
+}
+
 let currentProgress: IndexProgress = {
   active: false,
   workDir: '',
@@ -100,6 +109,95 @@ let currentProgress: IndexProgress = {
 
 function updateProgress(next: Partial<IndexProgress>): void {
   currentProgress = { ...currentProgress, ...next };
+}
+
+function loadJson<T>(key: string, fallback: T): T {
+  const raw = storeGet(key);
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
+}
+
+function saveJson(key: string, value: any): void {
+  storeSet(key, JSON.stringify(value));
+}
+
+function listWorkspaceDirectories(workDir: string): string[] {
+  const defaultExcludes = DEFAULT_EXCLUDES.map((dir) => `-not -path "*/${shellQuote(dir)}/*"`).join(' ');
+  const findOut = execCmd(`find "${shellQuote(workDir)}" -type d ${defaultExcludes} 2>/dev/null`);
+  const dirs = new Set<string>();
+  const root = workDir.endsWith('/') ? workDir : `${workDir}/`;
+  for (const line of findOut.split('\n')) {
+    const abs = line.trim();
+    if (!abs) continue;
+    if (!abs.startsWith(root)) continue;
+    const rel = normalizeDir(abs.slice(root.length));
+    if (!rel) continue;
+    const parts = rel.split('/');
+    let prefix = '';
+    for (const part of parts) {
+      prefix = prefix ? `${prefix}/${part}` : part;
+      if (prefix === '.git' || prefix.startsWith('.git/')) break;
+      if (prefix === 'node_modules' || prefix.startsWith('node_modules/')) break;
+      if (prefix === '.zig-cache' || prefix.startsWith('.zig-cache/')) break;
+      if (prefix === 'zig-out' || prefix.startsWith('zig-out/')) break;
+      if (prefix === 'dist' || prefix.startsWith('dist/')) break;
+      if (prefix === '.cache' || prefix.startsWith('.cache/')) break;
+      dirs.add(prefix);
+    }
+  }
+  return Array.from(dirs).sort((a, b) => a.localeCompare(b));
+}
+
+const STORE_DIR_RULES_KEY = 'cursor-ide.indexer.dirRules';
+
+function loadDirRules(): Record<string, boolean> {
+  return loadJson<Record<string, boolean>>(STORE_DIR_RULES_KEY, {});
+}
+
+function saveDirRules(rules: Record<string, boolean>): void {
+  saveJson(STORE_DIR_RULES_KEY, rules);
+}
+
+function excludedPatternsFromRules(rules: Record<string, boolean>): string {
+  const parts: string[] = DEFAULT_EXCLUDES.map((dir) => `-not -path "*/${shellQuote(dir)}/*"`);
+  for (const [dir, included] of Object.entries(rules)) {
+    if (included !== false) continue;
+    const normalized = normalizeDir(dir);
+    if (!normalized) continue;
+    parts.push(`-not -path "*/${shellQuote(normalized)}/*"`);
+  }
+  return parts.join(' ');
+}
+
+export function listIndexDirectories(workDir: string): IndexDirectory[] {
+  const dirs = listWorkspaceDirectories(workDir);
+  const rules = loadDirRules();
+  return dirs.map((path) => ({
+    path,
+    included: rules[path] !== false,
+  }));
+}
+
+export function setDirectoryIncluded(dir: string, included: boolean): void {
+  const rules = loadDirRules();
+  rules[normalizeDir(dir)] = included;
+  saveDirRules(rules);
+}
+
+export function toggleDirectoryIncluded(dir: string): boolean {
+  const normalized = normalizeDir(dir);
+  const rules = loadDirRules();
+  const next = !(rules[normalized] !== false);
+  rules[normalized] = next;
+  saveDirRules(rules);
+  return next;
+}
+
+export function getDirectoryIncluded(dir: string): boolean {
+  const key = normalizeDir(dir);
+  if (!key) return true;
+  const rules = loadDirRules();
+  return rules[key] !== false;
 }
 
 function sleep0(): Promise<void> {
@@ -156,11 +254,11 @@ export function indexFile(path: string): IndexedFile | null {
 }
 
 export async function indexWorkspace(workDir: string, options?: { exclude?: string[] }): Promise<IndexStats> {
-  const exclude = new Set([
-    ...DEFAULT_EXCLUDES,
-    ...(options?.exclude || []),
-  ]);
-  const excludes = Array.from(exclude).map((e) => `-not -path "*/${shellQuote(e)}/*"`).join(' ');
+  const rules = loadDirRules();
+  for (const dir of options?.exclude || []) {
+    rules[normalizeDir(dir)] = false;
+  }
+  const excludes = excludedPatternsFromRules(rules);
   const findOut = execCmd(`find "${shellQuote(workDir)}" -type f ${excludes} 2>/dev/null`);
   const paths = findOut.split('\n').filter((p) => p.trim());
 
