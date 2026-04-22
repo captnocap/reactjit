@@ -8,7 +8,6 @@ import { MarkdownImage } from './MarkdownImage';
 import { MarkdownLink } from './MarkdownLink';
 import { MarkdownTable } from './MarkdownTable';
 import type { MarkdownAst, MarkdownBlock, MarkdownInlineNode } from './useMarkdownAst';
-import { editorTokenTone } from '../../utils';
 
 function highlightText(text: string, query: string, fontSize: number, color: string, keyPrefix: string) {
   const q = query.trim();
