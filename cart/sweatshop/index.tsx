@@ -81,6 +81,7 @@ import { BreadcrumbBar } from './components/breadcrumbs/index';
 import { StatusBar } from './components/statusbar';
 import { TerminalPanel } from './components/terminal';
 import { Sidebar } from './components/sidebar';
+import { HomePage } from './components/home/HomePage';
 import { EditorSurface } from './components/editor';
 import { SearchSurface } from './components/search';
 import { ChatSurface } from './components/chat';
@@ -114,6 +115,7 @@ export default function CursorIdeApp() {
   // directly (rather than via useTheme) don't re-render on theme switch
   // and appear stuck on the previous palette until some other state change.
   useTheme();
+  const [appMode, setAppMode] = useState<'home' | 'ide'>('home');
   const [activeTabId, setActiveTabId] = useState('home');
   const [currentInput, setCurrentInputState] = useState('');
   const [isGenerating, setIsGenerating] = useState(0);
@@ -216,6 +218,12 @@ export default function CursorIdeApp() {
   const [showPalette, setShowPalette] = useState(0);
   const openPalette = useCallback(() => setShowPalette(1), []);
   const [dockPanels, setDockPanels] = usePersistentState<string[]>('sweatshop.dockPanels', getDefaultOpenPanelIds());
+
+  useEffect(() => {
+    if (activeView !== 'terminal' && terminalDockExpanded) {
+      setTerminalDockExpanded(0);
+    }
+  }, [activeView, terminalDockExpanded, setTerminalDockExpanded]);
 
   // ── New ported state ─────────────────────────────────────────────────
   const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('sweatshop.providerConfigs', Object.values(PROVIDER_CONFIGS));
@@ -1627,6 +1635,16 @@ export default function CursorIdeApp() {
       </Box>
     );
   };
+
+  if (appMode === 'home') {
+    return (
+      <TooltipLayer>
+        <ToastProvider>
+          <HomePage onOpenIDE={() => setAppMode('ide')} />
+        </ToastProvider>
+      </TooltipLayer>
+    );
+  }
 
   return (
     <TooltipLayer>
