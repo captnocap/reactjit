@@ -1,84 +1,89 @@
-# ReactJIT
+# reactjit
 
-This is an experiment. We don't know where it's going. It's a general-purpose stack that does whatever you point it at — coding tools, 3D scenes, physics sims, audio visualizers, agent UIs, dashboards, emulators. Put the fries in the bag.
+A general-purpose native runtime for React. Write plain `.tsx`, bundle with esbuild, ship a single-file binary. No DOM, no CSS engine, no browser.
 
-Write React in plain `.tsx`. Bundle with esbuild. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags — all work. But there is no DOM, no CSS engine, no browser. React's reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned `Node` pool. Layout, paint, hit-test, events, input, text, and GPU are native Zig/wgpu. React is the algorithm, not the environment.
+React's reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned node tree. Layout, paint, hit-test, events, input, text, and GPU are native Zig on top of V8 and wgpu. React is the algorithm, not the environment.
 
-The JS runtime is **V8** (embedded via zig-v8) — the default since April 2026. The prior QuickJS-based host hit a 2000ms-per-click ceiling on large React trees and is now maintenance-only legacy. `scripts/ship` builds V8 by default; `--qjs` is legacy opt-in.
+## Why
 
-The "V8 has baggage" myth is fake — the baggage is Chromium, not V8. V8 standalone is ~6MB. Node+V8 is ~50MB. CEF is ~200MB. We measured it. V8-qua-V8, embedded in a native app, is tight.
+Copy-paste React components. Get native performance. Don't ship Chromium.
 
----
+V8 standalone is ~6MB. Node+V8 is ~50MB. CEF is ~200MB. The "V8 is bloated" intuition is really "Chromium is bloated" — V8 itself is tight.
 
-## Quick start
+## Carts
+
+Applications built on reactjit are called **carts**. A cart is a `.tsx` file (or directory) under `cart/`. Anything React can describe, a cart can be: an IDE, a physics sim, a game, an emulator, a dashboard, an audio visualizer, an agent UI.
+
+```
+cart/counter.tsx       one-file cart
+cart/sweatshop/        directory cart — the current internal dev-driver IDE
+cart/...               your cart goes here
+```
+
+`cart/sweatshop/` is one cart among many. It happens to be the IDE reactjit is developed inside of. It is not the framework.
+
+## Primitives
+
+```
+Box  Row  Col  Text  Image  Pressable  ScrollView
+TextInput  TextArea  TextEditor
+Canvas  Canvas.Node  Canvas.Path
+Graph  Graph.Path  Graph.Node
+Native
+```
+
+Standard HTML tags (`<div>`, `<span>`, `<button>`, etc.) are remapped to these at reconcile time. Tailwind utilities work via `className` (parsed by `runtime/tw.ts`). `<Native type="X" />` is the universal escape hatch — it bridges to any Zig-handled node type until that type gets a first-class wrapper.
+
+## Host bindings
+
+Exposed on the JS global. Filesystem (`__fs_*`), subprocess (`__exec`), SQLite (`__store_*`), HTTP sync+async (`__http_*`), crypto (`__crypto_*`), clipboard, timers, and more. `installBrowserShims()` adds `fetch` and `localStorage`.
+
+Not available: `window`/`document`, `sessionStorage`/`IndexedDB`, CSS Grid, media queries, pseudo-classes, inline SVG, blob URLs. This is closer to React Native than browser React.
+
+## Getting started
+
+Prerequisites: Zig 0.15.2, Node 20+.
 
 ```bash
-./scripts/ship counter          # cart/counter.tsx → self-extracting binary
-./scripts/ship counter -d       # debug/raw ELF
-./scripts/ship counter --raw    # release/raw ELF
-
-./scripts/dev sweatshop         # persistent dev host + hot reload
+./scripts/ship <cart-name>          # cart/<name>[.tsx] → self-extracting binary
+./scripts/run  <cart-name>          # run the built binary (headless-capable)
+./scripts/dev  <cart-name>          # persistent dev host, ~300ms hot reload
 ```
 
-Dev mode is always `ReleaseFast`. Debug builds have a pre-existing click-path bug — don't use them for dev work. `useHotState` scaffolding exists but doesn't preserve state across reloads yet.
+The JS runtime is V8 by default (`--qjs` opts into the legacy QuickJS host; maintenance-only). Dev builds run `ReleaseFast` — debug builds have a click-path bug and are not for daily work.
 
----
-
-## What's in the box
-
-**Primitives:** `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`, `Graph`/`Graph.Path`/`Graph.Node`, `Native`.
-
-`Native` is the universal escape hatch — `<Native type="X" />` bridges to Zig-handled types (Audio, Video, Cartridge, LLMAgent, etc.) until they get first-class wrappers.
-
-**Copy-paste compatibility:** Standard hooks, HTML tags remapped to primitives, tailwind `className`, timers, and events all work out of the box. `installBrowserShims()` adds `fetch` + `localStorage` globals.
-
-**Host hooks:** fs, SQLite, HTTP (sync + async), crypto, clipboard. See `runtime/hooks/README.md` for the full matrix.
-
-**Not available:** `window`/`document`, `sessionStorage`/`IndexedDB`, CSS Grid/media/pseudo-classes, inline SVG, blob URLs. This is closer to React Native than browser React.
-
----
-
-## Source layout
+## Layout
 
 ```
-cart/              .tsx apps (single-file or directory-based)
-cart/sweatshop/    Active IDE cart
+cart/          .tsx cart apps
+framework/     Zig runtime (~45k lines). Layout, engine, GPU,
+               events, input, state, text, windows.
+runtime/       JS entry, primitives, classifier, theme, tw, hooks.
+renderer/      Reconciler host config. Mutation command stream.
+scripts/       Build + dev tooling.
+build.zig      Root build.
 
-framework/         Zig runtime (~45k lines). Layout, engine, GPU,
-                   events, input, state, text, windows.
-runtime/           JS entry, primitives, classifier, theme, tw, hooks.
-renderer/          Reconciler host config. Mutation command stream.
-scripts/           Build scripts.
-build.zig          Root build.
+v8_app.zig     Active cart host (default, embeds V8).
+qjs_app.zig    Legacy QuickJS host. Maintenance-only.
+jsrt_app.zig   Alternate LuaJIT-based JS host.
 
-v8_app.zig         ACTIVE — V8-based cart host (default).
-qjs_app.zig        LEGACY — QuickJS host. Maintenance-only.
-jsrt_app.zig       JSRT host binary. Alternate path.
-
-tsz/               FROZEN — Smith-era AOT compiler stack.
-love2d/            FROZEN — Proven reconciler-on-Lua stack.
-archive/           FROZEN — Old compiler iterations.
-os/                Future (CartridgeOS). Mostly stubs.
+tsz/ love2d/ archive/    Frozen reference trees — read-only. See git log
+                         for backstory.
+os/                      Future CartridgeOS. Mostly stubs.
 ```
-
-Frozen directories are read-only. See git log for the backstory.
-
----
 
 ## Status
 
 | Working | Incomplete |
 |---|---|
-| IDE cart, all primitives, HTML remapping, tailwind | Multi-window, Inspector |
-| Host bindings (fs, http, crypto, clipboard, etc.) | Physics/audio/video bridging |
-| Dev host with ~300ms hot reload | WebSocket hooks, subprocess pipes |
-| V8 runtime (default) | `useHotState` persistence |
-
----
+| V8 runtime, all primitives, HTML remapping, tailwind | Multi-window, Inspector |
+| Host bindings (fs, http, crypto, clipboard, sqlite) | Physics/audio/video bridging |
+| Dev host with hot reload                            | WebSocket hooks, subprocess pipes |
+| Snapshot autotest gate in `scripts/ship`           | `useHotState` persistence across reloads |
 
 ## Contributing
 
-See [`AGENTS.md`](AGENTS.md) for agent/AI contributor conventions. See [`CLAUDE.md`](CLAUDE.md) for Claude Code specific guidance.
+See [`AGENTS.md`](AGENTS.md) for agent/AI contributor conventions. See [`CLAUDE.md`](CLAUDE.md) for Claude Code–specific guidance.
 
 ---
 
