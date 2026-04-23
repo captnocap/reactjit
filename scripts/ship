@@ -329,29 +329,47 @@ SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
 echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $RAW_BIN"
 rm -rf "$TMP_DIR" "$TARBALL"
 
-# ── 5. Post-build runtime-error gate ──────────────────────────────────
-# Supervisor rule: "'build verified' means you RAN the binary and parsed
-# its stderr for runtime errors." Compilation-only was false-greening V8
-# module-eval errors (e.g. "TypeError: React3.memo is not a function")
-# that land on the first tick, well before any user interaction.
-#
-# Runs ./scripts/run so the ZIGOS_HEADLESS=1 + timeout -s KILL form that
-# the user tested stays load-bearing. Fails ship on any v8 TypeError /
-# ReferenceError / SyntaxError found in the first 5 seconds of stderr.
-#
-# Full self-probe (--self-probe flag + walker + snap baseline) lands in
-# a follow-up commit; this gate already catches the entire class of bugs
-# the rule was written to catch.
-echo "[ship] running runtime-error gate (./scripts/run $NAME 5)..."
-GATE_OUT="$("$REPO_ROOT/scripts/run" "$NAME" 5 2>&1 || true)"
-if echo "$GATE_OUT" | grep -E '^\s*error:\s*\[v8 run\]' >/dev/null; then
-    echo "[ship] FAILED: v8 runtime error detected in $NAME" >&2
-    echo "---- offending stderr lines ----" >&2
-    echo "$GATE_OUT" | grep -E '\[v8 run\]' | head -10 >&2
-    echo "--------------------------------" >&2
+# ── 5. Post-build snapshot gate ───────────────────────────────────────
+# Runs the binary headless with ZIGOS_WITNESS=snapshot so framework/witness.zig
+# emits tests/<NAME>.autotest capturing all visible text, pressables, and a
+# health line. Counts FAIL lines + runtime errors; any failure deletes the
+# binary and exits 1. 1:1 port from tsz/scripts/build.
+mkdir -p tests
+AUTOTEST_FILE="tests/${NAME}.autotest"
+SNAP_STDERR=$(mktemp)
+SNAP_T0=$(date +%s%N)
+ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
+    timeout -s KILL 5 "$RAW_BIN" >/dev/null 2>"$SNAP_STDERR" || true
+SNAP_T1=$(date +%s%N)
+SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
+
+RUNTIME_ERRORS=$(grep -cE '^error:|^\[luajit-runtime\]|^\[evalExpr error\]|^\[evalToString error\]|^\[evalLuaMapData error\]|^\[js_on_press\].*error|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" 2>/dev/null || true)
+RUNTIME_ERRORS=${RUNTIME_ERRORS//[^0-9]/}; RUNTIME_ERRORS=${RUNTIME_ERRORS:-0}
+if [ "$RUNTIME_ERRORS" -gt 0 ]; then
+    echo "[$NAME] runtime: ${RUNTIME_ERRORS} error(s) detected" >&2
+    grep -E '^error:|^\[luajit-runtime\]|^\[eval.*error\]|^\[evalLuaMapData error\]|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" | head -10 >&2
+fi
+grep '^\[snapshot\]' "$SNAP_STDERR" 2>/dev/null || true
+rm -f "$SNAP_STDERR"
+
+EXPECT_COUNT=0; CLICK_COUNT=0; FAIL_COUNT=0
+if [ -f "$AUTOTEST_FILE" ]; then
+    EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || true)
+    CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || true)
+    FAIL_COUNT=$(grep -c '^# FAIL' "$AUTOTEST_FILE" 2>/dev/null || true)
+    EXPECT_COUNT=${EXPECT_COUNT//[^0-9]/}; EXPECT_COUNT=${EXPECT_COUNT:-0}
+    CLICK_COUNT=${CLICK_COUNT//[^0-9]/}; CLICK_COUNT=${CLICK_COUNT:-0}
+    FAIL_COUNT=${FAIL_COUNT//[^0-9]/}; FAIL_COUNT=${FAIL_COUNT:-0}
+else
+    echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)" >&2
+fi
+
+TOTAL_FAILS=$(( FAIL_COUNT + RUNTIME_ERRORS ))
+if [ "$TOTAL_FAILS" -gt 0 ]; then
+    echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE" >&2
+    echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary" >&2
     rm -f "$RAW_BIN" 2>/dev/null || true
     rm -rf "zig-out/bin/${NAME}.app" 2>/dev/null || true
-    echo "[ship] binary removed — no artifact left to run" >&2
     exit 1
 fi
-echo "[ship] runtime-error gate: clean"
+echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
