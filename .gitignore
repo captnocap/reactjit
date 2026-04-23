@@ -229,7 +229,7 @@ tsz/test_min
 
 
 # Test Screenshots
-tsz/tests/screenshots/*
+tsz/tests/*
 deps/tinyemu
 love2d/deps/love
 deps/tinyemu
@@ -254,5 +254,5 @@ deps/zig-v8/v8/
 deps/zig-v8/v8-build/
 
 # Test screenshots (local artifacts)
-tests/screenshots/
+tests/
 
