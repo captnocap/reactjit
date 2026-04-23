@@ -1640,7 +1640,12 @@ export default function CursorIdeApp() {
     return (
       <TooltipLayer>
         <ToastProvider>
-          <HomePage onOpenIDE={() => setAppMode('ide')} />
+          <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
+            <Col style={{ width: '100%', height: '100%' }}>
+              <TopBar chromeOnly={true} widthBand={widthBand} />
+              <HomePage onOpenIDE={() => setAppMode('ide')} />
+            </Col>
+          </Box>
         </ToastProvider>
       </TooltipLayer>
     );
