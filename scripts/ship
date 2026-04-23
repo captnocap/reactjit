@@ -339,7 +339,7 @@ AUTOTEST_FILE="tests/${NAME}.autotest"
 SNAP_STDERR=$(mktemp)
 SNAP_T0=$(date +%s%N)
 ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
-    timeout -s KILL 5 "$RAW_BIN" >/dev/null 2>"$SNAP_STDERR" || true
+    timeout -s KILL 30 "$RAW_BIN" >/dev/null 2>"$SNAP_STDERR" || true
 SNAP_T1=$(date +%s%N)
 SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
 

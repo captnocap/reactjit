@@ -833,6 +833,7 @@ fn chromeResizeEdge(node: *Node, mx: f32, my: f32) c.SDL_HitTestResult {
 
 /// Close the window (for custom close button).
 pub fn windowClose() void {
+    if (witness.isReplaying()) return; // don't let snapshot/replay clicks kill the process
     if (g_chrome_window) |_| {
         // Push a close event so the normal shutdown path runs
         var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
