@@ -105,6 +105,20 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("luajit-5.1");
 
     const os_tag = target.result.os.tag;
+
+    // Resolve macOS SDK path once (via xcrun) so ObjC compile steps can find
+    // system framework headers. Not all macOS hosts keep Foundation.h under
+    // /System/Library/Frameworks; on CommandLineTools-only setups it lives
+    // under /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/...
+    const macos_sdk: ?[]const u8 = if (os_tag == .macos and sysroot == null) blk: {
+        const result = std.process.Child.run(.{
+            .allocator = b.allocator,
+            .argv = &.{ "xcrun", "--show-sdk-path" },
+        }) catch break :blk null;
+        const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
+        break :blk b.allocator.dupe(u8, trimmed) catch null;
+    } else null;
+
     if (os_tag == .linux) {
         root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
         exe.linkSystemLibrary("X11");
@@ -143,6 +157,12 @@ pub fn build(b: *std.Build) void {
             root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
             root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
             root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+            // System frameworks (Foundation.h etc.) live under the SDK on
+            // CommandLineTools-only hosts, not /System/Library/Frameworks.
+            if (macos_sdk) |sdk| {
+                root_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
+                root_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
+            }
         }
         exe.linkFramework("Foundation");
         exe.linkFramework("QuartzCore");
@@ -150,7 +170,20 @@ pub fn build(b: *std.Build) void {
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        // Zig 0.15's internal clang can't locate Foundation.h on CommandLineTools-
+        // only macOS hosts (it keeps resolving Foundation to the stub at
+        // /System/Library/Frameworks). Compile applescript_shim.m out-of-band
+        // with system clang, then link the produced .o directly.
+        {
+            const compile_shim = b.addSystemCommand(&.{ "clang", "-c", "-O2", "-arch", "arm64" });
+            if (macos_sdk) |sdk| {
+                compile_shim.addArgs(&.{ "-isysroot", sdk });
+            }
+            compile_shim.addArg("-o");
+            const shim_obj = compile_shim.addOutputFileArg("applescript_shim.o");
+            compile_shim.addFileArg(b.path("framework/ffi/applescript_shim.m"));
+            root_mod.addObjectFile(shim_obj);
+        }
     }
 
     // ── Include paths ──────────────────────────────────────────
@@ -270,7 +303,21 @@ pub fn build(b: *std.Build) void {
         bridge_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
         bridge_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
         bridge_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
-        bridge_mod.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        if (macos_sdk) |sdk| {
+            bridge_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
+            bridge_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
+        }
+        // Same out-of-band clang compile for the bridge module — see root_mod above.
+        {
+            const compile_shim_b = b.addSystemCommand(&.{ "clang", "-c", "-O2", "-arch", "arm64" });
+            if (macos_sdk) |sdk| {
+                compile_shim_b.addArgs(&.{ "-isysroot", sdk });
+            }
+            compile_shim_b.addArg("-o");
+            const shim_obj_b = compile_shim_b.addOutputFileArg("applescript_shim_bridge.o");
+            compile_shim_b.addFileArg(b.path("framework/ffi/applescript_shim.m"));
+            bridge_mod.addObjectFile(shim_obj_b);
+        }
     }
 
     if (os_tag == .linux) {
