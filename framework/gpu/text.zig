@@ -168,6 +168,7 @@ var g_atlas_row_h: u32 = 0;
 var g_atlas_keys: [MAX_ATLAS_GLYPHS]AtlasGlyphKey = undefined;
 var g_atlas_vals: [MAX_ATLAS_GLYPHS]AtlasGlyphInfo = undefined;
 var g_atlas_count: usize = 0;
+var g_atlas_index: std.AutoHashMap(u64, u32) = undefined;
 
 // FreeType handles
 var g_ft_library: c.FT_Library = null;
@@ -189,6 +190,7 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
         g_ft_fallbacks[i] = fallbacks[i];
     }
     g_ft_current_size = 0;
+    g_atlas_index = std.AutoHashMap(u64, u32).init(std.heap.page_allocator);
 
     const device = core.getDevice() orelse return;
 
@@ -754,6 +756,7 @@ pub fn deinit() void {
     if (g_atlas_sampler) |s| s.release();
     if (g_atlas_view) |v| v.release();
     if (g_atlas_texture) |t| t.destroy();
+    g_atlas_index.deinit();
     g_text_bind_group = null;
     g_text_bind_group_layout = null;
     g_text_buffer = null;
@@ -931,9 +934,15 @@ fn initPipeline(device: *wgpu.Device) void {
 // ════════════════════════════════════════════════════════════════════════
 
 fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
+    const packed_key = (@as(u64, codepoint) << 16) | @as(u64, size_px);
     // Check cache
+    if (g_atlas_index.get(packed_key)) |idx| {
+        return &g_atlas_vals[idx];
+    }
     for (0..g_atlas_count) |i| {
         if (g_atlas_keys[i].codepoint == codepoint and g_atlas_keys[i].size_px == size_px) {
+            const found_idx: u32 = @intCast(i);
+            g_atlas_index.put(packed_key, found_idx) catch {};
             return &g_atlas_vals[i];
         }
     }
@@ -1009,6 +1018,7 @@ fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
         .height = @intCast(bh),
     };
     g_atlas_count += 1;
+    g_atlas_index.put(packed_key, @intCast(idx)) catch {};
 
     return &g_atlas_vals[idx];
 }
