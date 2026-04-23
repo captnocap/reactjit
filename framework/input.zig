@@ -15,6 +15,16 @@
 
 const std = @import("std");
 const c = @import("c.zig").imports;
+const build_options = @import("build_options");
+const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
+const USE_V8 = if (@hasDecl(build_options, "use_v8")) build_options.use_v8 else false;
+const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
+    pub fn hasGlobal(_: [*:0]const u8) bool {
+        return false;
+    }
+    pub fn callGlobalInt(_: [*:0]const u8, _: i64) void {}
+};
+const js_vm = if (USE_V8) @import("v8_runtime.zig") else qjs_runtime;
 
 pub const MAX_INPUTS = 128;
 // Large editor surfaces like sweatshop need materially more than 4 KiB or the
@@ -419,6 +429,17 @@ fn trimToCodepoints(bytes: []const u8, max_cp: u32) []const u8 {
     return bytes[0..i];
 }
 
+fn dispatchInputChange(id: u8) void {
+    const id64: i64 = @intCast(id);
+    if (USE_V8) {
+        js_vm.callGlobalInt("__dispatchInputChange", id64);
+        return;
+    }
+    if (js_vm.hasGlobal("__dispatchInputChange")) {
+        js_vm.callGlobalInt("__dispatchInputChange", id64);
+    }
+}
+
 // ── SDL event handlers ──────────────────────────────────────────────
 
 pub fn handleTextInput(text: [*:0]const u8) void {
@@ -438,14 +459,16 @@ pub fn handleTextInput(text: [*:0]const u8) void {
         for (bytes) |b| if (b == '\n' or b == '\r') { has_newline = true; break; };
         if (has_newline) {
             pushUndo(id, inp);
+            var changed = false;
             if (inp.has_selection) _ = deleteSelection(inp);
             for (bytes) |b| {
                 if (b == '\n' or b == '\r') continue;
                 var tmp: [1]u8 = .{b};
-                _ = insertBytes(inp, tmp[0..]);
+                changed = insertBytes(inp, tmp[0..]) or changed;
             }
             cursor_blink = 0; cursor_visible = true;
             if (on_change_callbacks[id]) |cb| cb();
+            if (changed) dispatchInputChange(id);
             return;
         }
     }
@@ -455,6 +478,7 @@ pub fn handleTextInput(text: [*:0]const u8) void {
     if (insertBytes(inp, bytes)) {
         cursor_blink = 0; cursor_visible = true;
         if (on_change_callbacks[id]) |cb| cb();
+        dispatchInputChange(id);
     }
 }
 
