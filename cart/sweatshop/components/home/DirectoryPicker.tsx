@@ -1,9 +1,17 @@
 const React: any = require('react');
 const { useState, useEffect } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { listDir, stat } from '../../../../runtime/hooks/fs';
+import { mkdirP } from '../../lib/workspace/validate';
+
+function isValidSegment(name: string): boolean {
+  if (!name) return false;
+  if (name === '.' || name === '..') return false;
+  if (name.indexOf('/') >= 0) return false;
+  return true;
+}
 
 type DirectoryPickerProps = {
   visible: boolean;
@@ -37,10 +45,12 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
   const [currentPath, setCurrentPath] = useState(props.startPath);
   const [entries, setEntries] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (props.visible) {
       setCurrentPath(props.startPath);
+      setQuery('');
       refreshEntries(props.startPath);
     }
   }, [props.visible, props.startPath]);
@@ -147,48 +157,71 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
             overflow: 'hidden',
           }}
         >
-          <Row
+          <Col
             style={{
               paddingLeft: 16,
               paddingRight: 16,
               paddingTop: 12,
               paddingBottom: 12,
-              gap: 8,
-              alignItems: 'center',
+              gap: 10,
               borderBottomWidth: 1,
               borderColor: COLORS.border,
               flexShrink: 0,
             }}
           >
-            <Row style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Pressable onPress={() => { setCurrentPath('/'); refreshEntries('/'); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
-                <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
+            <Row style={{ gap: 8, alignItems: 'center' }}>
+              <Row style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Pressable onPress={() => { setCurrentPath('/'); refreshEntries('/'); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                  <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
+                </Pressable>
+                {parts.map((part: string, idx: number) => (
+                  <Row key={idx} style={{ gap: 2, alignItems: 'center' }}>
+                    <Text fontSize={11} color={COLORS.textDim}>/</Text>
+                    <Pressable onPress={() => goToSegment(idx)} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                      <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
+                    </Pressable>
+                  </Row>
+                ))}
+              </Row>
+              <Pressable
+                onPress={props.onCancel}
+                style={{
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderRadius: TOKENS.radiusSm,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  backgroundColor: COLORS.panelBg,
+                }}
+              >
+                <Text fontSize={11} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>X</Text>
               </Pressable>
-              {parts.map((part: string, idx: number) => (
-                <Row key={idx} style={{ gap: 2, alignItems: 'center' }}>
-                  <Text fontSize={11} color={COLORS.textDim}>/</Text>
-                  <Pressable onPress={() => goToSegment(idx)} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
-                    <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
-                  </Pressable>
-                </Row>
-              ))}
             </Row>
-            <Pressable
-              onPress={props.onCancel}
+            <Box
               style={{
-                paddingLeft: 10,
-                paddingRight: 10,
-                paddingTop: 4,
-                paddingBottom: 4,
-                borderRadius: TOKENS.radiusSm,
                 borderWidth: 1,
                 borderColor: COLORS.border,
+                borderRadius: TOKENS.radiusSm,
                 backgroundColor: COLORS.panelBg,
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 7,
+                paddingBottom: 7,
               }}
             >
-              <Text fontSize={11} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>X</Text>
-            </Pressable>
-          </Row>
+              <TextInput
+                value={query}
+                onChange={(v: string) => setQuery(v)}
+                placeholder="filter / type a new name…"
+                autoFocus={true}
+                fontSize={11}
+                color={COLORS.text}
+                style={{ borderWidth: 0, backgroundColor: 'transparent' }}
+              />
+            </Box>
+          </Col>
 
           <Box
             style={{
@@ -209,9 +242,51 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
                     <Text fontSize={11} color={COLORS.red}>{error}</Text>
                   </Box>
                 ) : null}
-                {entries.map((name: string) => (
-                  <DirRow key={name} name={name} onPress={() => goDown(name)} />
-                ))}
+                {(() => {
+                  const q = (query || '').trim();
+                  const qLower = q.toLowerCase();
+                  const filtered = q.length === 0
+                    ? entries
+                    : entries.filter((n: string) => n.toLowerCase().indexOf(qLower) >= 0);
+                  const rows: any[] = filtered.map((name: string) => (
+                    <DirRow key={name} name={name} onPress={() => goDown(name)} />
+                  ));
+                  if (q.length > 0 && filtered.length === 0) {
+                    if (isValidSegment(q)) {
+                      const base = currentPath.replace(/\/+$/, '');
+                      const target = (base === '' ? '' : base) + '/' + q;
+                      rows.push(
+                        <Pressable
+                          key="__create__"
+                          onPress={() => {
+                            const check = mkdirP(target);
+                            if (!check.ok) { setError(check.reason || 'Failed to create directory.'); return; }
+                            props.onSelect(target);
+                          }}
+                          style={{
+                            paddingLeft: 12,
+                            paddingRight: 12,
+                            paddingTop: 10,
+                            paddingBottom: 10,
+                            borderRadius: TOKENS.radiusSm,
+                            borderWidth: 1,
+                            borderColor: COLORS.blue,
+                            backgroundColor: COLORS.blueDeep,
+                          }}
+                        >
+                          <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{'Create directory "' + q + '"'}</Text>
+                        </Pressable>
+                      );
+                    } else {
+                      rows.push(
+                        <Box key="__invalid__" style={{ padding: 12, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+                          <Text fontSize={11} color={COLORS.red}>Invalid name — single-segment only.</Text>
+                        </Box>
+                      );
+                    }
+                  }
+                  return rows;
+                })()}
               </Col>
             </ScrollView>
           </Box>
