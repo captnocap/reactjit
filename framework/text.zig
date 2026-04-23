@@ -515,11 +515,14 @@ pub const TextEngine = struct {
     }
 
     /// Get the advance width of a single Unicode codepoint.
-    fn cpAdvance(self: *TextEngine, codepoint: u32, size_px: u16) f32 {
-        if (self.rasterizeGlyph(codepoint, size_px)) |g| {
-            return @floatFromInt(g.advance);
-        }
-        return 0;
+    /// Single source of truth for per-glyph horizontal advance.
+    /// Routes through framework/gpu/text.zig — the painter's FreeType atlas.
+    /// Paint and measure must agree on advance, otherwise wrap/caret/selection
+    /// all drift (see commits 326ae5a03, ace10b7b5). The SDL-texture glyph
+    /// table elsewhere in this file is kept only for the legacy SDL paint
+    /// path (drawTextEx); measurement never consults it.
+    fn cpAdvance(_: *TextEngine, codepoint: u32, size_px: u16) f32 {
+        return gpu_text.getCharAdvance(codepoint, size_px);
     }
 
     /// Get font-level line metrics for the current size.
@@ -652,9 +655,7 @@ pub const TextEngine = struct {
                 continue;
             }
             const ch = decodeUtf8(text[i..]);
-            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
-                width += @floatFromInt(g.advance);
-            }
+            width += self.cpAdvance(ch.codepoint, size_px);
             char_count += 1;
             i += ch.len;
         }
@@ -817,10 +818,7 @@ pub const TextEngine = struct {
                 continue;
             }
             const ch = decodeUtf8(text[i..]);
-            var adv: f32 = 0;
-            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
-                adv = @floatFromInt(g.advance);
-            }
+            var adv: f32 = self.cpAdvance(ch.codepoint, size_px);
             if (char_count > 0) adv += letter_spacing;
             if (pen + adv > avail) break;
             pen += adv;
@@ -1156,17 +1154,7 @@ pub const TextEngine = struct {
         var i: usize = 0;
         while (i < line.len and i < target) {
             const ch = decodeUtf8(line[i..]);
-            // Route through the paint-side glyph cache (framework/gpu/text.zig)
-            // so cursor-x agrees with what's actually drawn. The SDL-era
-            // TextEngine's rasterizeGlyph path can miss advances for
-            // glyphs the paint renders correctly (historically '/' + a
-            // few others), leaving the caret behind the last character.
-            const adv_gpu = gpu_text.getCharAdvance(ch.codepoint, size_px);
-            const adv = if (adv_gpu > 0) adv_gpu else self.cpAdvance(ch.codepoint, size_px);
-            if (std.posix.getenv("REACTJIT_TEXTDEBUG") != null) {
-                std.debug.print("[byteToPos] cp=0x{x} adv_gpu={d} adv_te={d} used={d} pen_x={d}\n", .{ ch.codepoint, adv_gpu, self.cpAdvance(ch.codepoint, size_px), adv, pen_x });
-            }
-            pen_x += adv;
+            pen_x += self.cpAdvance(ch.codepoint, size_px);
             i += ch.len;
         }
 
