@@ -101,6 +101,52 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
     refreshEntries(next);
   };
 
+  const filteredRows = useMemo(() => {
+    const q = (query || '').trim();
+    const qLower = q.toLowerCase();
+    const filtered = q.length === 0
+      ? entries
+      : entries.filter((n: string) => n.toLowerCase().indexOf(qLower) >= 0);
+    const rows: any[] = filtered.map((name: string) => (
+      <DirRow key={name} name={name} onPress={() => goDown(name)} />
+    ));
+    if (q.length > 0 && filtered.length === 0) {
+      if (isValidSegment(q)) {
+        const base = currentPath.replace(/\/+$/, '');
+        const target = (base === '' ? '' : base) + '/' + q;
+        rows.push(
+          <Pressable
+            key="__create__"
+            onPress={() => {
+              const check = mkdirP(target);
+              if (!check.ok) { setError(check.reason || 'Failed to create directory.'); return; }
+              props.onSelect(target);
+            }}
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 10,
+              paddingBottom: 10,
+              borderRadius: TOKENS.radiusSm,
+              borderWidth: 1,
+              borderColor: COLORS.blue,
+              backgroundColor: COLORS.blueDeep,
+            }}
+          >
+            <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{'Create directory "' + q + '"'}</Text>
+          </Pressable>
+        );
+      } else {
+        rows.push(
+          <Box key="__invalid__" style={{ padding: 12, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+            <Text fontSize={11} color={COLORS.red}>Invalid name - single-segment only.</Text>
+          </Box>
+        );
+      }
+    }
+    return rows;
+  }, [query, entries, currentPath]);
+
   if (!props.visible) return null;
 
   const parts = currentPath.split('/').filter(Boolean);
@@ -242,51 +288,7 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
                     <Text fontSize={11} color={COLORS.red}>{error}</Text>
                   </Box>
                 ) : null}
-                {useMemo(() => {
-                  const q = (query || '').trim();
-                  const qLower = q.toLowerCase();
-                  const filtered = q.length === 0
-                    ? entries
-                    : entries.filter((n: string) => n.toLowerCase().indexOf(qLower) >= 0);
-                  const rows: any[] = filtered.map((name: string) => (
-                    <DirRow key={name} name={name} onPress={() => goDown(name)} />
-                  ));
-                  if (q.length > 0 && filtered.length === 0) {
-                    if (isValidSegment(q)) {
-                      const base = currentPath.replace(/\/+$/, '');
-                      const target = (base === '' ? '' : base) + '/' + q;
-                      rows.push(
-                        <Pressable
-                          key="__create__"
-                          onPress={() => {
-                            const check = mkdirP(target);
-                            if (!check.ok) { setError(check.reason || 'Failed to create directory.'); return; }
-                            props.onSelect(target);
-                          }}
-                          style={{
-                            paddingLeft: 12,
-                            paddingRight: 12,
-                            paddingTop: 10,
-                            paddingBottom: 10,
-                            borderRadius: TOKENS.radiusSm,
-                            borderWidth: 1,
-                            borderColor: COLORS.blue,
-                            backgroundColor: COLORS.blueDeep,
-                          }}
-                        >
-                          <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{'Create directory "' + q + '"'}</Text>
-                        </Pressable>
-                      );
-                    } else {
-                      rows.push(
-                        <Box key="__invalid__" style={{ padding: 12, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
-                          <Text fontSize={11} color={COLORS.red}>Invalid name — single-segment only.</Text>
-                        </Box>
-                      );
-                    }
-                  }
-                  return rows;
-                }, [query, entries])}
+                {filteredRows}
               </Col>
             </ScrollView>
           </Box>
