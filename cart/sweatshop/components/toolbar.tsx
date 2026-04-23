@@ -10,7 +10,7 @@ export function TopBar(props: any) {
   const compact = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimum = props.widthBand === 'minimum';
   return (
-    <Col style={{ width: '100%' }}>
+    <Col style={{ width: '100%', flexShrink: 0 }}>
       {props.menuSections ? <MenuBar sections={props.menuSections} /> : null}
       <Row
         windowDrag={true}
