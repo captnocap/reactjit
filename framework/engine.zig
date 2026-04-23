@@ -1065,7 +1065,7 @@ fn nodedumpTag(node: *Node) []const u8 {
     return "Box";
 }
 
-fn nodedumpWalk(node: *Node, count: *u32, limit: u32) void {
+fn nodedumpWalk(node: *Node, count: *u32, depth: u32, limit: u32) void {
     if (count.* >= limit) return;
     const r = node.computed;
     if (r.w > 0 and r.h > 0) {
@@ -1080,20 +1080,24 @@ fn nodedumpWalk(node: *Node, count: *u32, limit: u32) void {
             }
             text_len = take;
         }
-        std.debug.print("[nodedump] t=60 i={d} tag={s} x={d} y={d} w={d} h={d} text={s}\n", .{
+        const dbg_name: []const u8 = node.debug_name orelse "";
+        std.debug.print("[nodedump] t=60 i={d} d={d} kids={d} tag={s} x={d} y={d} w={d} h={d} name={s} text={s}\n", .{
             count.*,
+            depth,
+            node.children.len,
             nodedumpTag(node),
             @as(i32, @intFromFloat(r.x)),
             @as(i32, @intFromFloat(r.y)),
             @as(i32, @intFromFloat(r.w)),
             @as(i32, @intFromFloat(r.h)),
+            dbg_name,
             tbuf[0..text_len],
         });
         count.* += 1;
     }
     for (node.children) |*child| {
         if (count.* >= limit) return;
-        nodedumpWalk(child, count, limit);
+        nodedumpWalk(child, count, depth + 1, limit);
     }
 }
 
@@ -1108,7 +1112,7 @@ fn nodedumpMaybeEmit(root: *Node, win_w: f32, win_h: f32) void {
         @as(i32, @intFromFloat(win_h)),
     });
     var count: u32 = 0;
-    nodedumpWalk(root, &count, 500);
+    nodedumpWalk(root, &count, 0, 500);
 }
 
 // Canvas drag state — tracks which canvas is being dragged for pan
