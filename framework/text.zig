@@ -6,6 +6,7 @@
 const std = @import("std");
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
+const gpu_text = @import("gpu/text.zig");
 
 // ── Glyph cache ─────────────────────────────────────────────────────────────
 
@@ -1155,7 +1156,17 @@ pub const TextEngine = struct {
         var i: usize = 0;
         while (i < line.len and i < target) {
             const ch = decodeUtf8(line[i..]);
-            pen_x += self.cpAdvance(ch.codepoint, size_px);
+            // Route through the paint-side glyph cache (framework/gpu/text.zig)
+            // so cursor-x agrees with what's actually drawn. The SDL-era
+            // TextEngine's rasterizeGlyph path can miss advances for
+            // glyphs the paint renders correctly (historically '/' + a
+            // few others), leaving the caret behind the last character.
+            const adv_gpu = gpu_text.getCharAdvance(ch.codepoint, size_px);
+            const adv = if (adv_gpu > 0) adv_gpu else self.cpAdvance(ch.codepoint, size_px);
+            if (std.posix.getenv("REACTJIT_TEXTDEBUG") != null) {
+                std.debug.print("[byteToPos] cp=0x{x} adv_gpu={d} adv_te={d} used={d} pen_x={d}\n", .{ ch.codepoint, adv_gpu, self.cpAdvance(ch.codepoint, size_px), adv, pen_x });
+            }
+            pen_x += adv;
             i += ch.len;
         }
 
