@@ -37,13 +37,25 @@ Graph      Graph.Path   Graph.Node
 Render  Effect  Native
 ```
 
-Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Image'`, `'Canvas'`, …) that the reconciler host passes into the Zig runtime. `CodeGutter` and `Minimap` come from the `.tslx` pipeline under `framework/primitives/`.
+Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Image'`, `'Canvas'`, …) that the reconciler host passes into the Zig runtime.
 
 **HTML tag remapping** (`renderer/hostConfig.ts`): `div`/`section`/`article`/`aside`/`a`/`button`/`details`/`summary` → `View`; `h1`–`h6`, `p`, `span` → `Text`; `img` → `Image`; `input` → `TextInput`; `textarea` → `TextEditor`; `video` → `Video`. `img.src` and `input.value`/`textarea.value` are forwarded through.
 
 **Tailwind via `className`** — parsed by `tw()` in `runtime/tw.ts` at CREATE time.
 
-`Native` is a memoized passthrough for host-handled node types (source comment: `<Native type="Audio" />`). It is not referenced from any file under `cart/` today (`grep -rn '<Native' cart/` returns nothing). Treat it as plumbing, not a documented extension point.
+`Native` is internal plumbing for host-handled node types; no cart uses it directly.
+
+### Drawing, graphs, physics, audio, 3D
+
+**`<Canvas>`** (`Canvas.Node`, `Canvas.Path`, `Canvas.Clamp`) is the pan/zoomable drawing surface. Real uses: `cart/canvas_stress/StressCanvas.tsx` (node-count stress load), `cart/graph_demo/GraphStage.tsx`, `cart/cockpit/index.tsx`, plus many sweatshop components — `plancanvas.tsx`, `mermaid/renderer.tsx`, `chemistry/MoleculeView.tsx`, `gamepad/StickView.tsx`, `audio/Patchbay.tsx`, `noise/NoiseField.tsx`, `graph/GraphCanvas.tsx`, `cockpit/HeatmapGrid.tsx` + `WorkerCanvas.tsx`.
+
+**`<Graph>`** (`Graph.Path`, `Graph.Node`) is the static-viewport polyline/path surface. Used by the charts in `cart/sweatshop/components/charts/` (`LineChart`, `BarChart`, `PieChart`), `cart/effects/paisley_garden.tsx` + `circle_path_debug.tsx`, `cart/inspector/panels/` (Memory, Performance), `cart/sweatshop/components/audio/Knob.tsx`, and the cart-side Lucide icon renderer at `cart/sweatshop/components/icons.tsx` (polyline → `Graph.Path`).
+
+**Physics.** `framework/physics2d.zig` + `framework/physics3d.zig` are bridged via `cart/sweatshop/components/physics/`: `<PhysicsWorld>` provides a `PhysicsWorldCore` through a React context (`PhysicsContext.ts`); `<RigidBody>` + `useBodyState` + `useForce` + `usePhysics` are the cart-side hooks. This is a working integration inside sweatshop, not a framework-level primitive — reuse means copying the pattern.
+
+**Audio.** `framework/audio.zig` exposes a modular synth graph via `__audio_init`, `__audio_add_module`, plus module-parameter setters. `cart/pocket_operator.tsx` is the reference cart: it calls the host functions directly (no `<Audio>` React primitive). The modules registered by pocket_operator include `mixer`, `delay`, and a `pocket` drum/synth voice.
+
+**3D.** `cart/sweatshop/components/scene3d/` (`Scene3D.tsx`, `Mesh.tsx`, `OrbitControls.tsx`, `PointLight.tsx`, `DirectionalLight.tsx`, `StandardMaterial.ts`, `useScene3D.ts`) is a cart-side 3D scene built on top of the engine's GPU primitives. Same status as physics: working inside sweatshop, not yet factored into a runtime-level export.
 
 ## Host bindings
 
@@ -117,8 +129,8 @@ Frozen trees are read-only reference material. See `git log` for the backstory; 
 | Working | Incomplete / pending |
 |---|---|
 | V8 host (default), QJS host (legacy), JSRT host (alt) | Multi-window orchestration beyond `__window_*` |
-| Every primitive listed above, HTML remapping, tailwind | Physics (`framework/physics2d.zig`, `physics3d.zig`) not bridged to JSX |
-| Host bindings: fs, exec, http, sqlite, crypto, clipboard, hot-state | Audio-graph-style bridging on top of `framework/audio.zig` |
+| Every primitive listed above, HTML remapping, tailwind | Physics + 3D live as sweatshop-cart integrations, not runtime-level primitives |
+| Host bindings: fs, exec, http, sqlite, crypto, clipboard, hot-state, audio | No `<Audio>` React primitive — carts call `__audio_*` directly |
 | Persistent dev host + IPC bundle-push + hot reload | Video primitive end-to-end |
 | Inspector host-side telemetry (`__tel_*`, `__sem_*`) | Inspector UI cart (planned, to be regenerated from the `love2d/` reference) |
 | `scripts/ship` self-extracting packaging, snapshot autotest gate | `useHotState` state persistence across reloads |
