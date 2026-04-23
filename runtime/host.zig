@@ -100,6 +100,71 @@ fn applyStyle(node: *Node, style: std.json.Value) void {
     }
 }
 
+fn ensureNode(id: u32) !*Node {
+    if (nodes.getPtr(id)) |ptr| return ptr;
+    try nodes.put(id, .{
+        .id = id,
+        .type = "",
+        .children = .{},
+    });
+    return nodes.getPtr(id).?;
+}
+
+fn removeIdFromList(list: *std.ArrayList(u32), target: u32) bool {
+    for (list.items, 0..) |item, index| {
+        if (item == target) {
+            _ = list.orderedRemove(index);
+            return true;
+        }
+    }
+    return false;
+}
+
+fn removeNodeFromTree(id: u32) bool {
+    if (removeIdFromList(&root_ids, id)) return true;
+    var it = nodes.iterator();
+    while (it.next()) |entry| {
+        if (removeIdFromList(&entry.value_ptr.children, id)) return true;
+    }
+    return false;
+}
+
+fn appendChild(parent_id: ?u32, child_id: u32) !void {
+    if (parent_id) |pid| {
+        const p = try ensureNode(pid);
+        try p.children.append(alloc, child_id);
+    } else {
+        try root_ids.append(alloc, child_id);
+    }
+}
+
+fn insertChild(parent_id: ?u32, child_id: u32, before_id: ?u32) !void {
+    if (parent_id) |pid| {
+        const p = try ensureNode(pid);
+        var index: usize = p.children.items.len;
+        if (before_id) |bid| {
+            for (p.children.items, 0..) |item, i| {
+                if (item == bid) {
+                    index = i;
+                    break;
+                }
+            }
+        }
+        try p.children.insert(alloc, index, child_id);
+    } else {
+        var index: usize = root_ids.items.len;
+        if (before_id) |bid| {
+            for (root_ids.items, 0..) |item, i| {
+                if (item == bid) {
+                    index = i;
+                    break;
+                }
+            }
+        }
+        try root_ids.insert(alloc, index, child_id);
+    }
+}
+
 // ── Command application ─────────────────────────────────────────────
 
 fn applyCommand(cmd: std.json.Value) !void {
@@ -109,35 +174,58 @@ fn applyCommand(cmd: std.json.Value) !void {
     if (std.mem.eql(u8, op, "CREATE")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
         const type_str = cmd.object.get("type").?.string;
-        var node = Node{
+        const node = try ensureNode(id);
+        node.* = .{
             .id = id,
             .type = try alloc.dupe(u8, type_str),
             .children = .{},
         };
         const props = cmd.object.get("props") orelse std.json.Value{ .null = {} };
         if (props == .object) {
-            if (props.object.get("style")) |style| applyStyle(&node, style);
+            if (props.object.get("style")) |style| applyStyle(node, style);
         }
-        try nodes.put(id, node);
     } else if (std.mem.eql(u8, op, "CREATE_TEXT")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
-        try nodes.put(id, .{ .id = id, .type = "__Text__", .children = .{} });
+        const node = try ensureNode(id);
+        node.* = .{ .id = id, .type = "__Text__", .children = .{} };
+    } else if (std.mem.eql(u8, op, "INSERT")) {
+        const id: u32 = @intCast(cmd.object.get("id").?.integer);
+        const parent_id: ?u32 = if (cmd.object.get("parentId")) |v| @intCast(v.integer) else if (cmd.object.get("parent_id")) |v| @intCast(v.integer) else null;
+        const before_id: ?u32 = if (cmd.object.get("beforeId")) |v| @intCast(v.integer) else if (cmd.object.get("before_id")) |v| @intCast(v.integer) else null;
+        const node = try ensureNode(id);
+        if (cmd.object.get("type")) |type_v| {
+            if (type_v == .string) {
+                node.type = try alloc.dupe(u8, type_v.string);
+            }
+        } else if (cmd.object.get("type_name")) |type_v| {
+            if (type_v == .string) {
+                node.type = try alloc.dupe(u8, type_v.string);
+            }
+        }
+        const props = cmd.object.get("props") orelse std.json.Value{ .null = {} };
+        if (props == .object) {
+            if (props.object.get("style")) |style| applyStyle(node, style);
+        }
+        try insertChild(parent_id, id, before_id);
     } else if (std.mem.eql(u8, op, "APPEND")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        const p = nodes.getPtr(pid) orelse return;
-        try p.children.append(alloc, cid);
+        try appendChild(pid, cid);
     } else if (std.mem.eql(u8, op, "APPEND_TO_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        try root_ids.append(alloc, cid);
+        try appendChild(null, cid);
     } else if (std.mem.eql(u8, op, "REMOVE")) {
-        const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
-        const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        const p = nodes.getPtr(pid) orelse return;
-        for (p.children.items, 0..) |x, i| if (x == cid) { _ = p.children.orderedRemove(i); break; };
+        const cid: u32 = if (cmd.object.get("childId")) |v| @intCast(v.integer) else if (cmd.object.get("child_id")) |v| @intCast(v.integer) else @intCast(cmd.object.get("id").?.integer);
+        const pid: ?u32 = if (cmd.object.get("parentId")) |v| @intCast(v.integer) else if (cmd.object.get("parent_id")) |v| @intCast(v.integer) else null;
+        if (pid) |parent_id| {
+            const p = nodes.getPtr(parent_id) orelse return;
+            _ = removeIdFromList(&p.children, cid);
+        } else {
+            _ = removeNodeFromTree(cid);
+        }
     } else if (std.mem.eql(u8, op, "REMOVE_FROM_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        for (root_ids.items, 0..) |x, i| if (x == cid) { _ = root_ids.orderedRemove(i); break; };
+        _ = removeIdFromList(&root_ids, cid);
     } else if (std.mem.eql(u8, op, "UPDATE")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
         const n = nodes.getPtr(id) orelse return;

@@ -17,25 +17,55 @@
 # Usage:
 #   scripts/ship <cart-name>          # release, self-extracting
 #   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
-#   scripts/ship <cart-name> --raw    # release, skips packaging (raw ELF for ldd)
+#   --raw is DISABLED: the unpackaged ELF segfaults on startup because the
+#   Linux bundle's .so staging happens in the self-extracting shell wrapper.
+#   scripts/ship <cart-name> --jsrt   # build the JSRT runtime path instead of V8/QJS
+#   scripts/ship <cart-name> --qjs    # build the legacy QJS runtime path instead of V8
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+LOCK_FILE="$REPO_ROOT/.zig-cache/.ship.lock"
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "[ship] another build in progress — waiting for lock..."
+    flock 9
+    echo "[ship] got lock, proceeding"
+fi
+
 NAME="${1:-}"
 DEBUG=0
 RAW=0
+JSRT=0
+QJS=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
-        --raw)      RAW=1 ;;
+        --raw)
+            echo "[ship] --raw is disabled." >&2
+            echo "[ship]" >&2
+            echo "[ship] --raw produced an unpackaged ELF that segfaults 100% of the" >&2
+            echo "[ship] time on this platform, because the Linux build depends on the" >&2
+            echo "[ship] self-extracting shell wrapper around the ELF to stage its .so" >&2
+            echo "[ship] deps before exec. Running the raw ELF skips that staging and" >&2
+            echo "[ship] crashes at startup. Use the default packaged binary:" >&2
+            echo "[ship]" >&2
+            echo "[ship]   ./scripts/ship <cart-name>        # self-extracting (working)" >&2
+            echo "[ship]" >&2
+            echo "[ship] If you need the raw ELF for ldd or gdb, open zig-out/bin/<name>" >&2
+            echo "[ship] AFTER a successful ship — the wrapper keeps the ELF alongside." >&2
+            exit 1
+            ;;
+        --jsrt)     JSRT=1 ;;
+        --qjs)      QJS=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--raw]" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--jsrt|--qjs]" >&2
     echo "  Cart expected at: cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -62,10 +92,26 @@ fi
 
 # ── 1b. Bundle cart entry via esbuild → bundle-<name>.js ─────────────
 # Per-cart bundle path means two parallel ships can't overwrite each other's
-# output. qjs_app.zig embeds `bundle-<app-name>.js` at compile time.
+# output. v8_app.zig / qjs_app.zig embed `bundle-<app-name>.js` at compile time.
 BUNDLE_OUT="bundle-${NAME}.js"
-echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
-node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
+
+AST_OUT=""
+if [[ "$JSRT" -eq 1 ]]; then
+    AST_OUT="bundle-${NAME}.ast.lua"
+    JSRT_SOURCE="${JSRT_AST_SOURCE:-$CART_FILE}"
+    if [[ -z "${JSRT_AST_SOURCE:-}" ]]; then
+        echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+        BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
+        JSRT_SOURCE="$BUNDLE_OUT"
+    else
+        echo "[ship] JSRT AST source override: $JSRT_SOURCE"
+    fi
+    echo "[ship] parsing $JSRT_SOURCE → $AST_OUT..."
+    node scripts/build-jsast.mjs "$JSRT_SOURCE" "$AST_OUT"
+else
+    echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+    BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
+fi
 
 # ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
@@ -74,12 +120,49 @@ if [[ "$DEBUG" -eq 1 ]]; then
 fi
 
 echo "[ship] compiling native binary..."
-zig build app -Dapp-name="$NAME" -Dapp-source=qjs_app.zig $OPT_FLAG
+APP_SOURCE="v8_app.zig"
+QJS_FLAG="-Duse-v8=true"
+if [[ "$JSRT" -eq 1 ]]; then
+    APP_SOURCE="jsrt_app.zig"
+    QJS_FLAG=""
+elif [[ "$QJS" -eq 1 ]]; then
+    APP_SOURCE="qjs_app.zig"
+    QJS_FLAG=""
+fi
+
+# Cart-declared capabilities (cart/<name>/cart.json). Currently only
+# `customChrome: true` is honoured — the runtime reads it as
+# build_options.custom_chrome to decide borderless vs windowed chrome.
+# Missing cart.json → no flag passed → default false.
+CUSTOM_CHROME_FLAG=""
+CART_MANIFEST="cart/${NAME}/cart.json"
+if [[ -f "$CART_MANIFEST" ]]; then
+    CUSTOM_CHROME=$(node -e "try{const m=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(m.customChrome===true?'true':'false')}catch(e){process.stdout.write('false')}" "$CART_MANIFEST")
+    if [[ "$CUSTOM_CHROME" == "true" ]]; then
+        CUSTOM_CHROME_FLAG="-Dcustom-chrome=true"
+        echo "[ship] cart manifest: customChrome=true"
+    fi
+fi
+
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then
     echo "[ship] build produced no binary: $RAW_BIN" >&2
     exit 1
+fi
+
+if [[ "$JSRT" -eq 1 ]]; then
+    VERIFY_OUT="$(mktemp)"
+    trap 'rm -f "$VERIFY_OUT"' EXIT
+    "$RAW_BIN" --dump-ast > "$VERIFY_OUT"
+    if ! cmp -s "$AST_OUT" "$VERIFY_OUT"; then
+        echo "[ship] JSRT AST verification failed: $RAW_BIN --dump-ast does not match $AST_OUT" >&2
+        exit 1
+    fi
+    rm -f "$VERIFY_OUT"
+    trap - EXIT
+    echo "[ship] JSRT AST verification passed"
 fi
 
 # ── 3. Debug / --raw short-circuit ────────────────────────────────────
@@ -260,3 +343,60 @@ mv -f "$STAGED" "$RAW_BIN"
 SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
 echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $RAW_BIN"
 rm -rf "$TMP_DIR" "$TARBALL"
+
+# ── 5. Post-build snapshot gate ───────────────────────────────────────
+# Runs the binary headless with ZIGOS_WITNESS=snapshot so framework/witness.zig
+# emits tests/<NAME>.autotest capturing all visible text, pressables, and a
+# health line. Counts FAIL lines + runtime errors; any failure deletes the
+# binary and exits 1. 1:1 port from tsz/scripts/build.
+mkdir -p tests
+AUTOTEST_FILE="tests/${NAME}.autotest"
+SNAP_STDERR=$(mktemp)
+SNAP_T0=$(date +%s%N)
+ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
+    timeout -s KILL 300 "$RAW_BIN" >/dev/null 2>"$SNAP_STDERR" || true
+SNAP_T1=$(date +%s%N)
+SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
+
+RUNTIME_ERRORS=$(grep -cE '^error:|^\[luajit-runtime\]|^\[evalExpr error\]|^\[evalToString error\]|^\[evalLuaMapData error\]|^\[js_on_press\].*error|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" 2>/dev/null || true)
+RUNTIME_ERRORS=${RUNTIME_ERRORS//[^0-9]/}; RUNTIME_ERRORS=${RUNTIME_ERRORS:-0}
+if [ "$RUNTIME_ERRORS" -gt 0 ]; then
+    echo "[$NAME] runtime: ${RUNTIME_ERRORS} error(s) detected" >&2
+    grep -E '^error:|^\[luajit-runtime\]|^\[eval.*error\]|^\[evalLuaMapData error\]|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" | head -10 >&2
+fi
+grep '^\[snapshot\]' "$SNAP_STDERR" 2>/dev/null || true
+# Keep the full snapshot log for post-mortem diagnostics. Not a bypass: binary
+# still gets cleaned up on TOTAL_FAILS below; this just preserves stack traces.
+SNAP_LOG_KEEP="tests/screenshots/${NAME}/.last-snapshot.log"
+mkdir -p "$(dirname "$SNAP_LOG_KEEP")"
+cp "$SNAP_STDERR" "$SNAP_LOG_KEEP" 2>/dev/null || true
+rm -f "$SNAP_STDERR"
+
+EXPECT_COUNT=0; CLICK_COUNT=0; FAIL_COUNT=0
+if [ -f "$AUTOTEST_FILE" ]; then
+    EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || true)
+    CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || true)
+    FAIL_COUNT=$(grep -c '^# FAIL' "$AUTOTEST_FILE" 2>/dev/null || true)
+    EXPECT_COUNT=${EXPECT_COUNT//[^0-9]/}; EXPECT_COUNT=${EXPECT_COUNT:-0}
+    CLICK_COUNT=${CLICK_COUNT//[^0-9]/}; CLICK_COUNT=${CLICK_COUNT:-0}
+    FAIL_COUNT=${FAIL_COUNT//[^0-9]/}; FAIL_COUNT=${FAIL_COUNT:-0}
+else
+    echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)" >&2
+fi
+
+TOTAL_FAILS=$(( FAIL_COUNT + RUNTIME_ERRORS ))
+if [ "$TOTAL_FAILS" -gt 0 ]; then
+    echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE" >&2
+    echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary" >&2
+    rm -f "$RAW_BIN" 2>/dev/null || true
+    rm -rf "zig-out/bin/${NAME}.app" 2>/dev/null || true
+    exit 1
+fi
+echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
+
+# ── 6. Post-build autotest replay ─────────────────────────────────────
+# Replay the just-generated autotest against the binary and produce the
+# proof grid. Skip with SHIP_SKIP_AUTOTEST=1 for faster iterations.
+if [ "${SHIP_SKIP_AUTOTEST:-0}" != "1" ] && [ -f "$AUTOTEST_FILE" ]; then
+    "$(dirname "$0")/autotest" "$NAME" || true
+fi

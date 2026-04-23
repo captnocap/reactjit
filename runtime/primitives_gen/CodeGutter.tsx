@@ -12,5 +12,6 @@
  *   activeText
  *   textColor
  */
-const React: any = require('react');
-export const CodeGutter: any = (props: any) => React.createElement('CodeGutter', props);
+// Lazy require — see runtime/primitives.tsx header for why init-time capture
+// of React breaks under esbuild's inject/react-body cycle.
+export const CodeGutter: any = (props: any) => require('react').createElement('CodeGutter', props);

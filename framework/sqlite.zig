@@ -154,7 +154,7 @@ pub const Database = struct {
     db: *sql.sqlite3,
 
     /// Open (or create) a database at the given path.
-    /// Enables WAL mode and sets a 5-second busy timeout.
+    /// Enables WAL mode and fails fast when the database is locked.
     pub fn open(path: []const u8) !Database {
         // Null-terminate the path on the stack
         var path_buf: [std.fs.max_path_bytes + 1]u8 = undefined;
@@ -173,8 +173,9 @@ pub const Database = struct {
 
         var self = Database{ .db = db };
 
-        // Set busy timeout (5 seconds, matches Lua behavior)
-        _ = sql.sqlite3_busy_timeout(db, 5000);
+        // Host functions run on the UI thread. A long busy timeout here stalls
+        // the whole app when another process or stale handle holds the DB lock.
+        _ = sql.sqlite3_busy_timeout(db, 0);
 
         // Enable WAL mode for concurrent reads + crash safety
         self.exec("PRAGMA journal_mode=WAL") catch {};

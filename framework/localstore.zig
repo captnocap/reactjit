@@ -27,6 +27,183 @@ pub const KeyEntry = struct {
 // -- Module state --
 
 var db: ?sqlite.Database = null;
+var db_mutex: std.Thread.Mutex = .{};
+var db_path_buf: [fs.MAX_PATH]u8 = undefined;
+var db_path_len: usize = 0;
+
+const WRITE_QUEUE_CAP = 1024;
+
+const WriteJob = struct {
+    namespace: [MAX_KEY]u8 = undefined,
+    namespace_len: u16 = 0,
+    key: [MAX_KEY]u8 = undefined,
+    key_len: u16 = 0,
+    value: [MAX_VALUE]u8 = undefined,
+    value_len: u16 = 0,
+
+    fn namespaceSlice(self: *const WriteJob) []const u8 {
+        return self.namespace[0..self.namespace_len];
+    }
+
+    fn keySlice(self: *const WriteJob) []const u8 {
+        return self.key[0..self.key_len];
+    }
+
+    fn valueSlice(self: *const WriteJob) []const u8 {
+        return self.value[0..self.value_len];
+    }
+};
+
+var write_mutex: std.Thread.Mutex = .{};
+var write_cond: std.Thread.Condition = .{};
+var write_queue: [WRITE_QUEUE_CAP]WriteJob = undefined;
+var write_queue_len: usize = 0;
+var write_cache: [WRITE_QUEUE_CAP]WriteJob = undefined;
+var write_cache_len: usize = 0;
+var write_stop: bool = false;
+var write_thread: ?std.Thread = null;
+
+fn ensureSchema(database: *sqlite.Database) !void {
+    try database.exec(
+        "CREATE TABLE IF NOT EXISTS store (" ++
+            "namespace TEXT NOT NULL, " ++
+            "key TEXT NOT NULL, " ++
+            "value TEXT, " ++
+            "updated_at INTEGER NOT NULL, " ++
+            "PRIMARY KEY (namespace, key))",
+    );
+}
+
+fn setWithDb(database: *sqlite.Database, namespace: []const u8, key: []const u8, value: []const u8) !void {
+    var stmt = try database.prepare(
+        "INSERT OR REPLACE INTO store (namespace, key, value, updated_at) VALUES (?, ?, ?, ?)",
+    );
+    defer stmt.deinit();
+
+    try stmt.bindText(1, namespace);
+    try stmt.bindText(2, key);
+    try stmt.bindText(3, value);
+    try stmt.bindInt(4, std.time.timestamp());
+
+    _ = try stmt.step();
+}
+
+fn writeJobFrom(namespace: []const u8, key: []const u8, value: []const u8) WriteJob {
+    var job = WriteJob{};
+    @memcpy(job.namespace[0..namespace.len], namespace);
+    job.namespace_len = @intCast(namespace.len);
+    @memcpy(job.key[0..key.len], key);
+    job.key_len = @intCast(key.len);
+    @memcpy(job.value[0..value.len], value);
+    job.value_len = @intCast(value.len);
+    return job;
+}
+
+fn rememberSetLocked(namespace: []const u8, key: []const u8, value: []const u8) void {
+    var i: usize = 0;
+    while (i < write_cache_len) : (i += 1) {
+        if (std.mem.eql(u8, write_cache[i].namespaceSlice(), namespace) and
+            std.mem.eql(u8, write_cache[i].keySlice(), key))
+        {
+            @memcpy(write_cache[i].value[0..value.len], value);
+            write_cache[i].value_len = @intCast(value.len);
+            return;
+        }
+    }
+
+    if (write_cache_len >= WRITE_QUEUE_CAP) {
+        var j: usize = 1;
+        while (j < write_cache_len) : (j += 1) {
+            write_cache[j - 1] = write_cache[j];
+        }
+        write_cache_len -= 1;
+    }
+
+    write_cache[write_cache_len] = writeJobFrom(namespace, key, value);
+    write_cache_len += 1;
+}
+
+fn getRemembered(namespace: []const u8, key: []const u8, buf: []u8) ?usize {
+    write_mutex.lock();
+    defer write_mutex.unlock();
+
+    var remaining = write_cache_len;
+    while (remaining > 0) {
+        remaining -= 1;
+        const job = &write_cache[remaining];
+        if (std.mem.eql(u8, job.namespaceSlice(), namespace) and
+            std.mem.eql(u8, job.keySlice(), key))
+        {
+            const val = job.valueSlice();
+            if (val.len > buf.len) return null;
+            @memcpy(buf[0..val.len], val);
+            return val.len;
+        }
+    }
+    return null;
+}
+
+fn enqueueSet(namespace: []const u8, key: []const u8, value: []const u8) !void {
+    if (namespace.len > MAX_KEY or key.len > MAX_KEY or value.len > MAX_VALUE) return error.BufferTooSmall;
+
+    write_mutex.lock();
+    defer write_mutex.unlock();
+    rememberSetLocked(namespace, key, value);
+
+    var i: usize = 0;
+    while (i < write_queue_len) : (i += 1) {
+        if (std.mem.eql(u8, write_queue[i].namespaceSlice(), namespace) and
+            std.mem.eql(u8, write_queue[i].keySlice(), key))
+        {
+            @memcpy(write_queue[i].value[0..value.len], value);
+            write_queue[i].value_len = @intCast(value.len);
+            write_cond.signal();
+            return;
+        }
+    }
+
+    if (write_queue_len >= WRITE_QUEUE_CAP) {
+        // Drop the oldest pending write rather than blocking the UI thread.
+        var j: usize = 1;
+        while (j < write_queue_len) : (j += 1) {
+            write_queue[j - 1] = write_queue[j];
+        }
+        write_queue_len -= 1;
+    }
+
+    write_queue[write_queue_len] = writeJobFrom(namespace, key, value);
+    write_queue_len += 1;
+    write_cond.signal();
+}
+
+fn popWriteJob() ?WriteJob {
+    write_mutex.lock();
+    defer write_mutex.unlock();
+
+    while (write_queue_len == 0 and !write_stop) {
+        write_cond.wait(&write_mutex);
+    }
+
+    if (write_queue_len == 0 and write_stop) return null;
+
+    const job = write_queue[0];
+    var i: usize = 1;
+    while (i < write_queue_len) : (i += 1) {
+        write_queue[i - 1] = write_queue[i];
+    }
+    write_queue_len -= 1;
+    return job;
+}
+
+fn writerMain() void {
+    while (popWriteJob()) |job| {
+        db_mutex.lock();
+        if (db) |*d| {
+            setWithDb(d, job.namespaceSlice(), job.keySlice(), job.valueSlice()) catch {};
+        }
+        db_mutex.unlock();
+    }
+}
 
 // -- Init / Deinit --
 
@@ -42,24 +219,32 @@ pub fn init() !void {
 
     var database = try sqlite.Database.open(path);
 
-    database.exec(
-        "CREATE TABLE IF NOT EXISTS store (" ++
-            "namespace TEXT NOT NULL, " ++
-            "key TEXT NOT NULL, " ++
-            "value TEXT, " ++
-            "updated_at INTEGER NOT NULL, " ++
-            "PRIMARY KEY (namespace, key))",
-    ) catch |err| {
+    ensureSchema(&database) catch |err| {
         database.close();
         return err;
     };
 
+    @memcpy(db_path_buf[0..path.len], path);
+    db_path_len = path.len;
+    write_stop = false;
     db = database;
+    write_thread = std.Thread.spawn(.{}, writerMain, .{}) catch null;
 }
 
 pub fn deinit() void {
+    write_mutex.lock();
+    write_stop = true;
+    write_cond.signal();
+    write_mutex.unlock();
+    if (write_thread) |t| t.join();
+    write_thread = null;
+    db_mutex.lock();
+    defer db_mutex.unlock();
     if (db) |*d| d.close();
     db = null;
+    db_path_len = 0;
+    write_queue_len = 0;
+    write_cache_len = 0;
 }
 
 pub fn isInitialized() bool {
@@ -70,6 +255,11 @@ pub fn isInitialized() bool {
 
 /// Get a value by namespace and key. Returns bytes written to buf, or null if not found.
 pub fn get(namespace: []const u8, key: []const u8, buf: []u8) !?usize {
+    if (getRemembered(namespace, key, buf)) |n| return n;
+
+    db_mutex.lock();
+    defer db_mutex.unlock();
+
     var d = db orelse return error.NotInitialized;
     var stmt = try d.prepare("SELECT value FROM store WHERE namespace = ? AND key = ?");
     defer stmt.deinit();
@@ -113,18 +303,8 @@ pub fn getBool(namespace: []const u8, key: []const u8) !?bool {
 
 /// Set a text value for namespace + key. Creates or replaces.
 pub fn set(namespace: []const u8, key: []const u8, value: []const u8) !void {
-    var d = db orelse return error.NotInitialized;
-    var stmt = try d.prepare(
-        "INSERT OR REPLACE INTO store (namespace, key, value, updated_at) VALUES (?, ?, ?, ?)",
-    );
-    defer stmt.deinit();
-
-    try stmt.bindText(1, namespace);
-    try stmt.bindText(2, key);
-    try stmt.bindText(3, value);
-    try stmt.bindInt(4, std.time.timestamp());
-
-    _ = try stmt.step();
+    if (db == null) return error.NotInitialized;
+    try enqueueSet(namespace, key, value);
 }
 
 /// Set an integer value.
@@ -150,6 +330,9 @@ pub fn setBool(namespace: []const u8, key: []const u8, value: bool) !void {
 
 /// Delete a single key from a namespace.
 pub fn delete(namespace: []const u8, key: []const u8) !void {
+    db_mutex.lock();
+    defer db_mutex.unlock();
+
     var d = db orelse return error.NotInitialized;
     var stmt = try d.prepare("DELETE FROM store WHERE namespace = ? AND key = ?");
     defer stmt.deinit();
@@ -164,6 +347,9 @@ pub fn delete(namespace: []const u8, key: []const u8) !void {
 /// List all keys in a namespace, sorted alphabetically.
 /// Returns the number of keys written to `out`.
 pub fn keys(namespace: []const u8, out: []KeyEntry) !usize {
+    db_mutex.lock();
+    defer db_mutex.unlock();
+
     var d = db orelse return error.NotInitialized;
     var stmt = try d.prepare("SELECT key FROM store WHERE namespace = ? ORDER BY key");
     defer stmt.deinit();
@@ -186,6 +372,9 @@ pub fn keys(namespace: []const u8, out: []KeyEntry) !usize {
 
 /// Clear all keys in a namespace. If namespace is null, clear everything.
 pub fn clear(namespace: ?[]const u8) !void {
+    db_mutex.lock();
+    defer db_mutex.unlock();
+
     var d = db orelse return error.NotInitialized;
 
     if (namespace) |ns| {

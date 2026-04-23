@@ -235,7 +235,7 @@ tsz/test_min
 
 
 # Test Screenshots
-tsz/tests/screenshots/*
+tsz/tests/*
 deps/tinyemu
 love2d/deps/love
 deps/tinyemu
@@ -249,3 +249,16 @@ tsz/docs/CURSOR_IDE_PRODUCT_SURFACE_OVERVIEW.md
 deps/tinyemu
 deps/llama.cpp.zig
 love2d/deps/love
+
+# V8 prebuilt library (116MB, fetched by scripts/fetch-v8-prebuilt.sh)
+deps/v8-prebuilt/*.a
+
+# V8 runtime caches (filled when building the V8 path)
+deps/zig-v8/.zig-cache/
+deps/zig-v8/.lp-cache/
+deps/zig-v8/v8/
+deps/zig-v8/v8-build/
+
+# Test screenshots (local artifacts)
+tests/
+

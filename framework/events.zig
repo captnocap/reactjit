@@ -13,6 +13,8 @@ const Node = layout.Node;
 
 pub const EventHandler = struct {
     on_press: ?*const fn () void = null,
+    on_mouse_down: ?*const fn () void = null,
+    on_mouse_up: ?*const fn () void = null,
     on_hover_enter: ?*const fn () void = null,
     on_hover_exit: ?*const fn () void = null,
     js_on_hover_enter: ?[*:0]const u8 = null,
@@ -26,8 +28,13 @@ pub const EventHandler = struct {
     on_right_click: ?*const fn (x: f32, y: f32) void = null,
     /// JS expression to eval on press (used by .so cartridges that can't call QJS directly)
     js_on_press: ?[*:0]const u8 = null,
+    js_on_mouse_down: ?[*:0]const u8 = null,
+    js_on_mouse_up: ?[*:0]const u8 = null,
     /// Lua expression to eval on press (LuaJIT logic runtime)
     lua_on_press: ?[*:0]const u8 = null,
+    lua_on_mouse_down: ?[*:0]const u8 = null,
+    lua_on_mouse_up: ?[*:0]const u8 = null,
+    js_on_middle_click: ?[*:0]const u8 = null,
 };
 
 // ── Hit Testing ──────────────────────────────────────────────────────────
@@ -70,6 +77,8 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
 /// Returns true if the node has any event handler set.
 fn hasHandlers(h: *const EventHandler) bool {
     return h.on_press != null or
+        h.on_mouse_down != null or
+        h.on_mouse_up != null or
         h.on_hover_enter != null or
         h.on_hover_exit != null or
         h.js_on_hover_enter != null or
@@ -81,7 +90,11 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_submit != null or
         h.on_scroll != null or
         h.on_right_click != null or
+        h.js_on_mouse_down != null or
+        h.js_on_mouse_up != null or
         h.lua_on_press != null or
+        h.lua_on_mouse_down != null or
+        h.lua_on_mouse_up != null or
         h.js_on_press != null;
 }
 

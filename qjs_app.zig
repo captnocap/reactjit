@@ -23,6 +23,7 @@ const events = @import("framework/events.zig");
 const engine = if (IS_LIB) struct {} else @import("framework/engine.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig");
 const qjs_bindings = @import("framework/qjs_bindings.zig");
+const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
 comptime { if (!IS_LIB) _ = @import("framework/core.zig"); }
@@ -60,6 +61,14 @@ var g_press_expr_pool: std.ArrayList([:0]u8) = .{};
 var g_input_slot_by_node_id: std.AutoHashMap(u32, u8) = undefined;
 var g_node_id_by_input_slot: [input.MAX_INPUTS]u32 = [_]u32{0} ** input.MAX_INPUTS;
 
+// Content store — Zig-owned buffers referenced by handle. Carts use the
+// `useFileContent(path)` React hook to load a file's bytes once into this
+// store and pass the returned handle as a prop on TextEditor. The actual
+// text never crosses the JS bridge — only the u32 handle does. This fixes
+// the "1MB prop diff on every file click" bottleneck.
+var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
+var g_content_store_next_id: u32 = 1;
+
 // Pending flush queue. host_flush is called mid-frame (from inside js_on_press
 // evals, or inside __dispatchEvent's React commit). Applying CMDs mid-frame
 // would destroy nodes whose heap memory is still referenced by the engine's
@@ -74,11 +83,7 @@ var g_pending_flush: std.ArrayList([]u8) = .{};
 // context, reinit, and re-eval the new bundle. React state resets on reload
 // in phase 1; phase 2 will use LuaJIT hotstate atoms to preserve it.
 const DEV_MODE = if (@hasDecl(build_options, "dev_mode")) build_options.dev_mode else false;
-const CUSTOM_CHROME_MODE = if (@hasDecl(build_options, "app_name"))
-    std.mem.eql(u8, build_options.app_name, "browser") or
-        std.mem.eql(u8, build_options.app_name, "cursor-ide")
-else
-    false;
+const CUSTOM_CHROME_MODE = if (@hasDecl(build_options, "custom_chrome")) build_options.custom_chrome else false;
 const BORDERLESS_MODE = DEV_MODE or CUSTOM_CHROME_MODE;
 const DEV_BUNDLE_PATH = "bundle.js";
 
@@ -134,6 +139,11 @@ fn isMultilineInputType(type_name: []const u8) bool {
         std.mem.eql(u8, type_name, "TextEditor");
 }
 
+fn isTerminalType(type_name: []const u8) bool {
+    return std.mem.eql(u8, type_name, "Terminal") or
+        std.mem.eql(u8, type_name, "terminal");
+}
+
 fn dupJsonText(v: std.json.Value) ?[]const u8 {
     return switch (v) {
         .string => |s| g_alloc.dupe(u8, s) catch null,
@@ -150,6 +160,11 @@ fn dispatchInputEvent(slot: u8, global_name: [*:0]const u8) void {
     qjs_runtime.callGlobal("__beginJsEvent");
     qjs_runtime.callGlobalInt(global_name, @intCast(node_id));
     qjs_runtime.callGlobal("__endJsEvent");
+    // Additive LuaJIT dispatch — cart code running in the Lua VM picks up the
+    // same event by defining a matching global. Silent no-op if absent.
+    if (luajit_runtime.hasGlobal(global_name)) {
+        luajit_runtime.callGlobalInt(global_name, @intCast(node_id));
+    }
 }
 
 fn makeInputChangeCallback(comptime slot: u8) *const fn () void {
@@ -190,6 +205,9 @@ fn dispatchInputKeyEvent(slot: u8, key: c_int, mods: u16) void {
     qjs_runtime.callGlobal("__beginJsEvent");
     qjs_runtime.callGlobal3Int("__dispatchInputKey", @intCast(node_id), key, mods);
     qjs_runtime.callGlobal("__endJsEvent");
+    if (luajit_runtime.hasGlobal("__dispatchInputKey")) {
+        luajit_runtime.callGlobal3Int("__dispatchInputKey", @intCast(node_id), key, mods);
+    }
 }
 
 fn makeInputKeyCallback(comptime slot: u8) *const fn (key: c_int, mods: u16) void {
@@ -750,7 +768,9 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
     for (keys_v.array.items) |entry| {
         if (entry != .string) continue;
         const k = entry.string;
-        if (std.mem.eql(u8, k, "fontSize")) node.font_size = 16
+        if (std.mem.eql(u8, k, "fontSize")) {
+            if (node.terminal) node.terminal_font_size = 13 else node.font_size = 16;
+        }
         else if (std.mem.eql(u8, k, "color")) node.text_color = null
         else if (std.mem.eql(u8, k, "letterSpacing")) node.letter_spacing = 0
         else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0
@@ -776,10 +796,10 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
     // tslx:GEN:TYPE_DEFAULTS START
-        } else if (eq(u8, type_name, "CodeGutter")) {
-            node.gutter_rows = &[_]layout.GutterRow{};
-        } else if (eq(u8, type_name, "Minimap")) {
-            node.minimap_rows = &[_]layout.MinimapRow{};
+    } else if (eq(u8, type_name, "CodeGutter")) {
+        node.gutter_rows = &[_]layout.GutterRow{};
+    } else if (eq(u8, type_name, "Minimap")) {
+        node.minimap_rows = &[_]layout.MinimapRow{};
     // tslx:GEN:TYPE_DEFAULTS END
     } else if (eq(u8, type_name, "Canvas")) {
         // Infinite pan/zoom surface. `canvas_type` is what wires engine paint,
@@ -795,6 +815,8 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
         node.canvas_path = true;
     } else if (eq(u8, type_name, "Canvas.Clamp")) {
         node.canvas_clamp = true;
+    } else if (isTerminalType(type_name)) {
+        node.terminal = true;
     }
     ensureInputSlot(node, id, type_name);
 }
@@ -802,13 +824,19 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
 fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
     if (props != .object) return;
     const is_input = node.input_id != null or (type_name != null and isInputType(type_name.?));
+    const is_terminal = node.terminal or (type_name != null and isTerminalType(type_name.?));
     var it = props.object.iterator();
     while (it.next()) |e| {
         const k = e.key_ptr.*;
         const v = e.value_ptr.*;
         if (std.mem.eql(u8, k, "style")) applyStyle(node, v)
         else if (std.mem.eql(u8, k, "fontSize")) {
-            if (jsonInt(v)) |i| node.font_size = @intCast(@max(i, 1));
+            if (jsonInt(v)) |i| {
+                const size: u16 = @intCast(@max(i, 1));
+                if (is_terminal) node.terminal_font_size = size else node.font_size = size;
+            }
+        } else if (is_terminal and std.mem.eql(u8, k, "terminalFontSize")) {
+            if (jsonInt(v)) |i| node.terminal_font_size = @intCast(@max(i, 1));
         } else if (std.mem.eql(u8, k, "color")) {
             if (v == .string) node.text_color = parseColor(v.string);
         } else if (std.mem.eql(u8, k, "letterSpacing")) {
@@ -826,36 +854,53 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         }
         // tslx:GEN:PROPS START
                 // ── CodeGutter primitive props ──
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
-                    node.gutter_rows = parseGutterRows(v);
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-                    if (jsonFloat(v)) |f| node.gutter_row_height = f;
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "cursorLine")) {
-                    if (jsonInt(v)) |i| node.gutter_cursor_line = @intCast(@max(0, i));
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeBg")) {
-                    if (v == .string) node.gutter_active_bg = parseColor(v.string);
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeText")) {
-                    if (v == .string) node.gutter_active_text = parseColor(v.string);
-                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
-                    if (v == .string) node.gutter_text = parseColor(v.string);
+        else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
+            node.gutter_rows = parseGutterRows(v);
+        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
+            if (jsonFloat(v)) |f| node.gutter_row_height = f;
+        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "cursorLine")) {
+            if (jsonInt(v)) |i| node.gutter_cursor_line = @intCast(@max(0, i));
+        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeBg")) {
+            if (v == .string) node.gutter_active_bg = parseColor(v.string);
+        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeText")) {
+            if (v == .string) node.gutter_active_text = parseColor(v.string);
+        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
+            if (v == .string) node.gutter_text = parseColor(v.string);
+        }
                 // ── Minimap primitive props ──
-                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
-                    node.minimap_rows = parseMinimapRows(v);
-                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-                    if (jsonFloat(v)) |f| node.minimap_row_height = f;
-                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowGap")) {
-                    if (jsonFloat(v)) |f| node.minimap_row_gap = f;
-                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "activeColor")) {
-                    if (v == .string) node.minimap_active_color = parseColor(v.string);
-                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "inactiveColor")) {
-                    if (v == .string) node.minimap_inactive_color = parseColor(v.string);
+        else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
+            node.minimap_rows = parseMinimapRows(v);
+        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
+            if (jsonFloat(v)) |f| node.minimap_row_height = f;
+        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowGap")) {
+            if (jsonFloat(v)) |f| node.minimap_row_gap = f;
+        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "activeColor")) {
+            if (v == .string) node.minimap_active_color = parseColor(v.string);
+        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "inactiveColor")) {
+            if (v == .string) node.minimap_inactive_color = parseColor(v.string);
+        }
         // tslx:GEN:PROPS END
         else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
             if (dupJsonText(v)) |s| syncInputValue(node, s);
+        } else if (is_input and std.mem.eql(u8, k, "contentHandle")) {
+            // Handle-based content: skip the 1MB string-prop round-trip. The
+            // buffer already lives in g_content_store; point node.text directly
+            // at it so the paint path reads the Zig-owned bytes. Stays valid
+            // until the hook cleanup releases the handle.
+            const handle: u32 = switch (v) {
+                .integer => @intCast(@max(0, v.integer)),
+                .float => @intFromFloat(@max(0.0, v.float)),
+                else => 0,
+            };
+            if (handle != 0) {
+                if (contentStoreGet(handle)) |buf| syncInputValue(node, buf);
+            }
         } else if (std.mem.eql(u8, k, "source")) {
             if (dupJsonText(v)) |s| node.image_src = s;
+        } else if (std.mem.eql(u8, k, "renderSrc")) {
+            if (dupJsonText(v)) |s| node.render_src = s;
         } else if (std.mem.eql(u8, k, "href")) {
             if (dupJsonText(v)) |s| node.href = s;
         } else if (std.mem.eql(u8, k, "tooltip")) {
@@ -1035,6 +1080,8 @@ fn installJsExpr(comptime expr_fmt: []const u8, id: u32) ?[*:0]const u8 {
 
 fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
     node.handlers.js_on_press = null;
+    node.handlers.js_on_mouse_down = null;
+    node.handlers.js_on_mouse_up = null;
     node.handlers.js_on_hover_enter = null;
     node.handlers.js_on_hover_exit = null;
     node.handlers.on_scroll = null;
@@ -1044,6 +1091,12 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
 
     if (cmdHasAnyHandlerName(cmd, &.{ "onClick", "onPress" })) {
         node.handlers.js_on_press = installJsExpr("__dispatchEvent({d},'onClick')\x00", id);
+    }
+    if (cmdHasAnyHandlerName(cmd, &.{ "onMouseDown" })) {
+        node.handlers.js_on_mouse_down = installJsExpr("__dispatchEvent({d},'onMouseDown')\x00", id);
+    }
+    if (cmdHasAnyHandlerName(cmd, &.{ "onMouseUp" })) {
+        node.handlers.js_on_mouse_up = installJsExpr("__dispatchEvent({d},'onMouseUp')\x00", id);
     }
     if (cmdHasAnyHandlerName(cmd, &.{ "onHoverEnter", "onMouseEnter" })) {
         node.handlers.js_on_hover_enter = installJsExpr("__dispatchEvent({d},'onHoverEnter')\x00", id);
@@ -1276,6 +1329,47 @@ export fn host_get_input_text_for_node(ctx: ?*qjs.JSContext, _: qjs.JSValue, arg
     const text = input.getText(slot);
     if (text.len == 0) return qjs.JS_NewString(ctx, "");
     return qjs.JS_NewStringLen(ctx, text.ptr, @intCast(text.len));
+}
+
+// Read `path` into a Zig-owned buffer, store under a fresh u32 handle, and
+// return that handle to JS. Returns 0 on failure (empty path, missing file,
+// read error). 64MB cap matches __fs_readfile's sanity limit.
+export fn host_load_file_to_buffer(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) qjs.JSValue {
+    if (ctx == null or argc < 1) return qjs.JS_NewInt32(ctx, 0);
+    const c_str = qjs.JS_ToCString(ctx, argv[0]);
+    if (c_str == null) return qjs.JS_NewInt32(ctx, 0);
+    defer qjs.JS_FreeCString(ctx, c_str);
+    const path = std.mem.span(c_str);
+    if (path.len == 0) return qjs.JS_NewInt32(ctx, 0);
+
+    const data = std.fs.cwd().readFileAlloc(g_alloc, path, 64 * 1024 * 1024) catch |e| {
+        std.log.warn("[content-store] read failed path={s}: {}", .{ path, e });
+        return qjs.JS_NewInt32(ctx, 0);
+    };
+
+    const id = g_content_store_next_id;
+    g_content_store_next_id += 1;
+    g_content_store.put(id, data) catch {
+        g_alloc.free(data);
+        return qjs.JS_NewInt32(ctx, 0);
+    };
+    return qjs.JS_NewInt32(ctx, @intCast(id));
+}
+
+// Release a buffer by handle. Safe to call with 0 or an unknown id.
+export fn host_release_file_buffer(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) qjs.JSValue {
+    if (ctx == null or argc < 1) return QJS_UNDEFINED;
+    var id_i32: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &id_i32, argv[0]);
+    if (id_i32 <= 0) return QJS_UNDEFINED;
+    if (g_content_store.fetchRemove(@intCast(id_i32))) |entry| {
+        g_alloc.free(entry.value);
+    }
+    return QJS_UNDEFINED;
+}
+
+fn contentStoreGet(id: u32) ?[]const u8 {
+    return g_content_store.get(id);
 }
 
 // ── Tree materialization ────────────────────────────────────────
@@ -1723,6 +1817,8 @@ fn appInit() void {
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
     qjs_runtime.registerHostFn("__hostFlush", @ptrCast(&host_flush), 1);
     qjs_runtime.registerHostFn("__getInputTextForNode", @ptrCast(&host_get_input_text_for_node), 1);
+    qjs_runtime.registerHostFn("__hostLoadFileToBuffer", @ptrCast(&host_load_file_to_buffer), 1);
+    qjs_runtime.registerHostFn("__hostReleaseFileBuffer", @ptrCast(&host_release_file_buffer), 1);
 
     // Persistent-store substrate for runtime/hooks/localstore. Best-effort —
     // if init fails the hooks gracefully no-op (see qjs_bindings.storeGet etc.).
@@ -1778,6 +1874,7 @@ pub fn main() !void {
     g_node_by_id = std.AutoHashMap(u32, *Node).init(g_alloc);
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
     g_input_slot_by_node_id = std.AutoHashMap(u32, u8).init(g_alloc);
+    g_content_store = std.AutoHashMap(u32, []u8).init(g_alloc);
 
     g_root = .{};
 

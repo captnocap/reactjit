@@ -77,7 +77,9 @@ pub const WebSocket = struct {
         const sec_key = "dGhlIHNhbXBsZSBub25jZQ==";
 
         // Send HTTP upgrade request
-        const writer = stream.writer();
+        var writer_buf: [4096]u8 = undefined;
+        var stream_writer = stream.writer(&writer_buf);
+        const writer = &stream_writer.interface;
         try writer.print(
             "GET {s} HTTP/1.1\r\n" ++
                 "Host: {s}:{d}\r\n" ++
@@ -87,6 +89,7 @@ pub const WebSocket = struct {
                 "Sec-WebSocket-Key: {s}\r\n\r\n",
             .{ path, host, port, sec_key },
         );
+        try writer.flush();
 
         // Set socket to non-blocking for update() polling
         setNonBlocking(stream);
@@ -326,10 +329,12 @@ pub const WebSocket = struct {
     // ── Internal: frame writing ──────────────────────────────────────
 
     fn writeFrame(self: *WebSocket, opcode: Opcode, payload: []const u8) !void {
-        const writer = self.stream.writer();
+        var writer_buf: [4096]u8 = undefined;
+        var stream_writer = self.stream.writer(&writer_buf);
+        const writer = &stream_writer.interface;
 
         // FIN + opcode
-        try writer.writeByte(0x80 | @intFromEnum(opcode));
+        try writer.writeByte(0x80 | @as(u8, @intFromEnum(opcode)));
 
         // Length + mask bit (client→server must be masked)
         const mask_bit: u8 = 0x80;
@@ -358,6 +363,7 @@ pub const WebSocket = struct {
             masked[i] = payload[i] ^ mask_key[i % 4];
         }
         try writer.writeAll(masked[0..len]);
+        try writer.flush();
     }
 };
 
@@ -365,6 +371,6 @@ pub const WebSocket = struct {
 
 fn setNonBlocking(stream: std.net.Stream) void {
     const fd = stream.handle;
-    const flags = std.posix.fcntl(fd, .F_GETFL) catch return;
-    _ = std.posix.fcntl(fd, .F_SETFL, .{ .NONBLOCK = true, ._ = @bitCast(@as(u18, @truncate(flags))) }) catch {};
+    const flags = std.posix.fcntl(fd, std.posix.F.GETFL, 0) catch return;
+    _ = std.posix.fcntl(fd, std.posix.F.SETFL, flags | std.posix.SOCK.NONBLOCK) catch {};
 }

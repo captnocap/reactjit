@@ -103,6 +103,14 @@ const HTML_STRIP_PROPS = new Set([
  */
 function resolveHtmlProps(originalType: string, props: Record<string, any>): Record<string, any> {
   const resolved: Record<string, any> = {};
+  const mergeStyle = (base: Record<string, any> | undefined, patch: Record<string, any>): Record<string, any> => {
+    const out: Record<string, any> = {};
+    if (base) {
+      for (const key of Object.keys(base)) out[key] = base[key];
+    }
+    for (const key of Object.keys(patch)) out[key] = patch[key];
+    return out;
+  };
 
   for (const key of Object.keys(props)) {
     if (key === 'children') continue;
@@ -115,7 +123,7 @@ function resolveHtmlProps(originalType: string, props: Record<string, any>): Rec
   // className → tw() → merge into style (style wins on conflicts)
   if (resolved.className && typeof resolved.className === 'string') {
     const twStyle = tw(resolved.className);
-    resolved.style = resolved.style ? { ...twStyle, ...resolved.style } : twStyle;
+    resolved.style = resolved.style ? mergeStyle(twStyle, resolved.style) : twStyle;
     delete resolved.className;
   }
 
@@ -123,13 +131,13 @@ function resolveHtmlProps(originalType: string, props: Record<string, any>): Rec
   const headingSize = HEADING_FONT_SIZE[originalType];
   if (headingSize) {
     const headingStyle = { fontSize: headingSize, fontWeight: 'bold' as const };
-    resolved.style = resolved.style ? { ...headingStyle, ...resolved.style } : headingStyle;
+    resolved.style = resolved.style ? mergeStyle(headingStyle, resolved.style) : headingStyle;
   }
 
   // strong/b → bold
   if (originalType === 'strong' || originalType === 'b') {
     const boldStyle = { fontWeight: 'bold' as const };
-    resolved.style = resolved.style ? { ...boldStyle, ...resolved.style } : boldStyle;
+    resolved.style = resolved.style ? mergeStyle(boldStyle, resolved.style) : boldStyle;
   }
 
   // img: src → source
@@ -179,9 +187,15 @@ interface Command {
 declare const globalThis: {
   __hostFlush: (commands: string | Command[]) => void;
   __hostGetEvents: () => any[];
+  __hostLog?: (level: number, msg: string) => void;
   _pollAndDispatchEvents?: () => void;
   [key: string]: any;
 };
+
+// Per-call `[hostConfig] ...` tracing is noisy on real carts. Kept as a
+// no-op function so all existing call sites stay valid; flip this back
+// when you need to inspect reconciler decisions.
+function hostLog(_msg: string): void {}
 
 // ── Transport abstraction ────────────────────────────────
 
@@ -233,6 +247,37 @@ function coalesceCommands(commands: Command[]): Command[] {
   const updateMap = new Map<number, number>(); // nodeId -> index in output
   const output: Command[] = [];
 
+  const cloneValue = (value: any): any => {
+    if (Array.isArray(value)) {
+      const out: any[] = [];
+      for (let i = 0; i < value.length; i++) out[i] = cloneValue(value[i]);
+      return out;
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, any> = {};
+      for (const key of Object.keys(value)) {
+        out[key] = cloneValue(value[key]);
+      }
+      return out;
+    }
+    return value;
+  };
+
+  const mergePlainObject = (base: Record<string, any>, patch: Record<string, any>): Record<string, any> => {
+    const out: Record<string, any> = {};
+    for (const key of Object.keys(base)) out[key] = cloneValue(base[key]);
+    for (const key of Object.keys(patch)) out[key] = cloneValue(patch[key]);
+    return out;
+  };
+
+  const cloneCommand = (cmd: Command): Command => {
+    const out: any = {};
+    for (const key of Object.keys(cmd as any)) {
+      out[key] = cloneValue((cmd as any)[key]);
+    }
+    return out as Command;
+  };
+
   for (const cmd of commands) {
     if (cmd.op === 'UPDATE' && cmd.id != null) {
       const existingIdx = updateMap.get(cmd.id);
@@ -246,10 +291,10 @@ function coalesceCommands(commands: Command[]): Command[] {
         // below sees the same reference on both sides and does nothing.
         const prevStyle = existing.props.style;
         // Merge props (shallow)
-        existing.props = { ...existing.props, ...cmd.props };
+        existing.props = mergePlainObject(existing.props || {}, cmd.props || {});
         // Merge style sub-objects — use the pre-merge snapshot as the base
         if (prevStyle && cmd.props.style) {
-          existing.props.style = { ...prevStyle, ...cmd.props.style };
+          existing.props.style = mergePlainObject(prevStyle, cmd.props.style);
         }
         // Merge removal arrays
         if (cmd.removeKeys) {
@@ -269,7 +314,7 @@ function coalesceCommands(commands: Command[]): Command[] {
       }
       updateMap.set(cmd.id, output.length);
     }
-    output.push({ ...cmd });
+    output.push(cloneCommand(cmd));
   }
 
   return output;
@@ -287,14 +332,24 @@ export function flushToHost(): void {
     }
   }
 
+  const t0 = (globalThis as any).performance?.now?.() ?? Date.now();
+  const pendingN = pendingCommands.length;
   const coalesced = coalesceCommands(pendingCommands);
+  const t1 = (globalThis as any).performance?.now?.() ?? Date.now();
+  hostLog(`[hostConfig] flushToHost pending=${pendingCommands.length} coalesced=${coalesced.length}`);
   debugLog.log('recon', `flushToHost pending=${pendingCommands.length} coalesced=${coalesced.length}`);
 
   try {
-    // Send as JSON string to avoid QuickJS GC race during FFI object traversal.
-    // Large strings (500+ chars) can be silently collected by GC during property
-    // enumeration of sibling properties, causing silent data loss across the bridge.
-    transportFlush(JSON.stringify(coalesced));
+    const payload = JSON.stringify(coalesced);
+    const t2 = (globalThis as any).performance?.now?.() ?? Date.now();
+    transportFlush(payload);
+    const t3 = (globalThis as any).performance?.now?.() ?? Date.now();
+    if (payload.length > 100000 || (t3 - t0) > 50) {
+      const gh: any = globalThis as any;
+      if (typeof gh.__hostLog === 'function') {
+        try { gh.__hostLog(0, `[flush-timing] pending=${pendingN} coalesced=${coalesced.length} bytes=${payload.length} coalesce=${(t1-t0).toFixed(1)}ms stringify=${(t2-t1).toFixed(1)}ms bridge=${(t3-t2).toFixed(1)}ms total=${(t3-t0).toFixed(1)}ms`); } catch {}
+      }
+    }
   } catch (e) {
     reportError(e, 'flushToHost (' + coalesced.length + ' commands)');
   }
@@ -306,7 +361,7 @@ export function flushToHost(): void {
 // A single user event can trigger a chain of commits: click sets tab, effect
 // syncs derived state, memo invalidates, another effect fires, … React calls
 // resetAfterCommit per commit. Flushing synchronously there turns one event
-// into N separate __hostFlush calls (10+ seen in the cursor-ide tab switch),
+// into N separate __hostFlush calls (10+ seen in the sweatshop tab switch),
 // each with its own JSON.stringify + FFI crossing + Zig-side queue entry.
 //
 // Deferring the flush to a microtask lets all commits in the current
@@ -328,9 +383,11 @@ const microtask: (fn: () => void) => void =
     : (fn: () => void) => { Promise.resolve().then(fn); };
 
 export function scheduleFlush(): void {
+  hostLog(`[hostConfig] scheduleFlush called scheduled=${flushScheduled} pending=${pendingCommands.length}`);
   if (flushScheduled) return;
   flushScheduled = true;
   microtask(() => {
+    hostLog(`[hostConfig] scheduleFlush callback pending=${pendingCommands.length}`);
     flushScheduled = false;
     flushToHost();
   });
@@ -402,7 +459,7 @@ export function shallowEqual(
  * UPDATE just because `oldProps.onPress !== newProps.onPress` is pure waste —
  * and a parent that rerenders with inline arrow handlers cascades into O(N)
  * UPDATEs per frame across every Pressable in the subtree. That turns a
- * harmless ancestor rerender into a bridge flood (see the cursor-ide tab
+ * harmless ancestor rerender into a bridge flood (see the sweatshop tab
  * switch incident).
  *
  * Genuine adds/removes (onHoverEnter appearing, onPress disappearing) still
@@ -540,6 +597,7 @@ export const hostConfig: HostConfig<
     internalHandle?: any // React fiber (opaque, but we bend the rules for debugging)
   ): Instance {
     const id = ++nodeIdCounter;
+    hostLog(`[hostConfig] createInstance type=${type} id=${id}`);
 
     // HTML element remapping: <div> → View, <h1> → Text, <img> → Image, etc.
     const resolvedType = HTML_TYPE_MAP[type] || type;
@@ -649,6 +707,7 @@ export const hostConfig: HostConfig<
 
   createTextInstance(text: string): TextInstance {
     const id = ++nodeIdCounter;
+    hostLog(`[hostConfig] createTextInstance id=${id} text=${JSON.stringify(text)}`);
     emit({ op: 'CREATE_TEXT', id, text });
     return { id, text };
   },
@@ -656,6 +715,7 @@ export const hostConfig: HostConfig<
   // ── Tree building (pre-commit) ──────────────────────
 
   appendInitialChild(parent: Instance, child: Instance | TextInstance) {
+    hostLog(`[hostConfig] appendInitialChild parent=${parent.id} child=${child.id}`);
     (parent.children as any[]).push(child);
     emit({ op: 'APPEND', parentId: parent.id, childId: child.id });
   },
@@ -667,16 +727,19 @@ export const hostConfig: HostConfig<
   // ── Mutations ────────────────────────────────────────
 
   appendChild(parent: Instance, child: Instance | TextInstance) {
+    hostLog(`[hostConfig] appendChild parent=${parent.id} child=${child.id}`);
     (parent.children as any[]).push(child);
     emit({ op: 'APPEND', parentId: parent.id, childId: child.id });
   },
 
   appendChildToContainer(container: Container, child: Instance | TextInstance) {
+    hostLog(`[hostConfig] appendChildToContainer container=${container.id} child=${child.id}`);
     rootInstances.push(child as Instance);
     emit({ op: 'APPEND_TO_ROOT', childId: child.id });
   },
 
   removeChild(parent: Instance, child: Instance | TextInstance) {
+    hostLog(`[hostConfig] removeChild parent=${parent.id} child=${child.id}`);
     debugLog.log('recon', `removeChild parent=${parent.id} child=${child.id}`);
     const idx = (parent.children as any[]).indexOf(child);
     if (idx !== -1) (parent.children as any[]).splice(idx, 1);
@@ -685,6 +748,7 @@ export const hostConfig: HostConfig<
   },
 
   removeChildFromContainer(_container: Container, child: Instance | TextInstance) {
+    hostLog(`[hostConfig] removeChildFromContainer child=${child.id}`);
     const idx = rootInstances.indexOf(child as Instance);
     if (idx !== -1) rootInstances.splice(idx, 1);
     emit({ op: 'REMOVE_FROM_ROOT', childId: child.id });
@@ -696,6 +760,7 @@ export const hostConfig: HostConfig<
     child: Instance | TextInstance,
     before: Instance | TextInstance
   ) {
+    hostLog(`[hostConfig] insertBefore parent=${parent.id} child=${child.id} before=${before.id}`);
     const arr = parent.children as any[];
     const idx = arr.indexOf(before);
     if (idx !== -1) {
@@ -716,6 +781,7 @@ export const hostConfig: HostConfig<
     child: Instance | TextInstance,
     before: Instance | TextInstance
   ) {
+    hostLog(`[hostConfig] insertInContainerBefore child=${child.id} before=${before.id}`);
     const idx = rootInstances.indexOf(before as Instance);
     if (idx !== -1) {
       rootInstances.splice(idx, 0, child as Instance);
@@ -769,6 +835,7 @@ export const hostConfig: HostConfig<
     _oldProps: Props,
     newProps: Props
   ) {
+    hostLog(`[hostConfig] commitUpdate id=${instance.id} type=${instance.type}`);
     // Resolve HTML props so the committed state matches what prepareUpdate diffed
     const resolvedNew = HTML_TYPE_MAP[_type] ? resolveHtmlProps(_type, newProps) : newProps;
     const { clean, handlers } = extractHandlers(resolvedNew);
@@ -842,6 +909,7 @@ export const hostConfig: HostConfig<
   },
 
   commitTextUpdate(_textInstance: TextInstance, _oldText: string, newText: string) {
+    hostLog(`[hostConfig] commitTextUpdate id=${_textInstance.id} text=${JSON.stringify(newText)}`);
     _textInstance.text = newText;
     emit({ op: 'UPDATE_TEXT', id: _textInstance.id, text: newText });
   },
@@ -853,6 +921,11 @@ export const hostConfig: HostConfig<
   },
 
   resetAfterCommit() {
+    hostLog(`[hostConfig] resetAfterCommit`);
+    const stampStateUpdate = (globalThis as any).__clickLatencyStampStateUpdate;
+    if (typeof stampStateUpdate === 'function') {
+      try { stampStateUpdate(); } catch {}
+    }
     scheduleFlush();
   },
 

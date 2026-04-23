@@ -49,6 +49,7 @@ pub const resetInlineSlots = text.resetInlineSlots;
 pub const setTextEffect = text.setTextEffect;
 pub const clearTextEffect = text.clearTextEffect;
 pub const setLineHeightOverride = text.setLineHeightOverride;
+pub const setLetterSpacing = text.setLetterSpacing;
 pub fn getInlineSlotCount() u8 { return text.g_inline_slot_count; }
 pub fn getInlineSlots() *const [text.MAX_RECORDED_SLOTS]layout_types.InlineSlot { return &text.g_inline_slots; }
 

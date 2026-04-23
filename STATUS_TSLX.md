@@ -73,7 +73,7 @@ in for some sections**, so the current state is broken.
    already generated and unchanged from V1 — they should keep working.
 
 3. `zig build app` to confirm Zig still compiles, then
-   `./scripts/ship cursor-ide` and run the binary to confirm gutter
+   `./scripts/ship sweatshop` and run the binary to confirm gutter
    and minimap still paint correctly.
 
 4. Delete the now-redundant `STATUS_TSLX.md` (this file) once V2
@@ -108,11 +108,11 @@ grep -n "tslx:GEN:PROPS" qjs_app.zig -A 40
 node scripts/tslx_compile.mjs --all
 
 # 4. Verify compile:
-zig build app -Dapp-name=cursor-ide -Doptimize=ReleaseFast
+zig build app -Dapp-name=sweatshop -Doptimize=ReleaseFast
 
 # 5. Ship + run:
-./scripts/ship cursor-ide
-./zig-out/bin/cursor-ide
+./scripts/ship sweatshop
+./zig-out/bin/sweatshop
 ```
 
 ## Files touched this session
@@ -130,9 +130,9 @@ zig build app -Dapp-name=cursor-ide -Doptimize=ReleaseFast
   removed the hand-written `paintCodeGutter` / `paintMinimap`.
 - `framework/layout.zig` — splice markers added.
 - `qjs_app.zig` — splice markers added.
-- `cart/cursor-ide/components/editor.tsx` — uses `<CodeGutter>` +
+- `cart/sweatshop/components/editor.tsx` — uses `<CodeGutter>` +
   `<Minimap>` instead of `.map() → JSX`.
-- Several other `cart/cursor-ide/*` files — part of a sibling
+- Several other `cart/sweatshop/*` files — part of a sibling
   session's refactor that accumulated in the working tree.
 
 ## Context for perf fix thread

@@ -9,6 +9,8 @@
  */
 
 export * as fs from './fs';
+export { math, listZigCallable } from './math';
+export type { Vec2, Vec3, BBox2, BBox3, SmoothDampResult } from './math';
 export * as sqlite from './sqlite';
 export * as http from './http';
 export * as crypto from './crypto';

@@ -1,0 +1,7 @@
+{
+  "name": "Component Gallery",
+  "description": "Story-style presentation cart for ReactJIT components.",
+  "customChrome": true,
+  "width": 1280,
+  "height": 860
+}

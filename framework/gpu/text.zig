@@ -46,6 +46,15 @@ pub fn setLineHeightOverride(lh: f32) void {
     g_line_height_override = lh;
 }
 
+/// Letter-spacing (px, can be negative) applied to the next drawTextLine /
+/// drawTextWrapped call. Kept in sync with framework/text.zig's measure path so
+/// paint's wrap bound agrees with layout's computed width. Cleared by caller.
+var g_letter_spacing: f32 = 0;
+
+pub fn setLetterSpacing(ls: f32) void {
+    g_letter_spacing = ls;
+}
+
 fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
     if (i >= text.len) return 0;
     if (text[i] == 0x01) return 1;
@@ -159,6 +168,7 @@ var g_atlas_row_h: u32 = 0;
 var g_atlas_keys: [MAX_ATLAS_GLYPHS]AtlasGlyphKey = undefined;
 var g_atlas_vals: [MAX_ATLAS_GLYPHS]AtlasGlyphInfo = undefined;
 var g_atlas_count: usize = 0;
+var g_atlas_index: std.AutoHashMap(u64, u32) = undefined;
 
 // FreeType handles
 var g_ft_library: c.FT_Library = null;
@@ -180,6 +190,7 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
         g_ft_fallbacks[i] = fallbacks[i];
     }
     g_ft_current_size = 0;
+    g_atlas_index = std.AutoHashMap(u64, u32).init(std.heap.page_allocator);
 
     const device = core.getDevice() orelse return;
 
@@ -265,6 +276,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 g_inline_slot_count += 1;
             }
             pen_x += @floatFromInt(size_px);
+            pen_x += g_letter_spacing;
             i += sentinel_len;
             continue;
         }
@@ -299,6 +311,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 }
             }
             pen_x += @floatFromInt(glyph.advance);
+            pen_x += g_letter_spacing;
         }
         i += ch.len;
     }
@@ -396,9 +409,9 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                     var j: usize = line_start;
                     while (j < i) {
                         const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
+                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); pen_x += g_letter_spacing; j += j_sentinel_len; continue; }
                         const jch = decodeUtf8(text[j..]);
-                        if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
+                        if (cacheGlyph(jch.codepoint, size_px)) |g| { pen_x += @floatFromInt(g.advance); pen_x += g_letter_spacing; }
                         j += jch.len;
                     }
                     last_break = line_start;
@@ -406,6 +419,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 }
             }
             pen_x += advance;
+            pen_x += g_letter_spacing;
             i += sentinel_len;
             continue;
         }
@@ -470,6 +484,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
         }
 
         pen_x += advance;
+        pen_x += g_letter_spacing;
         i += ch.len;
     }
 
@@ -741,6 +756,7 @@ pub fn deinit() void {
     if (g_atlas_sampler) |s| s.release();
     if (g_atlas_view) |v| v.release();
     if (g_atlas_texture) |t| t.destroy();
+    g_atlas_index.deinit();
     g_text_bind_group = null;
     g_text_bind_group_layout = null;
     g_text_buffer = null;
@@ -918,9 +934,15 @@ fn initPipeline(device: *wgpu.Device) void {
 // ════════════════════════════════════════════════════════════════════════
 
 fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
+    const packed_key = (@as(u64, codepoint) << 16) | @as(u64, size_px);
     // Check cache
+    if (g_atlas_index.get(packed_key)) |idx| {
+        return &g_atlas_vals[idx];
+    }
     for (0..g_atlas_count) |i| {
         if (g_atlas_keys[i].codepoint == codepoint and g_atlas_keys[i].size_px == size_px) {
+            const found_idx: u32 = @intCast(i);
+            g_atlas_index.put(packed_key, found_idx) catch {};
             return &g_atlas_vals[i];
         }
     }
@@ -996,6 +1018,7 @@ fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
         .height = @intCast(bh),
     };
     g_atlas_count += 1;
+    g_atlas_index.put(packed_key, @intCast(idx)) catch {};
 
     return &g_atlas_vals[idx];
 }

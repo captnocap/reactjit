@@ -1,8 +1,8 @@
-# Investigation Report: Component Inlining Content Loss in cursor-ide
+# Investigation Report: Component Inlining Content Loss in sweatshop
 
 ## Executive Summary
 
-The `cursor-ide` cart compiles but produces empty component nodes with no children or text content. Component bodies render as skeleton layout boxes with style fields only. This is caused by component inlining failing for imported components whose names collide with classifier names.
+The `sweatshop` cart compiles but produces empty component nodes with no children or text content. Component bodies render as skeleton layout boxes with style fields only. This is caused by component inlining failing for imported components whose names collide with classifier names.
 
 ## Issues Identified
 
@@ -31,13 +31,13 @@ const _hasFlatMaps = ctx.maps.some(m => !m.isNested && !m.isInline);
 
 **Location:** Component resolution in `parseJSXElement` → `findComponent`
 
-**Problem:** When `cursor-ide.app.tsz` is compiled, imported components (TopBar, Sidebar, etc.) are not being inlined. Instead, they fall back to classifier behavior, producing nodes with styles but no children.
+**Problem:** When `sweatshop.app.tsz` is compiled, imported components (TopBar, Sidebar, etc.) are not being inlined. Instead, they fall back to classifier behavior, producing nodes with styles but no children.
 
 **Evidence:**
 
 1. **Generated output has classifier styles but no component children:**
 ```zig
-// Generated _arr_3 from cursor-ide - TopBar node has NO children:
+// Generated _arr_3 from sweatshop - TopBar node has NO children:
 pub var _arr_3 = [_]Node{
   .{ .style = .{ .height = 40, ... } },  // TopBar - empty!
   .{ .style = .{ ... }, .children = &_arr_2 },  // Workspace
@@ -54,7 +54,7 @@ pub var _arr_1 = [_]Node{
 }; // StatCard
 ```
 
-3. **cursor-ide output has NO `// ComponentName` comments**, confirming inlining never happened.
+3. **sweatshop output has NO `// ComponentName` comments**, confirming inlining never happened.
 
 ## Root Cause Analysis
 
@@ -65,7 +65,7 @@ pub var _arr_1 = [_]Node{
 | d100_named_slots | ✓ | ✗ | ✗ | ✓ YES |
 | d08_map_classifier_components | ✓ | ✗ | ✗ | ✓ YES |
 | Dashboard | ✗ | ✓ (StatCard, MetricRow) | ✗ | ✓ YES |
-| cursor-ide | ✗ | ✓ (TopBar, Sidebar, etc.) | ✓ YES | ✗ NO |
+| sweatshop | ✗ | ✓ (TopBar, Sidebar, etc.) | ✓ YES | ✗ NO |
 
 ### Key Finding
 
@@ -151,7 +151,7 @@ Run with `--logs` and check if:
 1. Apply the `_hasFlatMaps` fix immediately to restore compilation
 2. Add debug logging to pinpoint whether components are being collected
 3. Based on findings, fix either collection or resolution logic
-4. Test with `cursor-ide` to verify components have children
+4. Test with `sweatshop` to verify components have children
 5. Run conformance tests to ensure no regressions
 
 ## Appendix: Evidence Comparison
@@ -172,7 +172,7 @@ function StatCard({ label, value, color, tooltip }) {
 - Generated output shows `// StatCard` comment
 - Children are properly inlined
 
-### cursor-ide (Broken)
+### sweatshop (Broken)
 ```tsx
 // TopBar.c.tsz
 function TopBar(props) {

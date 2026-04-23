@@ -1,0 +1,167 @@
+#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+
+const repoRoot = path.resolve(__dirname, '..');
+const galleryDir = path.join(repoRoot, 'cart', 'component-gallery');
+const storiesDir = path.join(galleryDir, 'stories');
+const storyIndexPath = path.join(storiesDir, 'index.ts');
+
+function usage() {
+  console.error('Usage: scripts/gallery-component <ComponentName> [component-file]');
+  process.exit(1);
+}
+
+function toWords(value) {
+  return String(value)
+    .replace(/\.[^.]+$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+}
+
+function toPascal(value) {
+  const words = toWords(value);
+  if (words.length === 0) return '';
+  return words.map((word) => word[0].toUpperCase() + word.slice(1)).join('');
+}
+
+function toTitle(value) {
+  return toWords(value).map((word) => word[0].toUpperCase() + word.slice(1)).join(' ');
+}
+
+function toSlug(value) {
+  const words = toWords(value);
+  if (words.length === 0) return '';
+  return words.map((word) => word.toLowerCase()).join('-');
+}
+
+function lowerFirst(value) {
+  return value ? value[0].toLowerCase() + value.slice(1) : value;
+}
+
+function relativeImport(fromFile, toFile) {
+  let rel = path.relative(path.dirname(fromFile), toFile).replaceAll(path.sep, '/');
+  rel = rel.replace(/\.(tsx|ts)$/, '');
+  return rel.startsWith('.') ? rel : './' + rel;
+}
+
+function resolveComponentPath(componentName, rawPath, slug) {
+  if (!rawPath) {
+    return path.join(galleryDir, 'components', slug, `${componentName}.tsx`);
+  }
+
+  let out = path.resolve(repoRoot, rawPath);
+  if (!/\.(tsx|ts)$/.test(out)) out += '.tsx';
+  if (!out.startsWith(repoRoot + path.sep)) {
+    console.error('[gallery-component] component file must stay inside this repository');
+    process.exit(1);
+  }
+  return out;
+}
+
+const rawName = process.argv[2];
+if (!rawName) usage();
+
+const componentPathArg = process.argv[3] || '';
+const pascalName = toPascal(rawName);
+const title = toTitle(rawName);
+const slug = toSlug(rawName);
+if (!pascalName || !slug) usage();
+
+const exportName = lowerFirst(pascalName) + 'Section';
+const storyPath = path.join(storiesDir, `${slug}.story.tsx`);
+const componentPath = resolveComponentPath(pascalName, componentPathArg, slug);
+const componentDisplay = path.relative(repoRoot, componentPath).replaceAll(path.sep, '/');
+const componentImport = relativeImport(storyPath, componentPath);
+const primitiveImport = relativeImport(componentPath, path.join(repoRoot, 'runtime', 'primitives.tsx'));
+
+fs.mkdirSync(storiesDir, { recursive: true });
+fs.mkdirSync(path.dirname(componentPath), { recursive: true });
+
+if (fs.existsSync(storyPath)) {
+  console.error(`[gallery-component] exists: ${path.relative(repoRoot, storyPath)}`);
+  process.exit(1);
+}
+
+if (fs.existsSync(componentPath)) {
+  console.error(`[gallery-component] exists: ${path.relative(repoRoot, componentPath)}`);
+  process.exit(1);
+}
+
+const componentContent = `import { Col, Text } from '${primitiveImport}';
+
+export type ${pascalName}Props = {};
+
+export function ${pascalName}(_props: ${pascalName}Props) {
+  return (
+    <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>${title}</Text>
+      <Text style={{ fontSize: 12, color: '#657185' }}>${componentDisplay}</Text>
+    </Col>
+  );
+}
+`;
+
+const storyContent = `import { defineGallerySection, defineGalleryStory } from '../types';
+import { ${pascalName} } from '${componentImport}';
+
+export const ${exportName} = defineGallerySection({
+  id: '${slug}',
+  title: '${title}',
+  stories: [
+    defineGalleryStory({
+      id: '${slug}/default',
+      title: '${title}',
+      source: '${componentDisplay}',
+      status: 'draft',
+      variants: [
+        {
+          id: 'default',
+          name: 'Default',
+          render: () => <${pascalName} />,
+        },
+      ],
+    }),
+  ],
+});
+`;
+
+fs.writeFileSync(componentPath, componentContent);
+fs.writeFileSync(storyPath, storyContent);
+
+if (!fs.existsSync(storyIndexPath)) {
+  fs.writeFileSync(
+    storyIndexPath,
+    `import type { GallerySection } from '../types';
+
+// component-gallery:imports
+
+export const storySections: GallerySection[] = [
+  // component-gallery:sections
+];
+`
+  );
+}
+
+let indexSource = fs.readFileSync(storyIndexPath, 'utf8');
+const importLine = `import { ${exportName} } from '${relativeImport(storyIndexPath, storyPath)}';`;
+const sectionLine = `  ${exportName},`;
+
+if (!indexSource.includes(importLine)) {
+  indexSource = indexSource.replace('// component-gallery:imports', `${importLine}\n// component-gallery:imports`);
+}
+if (!indexSource.includes(sectionLine)) {
+  indexSource = indexSource.replace('  // component-gallery:sections', `${sectionLine}\n  // component-gallery:sections`);
+}
+
+if (!indexSource.includes(importLine) || !indexSource.includes(sectionLine)) {
+  console.error('[gallery-component] missing registry markers in cart/component-gallery/stories/index.ts');
+  process.exit(1);
+}
+
+fs.writeFileSync(storyIndexPath, indexSource);
+
+console.log(`[gallery-component] created ${path.relative(repoRoot, componentPath)}`);
+console.log(`[gallery-component] created ${path.relative(repoRoot, storyPath)}`);
+console.log(`[gallery-component] registered ${exportName}`);

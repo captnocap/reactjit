@@ -210,8 +210,9 @@ function emitTsxWrapper(spec) {
  * Props:
 ${propLines}
  */
-const React: any = require('react');
-export const ${spec.name}: any = (props: any) => React.createElement('${spec.name}', props);
+// Lazy require — see runtime/primitives.tsx header for why init-time capture
+// of React breaks under esbuild's inject/react-body cycle.
+export const ${spec.name}: any = (props: any) => require('react').createElement('${spec.name}', props);
 `;
 }
 

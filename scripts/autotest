@@ -1,0 +1,120 @@
+#!/bin/bash
+# Run an autotest: build cart, run headless with witness script, generate proof grid.
+#
+# Ported 1:1 from tsz/scripts/autotest, adapted for reactjit layout:
+#   carts/** → cart/
+#   .tsz     → .tsx (single-file)  OR  cart/<name>/index.tsx (dir layout)
+#   ./scripts/build → ./scripts/ship
+#
+# Usage:
+#   scripts/autotest <name>
+#
+# Looks for: tests/<name>.autotest
+# Finds cart: cart/<name>/index.tsx  OR  cart/<name>.tsx
+# Outputs:   tests/screenshots/<name>/proof.png
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ $# -lt 1 ]; then
+    echo "Usage: scripts/autotest <name>"
+    echo "  e.g.: scripts/autotest sweatshop"
+    exit 1
+fi
+
+NAME="$1"
+TEST_FILE="tests/${NAME}.autotest"
+
+# Resolve cart entry: directory layout wins, same rule as scripts/ship.
+if [ -f "cart/${NAME}/index.tsx" ]; then
+    CART="cart/${NAME}/index.tsx"
+elif [ -f "cart/${NAME}.tsx" ]; then
+    CART="cart/${NAME}.tsx"
+else
+    CART=""
+fi
+
+if [ ! -f "$TEST_FILE" ]; then
+    echo "[autotest] ERROR: no test file at $TEST_FILE"
+    exit 1
+fi
+
+if [ -z "$CART" ]; then
+    echo "[autotest] ERROR: no cart found for $NAME (expected cart/${NAME}/index.tsx or cart/${NAME}.tsx)"
+    exit 1
+fi
+
+# 1. Build via scripts/ship. The wrapped binary lives at zig-out/bin/<NAME>;
+#    scripts/run (and witness's screenshot-writing logic) both expect it there.
+BINARY="zig-out/bin/$NAME"
+
+# Skip build if binary is newer than the cart entry.
+if [ -x "$BINARY" ] && [ "$BINARY" -nt "$CART" ]; then
+    echo "[autotest] $NAME binary is current, skipping build"
+else
+    echo "[autotest] building $NAME..."
+    ./scripts/ship "$NAME" >/dev/null 2>&1 || { echo "[autotest] BUILD FAILED"; exit 1; }
+fi
+
+if [ ! -x "$BINARY" ]; then
+    echo "[autotest] ERROR: binary not found at $BINARY"
+    exit 1
+fi
+
+# 2. Timestamped output dir. Witness writes flat files into FLAT_DIR;
+#    after the run we move them into a timestamped subdir tagged PASS/FAIL.
+TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
+FLAT_DIR="tests/screenshots/${NAME}"
+OUT_DIR="${FLAT_DIR}/${TIMESTAMP}"
+
+mkdir -p "$FLAT_DIR"
+rm -f "$FLAT_DIR"/step_*.png "$FLAT_DIR"/manifest.txt "$FLAT_DIR"/proof.png "$FLAT_DIR"/verdict.txt
+
+# 3. Run headless autotest.
+echo "[autotest] running..."
+set +e
+
+# ZIGOS_SOURCE: source files whose data strings should always render. For
+# tsz this was <cart>.script.tsz (pure data). reactjit carts keep data in
+# cart/<name>/data.ts (see cart/sweatshop/data.ts) — pass that if present.
+SOURCE_FILES=""
+for candidate in "cart/${NAME}/data.ts" "cart/${NAME}/data.tsx"; do
+    [ -f "$candidate" ] && SOURCE_FILES="${SOURCE_FILES:+$SOURCE_FILES:}$candidate"
+done
+
+TMPLOG=$(mktemp)
+ZIGOS_HEADLESS=1 \
+ZIGOS_WITNESS=autotest \
+ZIGOS_WITNESS_FILE="$TEST_FILE" \
+ZIGOS_SOURCE="$SOURCE_FILES" \
+    timeout -s KILL 600 "$BINARY" >"$TMPLOG" 2>&1 || true
+grep -v "AUTOTEST RESULT" "$TMPLOG" \
+    | grep -E "expect|click|reject|color|bg|border|styles|PASS|FAIL|OK|VERIFY|audit|MISSING|changed" \
+    || true
+rm -f "$TMPLOG"
+set -e
+
+# 4. Generate proof grid.
+EXIT=1
+if [ -f "${FLAT_DIR}/manifest.txt" ]; then
+    python3 scripts/autotest-grid "$NAME"
+
+    # 5. Grid script writes final verdict to verdict.txt after pixel verification.
+    TAG=$(cat "${FLAT_DIR}/verdict.txt" 2>/dev/null || echo "FAIL")
+    [ "$TAG" = "PASS" ] && EXIT=0 || EXIT=1
+    TAGGED_DIR="${FLAT_DIR}/${TIMESTAMP}_${TAG}"
+    mkdir -p "$TAGGED_DIR"
+    mv "${FLAT_DIR}"/step_*.png "${FLAT_DIR}/manifest.txt" "${FLAT_DIR}/proof.png" "${FLAT_DIR}/verdict.txt" "$TAGGED_DIR/" 2>/dev/null
+
+    ln -sfn "$(basename "$TAGGED_DIR")" "${FLAT_DIR}/latest"
+
+    if [ "$TAG" = "PASS" ]; then
+        echo "[autotest] PASS — proof: ${TAGGED_DIR}/proof.png"
+    else
+        echo "[autotest] FAIL — proof: ${TAGGED_DIR}/proof.png"
+    fi
+else
+    echo "[autotest] WARNING: no manifest — screenshots may not have been captured"
+fi
+
+exit $EXIT

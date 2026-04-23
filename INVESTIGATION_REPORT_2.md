@@ -1,4 +1,4 @@
-# Investigation Report 2: RenderLocals Resolution Bugs in cursor-ide
+# Investigation Report 2: RenderLocals Resolution Bugs in sweatshop
 
 ## Summary
 
@@ -195,9 +195,9 @@ if ((!(state.getSlotString(1).len > 0)))  // Using ! not == 0
 
 ## Verification Steps
 
-1. Build cursor-ide with proposed fixes
-2. Check `generated_cursor-ide.app/maps.zig` for correct slicing
-3. Check `generated_cursor-ide.app/app.zig` `_updateConditionals` for correct boolean negation
+1. Build sweatshop with proposed fixes
+2. Check `generated_sweatshop.app/maps.zig` for correct slicing
+3. Check `generated_sweatshop.app/app.zig` `_updateConditionals` for correct boolean negation
 4. Run conformance tests to ensure no regressions
 
 ## Files Modified

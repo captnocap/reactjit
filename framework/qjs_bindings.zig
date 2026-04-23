@@ -22,6 +22,7 @@ const sqlite_mod = @import("sqlite.zig");
 const net_http = @import("net/http.zig");
 const page_fetch = @import("net/page_fetch.zig");
 const hotstate = @import("hotstate.zig");
+const exec_async = @import("exec_async.zig");
 
 const QJS_UNDEFINED = if (HAS_QUICKJS) (qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = qjs.JS_TAG_UNDEFINED }) else qjs.JSValue{};
 const QJS_NULL = if (HAS_QUICKJS) (qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = qjs.JS_TAG_NULL }) else qjs.JSValue{};
@@ -1020,6 +1021,43 @@ pub fn tickDrain() void {
             emitChannelPayload(ch, payload, alloc);
         }
     }
+
+    exec_async.drain(emitExecCompleted);
+}
+
+fn execAsync(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 2) return QJS_UNDEFINED;
+    const cmd_p = argStr(c2, argc, argv, 0) orelse return QJS_UNDEFINED;
+    defer freeStr(c2, cmd_p);
+    const rid_p = argStr(c2, argc, argv, 1) orelse return QJS_UNDEFINED;
+    defer freeStr(c2, rid_p);
+    exec_async.spawn(std.mem.span(rid_p), std.mem.span(cmd_p));
+    return QJS_UNDEFINED;
+}
+
+fn emitExecCompleted(rid: []const u8, stdout: []const u8, code: i32) void {
+    const alloc = std.heap.page_allocator;
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(alloc);
+    const w = buf.writer(alloc);
+    w.print("{{\"code\":{d},\"stdout\":\"", .{code}) catch return;
+    for (stdout) |ch| {
+        switch (ch) {
+            '"' => w.writeAll("\\\"") catch return,
+            '\\' => w.writeAll("\\\\") catch return,
+            '\n' => w.writeAll("\\n") catch return,
+            '\r' => w.writeAll("\\r") catch return,
+            '\t' => w.writeAll("\\t") catch return,
+            0...8, 11, 12, 14...31 => w.print("\\u{x:0>4}", .{ch}) catch return,
+            else => w.writeByte(ch) catch return,
+        }
+    }
+    w.writeAll("\"}") catch return;
+
+    var ch_buf: [256]u8 = undefined;
+    const channel = std.fmt.bufPrint(&ch_buf, "exec:{s}", .{rid}) catch return;
+    emitChannelPayload(channel, buf.items, alloc);
 }
 
 // ── __ffiEmit bridge ──────────────────────────────────────────────
@@ -1154,6 +1192,7 @@ pub fn registerAll(ctx_opaque: *anyopaque) void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_mkdir", qjs.JS_NewCFunction(ctx, fsMkdir, "__fs_mkdir", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_remove", qjs.JS_NewCFunction(ctx, fsRemove, "__fs_remove", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_stat_json", qjs.JS_NewCFunction(ctx, fsStatJson, "__fs_stat_json", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__exec_async", qjs.JS_NewCFunction(ctx, execAsync, "__exec_async", 2));
 
     // localstore
     _ = qjs.JS_SetPropertyStr(ctx, global, "__store_get", qjs.JS_NewCFunction(ctx, storeGet, "__store_get", 1));

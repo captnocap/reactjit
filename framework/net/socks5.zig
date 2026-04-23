@@ -56,8 +56,10 @@ pub fn connect(
     // Connect to proxy
     const stream = try std.net.tcpConnectToHost(std.heap.page_allocator, proxy_host, proxy_port);
     errdefer stream.close();
-    const reader = stream.reader();
-    const writer = stream.writer();
+    var reader_buf: [4096]u8 = undefined;
+    var writer_buf: [4096]u8 = undefined;
+    const reader = stream.reader(&reader_buf);
+    const writer = stream.writer(&writer_buf);
 
     // Send greeting
     if (user != null and user.?.len > 0) {

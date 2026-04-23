@@ -41,7 +41,10 @@ PER_CART_BUNDLE=".cache/bundle-${NAME}.js"
 mkdir -p .cache
 
 echo "[dev] bundling ${CART_FILE} → ${PER_CART_BUNDLE}"
-node scripts/build-bundle.mjs "$CART_FILE" --out "$PER_CART_BUNDLE"
+# BUNDLE_FROM_HARNESS=1 is the sentinel the bundler looks for. Direct
+# `node scripts/internal/cart-bundle.mjs ...` invocations (e.g. ad-hoc from an
+# agent) are refused — they race with the watcher and stamp stale bundles over disk.
+BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$PER_CART_BUNDLE"
 
 # Fast path: host already running — push and exit.
 if [[ -S "$SOCKET" ]]; then
@@ -62,16 +65,28 @@ if [[ ! -x "$BIN" ]]; then
     # ReleaseFast: Debug builds silently exit on click (pre-existing framework
     # issue — cockpit-raw reproduces it without dev mode). Dev-mode is a
     # RUNTIME flag, it doesn't need Debug compilation. Smaller binary too.
-    echo "[dev] compiling dev binary ($BIN, ReleaseFast)..."
-    zig build app -Dapp-name="reactjit-dev" -Dapp-source=qjs_app.zig -Ddev-mode=true -Doptimize=ReleaseFast
+    # V8 is the default runtime (per CLAUDE.md). QJS is legacy maintenance-only.
+    echo "[dev] compiling dev binary ($BIN, V8, ReleaseFast)..."
+    zig build app -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig -Duse-v8=true -Ddev-mode=true -Doptimize=ReleaseFast
 fi
 
 ./"$BIN" &
 BIN_PID=$!
 
 cleanup() {
-    kill "$BIN_PID" 2>/dev/null || true
-    pkill -P $$ 2>/dev/null || true
+    # Two-phase shutdown: polite SIGTERM first, then SIGKILL after a brief grace
+    # period. Without the SIGKILL fallback a binary that ignores TERM (or a
+    # race between trap firing and the host fully coming up) leaves the dev
+    # process attached to this terminal, still streaming telemetry + tick
+    # lines into stdout long after scripts/dev has exited.
+    kill -TERM "$BIN_PID" 2>/dev/null || true
+    pkill -TERM -P $$ 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+        kill -0 "$BIN_PID" 2>/dev/null || break
+        sleep 0.1
+    done
+    kill -KILL "$BIN_PID" 2>/dev/null || true
+    pkill -KILL -P $$ 2>/dev/null || true
     exit 0
 }
 trap cleanup INT TERM EXIT

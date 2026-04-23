@@ -3,10 +3,18 @@
 // reactjit dev host over /tmp/reactjit.sock.
 //
 // Usage: node scripts/watch-and-push.mjs <cart-name> <cart-file> <out-path>
+//
+// The esbuild config comes from scripts/esbuild-config.mjs — same module
+// scripts/internal/cart-bundle.mjs uses — so the startup bundle and every
+// watcher-pushed rebuild share identical options. Previously each script
+// carried its own copy; drift between them caused live bugs (factory name
+// mismatches, missing injects, etc.). This file only adds the push-on-rebuild
+// plugin on top.
 
 import { context } from 'esbuild';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { cartEsbuildOptions } from './esbuild-config.mjs';
 
 const [cartName, cartFile, outPath] = process.argv.slice(2);
 if (!cartName || !cartFile || !outPath) {
@@ -15,19 +23,9 @@ if (!cartName || !cartFile || !outPath) {
 }
 
 const rootDir = path.resolve(import.meta.dirname, '..');
-const runtimeDir = path.join(rootDir, 'runtime');
 const entryAbs = path.resolve(rootDir, cartFile);
 const outAbs = path.resolve(rootDir, outPath);
 const pushScript = path.join(import.meta.dirname, 'push-bundle.mjs');
-
-// Virtualize `./current_app` → this session's cart entry. Avoids writing to
-// a shared runtime/current_app.tsx file that other dev sessions might race on.
-const cartEntryPlugin = {
-  name: 'cart-entry',
-  setup(b) {
-    b.onResolve({ filter: /^\.\/current_app$/ }, () => ({ path: entryAbs }));
-  },
-};
 
 const pushPlugin = {
   name: 'push-on-rebuild',
@@ -47,18 +45,12 @@ const pushPlugin = {
   },
 };
 
-const ctx = await context({
-  absWorkingDir: rootDir,
-  entryPoints: [path.join(runtimeDir, 'index.tsx')],
-  bundle: true,
+const ctx = await context(cartEsbuildOptions({
+  rootDir,
   outfile: outAbs,
-  format: 'iife',
-  inject: [path.join(runtimeDir, 'jsx_shim.ts')],
-  jsxFactory: 'h',
-  jsxFragment: 'Fragment',
-  alias: { '@reactjit/core': './runtime/core_stub.ts' },
-  plugins: [cartEntryPlugin, pushPlugin],
-});
+  cartEntryAbs: entryAbs,
+  extraPlugins: [pushPlugin],
+}));
 
 await ctx.watch();
 console.log(`[dev] watching ${cartFile} — edits rebuild + push automatically (ctrl-c to stop)`);

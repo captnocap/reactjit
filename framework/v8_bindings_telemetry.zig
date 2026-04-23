@@ -1,0 +1,1392 @@
+const std = @import("std");
+const v8 = @import("v8");
+const v8rt = @import("v8_runtime.zig");
+const qjs_runtime = @import("qjs_runtime.zig");
+const telemetry = @import("telemetry.zig");
+const localstore = @import("localstore.zig");
+const hotstate = @import("hotstate.zig");
+const sqlite_mod = @import("sqlite.zig");
+const pty_mod = @import("pty.zig");
+
+extern fn heavy_compute(n: c_long) c_long;
+extern fn heavy_compute_timed(n: c_long) c_long;
+extern fn set_compute_n(n: c_long) void;
+extern fn sqlite3_column_name(stmt: *anyopaque, N: c_int) ?[*:0]const u8;
+
+const MAX_PTYS: usize = 16;
+var g_ptys: [MAX_PTYS]?pty_mod.Pty = .{null} ** MAX_PTYS;
+var g_active_pty_handle: u8 = 0;
+var g_sql_dbs: ?std.AutoHashMap(u32, *sqlite_mod.Database) = null;
+var g_sql_next_id: u32 = 1;
+
+const LS_NS: []const u8 = "app";
+const HTTP_MAX_HEADERS: usize = 16;
+
+fn currentContext(info: v8.FunctionCallbackInfo) v8.Context {
+    return info.getIsolate().getCurrentContext();
+}
+
+fn retUndefined(info_c: ?*const v8.c.FunctionCallbackInfo) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    info.getReturnValue().set(info.getIsolate().initUndefined().toValue());
+}
+
+fn setNumberReturn(info: v8.FunctionCallbackInfo, n: f64) void {
+    const iso = info.getIsolate();
+    info.getReturnValue().set(iso.initNumber(n).toValue());
+}
+
+fn setBoolReturn(info: v8.FunctionCallbackInfo, b: bool) void {
+    const iso = info.getIsolate();
+    info.getReturnValue().set(iso.initBoolean(b));
+}
+
+fn setStringReturn(info: v8.FunctionCallbackInfo, s: []const u8) void {
+    const iso = info.getIsolate();
+    info.getReturnValue().set(iso.initStringUtf8(s).toValue());
+}
+
+fn setNullReturn(info: v8.FunctionCallbackInfo) void {
+    const iso = info.getIsolate();
+    info.getReturnValue().set(iso.initNull().toValue());
+}
+
+fn setObjectNumber(ctx: v8.Context, obj: v8.Object, key: []const u8, val: anytype) void {
+    const iso = ctx.getIsolate();
+    const k = iso.initStringUtf8(key);
+    const n = iso.initNumber(@floatFromInt(val));
+    _ = obj.setValue(ctx, k.toValue(), n.toValue());
+}
+
+fn setObjectFloat(ctx: v8.Context, obj: v8.Object, key: []const u8, val: f64) void {
+    const iso = ctx.getIsolate();
+    const k = iso.initStringUtf8(key);
+    const n = iso.initNumber(val);
+    _ = obj.setValue(ctx, k.toValue(), n.toValue());
+}
+
+fn setObjectBool(ctx: v8.Context, obj: v8.Object, key: []const u8, val: bool) void {
+    const iso = ctx.getIsolate();
+    const k = iso.initStringUtf8(key);
+    const b = iso.initBoolean(val);
+    _ = obj.setValue(ctx, k.toValue(), b);
+}
+
+fn setObjectString(ctx: v8.Context, obj: v8.Object, key: []const u8, val: []const u8) void {
+    const iso = ctx.getIsolate();
+    const k = iso.initStringUtf8(key);
+    const s = iso.initStringUtf8(val);
+    _ = obj.setValue(ctx, k.toValue(), s.toValue());
+}
+
+fn argI32(info: v8.FunctionCallbackInfo, idx: u32, default: i32) i32 {
+    if (idx >= info.length()) return default;
+    const ctx = currentContext(info);
+    return info.getArg(idx).toI32(ctx) catch default;
+}
+
+fn argU32(info: v8.FunctionCallbackInfo, idx: u32, default: u32) u32 {
+    if (idx >= info.length()) return default;
+    const ctx = currentContext(info);
+    return info.getArg(idx).toU32(ctx) catch default;
+}
+
+fn argF64(info: v8.FunctionCallbackInfo, idx: u32, default: f64) f64 {
+    if (idx >= info.length()) return default;
+    const ctx = currentContext(info);
+    return info.getArg(idx).toF64(ctx) catch default;
+}
+
+fn argOwnedUtf8(alloc: std.mem.Allocator, info: v8.FunctionCallbackInfo, idx: u32) ?[]u8 {
+    if (idx >= info.length()) return null;
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const str = info.getArg(idx).toString(ctx) catch return null;
+    const n = str.lenUtf8(iso);
+    const buf = alloc.alloc(u8, n) catch return null;
+    _ = str.writeUtf8(iso, buf);
+    return buf;
+}
+
+fn argOwnedUtf8Z(alloc: std.mem.Allocator, info: v8.FunctionCallbackInfo, idx: u32) ?[:0]u8 {
+    if (idx >= info.length()) return null;
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const str = info.getArg(idx).toString(ctx) catch return null;
+    const n = str.lenUtf8(iso);
+    const buf = alloc.allocSentinel(u8, n, 0) catch return null;
+    _ = str.writeUtf8(iso, buf[0..n]);
+    return buf;
+}
+
+fn argJsonString(alloc: std.mem.Allocator, info: v8.FunctionCallbackInfo, idx: u32) ?[]u8 {
+    return argOwnedUtf8(alloc, info, idx);
+}
+
+fn appendJsonEscaped(out: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
+    try out.append(alloc, '"');
+    for (s) |ch| switch (ch) {
+        '"' => try out.appendSlice(alloc, "\\\""),
+        '\\' => try out.appendSlice(alloc, "\\\\"),
+        '\n' => try out.appendSlice(alloc, "\\n"),
+        '\r' => try out.appendSlice(alloc, "\\r"),
+        '\t' => try out.appendSlice(alloc, "\\t"),
+        0...8, 11, 12, 14...31 => try out.writer(alloc).print("\\u{x:0>4}", .{ch}),
+        else => try out.append(alloc, ch),
+    };
+    try out.append(alloc, '"');
+}
+
+fn jsValueOrEmptyString(iso: v8.Isolate, s: []const u8) v8.Value {
+    return iso.initStringUtf8(s).toValue();
+}
+
+fn getFpsCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setNumberReturn(info, @floatFromInt(qjs_runtime.telemetry_fps));
+}
+
+fn getLayoutUsCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setNumberReturn(info, @floatFromInt(qjs_runtime.telemetry_layout_us));
+}
+
+fn getPaintUsCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setNumberReturn(info, @floatFromInt(qjs_runtime.telemetry_paint_us));
+}
+
+fn getTickUsCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setNumberReturn(info, @floatFromInt(qjs_runtime.telemetry_tick_us));
+}
+
+fn telFrameCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "fps", s.fps);
+    setObjectNumber(ctx, obj, "tick_us", s.tick_us);
+    setObjectNumber(ctx, obj, "layout_us", s.layout_us);
+    setObjectNumber(ctx, obj, "paint_us", s.paint_us);
+    setObjectNumber(ctx, obj, "frame_total_us", s.frame_total_us);
+    setObjectNumber(ctx, obj, "frame_number", s.frame_number);
+    setObjectNumber(ctx, obj, "bridge_calls_per_sec", s.bridge_calls_per_sec);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telGpuCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "rect_count", s.rect_count);
+    setObjectNumber(ctx, obj, "glyph_count", s.glyph_count);
+    setObjectNumber(ctx, obj, "rect_capacity", s.rect_capacity);
+    setObjectNumber(ctx, obj, "glyph_capacity", s.glyph_capacity);
+    setObjectNumber(ctx, obj, "atlas_glyph_count", s.atlas_glyph_count);
+    setObjectNumber(ctx, obj, "atlas_capacity", s.atlas_capacity);
+    setObjectNumber(ctx, obj, "atlas_row_x", s.atlas_row_x);
+    setObjectNumber(ctx, obj, "atlas_row_y", s.atlas_row_y);
+    setObjectNumber(ctx, obj, "scissor_depth", s.scissor_depth);
+    setObjectNumber(ctx, obj, "scissor_segment_count", s.scissor_segment_count);
+    setObjectNumber(ctx, obj, "gpu_surface_w", s.gpu_surface_w);
+    setObjectNumber(ctx, obj, "gpu_surface_h", s.gpu_surface_h);
+    setObjectNumber(ctx, obj, "frame_hash", s.frame_hash);
+    setObjectNumber(ctx, obj, "frames_since_drain", s.frames_since_drain);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telNodesCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "total", s.total_nodes);
+    setObjectNumber(ctx, obj, "visible", s.visible_nodes);
+    setObjectNumber(ctx, obj, "hidden", s.hidden_nodes);
+    setObjectNumber(ctx, obj, "zero_size", s.zero_size_nodes);
+    setObjectNumber(ctx, obj, "max_depth", s.max_depth);
+    setObjectNumber(ctx, obj, "scroll", s.scroll_nodes);
+    setObjectNumber(ctx, obj, "text", s.text_nodes);
+    setObjectNumber(ctx, obj, "image", s.image_nodes);
+    setObjectNumber(ctx, obj, "pressable", s.pressable_nodes);
+    setObjectNumber(ctx, obj, "canvas", s.canvas_nodes);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telStateCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "slot_count", s.state_slot_count);
+    setObjectNumber(ctx, obj, "slot_capacity", s.state_slot_capacity);
+    setObjectBool(ctx, obj, "dirty", s.state_dirty);
+    setObjectNumber(ctx, obj, "array_slot_count", s.array_slot_count);
+    setObjectNumber(ctx, obj, "array_slot_capacity", s.array_slot_capacity);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telSystemCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "window_x", s.window_x);
+    setObjectNumber(ctx, obj, "window_y", s.window_y);
+    setObjectNumber(ctx, obj, "window_w", s.window_w);
+    setObjectNumber(ctx, obj, "window_h", s.window_h);
+    setObjectNumber(ctx, obj, "display_count", s.display_count);
+    setObjectNumber(ctx, obj, "current_display", s.current_display);
+    setObjectNumber(ctx, obj, "display_w", s.display_w);
+    setObjectNumber(ctx, obj, "display_h", s.display_h);
+    setObjectNumber(ctx, obj, "breakpoint", s.breakpoint_tier);
+    setObjectNumber(ctx, obj, "secondary_windows", s.secondary_window_count);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telInputCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "focused_id", s.focused_input_id);
+    setObjectNumber(ctx, obj, "active_count", s.active_input_count);
+    setObjectBool(ctx, obj, "has_selection", s.has_selection);
+    setObjectBool(ctx, obj, "selection_dragging", s.selection_dragging);
+    setObjectBool(ctx, obj, "tooltip_visible", s.tooltip_visible);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telCanvasCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectFloat(ctx, obj, "cam_x", s.canvas_cam_x);
+    setObjectFloat(ctx, obj, "cam_y", s.canvas_cam_y);
+    setObjectFloat(ctx, obj, "cam_zoom", s.canvas_cam_zoom);
+    setObjectNumber(ctx, obj, "type_count", s.canvas_type_count);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telNetCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "active_connections", s.net_active_connections);
+    setObjectNumber(ctx, obj, "open_connections", s.net_open_connections);
+    setObjectNumber(ctx, obj, "reconnecting", s.net_reconnecting);
+    setObjectNumber(ctx, obj, "event_queue_depth", s.net_event_queue_depth);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telLayoutCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const s = telemetry.current;
+    const obj = iso.initObject();
+    setObjectNumber(ctx, obj, "budget", s.layout_budget);
+    setObjectNumber(ctx, obj, "budget_used", s.layout_budget_used);
+    setObjectNumber(ctx, obj, "route_history_depth", s.route_history_depth);
+    setObjectNumber(ctx, obj, "route_current_index", s.route_current_index);
+    setObjectNumber(ctx, obj, "log_channels_enabled", s.log_channels_enabled);
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telHistoryCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    var count: i32 = 40;
+    if (info.length() >= 1) count = argI32(info, 0, 40);
+    const n: usize = @intCast(@max(1, @min(count, 120)));
+    const avail = telemetry.historyCount();
+    const actual = @min(n, avail);
+    const arr = iso.initArray(@intCast(actual));
+    for (0..actual) |i| {
+        if (telemetry.getHistory(i)) |snap| {
+            _ = arr.castTo(v8.Object).setValueAtIndex(ctx, @intCast(i), iso.initNumber(@floatFromInt(snap.frame_total_us)).toValue());
+        }
+    }
+    info.getReturnValue().set(arr.castTo(v8.Object).toValue());
+}
+
+fn telNodeCountCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setNumberReturn(info, @floatFromInt(telemetry.nodeCount()));
+}
+
+fn telNodeCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    if (info.length() < 1) {
+        retUndefined(info_c);
+        return;
+    }
+    const idx = argI32(info, 0, -1);
+    if (idx < 0) {
+        retUndefined(info_c);
+        return;
+    }
+    const node = telemetry.getNode(@intCast(idx)) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    const obj = iso.initObject();
+    const depth = telemetry.getNodeDepth(@intCast(idx));
+    setObjectNumber(ctx, obj, "depth", depth);
+    setObjectNumber(ctx, obj, "child_count", node.children.len);
+    setObjectFloat(ctx, obj, "x", node.computed.x);
+    setObjectFloat(ctx, obj, "y", node.computed.y);
+    setObjectFloat(ctx, obj, "w", node.computed.w);
+    setObjectFloat(ctx, obj, "h", node.computed.h);
+    setObjectBool(ctx, obj, "has_text", node.text != null);
+    setObjectBool(ctx, obj, "has_image", node.image_src != null);
+    setObjectBool(ctx, obj, "has_handler", node.handlers.on_press != null);
+    setObjectBool(ctx, obj, "has_tooltip", node.tooltip != null);
+    setObjectNumber(ctx, obj, "font_size", node.font_size);
+    setObjectFloat(ctx, obj, "opacity", node.style.opacity);
+    setObjectFloat(ctx, obj, "scroll_y", node.scroll_y);
+    setObjectFloat(ctx, obj, "content_height", node.content_height);
+    const tag = node.debug_name orelse telemetry.nodeTypeName(node);
+    setObjectString(ctx, obj, "tag", tag);
+    setObjectNumber(ctx, obj, "display", @intFromEnum(node.style.display));
+    setObjectNumber(ctx, obj, "flex_direction", @intFromEnum(node.style.flex_direction));
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telNodeStyleCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    if (info.length() < 1) {
+        retUndefined(info_c);
+        return;
+    }
+    const idx = argI32(info, 0, -1);
+    if (idx < 0) {
+        retUndefined(info_c);
+        return;
+    }
+    const node = telemetry.getNode(@intCast(idx)) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    const sty = node.style;
+    const obj = iso.initObject();
+
+    if (sty.width) |v| setObjectFloat(ctx, obj, "width", v) else setObjectNumber(ctx, obj, "width", -1);
+    if (sty.height) |v| setObjectFloat(ctx, obj, "height", v) else setObjectNumber(ctx, obj, "height", -1);
+    if (sty.min_width) |v| setObjectFloat(ctx, obj, "min_width", v);
+    if (sty.max_width) |v| setObjectFloat(ctx, obj, "max_width", v);
+    if (sty.min_height) |v| setObjectFloat(ctx, obj, "min_height", v);
+    if (sty.max_height) |v| setObjectFloat(ctx, obj, "max_height", v);
+
+    setObjectFloat(ctx, obj, "flex_grow", sty.flex_grow);
+    if (sty.flex_shrink) |v| setObjectFloat(ctx, obj, "flex_shrink", v);
+    if (sty.flex_basis) |v| setObjectFloat(ctx, obj, "flex_basis", v);
+    setObjectNumber(ctx, obj, "flex_direction", @intFromEnum(sty.flex_direction));
+    setObjectNumber(ctx, obj, "justify_content", @intFromEnum(sty.justify_content));
+    setObjectNumber(ctx, obj, "align_items", @intFromEnum(sty.align_items));
+    setObjectNumber(ctx, obj, "align_self", @intFromEnum(sty.align_self));
+    setObjectFloat(ctx, obj, "gap", sty.gap);
+
+    setObjectFloat(ctx, obj, "padding", sty.padding);
+    if (sty.padding_left) |v| setObjectFloat(ctx, obj, "padding_left", v);
+    if (sty.padding_right) |v| setObjectFloat(ctx, obj, "padding_right", v);
+    if (sty.padding_top) |v| setObjectFloat(ctx, obj, "padding_top", v);
+    if (sty.padding_bottom) |v| setObjectFloat(ctx, obj, "padding_bottom", v);
+
+    setObjectFloat(ctx, obj, "margin", sty.margin);
+    if (sty.margin_left) |v| setObjectFloat(ctx, obj, "margin_left", v);
+    if (sty.margin_right) |v| setObjectFloat(ctx, obj, "margin_right", v);
+    if (sty.margin_top) |v| setObjectFloat(ctx, obj, "margin_top", v);
+    if (sty.margin_bottom) |v| setObjectFloat(ctx, obj, "margin_bottom", v);
+
+    setObjectFloat(ctx, obj, "border_radius", sty.border_radius);
+    setObjectFloat(ctx, obj, "border_width", sty.border_width);
+    if (sty.border_top_width) |v| setObjectFloat(ctx, obj, "border_top_width", v);
+    if (sty.border_right_width) |v| setObjectFloat(ctx, obj, "border_right_width", v);
+    if (sty.border_bottom_width) |v| setObjectFloat(ctx, obj, "border_bottom_width", v);
+    if (sty.border_left_width) |v| setObjectFloat(ctx, obj, "border_left_width", v);
+    setObjectFloat(ctx, obj, "opacity", sty.opacity);
+    setObjectNumber(ctx, obj, "z_index", sty.z_index);
+    setObjectFloat(ctx, obj, "rotation", sty.rotation);
+    setObjectFloat(ctx, obj, "scale_x", sty.scale_x);
+    setObjectFloat(ctx, obj, "scale_y", sty.scale_y);
+
+    if (sty.background_color) |bg| {
+        setObjectNumber(ctx, obj, "bg_r", bg.r);
+        setObjectNumber(ctx, obj, "bg_g", bg.g);
+        setObjectNumber(ctx, obj, "bg_b", bg.b);
+        setObjectNumber(ctx, obj, "bg_a", bg.a);
+    }
+    if (sty.border_color) |bc| {
+        setObjectNumber(ctx, obj, "border_r", bc.r);
+        setObjectNumber(ctx, obj, "border_g", bc.g);
+        setObjectNumber(ctx, obj, "border_b", bc.b);
+        setObjectNumber(ctx, obj, "border_a", bc.a);
+    }
+
+    setObjectNumber(ctx, obj, "position", @intFromEnum(sty.position));
+    if (sty.top) |v| setObjectFloat(ctx, obj, "top", v);
+    if (sty.left) |v| setObjectFloat(ctx, obj, "left", v);
+    if (sty.right) |v| setObjectFloat(ctx, obj, "right", v);
+    if (sty.bottom) |v| setObjectFloat(ctx, obj, "bottom", v);
+
+    setObjectNumber(ctx, obj, "overflow", @intFromEnum(sty.overflow));
+    setObjectNumber(ctx, obj, "display", @intFromEnum(sty.display));
+    setObjectNumber(ctx, obj, "text_align", @intFromEnum(sty.text_align));
+
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn telNodeBoxModelCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    if (info.length() < 1) {
+        retUndefined(info_c);
+        return;
+    }
+    const idx = argI32(info, 0, -1);
+    if (idx < 0) {
+        retUndefined(info_c);
+        return;
+    }
+    const node = telemetry.getNode(@intCast(idx)) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    const sty = node.style;
+    const r = node.computed;
+    const obj = iso.initObject();
+    setObjectFloat(ctx, obj, "x", r.x);
+    setObjectFloat(ctx, obj, "y", r.y);
+    setObjectFloat(ctx, obj, "w", r.w);
+    setObjectFloat(ctx, obj, "h", r.h);
+    setObjectFloat(ctx, obj, "pad_top", sty.padTop());
+    setObjectFloat(ctx, obj, "pad_right", sty.padRight());
+    setObjectFloat(ctx, obj, "pad_bottom", sty.padBottom());
+    setObjectFloat(ctx, obj, "pad_left", sty.padLeft());
+    setObjectFloat(ctx, obj, "margin_top", sty.margin_top orelse sty.margin);
+    setObjectFloat(ctx, obj, "margin_right", sty.margin_right orelse sty.margin);
+    setObjectFloat(ctx, obj, "margin_bottom", sty.margin_bottom orelse sty.margin);
+    setObjectFloat(ctx, obj, "margin_left", sty.margin_left orelse sty.margin);
+    setObjectFloat(ctx, obj, "border_width", sty.border_width);
+    setObjectFloat(ctx, obj, "border_top_width", sty.brdTop());
+    setObjectFloat(ctx, obj, "border_right_width", sty.brdRight());
+    setObjectFloat(ctx, obj, "border_bottom_width", sty.brdBottom());
+    setObjectFloat(ctx, obj, "border_left_width", sty.brdLeft());
+    const pl = sty.padLeft();
+    const pr = sty.padRight();
+    const pt = sty.padTop();
+    const pb = sty.padBottom();
+    setObjectFloat(ctx, obj, "content_w", @max(0, r.w - pl - pr));
+    setObjectFloat(ctx, obj, "content_h", @max(0, r.h - pt - pb));
+    info.getReturnValue().set(obj.toValue());
+}
+
+fn ptyOpenCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    var cols: u16 = 80;
+    var rows: u16 = 24;
+    const alloc = std.heap.page_allocator;
+    var shell: ?[:0]u8 = null;
+    var cwd: ?[:0]u8 = null;
+    if (info.length() >= 1) {
+        const v = argI32(info, 0, 80);
+        if (v > 0) cols = @intCast(v);
+    }
+    if (info.length() >= 2) {
+        const v = argI32(info, 1, 24);
+        if (v > 0) rows = @intCast(v);
+    }
+    if (info.length() >= 3) {
+        shell = argOwnedUtf8Z(alloc, info, 2);
+    }
+    if (info.length() >= 4) {
+        cwd = argOwnedUtf8Z(alloc, info, 3);
+    }
+    defer if (shell) |value| alloc.free(value);
+    defer if (cwd) |value| alloc.free(value);
+    const slot = blk: {
+        var idx: usize = 0;
+        while (idx < MAX_PTYS) : (idx += 1) {
+            if (g_ptys[idx] == null) break :blk idx;
+        }
+        setNumberReturn(info, -1);
+        return;
+    };
+    _ = ctx;
+    g_ptys[slot] = pty_mod.openPty(.{
+        .cols = cols,
+        .rows = rows,
+        .shell = if (shell) |value| value.ptr else "bash",
+        .cwd = if (cwd) |value| value.ptr else null,
+    }) catch {
+        setNumberReturn(info, -1);
+        return;
+    };
+    if (g_active_pty_handle == 0) g_active_pty_handle = @intCast(slot + 1);
+    setNumberReturn(info, @as(f64, @floatFromInt(slot + 1)));
+}
+
+fn ptyReadCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            if (p.readData()) |data| {
+                info.getReturnValue().set(iso.initStringUtf8(data).toValue());
+                return;
+            }
+        }
+    }
+    retUndefined(info_c);
+}
+
+fn ptyWriteCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const handle = argI32(info, 0, 0);
+    const str = argOwnedUtf8(alloc, info, 1) orelse return;
+    defer alloc.free(str);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| _ = p.writeData(str);
+    }
+    retUndefined(info_c);
+}
+
+fn ptyAliveCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            const ok = p.alive();
+            if (!ok) {
+                p.closePty();
+                g_ptys[@intCast(handle - 1)] = null;
+                if (g_active_pty_handle == handle) g_active_pty_handle = 0;
+            }
+            setNumberReturn(info, if (ok) 1 else 0);
+            return;
+        }
+    }
+    setNumberReturn(info, 0);
+}
+
+fn ptyCloseCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| p.closePty();
+        g_ptys[@intCast(handle - 1)] = null;
+        if (g_active_pty_handle == handle) g_active_pty_handle = 0;
+    }
+    retUndefined(info_c);
+}
+
+fn ptyFocusCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS and g_ptys[@intCast(handle - 1)] != null) {
+        g_active_pty_handle = @intCast(handle);
+    } else {
+        g_active_pty_handle = 0;
+    }
+    retUndefined(info_c);
+}
+
+fn ptyCwdCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            var path_buf: [64]u8 = undefined;
+            const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
+                setStringReturn(info, "");
+                return;
+            };
+            var cwd_buf: [4096]u8 = undefined;
+            const cwd = std.posix.readlink(path, &cwd_buf) catch {
+                setStringReturn(info, "");
+                return;
+            };
+            setStringReturn(info, cwd);
+            return;
+        }
+    }
+    setStringReturn(info, "");
+}
+
+fn readProcField(pid: u32, field: []const u8, buf: []u8) ![]const u8 {
+    var path_buf: [256]u8 = undefined;
+    const path = try std.fmt.bufPrintZ(&path_buf, "/proc/{d}/{s}", .{ pid, field });
+    var file = std.fs.openFileAbsoluteZ(path, .{}) catch return error.NotFound;
+    defer file.close();
+    const n = file.readAll(buf) catch return error.NotFound;
+    var slice = buf[0..n];
+    while (slice.len > 0 and (slice[slice.len - 1] == '\n' or slice[slice.len - 1] == 0)) {
+        slice = slice[0 .. slice.len - 1];
+    }
+    return slice;
+}
+
+fn getProcessesJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const c2 = iso.getCurrentContext();
+    const alloc = std.heap.page_allocator;
+    var list: std.ArrayList(u8) = .{};
+    defer list.deinit(alloc);
+    list.append(alloc, '[') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+
+    var proc_dir = std.fs.openDirAbsolute("/proc", .{ .iterate = true }) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer proc_dir.close();
+
+    var it = proc_dir.iterate();
+    var first = true;
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        const pid = std.fmt.parseInt(u32, entry.name, 10) catch continue;
+
+        var name_buf: [256]u8 = undefined;
+        const name = readProcField(pid, "comm", &name_buf) catch continue;
+
+        var task_path_buf: [256]u8 = undefined;
+        const task_path = std.fmt.bufPrintZ(&task_path_buf, "/proc/{d}/task", .{pid}) catch continue;
+        var task_dir = std.fs.openDirAbsoluteZ(task_path, .{ .iterate = true }) catch continue;
+        defer task_dir.close();
+        var nthreads: u32 = 0;
+        var tit = task_dir.iterate();
+        while (tit.next() catch null) |tentry| {
+            if (tentry.kind == .directory) nthreads += 1;
+        }
+
+        if (!first) list.append(alloc, ',') catch break;
+        first = false;
+        list.writer(alloc).print("{{\"pid\":{d},\"nthreads\":{d},\"name\":", .{ pid, nthreads }) catch break;
+        appendJsonEscaped(&list, alloc, name) catch break;
+        list.append(alloc, '}') catch break;
+    }
+    list.append(alloc, ']') catch {};
+    _ = c2;
+    setStringReturn(info, list.items);
+}
+
+const ThreadStat = struct { core: i32 = -1, cputime: u64 = 0 };
+
+fn readThreadStat(pid: u32, tid: u32) ThreadStat {
+    var stat_path_buf: [256]u8 = undefined;
+    const stat_path = std.fmt.bufPrintZ(&stat_path_buf, "/proc/{d}/task/{d}/stat", .{ pid, tid }) catch return .{};
+    var file = std.fs.openFileAbsoluteZ(stat_path, .{}) catch return .{};
+    defer file.close();
+    var buf: [1024]u8 = undefined;
+    const n = file.readAll(&buf) catch return .{};
+    const data = buf[0..n];
+    const rparen = std.mem.lastIndexOfScalar(u8, data, ')') orelse return .{};
+    var rest = data[rparen + 1 ..];
+    var field: usize = 3;
+    var idx: usize = 0;
+    var utime: u64 = 0;
+    var stime: u64 = 0;
+    var core: i32 = -1;
+    while (idx < rest.len) {
+        while (idx < rest.len and rest[idx] == ' ') idx += 1;
+        const start = idx;
+        while (idx < rest.len and rest[idx] != ' ' and rest[idx] != '\n') idx += 1;
+        const tok = rest[start..idx];
+        if (tok.len == 0) break;
+        if (field == 14) utime = std.fmt.parseInt(u64, tok, 10) catch 0;
+        if (field == 15) stime = std.fmt.parseInt(u64, tok, 10) catch 0;
+        if (field == 39) core = std.fmt.parseInt(i32, tok, 10) catch -1;
+        field += 1;
+        if (field > 40) break;
+    }
+    return .{ .core = core, .cputime = utime + stime };
+}
+
+fn getThreadsJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const iso = info.getIsolate();
+    const c2 = iso.getCurrentContext();
+    const alloc = std.heap.page_allocator;
+    if (info.length() < 1) {
+        setStringReturn(info, "[]");
+        return;
+    }
+    const pid_f = argF64(info, 0, 0);
+    const pid: u32 = @intFromFloat(pid_f);
+    var list: std.ArrayList(u8) = .{};
+    defer list.deinit(alloc);
+    list.append(alloc, '[') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+
+    var task_path_buf: [256]u8 = undefined;
+    const task_path = std.fmt.bufPrintZ(&task_path_buf, "/proc/{d}/task", .{pid}) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    var task_dir = std.fs.openDirAbsoluteZ(task_path, .{ .iterate = true }) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer task_dir.close();
+
+    var it = task_dir.iterate();
+    var first = true;
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        const tid = std.fmt.parseInt(u32, entry.name, 10) catch continue;
+        var comm_path_buf: [256]u8 = undefined;
+        const comm_path = std.fmt.bufPrintZ(&comm_path_buf, "/proc/{d}/task/{d}/comm", .{ pid, tid }) catch continue;
+        var file = std.fs.openFileAbsoluteZ(comm_path, .{}) catch continue;
+        defer file.close();
+        var name_buf: [256]u8 = undefined;
+        const n = file.readAll(&name_buf) catch continue;
+        var name = name_buf[0..n];
+        while (name.len > 0 and (name[name.len - 1] == '\n' or name[name.len - 1] == 0)) {
+            name = name[0 .. name.len - 1];
+        }
+        const tstat = readThreadStat(pid, tid);
+        if (!first) list.append(alloc, ',') catch break;
+        first = false;
+        list.writer(alloc).print("{{\"tid\":{d},\"core\":{d},\"cpu\":{d},\"name\":", .{ tid, tstat.core, tstat.cputime }) catch break;
+        appendJsonEscaped(&list, alloc, name) catch break;
+        list.append(alloc, '}') catch break;
+    }
+    list.append(alloc, ']') catch {};
+    _ = c2;
+    setStringReturn(info, list.items);
+}
+
+fn getCoreCountCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    var count: u32 = 0;
+    var cpu_dir = std.fs.openDirAbsolute("/sys/devices/system/cpu", .{ .iterate = true }) catch {
+        setNumberReturn(info, 1);
+        return;
+    };
+    defer cpu_dir.close();
+    var it = cpu_dir.iterate();
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        if (entry.name.len < 4) continue;
+        if (!std.mem.startsWith(u8, entry.name, "cpu")) continue;
+        _ = std.fmt.parseInt(u32, entry.name[3..], 10) catch continue;
+        count += 1;
+    }
+    if (count == 0) count = 1;
+    setNumberReturn(info, @floatFromInt(count));
+}
+
+fn heavyComputeCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        setNumberReturn(info, 0);
+        return;
+    }
+    const n = argI32(info, 0, 0);
+    setNumberReturn(info, @floatFromInt(heavy_compute(@intCast(n))));
+}
+
+fn heavyComputeTimedCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        setNumberReturn(info, 0);
+        return;
+    }
+    const n = argI32(info, 0, 0);
+    setNumberReturn(info, @floatFromInt(heavy_compute_timed(@intCast(n))));
+}
+
+fn setComputeNCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        retUndefined(info_c);
+        return;
+    }
+    const n = argI32(info, 0, 0);
+    set_compute_n(@intCast(n));
+    retUndefined(info_c);
+}
+
+fn sqlDbs() *std.AutoHashMap(u32, *sqlite_mod.Database) {
+    if (g_sql_dbs == null) {
+        g_sql_dbs = std.AutoHashMap(u32, *sqlite_mod.Database).init(std.heap.page_allocator);
+    }
+    return &g_sql_dbs.?;
+}
+
+fn sqlOpenCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const path = argOwnedUtf8(alloc, info, 0) orelse {
+        setNumberReturn(info, 0);
+        return;
+    };
+    defer alloc.free(path);
+    const db_ptr = alloc.create(sqlite_mod.Database) catch {
+        setNumberReturn(info, 0);
+        return;
+    };
+    db_ptr.* = sqlite_mod.Database.open(path) catch {
+        alloc.destroy(db_ptr);
+        setNumberReturn(info, 0);
+        return;
+    };
+    const id = g_sql_next_id;
+    g_sql_next_id += 1;
+    sqlDbs().put(id, db_ptr) catch {
+        db_ptr.close();
+        alloc.destroy(db_ptr);
+        setNumberReturn(info, 0);
+        return;
+    };
+    setNumberReturn(info, @floatFromInt(id));
+}
+
+fn sqlCloseCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        retUndefined(info_c);
+        return;
+    }
+    const id: u32 = @intCast(@max(0, argI32(info, 0, 0)));
+    if (sqlDbs().fetchRemove(id)) |kv| {
+        kv.value.close();
+        std.heap.page_allocator.destroy(kv.value);
+    }
+    retUndefined(info_c);
+}
+
+const SqlRequest = struct {
+    parsed: std.json.Parsed(std.json.Value),
+    sql: []const u8,
+    params: []const std.json.Value,
+
+    fn deinit(self: *SqlRequest) void {
+        self.parsed.deinit();
+    }
+};
+
+fn parseSqlRequest(json_str: []const u8) ?SqlRequest {
+    var parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, json_str, .{}) catch return null;
+    const root = parsed.value;
+    if (root != .object) {
+        parsed.deinit();
+        return null;
+    }
+    const sql_v = root.object.get("sql") orelse {
+        parsed.deinit();
+        return null;
+    };
+    if (sql_v != .string) {
+        parsed.deinit();
+        return null;
+    }
+    const params_slice: []const std.json.Value = blk: {
+        if (root.object.get("params")) |p| {
+            if (p == .array) break :blk p.array.items;
+        }
+        break :blk &[_]std.json.Value{};
+    };
+    return .{ .parsed = parsed, .sql = sql_v.string, .params = params_slice };
+}
+
+fn bindParams(stmt: *sqlite_mod.Statement, params: []const std.json.Value) sqlite_mod.SqliteError!void {
+    for (params, 0..) |p, i| {
+        const idx: c_int = @intCast(i + 1);
+        switch (p) {
+            .null => try stmt.bindNull(idx),
+            .bool => |b| try stmt.bindInt(idx, if (b) 1 else 0),
+            .integer => |v| try stmt.bindInt(idx, v),
+            .float => |v| try stmt.bindFloat(idx, v),
+            .number_string => |s| try stmt.bindText(idx, s),
+            .string => |s| try stmt.bindText(idx, s),
+            .array, .object => try stmt.bindNull(idx),
+        }
+    }
+}
+
+fn execSqlStmt(db: *sqlite_mod.Database, sql: []const u8, params: []const std.json.Value) !void {
+    const alloc = std.heap.page_allocator;
+    const sql_z = try alloc.allocSentinel(u8, sql.len, 0);
+    defer alloc.free(sql_z);
+    @memcpy(sql_z[0..sql.len], sql);
+    var stmt = try db.prepare(sql_z.ptr);
+    defer stmt.deinit();
+    try bindParams(&stmt, params);
+    _ = try stmt.step();
+}
+
+fn sqlExecCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    if (info.length() < 2) {
+        setBoolReturn(info, false);
+        return;
+    }
+    const id: u32 = @intCast(@max(0, argI32(info, 0, 0)));
+    const db_ptr = sqlDbs().get(id) orelse {
+        setBoolReturn(info, false);
+        return;
+    };
+    const json = argOwnedUtf8(alloc, info, 1) orelse {
+        setBoolReturn(info, false);
+        return;
+    };
+    defer alloc.free(json);
+    var req = parseSqlRequest(json) orelse {
+        setBoolReturn(info, false);
+        return;
+    };
+    defer req.deinit();
+    execSqlStmt(db_ptr, req.sql, req.params) catch {
+        setBoolReturn(info, false);
+        return;
+    };
+    setBoolReturn(info, true);
+}
+
+fn sqlQueryJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    if (info.length() < 2) {
+        setStringReturn(info, "[]");
+        return;
+    }
+    const id: u32 = @intCast(@max(0, argI32(info, 0, 0)));
+    const db_ptr = sqlDbs().get(id) orelse {
+        setStringReturn(info, "[]");
+        return;
+    };
+    const json = argOwnedUtf8(alloc, info, 1) orelse {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer alloc.free(json);
+    var req = parseSqlRequest(json) orelse {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer req.deinit();
+
+    const sql_z = alloc.allocSentinel(u8, req.sql.len, 0) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer alloc.free(sql_z);
+    @memcpy(sql_z[0..req.sql.len], req.sql);
+    var stmt = db_ptr.prepare(sql_z.ptr) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer stmt.deinit();
+    bindParams(&stmt, req.params) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+
+    const col_count = stmt.columnCount();
+    if (col_count <= 0) {
+        setStringReturn(info, "[]");
+        return;
+    }
+
+    var col_names: [64][]const u8 = undefined;
+    const nc: usize = @intCast(@min(col_count, 64));
+    const raw_stmt: *anyopaque = @ptrCast(stmt.stmt);
+    for (0..nc) |i| {
+        const n = sqlite3_column_name(raw_stmt, @intCast(i));
+        col_names[i] = if (n) |p| std.mem.span(p) else "";
+    }
+
+    var out: std.ArrayList(u8) = .{};
+    defer out.deinit(alloc);
+    out.append(alloc, '[') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+
+    var first_row = true;
+    while (stmt.step() catch false) {
+        if (!first_row) out.append(alloc, ',') catch break;
+        first_row = false;
+        out.append(alloc, '{') catch break;
+        for (0..nc) |i| {
+            if (i > 0) out.append(alloc, ',') catch break;
+            appendJsonEscaped(&out, alloc, col_names[i]) catch break;
+            out.append(alloc, ':') catch break;
+            const t = stmt.columnType(@intCast(i));
+            switch (t) {
+                .null_val => out.appendSlice(alloc, "null") catch break,
+                .integer => out.writer(alloc).print("{d}", .{stmt.columnInt(@intCast(i))}) catch break,
+                .float => out.writer(alloc).print("{d}", .{stmt.columnFloat(@intCast(i))}) catch break,
+                .text => {
+                    const s = stmt.columnText(@intCast(i)) orelse "";
+                    appendJsonEscaped(&out, alloc, s) catch break;
+                },
+                .blob => out.appendSlice(alloc, "null") catch break,
+            }
+        }
+        out.append(alloc, '}') catch break;
+    }
+    out.append(alloc, ']') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    _ = ctx;
+    setStringReturn(info, out.items);
+}
+
+fn sqlLastRowIdCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        setNumberReturn(info, 0);
+        return;
+    }
+    const id: u32 = @intCast(@max(0, argI32(info, 0, 0)));
+    const db_ptr = sqlDbs().get(id) orelse {
+        setNumberReturn(info, 0);
+        return;
+    };
+    setNumberReturn(info, @floatFromInt(db_ptr.lastInsertRowId()));
+}
+
+fn sqlChangesCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        setNumberReturn(info, 0);
+        return;
+    }
+    const id: u32 = @intCast(@max(0, argI32(info, 0, 0)));
+    const db_ptr = sqlDbs().get(id) orelse {
+        setNumberReturn(info, 0);
+        return;
+    };
+    setNumberReturn(info, @floatFromInt(db_ptr.changes()));
+}
+
+fn hotGetCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        setNullReturn(info);
+        return;
+    };
+    defer alloc.free(key);
+    const val = hotstate.get(key);
+    if (val) |v| {
+        setStringReturn(info, v);
+    } else {
+        setNullReturn(info);
+    }
+}
+
+fn hotSetCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(key);
+    const val = argOwnedUtf8(alloc, info, 1) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(val);
+    hotstate.set(key, val);
+    retUndefined(info_c);
+}
+
+fn hotRemoveCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(key);
+    hotstate.remove(key);
+    retUndefined(info_c);
+}
+
+fn hotClearCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    hotstate.clear();
+    retUndefined(info_c);
+}
+
+fn hotKeysJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const json = hotstate.keysJson(alloc) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    defer alloc.free(json);
+    setStringReturn(info, json);
+}
+
+fn dbQueryCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    if (info.length() < 2) {
+        setStringReturn(info, "");
+        return;
+    }
+    const path = argOwnedUtf8(alloc, info, 0) orelse {
+        setStringReturn(info, "");
+        return;
+    };
+    defer alloc.free(path);
+    const sql = argOwnedUtf8(alloc, info, 1) orelse {
+        setStringReturn(info, "");
+        return;
+    };
+    defer alloc.free(sql);
+
+    var db = sqlite_mod.Database.open(path) catch {
+        setStringReturn(info, "");
+        return;
+    };
+    defer db.close();
+
+    const sql_z = alloc.allocSentinel(u8, sql.len, 0) catch {
+        setStringReturn(info, "");
+        return;
+    };
+    defer alloc.free(sql_z);
+    @memcpy(sql_z[0..sql.len], sql);
+
+    var stmt = db.prepare(sql_z.ptr) catch {
+        setStringReturn(info, "");
+        return;
+    };
+    defer stmt.deinit();
+
+    var out: [65536]u8 = undefined;
+    var pos: usize = 0;
+    while (true) {
+        const has_row = stmt.step() catch break;
+        if (!has_row) break;
+        const ncols = stmt.columnCount();
+        var col: c_int = 0;
+        while (col < ncols) : (col += 1) {
+            if (col > 0 and pos < out.len) {
+                out[pos] = '|';
+                pos += 1;
+            }
+            const val = stmt.columnText(col) orelse "";
+            const copy_len = @min(val.len, out.len - pos);
+            if (copy_len > 0) {
+                @memcpy(out[pos .. pos + copy_len], val[0..copy_len]);
+                pos += copy_len;
+            }
+        }
+        if (pos < out.len) {
+            out[pos] = '\n';
+            pos += 1;
+        }
+    }
+    if (pos == 0) {
+        setStringReturn(info, "");
+        return;
+    }
+    _ = ctx;
+    setStringReturn(info, out[0..pos]);
+}
+
+fn getProcessesJsonForRegistration() v8.c.FunctionCallback {
+    return getProcessesJsonCb;
+}
+
+pub fn registerTelemetry(_: anytype) void {
+    v8rt.registerHostFn("getFps", getFpsCb);
+    v8rt.registerHostFn("getLayoutUs", getLayoutUsCb);
+    v8rt.registerHostFn("getPaintUs", getPaintUsCb);
+    v8rt.registerHostFn("getTickUs", getTickUsCb);
+
+    v8rt.registerHostFn("__tel_frame", telFrameCb);
+    v8rt.registerHostFn("__tel_gpu", telGpuCb);
+    v8rt.registerHostFn("__tel_nodes", telNodesCb);
+    v8rt.registerHostFn("__tel_state", telStateCb);
+    v8rt.registerHostFn("__tel_history", telHistoryCb);
+    v8rt.registerHostFn("__tel_input", telInputCb);
+    v8rt.registerHostFn("__tel_layout", telLayoutCb);
+    v8rt.registerHostFn("__tel_net", telNetCb);
+    v8rt.registerHostFn("__tel_node", telNodeCb);
+    v8rt.registerHostFn("__tel_node_box_model", telNodeBoxModelCb);
+    v8rt.registerHostFn("__tel_node_style", telNodeStyleCb);
+    v8rt.registerHostFn("__tel_node_count", telNodeCountCb);
+    v8rt.registerHostFn("__tel_system", telSystemCb);
+    v8rt.registerHostFn("__tel_canvas", telCanvasCb);
+
+    v8rt.registerHostFn("getProcessesJson", getProcessesJsonCb);
+    v8rt.registerHostFn("getThreadsJson", getThreadsJsonCb);
+    v8rt.registerHostFn("getCoreCount", getCoreCountCb);
+
+    v8rt.registerHostFn("heavy_compute", heavyComputeCb);
+    v8rt.registerHostFn("heavy_compute_timed", heavyComputeTimedCb);
+    v8rt.registerHostFn("set_compute_n", setComputeNCb);
+
+    v8rt.registerHostFn("__pty_open", ptyOpenCb);
+    v8rt.registerHostFn("__pty_read", ptyReadCb);
+    v8rt.registerHostFn("__pty_write", ptyWriteCb);
+    v8rt.registerHostFn("__pty_alive", ptyAliveCb);
+    v8rt.registerHostFn("__pty_close", ptyCloseCb);
+    v8rt.registerHostFn("__pty_focus", ptyFocusCb);
+    v8rt.registerHostFn("__pty_cwd", ptyCwdCb);
+
+    v8rt.registerHostFn("__store_set", storeSetCb);
+    v8rt.registerHostFn("__store_get", storeGetCb);
+    v8rt.registerHostFn("__store_remove", storeRemoveCb);
+    v8rt.registerHostFn("__store_clear", storeClearCb);
+    v8rt.registerHostFn("__store_keys_json", storeKeysJsonCb);
+
+    v8rt.registerHostFn("__hot_set", hotSetCb);
+    v8rt.registerHostFn("__hot_get", hotGetCb);
+    v8rt.registerHostFn("__hot_remove", hotRemoveCb);
+    v8rt.registerHostFn("__hot_clear", hotClearCb);
+    v8rt.registerHostFn("__hot_keys_json", hotKeysJsonCb);
+
+    v8rt.registerHostFn("__sql_open", sqlOpenCb);
+    v8rt.registerHostFn("__sql_close", sqlCloseCb);
+    v8rt.registerHostFn("__sql_exec", sqlExecCb);
+    v8rt.registerHostFn("__sql_query_json", sqlQueryJsonCb);
+    v8rt.registerHostFn("__sql_changes", sqlChangesCb);
+    v8rt.registerHostFn("__sql_last_rowid", sqlLastRowIdCb);
+
+    v8rt.registerHostFn("__db_query", dbQueryCb);
+}
+
+fn storeGetCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    if (!localstore.isInitialized()) {
+        setNullReturn(info);
+        return;
+    }
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        setNullReturn(info);
+        return;
+    };
+    defer alloc.free(key);
+    var buf: [localstore.MAX_VALUE]u8 = undefined;
+    const n = localstore.get(LS_NS, key, &buf) catch {
+        setNullReturn(info);
+        return;
+    };
+    if (n == null) {
+        setNullReturn(info);
+        return;
+    }
+    setStringReturn(info, buf[0..n.?]);
+}
+
+fn storeSetCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    if (!localstore.isInitialized()) {
+        retUndefined(info_c);
+        return;
+    }
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(key);
+    const val = argOwnedUtf8(alloc, info, 1) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(val);
+    localstore.set(LS_NS, key, val) catch {};
+    retUndefined(info_c);
+}
+
+fn storeRemoveCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    if (!localstore.isInitialized()) {
+        retUndefined(info_c);
+        return;
+    }
+    const key = argOwnedUtf8(alloc, info, 0) orelse {
+        retUndefined(info_c);
+        return;
+    };
+    defer alloc.free(key);
+    localstore.delete(LS_NS, key) catch {};
+    retUndefined(info_c);
+}
+
+fn storeClearCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    if (!localstore.isInitialized()) {
+        retUndefined(info_c);
+        return;
+    }
+    localstore.clear(LS_NS) catch {};
+    retUndefined(info_c);
+}
+
+fn storeKeysJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const alloc = std.heap.page_allocator;
+    if (!localstore.isInitialized()) {
+        setStringReturn(info, "[]");
+        return;
+    }
+    var entries: [localstore.MAX_KEYS]localstore.KeyEntry = undefined;
+    const n = localstore.keys(LS_NS, &entries) catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    var out: std.ArrayList(u8) = .{};
+    defer out.deinit(alloc);
+    out.append(alloc, '[') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        if (i > 0) out.append(alloc, ',') catch break;
+        appendJsonEscaped(&out, alloc, entries[i].key()) catch break;
+    }
+    out.append(alloc, ']') catch {
+        setStringReturn(info, "[]");
+        return;
+    };
+    setStringReturn(info, out.items);
+}

@@ -1160,6 +1160,35 @@ pub fn toDegrees(radians: f32) f32 {
     return radians * (180.0 / pi);
 }
 
+// ── Scalar math primitives (exposed for JS bridge) ────────────────
+// Zig's @sin / @cos / @exp etc. are builtins, not library fns, so the
+// v8_bindings_zigcall reflection can't pick them up. Thin wrappers make
+// them callable from cart JS through math.sin(), math.cos(), etc.
+pub fn sin(x: f32) f32 { return @sin(x); }
+pub fn cos(x: f32) f32 { return @cos(x); }
+pub fn tan(x: f32) f32 { return @tan(x); }
+pub fn asin(x: f32) f32 { return std.math.asin(x); }
+pub fn acos(x: f32) f32 { return std.math.acos(x); }
+pub fn atan(x: f32) f32 { return std.math.atan(x); }
+pub fn atan2(y: f32, x: f32) f32 { return std.math.atan2(y, x); }
+pub fn exp(x: f32) f32 { return @exp(x); }
+pub fn exp2(x: f32) f32 { return @exp2(x); }
+pub fn log(x: f32) f32 { return @log(x); }
+pub fn log2(x: f32) f32 { return @log2(x); }
+pub fn log10(x: f32) f32 { return @log10(x); }
+pub fn sqrt(x: f32) f32 { return @sqrt(x); }
+pub fn pow(x: f32, y: f32) f32 { return std.math.pow(f32, x, y); }
+pub fn absf(x: f32) f32 { return @abs(x); }
+pub fn floorf(x: f32) f32 { return @floor(x); }
+pub fn ceilf(x: f32) f32 { return @ceil(x); }
+pub fn roundf(x: f32) f32 { return @round(x); }
+pub fn signf(x: f32) f32 { if (x > 0) return 1; if (x < 0) return -1; return 0; }
+pub fn hypot(x: f32, y: f32) f32 { return std.math.hypot(x, y); }
+pub fn fract(x: f32) f32 { return x - @floor(x); }
+
+pub fn piValue() f32 { return pi; }
+pub fn tauValue() f32 { return pi * 2.0; }
+
 // ============================================================================
 // Perlin Noise
 // ============================================================================

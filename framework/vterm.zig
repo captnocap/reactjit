@@ -567,6 +567,15 @@ pub fn deinit() void {
 const pty_mod = @import("pty.zig");
 
 var g_pty: ?pty_mod.Pty = null;
+var g_spawn_cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
+var g_spawn_cwd_len: usize = 0;
+
+pub fn setSpawnCwd(path: []const u8) void {
+    const len = @min(path.len, g_spawn_cwd_buf.len - 1);
+    @memcpy(g_spawn_cwd_buf[0..len], path[0..len]);
+    g_spawn_cwd_buf[len] = 0;
+    g_spawn_cwd_len = len;
+}
 
 /// Spawn a shell and connect it to the global vterm instance.
 /// If vterm doesn't exist yet, creates one at the given dimensions.
@@ -574,7 +583,8 @@ pub fn spawnShell(shell: [*:0]const u8, rows: u16, cols: u16) void {
     if (g_pty != null) closePty();
     if (g_vterm == null) initVterm(rows, cols);
 
-    g_pty = pty_mod.openPty(.{ .shell = shell, .rows = rows, .cols = cols }) catch |err| {
+    const cwd: ?[*:0]const u8 = if (g_spawn_cwd_len > 0) @ptrCast(&g_spawn_cwd_buf) else null;
+    g_pty = pty_mod.openPty(.{ .shell = shell, .rows = rows, .cols = cols, .cwd = cwd }) catch |err| {
         std.debug.print("[vterm] spawnShell failed: {}\n", .{err});
         return;
     };

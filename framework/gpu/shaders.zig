@@ -150,7 +150,10 @@ pub const rect_wgsl =
     \\    // Border: if border_width > 0, inner region is fill, outer ring is border
     \\    var final_color: vec4f;
     \\    if in.border_width > 0.0 {
-    \\        let inner_dist = sdf_rounded_rect(p, half_size - in.border_width, in.radii);
+    \\        let bw = in.border_width;
+    \\        let inner_half = max(half_size - vec2f(bw, bw), vec2f(0.0, 0.0));
+    \\        let inner_radii = max(in.radii - vec4f(bw, bw, bw, bw), vec4f(0.0, 0.0, 0.0, 0.0));
+    \\        let inner_dist = sdf_rounded_rect(p, inner_half, inner_radii);
     \\        let inner_aa = smoothstep(-1.0, 0.5, inner_dist);
     \\        // mix: inner_aa=0 means inside fill, inner_aa=1 means in border zone
     \\        final_color = mix(base_color, in.border_color, inner_aa);

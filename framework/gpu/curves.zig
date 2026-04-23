@@ -38,11 +38,12 @@ pub const CurveInstance = extern struct {
 // Constants & State
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_CURVES = 4096;
+pub const MAX_CURVES = 32768;
 
 var g_curves: [MAX_CURVES]CurveInstance = undefined;
 var g_curve_count: usize = 0;
 var g_last_curve_count: usize = 0;
+var g_capacity_warning_emitted: bool = false;
 
 var g_curve_pipeline: ?*wgpu.RenderPipeline = null;
 var g_curve_buffer: ?*wgpu.Buffer = null;
@@ -67,7 +68,14 @@ pub fn drawCurve(
     a: f32,
     stroke_width: f32,
 ) void {
-    if (g_curve_count >= MAX_CURVES or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
+    if (g_curve_count >= MAX_CURVES) {
+        if (!g_capacity_warning_emitted) {
+            std.debug.print("[gpu.curves] capacity reached: {d} curves; dropping later curve draws this frame\n", .{MAX_CURVES});
+            g_capacity_warning_emitted = true;
+        }
+        return;
+    }
+    if (core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
 
     // Apply canvas transform if active
@@ -327,6 +335,7 @@ pub fn lastCount() usize {
 pub fn reset() void {
     g_last_curve_count = g_curve_count;
     g_curve_count = 0;
+    g_capacity_warning_emitted = false;
 }
 
 /// Hash the current curve instance data for dirty checking.

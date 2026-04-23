@@ -50,8 +50,10 @@ var g_qjs_rt: ?*qjs.JSRuntime = null;
 var g_qjs_ctx: ?*qjs.JSContext = null;
 var g_text_engine: ?*TextEngine = null;
 
-// ── PTY singleton ────────────────────────────────────────────────
-var g_pty: ?pty_mod.Pty = null;
+// ── PTY pool ─────────────────────────────────────────────────────
+const MAX_PTYS: usize = 16;
+var g_ptys: [MAX_PTYS]?pty_mod.Pty = .{null} ** MAX_PTYS;
+var g_active_pty_handle: u8 = 0;
 
 // ── Claude SDK session singleton ─────────────────────────────────
 const claude_sdk = @import("claude_sdk/mod.zig");
@@ -75,13 +77,55 @@ pub var telemetry_tick_us: u64 = 0;
 pub var telemetry_bridge_calls: u64 = 0;
 pub var bridge_calls_this_second: u64 = 0;
 var bridge_last_reset: i64 = 0;
-var g_prepared_node_event_id: u32 = 0;
-var g_prepared_mouse_x: f32 = 0;
-var g_prepared_mouse_y: f32 = 0;
-var g_prepared_scroll_x: f32 = 0;
-var g_prepared_scroll_y: f32 = 0;
-var g_prepared_scroll_dx: f32 = 0;
-var g_prepared_scroll_dy: f32 = 0;
+pub var g_prepared_node_event_id: u32 = 0;
+pub var g_prepared_mouse_x: f32 = 0;
+pub var g_prepared_mouse_y: f32 = 0;
+pub var g_prepared_scroll_x: f32 = 0;
+pub var g_prepared_scroll_y: f32 = 0;
+pub var g_prepared_scroll_dx: f32 = 0;
+pub var g_prepared_scroll_dy: f32 = 0;
+pub var g_mouse_x: f32 = 0;
+pub var g_mouse_y: f32 = 0;
+pub var g_mouse_down: bool = false;
+pub var g_mouse_right_down: bool = false;
+var g_terminal_dock_resize_active: bool = false;
+var g_terminal_dock_resize_start_y: f32 = 0;
+var g_terminal_dock_resize_start_height: f32 = 0;
+
+pub fn updateMouse(x: f32, y: f32) void {
+    g_mouse_x = x;
+    g_mouse_y = y;
+}
+
+pub fn updateMouseButton(down: bool, right: bool) void {
+    if (right) {
+        g_mouse_right_down = down;
+    } else {
+        g_mouse_down = down;
+    }
+}
+
+pub fn beginTerminalDockResize(start_y: f32, start_height: f32) void {
+    g_terminal_dock_resize_active = true;
+    g_terminal_dock_resize_start_y = start_y;
+    g_terminal_dock_resize_start_height = start_height;
+}
+
+pub fn endTerminalDockResize() void {
+    g_terminal_dock_resize_active = false;
+}
+
+pub fn terminalDockResizeActive() bool {
+    return g_terminal_dock_resize_active;
+}
+
+pub fn terminalDockResizeStartY() f32 {
+    return g_terminal_dock_resize_start_y;
+}
+
+pub fn terminalDockResizeStartHeight() f32 {
+    return g_terminal_dock_resize_start_height;
+}
 
 fn kimiResetTurnBuffers() void {
     g_kimi_turn_text.clearRetainingCapacity();
@@ -514,16 +558,10 @@ fn hostGetTickUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_tick_us));
 }
 fn hostGetMouseX(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    _ = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, @floatCast(mx));
+    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_x));
 }
 fn hostGetMouseY(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    _ = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, @floatCast(my));
+    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_y));
 }
 
 fn hostClipboardSet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -542,16 +580,34 @@ fn hostClipboardGet(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.J
     return qjs.JS_NewString(ctx, clip);
 }
 fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    const buttons = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_LMASK != 0) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (g_mouse_down) 1.0 else 0.0);
 }
 fn hostGetMouseRightDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    const buttons = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_RMASK != 0) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (g_mouse_right_down) 1.0 else 0.0);
+}
+
+fn hostBeginTerminalDockResize(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 2) return QJS_UNDEFINED;
+    var start_y: f64 = 0;
+    var start_height: f64 = 0;
+    _ = qjs.JS_ToFloat64(ctx, &start_y, argv[0]);
+    _ = qjs.JS_ToFloat64(ctx, &start_height, argv[1]);
+    beginTerminalDockResize(@floatCast(start_y), @floatCast(start_height));
+    return QJS_UNDEFINED;
+}
+
+fn hostEndTerminalDockResize(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    endTerminalDockResize();
+    return QJS_UNDEFINED;
+}
+
+fn hostGetTerminalDockResizeState(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "active", if (g_terminal_dock_resize_active) 1 else 0);
+    setF(c2, obj, "startY", g_terminal_dock_resize_start_y);
+    setF(c2, obj, "startHeight", g_terminal_dock_resize_start_height);
+    return obj;
 }
 fn hostIsKeyDown(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 1) return qjs.JS_NewFloat64(null, 0);
@@ -2404,10 +2460,48 @@ fn hostFetch(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JS
 
 // ── PTY host functions ───────────────────────────────────────────
 
+fn ptySlot(handle: i32) ?usize {
+    if (handle <= 0) return null;
+    const idx: usize = @intCast(handle - 1);
+    if (idx >= MAX_PTYS) return null;
+    return idx;
+}
+
+fn ptyFromHandle(handle: i32) ?*pty_mod.Pty {
+    const slot = ptySlot(handle) orelse return null;
+    if (g_ptys[slot]) |*p| return p;
+    return null;
+}
+
+fn ptyAllocSlot() ?usize {
+    var idx: usize = 0;
+    while (idx < MAX_PTYS) : (idx += 1) {
+        if (g_ptys[idx] == null) return idx;
+    }
+    return null;
+}
+
+fn ptyReleaseHandle(handle: i32) void {
+    const slot = ptySlot(handle) orelse return;
+    if (g_ptys[slot]) |*p| p.closePty();
+    g_ptys[slot] = null;
+    if (g_active_pty_handle == handle) g_active_pty_handle = 0;
+}
+
+fn ptySetActiveHandle(handle: i32) void {
+    if (handle <= 0) {
+        g_active_pty_handle = 0;
+        return;
+    }
+    if (ptyFromHandle(handle) != null) g_active_pty_handle = @intCast(handle);
+}
+
 fn hostPtyOpen(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (g_pty != null) return qjs.JS_NewFloat64(null, 0);
     var cols: u16 = 80;
     var rows: u16 = 24;
+    var shell_z: ?[*:0]const u8 = null;
+    var cwd_z: ?[*:0]const u8 = null;
+
     if (argc >= 1) {
         var v: i32 = 0;
         _ = qjs.JS_ToInt32(ctx, &v, argv[0]);
@@ -2418,14 +2512,69 @@ fn hostPtyOpen(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.
         _ = qjs.JS_ToInt32(ctx, &v, argv[1]);
         if (v > 0) rows = @intCast(v);
     }
-    g_pty = pty_mod.openPty(.{ .cols = cols, .rows = rows }) catch {
+    if (argc >= 3) {
+        const s = qjs.JS_ToCString(ctx, argv[2]);
+        if (s != null and std.mem.span(s).len > 0) shell_z = s else if (s != null) qjs.JS_FreeCString(ctx, s);
+    }
+    if (argc >= 4) {
+        const cpath = qjs.JS_ToCString(ctx, argv[3]);
+        if (cpath != null and std.mem.span(cpath).len > 0) cwd_z = cpath else if (cpath != null) qjs.JS_FreeCString(ctx, cpath);
+    }
+    defer if (shell_z) |s| qjs.JS_FreeCString(ctx, s);
+    defer if (cwd_z) |s| qjs.JS_FreeCString(ctx, s);
+
+    const slot = ptyAllocSlot() orelse return qjs.JS_NewFloat64(null, -1);
+    g_ptys[slot] = pty_mod.openPty(.{
+        .cols = cols,
+        .rows = rows,
+        .shell = shell_z orelse "bash",
+        .cwd = cwd_z,
+    }) catch {
         return qjs.JS_NewFloat64(null, -1);
     };
-    return qjs.JS_NewFloat64(null, 0);
+    if (g_active_pty_handle == 0) g_active_pty_handle = @intCast(slot + 1);
+    return qjs.JS_NewFloat64(null, @floatFromInt(slot + 1));
 }
 
-fn hostPtyRead(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (g_pty) |*p| {
+fn hostPtyFocus(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    ptySetActiveHandle(value);
+    return QJS_UNDEFINED;
+}
+
+fn hostPtyCwd(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewString(ctx, "");
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    if (ptyFromHandle(value)) |p| {
+        var path_buf: [64]u8 = undefined;
+        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
+            return qjs.JS_NewString(ctx, "");
+        };
+        var cwd_buf: [4096]u8 = undefined;
+        const cwd = std.posix.readlink(path, &cwd_buf) catch {
+            return qjs.JS_NewString(ctx, "");
+        };
+        return qjs.JS_NewStringLen(ctx, cwd.ptr, @intCast(cwd.len));
+    }
+    return qjs.JS_NewString(ctx, "");
+}
+
+fn hostPtyClose(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    ptyReleaseHandle(value);
+    return QJS_UNDEFINED;
+}
+
+fn hostPtyRead(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    if (ptyFromHandle(value)) |p| {
         if (p.readData()) |data| {
             return qjs.JS_NewStringLen(ctx, data.ptr, @intCast(data.len));
         }
@@ -2434,9 +2583,11 @@ fn hostPtyRead(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
 }
 
 fn hostPtyWrite(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (argc < 1) return QJS_UNDEFINED;
-    if (g_pty) |*p| {
-        const str = qjs.JS_ToCString(ctx, argv[0]);
+    if (argc < 2) return QJS_UNDEFINED;
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    if (ptyFromHandle(value)) |p| {
+        const str = qjs.JS_ToCString(ctx, argv[1]);
         if (str == null) return QJS_UNDEFINED;
         defer qjs.JS_FreeCString(ctx, str);
         _ = p.writeData(std.mem.span(str));
@@ -2444,9 +2595,14 @@ fn hostPtyWrite(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     return QJS_UNDEFINED;
 }
 
-fn hostPtyAlive(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (g_pty) |*p| {
-        return qjs.JS_NewFloat64(null, if (p.alive()) @as(f64, 1) else 0);
+fn hostPtyAlive(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewFloat64(null, 0);
+    var value: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
+    if (ptyFromHandle(value)) |p| {
+        const ok = p.alive();
+        if (!ok) ptyReleaseHandle(value);
+        return qjs.JS_NewFloat64(null, if (ok) @as(f64, 1) else 0);
     }
     return qjs.JS_NewFloat64(null, 0);
 }
@@ -2456,15 +2612,19 @@ fn hostPtyAlive(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue
 /// Returns true if a PTY is active and should consume keyboard input.
 pub fn ptyActive() bool {
     if (comptime !HAS_QUICKJS) return false;
-    if (g_pty) |*p| return p.alive();
+    if (g_active_pty_handle == 0) return false;
+    if (ptyFromHandle(g_active_pty_handle)) |*p| return p.*.alive();
+    g_active_pty_handle = 0;
     return false;
 }
 
 /// Forward SDL_TEXTINPUT text to the PTY (printable chars, already UTF-8).
 pub fn ptyHandleTextInput(text: [*:0]const u8) void {
     if (comptime !HAS_QUICKJS) return;
-    if (g_pty) |*p| {
-        _ = p.writeData(std.mem.span(text));
+    if (g_active_pty_handle != 0) {
+        if (ptyFromHandle(g_active_pty_handle)) |*p| {
+            _ = p.*.writeData(std.mem.span(text));
+        }
     }
 }
 
@@ -2489,29 +2649,31 @@ pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
 
     const ctrl = (mod & KMOD_CTRL) != 0;
 
-    if (g_pty) |*p| {
-        if (ctrl and sym >= 'a' and sym <= 'z') {
-            // Ctrl+letter → \x01..\x1a
-            const seq = [1]u8{ @intCast(sym - 'a' + 1) };
-            _ = p.writeData(&seq);
-            return;
+    if (g_active_pty_handle != 0) {
+        if (ptyFromHandle(g_active_pty_handle)) |*p| {
+            if (ctrl and sym >= 'a' and sym <= 'z') {
+                // Ctrl+letter → \x01..\x1a
+                const seq = [1]u8{ @intCast(sym - 'a' + 1) };
+                _ = p.*.writeData(&seq);
+                return;
+            }
+            const seq: []const u8 = switch (sym) {
+                SDLK_RETURN    => "\r",
+                SDLK_BACKSPACE => "\x7f",
+                SDLK_DELETE    => "\x1b[3~",
+                SDLK_TAB       => "\t",
+                SDLK_UP        => "\x1b[A",
+                SDLK_DOWN      => "\x1b[B",
+                SDLK_RIGHT     => "\x1b[C",
+                SDLK_LEFT      => "\x1b[D",
+                SDLK_HOME      => "\x1b[H",
+                SDLK_END       => "\x1b[F",
+                SDLK_PAGEUP    => "\x1b[5~",
+                SDLK_PAGEDOWN  => "\x1b[6~",
+                else           => return,
+            };
+            _ = p.*.writeData(seq);
         }
-        const seq: []const u8 = switch (sym) {
-            SDLK_RETURN    => "\r",
-            SDLK_BACKSPACE => "\x7f",
-            SDLK_DELETE    => "\x1b[3~",
-            SDLK_TAB       => "\t",
-            SDLK_UP        => "\x1b[A",
-            SDLK_DOWN      => "\x1b[B",
-            SDLK_RIGHT     => "\x1b[C",
-            SDLK_LEFT      => "\x1b[D",
-            SDLK_HOME      => "\x1b[H",
-            SDLK_END       => "\x1b[F",
-            SDLK_PAGEUP    => "\x1b[5~",
-            SDLK_PAGEDOWN  => "\x1b[6~",
-            else           => return,
-        };
-        _ = p.writeData(seq);
     }
 }
 
@@ -2933,6 +3095,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "isKeyDown", qjs.JS_NewCFunction(ctx, hostIsKeyDown, "isKeyDown", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseRightDown", qjs.JS_NewCFunction(ctx, hostGetMouseRightDown, "getMouseRightDown", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__beginTerminalDockResize", qjs.JS_NewCFunction(ctx, hostBeginTerminalDockResize, "__beginTerminalDockResize", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__endTerminalDockResize", qjs.JS_NewCFunction(ctx, hostEndTerminalDockResize, "__endTerminalDockResize", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getTerminalDockResizeState", qjs.JS_NewCFunction(ctx, hostGetTerminalDockResizeState, "__getTerminalDockResizeState", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_set", qjs.JS_NewCFunction(ctx, hostClipboardSet, "__clipboard_set", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_get", qjs.JS_NewCFunction(ctx, hostClipboardGet, "__clipboard_get", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
@@ -2987,10 +3152,13 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fetch", qjs.JS_NewCFunction(ctx, hostFetch, "__fetch", 1));
 
     // PTY host functions
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_open", qjs.JS_NewCFunction(ctx, hostPtyOpen, "__pty_open", 2));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_read", qjs.JS_NewCFunction(ctx, hostPtyRead, "__pty_read", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_write", qjs.JS_NewCFunction(ctx, hostPtyWrite, "__pty_write", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_open", qjs.JS_NewCFunction(ctx, hostPtyOpen, "__pty_open", 4));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_read", qjs.JS_NewCFunction(ctx, hostPtyRead, "__pty_read", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_write", qjs.JS_NewCFunction(ctx, hostPtyWrite, "__pty_write", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_close", qjs.JS_NewCFunction(ctx, hostPtyClose, "__pty_close", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_focus", qjs.JS_NewCFunction(ctx, hostPtyFocus, "__pty_focus", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_cwd", qjs.JS_NewCFunction(ctx, hostPtyCwd, "__pty_cwd", 1));
 
     // Claude Code SDK — subprocess session in stream-json mode
     _ = qjs.JS_SetPropertyStr(ctx, global, "__claude_init", qjs.JS_NewCFunction(ctx, hostClaudeInit, "__claude_init", 2));
@@ -3182,6 +3350,44 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
         if (!qjs.JS_IsUndefined(func)) {
             var argv = [1]qjs.JSValue{qjs.JS_NewInt64(ctx, arg)};
             const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with one float argument.
+pub fn callGlobalFloat(name: [*:0]const u8, arg: f32) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [1]qjs.JSValue{qjs.JS_NewFloat64(ctx, @floatCast(arg))};
+            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with two float arguments.
+pub fn callGlobal2Float(name: [*:0]const u8, arg0: f32, arg1: f32) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [2]qjs.JSValue{
+                qjs.JS_NewFloat64(ctx, @floatCast(arg0)),
+                qjs.JS_NewFloat64(ctx, @floatCast(arg1)),
+            };
+            const r = qjs.JS_Call(ctx, func, global, 2, &argv);
+            qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, argv[1]);
             qjs.JS_FreeValue(ctx, r);
         }
     }

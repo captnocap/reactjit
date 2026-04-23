@@ -559,48 +559,216 @@ pub fn parsePathWithTolerance(d: []const u8, tol: f32) Path {
     return path;
 }
 
-// ── Filled path rendering (centroid fan decomposition) ─────────────────
+// ── Filled path rendering (ear-clipping tessellation) ─────────────────
+//
+// Non-convex-safe polygon tessellation. For each subpath we build an index
+// list, normalize winding to CCW (positive shoelace area in a Y-down system
+// means the polygon is drawn with mathematical winding reversed — we flip to
+// a consistent CCW order before clipping), then repeatedly remove "ears":
+// vertices whose triangle (prev, curr, next) is (a) convex and (b) contains
+// no other polygon vertex. The ear triangle is emitted via `emit(a,b,c)` and
+// the vertex is removed. O(n²) in vertex count — fine for icon-scale polygons.
+//
+// Subpaths are tessellated independently; this produces the correct visual for
+// disjoint subpaths (e.g. OpenAI's 6 petals). Truly nested holes would need
+// bridging — brand icons in the Lobe set don't use them so we don't either.
 
-/// Fill a closed path using triangle fan from the centroid.
-/// Computes the average of all vertices (centroid), then fans from there.
-/// Works for convex polygons, regular stars, and most simple concave shapes.
-/// Complex self-intersecting paths may need ear-clipping or stencil buffer.
-pub fn drawFill(path: *const Path, fill_r: f32, fill_g: f32, fill_b: f32, fill_a: f32) void {
-    for (0..path.subpath_count) |si| {
-        const sp = &path.subpaths[si];
-        const n_pts = sp.count / 2;
-        if (n_pts < 3) continue;
+const MAX_POLY_VERTS = MAX_POINTS / 2;
 
-        // Compute centroid
-        var cx: f32 = 0;
-        var cy: f32 = 0;
-        var pi: u32 = 0;
-        while (pi < sp.count) : (pi += 2) {
-            cx += sp.points[pi];
-            cy += sp.points[pi + 1];
+const TriEmitContext = struct {
+    ctx: *anyopaque,
+    emit: *const fn (ctx: *anyopaque, ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) void,
+};
+
+fn polygonSignedArea(sp: *const Subpath) f32 {
+    var area: f32 = 0;
+    const n = sp.count / 2;
+    if (n < 3) return 0;
+    var i: u32 = 0;
+    while (i < n) : (i += 1) {
+        const j: u32 = (i + 1) % n;
+        const xi = sp.points[i * 2];
+        const yi = sp.points[i * 2 + 1];
+        const xj = sp.points[j * 2];
+        const yj = sp.points[j * 2 + 1];
+        area += xi * yj - xj * yi;
+    }
+    return area * 0.5;
+}
+
+/// True if triangle (a→b→c) is on the left side (convex vertex in CCW order).
+fn triIsConvex(ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) bool {
+    return ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) > 0;
+}
+
+fn pointInTri(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) bool {
+    // Strictly-inside test — boundary-hits don't reject the ear. Post-bezier
+    // flattening produces many near-colinear vertex triples; the inclusive
+    // version of this test was rejecting valid ears on curved subpaths when
+    // an adjacent vertex landed on a triangle edge within float jitter.
+    const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+    const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+    const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+    const all_pos = (d1 > 0) and (d2 > 0) and (d3 > 0);
+    const all_neg = (d1 < 0) and (d2 < 0) and (d3 < 0);
+    return all_pos or all_neg;
+}
+
+/// Ear-clip one subpath, emitting triangles via the callback. Indices into
+/// `sp.points` are normalized to CCW before clipping. Guards against infinite
+/// loops on malformed geometry.
+fn triangulateSubpath(sp: *const Subpath, emit_ctx: TriEmitContext) void {
+    const n_pts = sp.count / 2;
+    if (n_pts < 3) return;
+
+    var verts: [MAX_POLY_VERTS]u32 = undefined;
+    var remaining: u32 = n_pts;
+
+    // Winding fix: triIsConvex returns true for a LEFT turn. Under SVG's
+    // Y-down coords, a polygon with positive signed area traces CW on screen
+    // (= math-CCW once Y is flipped), which already produces the LEFT turns
+    // triIsConvex expects at every convex vertex. A negative-area polygon is
+    // the other winding and needs reversing before clipping.
+    //
+    // Previous version had the inverse condition, so rectangles like a
+    // BarChart bar (positive signed area) got reversed into the wrong winding,
+    // no candidate vertex passed the convex test, and zero triangles were
+    // emitted — fills rendered as empty outlines.
+    const area = polygonSignedArea(sp);
+    if (area < 0) {
+        var i: u32 = 0;
+        while (i < n_pts) : (i += 1) verts[i] = n_pts - 1 - i;
+    } else {
+        var i: u32 = 0;
+        while (i < n_pts) : (i += 1) verts[i] = i;
+    }
+
+    const pt = struct {
+        fn xy(s: *const Subpath, idx: u32) struct { x: f32, y: f32 } {
+            return .{ .x = s.points[idx * 2], .y = s.points[idx * 2 + 1] };
         }
-        cx /= @floatFromInt(n_pts);
-        cy /= @floatFromInt(n_pts);
+    };
 
-        // Fan from centroid through consecutive edge pairs
-        pi = 0;
-        while (pi + 3 < sp.count) : (pi += 2) {
-            const x1 = sp.points[pi];
-            const y1 = sp.points[pi + 1];
-            const x2 = sp.points[pi + 2];
-            const y2 = sp.points[pi + 3];
-            gpu.drawTri(cx, cy, x1, y1, x2, y2, fill_r, fill_g, fill_b, fill_a);
+    var guard: u32 = 0;
+    const guard_limit: u32 = n_pts * n_pts + 4;
+    while (remaining > 3) {
+        if (guard >= guard_limit) break; // defensive — malformed polygon
+        guard += 1;
+
+        var found_ear = false;
+        var i: u32 = 0;
+        while (i < remaining) : (i += 1) {
+            const ia = verts[(i + remaining - 1) % remaining];
+            const ib = verts[i];
+            const ic = verts[(i + 1) % remaining];
+            const a = pt.xy(sp, ia);
+            const b = pt.xy(sp, ib);
+            const c = pt.xy(sp, ic);
+            if (!triIsConvex(a.x, a.y, b.x, b.y, c.x, c.y)) continue; // reflex
+
+            // No other polygon vertex may lie inside the candidate ear.
+            var any_inside = false;
+            var k: u32 = 0;
+            while (k < remaining) : (k += 1) {
+                if (k == i or k == (i + remaining - 1) % remaining or k == (i + 1) % remaining) continue;
+                const p = pt.xy(sp, verts[k]);
+                if (pointInTri(p.x, p.y, a.x, a.y, b.x, b.y, c.x, c.y)) {
+                    any_inside = true;
+                    break;
+                }
+            }
+            if (any_inside) continue;
+
+            emit_ctx.emit(emit_ctx.ctx, a.x, a.y, b.x, b.y, c.x, c.y);
+            var j: u32 = i;
+            while (j + 1 < remaining) : (j += 1) verts[j] = verts[j + 1];
+            remaining -= 1;
+            found_ear = true;
+            break;
         }
-        // Close: last vertex → first vertex
-        if (sp.closed and n_pts >= 3) {
-            const lx = sp.points[sp.count - 2];
-            const ly = sp.points[sp.count - 1];
-            const fx = sp.points[0];
-            const fy = sp.points[1];
-            gpu.drawTri(cx, cy, lx, ly, fx, fy, fill_r, fill_g, fill_b, fill_a);
+        if (!found_ear) {
+            // Fallback — no strict ear found (happens on bezier-flattened curves
+            // where near-colinear triples defeat either the convex test or the
+            // point-in-triangle test). Force-clip at the most-convex vertex so
+            // tessellation always makes progress. May produce minor overlap on
+            // pathological paths but preserves full coverage.
+            var best_i: u32 = 0;
+            var best_cross: f32 = -1e30;
+            var fi: u32 = 0;
+            while (fi < remaining) : (fi += 1) {
+                const fia = verts[(fi + remaining - 1) % remaining];
+                const fib = verts[fi];
+                const fic = verts[(fi + 1) % remaining];
+                const fa = pt.xy(sp, fia);
+                const fb = pt.xy(sp, fib);
+                const fc_pt = pt.xy(sp, fic);
+                const cross = (fb.x - fa.x) * (fc_pt.y - fa.y) - (fb.y - fa.y) * (fc_pt.x - fa.x);
+                if (cross > best_cross) {
+                    best_cross = cross;
+                    best_i = fi;
+                }
+            }
+            const ia = verts[(best_i + remaining - 1) % remaining];
+            const ib = verts[best_i];
+            const ic = verts[(best_i + 1) % remaining];
+            const a = pt.xy(sp, ia);
+            const b = pt.xy(sp, ib);
+            const c = pt.xy(sp, ic);
+            emit_ctx.emit(emit_ctx.ctx, a.x, a.y, b.x, b.y, c.x, c.y);
+            var j: u32 = best_i;
+            while (j + 1 < remaining) : (j += 1) verts[j] = verts[j + 1];
+            remaining -= 1;
         }
     }
+    if (remaining == 3) {
+        const a = pt.xy(sp, verts[0]);
+        const b = pt.xy(sp, verts[1]);
+        const c = pt.xy(sp, verts[2]);
+        emit_ctx.emit(emit_ctx.ctx, a.x, a.y, b.x, b.y, c.x, c.y);
+    }
 }
+
+const SolidFillCtx = struct {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    fn emit(opaque_ctx: *anyopaque, ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) void {
+        const self: *SolidFillCtx = @ptrCast(@alignCast(opaque_ctx));
+        gpu.drawTri(ax, ay, bx, by, cx, cy, self.r, self.g, self.b, self.a);
+    }
+};
+
+/// Fill a closed path with a solid color, using ear-clipping so non-convex
+/// paths (e.g. brand logos) render correctly.
+pub fn drawFill(path: *const Path, fill_r: f32, fill_g: f32, fill_b: f32, fill_a: f32) void {
+    var ctx = SolidFillCtx{ .r = fill_r, .g = fill_g, .b = fill_b, .a = fill_a };
+    const emit_ctx = TriEmitContext{ .ctx = &ctx, .emit = SolidFillCtx.emit };
+    for (0..path.subpath_count) |si| {
+        triangulateSubpath(&path.subpaths[si], emit_ctx);
+    }
+}
+
+const EffectFillCtx = struct {
+    pixels: [*]const u8,
+    w: u32,
+    h: u32,
+    bb_x: f32,
+    bb_y: f32,
+    bb_w: f32,
+    bb_h: f32,
+    fn emit(opaque_ctx: *anyopaque, ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) void {
+        const self: *EffectFillCtx = @ptrCast(@alignCast(opaque_ctx));
+        const ca = sampleEffect(self.pixels, self.w, self.h, ax, ay, self.bb_x, self.bb_y, self.bb_w, self.bb_h);
+        const cb = sampleEffect(self.pixels, self.w, self.h, bx, by, self.bb_x, self.bb_y, self.bb_w, self.bb_h);
+        const cc = sampleEffect(self.pixels, self.w, self.h, cx, cy, self.bb_x, self.bb_y, self.bb_w, self.bb_h);
+        gpu.drawTriColored(
+            ax, ay, ca[0], ca[1], ca[2], ca[3],
+            bx, by, cb[0], cb[1], cb[2], cb[3],
+            cx, cy, cc[0], cc[1], cc[2], cc[3],
+        );
+    }
+};
 
 /// Fill a closed path sampling per-vertex colors from an effect pixel buffer.
 /// Each triangle vertex gets its color from the effect texture at the corresponding
@@ -616,56 +784,124 @@ pub fn drawFillFromEffect(
     bb_h: f32,
 ) void {
     if (bb_w <= 0 or bb_h <= 0) return;
-
+    var ctx = EffectFillCtx{
+        .pixels = effect_pixels,
+        .w = effect_w,
+        .h = effect_h,
+        .bb_x = bb_min_x,
+        .bb_y = bb_min_y,
+        .bb_w = bb_w,
+        .bb_h = bb_h,
+    };
+    const emit_ctx = TriEmitContext{ .ctx = &ctx, .emit = EffectFillCtx.emit };
     for (0..path.subpath_count) |si| {
-        const sp = &path.subpaths[si];
-        const n_pts = sp.count / 2;
-        if (n_pts < 3) continue;
+        triangulateSubpath(&path.subpaths[si], emit_ctx);
+    }
+}
 
-        // Compute centroid
-        var cx: f32 = 0;
-        var cy: f32 = 0;
-        var pi: u32 = 0;
-        while (pi < sp.count) : (pi += 2) {
-            cx += sp.points[pi];
-            cy += sp.points[pi + 1];
-        }
-        cx /= @floatFromInt(n_pts);
-        cy /= @floatFromInt(n_pts);
+const GradientFillCtx = struct {
+    x1: f32,
+    y1: f32,
+    dx: f32,
+    dy: f32,
+    len_sq: f32,
+    stops: []const GradientStopF,
+    fn emit(opaque_ctx: *anyopaque, ax: f32, ay: f32, bx: f32, by: f32, cx: f32, cy: f32) void {
+        const self: *GradientFillCtx = @ptrCast(@alignCast(opaque_ctx));
+        const ca = sampleGradient(ax, ay, self.x1, self.y1, self.dx, self.dy, self.len_sq, self.stops);
+        const cb = sampleGradient(bx, by, self.x1, self.y1, self.dx, self.dy, self.len_sq, self.stops);
+        const cc = sampleGradient(cx, cy, self.x1, self.y1, self.dx, self.dy, self.len_sq, self.stops);
+        gpu.drawTriColored(
+            ax, ay, ca[0], ca[1], ca[2], ca[3],
+            bx, by, cb[0], cb[1], cb[2], cb[3],
+            cx, cy, cc[0], cc[1], cc[2], cc[3],
+        );
+    }
+};
 
-        // Sample centroid color once
-        const cc = sampleEffect(effect_pixels, effect_w, effect_h, cx, cy, bb_min_x, bb_min_y, bb_w, bb_h);
+/// Fill a closed path with a linear gradient. Ear-clipped triangulation;
+/// each triangle vertex samples `stops` by projection onto the gradient line,
+/// and the GPU Gouraud-interpolates across the triangle.
+///
+/// `stops` must be sorted by `offset` ascending in [0,1]. Endpoints (x1,y1)
+/// → (x2,y2) live in the path's own coordinate space, so `setTransform` at
+/// the call site handles icon scaling.
+pub fn drawFillLinearGradient(
+    path: *const Path,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+    stops: []const GradientStopF,
+) void {
+    if (stops.len == 0) return;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len_sq = dx * dx + dy * dy;
+    if (len_sq <= 1e-8) return;
+    var ctx = GradientFillCtx{
+        .x1 = x1,
+        .y1 = y1,
+        .dx = dx,
+        .dy = dy,
+        .len_sq = len_sq,
+        .stops = stops,
+    };
+    const emit_ctx = TriEmitContext{ .ctx = &ctx, .emit = GradientFillCtx.emit };
+    for (0..path.subpath_count) |si| {
+        triangulateSubpath(&path.subpaths[si], emit_ctx);
+    }
+}
 
-        // Fan from centroid — each triangle has 3 distinct vertex colors
-        pi = 0;
-        while (pi + 3 < sp.count) : (pi += 2) {
-            const x1 = sp.points[pi];
-            const y1 = sp.points[pi + 1];
-            const x2 = sp.points[pi + 2];
-            const y2 = sp.points[pi + 3];
-            const c1 = sampleEffect(effect_pixels, effect_w, effect_h, x1, y1, bb_min_x, bb_min_y, bb_w, bb_h);
-            const c2 = sampleEffect(effect_pixels, effect_w, effect_h, x2, y2, bb_min_x, bb_min_y, bb_w, bb_h);
-            gpu.drawTriColored(
-                cx, cy, cc[0], cc[1], cc[2], cc[3],
-                x1, y1, c1[0], c1[1], c1[2], c1[3],
-                x2, y2, c2[0], c2[1], c2[2], c2[3],
-            );
-        }
-        // Close: last vertex → first vertex
-        if (sp.closed and n_pts >= 3) {
-            const lx = sp.points[sp.count - 2];
-            const ly = sp.points[sp.count - 1];
-            const fx = sp.points[0];
-            const fy = sp.points[1];
-            const cl = sampleEffect(effect_pixels, effect_w, effect_h, lx, ly, bb_min_x, bb_min_y, bb_w, bb_h);
-            const cf = sampleEffect(effect_pixels, effect_w, effect_h, fx, fy, bb_min_x, bb_min_y, bb_w, bb_h);
-            gpu.drawTriColored(
-                cx, cy, cc[0], cc[1], cc[2], cc[3],
-                lx, ly, cl[0], cl[1], cl[2], cl[3],
-                fx, fy, cf[0], cf[1], cf[2], cf[3],
-            );
+/// Normalized gradient stop in f32 RGBA. Callers translate from the
+/// layout.GradientStop representation (u8 Color) at the dispatch site.
+pub const GradientStopF = struct {
+    offset: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+};
+
+fn sampleGradient(
+    px: f32,
+    py: f32,
+    x1: f32,
+    y1: f32,
+    dx: f32,
+    dy: f32,
+    len_sq: f32,
+    stops: []const GradientStopF,
+) [4]f32 {
+    const t_raw = ((px - x1) * dx + (py - y1) * dy) / len_sq;
+    const t = if (t_raw < 0) 0.0 else if (t_raw > 1) 1.0 else t_raw;
+
+    if (stops.len == 1) {
+        return .{ stops[0].r, stops[0].g, stops[0].b, stops[0].a };
+    }
+    if (t <= stops[0].offset) {
+        return .{ stops[0].r, stops[0].g, stops[0].b, stops[0].a };
+    }
+    const last = stops[stops.len - 1];
+    if (t >= last.offset) {
+        return .{ last.r, last.g, last.b, last.a };
+    }
+    var i: usize = 1;
+    while (i < stops.len) : (i += 1) {
+        if (t <= stops[i].offset) {
+            const a = stops[i - 1];
+            const b = stops[i];
+            const span = b.offset - a.offset;
+            const u = if (span > 1e-6) (t - a.offset) / span else 0.0;
+            return .{
+                a.r + (b.r - a.r) * u,
+                a.g + (b.g - a.g) * u,
+                a.b + (b.b - a.b) * u,
+                a.a + (b.a - a.a) * u,
+            };
         }
     }
+    return .{ last.r, last.g, last.b, last.a };
 }
 
 /// Sample a color from the effect pixel buffer at a graph-space coordinate.
@@ -807,15 +1043,55 @@ pub fn drawStroke(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32
     }
 }
 
-/// Draw a single line segment as an oriented rectangle.
-fn drawLineSegment(x0: f32, y0: f32, x1: f32, y1: f32, width: f32, r: f32, g: f32, b: f32, a: f32) void {
-    // Route through drawCurve (SDF bezier shader) so diagonal lines render as
-    // proper anti-aliased strokes instead of axis-aligned bounding boxes
-    // (which collapse a true diagonal into a solid filled square).
-    // Degenerate quadratic: control point at midpoint.
-    const mx = (x0 + x1) * 0.5;
-    const my = (y0 + y1) * 0.5;
-    gpu.drawCurve(x0, y0, mx, my, x1, y1, r, g, b, a, width);
+/// Draw a single line segment through the SDF bezier shader.
+///
+/// Quadratic control point sits slightly OFF the line (0.1px perpendicular)
+/// instead of at the true midpoint. Mathematically the curve still looks
+/// straight to the eye — 0.1px deflection at the apex is subpixel — but the
+/// shader's distance-to-curve calculation avoids the near-degenerate case it
+/// hits when the three control points are colinear, which used to pop a
+/// visible highlight at every segment midpoint ("dashes" / "pearls" on every
+/// polyline). Unlike the oriented-rect approach, this keeps the anti-aliasing
+/// crisp on diagonals.
+///
+/// The half-stroke-width endpoint extension is preserved so adjacent segments
+/// overlap at polyline vertices (no dim seam at joints).
+pub fn drawLineSegment(x0: f32, y0: f32, x1: f32, y1: f32, width: f32, r: f32, g: f32, b: f32, a: f32) void {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = @sqrt(dx * dx + dy * dy);
+    if (len < 0.0001) return;
+    const ux = dx / len;
+    const uy = dy / len;
+    const ext = width * 0.5;
+    const ax = x0 - ux * ext;
+    const ay = y0 - uy * ext;
+    const bx = x1 + ux * ext;
+    const by = y1 + uy * ext;
+    // Route through drawRectTransformed — the SDF rect shader — instead of
+    // drawCurve. The bezier shader glitched on near-degenerate quadratics
+    // three different ways over the last hour (midpoint pearls, perpendicular-
+    // nudge side notches, control-at-endpoint scatter dots). The rect shader
+    // has no curve math: it anti-aliases a clean rotated rectangle.
+    //
+    // Rect: centered on segment midpoint, width = extended length,
+    // height = stroke width. Rotation = segment angle.
+    const mx_line = (ax + bx) * 0.5;
+    const my_line = (ay + by) * 0.5;
+    const ext_len = len + 2.0 * ext; // post-extension length
+    const rotation_deg = std.math.atan2(dy, dx) * 180.0 / std.math.pi;
+    gpu.drawRectTransformed(
+        mx_line - ext_len * 0.5,
+        my_line - width * 0.5,
+        ext_len,
+        width,
+        r, g, b, a,
+        0, // border_radius
+        0, // border_width
+        0, 0, 0, 0, // border color (unused)
+        rotation_deg,
+        1.0, 1.0, // sx, sy
+    );
 }
 
 // ── Arc-length utilities (for animation) ────────────────────────────────

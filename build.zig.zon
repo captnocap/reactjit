@@ -9,6 +9,9 @@
         .wgpu_native_zig = .{
             .path = "deps/wgpu_native_zig",
         },
+        .v8 = .{
+            .path = "deps/zig-v8",
+        },
         .zluajit = .{
             .url = "git+https://github.com/negrel/zluajit#86ee726416810b60e101cf19703bc2325cb19a42",
             .hash = "zluajit-0.0.0-uJQ3fjmRAgBvG9HlxU_5HiDNMvT3FQVgOB6DDfXKsgoK",

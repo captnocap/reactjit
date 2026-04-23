@@ -18,6 +18,7 @@ pub const FlexWrap = enum { no_wrap, wrap, wrap_reverse };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
 pub const Overflow = enum { visible, hidden, scroll, auto };
+pub const ScrollbarSide = enum(u8) { auto, left, right, top, bottom };
 pub const TextAlign = enum { left, center, right, justify };
 pub const CodeLanguage = enum { none, zig, type_script, json, bash, markdown, plain };
 pub const GradientDirection = enum { none, vertical, horizontal };
@@ -56,6 +57,16 @@ pub const Color = struct {
     }
 };
 
+// ── Gradient types (mirrors layout.zig) ────────────────────────────
+pub const GradientStop = struct { offset: f32 = 0, color: Color = .{} };
+pub const LinearGradient = struct {
+    x1: f32 = 0,
+    y1: f32 = 0,
+    x2: f32 = 0,
+    y2: f32 = 0,
+    stops: []const GradientStop = &.{},
+};
+
 // ── Small types ────────────────────────────────────────────────────
 pub const TextMetrics = struct { width: f32 = 0, height: f32 = 0, ascent: f32 = 0 };
 pub const LayoutRect = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
@@ -76,6 +87,8 @@ pub const MAX_INLINE_SLOTS = 8;
 // ── Dependency types (inlined to avoid importing heavy modules) ────
 pub const EventHandler = struct {
     on_press: ?*const fn () void = null,
+    on_mouse_down: ?*const fn () void = null,
+    on_mouse_up: ?*const fn () void = null,
     on_hover_enter: ?*const fn () void = null,
     on_hover_exit: ?*const fn () void = null,
     js_on_hover_enter: ?[*:0]const u8 = null,
@@ -88,7 +101,11 @@ pub const EventHandler = struct {
     on_scroll: ?*const fn () void = null,
     on_right_click: ?*const fn (x: f32, y: f32) void = null,
     js_on_press: ?[*:0]const u8 = null,
+    js_on_mouse_down: ?[*:0]const u8 = null,
+    js_on_mouse_up: ?[*:0]const u8 = null,
     lua_on_press: ?[*:0]const u8 = null,
+    lua_on_mouse_down: ?[*:0]const u8 = null,
+    lua_on_mouse_up: ?[*:0]const u8 = null,
 };
 
 pub const GpuShaderDesc = struct { wgsl: []const u8 };
@@ -153,6 +170,12 @@ pub const Style = struct {
     border_bottom_width: ?f32 = null,
     border_left_width: ?f32 = null,
     border_color: ?Color = null,
+    // See framework/layout.zig for semantics; kept in sync so the public api
+    // surface matches the layout struct.
+    border_dash_on: f32 = 0,
+    border_dash_off: f32 = 0,
+    border_flow_speed: f32 = 0,
+    border_dash_width: f32 = 0,
     z_index: i16 = 0,
     gradient_color_end: ?Color = null,
     gradient_direction: GradientDirection = .none,
@@ -231,6 +254,10 @@ pub const Node = struct {
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,
     scroll_persist_slot: u32 = 0,
+    show_scrollbar: bool = true,
+    scrollbar_side: ScrollbarSide = .auto,
+    scrollbar_auto_hide: bool = true,
+    scrollbar_last_activity_ms: i64 = 0,
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
@@ -313,6 +340,7 @@ pub const Node = struct {
     canvas_path_d: ?[]const u8 = null,
     canvas_stroke_width: f32 = 2,
     canvas_fill_color: ?Color = null,
+    canvas_fill_gradient: ?LinearGradient = null,
     canvas_flow_speed: f32 = 0,
     canvas_fill_effect: ?[]const u8 = null,
     text_effect: ?[]const u8 = null,

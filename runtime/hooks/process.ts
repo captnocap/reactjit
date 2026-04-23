@@ -22,7 +22,7 @@
  *   __ffiEmit('proc:exit:<pid>', { code, signal })
  */
 
-import { callHost, subscribe } from '../ffi';
+import { callHost, hasHost, subscribe } from '../ffi';
 
 export interface SpawnOptions {
   cmd: string;
@@ -111,5 +111,42 @@ export function run(cmd: string, args: string[] = []): Promise<RunResult> {
       offOut(); offErr(); offExit();
       resolve({ code: r.code, stdout, stderr });
     });
+  });
+}
+
+// ── Async exec (shell one-liners) ─────────────────────────────────
+// `execAsync(cmd)` is the async twin of the sync `exec(cmd)` host fn. The
+// host runs popen on a detached thread and drains results via __ffiEmit;
+// the Promise resolves when the process exits. Use this from any UI handler
+// instead of `exec` — sync `exec` blocks the click frame for subprocess
+// startup + total runtime (tsc, git, etc. are easily 500ms–2s).
+let _execRidCounter = 0;
+
+export interface ExecResult {
+  code: number;
+  stdout: string;
+}
+
+export function execAsync(cmd: string): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    if (!hasHost('__exec_async')) {
+      const sync = (globalThis as any).__exec;
+      if (typeof sync === 'function') {
+        try { resolve({ code: 0, stdout: String(sync(cmd) ?? '') }); return; } catch {}
+      }
+      resolve({ code: -1, stdout: '' });
+      return;
+    }
+    const rid = 'x' + (++_execRidCounter) + ':' + Date.now();
+    const off = subscribe('exec:' + rid, (payload: any) => {
+      off();
+      try {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        resolve({ code: parsed.code ?? -1, stdout: parsed.stdout ?? '' });
+      } catch {
+        resolve({ code: -1, stdout: '' });
+      }
+    });
+    callHost<void>('__exec_async', undefined as any, cmd, rid);
   });
 }

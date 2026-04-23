@@ -146,8 +146,13 @@ const AutoStep = struct {
     key_shift: bool = false,
     key_alt: bool = false,
     key_code: c_int = 0, // SDL keycode
+    // For `click @x,y` / `hover @x,y` / etc. — direct coordinate addressing,
+    // used when a pressable has no text/test_id label (icon-only buttons).
+    use_coord: bool = false,
+    coord_x: f32 = 0,
+    coord_y: f32 = 0,
 };
-const MAX_AUTO_STEPS = 256;
+const MAX_AUTO_STEPS = 2048;
 var auto_steps: [MAX_AUTO_STEPS]AutoStep = undefined;
 var auto_step_count: u16 = 0;
 var auto_idx: u16 = 0;
@@ -156,6 +161,26 @@ var auto_passed: u16 = 0;
 var auto_failed: u16 = 0;
 var auto_settle_frames: u8 = 0; // frames to wait before next action (settle + render)
 var auto_capture_pending: bool = false; // waiting for GPU readback callback
+
+// ── Scroll-hunt state ───────────────────────────────────────────────────
+// Multi-frame hunt: when the current step targets text that isn't currently
+// in the layout tree (typical cause: VirtualFileTree-style virtualization,
+// where rows outside the scroll viewport never mount), we scroll every
+// scroll container through its range, yielding a settle frame between each
+// move, until the target text shows up — or all containers are exhausted.
+// Settle frames matter because virtualization needs React to re-render in
+// response to the new scroll_y before query.find can see the new rows.
+const MAX_HUNT_CONTAINERS = 64;
+var hunt_active: bool = false;
+var hunt_exhausted: bool = false;
+var hunt_settle: u8 = 0;
+var hunt_containers: [MAX_HUNT_CONTAINERS]*Node = undefined;
+var hunt_original_scrolls: [MAX_HUNT_CONTAINERS]f32 = undefined;
+var hunt_container_count: u16 = 0;
+var hunt_container_idx: u16 = 0;
+var hunt_text_buf: [TEXT_LEN]u8 = undefined;
+var hunt_text_len: u16 = 0;
+var hunt_started_for_step: bool = false;
 
 // Track all texts ever seen during the test run (for source audit)
 var auto_seen_texts: [512][64]u8 = undefined;
@@ -807,7 +832,9 @@ fn loadAutotest() void {
     };
     defer file.close();
 
-    var buf: [4096]u8 = undefined;
+    // Must fit the entire .autotest file. Sweatshop-scale snapshots emit
+    // ~800 steps / ~30KB; leave headroom for growth.
+    var buf: [262144]u8 = undefined;
     const len = file.readAll(&buf) catch return;
     const content = buf[0..len];
 
@@ -893,7 +920,29 @@ fn loadAutotest() void {
 }
 
 fn parseAutoText(rest: []const u8, step: *AutoStep) void {
-    // Parse: "text" [#N]
+    // Parse any of:
+    //   "text"              — find by text
+    //   "text" #N           — find by text, pick Nth occurrence
+    //   @x,y                — direct coordinate click (icon-only buttons)
+    //   "Name" @x,y         — hybrid: "Name" labels the click for humans/proof
+    //                         grid, @x,y is the actual replay target. Emitted
+    //                         when the reconciler can resolve a debugName for
+    //                         an icon-only pressable.
+    // parseTail handles the trailing `@x,y` (if present) and `#N`.
+    const trimmed_lead = std.mem.trimLeft(u8, rest, " \t");
+    if (trimmed_lead.len > 0 and trimmed_lead[0] == '@') {
+        parseCoordTail(trimmed_lead, step);
+        if (step.use_coord) {
+            // Store full "@x,y" as the display label for logs/manifest.
+            const label_len = std.mem.indexOfScalarPos(u8, trimmed_lead, 0, ' ') orelse trimmed_lead.len;
+            const copy_len = @min(label_len, TEXT_LEN);
+            @memcpy(step.text[0..copy_len], trimmed_lead[0..copy_len]);
+            step.text_len = @intCast(copy_len);
+        }
+        return;
+    }
+
+    // Parse: "text" [@x,y] [#N]
     // Find opening quote
     const q1 = std.mem.indexOfScalar(u8, rest, '"') orelse return;
     const after_q1 = rest[q1 + 1 ..];
@@ -903,17 +952,42 @@ fn parseAutoText(rest: []const u8, step: *AutoStep) void {
     @memcpy(step.text[0..copy_len], text[0..copy_len]);
     step.text_len = @intCast(copy_len);
 
-    // Check for #N occurrence after closing quote
+    // Check for optional `@x,y` (coord-override, used with a human-readable
+    // label) and `#N` (occurrence index) after the closing quote.
     const after_text = after_q1[q2 + 1 ..];
+    const at_marker = std.mem.indexOfScalar(u8, after_text, '@');
+    if (at_marker) |pos| {
+        parseCoordTail(after_text[pos..], step);
+    }
     if (std.mem.indexOf(u8, after_text, "#")) |hash| {
         const num_start = after_text[hash + 1 ..];
-        // Parse digits
         var end: usize = 0;
         while (end < num_start.len and num_start[end] >= '0' and num_start[end] <= '9') : (end += 1) {}
         if (end > 0) {
             step.occurrence = std.fmt.parseInt(u16, num_start[0..end], 10) catch 1;
         }
     }
+}
+
+/// Parse `@<x>,<y>` into step.coord_x/coord_y, setting use_coord. Caller passes
+/// a slice starting at the `@`; no-op if the tail doesn't look like a coord.
+fn parseCoordTail(tail: []const u8, step: *AutoStep) void {
+    if (tail.len < 3 or tail[0] != '@') return;
+    const body = tail[1..];
+    const comma = std.mem.indexOfScalar(u8, body, ',') orelse return;
+    const x_str = std.mem.trim(u8, body[0..comma], " \t");
+    const y_rest = body[comma + 1 ..];
+    var y_end: usize = 0;
+    while (y_end < y_rest.len) : (y_end += 1) {
+        const c = y_rest[y_end];
+        if (!(c == '-' or c == '.' or c == '+' or (c >= '0' and c <= '9'))) break;
+    }
+    const y_str = std.mem.trim(u8, y_rest[0..y_end], " \t");
+    const x = std.fmt.parseFloat(f32, x_str) catch return;
+    const y = std.fmt.parseFloat(f32, y_str) catch return;
+    step.use_coord = true;
+    step.coord_x = x;
+    step.coord_y = y;
 }
 
 fn parseAutoTextWithColor(rest: []const u8, step: *AutoStep) void {
@@ -1040,6 +1114,136 @@ fn findScrollParentWalk(node: *Node, target: *Node, current_scroll: ?*Node) ?*No
         if (findScrollParentWalk(child, target, new_scroll)) |result| return result;
     }
     return null;
+}
+
+fn isScrollContainer(node: *const Node) bool {
+    const ov = node.style.overflow;
+    if (ov == .scroll) return node.content_height > node.computed.h;
+    if (ov == .auto) return node.content_height > node.computed.h;
+    return false;
+}
+
+/// Adjust the nearest scroll-container ancestor of `target` so `target` lands
+/// inside the visible window. Returns true if a scroll was applied (so the
+/// caller can log it / let the next settle frame re-layout). No-op and
+/// returns false if `target` is already visible or has no scroll parent.
+///
+/// Used by the `expect` step so text below a ScrollView's fold passes pixel
+/// verification — the autotest nudges the scroll, settles, then the next
+/// captured screenshot sees the element in the viewport.
+fn scrollNodeIntoView(root: *Node, target: *Node) bool {
+    const sp = findScrollParent(root, target) orelse return false;
+    const target_y = target.computed.y;
+    const target_h = target.computed.h;
+    const scroll_top = sp.computed.y;
+    const scroll_h = sp.computed.h;
+    const visible_top = scroll_top + sp.scroll_y;
+    const visible_bottom = visible_top + scroll_h;
+    const already_visible = target_y >= visible_top and (target_y + target_h) <= visible_bottom;
+    if (already_visible) return false;
+    if (target_y + target_h > visible_bottom) {
+        // Node below fold — scroll down, leave 20px of trailing room so the
+        // target isn't flush with the bottom edge (helps pixel sampler).
+        sp.scroll_y = target_y + target_h - scroll_top - scroll_h + 20;
+    } else if (target_y < visible_top) {
+        // Node above top — scroll up, 10px leading room.
+        sp.scroll_y = target_y - scroll_top - 10;
+    }
+    if (sp.scroll_y < 0) sp.scroll_y = 0;
+    const max_scroll = @max(0.0, sp.content_height - sp.computed.h);
+    if (sp.scroll_y > max_scroll) sp.scroll_y = max_scroll;
+    layout.markLayoutDirty();
+    return true;
+}
+
+fn collectScrollContainersRecurse(node: *Node) void {
+    if (hunt_container_count >= MAX_HUNT_CONTAINERS) return;
+    if (isScrollContainer(node)) {
+        hunt_containers[hunt_container_count] = node;
+        hunt_original_scrolls[hunt_container_count] = node.scroll_y;
+        hunt_container_count += 1;
+    }
+    for (node.children) |*child| collectScrollContainersRecurse(child);
+}
+
+/// Returns true if a step of this kind wants to locate a named target in the
+/// tree. Hunt only makes sense for these — `reject`, `key_press`, and `clear`
+/// don't need a target to find.
+fn stepNeedsTextTarget(kind: anytype) bool {
+    return switch (kind) {
+        .click, .hover, .rightclick, .wheel, .wheelx, .expect,
+        .scroll, .color, .bg, .border, .styles, .focus, .type_text => true,
+        else => false,
+    };
+}
+
+/// Begin a scroll hunt for `text`. Snapshots the current scroll_y of every
+/// scroll container (so a hunt that fails can roll the UI back), resets them
+/// all to zero, then lets huntTick walk each one through its range. If the
+/// hunt eventually locates the text, scroll positions stay where they are so
+/// the subsequent click/expect lands on the now-visible node.
+fn startHunt(root: *Node, text: []const u8) void {
+    hunt_container_count = 0;
+    collectScrollContainersRecurse(root);
+
+    hunt_text_len = @intCast(@min(text.len, TEXT_LEN));
+    @memcpy(hunt_text_buf[0..hunt_text_len], text[0..hunt_text_len]);
+
+    // Start every container at 0 so the hunt covers the whole range.
+    for (hunt_containers[0..hunt_container_count]) |c| c.scroll_y = 0;
+
+    hunt_container_idx = 0;
+    hunt_settle = 3; // let React re-render virtualized rows before first check
+    hunt_active = true;
+    hunt_exhausted = (hunt_container_count == 0);
+    layout.markLayoutDirty();
+
+    std.debug.print("  [hunt] target \"{s}\" not in tree — scanning {d} scroll container(s)\n", .{ text, hunt_container_count });
+}
+
+/// Called on every tick while `hunt_active`. Returns true the moment the
+/// target text appears in the tree (caller should stop hunting and execute
+/// the pending step). Returns false otherwise; when all scroll containers
+/// have been walked, sets `hunt_exhausted` and restores original scrolls.
+fn huntTick(root: *Node) bool {
+    if (hunt_settle > 0) {
+        hunt_settle -= 1;
+        return false;
+    }
+    const text = hunt_text_buf[0..hunt_text_len];
+    if (query.find(root, .{ .text_contains = text }) != null) {
+        std.debug.print("  [hunt] found \"{s}\" after scrolling\n", .{text});
+        return true;
+    }
+    if (hunt_container_idx >= hunt_container_count) {
+        // Ran out of containers to try — restore original scroll positions
+        // so we don't leave the UI in an arbitrary scrolled state that would
+        // make every subsequent step fail too.
+        for (hunt_containers[0..hunt_container_count], 0..) |c, i| c.scroll_y = hunt_original_scrolls[i];
+        layout.markLayoutDirty();
+        hunt_exhausted = true;
+        std.debug.print("  [hunt] exhausted — \"{s}\" not reachable\n", .{text});
+        return false;
+    }
+
+    const c = hunt_containers[hunt_container_idx];
+    const viewport = if (c.computed.h > 0) c.computed.h else 100.0;
+    const step_px = @max(viewport * 0.9, 40.0);
+    const max_scroll: f32 = if (c.content_height > c.computed.h) c.content_height - c.computed.h else 0.0;
+
+    if (c.scroll_y < max_scroll) {
+        c.scroll_y = @min(c.scroll_y + step_px, max_scroll);
+    } else {
+        // Container fully walked — reset it and advance.
+        c.scroll_y = hunt_original_scrolls[hunt_container_idx];
+        hunt_container_idx += 1;
+        if (hunt_container_idx < hunt_container_count) {
+            hunt_containers[hunt_container_idx].scroll_y = 0;
+        }
+    }
+    layout.markLayoutDirty();
+    hunt_settle = 3;
+    return false;
 }
 
 fn findTextInputWalk(node: *Node, search_text: []const u8, scroll_y: f32) ?query.QueryResult {
@@ -1175,18 +1379,20 @@ fn colorEql(a: layout.Color, b: layout.Color) bool {
 //   3. Write the complete autotest to ZIGOS_WITNESS_FILE
 // The autotest is a build artifact — never hand-written.
 
-const SNAP_MAX_CLICKS = 64;
-const SNAP_MAX_LINES = 512;
+const SNAP_MAX_CLICKS = 1024;
+const SNAP_MAX_LINES = 8192;
 
 const SnapPhase = enum { wait_settle, collect_initial, clicking, settle_after_click, done };
 
 var snap_phase: SnapPhase = .wait_settle;
 var snap_settle_countdown: u8 = 0;
 
-// Pressable nodes discovered on initial render
+// Pressable nodes discovered on initial render + re-discovered after each click
 var snap_pressables: [SNAP_MAX_CLICKS]query.QueryResult = undefined;
 var snap_press_labels: [SNAP_MAX_CLICKS][64]u8 = undefined;
 var snap_press_label_lens: [SNAP_MAX_CLICKS]u8 = undefined;
+// true → label is `@x,y` coordinate form (icon-only / text-less button); emit unquoted.
+var snap_press_is_coord: [SNAP_MAX_CLICKS]bool = undefined;
 var snap_pressable_count: u16 = 0;
 var snap_click_idx: u16 = 0;
 
@@ -1229,9 +1435,13 @@ fn snapCountTree(node: *Node) void {
     }
 }
 
+var snap_emitted_expects: u16 = 0;
+
 fn snapCollectTexts(root: *Node) void {
     collectSeenTexts(root);
-    for (0..auto_seen_count) |i| {
+    const start: u16 = snap_emitted_expects;
+    snap_emitted_expects = auto_seen_count;
+    for (start..auto_seen_count) |i| {
         const raw_txt = auto_seen_texts[i][0..auto_seen_lens[i]];
         var normalized_buf: [64]u8 = undefined;
         var normalized_len: usize = 0;
@@ -1315,8 +1525,14 @@ fn snapCollectTexts(root: *Node) void {
     }
 }
 
+var snap_viewport_w: f32 = 0;
+var snap_viewport_h: f32 = 0;
+
 fn snapFindPressables(root: *Node) void {
-    // Find all nodes that have press handlers AND have text (so we can label the click)
+    // Record the viewport once so on-screen checks inside the recursion don't
+    // have to re-walk up to the root.
+    snap_viewport_w = root.computed.w;
+    snap_viewport_h = root.computed.h;
     snapFindPressRecurse(root, 0);
 }
 
@@ -1336,43 +1552,105 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
     }
 
     if (has_press) {
-        // test_id is the most reliable label — compiler injects it from the handler name
-        var label: ?[]const u8 = node.test_id;
-        // Fall back to visible text
-        if (label == null) {
-            label = node.text;
+        const cx = node.computed.x + node.computed.w / 2.0;
+        const cy = node.computed.y - scroll_y + node.computed.h / 2.0;
+
+        // Resolve label, preferring stable identifiers over visible text.
+        // 1. test_id — compiler-injected from handler name. Best option.
+        // 2. node.text — own visible text.
+        // 3. First child's visible text — common button-wraps-text pattern.
+        // Handler strings (__dispatchEvent(...), debug_name) are NOT used as
+        // labels: they're not addressable at replay time. Icon-only and
+        // otherwise text-less pressables get a @cx,cy coordinate label so
+        // the replay hits the same pixel instead of failing the step.
+        var text_label: ?[]const u8 = node.test_id;
+        if (text_label == null) text_label = node.text;
+        if (text_label == null) text_label = findFirstChildText(node);
+
+        // Filter out glyph placeholder / non-printable labels — they're not
+        // addressable at replay and usually mean the handler label leaked a
+        // raw SDF-atlas index byte. Fall back to coord form in that case.
+        if (text_label) |lbl| {
+            var ok = lbl.len >= 2;
+            if (ok) for (lbl) |ch| {
+                if (ch < 0x20) {
+                    ok = false;
+                    break;
+                }
+            };
+            if (ok) {
+                if (std.mem.indexOf(u8, lbl, "\\1") != null) ok = false;
+                if (std.mem.eql(u8, lbl, "\\1")) ok = false;
+                if (std.mem.indexOf(u8, lbl, "\\\\1") != null) ok = false;
+                if (std.mem.eql(u8, lbl, "\\\\1")) ok = false;
+                if (std.mem.indexOf(u8, lbl, "\\x01") != null) ok = false;
+                if (std.mem.eql(u8, lbl, "\\x01")) ok = false;
+                if (std.mem.indexOf(u8, lbl, "\\\\x01") != null) ok = false;
+                if (std.mem.eql(u8, lbl, "\\\\x01")) ok = false;
+            }
+            if (!ok) text_label = null;
         }
-        if (label == null) {
-            label = findFirstChildText(node);
-        }
-        // Last resort: handler string directly
-        if (label == null) {
-            if (node.debug_name) |dn| label = dn else if (h.js_on_press) |jp| label = std.mem.span(jp) else if (h.lua_on_press) |lp| label = std.mem.span(lp);
-        }
-        if (label) |lbl| {
-            // Skip glyph placeholders (\x01 byte, "\1"/"\\1", or "\x01"/"\\x01" escaped strings) and non-printable labels
-            var is_valid_label = lbl.len >= 2;
-            if (is_valid_label) {
-                // Check for raw 0x01 byte
-                for (lbl) |ch| {
-                    if (ch < 0x20) {
-                        is_valid_label = false;
+
+        // Skip pressables whose center isn't on-screen — off-screen click
+        // hits nothing useful and just wastes a step.
+        const on_screen = cx >= 0 and cy >= 0 and cx < snap_viewport_w and cy < snap_viewport_h;
+
+        if (on_screen) {
+            // Build the label. Three forms in priority order:
+            //   1. plain text    — pressable had text/test_id.
+            //   2. "Name" @x,y   — no text, but the reconciler resolved a
+            //                      component debug_name (e.g. TabCloseButton).
+            //                      Name is for readability, @x,y is the
+            //                      replay target.
+            //   3. @x,y          — anonymous icon button, no component name.
+            var label_buf: [64]u8 = undefined;
+            var label: []const u8 = undefined;
+            var is_coord = false;
+            if (text_label) |lbl| {
+                const clen = @min(lbl.len, 64);
+                label = lbl[0..clen];
+            } else if (node.debug_name) |dn| {
+                // Sanitize: component names should be ASCII word chars; reject
+                // anything weird (keeps the autotest file parseable).
+                var dn_ok = dn.len > 0 and dn.len < 48;
+                if (dn_ok) for (dn) |ch| {
+                    const alpha = (ch >= 'A' and ch <= 'Z') or (ch >= 'a' and ch <= 'z');
+                    const digit = ch >= '0' and ch <= '9';
+                    if (!(alpha or digit or ch == '_' or ch == '.' or ch == '-')) {
+                        dn_ok = false;
                         break;
                     }
+                };
+                if (dn_ok) {
+                    // Hybrid label stored as `Name|@x,y` internally; split on
+                    // '|' at emission time so the autotest file reads
+                    //   click "Name" @x,y
+                    // and the parser sees coords OUTSIDE the quoted label.
+                    const s = std.fmt.bufPrint(&label_buf, "{s}|@{d:.0},{d:.0}", .{ dn, cx, cy }) catch "";
+                    label = s;
+                    is_coord = true;
+                } else {
+                    const s = std.fmt.bufPrint(&label_buf, "@{d:.0},{d:.0}", .{ cx, cy }) catch "@0,0";
+                    label = s;
+                    is_coord = true;
+                }
+            } else {
+                const s = std.fmt.bufPrint(&label_buf, "@{d:.0},{d:.0}", .{ cx, cy }) catch "@0,0";
+                label = s;
+                is_coord = true;
+            }
+
+            // Dedupe: skip if an identical label was already captured.
+            var seen = false;
+            var si: u16 = 0;
+            while (si < snap_pressable_count) : (si += 1) {
+                const prev = snap_press_labels[si][0..snap_press_label_lens[si]];
+                if (prev.len == label.len and std.mem.eql(u8, prev, label)) {
+                    seen = true;
+                    break;
                 }
             }
-            if (is_valid_label) {
-                // Check for escaped glyph placeholder "\1", "\\1", or "\\x01"
-                if (std.mem.indexOf(u8, lbl, "\\1") != null) is_valid_label = false;
-                if (std.mem.eql(u8, lbl, "\\1")) is_valid_label = false;
-                if (std.mem.indexOf(u8, lbl, "\\\\1") != null) is_valid_label = false;
-                if (std.mem.eql(u8, lbl, "\\\\1")) is_valid_label = false;
-                if (std.mem.indexOf(u8, lbl, "\\x01") != null) is_valid_label = false;
-                if (std.mem.eql(u8, lbl, "\\x01")) is_valid_label = false;
-                if (std.mem.indexOf(u8, lbl, "\\\\x01") != null) is_valid_label = false;
-                if (std.mem.eql(u8, lbl, "\\\\x01")) is_valid_label = false;
-            }
-            if (is_valid_label) {
+            if (!seen) {
                 const idx = snap_pressable_count;
                 snap_pressables[idx] = .{
                     .node = node,
@@ -1380,12 +1658,13 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
                     .y = node.computed.y - scroll_y,
                     .w = node.computed.w,
                     .h = node.computed.h,
-                    .cx = node.computed.x + node.computed.w / 2.0,
-                    .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+                    .cx = cx,
+                    .cy = cy,
                 };
-                const clen = @min(lbl.len, 64);
-                @memcpy(snap_press_labels[idx][0..clen], lbl[0..clen]);
-                snap_press_label_lens[idx] = @intCast(clen);
+                const clen: u8 = @intCast(label.len);
+                @memcpy(snap_press_labels[idx][0..label.len], label);
+                snap_press_label_lens[idx] = clen;
+                snap_press_is_coord[idx] = is_coord;
                 snap_pressable_count += 1;
             }
         }
@@ -1503,25 +1782,29 @@ fn snapshotTick(root: *Node) bool {
             }
 
             const label = snap_press_labels[snap_click_idx][0..snap_press_label_lens[snap_click_idx]];
+            const is_coord = snap_press_is_coord[snap_click_idx];
 
-            // Skip if we already clicked a button with this exact label
-            var already_clicked = false;
-            for (0..snap_click_idx) |prev| {
-                const prev_label = snap_press_labels[prev][0..snap_press_label_lens[prev]];
-                if (std.mem.eql(u8, label, prev_label)) {
-                    already_clicked = true;
-                    break;
-                }
-            }
-            if (already_clicked) {
-                snap_click_idx += 1;
-                return false;
-            }
-
-            // Click using stored coordinates (don't re-find — avoids hitting wrong node with same label)
+            // Click using stored coordinates (don't re-find — avoids hitting wrong node with same label).
+            // Three emission forms:
+            //   text label         → click "foo"
+            //   hybrid name + coord → click "Name @x,y"   (readable + replay-precise)
+            //   pure coord         → click @x,y           (anonymous icon button)
             const p = snap_pressables[snap_click_idx];
             snapAddLine("");
-            snapAddFmt("click \"{s}\"", .{label});
+            if (is_coord) {
+                // Pure coord labels start with '@'. Hybrid labels are stored
+                // as `Name|@x,y` and split on '|' here so the output is
+                //   click "Name" @x,y
+                if (label.len > 0 and label[0] == '@') {
+                    snapAddFmt("click {s}", .{label});
+                } else if (std.mem.indexOfScalar(u8, label, '|')) |pipe| {
+                    snapAddFmt("click \"{s}\" {s}", .{ label[0..pipe], label[pipe + 1 ..] });
+                } else {
+                    snapAddFmt("click \"{s}\"", .{label});
+                }
+            } else {
+                snapAddFmt("click \"{s}\"", .{label});
+            }
             testdriver.click(p.cx, p.cy);
             snap_settle_countdown = 3;
             snap_phase = .settle_after_click;
@@ -1533,9 +1816,16 @@ fn snapshotTick(root: *Node) bool {
                 return false;
             }
 
-            // Reset seen texts and re-collect after click
-            auto_seen_count = 0;
+            // Re-collect texts after click — keep auto_seen across clicks so
+            // only NEW strings get appended (otherwise every click dumps ~500
+            // expects and fills the line buffer within ~10 clicks).
             snapCollectTexts(root);
+
+            // Re-discover pressables: clicking may have revealed new buttons
+            // (open menus, nav to another screen, expand a tree row, etc.).
+            // Dedupe inside snapFindPressRecurse keeps us from looping on the
+            // same buttons forever.
+            snapFindPressables(root);
 
             snap_click_idx += 1;
             if (snap_click_idx >= snap_pressable_count) {
@@ -1629,6 +1919,21 @@ fn autotestTick(root: *Node) bool {
         return false;
     }
 
+    // ── Scroll-hunt ────────────────────────────────────────────────────
+    // If a hunt is in progress, drive it. Suspend step dispatch while we
+    // scroll through containers; resume the moment huntTick reports found
+    // (target is now visible) or exhaustion (give up — the step will FAIL
+    // normally, but with every scroll position we tried documented).
+    if (hunt_active) {
+        if (huntTick(root)) {
+            hunt_active = false;
+        } else if (hunt_exhausted) {
+            hunt_active = false;
+        } else {
+            return false;
+        }
+    }
+
     if (auto_idx >= auto_step_count) {
         // Audits: verify source texts render + check colors
         auditSourceTexts(root);
@@ -1651,10 +1956,28 @@ fn autotestTick(root: *Node) bool {
     var passed = false;
     var hit_result: ?query.QueryResult = null;
 
+    // Pre-step scroll hunt: if this step targets named text and the text
+    // isn't in the current layout tree, try scrolling every scroll container
+    // before we declare FAIL. One hunt attempt per step — if it completes
+    // without finding the text, we fall through to the switch and the step
+    // records its FAIL as usual. hunt_started_for_step guards against
+    // re-entering hunt in the same step after exhaustion.
+    if (!hunt_started_for_step and !step.use_coord and step.text_len > 0 and stepNeedsTextTarget(step.kind)) {
+        if (query.find(root, .{ .text_contains = text }) == null) {
+            hunt_started_for_step = true;
+            startHunt(root, text);
+            return false;
+        }
+    }
+
     switch (step.kind) {
         .click => {
             std.debug.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (findActionTarget(root, text, step.occurrence)) |result| {
+            if (step.use_coord) {
+                testdriver.click(step.coord_x, step.coord_y);
+                std.debug.print(" ... OK (coord)\n", .{});
+                passed = true;
+            } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.click(result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
@@ -1667,7 +1990,11 @@ fn autotestTick(root: *Node) bool {
         },
         .hover => {
             std.debug.print("  [{d}/{d}] hover \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (findActionTarget(root, text, step.occurrence)) |result| {
+            if (step.use_coord) {
+                testdriver.moveMouse(step.coord_x, step.coord_y);
+                std.debug.print(" ... OK (coord)\n", .{});
+                passed = true;
+            } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.moveMouse(result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
@@ -1680,7 +2007,11 @@ fn autotestTick(root: *Node) bool {
         },
         .rightclick => {
             std.debug.print("  [{d}/{d}] rightclick \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (findActionTarget(root, text, step.occurrence)) |result| {
+            if (step.use_coord) {
+                testdriver.rightClick(step.coord_x, step.coord_y);
+                std.debug.print(" ... OK (coord)\n", .{});
+                passed = true;
+            } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.rightClick(result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
@@ -1693,7 +2024,11 @@ fn autotestTick(root: *Node) bool {
         },
         .wheel => {
             std.debug.print("  [{d}/{d}] wheel \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (findActionTarget(root, text, step.occurrence)) |result| {
+            if (step.use_coord) {
+                testdriver.scrollAt(0, -3, step.coord_x, step.coord_y);
+                std.debug.print(" ... OK (coord)\n", .{});
+                passed = true;
+            } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.scrollAt(0, -3, result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
@@ -1706,7 +2041,11 @@ fn autotestTick(root: *Node) bool {
         },
         .wheelx => {
             std.debug.print("  [{d}/{d}] wheelx \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
-            if (findActionTarget(root, text, step.occurrence)) |result| {
+            if (step.use_coord) {
+                testdriver.scrollAt(-3, 0, step.coord_x, step.coord_y);
+                std.debug.print(" ... OK (coord)\n", .{});
+                passed = true;
+            } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.scrollAt(-3, 0, result.cx, result.cy);
                 std.debug.print(" ... OK\n", .{});
@@ -1721,7 +2060,18 @@ fn autotestTick(root: *Node) bool {
             std.debug.print("  [{d}/{d}] expect \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (query.find(root, .{ .text_contains = text })) |result| {
                 hit_result = result;
-                std.debug.print(" ... PASS\n", .{});
+                // Auto-scroll: if the node is inside a scroll container but not
+                // currently in its visible window, nudge the container's scroll
+                // so the node is on-screen. The 3-frame settle after this step
+                // lets layout reflow before the next screenshot, so the pixel
+                // verify sees the node. Without this, snapshot-emitted expects
+                // for text below a ScrollView's fold fail pixel verification
+                // even though the app renders them correctly when scrolled.
+                if (scrollNodeIntoView(root, result.node)) {
+                    std.debug.print(" ... PASS (scrolled into view)\n", .{});
+                } else {
+                    std.debug.print(" ... PASS\n", .{});
+                }
                 passed = true;
             } else {
                 std.debug.print(" ... FAIL (not found)\n", .{});
@@ -2059,7 +2409,14 @@ fn autotestTick(root: *Node) bool {
 
     appendManifest(auto_idx, step, passed, hit_result);
 
+    // Flush manifest to disk incrementally so a SIGKILL (via `timeout -s KILL`)
+    // still leaves a partial proof grid instead of wiping the run. finishAutotest
+    // is idempotent — it just rewrites the full buffer.
+    finishAutotest();
+
     auto_idx += 1;
+    hunt_started_for_step = false;
+    hunt_exhausted = false;
 
     // Wait 3 frames for tree rebuild + layout + GPU render, then screenshot
     auto_settle_frames = 3;
