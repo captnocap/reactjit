@@ -1128,7 +1128,7 @@ function describeJsonValue(value: unknown): string {
 }
 
 function isJsonContainer(value: unknown): value is Record<string, unknown> | unknown[] {
-  return Array.isArray(value) || (!!value && typeof value === 'object');
+  return Array.isArray(value) || (value !== null && typeof value === 'object' && Object.prototype.toString.call(value) === '[object Object]');
 }
 
 function formatJsonPrimitive(value: unknown): string {
@@ -1149,7 +1149,11 @@ function getJsonChildren(value: Record<string, unknown> | unknown[]): Array<[str
   if (Array.isArray(value)) {
     return value.map((entry, index) => [String(index), entry]);
   }
-  return Object.entries(value);
+  try {
+    return Object.entries(value);
+  } catch {
+    return [];
+  }
 }
 
 function shouldCollapseJsonNodeByDefault(depth: number): boolean {
@@ -1168,6 +1172,8 @@ function getJsonNodeCollapsedState(
   return hasJsonNodeState(collapsed, path) ? collapsed[path] : shouldCollapseJsonNodeByDefault(depth);
 }
 
+const JSON_TREE_MAX_DEPTH = 64;
+
 function JsonTreeNode({
   name,
   value,
@@ -1183,6 +1189,15 @@ function JsonTreeNode({
   collapsed: Record<string, boolean>;
   onToggle: (path: string, depth: number) => void;
 }) {
+  if (depth > JSON_TREE_MAX_DEPTH) {
+    return (
+      <Row style={{ width: '100%', minHeight: 20, alignItems: 'flex-start', paddingLeft: depth * 14, gap: 6 }}>
+        {name ? <Text style={{ fontFamily: 'monospace', fontSize: 10, lineHeight: 16, color: PAGE_SURFACE.textColor }}>{`${name}:`}</Text> : null}
+        <Text style={{ fontFamily: 'monospace', fontSize: 10, lineHeight: 16, color: PAGE_SURFACE.mutedTextColor }}>{'[max depth exceeded]'}</Text>
+      </Row>
+    );
+  }
+
   const indent = depth * 14;
   const container = isJsonContainer(value);
 
@@ -1379,18 +1394,24 @@ function JsonDataPanel({
           }}
           showScrollbar
         >
-          <JsonTreeNode
-            value={value}
-            path="root"
-            depth={0}
-            collapsed={collapsed}
-            onToggle={(path, depth) => {
-              setCollapsed((prev) => ({
-                ...prev,
-                [path]: !getJsonNodeCollapsedState(prev, path, depth),
-              }));
-            }}
-          />
+          {value != null ? (
+            <JsonTreeNode
+              value={value}
+              path="root"
+              depth={0}
+              collapsed={collapsed}
+              onToggle={(path, depth) => {
+                setCollapsed((prev) => ({
+                  ...prev,
+                  [path]: !getJsonNodeCollapsedState(prev, path, depth),
+                }));
+              }}
+            />
+          ) : (
+            <Text style={{ fontFamily: 'monospace', fontSize: 10, lineHeight: 16, color: PAGE_SURFACE.mutedTextColor }}>
+              null
+            </Text>
+          )}
         </ScrollView>
       </Box>
     </Col>
