@@ -164,7 +164,6 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "tor",          .required = false, .grep_prefix = "__tor_",     .reg_fn = "registerTor",         .mod = v8_bindings_tor },
     .{ .name = "privacy",      .required = false, .grep_prefix = "__priv_",    .reg_fn = "registerPrivacy",     .mod = v8_bindings_privacy },
 };
-const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
 comptime {
@@ -461,11 +460,6 @@ fn dispatchInputEvent(slot: u8, global_name: [*:0]const u8) void {
     v8_runtime.callGlobal("__beginJsEvent");
     v8_runtime.callGlobal2Int(global_name, @intCast(node_id), @intCast(slot));
     v8_runtime.callGlobal("__endJsEvent");
-    // Additive LuaJIT dispatch — cart code running in the Lua VM picks up the
-    // same event by defining a matching global. Silent no-op if absent.
-    if (luajit_runtime.hasGlobal(global_name)) {
-        luajit_runtime.callGlobalInt(global_name, @intCast(node_id));
-    }
 }
 
 fn makeInputChangeCallback(comptime slot: u8) *const fn () void {
@@ -506,9 +500,6 @@ fn dispatchInputKeyEvent(slot: u8, key: c_int, mods: u16) void {
     v8_runtime.callGlobal("__beginJsEvent");
     v8_runtime.callGlobal3Int("__dispatchInputKey", @intCast(node_id), key, mods);
     v8_runtime.callGlobal("__endJsEvent");
-    if (luajit_runtime.hasGlobal("__dispatchInputKey")) {
-        luajit_runtime.callGlobal3Int("__dispatchInputKey", @intCast(node_id), key, mods);
-    }
 }
 
 fn makeInputKeyCallback(comptime slot: u8) *const fn (key: c_int, mods: u16) void {

@@ -9,7 +9,6 @@ comptime {
 const v8_runtime = @import("v8_runtime.zig");
 const state = @import("state.zig");
 const input = @import("input.zig");
-const luajit_runtime = @import("luajit_runtime.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const exec_async = @import("exec_async.zig");
 const vterm = @import("vterm.zig");
@@ -189,14 +188,6 @@ fn hostJsEval(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     var buf: [16384]u8 = undefined;
     const result = v8_runtime.evalToString(code, buf[0..]);
     setReturnString(info, result);
-}
-
-fn hostLuaEval(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
-    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    if (info.length() < 1) return;
-    const code = argToStringAlloc(info, 0) orelse return;
-    defer std.heap.c_allocator.free(code);
-    luajit_runtime.evalExpr(code);
 }
 
 fn hostSetState(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -812,7 +803,6 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__hostReleaseFileBuffer", hostReleaseFileBuffer);
     v8_runtime.registerHostFn("__hostLog", hostLog);
     v8_runtime.registerHostFn("__js_eval", hostJsEval);
-    v8_runtime.registerHostFn("__luaEval", hostLuaEval);
     v8_runtime.registerHostFn("__setState", hostSetState);
     v8_runtime.registerHostFn("__setStateString", hostSetStateString);
     v8_runtime.registerHostFn("__getState", hostGetState);

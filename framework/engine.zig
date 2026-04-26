@@ -837,9 +837,6 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     // Exit previous
     if (hovered_node) |prev| {
         if (prev.handlers.on_hover_exit) |handler| handler();
-        if (prev.handlers.lua_on_hover_exit) |lua_expr| {
-            luajit_runtime.evalExpr(std.mem.span(lua_expr));
-        }
         if (prev.handlers.js_on_hover_exit) |js_expr| {
             js_vm.callGlobal("__beginJsEvent");
             js_vm.evalExpr(std.mem.span(js_expr));
@@ -851,9 +848,6 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     // Enter new
     if (hit) |node| {
         if (node.handlers.on_hover_enter) |handler| handler();
-        if (node.handlers.lua_on_hover_enter) |lua_expr| {
-            luajit_runtime.evalExpr(std.mem.span(lua_expr));
-        }
         if (node.handlers.js_on_hover_enter) |js_expr| {
             js_vm.callGlobal("__beginJsEvent");
             js_vm.evalExpr(std.mem.span(js_expr));
@@ -1166,17 +1160,6 @@ fn openUrl(url: []const u8) void {
     _ = child.spawnAndWait() catch {};
 }
 
-fn tryDispatchJsrtEventExpr(expr: []const u8) bool {
-    if (!luajit_runtime.hasGlobal("__dispatchEventFromZig")) return false;
-    const prefix = "__dispatchEvent(";
-    const suffix = ",'onClick')";
-    if (!std.mem.startsWith(u8, expr, prefix) or !std.mem.endsWith(u8, expr, suffix)) return false;
-    const id_slice = expr[prefix.len .. expr.len - suffix.len];
-    const id = std.fmt.parseInt(i64, id_slice, 10) catch return false;
-    luajit_runtime.callGlobalIntStr("__dispatchEventFromZig", id, "onClick");
-    return true;
-}
-
 fn tryParseDispatchEventExpr(expr: []const u8) ?struct { id: u32, handler: []const u8 } {
     const prefix = "__dispatchEvent(";
     if (!std.mem.startsWith(u8, expr, prefix)) return null;
@@ -1199,10 +1182,6 @@ fn runJsHandlerExpr(expr: []const u8) void {
             state_mod.markDirty();
             return;
         }
-    }
-    if (tryDispatchJsrtEventExpr(expr)) {
-        state_mod.markDirty();
-        return;
     }
     js_vm.callGlobal("__beginJsEvent");
     js_vm.evalExpr(expr);
@@ -1460,7 +1439,12 @@ var g_input_latency_kind: []const u8 = "";
 var g_input_latency_event_count: u32 = 0; // events batched into this frame
 
 fn stampClickLatency() void {
-    luajit_runtime.callGlobal("__clickLatencyBegin");
+    // Click-latency telemetry was a one-off measurement; the storage that
+    // fed it (framework/lua/jsrt/click_latency.zig) was removed alongside
+    // JSRT. Kept as a no-op so the ~9 stamp call sites in this file don't
+    // need surgery; if a future click-paint-latency tool needs the hook,
+    // wire it back in here.
+    _ = .{};
 }
 
 fn stampInputLatency(kind: []const u8) void {
@@ -2866,7 +2850,6 @@ pub fn run(config_in: AppConfig) !void {
     // Load embedded scripts — after init so host functions are registered,
     // then mark dirty so first tick re-evaluates conditionals with scripts available.
     if (config.js_logic.len > 0) js_vm.evalScript(config.js_logic);
-    if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
     if (config.js_logic.len > 0) js_vm.evalExpr("__luaReady = true;");
     if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
     {
@@ -2918,7 +2901,6 @@ pub fn run(config_in: AppConfig) !void {
                 // (matches startup order: _appInit → evalScript)
                 if (config.init) |initFn| initFn();
                 if (config.js_logic.len > 0) js_vm.evalScript(config.js_logic);
-                if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
                 if (config.js_logic.len > 0) js_vm.evalExpr("__luaReady = true;");
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
@@ -2975,7 +2957,6 @@ pub fn run(config_in: AppConfig) !void {
                     }
                     qjs_runtime.updateMouse(event.button.x, event.button.y);
                     qjs_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
-                    luajit_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface input forwarding (VNC mouse) — check first
                     {
                         const rmx: f32 = event.button.x;
@@ -3020,14 +3001,10 @@ pub fn run(config_in: AppConfig) !void {
                             if (h.handlers.js_on_middle_click) |expr| {
                                 input.unfocus();
                                 const expr_str = std.mem.span(expr);
-                                if (luajit_runtime.hasGlobal("__dispatchEventFromZig")) {
-                                    luajit_runtime.callGlobalIntStr("__dispatchEventFromZig", h.scroll_persist_slot, "onMiddleClick");
-                                } else {
-                                    js_vm.callGlobal("__beginJsEvent");
-                                    js_vm.evalExpr(expr_str);
-                                    js_vm.callGlobal("__endJsEvent");
-                                    state_mod.markDirty();
-                                }
+                                js_vm.callGlobal("__beginJsEvent");
+                                js_vm.evalExpr(expr_str);
+                                js_vm.callGlobal("__endJsEvent");
+                                state_mod.markDirty();
                             }
                         }
                     }

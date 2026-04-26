@@ -1892,59 +1892,12 @@ pub fn initVM() void {
     g_lua = L;
     jsrtInitTree();
 
-    // Register host functions
-    const funcs = [_]struct { name: [*:0]const u8, func: lua.lua_CFunction }{
-        .{ .name = "__setState", .func = &hostSetState },
-        .{ .name = "__getState", .func = &hostGetState },
-        .{ .name = "__setStateString", .func = &hostSetStateString },
-        .{ .name = "__getStateString", .func = &hostGetStateString },
-        .{ .name = "__markDirty", .func = &hostMarkDirty },
-        .{ .name = "__hostLog", .func = &hostLog },
-        .{ .name = "getInputText", .func = &hostGetInputText },
-        .{ .name = "__setInputText", .func = &hostSetInputText },
-        .{ .name = "__pollInputSubmit", .func = &hostPollInputSubmit },
-        .{ .name = "__hostCreate", .func = &hostCreate },
-        .{ .name = "__hostCreateText", .func = &hostCreateText },
-        .{ .name = "__hostAppend", .func = &hostAppend },
-        .{ .name = "__hostAppendToRoot", .func = &hostAppendToRoot },
-        .{ .name = "__hostUpdate", .func = &hostUpdate },
-        .{ .name = "__hostUpdateText", .func = &hostUpdateText },
-        .{ .name = "__hostRemove", .func = &hostRemove },
-        .{ .name = "__hostRemoveFromRoot", .func = &hostRemoveFromRoot },
-        .{ .name = "__hostInsertBefore", .func = &hostInsertBefore },
-        .{ .name = "__hostInsertBeforeRoot", .func = &hostInsertBeforeRoot },
-        .{ .name = "__hostFlush", .func = &hostFlush },
-        .{ .name = "getMouseX", .func = &hostGetMouseX },
-        .{ .name = "getMouseY", .func = &hostGetMouseY },
-        .{ .name = "getMouseDown", .func = &hostGetMouseDown },
-        .{ .name = "getMouseRightDown", .func = &hostGetMouseRightDown },
-        .{ .name = "getFps", .func = &hostGetFps },
-        .{ .name = "getLayoutUs", .func = &hostGetLayoutUs },
-        .{ .name = "getPaintUs", .func = &hostGetPaintUs },
-        .{ .name = "getTickUs", .func = &hostGetTickUs },
-        .{ .name = "getNowMs", .func = &hostGetNowMs },
-        .{ .name = "__applescript", .func = &hostApplescript },
-        .{ .name = "__applescript_file", .func = &hostApplescriptFile },
-        .{ .name = "__declareChildren", .func = &hostDeclareChildren },
-        .{ .name = "__clearLuaNodes", .func = &hostClearLuaNodes },
-        .{ .name = "__eval", .func = &hostEval },
-        .{ .name = "__callJS", .func = &hostCallJS },
-        .{ .name = "__callJSReturn", .func = &hostCallJSReturn },
-        .{ .name = "__syncToJS", .func = &hostSyncToJS },
-        .{ .name = "__clickLatencyBegin", .func = &hostClickLatencyBegin },
-        .{ .name = "__clickLatencyCurrentSeq", .func = &hostClickLatencyCurrentSeq },
-        .{ .name = "__clickLatencyStampDispatch", .func = &hostClickLatencyStampDispatch },
-        .{ .name = "__clickLatencyStampHandler", .func = &hostClickLatencyStampHandler },
-        .{ .name = "__clickLatencyStampStateUpdate", .func = &hostClickLatencyStampStateUpdate },
-        .{ .name = "__clickLatencyStampFlush", .func = &hostClickLatencyStampFlush },
-        .{ .name = "__clickLatencyStampApplyDone", .func = &hostClickLatencyStampApplyDone },
-        .{ .name = "__clickLatencyDump", .func = &hostClickLatencyDump },
-    };
-
-    for (funcs) |f| {
-        lua.lua_pushcclosure(L, f.func, 0);
-        lua.lua_setglobal(L, f.name);
-    }
+    // Host-fn registration table was removed because nothing in modern V8
+    // carts calls into Lua-side host fns (Smith/.tsz codegen was the only
+    // consumer, and that's frozen). The table baked ~45 host-fn name string
+    // literals into .rodata — visible in every binary even when unreferenced.
+    // If a future feature needs Lua → Zig host calls, build a minimal table
+    // here for *that* feature only. Don't restore the full Smith-era list.
 
     // Scroll offset persistence for Lua-tree apps (see persistScrollSlot / compiler emit)
     lua.lua_newtable(L);
