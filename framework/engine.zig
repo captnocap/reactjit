@@ -1213,12 +1213,13 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     }
     if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(node.letter_spacing);
+    const draw_width = if (node.no_wrap) @as(f32, 0) else max_width;
     const text_h = gpu.drawTextWrapped(
         text,
         x,
         y,
         node.font_size,
-        max_width,
+        draw_width,
         @as(f32, @floatFromInt(color.r)) / 255.0,
         @as(f32, @floatFromInt(color.g)) / 255.0,
         @as(f32, @floatFromInt(color.b)) / 255.0,

@@ -874,6 +874,14 @@ fn parseOverflow(s: []const u8) layout.Overflow {
     return .visible;
 }
 
+fn parseScrollbarSide(s: []const u8) layout.ScrollbarSide {
+    if (std.mem.eql(u8, s, "left") or std.mem.eql(u8, s, "start")) return .left;
+    if (std.mem.eql(u8, s, "right") or std.mem.eql(u8, s, "end")) return .right;
+    if (std.mem.eql(u8, s, "top")) return .top;
+    if (std.mem.eql(u8, s, "bottom")) return .bottom;
+    return .auto;
+}
+
 fn parseDisplay(s: []const u8) layout.Display {
     if (std.mem.eql(u8, s, "none")) return .none;
     return .flex;
@@ -1120,6 +1128,22 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
     for (keys_v.array.items) |entry| {
         if (entry != .string) continue;
         const k = entry.string;
+        if (std.mem.eql(u8, k, "scrollY")) {
+            node.scroll_y = 0;
+            continue;
+        } else if (std.mem.eql(u8, k, "scrollX")) {
+            node.scroll_x = 0;
+            continue;
+        } else if (std.mem.eql(u8, k, "showScrollbar")) {
+            node.show_scrollbar = true;
+            continue;
+        } else if (std.mem.eql(u8, k, "scrollbarSide")) {
+            node.scrollbar_side = .auto;
+            continue;
+        } else if (std.mem.eql(u8, k, "autoHide")) {
+            node.scrollbar_auto_hide = true;
+            continue;
+        }
         if (std.mem.eql(u8, k, "fontSize")) {
             if (node.terminal) node.terminal_font_size = 13 else node.font_size = 16;
         } else if (std.mem.eql(u8, k, "color")) node.text_color = null else if (std.mem.eql(u8, k, "letterSpacing")) node.letter_spacing = 0 else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0 else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0 else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true else if (std.mem.eql(u8, k, "colorRows")) node.input_color_rows = null else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null else if (std.mem.eql(u8, k, "value")) node.text = null else if (std.mem.eql(u8, k, "source")) node.image_src = null else if (std.mem.eql(u8, k, "renderSrc")) node.render_src = null else if (std.mem.eql(u8, k, "staticSurface")) node.static_surface = false else if (std.mem.eql(u8, k, "staticSurfaceKey")) node.static_surface_key = null else if (std.mem.eql(u8, k, "staticSurfaceScale")) node.static_surface_scale = 1 else if (std.mem.eql(u8, k, "staticSurfaceWarmupFrames")) node.static_surface_warmup_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceIntroFrames")) node.static_surface_intro_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) node.static_surface_overlay = false else if (std.mem.eql(u8, k, "d")) node.canvas_path_d = null else if (std.mem.eql(u8, k, "stroke")) node.text_color = null else if (std.mem.eql(u8, k, "strokeWidth")) node.canvas_stroke_width = 2 else if (std.mem.eql(u8, k, "strokeOpacity")) node.canvas_stroke_opacity = 1 else if (std.mem.eql(u8, k, "fill")) node.canvas_fill_color = null else if (std.mem.eql(u8, k, "fillOpacity")) node.canvas_fill_opacity = 1 else if (std.mem.eql(u8, k, "gradient")) node.canvas_fill_gradient = null else if (std.mem.eql(u8, k, "fillEffect")) node.canvas_fill_effect = null else if (std.mem.eql(u8, k, "href")) node.href = null else if (std.mem.eql(u8, k, "tooltip")) node.tooltip = null else if (std.mem.eql(u8, k, "hoverable")) node.hoverable = false else if (std.mem.eql(u8, k, "debugName")) node.debug_name = null else if (std.mem.eql(u8, k, "testID")) node.test_id = null else if (std.mem.eql(u8, k, "windowDrag")) node.window_drag = false else if (std.mem.eql(u8, k, "windowResize")) node.window_resize = false;
@@ -1453,6 +1477,16 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // dispatches `__dispatchEvent(<id>,'onContextMenu',<itemIdx>)` when
             // an item is clicked. Cap MAX_MENU_ITEMS items.
             applyContextMenuItems(node, v);
+        } else if (std.mem.eql(u8, k, "scrollY")) {
+            if (jsonFloat(v)) |f| node.scroll_y = f;
+        } else if (std.mem.eql(u8, k, "scrollX")) {
+            if (jsonFloat(v)) |f| node.scroll_x = f;
+        } else if (std.mem.eql(u8, k, "showScrollbar")) {
+            if (jsonBool(v)) |b| node.show_scrollbar = b;
+        } else if (std.mem.eql(u8, k, "scrollbarSide")) {
+            if (v == .string) node.scrollbar_side = parseScrollbarSide(v.string);
+        } else if (std.mem.eql(u8, k, "autoHide")) {
+            if (jsonBool(v)) |b| node.scrollbar_auto_hide = b;
         } else if (std.mem.eql(u8, k, "initialScrollY")) {
             // One-shot: set scroll_y on CREATE so dev hot reloads can restore
             // the user's scroll position via the ScrollView React wrapper.
@@ -1757,6 +1791,8 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
     child.font_size = parent.font_size;
     if (parent.text_color) |c| child.text_color = c;
     child.letter_spacing = parent.letter_spacing;
+    child.number_of_lines = parent.number_of_lines;
+    child.no_wrap = parent.no_wrap;
     // Only propagate line_height when the parent explicitly set one. Without
     // this guard, a child with its own `lineHeight` style would get stomped
     // back to 0 by any parent UPDATE (the default), which desynchronises

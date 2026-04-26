@@ -550,7 +550,11 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
 }
 
 fn hasHandlers(h: EventHandler) bool {
-    return h.on_press != null or h.js_on_press != null or h.lua_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.js_on_hover_enter != null or h.lua_on_hover_enter != null or h.js_on_hover_exit != null or h.lua_on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
+    return h.on_press != null or h.js_on_press != null or h.lua_on_press != null or
+        h.on_mouse_down != null or h.js_on_mouse_down != null or h.lua_on_mouse_down != null or
+        h.on_mouse_up != null or h.js_on_mouse_up != null or h.lua_on_mouse_up != null or
+        h.on_hover_enter != null or h.on_hover_exit != null or h.js_on_hover_enter != null or h.lua_on_hover_enter != null or h.js_on_hover_exit != null or h.lua_on_hover_exit != null or
+        h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
 }
 
 pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
@@ -680,7 +684,8 @@ fn measureNodeText(node: *Node) TextMetrics {
 
 // ── Text measurement cache ──────────────────────────────────────
 // Avoids redundant FreeType calls during estimation + layout.
-// Keyed on (text_ptr, text_len, font_size, maxWidth_bits).
+// Keyed on the full measurement inputs. Text height/line breaks depend on
+// spacing, line height, line clamps, and no-wrap just as much as width.
 // Direct-mapped (hash & mask) for speed. Collisions just re-measure.
 
 const TEXT_CACHE_SIZE = 1024; // must be power of 2
@@ -691,13 +696,17 @@ const TextCacheEntry = struct {
     text_len: usize = 0,
     font_size: u16 = 0,
     max_width_bits: u32 = 0,
+    letter_spacing_bits: u32 = 0,
+    line_height_bits: u32 = 0,
+    max_lines: u16 = 0,
+    no_wrap: bool = false,
     result: TextMetrics = .{},
     valid: bool = false,
 };
 
 var textCache: [TEXT_CACHE_SIZE]TextCacheEntry = [_]TextCacheEntry{.{}} ** TEXT_CACHE_SIZE;
 
-fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bits: u32) usize {
+fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bits: u32, letter_spacing_bits: u32, line_height_bits: u32, max_lines: u16, no_wrap: bool) usize {
     // FNV-1a style hash
     var h: usize = 0x811c9dc5;
     h ^= text_ptr;
@@ -707,6 +716,14 @@ fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bit
     h ^= font_size;
     h *%= 0x01000193;
     h ^= max_width_bits;
+    h *%= 0x01000193;
+    h ^= letter_spacing_bits;
+    h *%= 0x01000193;
+    h ^= line_height_bits;
+    h *%= 0x01000193;
+    h ^= max_lines;
+    h *%= 0x01000193;
+    h ^= if (no_wrap) 1 else 0;
     h *%= 0x01000193;
     return h & TEXT_CACHE_MASK;
 }
@@ -719,12 +736,15 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
     const text_ptr = @intFromPtr(txt.ptr);
     const text_len = txt.len;
     const mw_bits: u32 = @bitCast(@as(f32, maxWidth));
-    const idx = textCacheHash(text_ptr, text_len, node.font_size, mw_bits);
+    const ls_bits: u32 = @bitCast(@as(f32, node.letter_spacing));
+    const lh_bits: u32 = @bitCast(@as(f32, node.line_height));
+    const idx = textCacheHash(text_ptr, text_len, node.font_size, mw_bits, ls_bits, lh_bits, node.number_of_lines, node.no_wrap);
 
     const entry = &textCache[idx];
     if (entry.valid and entry.text_ptr == text_ptr and entry.text_len == text_len and
         entry.font_size == node.font_size and entry.max_width_bits == mw_bits and
-        node.number_of_lines == 0) // skip cache for truncated text
+        entry.letter_spacing_bits == ls_bits and entry.line_height_bits == lh_bits and
+        entry.max_lines == node.number_of_lines and entry.no_wrap == node.no_wrap)
     {
         return entry.result;
     }
@@ -735,6 +755,10 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
         .text_len = text_len,
         .font_size = node.font_size,
         .max_width_bits = mw_bits,
+        .letter_spacing_bits = ls_bits,
+        .line_height_bits = lh_bits,
+        .max_lines = node.number_of_lines,
+        .no_wrap = node.no_wrap,
         .result = result,
         .valid = true,
     };
