@@ -20,10 +20,6 @@
 #   --raw is DISABLED: the unpackaged ELF segfaults on startup because the
 #   Linux bundle's .so staging happens in the self-extracting shell wrapper.
 #   scripts/ship <cart-name> --qjs    # build the legacy QJS runtime path instead of V8
-#
-# JSRT (--jsrt) is shelved as of 2026-04-23. The JS-inside-Lua evaluator in
-# framework/lua/jsrt/ stays as reference code but is not wired into ship any
-# more; V8 is the only default path.
 
 set -euo pipefail
 
@@ -59,11 +55,6 @@ for arg in "${@:2}"; do
             echo "[ship]" >&2
             echo "[ship] If you need the raw ELF for ldd or gdb, open zig-out/bin/<name>" >&2
             echo "[ship] AFTER a successful ship — the wrapper keeps the ELF alongside." >&2
-            exit 1
-            ;;
-        --jsrt)
-            echo "[ship] --jsrt is shelved — JSRT is no longer wired into ship." >&2
-            echo "[ship] V8 is the default and only supported runtime." >&2
             exit 1
             ;;
         --qjs)      QJS=1 ;;

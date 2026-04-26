@@ -8,21 +8,7 @@ CART_NAME="${CART_NAME:-hello}"
 HARNESS_NAME="${HARNESS_NAME:-verify-${CART_NAME}}"
 EXPECT_FILE="${EXPECT_FILE:-$ROOT/tests/${CART_NAME}.autotest}"
 
-SHIP_ARGS=()
-JSRT_MODE="${REACTJIT_USE_JSRT:-auto}"
-case "$JSRT_MODE" in
-  1|true|yes|on)
-    SHIP_ARGS+=(--jsrt)
-    ;;
-  auto)
-    # Flip automatically once the JSRT app source lands.
-    if [[ -f "jsrt_app.zig" || -f "framework/jsrt_app.zig" ]]; then
-      SHIP_ARGS+=(--jsrt)
-    fi
-    ;;
-esac
-
-./scripts/ship "$CART_NAME" "${SHIP_ARGS[@]}"
+./scripts/ship "$CART_NAME"
 
 OS="$(uname -s)"
 case "$OS" in
