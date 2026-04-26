@@ -86,6 +86,19 @@ export type {
   NoiseInitiateResult,
   SecureBufferMode,
 } from './usePrivacy';
+export { useTelemetry } from './useTelemetry';
+export type {
+  TelemetrySpec,
+  TelemetryResult,
+  ScalarKind as TelemetryScalarKind,
+  JsonKind as TelemetryJsonKind,
+  NodeKind as TelemetryNodeKind,
+  ScalarTelemetrySpec,
+  JsonTelemetrySpec,
+  NodeTelemetrySpec,
+  ScalarTelemetryResult,
+  JsonTelemetryResult,
+} from './useTelemetry';
 
 export * from '../ffi';
 
