@@ -151,6 +151,48 @@ for (const [name, spec] of Object.entries(tools)) {
   }
 }
 
+// Bundle SDL3's transitive .so deps (PipeWire / Pulse / Wayland / xkbcommon /
+// libdecor / libdrm / libgbm). We pinned SDL3 → we pin its deps too, otherwise
+// the cart binary on Whonix loads our newer SDL3 against Whonix's older libs
+// and explodes with errors like "undefined symbol: pw_check_library_version".
+//
+// Filters: skip glibc family (handled separately below), the X11 family
+// (system-assumed — every desktop Linux has it), linux-vdso (kernel virtual).
+const SR_LIB_STAGE = STAGE + '/deps/sysroot/usr/lib';
+__mkdirp(SR_LIB_STAGE);
+const SDL3_HOST_PATH = '/lib/x86_64-linux-gnu/libSDL3.so.0';
+const SKIP_FAMILIES = [
+  /^libc\.so\./, /^libm\.so\./, /^libpthread\.so\./, /^libdl\.so\./,
+  /^libresolv\.so\./, /^ld-linux/, /^linux-vdso/,
+  // X11 family — system-assumed. Every desktop Linux has these.
+  /^libX11\.so\./, /^libXext\.so\./, /^libXcursor\.so\./, /^libXi\.so\./,
+  /^libXfixes\.so\./, /^libXrandr\.so\./, /^libXss\.so\./, /^libXrender\.so\./,
+  /^libxcb\.so\./, /^libxcb-/,
+];
+function copyLibChain(realPath, soname, label) {
+  const dest = SR_LIB_STAGE + '/' + soname;
+  if (__exists(dest)) return false;
+  copyFile(realPath, dest);
+  // Also drop a soname symlink one step up the version chain
+  // (lib<name>.so.<MAJOR> → real file's basename).
+  return true;
+}
+if (__exists(SDL3_HOST_PATH)) {
+  const lddOut = sh('ldd', [SDL3_HOST_PATH], '').stdout || '';
+  for (const line of lddOut.split('\n')) {
+    const m = line.match(/^\s*(\S+)\s*=>\s*(\S+)/);
+    if (!m) continue;
+    const soname = m[1];
+    const libPath = m[2];
+    if (libPath === 'not' || !__exists(libPath)) continue;
+    if (SKIP_FAMILIES.some(rx => rx.test(soname))) continue;
+    const realPath = sh('readlink', ['-f', libPath], '').stdout.trim() || libPath;
+    if (copyLibChain(realPath, soname, 'SDL3-dep')) {
+      log('SDL3 dep ' + soname + ' ← ' + realPath);
+    }
+  }
+}
+
 // Glibc family — bundle libc/libm/libpthread/libdl/libresolv/ld-linux from
 // THIS pack-sdk host's /lib/x86_64-linux-gnu/ into deps/sysroot/usr/lib/.
 // This is what lets cart binaries built on Whonix (older glibc) still load
