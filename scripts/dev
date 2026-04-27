@@ -17,38 +17,48 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+# CART_ROOT is the user's project (where cart/<name>.tsx lives, and where
+# .cache/bundle-<name>.js gets written). RJIT_HOME is the SDK install
+# (where build.zig, tools/, scripts/, framework/, runtime/ live, and where
+# the shared dev host binary is cached).
+CART_ROOT="$PWD"
+RJIT_HOME="${RJIT_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cd "$RJIT_HOME"
+ZIG="${REACTJIT_ZIG:-$RJIT_HOME/tools/zig/zig}"
+if [[ ! -x "$ZIG" ]]; then
+    ZIG="zig"
+fi
 
 NAME="${1:-}"
 if [[ -z "$NAME" ]]; then
     echo "Usage: scripts/dev <cart-name>" >&2
-    echo "  Cart expected at: cart/<name>/index.tsx or cart/<name>.tsx" >&2
+    echo "  Cart expected at: $CART_ROOT/cart/<name>/index.tsx or $CART_ROOT/cart/<name>.tsx" >&2
     exit 1
 fi
 
-if [[ -f "cart/${NAME}/index.tsx" ]]; then
-    CART_FILE="cart/${NAME}/index.tsx"
-elif [[ -f "cart/${NAME}.tsx" ]]; then
-    CART_FILE="cart/${NAME}.tsx"
+if [[ -f "$CART_ROOT/cart/${NAME}/index.tsx" ]]; then
+    CART_FILE="$CART_ROOT/cart/${NAME}/index.tsx"
+elif [[ -f "$CART_ROOT/cart/${NAME}.tsx" ]]; then
+    CART_FILE="$CART_ROOT/cart/${NAME}.tsx"
 else
-    echo "[dev] not found: cart/${NAME}/index.tsx or cart/${NAME}.tsx" >&2
+    echo "[dev] not found: $CART_ROOT/cart/${NAME}/index.tsx or $CART_ROOT/cart/${NAME}.tsx" >&2
     exit 1
 fi
 
 SOCKET=/tmp/reactjit.sock
-PER_CART_BUNDLE=".cache/bundle-${NAME}.js"
-mkdir -p .cache
+PER_CART_BUNDLE="$CART_ROOT/.cache/bundle-${NAME}.js"
+mkdir -p "$CART_ROOT/.cache"
 
 # Heal top-level `const { useX } = React;` and stray require('react') lines —
 # patterns that fail at module-init before globalThis.React is set.
-scripts/fix-react-imports
+# fix-react-imports honors RJIT_HOME + CART_ROOT env when set.
+RJIT_HOME="$RJIT_HOME" CART_ROOT="$CART_ROOT" scripts/fix-react-imports
 
 echo "[dev] bundling ${CART_FILE} → ${PER_CART_BUNDLE}"
 # BUNDLE_FROM_HARNESS=1 is the sentinel the bundler looks for. Direct
 # `tools/v8cli scripts/cart-bundle.js ...` invocations (e.g. ad-hoc from an
 # agent) are refused — they race with the watcher and stamp stale bundles over disk.
-BUNDLE_FROM_HARNESS=1 tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$PER_CART_BUNDLE"
+BUNDLE_FROM_HARNESS=1 CART_ROOT="$CART_ROOT" tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$PER_CART_BUNDLE"
 
 # Fast path: host already running — push and exit.
 if [[ -S "$SOCKET" ]]; then
@@ -62,30 +72,36 @@ if [[ -S "$SOCKET" ]]; then
 fi
 
 # Spawn path — bootstrap via bundle.js on disk, compile if needed, launch.
+# bundle.js sits at $RJIT_HOME so v8_app.zig's default @embedFile lookup
+# (relative to its source dir) resolves it. The dev binary itself is a
+# shared, fat host cached per-RJIT_HOME — every cart in every cwd reuses
+# the same compiled dev binary.
 cp "$PER_CART_BUNDLE" bundle.js
 
-BIN="zig-out/bin/reactjit-dev"
-# Rebuild when missing OR when any framework/build.zig source is newer than the
-# binary. Without this, editing framework/*.zig and restarting the host silently
-# reuses a stale ELF — a specific gotcha that has cost real debugging time
-# (e.g. chasing a letter-spacing wrap bug against a binary built before the fix).
+BIN="$RJIT_HOME/zig-out/bin/reactjit-dev"
 needs_build=0
 if [[ ! -x "$BIN" ]]; then
     needs_build=1
-elif [[ -n "$(find framework build.zig -newer "$BIN" 2>/dev/null | head -1)" ]]; then
+elif [[ -n "$(find framework build.zig v8_app.zig sdk/dependency-registry.json scripts/sdk-dependency-resolve.js tools/zig/zig -newer "$BIN" 2>/dev/null | head -1)" ]]; then
     needs_build=1
-    echo "[dev] framework source newer than binary — rebuilding..."
+    echo "[dev] dev host inputs newer than binary — rebuilding..."
 fi
 if [[ "$needs_build" -eq 1 ]]; then
     # ReleaseFast: Debug builds silently exit on click (pre-existing framework
     # issue — cockpit-raw reproduces it without dev mode). Dev-mode is a
     # RUNTIME flag, it doesn't need Debug compilation. Smaller binary too.
     # V8 is the default runtime (per CLAUDE.md). QJS is legacy maintenance-only.
-    echo "[dev] compiling dev binary ($BIN, V8, ReleaseFast)..."
-    zig build app -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig -Duse-v8=true -Ddev-mode=true -Doptimize=ReleaseFast
+    echo "[dev] compiling dev binary ($BIN, V8 fat host, ReleaseFast)..."
+    DEV_FEATURE_FLAGS=$(tools/v8cli scripts/sdk-dependency-resolve.js --format dev-zig-flags --build-zig build.zig)
+    if [[ -z "$DEV_FEATURE_FLAGS" ]]; then
+        echo "[dev] FATAL: sdk-dependency-resolve produced no dev flags" >&2
+        exit 1
+    fi
+    read -r -a DEV_FEATURE_ARGS <<< "$DEV_FEATURE_FLAGS"
+    ZIG_GLOBAL_CACHE_DIR="$RJIT_HOME/tools/zig/cache" "$ZIG" build app -p "$RJIT_HOME/zig-out" -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig "${DEV_FEATURE_ARGS[@]}" -Doptimize=ReleaseFast
 fi
 
-./"$BIN" &
+"$BIN" &
 BIN_PID=$!
 
 cleanup() {
@@ -109,4 +125,4 @@ trap cleanup INT TERM EXIT
 echo "[dev] host PID=$BIN_PID — run 'scripts/dev <other>' from another terminal to add tabs"
 
 # Watch loop pushes each rebuild to the host over the socket.
-tools/v8cli scripts/watch-and-push.js "$NAME" "$CART_FILE" "$PER_CART_BUNDLE"
+CART_ROOT="$CART_ROOT" tools/v8cli scripts/watch-and-push.js "$NAME" "$CART_FILE" "$PER_CART_BUNDLE"
