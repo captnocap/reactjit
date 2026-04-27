@@ -573,25 +573,41 @@ Categories=Development;
 DESKTOP
 fi
 
-# Walk ldd output, bundle every non-system .so
+# Walk ldd output, bundle every non-system .so. When the SDK ships a
+# matching lib in deps/sysroot/usr/lib (the glibc family + our pins),
+# bundle THAT version, not the one ldd resolved from the build host. This
+# is what lets a cart built on Whonix (glibc 2.36) still ship our pinned
+# SDL3.so.0 — the bundled glibc is from the SDK builder's host (newer),
+# so SDL3's GLIBC_2.38 symbol references resolve at runtime.
+SR_LIB="$RJIT_HOME/deps/sysroot/usr/lib"
 LIB_COUNT=0
 LDD_TMP=$(mktemp)
 ldd "$BUILD_BIN" > "$LDD_TMP" 2>/dev/null || true
 while IFS= read -r line; do
     case "$line" in *linux-vdso*) continue ;; esac
-    lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
-    [[ -z "$lib_path" ]] && continue
-    [[ ! -f "$lib_path" ]] && continue
-    real_path=$(readlink -f "$lib_path")
     soname=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*=>.*//')
+    if [[ -f "$SR_LIB/$soname" ]]; then
+        real_path=$(readlink -f "$SR_LIB/$soname")
+    else
+        lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
+        [[ -z "$lib_path" || ! -f "$lib_path" ]] && continue
+        real_path=$(readlink -f "$lib_path")
+    fi
     [[ -f "$LIB_DIR/$soname" ]] && continue
     cp "$real_path" "$LIB_DIR/$soname"
     LIB_COUNT=$((LIB_COUNT + 1))
 done < "$LDD_TMP"
 rm -f "$LDD_TMP"
 
-# Bundle the dynamic loader itself
-LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null || readlink -f /lib/ld-linux-x86-64.so.2 2>/dev/null || echo "")
+# Bundle the dynamic loader itself — prefer the SDK-bundled one for the
+# same forward-compat reason as above.
+LD_LINUX=""
+if [[ -f "$SR_LIB/ld-linux-x86-64.so.2" ]]; then
+    LD_LINUX=$(readlink -f "$SR_LIB/ld-linux-x86-64.so.2")
+fi
+if [[ -z "$LD_LINUX" ]]; then
+    LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null || readlink -f /lib/ld-linux-x86-64.so.2 2>/dev/null || echo "")
+fi
 if [[ -z "$LD_LINUX" ]] || [[ ! -f "$LD_LINUX" ]]; then
     echo "[ship] WARNING: ld-linux-x86-64.so.2 not found — leaving build output at $BUILD_BIN"
     rm -rf "$TMP_DIR"

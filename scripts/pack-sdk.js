@@ -151,6 +151,35 @@ for (const [name, spec] of Object.entries(tools)) {
   }
 }
 
+// Glibc family — bundle libc/libm/libpthread/libdl/libresolv/ld-linux from
+// THIS pack-sdk host's /lib/x86_64-linux-gnu/ into deps/sysroot/usr/lib/.
+// This is what lets cart binaries built on Whonix (older glibc) still load
+// our pinned SDL3 (which references e.g. GLIBC_2.38). scripts/ship prefers
+// sysroot libs over ldd-resolved system libs when bundling the cart's
+// self-extractor, so the cart ships *our* glibc, not the build host's.
+//
+// NOT shipped: NSS plugins (libnss_*.so). If DNS / /etc/hosts lookups
+// break under our bundled libc, add libnss_files / libnss_dns here.
+const GLIBC_FAMILY = [
+  '/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2',
+  '/lib/x86_64-linux-gnu/libc.so.6',
+  '/lib/x86_64-linux-gnu/libm.so.6',
+  '/lib/x86_64-linux-gnu/libpthread.so.0',
+  '/lib/x86_64-linux-gnu/libdl.so.2',
+  '/lib/x86_64-linux-gnu/libresolv.so.2',
+  '/lib64/ld-linux-x86-64.so.2',  // fallback path on some distros
+];
+__mkdirp(STAGE + '/deps/sysroot/usr/lib');
+for (const p of GLIBC_FAMILY) {
+  if (!__exists(p)) continue;
+  const realPath = sh('readlink', ['-f', p], '').stdout.trim() || p;
+  const baseName = p.replace(/^.*\//, '');
+  const dest = STAGE + '/deps/sysroot/usr/lib/' + baseName;
+  if (__exists(dest)) continue;
+  log('glibc ' + baseName + ' ← ' + realPath);
+  copyFile(realPath, dest);
+}
+
 // Zig package cache — overlay the host's $ZIG_GLOBAL_CACHE_DIR/p/ on top
 // of whatever was already staged from tools/zig/cache/p/. The repo's
 // pinned cache gets pruned over time (libwgpu_native.a went missing) and
