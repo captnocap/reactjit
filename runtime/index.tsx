@@ -6,6 +6,13 @@
 // ES `import * as React` yields an immutable namespace and breaks the patch.
 const React: any = require('react');
 
+// Side-effect import: useIFTTT installs a top-level set of host-fn shims
+// (__ifttt_onKeyDown, __ifttt_onSystemSlowFrame, etc.) that the engine calls
+// unconditionally from telemetry/system signals. Without this, any cart that
+// doesn't itself call useIFTTT() leaves those globals undefined and the engine
+// throws ReferenceError on every slow frame / key press / focus change.
+require('./hooks/useIFTTT');
+
 // ── Browser API shims ────────────────────────────────────────────────
 // Copy-pasted React code routinely reaches for window/document/addEventListener.
 // Without these, any useEffect that wires keyboard/resize/visibility listeners

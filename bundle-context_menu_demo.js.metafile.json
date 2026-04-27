@@ -509,13 +509,122 @@
       ],
       "format": "esm"
     },
-    "cart/context_menu_demo.tsx": {
-      "bytes": 3134,
+    "runtime/hooks/useContextMenu.tsx": {
+      "bytes": 4013,
       "imports": [
         {
           "path": "vendor/react/index.js",
           "kind": "import-statement",
           "original": "react"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/context_menu_demo.tsx": {
+      "bytes": 5072,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/hooks/useContextMenu.tsx",
+          "kind": "import-statement",
+          "original": "../runtime/hooks/useContextMenu"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/ffi.ts": {
+      "bytes": 3918,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/hooks/clipboard.ts": {
+      "bytes": 566,
+      "imports": [
+        {
+          "path": "runtime/ffi.ts",
+          "kind": "import-statement",
+          "original": "../ffi"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/hooks/useIFTTT.ts": {
+      "bytes": 14155,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/hooks/clipboard.ts",
+          "kind": "import-statement",
+          "original": "./clipboard"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -640,7 +749,7 @@
       "format": "cjs"
     },
     "runtime/index.tsx": {
-      "bytes": 19472,
+      "bytes": 19885,
       "imports": [
         {
           "path": "renderer/hostConfig.ts",
@@ -678,6 +787,11 @@
           "original": "react"
         },
         {
+          "path": "runtime/hooks/useIFTTT.ts",
+          "kind": "require-call",
+          "original": "./hooks/useIFTTT"
+        },
+        {
           "path": "vendor/react-reconciler/index.js",
           "kind": "require-call",
           "original": "react-reconciler"
@@ -711,7 +825,16 @@
           "bytesInOutput": 5974
         },
         "runtime/jsx_shim.ts": {
-          "bytesInOutput": 920
+          "bytesInOutput": 993
+        },
+        "runtime/ffi.ts": {
+          "bytesInOutput": 851
+        },
+        "runtime/hooks/clipboard.ts": {
+          "bytesInOutput": 319
+        },
+        "runtime/hooks/useIFTTT.ts": {
+          "bytesInOutput": 10102
         },
         "vendor/scheduler/cjs/scheduler.development.js": {
           "bytesInOutput": 17858
@@ -720,13 +843,13 @@
           "bytesInOutput": 331
         },
         "vendor/react-reconciler/cjs/react-reconciler.development.js": {
-          "bytesInOutput": 692361
+          "bytesInOutput": 692385
         },
         "vendor/react-reconciler/index.js": {
           "bytesInOutput": 352
         },
         "runtime/index.tsx": {
-          "bytesInOutput": 13487
+          "bytesInOutput": 13508
         },
         "renderer/hostConfig.ts": {
           "bytesInOutput": 27783
@@ -750,10 +873,13 @@
           "bytesInOutput": 6389
         },
         "cart/context_menu_demo.tsx": {
-          "bytesInOutput": 3354
+          "bytesInOutput": 5346
+        },
+        "runtime/hooks/useContextMenu.tsx": {
+          "bytesInOutput": 1428
         }
       },
-      "bytes": 898761
+      "bytes": 913729
     }
   }
 }

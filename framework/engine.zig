@@ -21,6 +21,8 @@ const context_menu = @import("context_menu.zig");
 const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
 const fswatch = @import("fswatch.zig");
+const clipboard_watch = @import("clipboard_watch.zig");
+const system_signals = @import("system_signals.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
 const semantic = @import("semantic.zig");
@@ -1520,6 +1522,62 @@ fn setComposedGpuTransform(ox: f32, oy: f32, tx: f32, ty: f32, scale: f32) void 
     gpu.setTransform(0, 0, parent_bx + parent.scale * child_bx, parent_by + parent.scale * child_by, parent.scale * scale);
 }
 
+// Paint a node's children in z-index order (ascending: lower paints first,
+// higher paints on top). Stable on equal z_index so DOM order wins for ties.
+// Fast-paths the common case where no child has a non-zero z_index.
+fn paintChildrenInZOrder(node: *Node) void {
+    const n = node.children.len;
+    if (n == 0) return;
+    if (n == 1) {
+        if (!node.children[0].effect_background) paintNode(&node.children[0]);
+        return;
+    }
+    var any_z = false;
+    for (node.children) |*child| {
+        if (child.style.z_index != 0) { any_z = true; break; }
+    }
+    if (!any_z) {
+        for (node.children) |*child| if (!child.effect_background) paintNode(child);
+        return;
+    }
+    var indices: [256]u16 = undefined;
+    const m = @min(n, indices.len);
+    for (0..m) |i| indices[i] = @intCast(i);
+    var i: usize = 1;
+    while (i < m) : (i += 1) {
+        const cur = indices[i];
+        const cur_z = node.children[cur].style.z_index;
+        var j = i;
+        while (j > 0 and node.children[indices[j - 1]].style.z_index > cur_z) : (j -= 1) {
+            indices[j] = indices[j - 1];
+        }
+        indices[j] = cur;
+    }
+    const win_w: f32 = @floatFromInt(gpu.getWidth());
+    const win_h: f32 = @floatFromInt(gpu.getHeight());
+    for (0..m) |k| {
+        const child = &node.children[indices[k]];
+        if (child.effect_background) continue;
+        // Non-zero z-index: push a fresh full-viewport scissor before painting.
+        // Two effects in one move: (a) the scissor change forces a new GPU
+        // segment, so this child's rects + text + curves draw together AFTER
+        // all preceding siblings — making text actually z-stack correctly;
+        // (b) the full-viewport extent escapes any ancestor overflow:hidden,
+        // letting menus/tooltips/popovers extend outside their parent.
+        if (child.style.z_index != 0) {
+            gpu.pushScissor(0, 0, win_w, win_h);
+            paintNode(child);
+            gpu.popScissor();
+        } else {
+            paintNode(child);
+        }
+    }
+    // Anything past slot 256 falls back to DOM order.
+    if (n > m) {
+        for (node.children[m..]) |*child| if (!child.effect_background) paintNode(child);
+    }
+}
+
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) {
         g_hidden_count += 1;
@@ -1669,10 +1727,10 @@ fn paintNode(node: *Node) void {
         const sx = node.scroll_x;
         const sy = node.scroll_y;
         offsetDescendants(node, -sx, -sy);
-        for (node.children) |*child| if (!child.effect_background) paintNode(child);
+        paintChildrenInZOrder(node);
         offsetDescendants(node, sx, sy);
     } else {
-        for (node.children) |*child| if (!child.effect_background) paintNode(child);
+        paintChildrenInZOrder(node);
     }
 
     if (is_scroll) paintScrollbars(node);
@@ -2914,23 +2972,19 @@ pub fn run(config_in: AppConfig) !void {
                     if (event.button.button == c.SDL_BUTTON_RIGHT) {
                         const mx: f32 = event.button.x;
                         const my: f32 = event.button.y;
-                        std.debug.print("[ctxmenu] right-click at ({d},{d})\n", .{ mx, my });
-                        context_menu.hide(); // dismiss any existing menu first
+                        context_menu.hide(); // dismiss any existing native menu first
                         const rc_events = @import("events.zig");
                         if (rc_events.hitTestRightClick(config.root, mx, my)) |h| {
-                            std.debug.print("[ctxmenu] hit node id={d} on_right_click={} ctx_items={}\n", .{ h.scroll_persist_slot, h.handlers.on_right_click != null, h.context_menu_items != null });
-                            // Prefer the native menu when items are declared — they are
-                            // the explicit opt-in. on_right_click may also be set because
-                            // the JS bridge aliases onContextMenu→onRightClick.
+                            // Prefer the native context_menu_items overlay when
+                            // explicitly declared. on_right_click is also set
+                            // when JS attaches onContextMenu (alias), so the
+                            // explicit-items path wins.
                             if (h.context_menu_items) |items| {
-                                std.debug.print("[ctxmenu] showFor n_items={d}\n", .{items.len});
                                 context_menu.showFor(mx, my, items, h.scroll_persist_slot);
                             } else if (h.handlers.on_right_click) |handler| {
                                 qjs_runtime.prepareNodeEvent(h.scroll_persist_slot);
                                 handler(mx, my);
                             }
-                        } else {
-                            std.debug.print("[ctxmenu] no hit\n", .{});
                         }
                     }
                     // Middle-click — dispatch onMiddleClick to JSRT
@@ -3649,9 +3703,17 @@ pub fn run(config_in: AppConfig) !void {
                 },
                 c.SDL_EVENT_DROP_FILE => {
                     if (event.drop.data) |data_ptr| {
-                        filedrop.dispatch(std.mem.span(data_ptr), config.root);
+                        const path = std.mem.span(data_ptr);
+                        filedrop.dispatch(path, config.root);
+                        system_signals.notifyDrop(path);
                         // SDL3: drop data is managed by SDL, no SDL_free needed
                     }
+                },
+                c.SDL_EVENT_WINDOW_FOCUS_GAINED => {
+                    system_signals.notifyFocus(true);
+                },
+                c.SDL_EVENT_WINDOW_FOCUS_LOST => {
+                    system_signals.notifyFocus(false);
                 },
                 else => {},
             }
@@ -3808,6 +3870,8 @@ pub fn run(config_in: AppConfig) !void {
         effects.update(dt_sec);
         r3d.update(dt_sec);
         fswatch.tick(dt_ms);
+        clipboard_watch.tick(dt_ms);
+        system_signals.tick(dt_ms);
 
         // Paint (main window — wgpu)
         g_dt_sec = dt_sec;
@@ -3817,6 +3881,7 @@ pub fn run(config_in: AppConfig) !void {
         g_hidden_count = 0;
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
+        system_signals.tickPostPaint(dt_sec);
 
         // (devtools paint removed — inspector lives in tsz-tools)
 

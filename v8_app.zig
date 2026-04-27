@@ -352,7 +352,6 @@ fn clearContextMenu(node_id: u32) void {
 
 fn applyContextMenuItems(node: *Node, val: std.json.Value) void {
     const node_id = node.scroll_persist_slot;
-    std.debug.print("[ctxmenu] applyContextMenuItems node={d} kind={s}\n", .{ node_id, @tagName(val) });
     clearContextMenu(node_id);
     if (val != .array) {
         node.context_menu_items = null;
@@ -360,7 +359,6 @@ fn applyContextMenuItems(node: *Node, val: std.json.Value) void {
     }
     const src = val.array.items;
     const n = @min(src.len, MAX_MENU_ITEMS);
-    std.debug.print("[ctxmenu]   n_items={d}\n", .{n});
     if (n == 0) {
         node.context_menu_items = null;
         return;

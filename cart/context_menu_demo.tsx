@@ -1,17 +1,57 @@
 import { useState } from 'react';
+import { useContextMenu } from '../runtime/hooks/useContextMenu';
 
-type MenuState = { x: number; y: number } | null;
+const ITEM_H = 32;
+const MENU_W = 180;
 
 export default function App() {
-  const [menu, setMenu] = useState<MenuState>(null);
+  const { triggerProps, ContextMenu, close, x, y, isOpen } = useContextMenu();
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [openSub, setOpenSub] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
 
-  const items = ['Open', 'Rename', 'Duplicate', 'Delete'];
+  const items: Array<{ label: string; sub?: string[] }> = [
+    { label: 'Open' },
+    { label: 'Open With', sub: ['Editor', 'Image Viewer', 'Terminal'] },
+    { label: 'Rename' },
+    { label: 'Duplicate' },
+    { label: 'Delete' },
+  ];
 
   const pick = (label: string) => {
     setLog((prev) => [`picked: ${label}`, ...prev].slice(0, 8));
-    setMenu(null);
+    setHovered(null);
+    setOpenSub(null);
+    close();
   };
+
+  const hoverTop = (label: string, hasSub: boolean) => ({
+    onHoverEnter: () => {
+      setHovered(label);
+      setOpenSub(hasSub ? label : null);
+    },
+  });
+  const hoverSub = (label: string) => ({
+    onHoverEnter: () => setHovered(label),
+  });
+
+  const itemStyle = (label: string) => ({
+    height: ITEM_H,
+    paddingLeft: 12,
+    paddingRight: 12,
+    borderRadius: 4,
+    color: '#e5e7eb',
+    fontSize: 14,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: hovered === label ? '#374151' : 'transparent',
+  });
+
+  const submenuFor = items.find((i) => i.label === openSub && i.sub);
+  const submenuParentIdx = submenuFor
+    ? items.findIndex((i) => i.label === submenuFor.label)
+    : -1;
 
   return (
     <div
@@ -25,11 +65,11 @@ export default function App() {
       }}
     >
       <h1 style={{ fontSize: 26, color: '#f8fafc', margin: 0 }}>
-        overlay primitive — clipping test
+        useContextMenu — hover + nested + dismiss
       </h1>
       <p style={{ fontSize: 14, color: '#94a3b8', margin: 0 }}>
-        the tile lives inside a 220×120 box with overflow:hidden.
-        right-click it and the menu should escape that box.
+        right-click the tile. hover items to highlight; "Open With" opens a submenu.
+        click outside to dismiss.
       </p>
 
       <div
@@ -44,10 +84,7 @@ export default function App() {
         }}
       >
         <div
-          onRightClick={(x: number, y: number) => {
-            setLog((p) => [`right-click handler fired (${x|0},${y|0})`, ...p].slice(0, 8));
-            setMenu({ x, y });
-          }}
+          {...triggerProps}
           style={{
             width: 200,
             height: 100,
@@ -85,38 +122,55 @@ export default function App() {
         )}
       </div>
 
-      {menu && (
+      <ContextMenu
+        style={{
+          backgroundColor: '#1f2937',
+          borderRadius: 8,
+          padding: 4,
+          flexDirection: 'column',
+          width: MENU_W,
+        }}
+      >
+        {items.map((it) => (
+          <div
+            key={it.label}
+            {...hoverTop(it.label, !!it.sub)}
+            onClick={() => (it.sub ? null : pick(it.label))}
+            style={itemStyle(it.label)}
+          >
+            <span style={{ color: '#e5e7eb', fontSize: 14 }}>{it.label}</span>
+            {it.sub ? (
+              <span style={{ color: '#9ca3af', fontSize: 14 }}>›</span>
+            ) : null}
+          </div>
+        ))}
+      </ContextMenu>
+
+      {isOpen && submenuFor && (
         <div
-          overlayRoot={true}
           style={{
             position: 'absolute',
-            left: menu.x,
-            top: menu.y,
+            zIndex: 1000,
+            // Anchor the submenu to the right edge of the parent menu, at the
+            // y-position of the parent item. The hook exposes x/y of the
+            // outer menu so we can compute submenu position relative to it.
+            left: x + MENU_W + 2,
+            top: y + 4 + submenuParentIdx * ITEM_H,
             backgroundColor: '#1f2937',
             borderRadius: 8,
             padding: 4,
             flexDirection: 'column',
-            minWidth: 160,
-            shadowColor: '#000',
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
+            width: MENU_W,
           }}
         >
-          {items.map((label) => (
+          {submenuFor.sub!.map((label) => (
             <div
               key={label}
-              onClick={() => pick(label)}
-              style={{
-                paddingTop: 8,
-                paddingBottom: 8,
-                paddingLeft: 12,
-                paddingRight: 12,
-                borderRadius: 4,
-                color: '#e5e7eb',
-                fontSize: 14,
-              }}
+              {...hoverSub(label)}
+              onClick={() => pick(`${submenuFor.label} → ${label}`)}
+              style={itemStyle(label)}
             >
-              {label}
+              <span style={{ color: '#e5e7eb', fontSize: 14 }}>{label}</span>
             </div>
           ))}
         </div>
