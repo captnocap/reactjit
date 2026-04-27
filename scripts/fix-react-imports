@@ -21,7 +21,12 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ROOTS = [os.path.join(ROOT, "cart"), os.path.join(ROOT, "runtime")]
+# In-repo: RJIT_HOME and CART_ROOT both default to ROOT (the repo root).
+# rjit-driven: scripts/ship and scripts/dev export both env vars so we walk
+# the user's cart dir from CART_ROOT and the SDK's runtime dir from RJIT_HOME.
+RJIT_HOME = os.environ.get("RJIT_HOME") or ROOT
+CART_ROOT = os.environ.get("CART_ROOT") or ROOT
+ROOTS = [os.path.join(CART_ROOT, "cart"), os.path.join(RJIT_HOME, "runtime")]
 
 DESTRUCTURE = re.compile(
     r"^const\s*\{\s*([^}]+?)\s*\}\s*=\s*React\s*;\s*$",

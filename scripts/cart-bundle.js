@@ -47,7 +47,16 @@ if (!entryArg) die('missing cart entry path', 2);
 const entryAbs = ensureAbs(entryArg);
 const bundleAbs = outArg ? ensureAbs(outArg) : ROOT + '/bundle.js';
 
-if (!entryAbs.startsWith(ROOT + '/')) die('entry must stay inside ' + ROOT, 2);
+// Sanity guard: entry must live inside the SDK install (RJIT_HOME, == ROOT
+// here) or under the user's project (CART_ROOT). The dispatcher sets
+// CART_ROOT to the user's cwd; in-repo invocations leave it unset and the
+// fallback to ROOT preserves the original "stay inside the repo" check.
+const CART_ROOT = __env('CART_ROOT') || ROOT;
+const entryInsideHome = entryAbs.startsWith(ROOT + '/');
+const entryInsideCart = CART_ROOT !== ROOT && entryAbs.startsWith(CART_ROOT + '/');
+if (!entryInsideHome && !entryInsideCart) {
+  die('entry must stay inside ' + ROOT + (CART_ROOT !== ROOT ? ' or ' + CART_ROOT : ''), 2);
+}
 if (!__exists(entryAbs)) die('missing entry: ' + entryArg, 2);
 
 // ── esbuild flags ─────────────────────────────────────────────────────

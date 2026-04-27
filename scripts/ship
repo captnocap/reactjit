@@ -2,7 +2,7 @@
 # ship — build a .tsx cart into a self-extracting native binary.
 #
 # Pipeline:
-#   1. esbuild cart/<name>.tsx → bundle.js
+#   1. esbuild cart/<name>.tsx → bundle-<name>.js (in CART_ROOT)
 #   2. zig build app → zig-out/bin/<name> (ELF, dynamic-linked, bundle embedded)
 #   3. Package as self-extracting shell wrapper:
 #      - ldd the binary, bundle every non-system .so into a lib/ dir
@@ -14,19 +14,32 @@
 # Result: a single-file shippable binary with zero system dependencies.
 # LuaJIT stays dynamic at link time (fast builds) but ships bundled (portable).
 #
+# Two modes (transparent to the user):
+#   In-repo: run from a clone. RJIT_HOME and CART_ROOT both = repo root.
+#            Behavior is identical to the pre-split script.
+#   rjit-driven: the dispatcher sets RJIT_HOME to its SDK install (a
+#            ~/.cache/rjit/<sig>/ dir). CART_ROOT is the user's cwd.
+#            build.zig + tools + scripts + framework + runtime live under
+#            RJIT_HOME; cart inputs and build outputs live under CART_ROOT.
+#
 # Usage:
 #   scripts/ship <cart-name>          # release, self-extracting
-#   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
-#   --raw is DISABLED: the unpackaged ELF segfaults on startup because the
-#   Linux bundle's .so staging happens in the self-extracting shell wrapper.
-#   scripts/ship <cart-name> --qjs    # build the legacy QJS runtime path instead of V8
+#   scripts/ship <cart-name> -d       # debug build, skips packaging
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+# CART_ROOT is the user's project (where cart/<name>.tsx lives, and where
+# bundle-<name>.js, zig-out/, tests/ get written). RJIT_HOME is the SDK
+# install (where build.zig, tools/, scripts/, framework/, runtime/ live).
+CART_ROOT="$PWD"
+RJIT_HOME="${RJIT_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cd "$RJIT_HOME"
+OS="$(uname -s)"
 
-LOCK_FILE="$REPO_ROOT/.zig-cache/.ship.lock"
+# Lock guards the SDK's zig-cache against parallel zig-build races on the
+# same RJIT_HOME. Multiple ships from different cart dirs against the same
+# SDK install must serialize.
+LOCK_FILE="$RJIT_HOME/.zig-cache/.ship.lock"
 mkdir -p "$(dirname "$LOCK_FILE")"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -37,60 +50,125 @@ fi
 
 NAME="${1:-}"
 DEBUG=0
-RAW=0
-QJS=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
-        --raw)
-            echo "[ship] --raw is disabled." >&2
-            echo "[ship]" >&2
-            echo "[ship] --raw produced an unpackaged ELF that segfaults 100% of the" >&2
-            echo "[ship] time on this platform, because the Linux build depends on the" >&2
-            echo "[ship] self-extracting shell wrapper around the ELF to stage its .so" >&2
-            echo "[ship] deps before exec. Running the raw ELF skips that staging and" >&2
-            echo "[ship] crashes at startup. Use the default packaged binary:" >&2
-            echo "[ship]" >&2
-            echo "[ship]   ./scripts/ship <cart-name>        # self-extracting (working)" >&2
-            echo "[ship]" >&2
-            echo "[ship] If you need the raw ELF for ldd or gdb, open zig-out/bin/<name>" >&2
-            echo "[ship] AFTER a successful ship — the wrapper keeps the ELF alongside." >&2
+        *)
+            echo "[ship] unknown flag: $arg" >&2
+            echo "Usage: scripts/ship <cart-name> [-d|--debug]" >&2
             exit 1
             ;;
-        --qjs)      QJS=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--qjs]" >&2
-    echo "  Cart expected at: cart/<cart-name>.tsx" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--debug]" >&2
+    echo "  Cart expected at: $CART_ROOT/cart/<cart-name>.tsx" >&2
     exit 1
 fi
 
-# Resolve cart entry: prefer cart/<name>/index.tsx (directory layout), fall
-# back to cart/<name>.tsx (single-file cart). Directory wins when both exist.
-if [[ -f "cart/${NAME}/index.tsx" ]]; then
-    CART_FILE="cart/${NAME}/index.tsx"
-elif [[ -f "cart/${NAME}.tsx" ]]; then
-    CART_FILE="cart/${NAME}.tsx"
+# Resolve cart entry under CART_ROOT: prefer cart/<name>/index.tsx (directory
+# layout), fall back to cart/<name>.tsx (single-file cart). Directory wins.
+if [[ -f "$CART_ROOT/cart/${NAME}/index.tsx" ]]; then
+    CART_FILE="$CART_ROOT/cart/${NAME}/index.tsx"
+elif [[ -f "$CART_ROOT/cart/${NAME}.tsx" ]]; then
+    CART_FILE="$CART_ROOT/cart/${NAME}.tsx"
 else
-    echo "[ship] not found: cart/${NAME}/index.tsx or cart/${NAME}.tsx" >&2
+    echo "[ship] not found: $CART_ROOT/cart/${NAME}/index.tsx or $CART_ROOT/cart/${NAME}.tsx" >&2
     exit 1
+fi
+CART_DIR="$(dirname "$CART_FILE")"
+CART_MANIFEST="$CART_ROOT/cart/${NAME}/cart.json"
+
+resolve_icon_path() {
+    local value="$1"
+    if [[ -z "$value" ]]; then
+        return 1
+    fi
+    if [[ "$value" = /* ]]; then
+        [[ -f "$value" ]] && { printf '%s\n' "$value"; return 0; }
+    else
+        [[ -f "$CART_DIR/$value" ]] && { printf '%s\n' "$CART_DIR/$value"; return 0; }
+        [[ -f "$CART_ROOT/$value" ]] && { printf '%s\n' "$CART_ROOT/$value"; return 0; }
+    fi
+    return 1
+}
+
+ICON_SOURCE=""
+ICON_DECLARED=""
+if [[ -f "$CART_MANIFEST" ]]; then
+    if [[ "$OS" == "Darwin" ]]; then
+        ICON_DECLARED="$(tools/v8cli scripts/cart-manifest-field.js "$CART_MANIFEST" icons.macos || true)"
+    elif [[ "$OS" == "Linux" ]]; then
+        ICON_DECLARED="$(tools/v8cli scripts/cart-manifest-field.js "$CART_MANIFEST" icons.linux || true)"
+    fi
+    if [[ -z "$ICON_DECLARED" ]]; then
+        ICON_DECLARED="$(tools/v8cli scripts/cart-manifest-field.js "$CART_MANIFEST" icons.default || true)"
+    fi
+    if [[ -z "$ICON_DECLARED" ]]; then
+        ICON_DECLARED="$(tools/v8cli scripts/cart-manifest-field.js "$CART_MANIFEST" icon || true)"
+    fi
+    if [[ -n "$ICON_DECLARED" ]]; then
+        if ! ICON_SOURCE="$(resolve_icon_path "$ICON_DECLARED")"; then
+            echo "[ship] cart manifest icon not found: $ICON_DECLARED" >&2
+            echo "[ship] icon paths are resolved relative to $CART_DIR, then $CART_ROOT" >&2
+            exit 1
+        fi
+    fi
+fi
+if [[ -z "$ICON_SOURCE" ]]; then
+    for candidate in \
+        "$CART_ROOT/cart/${NAME}/icon.icns" \
+        "$CART_ROOT/cart/${NAME}/icon.png" \
+        "$CART_ROOT/cart/${NAME}/icon.svg" \
+        "$CART_ROOT/cart/${NAME}/icon.ico" \
+        "$CART_ROOT/cart/${NAME}.icns" \
+        "$CART_ROOT/cart/${NAME}.png" \
+        "$CART_ROOT/cart/${NAME}.svg" \
+        "$CART_ROOT/cart/${NAME}.ico"
+    do
+        if [[ -f "$candidate" ]]; then
+            ICON_SOURCE="$candidate"
+            break
+        fi
+    done
+fi
+ICON_EXT=""
+ICON_FILE=""
+if [[ -n "$ICON_SOURCE" ]]; then
+    ICON_EXT="${ICON_SOURCE##*.}"
+    ICON_EXT="${ICON_EXT,,}"
+    ICON_FILE="${NAME}.${ICON_EXT}"
+    echo "[ship] app icon: $ICON_SOURCE"
 fi
 
 # ── 1. Bundle cart entry via esbuild → bundle-<name>.js ──────────────
-# Per-cart bundle path means two parallel ships can't overwrite each other's
-# output. v8_app.zig / qjs_app.zig embed `bundle-<app-name>.js` at compile time.
-BUNDLE_OUT="bundle-${NAME}.js"
+# Bundle output lives in CART_ROOT so the user's project owns its build
+# artefacts. zig build embeds it via -Dbundle-path so v8_app.zig's
+# @embedFile resolves the absolute path (instead of the SDK-relative
+# default).
+BUNDLE_OUT="$CART_ROOT/bundle-${NAME}.js"
 
 # Heal top-level `const { useX } = React;` and stray require('react') lines —
 # patterns that fail at module-init before globalThis.React is set.
-scripts/fix-react-imports
+# fix-react-imports honors RJIT_HOME + CART_ROOT env when set.
+RJIT_HOME="$RJIT_HOME" CART_ROOT="$CART_ROOT" scripts/fix-react-imports
 
 echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
-BUNDLE_FROM_HARNESS=1 tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$BUNDLE_OUT"
+BUNDLE_FROM_HARNESS=1 CART_ROOT="$CART_ROOT" tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$BUNDLE_OUT"
 
-# ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
+# Zig's @embedFile rejects absolute paths outside the build.zig package
+# (RJIT_HOME). When CART_ROOT differs (rjit-driven mode), the bundle just
+# written under CART_ROOT cannot be embedded directly; mirror it into the
+# SDK's zig-cache so the embed path lands inside the package.
+EMBED_BUNDLE="$BUNDLE_OUT"
+if [[ "$CART_ROOT" != "$RJIT_HOME" ]]; then
+    EMBED_BUNDLE="$RJIT_HOME/.zig-cache/bundles/bundle-${NAME}.js"
+    mkdir -p "$(dirname "$EMBED_BUNDLE")"
+    cp -f "$BUNDLE_OUT" "$EMBED_BUNDLE"
+fi
+
+# ── 2. Compile v8_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
 if [[ "$DEBUG" -eq 1 ]]; then
     OPT_FLAG="-Doptimize=Debug"
@@ -98,18 +176,13 @@ fi
 
 echo "[ship] compiling native binary..."
 APP_SOURCE="v8_app.zig"
-QJS_FLAG="-Duse-v8=true"
-if [[ "$QJS" -eq 1 ]]; then
-    APP_SOURCE="qjs_app.zig"
-    QJS_FLAG=""
-fi
+V8_FLAG="-Duse-v8=true"
 
 # Cart-declared capabilities (cart/<name>/cart.json). Currently only
 # `customChrome: true` is honoured — the runtime reads it as
 # build_options.custom_chrome to decide borderless vs windowed chrome.
 # Missing cart.json → no flag passed → default false.
 CUSTOM_CHROME_FLAG=""
-CART_MANIFEST="cart/${NAME}/cart.json"
 if [[ -f "$CART_MANIFEST" ]]; then
     # Grep-based probe avoids shelling out to a JS runtime for a one-field read.
     # Matches `"customChrome":true` with optional whitespace. A cart author who
@@ -140,7 +213,7 @@ fi
 # Ingredient-level granularity, not flavor-level: useHost has process/http/ws
 # flavors but importing the file at all means register all three. Same way
 # usePrivacy has thirty flavors and registering brings them all.
-METAFILE="bundle-${NAME}.js.metafile.json"
+METAFILE="$BUNDLE_OUT.metafile.json"
 PRIVACY_FLAG=""
 PROCESS_FLAG=""
 HTTPSRV_FLAG=""
@@ -151,11 +224,20 @@ FS_FLAG=""
 WS_FLAG=""
 TEL_FLAG=""
 ZIGCALL_FLAG=""
+SDK_FLAG=""
+WANT_PRIVACY=0
+WANT_USEHOST=0
+WANT_USECONN=0
+WANT_FS=0
+WANT_WS=0
+WANT_TEL=0
+WANT_ZIGCALL=0
+WANT_SDK=0
 if [[ -f "$METAFILE" ]]; then
     # Pure JSON membership check — v8cli reads the metafile, walks
     # outputs[].inputs (bytes-actually-shipped), and emits a single line of
     # space-separated 0/1 flags in this exact order:
-    #   privacy useHost useConnection fs websocket telemetry zigcall
+    #   privacy useHost useConnection fs websocket telemetry zigcall sdk
     # See scripts/ship-metafile-gate.js for the hook→binding map.
     GATE_FLAGS=$(tools/v8cli scripts/ship-metafile-gate.js "$METAFILE")
     if [[ -z "$GATE_FLAGS" ]]; then
@@ -164,51 +246,108 @@ if [[ -f "$METAFILE" ]]; then
         echo "[ship] any cart that uses a gated hook would crash at runtime." >&2
         exit 1
     fi
-    read -r WANT_PRIVACY WANT_USEHOST WANT_USECONN WANT_FS WANT_WS WANT_TEL WANT_ZIGCALL <<< "$GATE_FLAGS"
+    read -r WANT_PRIVACY WANT_USEHOST WANT_USECONN WANT_FS WANT_WS WANT_TEL WANT_ZIGCALL WANT_SDK <<< "$GATE_FLAGS"
     if [[ "$WANT_PRIVACY" == "1" ]]; then
         PRIVACY_FLAG="-Dhas-privacy=true"
-        echo "[ship] cart imports usePrivacy → linking libsodium + privacy bindings"
     fi
     if [[ "$WANT_USEHOST" == "1" ]]; then
         PROCESS_FLAG="-Dhas-process=true"
         HTTPSRV_FLAG="-Dhas-httpsrv=true"
         WSSRV_FLAG="-Dhas-wssrv=true"
-        echo "[ship] cart imports useHost → registering __proc_*/__httpsrv_*/__wssrv_* bindings"
     fi
     # useHost or useConnection both need the net binding (tcp/udp/socks5).
     if [[ "$WANT_USEHOST" == "1" ]] || [[ "$WANT_USECONN" == "1" ]]; then
         NET_FLAG="-Dhas-net=true"
-        echo "[ship] cart imports useHost/useConnection → registering __tcp_*/__udp_*/__socks5_* bindings"
     fi
     if [[ "$WANT_USECONN" == "1" ]]; then
         TOR_FLAG="-Dhas-tor=true"
-        echo "[ship] cart imports useConnection → registering __tor_* bindings"
     fi
     if [[ "$WANT_FS" == "1" ]]; then
         FS_FLAG="-Dhas-fs=true"
-        echo "[ship] cart imports fs hooks → registering __fs_*/__window_*/__getenv bindings"
     fi
     if [[ "$WANT_WS" == "1" ]]; then
         WS_FLAG="-Dhas-websocket=true"
-        echo "[ship] cart uses WebSocket client → registering __ws_* bindings"
     fi
     if [[ "$WANT_TEL" == "1" ]]; then
         TEL_FLAG="-Dhas-telemetry=true"
-        echo "[ship] cart uses telemetry → registering __tel_*/getFps/... bindings"
     fi
     if [[ "$WANT_ZIGCALL" == "1" ]]; then
         ZIGCALL_FLAG="-Dhas-zigcall=true"
-        echo "[ship] cart imports math hooks → registering __zig_call/__zig_call_list bindings"
+    fi
+    if [[ "$WANT_SDK" == "1" ]]; then
+        SDK_FLAG="-Dhas-sdk=true"
     fi
 else
     echo "[ship] WARNING: no metafile at $METAFILE — all opt-in V8 bindings disabled" >&2
 fi
 
-zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG $PRIVACY_FLAG $PROCESS_FLAG $HTTPSRV_FLAG $WSSRV_FLAG $NET_FLAG $TOR_FLAG $FS_FLAG $WS_FLAG $TEL_FLAG $ZIGCALL_FLAG
+BUILD_BINDINGS=()
+BUILD_LIBS=()
+BUILD_TRIGGERS=()
+if [[ "$WANT_PRIVACY" == "1" ]]; then
+    BUILD_BINDINGS+=("privacy")
+    BUILD_LIBS+=("libsodium")
+    BUILD_TRIGGERS+=("privacy: runtime/hooks/usePrivacy.ts")
+fi
+if [[ "$WANT_USEHOST" == "1" ]]; then
+    BUILD_BINDINGS+=("process" "httpsrv" "wssrv")
+    BUILD_TRIGGERS+=("useHost: runtime/hooks/useHost.ts")
+fi
+if [[ "$WANT_USEHOST" == "1" ]] || [[ "$WANT_USECONN" == "1" ]]; then
+    BUILD_BINDINGS+=("net")
+fi
+if [[ "$WANT_USECONN" == "1" ]]; then
+    BUILD_BINDINGS+=("tor")
+    BUILD_TRIGGERS+=("connection: runtime/hooks/useConnection.ts")
+fi
+if [[ "$WANT_FS" == "1" ]]; then
+    BUILD_BINDINGS+=("fs")
+    BUILD_TRIGGERS+=("fs: runtime/hooks/fs.ts")
+fi
+if [[ "$WANT_WS" == "1" ]]; then
+    BUILD_BINDINGS+=("websocket")
+    BUILD_TRIGGERS+=("websocket: runtime/hooks/websocket.ts or useConnection")
+fi
+if [[ "$WANT_TEL" == "1" ]]; then
+    BUILD_BINDINGS+=("telemetry")
+    BUILD_TRIGGERS+=("telemetry: telemetry cart source")
+fi
+if [[ "$WANT_ZIGCALL" == "1" ]]; then
+    BUILD_BINDINGS+=("zigcall" "zigcall_list")
+    BUILD_TRIGGERS+=("zigcall: runtime/hooks/math.ts")
+fi
+if [[ "$WANT_SDK" == "1" ]]; then
+    BUILD_BINDINGS+=("sdk")
+    BUILD_TRIGGERS+=("sdk: runtime/hooks/http.ts or runtime/hooks/browser_page.ts")
+fi
 
-RAW_BIN="zig-out/bin/$NAME"
-if [[ ! -f "$RAW_BIN" ]]; then
-    echo "[ship] build produced no binary: $RAW_BIN" >&2
+echo "[ship] build ingredients:"
+echo "[ship]   runtime: $APP_SOURCE (V8)"
+if [[ "${#BUILD_BINDINGS[@]}" -gt 0 ]]; then
+    echo "[ship]   V8 bindings: ${BUILD_BINDINGS[*]}"
+else
+    echo "[ship]   V8 bindings: none"
+fi
+if [[ "${#BUILD_LIBS[@]}" -gt 0 ]]; then
+    echo "[ship]   native feature libs: ${BUILD_LIBS[*]}"
+else
+    echo "[ship]   native feature libs: none"
+fi
+if [[ "${#BUILD_TRIGGERS[@]}" -gt 0 ]]; then
+    echo "[ship]   triggers:"
+    for trigger in "${BUILD_TRIGGERS[@]}"; do
+        echo "[ship]     - $trigger"
+    done
+else
+    echo "[ship]   triggers: none"
+fi
+echo "[ship]   zig flags: $V8_FLAG${CUSTOM_CHROME_FLAG:+ $CUSTOM_CHROME_FLAG} $OPT_FLAG${PRIVACY_FLAG:+ $PRIVACY_FLAG}${PROCESS_FLAG:+ $PROCESS_FLAG}${HTTPSRV_FLAG:+ $HTTPSRV_FLAG}${WSSRV_FLAG:+ $WSSRV_FLAG}${NET_FLAG:+ $NET_FLAG}${TOR_FLAG:+ $TOR_FLAG}${FS_FLAG:+ $FS_FLAG}${WS_FLAG:+ $WS_FLAG}${TEL_FLAG:+ $TEL_FLAG}${ZIGCALL_FLAG:+ $ZIGCALL_FLAG}${SDK_FLAG:+ $SDK_FLAG}"
+
+zig build app -p "$CART_ROOT/zig-out" -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" -Dbundle-path="$EMBED_BUNDLE" $V8_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG $PRIVACY_FLAG $PROCESS_FLAG $HTTPSRV_FLAG $WSSRV_FLAG $NET_FLAG $TOR_FLAG $FS_FLAG $WS_FLAG $TEL_FLAG $ZIGCALL_FLAG $SDK_FLAG
+
+BUILD_BIN="$CART_ROOT/zig-out/bin/$NAME"
+if [[ ! -f "$BUILD_BIN" ]]; then
+    echo "[ship] build produced no binary: $BUILD_BIN" >&2
     exit 1
 fi
 
@@ -218,7 +357,7 @@ fi
 # against the cart's pre-build declaration. Any disagreement = the
 # kitchen contradicted the label, so the binary is destroyed before
 # shipping. There is no "trust us, it's fine" path here — by design.
-LABEL_DIR="zig-out/manifest/v8-ingredients"
+LABEL_DIR="$CART_ROOT/zig-out/manifest/v8-ingredients"
 NET_EXPECTED="0"
 [[ "$WANT_USEHOST" == "1" || "$WANT_USECONN" == "1" ]] && NET_EXPECTED="1"
 declare -A EXPECTED=(
@@ -250,37 +389,45 @@ for ing in privacy process httpsrv wssrv net tor fs websocket telemetry zigcall;
 done
 if [[ "$LABEL_MISMATCH" -eq 1 ]]; then
     echo "[ship] DESTROYING binary — manifest disagrees with cart declaration" >&2
-    rm -f "$RAW_BIN"
+    rm -f "$BUILD_BIN"
     exit 1
 fi
 
-# ── 3. Debug / --raw short-circuit ────────────────────────────────────
-# In debug or --raw mode, move the ELF to "$NAME-raw" so zig-out/bin/$NAME
-# stays reserved for the self-extracting wrapper. Prevents accidentally
-# shipping a blue-icon raw binary because someone (read: claude) forgot
-# the flag was still in scope.
-if [[ "$DEBUG" -eq 1 ]] || [[ "$RAW" -eq 1 ]]; then
-    RAW_OUT="zig-out/bin/${NAME}-raw"
-    mv -f "$RAW_BIN" "$RAW_OUT"
-    SIZE_MB=$(du -m "$RAW_OUT" | cut -f1)
-    echo "[ship] done (raw ELF, ${SIZE_MB}MB) → $RAW_OUT"
-    echo "[ship] note: zig-out/bin/$NAME left for wrapped build; run './scripts/ship $NAME' for the shippable form."
+# ── 3. Debug short-circuit ─────────────────────────────────────────────
+# In debug mode, move the debug ELF to "$NAME-debug" so zig-out/bin/$NAME
+# stays reserved for the self-extracting wrapper.
+if [[ "$DEBUG" -eq 1 ]]; then
+    DEBUG_OUT="$CART_ROOT/zig-out/bin/${NAME}-debug"
+    mv -f "$BUILD_BIN" "$DEBUG_OUT"
+    SIZE_MB=$(du -m "$DEBUG_OUT" | cut -f1)
+    echo "[ship] done (debug ELF, ${SIZE_MB}MB) → $DEBUG_OUT"
+    echo "[ship] note: $BUILD_BIN left for wrapped build; run './scripts/ship $NAME' for the shippable form."
     exit 0
 fi
 
 # ── 4. Package as self-extracting binary ──────────────────────────────
-OS="$(uname -s)"
-
 if [[ "$OS" == "Darwin" ]]; then
     # ── macOS: package as .app bundle ──────────────────────────────
     echo "[ship] packaging macOS .app bundle..."
-    APP_BUNDLE="zig-out/bin/${NAME}.app"
+    APP_BUNDLE="$CART_ROOT/zig-out/bin/${NAME}.app"
     CONTENTS="$APP_BUNDLE/Contents"
     MACOS_DIR="$CONTENTS/MacOS"
     FW_DIR="$CONTENTS/Frameworks"
+    RES_DIR="$CONTENTS/Resources"
     rm -rf "$APP_BUNDLE"
-    mkdir -p "$MACOS_DIR" "$FW_DIR"
-    cp "$RAW_BIN" "$MACOS_DIR/$NAME"
+    mkdir -p "$MACOS_DIR" "$FW_DIR" "$RES_DIR"
+    cp "$BUILD_BIN" "$MACOS_DIR/$NAME"
+
+    MACOS_ICON_PLIST=""
+    if [[ -n "$ICON_SOURCE" ]]; then
+        cp "$ICON_SOURCE" "$RES_DIR/$ICON_FILE"
+        if [[ "$ICON_EXT" == "icns" ]]; then
+            MACOS_ICON_PLIST="    <key>CFBundleIconFile</key>
+    <string>$ICON_FILE</string>"
+        else
+            echo "[ship] macOS icon copied to Resources/$ICON_FILE; Finder icon requires .icns" >&2
+        fi
+    fi
 
     cat > "$CONTENTS/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -297,6 +444,7 @@ if [[ "$OS" == "Darwin" ]]; then
     <string>1.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+${MACOS_ICON_PLIST}
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
@@ -356,21 +504,36 @@ PLIST
 fi
 
 if [[ "$OS" != "Linux" ]]; then
-    echo "[ship] packaging not implemented for $OS — leaving raw ELF at $RAW_BIN"
+    echo "[ship] packaging not implemented for $OS — leaving build output at $BUILD_BIN"
     exit 0
 fi
 
 echo "[ship] packaging self-extracting binary..."
 TMP_DIR="/tmp/reactjit-dist-$NAME"
 LIB_DIR="$TMP_DIR/lib"
+SHARE_DIR="$TMP_DIR/share"
 rm -rf "$TMP_DIR"
 mkdir -p "$LIB_DIR"
-cp "$RAW_BIN" "$TMP_DIR/app.bin"
+cp "$BUILD_BIN" "$TMP_DIR/app.bin"
+
+if [[ -n "$ICON_SOURCE" ]]; then
+    mkdir -p "$SHARE_DIR/icons" "$SHARE_DIR/applications"
+    cp "$ICON_SOURCE" "$SHARE_DIR/icons/$ICON_FILE"
+    cat > "$SHARE_DIR/applications/${NAME}.desktop.in" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=$NAME
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Development;
+DESKTOP
+fi
 
 # Walk ldd output, bundle every non-system .so
 LIB_COUNT=0
 LDD_TMP=$(mktemp)
-ldd "$RAW_BIN" > "$LDD_TMP" 2>/dev/null || true
+ldd "$BUILD_BIN" > "$LDD_TMP" 2>/dev/null || true
 while IFS= read -r line; do
     case "$line" in *linux-vdso*) continue ;; esac
     lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
@@ -387,7 +550,7 @@ rm -f "$LDD_TMP"
 # Bundle the dynamic loader itself
 LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null || readlink -f /lib/ld-linux-x86-64.so.2 2>/dev/null || echo "")
 if [[ -z "$LD_LINUX" ]] || [[ ! -f "$LD_LINUX" ]]; then
-    echo "[ship] WARNING: ld-linux-x86-64.so.2 not found — leaving raw ELF at $RAW_BIN"
+    echo "[ship] WARNING: ld-linux-x86-64.so.2 not found — leaving build output at $BUILD_BIN"
     rm -rf "$TMP_DIR"
     exit 0
 fi
@@ -405,21 +568,26 @@ chmod +x "$TMP_DIR/run"
 TARBALL="/tmp/reactjit-${NAME}-payload.tar.gz"
 (cd "$TMP_DIR" && tar czf "$TARBALL" .)
 
-# Write wrapper to a staging file, then atomic-rename over the raw ELF.
+# Write wrapper to a staging file, then atomic-rename over the build output.
 # Atomic rename works even if the previous binary is currently running —
 # the running process keeps its fd to the old inode, the dentry is replaced.
-STAGED="${RAW_BIN}.staged"
+STAGED="${BUILD_BIN}.staged"
 cat > "$STAGED" << HEADER
 #!/bin/sh
 set -e
 APP_DIR=\${XDG_CACHE_HOME:-\$HOME/.cache}/reactjit-$NAME
 SIG=\$(md5sum "\$0" 2>/dev/null | cut -c1-8 || cksum "\$0" | cut -d" " -f1)
 CACHE="\$APP_DIR/\$SIG"
+ICON_FILE="$ICON_FILE"
 if [ ! -f "\$CACHE/.ready" ]; then
   rm -rf "\$APP_DIR"
   mkdir -p "\$CACHE"
   SKIP=\$(awk '/^__ARCHIVE__\$/{print NR + 1; exit}' "\$0")
   tail -n+"\$SKIP" "\$0" | tar xz -C "\$CACHE"
+  if [ -n "\$ICON_FILE" ] && [ -f "\$CACHE/share/applications/$NAME.desktop.in" ]; then
+    sed "s|@EXEC@|\$CACHE/run|g; s|@ICON@|\$CACHE/share/icons/\$ICON_FILE|g" \
+      "\$CACHE/share/applications/$NAME.desktop.in" > "\$CACHE/share/applications/$NAME.desktop"
+  fi
   touch "\$CACHE/.ready"
 fi
 exec "\$CACHE/run" "\$@"
@@ -427,10 +595,10 @@ __ARCHIVE__
 HEADER
 cat "$TARBALL" >> "$STAGED"
 chmod +x "$STAGED"
-mv -f "$STAGED" "$RAW_BIN"
+mv -f "$STAGED" "$BUILD_BIN"
 
-SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
-echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $RAW_BIN"
+SIZE_MB=$(du -m "$BUILD_BIN" | cut -f1)
+echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $BUILD_BIN"
 rm -rf "$TMP_DIR" "$TARBALL"
 
 # ── 5. Post-build snapshot gate ───────────────────────────────────────
@@ -438,12 +606,12 @@ rm -rf "$TMP_DIR" "$TARBALL"
 # emits tests/<NAME>.autotest capturing all visible text, pressables, and a
 # health line. Counts FAIL lines + runtime errors; any failure deletes the
 # binary and exits 1. 1:1 port from tsz/scripts/build.
-mkdir -p tests
-AUTOTEST_FILE="tests/${NAME}.autotest"
+mkdir -p "$CART_ROOT/tests"
+AUTOTEST_FILE="$CART_ROOT/tests/${NAME}.autotest"
 SNAP_STDERR=$(mktemp)
 SNAP_T0=$(date +%s%N)
 ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
-    timeout -s KILL 300 "$RAW_BIN" >/dev/null 2>"$SNAP_STDERR" || true
+    timeout -s KILL 300 "$BUILD_BIN" >/dev/null 2>"$SNAP_STDERR" || true
 SNAP_T1=$(date +%s%N)
 SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
 
@@ -456,7 +624,7 @@ fi
 grep '^\[snapshot\]' "$SNAP_STDERR" 2>/dev/null || true
 # Keep the full snapshot log for post-mortem diagnostics. Not a bypass: binary
 # still gets cleaned up on TOTAL_FAILS below; this just preserves stack traces.
-SNAP_LOG_KEEP="tests/screenshots/${NAME}/.last-snapshot.log"
+SNAP_LOG_KEEP="$CART_ROOT/tests/screenshots/${NAME}/.last-snapshot.log"
 mkdir -p "$(dirname "$SNAP_LOG_KEEP")"
 cp "$SNAP_STDERR" "$SNAP_LOG_KEEP" 2>/dev/null || true
 rm -f "$SNAP_STDERR"
@@ -477,8 +645,8 @@ TOTAL_FAILS=$(( FAIL_COUNT + RUNTIME_ERRORS ))
 if [ "$TOTAL_FAILS" -gt 0 ]; then
     echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE" >&2
     echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary" >&2
-    rm -f "$RAW_BIN" 2>/dev/null || true
-    rm -rf "zig-out/bin/${NAME}.app" 2>/dev/null || true
+    rm -f "$BUILD_BIN" 2>/dev/null || true
+    rm -rf "$CART_ROOT/zig-out/bin/${NAME}.app" 2>/dev/null || true
     exit 1
 fi
 echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
