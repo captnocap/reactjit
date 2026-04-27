@@ -159,11 +159,12 @@ BUNDLE_FROM_HARNESS=1 CART_ROOT="$CART_ROOT" tools/v8cli scripts/cart-bundle.js 
 
 # Zig's @embedFile rejects absolute paths outside the build.zig package
 # (RJIT_HOME). When CART_ROOT differs (rjit-driven mode), the bundle just
-# written under CART_ROOT cannot be embedded directly; mirror it into the
-# SDK's zig-cache so the embed path lands inside the package.
+# written under CART_ROOT cannot be embedded directly; mirror it into a
+# package-local dir so the embed path lands inside the package. Avoid
+# .zig-cache/ — Zig excludes it from package paths.
 EMBED_BUNDLE="$BUNDLE_OUT"
 if [[ "$CART_ROOT" != "$RJIT_HOME" ]]; then
-    EMBED_BUNDLE="$RJIT_HOME/.zig-cache/bundles/bundle-${NAME}.js"
+    EMBED_BUNDLE="$RJIT_HOME/bundles/bundle-${NAME}.js"
     mkdir -p "$(dirname "$EMBED_BUNDLE")"
     cp -f "$BUNDLE_OUT" "$EMBED_BUNDLE"
 fi

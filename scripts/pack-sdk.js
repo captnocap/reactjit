@@ -1,0 +1,241 @@
+// scripts/pack-sdk.js — build the single-file `rjit` distributable.
+//
+// Runs via: tools/v8cli scripts/pack-sdk.js [--out path] [--keep-stage]
+//
+// Output: a self-extracting shell script that, on first run, expands the
+// embedded tarball into $XDG_CACHE_HOME/rjit/<sig>/ and dispatches to
+// init|dev|ship|help. Same self-extractor pattern scripts/ship uses for
+// cart binaries — proven smaller than a Zig ELF with @embedFile.
+//
+// Payload contents (mirrors the in-repo install layout):
+//   tools/{zig,v8cli,esbuild}           — toolchain
+//   vendor/                             — vendored npm deps (react, ts, …)
+//   framework/ runtime/ renderer/       — runtime + reconciler source
+//   scripts/                            — dispatcher targets (dev, ship, init, …)
+//   sdk/dependency-registry.json        — single source of truth
+//   build.zig v8_app.zig qjs_app.zig    — build entry points
+//   deps/v8-prebuilt/libc_v8.a          — V8 static archive (~116 MB)
+//   deps/<zig-packages>/                — wgpu-native, etc.
+//   lib/                                — bundlePolicy:always .so libs (sdl3, freetype, luajit)
+//
+// Native libs are resolved via ldconfig from the host. The output is
+// Linux-x86_64-bound. Cross-platform build is a follow-up.
+
+const ROOT = __cwd();
+
+function die(msg, code) {
+  __writeStderr('[pack-sdk] ' + msg + '\n');
+  __exit(code | 0 || 1);
+}
+
+function log(msg) { __writeStdout('[pack-sdk] ' + msg + '\n'); }
+
+function sh(cmd, args, stdin) {
+  const r = JSON.parse(__spawnSync(cmd, JSON.stringify(args || []), stdin || ''));
+  return r;
+}
+
+function shOrDie(cmd, args, label) {
+  const r = sh(cmd, args, '');
+  if (r.code !== 0) {
+    if (r.stderr) __writeStderr(r.stderr);
+    die((label || cmd) + ' failed (code ' + r.code + ')', r.code || 1);
+  }
+  return r;
+}
+
+// ── argv ──────────────────────────────────────────────────────────────
+const argv = process.argv.slice(1);
+let outPath = ROOT + '/dist/rjit';
+let keepStage = false;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--out' || a === '-o') { outPath = argv[++i]; continue; }
+  if (a === '--keep-stage') { keepStage = true; continue; }
+  die('unknown flag: ' + a, 2);
+}
+if (!outPath.startsWith('/')) outPath = ROOT + '/' + outPath;
+
+// ── load registry ─────────────────────────────────────────────────────
+const REGISTRY_PATH = ROOT + '/sdk/dependency-registry.json';
+if (!__exists(REGISTRY_PATH)) die('registry missing: ' + REGISTRY_PATH);
+const registry = JSON.parse(__readFile(REGISTRY_PATH));
+
+// ── stage dir ─────────────────────────────────────────────────────────
+const STAGE = '/tmp/rjit-stage-' + Date.now();
+__mkdirp(STAGE);
+log('staging at ' + STAGE);
+
+function copyTree(srcAbs, destAbs, label) {
+  if (!__exists(srcAbs)) die('missing payload: ' + (label || srcAbs));
+  __mkdirp(destAbs.replace(/\/[^/]+$/, ''));
+  shOrDie('cp', ['-a', srcAbs, destAbs], 'cp ' + (label || srcAbs));
+}
+
+function copyFile(srcAbs, destAbs) {
+  if (!__exists(srcAbs)) die('missing file: ' + srcAbs);
+  __mkdirp(destAbs.replace(/\/[^/]+$/, ''));
+  shOrDie('cp', ['-a', srcAbs, destAbs], 'cp ' + srcAbs);
+}
+
+// Source trees — these come from the in-repo layout verbatim.
+const SOURCE_TREES = [
+  'framework', 'runtime', 'renderer', 'scripts', 'sdk', 'vendor',
+  // C source roots referenced unconditionally by build.zig.
+  'stb',                   // stb_image / stb_image_write
+  'love2d/quickjs',        // QJS compiled into the cart bridge regardless of runtime selection
+];
+for (const sub of SOURCE_TREES) {
+  log('copy ' + sub + '/');
+  copyTree(ROOT + '/' + sub, STAGE + '/' + sub, sub);
+}
+
+// Path-based zig package deps declared in build.zig.zon. Foundational only;
+// feature-gated deps (llama.cpp.zig, vello_ffi, libvterm, …) are not yet
+// wired through the registry's bundling step.
+const ZIG_PATH_DEPS = [
+  'deps/tls.zig',          // tls_zig — TLS for net features (referenced as foundational by build.zig)
+  'deps/wgpu_native_zig',  // wgpu — render backbone
+  'deps/zig-v8',           // v8 zig binding
+];
+for (const sub of ZIG_PATH_DEPS) {
+  if (__exists(ROOT + '/' + sub)) {
+    log('copy ' + sub + '/');
+    copyTree(ROOT + '/' + sub, STAGE + '/' + sub, sub);
+  }
+}
+
+// Top-level build entry files. build.zig.zon declares zig package deps
+// (wgpu_native_zig, etc.) that build.zig pulls in via b.dependency().
+for (const f of ['build.zig', 'build.zig.zon', 'v8_app.zig', 'qjs_app.zig', 'v8_cli.zig', 'v8_hello.zig']) {
+  if (__exists(ROOT + '/' + f)) {
+    log('copy ' + f);
+    copyFile(ROOT + '/' + f, STAGE + '/' + f);
+  }
+}
+
+// Toolchain: zig (with full lib/ tree), v8cli, esbuild from registry tools.
+const tools = registry.cliPayload && registry.cliPayload.tools ? registry.cliPayload.tools : {};
+for (const [name, spec] of Object.entries(tools)) {
+  if (spec.packPolicy === 'optional') continue;
+  if (spec.payloadPath) {
+    log('tool ' + name + ' ← ' + spec.payloadPath);
+    copyFile(ROOT + '/' + spec.payloadPath, STAGE + '/' + spec.payloadPath);
+  }
+  for (const sup of spec.supportPaths || []) {
+    if (__exists(ROOT + '/' + sup)) {
+      log('tool ' + name + ' support ← ' + sup);
+      copyTree(ROOT + '/' + sup, STAGE + '/' + sup, sup);
+    }
+  }
+}
+
+// Native libraries with bundlePolicy: always.
+const nativeLibs = registry.nativeLibraries || {};
+const ldcache = sh('sh', ['-c', 'ldconfig -p 2>/dev/null'], '').stdout || '';
+function findSo(systemNames) {
+  for (const name of systemNames) {
+    // ldconfig -p lines look like:
+    //   "  libSDL3.so.0 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libSDL3.so.0"
+    const re = new RegExp('lib' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.so[^\\s]*\\s*\\([^)]+\\)\\s*=>\\s*(\\S+)');
+    const m = ldcache.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+const missingLibs = [];
+for (const [name, spec] of Object.entries(nativeLibs)) {
+  if (spec.bundlePolicy !== 'always') continue;
+  if (spec.kind === 'static-library' || spec.kind === 'zig-package') {
+    if (!spec.payloadPath) {
+      missingLibs.push(name + ' (kind=' + spec.kind + ', no payloadPath)');
+      continue;
+    }
+    const src = ROOT + '/' + spec.payloadPath;
+    if (!__exists(src)) {
+      missingLibs.push(name + ' (' + spec.payloadPath + ' missing)');
+      continue;
+    }
+    log('native ' + name + ' ← ' + spec.payloadPath);
+    const stat = JSON.parse(__stat(src) || 'null');
+    if (stat && stat.isDir) copyTree(src, STAGE + '/' + spec.payloadPath, name);
+    else copyFile(src, STAGE + '/' + spec.payloadPath);
+    continue;
+  }
+  if (spec.kind === 'dynamic-library') {
+    const sysNames = spec.systemNames || [name];
+    const resolved = findSo(sysNames);
+    if (!resolved) {
+      missingLibs.push(name + ' (no ldconfig hit for ' + sysNames.join('|') + ')');
+      continue;
+    }
+    log('native ' + name + ' ← ' + resolved);
+    // Resolve symlink + carry the SONAME as the install name.
+    const realPath = sh('readlink', ['-f', resolved], '').stdout.trim() || resolved;
+    const baseName = resolved.replace(/^.*\//, '');
+    copyFile(realPath, STAGE + '/lib/' + baseName);
+    continue;
+  }
+  // vendored-c-source / platform-library / etc. — no payload to ship beyond
+  // what's already in framework/ or vendor/.
+}
+
+if (missingLibs.length) {
+  __writeStderr('[pack-sdk] missing foundational payloads:\n');
+  for (const m of missingLibs) __writeStderr('  - ' + m + '\n');
+  die('cannot pack SDK with missing foundational libs', 3);
+}
+
+// ── tarball ───────────────────────────────────────────────────────────
+const TARBALL = '/tmp/rjit-payload-' + Date.now() + '.tar.gz';
+log('compressing → ' + TARBALL);
+shOrDie('sh', ['-c', "cd '" + STAGE + "' && tar czf '" + TARBALL + "' ."], 'tar');
+
+// ── wrapper + concat ──────────────────────────────────────────────────
+const WRAPPER = [
+  '#!/bin/sh',
+  'set -e',
+  'SELF="$0"',
+  'CMD="${1:-help}"',
+  '[ "$#" -gt 0 ] && shift',
+  'CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}',
+  'APP_DIR=$CACHE_HOME/rjit',
+  'SIG=$(md5sum "$SELF" 2>/dev/null | cut -c1-8 || cksum "$SELF" | cut -d" " -f1)',
+  'CACHE=$APP_DIR/$SIG',
+  'if [ ! -f "$CACHE/.ready" ]; then',
+  '  rm -rf "$APP_DIR"',
+  '  mkdir -p "$CACHE"',
+  '  SKIP=$(awk \'/^__ARCHIVE__$/{print NR + 1; exit}\' "$SELF")',
+  '  tail -n+"$SKIP" "$SELF" | tar xz -C "$CACHE"',
+  '  touch "$CACHE/.ready"',
+  'fi',
+  'export RJIT_HOME="$CACHE"',
+  'export LD_LIBRARY_PATH="$CACHE/lib:${LD_LIBRARY_PATH:-}"',
+  'case "$CMD" in',
+  '  init) exec "$CACHE/tools/v8cli" "$CACHE/scripts/init.js" "$@" ;;',
+  '  dev)  exec "$CACHE/scripts/dev" "$@" ;;',
+  '  ship) exec "$CACHE/scripts/ship" "$@" ;;',
+  '  help|--help|-h) exec "$CACHE/tools/v8cli" "$CACHE/scripts/help.js" "$@" ;;',
+  '  *) exec "$CACHE/tools/v8cli" "$CACHE/scripts/help.js" "$CMD" "$@" ;;',
+  'esac',
+  '__ARCHIVE__',
+  '',
+].join('\n');
+
+__mkdirp(outPath.replace(/\/[^/]+$/, ''));
+const STAGED = outPath + '.staged';
+if (__exists(STAGED)) __remove(STAGED);
+__writeFile(STAGED, WRAPPER);
+shOrDie('sh', ['-c', "cat '" + TARBALL + "' >> '" + STAGED + "'"], 'concat');
+shOrDie('chmod', ['+x', STAGED], 'chmod');
+shOrDie('mv', ['-f', STAGED, outPath], 'mv');
+
+// ── cleanup + report ──────────────────────────────────────────────────
+if (!keepStage) {
+  __remove(STAGE);
+  __remove(TARBALL);
+}
+
+const sizeOut = sh('du', ['-h', outPath], '').stdout.trim().split(/\s+/)[0];
+log('done → ' + outPath + ' (' + sizeOut + ')');
