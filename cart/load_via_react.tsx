@@ -10,8 +10,8 @@
 // path. Compare click-latency numbers between the two.
 
 import { useState } from 'react';
-import { Box, Pressable, Text, TextEditor } from '../runtime/primitives';
-import * as fs from '../runtime/hooks/fs';
+import { Box, Pressable, Text, TextEditor } from '@reactjit/runtime/primitives';
+import * as fs from '@reactjit/runtime/hooks/fs';
 
 const TEST_FILE = '/home/siah/creative/reactjit/cart/sweatshop/index.tsx';
 

@@ -5,7 +5,7 @@
 //
 // Code-form usage (`<Icon icon={Heart} />`) tree-shakes without this file.
 
-import { registerIcons } from '../../runtime/icons/registry';
+import { registerIcons } from '@reactjit/runtime/icons/registry';
 import {
   AtSign,
   ArrowDown,
@@ -107,7 +107,7 @@ import {
   TrendingUp,
   X,
   Zap,
-} from '../../runtime/icons/icons';
+} from '@reactjit/runtime/icons/icons';
 
 let registered = false;
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Window } from '../runtime/primitives';
+import { Window } from '@reactjit/runtime/primitives';
 
 export default function App() {
   const [count, setCount] = useState(0);

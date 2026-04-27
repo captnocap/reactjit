@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Text, ScrollView, TextInput, TextArea } from '../runtime/primitives';
+import { Box, Text, ScrollView, TextInput, TextArea } from '@reactjit/runtime/primitives';
 
 function Field(props: any) {
   return (

@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../sweatshop/theme';
 import type { ColorMode, DemoNode, EdgeDensity, GraphLayoutMode, NodeCount } from './LayoutEngine';
 

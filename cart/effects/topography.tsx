@@ -2,7 +2,7 @@
 // with sin-wave micro-wobble + fbm-driven ridge lift. Port of
 // tsz/carts/conformance/mixed/effects/topography.tsz.
 
-import { Box, Effect } from '../../runtime/primitives';
+import { Box, Effect } from '@reactjit/runtime/primitives';
 const TOPO_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

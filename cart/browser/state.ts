@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { browserPage, localstore } from '../../runtime/hooks';
+import { browserPage, localstore } from '@reactjit/runtime/hooks';
 import { extractDocumentStyleRefs, interpretPageResponse } from './content';
 import {
   BLANK_URL,

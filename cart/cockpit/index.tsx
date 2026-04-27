@@ -10,8 +10,8 @@
 // fine without them; sends just surface a "backend not wired" system message.
 
 import { useState, useEffect, useRef } from 'react';
-import { Box, Canvas, TextInput } from '../../runtime/primitives';
-import { ThemeProvider } from '../../runtime/theme';
+import { Box, Canvas, TextInput } from '@reactjit/runtime/primitives';
+import { ThemeProvider } from '@reactjit/runtime/theme';
 import './style_cls';
 import { C } from './style_cls';
 import { THEMES, THEME_NAMES } from './themes';

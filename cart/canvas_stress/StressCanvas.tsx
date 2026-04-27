@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Box, Canvas } from '../../runtime/primitives';
+import { Box, Canvas } from '@reactjit/runtime/primitives';
 import { FpsMeter } from './FpsMeter';
 import { resolveNodePosition, type StressScene } from './useStressScene';
 

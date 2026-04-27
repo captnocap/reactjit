@@ -1,4 +1,4 @@
-import { StaticSurface } from '../runtime/primitives';
+import { StaticSurface } from '@reactjit/runtime/primitives';
 
 export default function App() {
   return (

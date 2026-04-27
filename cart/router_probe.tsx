@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Box, Pressable, ScrollView, Text } from '../runtime/primitives';
+import { Box, Pressable, ScrollView, Text } from '@reactjit/runtime/primitives';
 import {
   Route as RuntimeRoute,
   Router as RuntimeRouter,
   useNavigate,
   useRoute,
-} from '../runtime/router';
+} from '@reactjit/runtime/router';
 
 const paths = ['/', '/users/42', '/settings', '/missing'];
 

@@ -7,7 +7,7 @@
 // (snoise, fbm, hsv2rgb, hsl2rgb, voronoi, …). The user WGSL only needs
 // to declare `fs_main` with the right signature.
 
-import { Box, Effect } from '../../runtime/primitives';
+import { Box, Effect } from '@reactjit/runtime/primitives';
 const PLASMA_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

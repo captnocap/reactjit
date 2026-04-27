@@ -5,7 +5,7 @@
 // hooks moved inside App() (mixed-lane hoists them; React requires them in a FC).
 
 import { useState, useEffect, useRef } from 'react';
-import { Box, Text, Pressable, ScrollView } from '../runtime/primitives';
+import { Box, Text, Pressable, ScrollView } from '@reactjit/runtime/primitives';
 
 // ── Math utilities ─────────────────────────────────────────────────
 

@@ -12,8 +12,8 @@
 // haven't isolated yet).
 
 import { useState } from 'react';
-import { Box, Pressable, Text, TextEditor } from '../runtime/primitives';
-import { useFileContent } from '../runtime/hooks/useFileContent';
+import { Box, Pressable, Text, TextEditor } from '@reactjit/runtime/primitives';
+import { useFileContent } from '@reactjit/runtime/hooks/useFileContent';
 
 const TEST_FILE = '/home/siah/creative/reactjit/cart/sweatshop/index.tsx';
 

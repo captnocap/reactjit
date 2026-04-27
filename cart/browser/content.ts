@@ -1,4 +1,4 @@
-import { BrowserPageResponse } from '../../runtime/hooks/browser_page';
+import { BrowserPageResponse } from '@reactjit/runtime/hooks/browser_page';
 import {
   collapseHtmlWhitespace,
   decodeHtmlEntities,

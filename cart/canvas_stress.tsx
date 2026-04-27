@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Col, Row, Text } from '../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { StressCanvas } from './canvas_stress/StressCanvas';
 import { StressControls, type CountChoice, type StressPreset, type StressShape } from './canvas_stress/StressControls';
 import { useFpsTracker } from './canvas_stress/useFpsTracker';

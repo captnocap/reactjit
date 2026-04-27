@@ -7,7 +7,7 @@
 // of the parametric curve per pixel and taking the closest one. No trail
 // decay, just a clean curve.
 
-import { Box, Effect } from '../../runtime/primitives';
+import { Box, Effect } from '@reactjit/runtime/primitives';
 const SPIROGRAPH_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

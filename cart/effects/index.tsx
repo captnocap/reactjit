@@ -1,7 +1,7 @@
 // Effects gallery — picker for the port of tsz/carts/conformance/mixed/effects.
 // Click a tab at the top to switch the active effect.
 
-import { Box, Row, Pressable, Text } from '../../runtime/primitives';
+import { Box, Row, Pressable, Text } from '@reactjit/runtime/primitives';
 import Plasma from './plasma';
 import Rings from './rings';
 import Spirograph from './spirograph';

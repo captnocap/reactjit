@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Box, Col, Pressable, Row, ScrollView, Text, TextInput,
-} from '../../runtime/primitives';
+} from '@reactjit/runtime/primitives';
 import { transformJSX } from '../jsx-transform';
 
 const C = {

@@ -1,4 +1,4 @@
-import { Box, Col } from '../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { COLORS } from './sweatshop/theme';
 import { GraphControls } from './graph_demo/GraphControls';
 import { GraphStage } from './graph_demo/GraphStage';

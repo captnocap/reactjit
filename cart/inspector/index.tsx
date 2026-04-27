@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Box, Col, Row, Text, Pressable } from '../../runtime/primitives';
+import { Box, Col, Row, Text, Pressable } from '@reactjit/runtime/primitives';
 import { InspectorNode, MainTab, NodeIndex } from './types';
 import { COLORS } from './constants';
 import { coerceHostId } from './utils';

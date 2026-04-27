@@ -1,7 +1,7 @@
 // ChatCard — conversation view driven by props from the cockpit.
 
 import { useState } from 'react';
-import { ScrollView, Box, Text, Pressable, TextInput } from '../../runtime/primitives';
+import { ScrollView, Box, Text, Pressable, TextInput } from '@reactjit/runtime/primitives';
 import { C } from './style_cls';
 
 type Segment = {

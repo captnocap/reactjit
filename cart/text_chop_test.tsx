@@ -1,4 +1,4 @@
-import { Box, Col, Text, TextInput } from '../runtime/primitives';
+import { Box, Col, Text, TextInput } from '@reactjit/runtime/primitives';
 
 const SAMPLE = 'jumpy pigs qq gg yy — O S M W';
 

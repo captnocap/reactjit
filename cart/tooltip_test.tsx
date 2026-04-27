@@ -8,7 +8,7 @@
 // version, the engine's tooltip overlay is responsible.
 
 import { useState } from 'react';
-import { Box, Pressable, Text } from '../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 
 function EngineTooltipButton() {
   return (

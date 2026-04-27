@@ -2,7 +2,7 @@
 // Token scheme: `theme-xxx` → `theme:xxx` (new classifier uses `:` delimiter).
 // Importing this module registers every named primitive once.
 
-import { classifier } from '../../runtime/classifier';
+import { classifier } from '@reactjit/runtime/classifier';
 
 classifier({
   Root: {
@@ -1148,4 +1148,4 @@ classifier({
   },
 });
 
-export { classifiers as C } from '../../runtime/classifier';
+export { classifiers as C } from '@reactjit/runtime/classifier';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Box, Image, Pressable, Row, Text } from '../../runtime/primitives';
+import { Box, Image, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../sweatshop/theme';
 import type { ColorMode, DemoNode } from './LayoutEngine';
 import { colorForNode, iconShapeForNode } from './LayoutEngine';

@@ -1,4 +1,4 @@
-import { Box, Canvas, Graph, Text } from '../../runtime/primitives';
+import { Box, Canvas, Graph, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../sweatshop/theme';
 import { colorForNode, graphPathFor } from './LayoutEngine';
 import { NodeLabel } from './NodeLabel';

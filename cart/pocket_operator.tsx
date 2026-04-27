@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Text, Pressable, ScrollView } from '../runtime/primitives';
+import { Box, Text, Pressable, ScrollView } from '@reactjit/runtime/primitives';
 
 type StepLevel = 0 | 1 | 2;
 type TrackParams = {

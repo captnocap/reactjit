@@ -14,9 +14,9 @@
  */
 
 import * as React from 'react';
-import { useHost } from '../runtime/hooks/useHost';
-import { useConnection } from '../runtime/hooks/useConnection';
-import { useTelemetry } from '../runtime/hooks/useTelemetry';
+import { useHost } from '@reactjit/runtime/hooks/useHost';
+import { useConnection } from '@reactjit/runtime/hooks/useConnection';
+import { useTelemetry } from '@reactjit/runtime/hooks/useTelemetry';
 
 export default function App() {
   const http = useHost({

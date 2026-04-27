@@ -4,7 +4,7 @@
 // Also renders the raw value returned by __hot_get so we can see whether the
 // Zig side actually holds anything.
 
-import { useHotState } from '../runtime/hooks';
+import { useHotState } from '@reactjit/runtime/hooks';
 
 export default function HotTest() {
   const [count, setCount] = useHotState<number>('hottest.count', 0);

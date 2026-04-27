@@ -1,5 +1,5 @@
-import { installBrowserShims } from '../../runtime/hooks';
-import { Box, Col, Row } from '../../runtime/primitives';
+import { installBrowserShims } from '@reactjit/runtime/hooks';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import { COLORS } from './constants';
 import { useBrowserShellState } from './state';
 import BookmarkBar from './components/BookmarkBar';

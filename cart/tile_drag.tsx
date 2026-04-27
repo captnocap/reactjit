@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Col, Row, Text, Pressable } from '../runtime/primitives';
+import { Box, Col, Row, Text, Pressable } from '@reactjit/runtime/primitives';
 
 const COLS = 4;
 const ROWS = 3;

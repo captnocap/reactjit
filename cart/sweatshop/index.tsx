@@ -22,7 +22,7 @@ import {
   ScrollView,
   Text,
   TextInput,
-} from '../../runtime/primitives';
+} from '@reactjit/runtime/primitives';
 
 import {
   buildSeedMessages,
@@ -42,7 +42,7 @@ import { expandVariables, hasVariables, listCustomVariables } from './variables'
 import type { ExpansionResult } from './variables';
 import { listProxyConfigs, getProxyStatus } from './proxy';
 import type { ProxyConfig } from './proxy';
-import { execAsync } from '../../runtime/hooks/process';
+import { execAsync } from '@reactjit/runtime/hooks/process';
 import {
   closeWindow,
   exec,
@@ -94,7 +94,7 @@ import { FadeIn, PageModeTransition, SlideIn } from './anim';
 import { TooltipRoot } from './components/tooltip';
 
 import { usePersistentState } from './hooks/usePersistentState';
-import { useFileContent } from '../../runtime/hooks/useFileContent';
+import { useFileContent } from '@reactjit/runtime/hooks/useFileContent';
 import { loadPlugins, type PluginRegistry } from './plugin';
 import { HotPanel } from './components/hotpanel';
 import { GitPanel } from './components/git/GitPanel';

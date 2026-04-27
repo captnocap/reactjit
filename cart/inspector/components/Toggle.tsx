@@ -1,4 +1,4 @@
-import { Row, Text, Pressable, Box } from '../../runtime/primitives';
+import { Row, Text, Pressable, Box } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 export default function Toggle({

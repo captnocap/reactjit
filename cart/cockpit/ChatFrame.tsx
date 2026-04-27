@@ -2,7 +2,7 @@
 // Gutter 1: model variant   Gutter 2: effort   Gutter 3: context / reset
 
 import { ChatCard, WorkerQuestAttachment } from './ChatCard';
-import { Box, Text } from '../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { C } from './style_cls';
 
 const MODEL_VARIANTS = [

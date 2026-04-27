@@ -8,7 +8,7 @@
 // The named Effect uses an onRender JS callback (CPU path) because the
 // framework's fillEffect sampling reads from CPU pixel buffers.
 
-import { Box, Row, Text, Graph, Effect } from '../../runtime/primitives';
+import { Box, Row, Text, Graph, Effect } from '@reactjit/runtime/primitives';
 import { useMemo } from 'react';
 function round1(v: number) {
   return Math.round(v * 10) / 10;

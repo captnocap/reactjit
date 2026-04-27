@@ -11,7 +11,7 @@
 //     down to 192x192 and only render the base noise field (no decorative
 //     bezier-dot loops) so QJS can keep up.
 
-import { Box, Row, Text, Graph, Effect } from '../../runtime/primitives';
+import { Box, Row, Text, Graph, Effect } from '@reactjit/runtime/primitives';
 import { useMemo } from 'react';
 type Palette = {
   effect: string;

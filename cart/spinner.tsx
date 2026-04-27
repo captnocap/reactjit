@@ -1,4 +1,4 @@
-import { Box } from '../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { useState, useEffect } from 'react';
 const COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
