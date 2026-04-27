@@ -97,6 +97,7 @@ const ZIG_PATH_DEPS = [
   'deps/tls.zig',          // tls_zig — TLS for net features (referenced as foundational by build.zig)
   'deps/wgpu_native_zig',  // wgpu — render backbone
   'deps/zig-v8',           // v8 zig binding
+  'deps/sysroot',          // vendored headers + .so for SDL3/freetype/luajit/curl — build.zig --Dsysroot
 ];
 for (const sub of ZIG_PATH_DEPS) {
   if (__exists(ROOT + '/' + sub)) {

@@ -139,16 +139,21 @@ pub fn build(b: *std.Build) void {
 
     const os_tag = target.result.os.tag;
     if (os_tag == .linux) {
-        root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        // X11/m/pthread/dl are universal on every desktop Linux — system-assumed,
+        // never bundled. SDL3/freetype/luajit/curl headers + sos come from the
+        // sysroot when -Dsysroot is set; otherwise we fall back to the host's
+        // /usr/include/* layout (Debian-shaped paths).
         exe.linkSystemLibrary("X11");
         exe.linkSystemLibrary("m");
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
         if (sysroot) |sr| {
+            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/luajit-2.1", .{sr}) });
             root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
             root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
             root_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
         } else {
+            root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
@@ -362,12 +367,13 @@ pub fn build(b: *std.Build) void {
     }
 
     if (os_tag == .linux) {
-        bridge_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
         if (sysroot) |sr| {
+            bridge_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/luajit-2.1", .{sr}) });
             bridge_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
             bridge_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
             bridge_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
         } else {
+            bridge_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
             bridge_mod.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             bridge_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
