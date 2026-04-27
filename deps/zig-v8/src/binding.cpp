@@ -364,6 +364,10 @@ void v8__Isolate__PerformMicrotaskCheckpoint(v8::Isolate* self) {
     self->PerformMicrotaskCheckpoint();
 }
 
+void v8__Isolate__SetStackLimit(v8::Isolate* self, uintptr_t limit) {
+    self->SetStackLimit(limit);
+}
+
 bool v8__Isolate__AddMessageListener(
         v8::Isolate* self,
         v8::MessageCallback callback) {

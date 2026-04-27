@@ -368,6 +368,10 @@ pub const Isolate = struct {
         c.v8__Isolate__PerformMicrotaskCheckpoint(self.handle);
     }
 
+    pub fn setStackLimit(self: Self, limit: usize) void {
+        c.v8__Isolate__SetStackLimit(self.handle, limit);
+    }
+
     pub fn addMessageListener(self: Self, callback: c.MessageCallback) bool {
         return c.v8__Isolate__AddMessageListener(self.handle, callback);
     }

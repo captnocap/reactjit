@@ -257,6 +257,7 @@ void v8__Isolate__SetMicrotasksPolicy(
     Isolate* self,
     MicrotasksPolicy policy);
 void v8__Isolate__PerformMicrotaskCheckpoint(Isolate* self);
+void v8__Isolate__SetStackLimit(Isolate* self, uintptr_t limit);
 bool v8__Isolate__AddMessageListener(
     Isolate* self,
     MessageCallback callback);
