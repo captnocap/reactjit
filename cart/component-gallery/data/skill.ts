@@ -28,6 +28,13 @@ export type Skill = {
   description: string;
   systemMessageId?: string;
   promptTemplateId?: string;
+  /**
+   * Opt-in: when set, the assembler builds the skill's prompt via
+   * this Composition instead of walking systemMessageId +
+   * promptTemplateId directly. Net-additive — falls back to legacy
+   * fields when unset.
+   */
+  compositionId?: string;
   requiredCapabilities: string[]; // capability.id values
   requiredTools: string[]; // tool names — must appear in Privacy.tools.allowed
   triggers?: SkillTrigger;

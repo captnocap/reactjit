@@ -1,5 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { TooltipHeader } from '../components/tooltip-header/TooltipHeader';
+import { Command } from '../../../runtime/icons/icons';
 
 export const tooltipHeaderSection = defineGallerySection({
   id: "tooltip-header",
@@ -15,13 +16,13 @@ export const tooltipHeaderSection = defineGallerySection({
       title: "Tooltip Header",
       source: "cart/component-gallery/components/tooltip-header/TooltipHeader.tsx",
       status: 'ready',
-      summary: 'Tooltip header atom for title, supporting detail, and optional shortcut chip.',
+      summary: 'Tooltip header adapter built from Body, Mono, InlinePill, Divider, and the shared Icon renderer.',
       tags: ["header", "badge", "card"],
       variants: [
         {
           id: 'default',
           name: 'Default',
-          render: () => <TooltipHeader shortcut="Cmd K" />,
+          render: () => <TooltipHeader shortcut="Cmd K" icon={Command} />,
         },
       ],
     }),

@@ -10,6 +10,10 @@ export type DexTableExplorerProps = {
   width?: number;
 };
 
+type DexTableId = 'events' | 'runs' | 'users';
+type DexTableCellValue = string | number;
+type DexTableRow = DexTableCellValue[];
+
 const columns = [
   { label: 'run_id', flex: 1.05, bins: [1, 1, 2, 4, 3, 2] },
   { label: 't', flex: 0.72, bins: [1, 3, 5, 2, 4, 6] },
@@ -19,8 +23,7 @@ const columns = [
   { label: 'lag', flex: 0.62, bins: [2, 2, 6, 4, 3, 1] },
 ] as const;
 
-const tables = {
-  events: [
+const eventRows: DexTableRow[] = [
   ['r_7f3a', 412.01, 'think', 'w-01', 412, '18ms'],
   ['r_7f3a', 412.34, 'tool', 'w-02', 1204, '44ms'],
   ['r_7f3b', 12.11, 'flag', 'w-04', 88, '9ms'],
@@ -33,28 +36,42 @@ const tables = {
   ['r_7f42', 208.44, 'ok', 'w-05', 744, '22ms'],
   ['r_7f43', 233.18, 'tool', 'w-04', 1680, '35ms'],
   ['r_7f44', 261.02, 'warn', 'w-02', 210, '48ms'],
-  ],
-  runs: [
-    ['r_7f3a', 412.01, 'ok', 'w-01', 84213, '18ms'],
-    ['r_7f3b', 98.11, 'flag', 'w-04', 19022, '9ms'],
-    ['r_7f3c', 301.22, 'edit', 'w-03', 4402, '63ms'],
-    ['r_7f3d', 3.44, 'warn', 'w-05', 120, '31ms'],
-    ['r_7f3e', 88.02, 'ok', 'w-02', 302, '12ms'],
-    ['r_7f3f', 141.7, 'tool', 'w-01', 980, '27ms'],
-    ['r_7f45', 388.2, 'think', 'w-05', 1204, '54ms'],
-    ['r_7f46', 401.5, 'ok', 'w-02', 602, '11ms'],
-  ],
-  users: [
-    ['u_01', 17.02, 'ok', 'ada', 1288, '12ms'],
-    ['u_02', 21.44, 'tool', 'grace', 604, '18ms'],
-    ['u_03', 44.18, 'edit', 'alan', 1202, '22ms'],
-    ['u_04', 66.41, 'warn', 'linus', 410, '39ms'],
-    ['u_05', 88.8, 'ok', 'marg', 992, '9ms'],
-    ['u_06', 104.3, 'flag', 'barb', 86, '44ms'],
-    ['u_07', 144.9, 'think', 'ken', 730, '20ms'],
-    ['u_08', 172.4, 'ok', 'radia', 540, '13ms'],
-  ],
-} as const;
+];
+
+const runRows: DexTableRow[] = [
+  ['r_7f3a', 412.01, 'ok', 'w-01', 84213, '18ms'],
+  ['r_7f3b', 98.11, 'flag', 'w-04', 19022, '9ms'],
+  ['r_7f3c', 301.22, 'edit', 'w-03', 4402, '63ms'],
+  ['r_7f3d', 3.44, 'warn', 'w-05', 120, '31ms'],
+  ['r_7f3e', 88.02, 'ok', 'w-02', 302, '12ms'],
+  ['r_7f3f', 141.7, 'tool', 'w-01', 980, '27ms'],
+  ['r_7f45', 388.2, 'think', 'w-05', 1204, '54ms'],
+  ['r_7f46', 401.5, 'ok', 'w-02', 602, '11ms'],
+];
+
+const userRows: DexTableRow[] = [
+  ['u_01', 17.02, 'ok', 'ada', 1288, '12ms'],
+  ['u_02', 21.44, 'tool', 'grace', 604, '18ms'],
+  ['u_03', 44.18, 'edit', 'alan', 1202, '22ms'],
+  ['u_04', 66.41, 'warn', 'linus', 410, '39ms'],
+  ['u_05', 88.8, 'ok', 'marg', 992, '9ms'],
+  ['u_06', 104.3, 'flag', 'barb', 86, '44ms'],
+  ['u_07', 144.9, 'think', 'ken', 730, '20ms'],
+  ['u_08', 172.4, 'ok', 'radia', 540, '13ms'],
+];
+
+const tableIds: DexTableId[] = ['events', 'runs', 'users'];
+
+function resolveRows(active: DexTableId): DexTableRow[] {
+  switch (active) {
+    case 'runs':
+      return runRows;
+    case 'users':
+      return userRows;
+    default:
+      return eventRows;
+  }
+}
 
 function toneFor(cell: string | number) {
   if (cell === 'flag') return 'flag';
@@ -64,20 +81,21 @@ function toneFor(cell: string | number) {
 }
 
 export function DexTableExplorer({ width = 468 }: DexTableExplorerProps) {
-  const [active, setActive] = useState<keyof typeof tables>('events');
+  const [active, setActive] = useState<DexTableId>('events');
   const [selectedRow, setSelectedRow] = useState(3);
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const activeRows = resolveRows(active);
 
   const rows = useMemo(() => {
-    const base = [...tables[active]];
+    const base = activeRows.slice();
     if (sortColumn == null) return base;
     return base.sort((a, b) => {
       const av = a[sortColumn];
       const bv = b[sortColumn];
       return (av > bv ? 1 : av < bv ? -1 : 0) * sortDir;
     });
-  }, [active, sortColumn, sortDir]);
+  }, [activeRows, sortColumn, sortDir]);
 
   const selected = rows[selectedRow] || rows[0];
 
@@ -89,7 +107,7 @@ export function DexTableExplorer({ width = 468 }: DexTableExplorerProps) {
       height={300}
       right={
         <Row style={{ gap: 6 }}>
-          {(['events', 'runs', 'users'] as const).map((label) => (
+          {tableIds.map((label) => (
             <Pressable
               key={label}
               onPress={() => {
@@ -110,7 +128,7 @@ export function DexTableExplorer({ width = 468 }: DexTableExplorerProps) {
         </Row>
       }
     >
-      <DexSearchBar value="edit" count={`${rows.length}/${tables[active].length}`} placeholder={`filter in ${active}`} />
+      <DexSearchBar value="edit" count={`${rows.length}/${activeRows.length}`} placeholder={`filter in ${active}`} />
       <ScrollView showScrollbar={true} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
         <Col style={{ width: width - 2, flexShrink: 0 }}>
           <Row>

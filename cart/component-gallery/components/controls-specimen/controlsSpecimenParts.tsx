@@ -35,16 +35,22 @@ export function Mono(props: {
   fontSize?: number;
   fontWeight?: string;
   letterSpacing?: number;
+  lineHeight?: number;
+  noWrap?: boolean;
+  numberOfLines?: number;
   style?: any;
 }) {
   return (
     <Text
+      noWrap={props.noWrap}
+      numberOfLines={props.numberOfLines}
       style={{
         fontFamily: CTRL.mono,
         color: props.color ?? CTRL.inkDim,
         fontSize: props.fontSize ?? 8,
         fontWeight: props.fontWeight ?? 'normal',
         letterSpacing: props.letterSpacing ?? 1.2,
+        ...(props.lineHeight != null ? { lineHeight: props.lineHeight } : {}),
         ...(props.style || {}),
       }}
     >
@@ -53,13 +59,25 @@ export function Mono(props: {
   );
 }
 
-export function Body(props: { children: any; color?: string; fontSize?: number; fontWeight?: string; style?: any }) {
+export function Body(props: {
+  children: any;
+  color?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  lineHeight?: number;
+  noWrap?: boolean;
+  numberOfLines?: number;
+  style?: any;
+}) {
   return (
     <Text
+      noWrap={props.noWrap}
+      numberOfLines={props.numberOfLines}
       style={{
         color: props.color ?? CTRL.ink,
         fontSize: props.fontSize ?? 13,
         fontWeight: props.fontWeight ?? 'normal',
+        ...(props.lineHeight != null ? { lineHeight: props.lineHeight } : {}),
         ...(props.style || {}),
       }}
     >
@@ -132,7 +150,7 @@ export function InlinePill(props: { label: string; tone?: ControlTone; solid?: b
         backgroundColor: props.solid ? color : toneSoftBackground(props.tone ?? 'accent'),
       }}
     >
-      <Mono color={props.solid ? CTRL.bg : color} fontSize={9} fontWeight="bold" letterSpacing={1.4}>
+      <Mono color={props.solid ? CTRL.bg : color} fontSize={9} fontWeight="bold" letterSpacing={1.4} lineHeight={10} noWrap>
         {props.label}
       </Mono>
     </Box>

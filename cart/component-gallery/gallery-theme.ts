@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { setTokens, setStyleTokens } from '../../runtime/theme';
+import { setTokens, setStyleTokens } from '@reactjit/runtime/theme';
 import { mergeThemeTokenCategories } from './theme-system';
 import { galleryThemeSystems } from './themes';
 import type { ResolvedThemeTokenCategory } from './theme-system';

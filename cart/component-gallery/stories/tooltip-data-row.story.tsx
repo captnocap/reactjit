@@ -15,7 +15,7 @@ export const tooltipDataRowSection = defineGallerySection({
       title: "Tooltip Data Row",
       source: "cart/component-gallery/components/tooltip-data-row/TooltipDataRow.tsx",
       status: 'ready',
-      summary: 'Compact label/value atom for metric-rich tooltip bodies.',
+      summary: 'Tooltip row adapter over the existing KeyValueBadge atom.',
       tags: ["card", "table", "data"],
       variants: [
         {
@@ -26,7 +26,7 @@ export const tooltipDataRowSection = defineGallerySection({
         {
           id: 'warning',
           name: 'Warning',
-          render: () => <TooltipDataRow label="P95" value="118 ms" color="theme:warn" />,
+          render: () => <TooltipDataRow label="P95" value="118 ms" tone="warn" />,
         },
       ],
     }),

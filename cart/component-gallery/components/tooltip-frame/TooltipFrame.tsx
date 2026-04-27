@@ -1,31 +1,26 @@
-import { classifiers as S } from '@reactjit/core';
+import { Row } from '../../../../runtime/primitives';
+import { AtomFrame, Body, Mono, VerticalSpine } from '../controls-specimen/controlsSpecimenParts';
+import type { ControlTone } from '../controls-specimen/controlsSpecimenTheme';
 
 export type TooltipFrameProps = {
   children?: any;
   width?: number;
-  emphasis?: 'neutral' | 'accent';
+  tone?: ControlTone;
+  spine?: string;
 };
 
-export function TooltipFrame({ children, width = 220, emphasis = 'neutral' }: TooltipFrameProps) {
+export function TooltipFrame({ children, width = 336, tone = 'accent', spine = 'TIP' }: TooltipFrameProps) {
   return (
-    <S.Surface
-      style={{
-        width,
-        gap: 'theme:spaceX4',
-        borderWidth: 1,
-        borderColor: emphasis === 'accent' ? 'theme:accent' : 'theme:ruleBright',
-        shadowColor: 'theme:bg',
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-      }}
-    >
-      {children || (
-        <S.StackX2>
-          <S.TypeBodyBold>Tooltip frame</S.TypeBodyBold>
-          <S.TypeCaption style={{ color: 'theme:inkDim' }}>Reusable surface atom</S.TypeCaption>
-        </S.StackX2>
-      )}
-    </S.Surface>
+    <Row style={{ alignItems: 'stretch', gap: 0 }}>
+      <VerticalSpine label={spine} tone={tone} solid={true} minWidth={30} />
+      <AtomFrame width={width} padding={12} gap={10} tone={tone}>
+        {children || (
+          <>
+            <Body fontSize={14} fontWeight="bold">Tooltip frame</Body>
+            <Mono fontSize={9} letterSpacing={0.4}>Controls-specimen surface and spine atoms</Mono>
+          </>
+        )}
+      </AtomFrame>
+    </Row>
   );
 }

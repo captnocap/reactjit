@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import './components.cls';
-import { callHost } from '../../runtime/ffi';
+import { callHost } from '@reactjit/runtime/ffi';
 import { TooltipRoot } from '../shared/tooltip/Tooltip';
 import {
   useFuzzySearch,
@@ -8,9 +8,9 @@ import {
   type FuzzySearchCandidate,
   type FuzzySearchOptions,
   type FuzzySearchResult,
-} from '../../runtime/hooks/useFuzzySearch';
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../runtime/primitives';
-import { Route, Router, useNavigate } from '../../runtime/router';
+} from '@reactjit/runtime/hooks/useFuzzySearch';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
+import { Route, Router, useNavigate } from '@reactjit/runtime/router';
 import { findGalleryThemeOption, useGalleryTheme } from './gallery-theme';
 import { gallerySections } from './registry';
 import { COLORS, PAGE_SURFACE } from './surface';

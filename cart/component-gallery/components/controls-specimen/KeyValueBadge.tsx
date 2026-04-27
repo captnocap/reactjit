@@ -17,10 +17,10 @@ export function KeyValueBadge({
   return (
     <Row style={{ borderWidth: 1, borderColor: color, backgroundColor: CTRL.bg1 }}>
       <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, backgroundColor: color }}>
-        <Mono color={CTRL.bg} fontSize={9} fontWeight="bold">{label}</Mono>
+        <Mono color={CTRL.bg} fontSize={9} fontWeight="bold" lineHeight={10} noWrap>{label}</Mono>
       </Box>
       <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 }}>
-        <Body fontSize={12}>{value}</Body>
+        <Body fontSize={12} lineHeight={14} noWrap>{value}</Body>
       </Box>
     </Row>
   );

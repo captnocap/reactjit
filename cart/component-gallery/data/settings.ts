@@ -18,6 +18,13 @@ export type Settings = {
   defaultConnectionId?: string;
   defaultModelId?: string;
   defaultPresetId?: string;
+  /**
+   * The master Composition that orchestrates a turn for this profile.
+   * When set, the assembler walks this composition (which slots `who`
+   * + `what-when` + `execution` sub-compositions). When unset, the
+   * assembler falls back to the legacy default-only behavior.
+   */
+  masterCompositionId?: string;
   createdAt: string;
   updatedAt: string;
   summary?: string;

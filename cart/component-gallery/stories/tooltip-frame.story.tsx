@@ -15,7 +15,7 @@ export const tooltipFrameSection = defineGallerySection({
       title: "Tooltip Frame",
       source: "cart/component-gallery/components/tooltip-frame/TooltipFrame.tsx",
       status: 'ready',
-      summary: 'Tooltip surface atom composed with existing surface, stack, and text classifiers.',
+      summary: 'Tooltip frame adapter built from existing AtomFrame and VerticalSpine atoms.',
       tags: ["card", "panel"],
       variants: [
         {
@@ -26,7 +26,7 @@ export const tooltipFrameSection = defineGallerySection({
         {
           id: 'accent',
           name: 'Accent',
-          render: () => <TooltipFrame emphasis="accent" />,
+          render: () => <TooltipFrame tone="accent" spine="DATA" />,
         },
       ],
     }),

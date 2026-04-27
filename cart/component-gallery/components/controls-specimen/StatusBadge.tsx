@@ -41,7 +41,7 @@ export function StatusBadge({
             backgroundColor: color,
           }}
         />
-        <Mono color={color} fontSize={9} fontWeight="bold" letterSpacing={1.4}>
+        <Mono color={color} fontSize={9} fontWeight="bold" letterSpacing={1.4} lineHeight={10} noWrap>
           {label}
         </Mono>
       </Row>
@@ -61,7 +61,7 @@ export function StatusBadge({
         backgroundColor: solid ? color : toneSoftBackground(tone),
       }}
     >
-      <Mono color={solid ? CTRL.bg : color} fontSize={9} fontWeight="bold" letterSpacing={1.4}>
+      <Mono color={solid ? CTRL.bg : color} fontSize={9} fontWeight="bold" letterSpacing={1.4} lineHeight={10} noWrap>
         {label}
       </Mono>
     </Box>

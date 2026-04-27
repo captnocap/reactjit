@@ -1,6 +1,7 @@
 import type { GallerySection } from '../types';
 
 import { chartSection } from './chart.story';
+import { flowEditorSection } from './flow-editor.story';
 import { areaChartSection } from './area-chart.story';
 import { barChartSection } from './bar-chart.story';
 import { boxplotSection } from './boxplot.story';
@@ -50,6 +51,7 @@ import { skeletonTilesSection } from './skeleton-tiles.story';
 import { sweatshopMatrixDisplaySection } from './sweatshop-matrix-display.story';
 import { astQuiltSection } from './ast-quilt.story';
 import { easingsSection } from './easings.story';
+import { animatedTextSection } from './animated-text.story';
 import { gridSpinnersSection } from './grid-spinners.story';
 import { hairlineSliderSection } from './hairline-slider.story';
 import { filledRailSliderSection } from './filled-rail-slider.story';
@@ -188,8 +190,26 @@ import { basicWorkerCardSection } from './basic-worker-card.story';
 import { tooltipFrameSection } from './tooltip-frame.story';
 import { tooltipHeaderSection } from './tooltip-header.story';
 import { tooltipDataRowSection } from './tooltip-data-row.story';
-import { basicTooltipSection } from './basic-tooltip.story';
-import { richTooltipSection } from './rich-tooltip.story';
+import { tooltipSection } from './tooltip.story';
+import { notificationSection } from './notification.story';
+import { toolbarSection } from './toolbar.story';
+import { goalCardSection } from './goal-card.story';
+import { taskCardSection } from './task-card.story';
+import { workerCardSection } from './worker-card.story';
+import { constraintBadgeSection } from './constraint-badge.story';
+import { presetCardSection } from './preset-card.story';
+import { rubricPanelSection } from './rubric-panel.story';
+import { hookListSection } from './hook-list.story';
+import { compositionSection } from './composition.story';
+import { compositionSourceKindSection } from './composition-source-kind.story';
+import { promptFragmentSection } from './prompt-fragment.story';
+import { codeSnippetSection } from './code-snippet.story';
+import { codeBlockSection } from './code-block.story';
+import { codeLineSection } from './code-line.story';
+import { codeLineNumberSection } from './code-line-number.story';
+import { syntaxHighlighterSection } from './syntax-highlighter.story';
+import { codeCopyButtonSection } from './code-copy-button.story';
+import { intentSurfaceSection } from './intent-surface.story';
 // component-gallery:imports
 
 export const storySections: GallerySection[] = [
@@ -245,6 +265,7 @@ export const storySections: GallerySection[] = [
   sweatshopMatrixDisplaySection,
   astQuiltSection,
   easingsSection,
+  animatedTextSection,
   gridSpinnersSection,
   hairlineSliderSection,
   filledRailSliderSection,
@@ -381,7 +402,26 @@ export const storySections: GallerySection[] = [
   tooltipFrameSection,
   tooltipHeaderSection,
   tooltipDataRowSection,
-  basicTooltipSection,
-  richTooltipSection,
+  tooltipSection,
+  notificationSection,
+  toolbarSection,
+  goalCardSection,
+  taskCardSection,
+  workerCardSection,
+  constraintBadgeSection,
+  presetCardSection,
+  rubricPanelSection,
+  hookListSection,
+  compositionSection,
+  compositionSourceKindSection,
+  promptFragmentSection,
+  codeSnippetSection,
+  codeBlockSection,
+  codeLineSection,
+  codeLineNumberSection,
+  syntaxHighlighterSection,
+  codeCopyButtonSection,
+  intentSurfaceSection,
+  flowEditorSection,
   // component-gallery:sections
 ];

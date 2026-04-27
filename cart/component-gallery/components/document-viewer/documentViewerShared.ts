@@ -3,7 +3,7 @@ export type DocumentBlock =
   | { type: 'paragraph'; text: string }
   | { type: 'list'; ordered?: boolean; items: string[] }
   | { type: 'quote'; text: string; attribution?: string }
-  | { type: 'code'; code: string; lang?: string }
+  | { type: 'code'; code: string; lang?: string; title?: string; filename?: string }
   | { type: 'divider' };
 
 export type DocumentModel = {
@@ -15,28 +15,6 @@ export type DocumentModel = {
 };
 
 export type DocumentSize = 'compact' | 'comfortable';
-
-export const DOCUMENT_THEME = {
-  page: '#eadfca',
-  pageBorder: '#e8dcc4',
-  pageShadow: 'rgba(40, 32, 16, 0.10)',
-  ink: '#14100d',
-  inkMuted: '#4a4238',
-  inkSubtle: '#b8a890',
-  rule: '#b8a890',
-  toolbar: '#1a1511',
-  toolbarBorder: '#4a4238',
-  toolbarInk: '#e8dcc4',
-  toolbarMuted: '#b8a890',
-  outline: '#e8dcc4',
-  outlineActive: '#eadfca',
-  outlineActiveInk: '#14100d',
-  outlineBorder: '#e8dcc4',
-  accent: '#8a4a20',
-  code: '#1a1511',
-  codeInk: '#f2e8dc',
-  quoteBar: '#8a4a20',
-};
 
 export const SAMPLE_DOCUMENT: DocumentModel = {
   title: 'On the Shape of Documents',
@@ -99,6 +77,8 @@ export const SAMPLE_DOCUMENT: DocumentModel = {
     {
       type: 'code',
       lang: 'ts',
+      title: 'Size Fit',
+      filename: 'fit.ts',
       code: 'function fit(view: { w: number; h: number }) {\n  return view.w < 540 ? "compact" : "comfortable";\n}',
     },
     { type: 'divider' },

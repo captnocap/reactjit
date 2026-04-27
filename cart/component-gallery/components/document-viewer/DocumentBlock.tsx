@@ -1,166 +1,86 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
-import { DOCUMENT_THEME, type DocumentBlock as Block, type DocumentSize } from './documentViewerShared';
-
-const HEADING_SIZE = {
-  comfortable: { 1: 28, 2: 20, 3: 16 },
-  compact: { 1: 22, 2: 17, 3: 14 },
-} as const;
-
-const BODY_SIZE = {
-  comfortable: 14,
-  compact: 12.5,
-};
+import { classifiers as S } from '@reactjit/core';
+import { CodeBlock } from '../code-block/CodeBlock';
+import type { DocumentBlock as Block, DocumentSize } from './documentViewerShared';
 
 export type DocumentBlockProps = {
   block: Block;
   size: DocumentSize;
+  onHeadingLayout?: (id: string, y: number) => void;
 };
 
-export function DocumentBlock({ block, size }: DocumentBlockProps) {
-  const body = BODY_SIZE[size];
-
+export function DocumentBlock({ block, size: _size, onHeadingLayout }: DocumentBlockProps) {
   if (block.type === 'heading') {
-    const fontSize = HEADING_SIZE[size][block.level];
-    const topGap = block.level === 1 ? 4 : block.level === 2 ? 14 : 8;
-    return (
-      <Col style={{ marginTop: topGap, marginBottom: 4, gap: 6 }}>
-        <Text
-          style={{
-            fontSize,
-            lineHeight: Math.round(fontSize * 1.25),
-            fontWeight: block.level === 1 ? '700' : '600',
-            color: DOCUMENT_THEME.ink,
-          }}
-        >
-          {block.text}
-        </Text>
-        {block.level === 1 ? (
-          <Box
-            style={{
-              height: 1,
-              width: '100%',
-              backgroundColor: DOCUMENT_THEME.rule,
-            }}
-          />
-        ) : null}
-      </Col>
-    );
+    const onLayout = (rect: any) => {
+      const y = typeof rect?.y === 'number' ? rect.y : typeof rect?.top === 'number' ? rect.top : null;
+      if (y !== null) onHeadingLayout?.(block.id, y);
+    };
+
+    if (block.level === 1) {
+      return (
+        <S.StackX3 onLayout={onLayout}>
+          <S.DocH1>{block.text}</S.DocH1>
+          <S.DocPaperRule />
+        </S.StackX3>
+      );
+    }
+    if (block.level === 2) {
+      return <S.DocH2 onLayout={onLayout}>{block.text}</S.DocH2>;
+    }
+    return <S.DocH3 onLayout={onLayout}>{block.text}</S.DocH3>;
   }
 
   if (block.type === 'paragraph') {
-    return (
-      <Text
-        style={{
-          fontSize: body,
-          lineHeight: body * 1.55,
-          color: DOCUMENT_THEME.ink,
-        }}
-      >
-        {block.text}
-      </Text>
-    );
+    return <S.DocBodyText>{block.text}</S.DocBodyText>;
   }
 
   if (block.type === 'list') {
     return (
-      <Col style={{ gap: 4, paddingLeft: 6 }}>
+      <S.StackX2>
         {block.items.map((item, index) => (
-          <Row key={index} style={{ gap: 8, alignItems: 'flex-start' }}>
-            <Text
-              style={{
-                fontSize: body,
-                lineHeight: body * 1.55,
-                color: DOCUMENT_THEME.inkMuted,
-                width: 18,
-              }}
-            >
-              {block.ordered ? `${index + 1}.` : '•'}
-            </Text>
-            <Text
-              style={{
-                fontSize: body,
-                lineHeight: body * 1.55,
-                color: DOCUMENT_THEME.ink,
-                flexGrow: 1,
-                flexShrink: 1,
-              }}
-            >
-              {item}
-            </Text>
-          </Row>
+          <S.InlineX3 key={index}>
+            <S.DocBodyDim>{block.ordered ? `${index + 1}.` : '•'}</S.DocBodyDim>
+            <S.DocBodyText>{item}</S.DocBodyText>
+          </S.InlineX3>
         ))}
-      </Col>
+      </S.StackX2>
     );
   }
 
   if (block.type === 'quote') {
     return (
-      <Row style={{ gap: 12, paddingLeft: 4 }}>
-        <Box
-          style={{
-            width: 3,
-            backgroundColor: DOCUMENT_THEME.quoteBar,
-            borderRadius: 2,
-            alignSelf: 'stretch',
-          }}
-        />
-        <Col style={{ gap: 6, flexGrow: 1, flexShrink: 1 }}>
-          <Text
-            style={{
-              fontSize: body + 1,
-              lineHeight: (body + 1) * 1.55,
-              color: DOCUMENT_THEME.ink,
-              fontStyle: 'italic',
-            }}
-          >
-            {block.text}
-          </Text>
-          {block.attribution ? (
-            <Text style={{ fontSize: body - 2, color: DOCUMENT_THEME.inkMuted }}>
-              {`— ${block.attribution}`}
-            </Text>
-          ) : null}
-        </Col>
-      </Row>
+      <S.DocQuoteRow>
+        <S.DocQuoteBar />
+        <S.StackX2>
+          <S.DocQuoteText>{block.text}</S.DocQuoteText>
+          {block.attribution ? <S.DocAttribution>{`— ${block.attribution}`}</S.DocAttribution> : null}
+        </S.StackX2>
+      </S.DocQuoteRow>
     );
   }
 
   if (block.type === 'code') {
+    const lang = (block.lang === 'tsx' || block.lang === 'ts' || block.lang === 'js' ||
+                  block.lang === 'json' || block.lang === 'zig' || block.lang === 'python' ||
+                  block.lang === 'shell' || block.lang === 'text')
+      ? block.lang
+      : 'text';
     return (
-      <Box
-        style={{
-          backgroundColor: DOCUMENT_THEME.code,
-          borderRadius: 4,
-          padding: size === 'compact' ? 10 : 14,
+      <CodeBlock
+        row={{
+          id: `doc-code-${block.code.length}`,
+          title: block.title || 'Snippet',
+          filename: block.filename,
+          language: lang,
+          code: block.code,
+          showLineNumbers: true,
+          wrap: true,
         }}
-      >
-        <Text
-          style={{
-            fontFamily: 'monospace',
-            fontSize: body - 1,
-            lineHeight: (body - 1) * 1.5,
-            color: DOCUMENT_THEME.codeInk,
-          }}
-        >
-          {block.code}
-        </Text>
-      </Box>
+      />
     );
   }
 
   if (block.type === 'divider') {
-    return (
-      <Box
-        style={{
-          marginTop: 4,
-          marginBottom: 4,
-          height: 1,
-          width: '40%',
-          alignSelf: 'center',
-          backgroundColor: DOCUMENT_THEME.rule,
-        }}
-      />
-    );
+    return <S.DocPaperRule />;
   }
 
   return null;

@@ -21,6 +21,22 @@ const SIZE = 108;
 const GAP = 4;
 const CELL = Math.floor((SIZE - GAP * 2) / 3); // 33
 
+const TIMING_MS = {
+  tiny: 220,
+  snake: 260,
+  mines: 340,
+  ttt: 380,
+  tetris: 340,
+  pulse: 1200,
+  orbit: 450,
+  binary: 140,
+  life: 720,
+  sort: 180,
+  slide: 360,
+  rotate: 250,
+  shuffle: 360,
+} as const;
+
 type CellSpec = {
   active: boolean;
   accent: boolean;
@@ -181,9 +197,9 @@ function emptyCells(): CellSpec[] {
 }
 
 // 1. SNAKE
-function SnakeSpinner() {
-  const t = useTick(260);
-  const tickTiny = useTick(220);
+export function SnakeSpinner() {
+  const t = useTick(TIMING_MS.snake);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const path = [0, 1, 2, 5, 4, 3, 6, 7, 8, 7, 6, 3, 4, 5, 2, 1];
   const len = 4;
   const head = t % path.length;
@@ -197,8 +213,8 @@ function SnakeSpinner() {
 
 // 2. MINESWEEPER
 function MinesSpinner() {
-  const t = useTick(340);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.mines);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const cycle = 12;
   const frame = t % cycle;
   const mineIdx = 5;
@@ -241,8 +257,8 @@ function MinesSpinner() {
 
 // 3. TIC TAC TOE
 function TicTacToeSpinner() {
-  const t = useTick(380);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.ttt);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const sequence = [
     { idx: 0, mark: 'x' },
     { idx: 4, mark: 'o' },
@@ -281,8 +297,8 @@ function TicTacToeSpinner() {
 
 // 4. TETRIS
 function TetrisSpinner() {
-  const t = useTick(340);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.tetris);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const pieces = [
     { shape: [[1, 1, 0], [0, 1, 0]], color: PALETTE.ink },
     { shape: [[1, 0, 0], [1, 1, 0]], color: PALETTE.accent },
@@ -318,8 +334,8 @@ function TetrisSpinner() {
 
 // 5. PULSE
 function PulseSpinner() {
-  const t = useTick(520);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.pulse);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const ring = t % 3;
   const layers = [[4], [1, 3, 5, 7], [0, 2, 6, 8]];
   const colors = [PALETTE.ink, '#7a6e5d', PALETTE.accent];
@@ -332,8 +348,8 @@ function PulseSpinner() {
 
 // 6. ORBIT
 function OrbitSpinner() {
-  const t = useTick(220);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.orbit);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const perim = [0, 1, 2, 5, 8, 7, 6, 3];
   const cells = emptyCells();
   const a = perim[t % 8];
@@ -350,9 +366,9 @@ function OrbitSpinner() {
 
 // 7. BINARY
 function BinarySpinner() {
-  const t = useTick(140);
-  const tickTiny = useTick(220);
-  const n = t % 512;
+  const t = useTick(TIMING_MS.binary);
+  const tickTiny = useTick(TIMING_MS.tiny);
+  const n = (t * 17) % 512;
   const cells = emptyCells();
   for (let i = 0; i < 9; i++) {
     const on = !!(n & (1 << (8 - i)));
@@ -363,8 +379,8 @@ function BinarySpinner() {
 
 // 8. LIFE
 function LifeSpinner() {
-  const t = useTick(420);
-  const tickTiny = useTick(220);
+  const t = useTick(TIMING_MS.life);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const patterns = [
     [0, 0, 0, 1, 1, 1, 0, 0, 0],
     [0, 1, 0, 0, 1, 0, 0, 1, 0],
@@ -413,7 +429,7 @@ function SortSpinner() {
         iRef.current += 1;
         return next;
       });
-    }, 180);
+    }, TIMING_MS.sort);
     return () => clearInterval(id);
   }, []);
 
@@ -465,7 +481,7 @@ function SlideSpinner() {
   const [layout, setLayout] = useState<number[]>(() => [0, 1, 2, 3, 4, 5, 6, 7, -1]);
   const emptyRef = useRef(8);
   const lastMoveRef = useRef(-1);
-  const tickTiny = useTick(220);
+  const tickTiny = useTick(TIMING_MS.tiny);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -489,7 +505,7 @@ function SlideSpinner() {
         emptyRef.current = pick;
         return next;
       });
-    }, 360);
+    }, TIMING_MS.slide);
     return () => clearInterval(id);
   }, []);
 
@@ -512,7 +528,7 @@ function RotateSpinner() {
   const [corner, setCorner] = useState(0);
   const cornerRef = useRef(0);
   const stepRef = useRef(0);
-  const tickTiny = useTick(220);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const blocks = [[0, 1, 3, 4], [1, 2, 4, 5], [3, 4, 6, 7], [4, 5, 7, 8]];
 
   useEffect(() => {
@@ -532,7 +548,7 @@ function RotateSpinner() {
         }
         return next;
       });
-    }, 420);
+    }, TIMING_MS.rotate);
     return () => clearInterval(id);
   }, []);
 
@@ -559,7 +575,7 @@ function ShuffleSpinner() {
   const [positions, setPositions] = useState<number[]>(() => Array.from({ length: 9 }, (_, i) => i));
   const [activePair, setActivePair] = useState<[number, number]>([0, 1]);
   const swapsRef = useRef(0);
-  const tickTiny = useTick(220);
+  const tickTiny = useTick(TIMING_MS.tiny);
   const pairs = [
     [0, 1], [3, 4], [6, 7],
     [1, 2], [4, 5], [7, 8],
@@ -581,7 +597,7 @@ function ShuffleSpinner() {
         setActivePair([a, b]);
         return next;
       });
-    }, 360);
+    }, TIMING_MS.shuffle);
     return () => clearInterval(id);
   }, []);
 

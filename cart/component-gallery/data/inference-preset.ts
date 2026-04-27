@@ -35,8 +35,14 @@ export type InferencePreset = {
   // pure-parameters. When both are present, systemMessage takes
   // precedence over systemMessageId on resolve (inline wins).
   systemMessage?: string;
-  systemMessageId?: string; // forward FK → system-message.ts (future)
-  promptTemplateId?: string; // forward FK → prompt-template.ts (future)
+  systemMessageId?: string; // FK → system-message.ts
+  promptTemplateId?: string; // FK → prompt-template.ts
+  /**
+   * Opt-in: when set, the assembler builds the preset's system-side
+   * via this Composition instead of walking the systemMessage* /
+   * promptTemplateId fields. Net-additive.
+   */
+  compositionId?: string;
 
   // Scoping — both optional; unset means the preset is portable.
   scopedKinds?: ConnectionKind[];

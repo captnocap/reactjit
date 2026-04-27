@@ -17,6 +17,13 @@ export type Role = {
   defaultModelId?: string;
   defaultPresetId?: string;
   baseSystemMessageId?: string;
+  /**
+   * Opt-in: when set, the assembler uses this Composition to build
+   * the worker's prompt instead of walking baseSystemMessageId +
+   * skill.systemMessageId directly. Net-additive — when unset, fall
+   * back to legacy behavior.
+   */
+  compositionId?: string;
   skills: string[]; // skill.id values
   requiredCapabilities: string[]; // union of skill reqs + role baseline
   createdAt: string;

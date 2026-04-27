@@ -1,5 +1,5 @@
-import { Col, Pressable, ScrollView, Text } from '../../../../runtime/primitives';
-import { DOCUMENT_THEME } from './documentViewerShared';
+import { classifiers as S } from '@reactjit/core';
+import { ScrollView } from '../../../../runtime/primitives';
 
 export type OutlineEntry = {
   id: string;
@@ -13,72 +13,52 @@ export type DocumentOutlineProps = {
   onSelect?: (id: string) => void;
 };
 
+function OutlineRow({
+  entry,
+  active,
+  onSelect,
+}: {
+  entry: OutlineEntry;
+  active: boolean;
+  onSelect?: (id: string) => void;
+}) {
+  const handlePress = onSelect ? () => onSelect(entry.id) : undefined;
+  const Label = entry.level === 1
+    ? (active ? S.DocOutlineEntryH1Active : S.DocOutlineEntryH1)
+    : (active ? S.DocOutlineEntryActive : S.DocOutlineEntry);
+
+  if (active) {
+    return (
+      <S.DocOutlineRowActive onPress={handlePress}>
+        <Label>{entry.text}</Label>
+      </S.DocOutlineRowActive>
+    );
+  }
+  return (
+    <S.DocOutlineRow onPress={handlePress}>
+      <Label>{entry.text}</Label>
+    </S.DocOutlineRow>
+  );
+}
+
 export function DocumentOutline({ entries, activeId, onSelect }: DocumentOutlineProps) {
   return (
-    <Col
-      style={{
-        width: 200,
-        flexShrink: 0,
-        backgroundColor: DOCUMENT_THEME.outline,
-        borderRightWidth: 1,
-        borderRightColor: DOCUMENT_THEME.outlineBorder,
-      }}
-    >
-      <Col
-        style={{
-          paddingLeft: 12,
-          paddingRight: 12,
-          paddingTop: 10,
-          paddingBottom: 6,
-          borderBottomWidth: 1,
-          borderBottomColor: DOCUMENT_THEME.outlineBorder,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 10,
-            lineHeight: 13,
-            color: DOCUMENT_THEME.inkSubtle,
-            fontWeight: '600',
-          }}
-        >
-          {'OUTLINE'}
-        </Text>
-      </Col>
+    <S.DocOutline>
+      <S.DocOutlineHeader>
+        <S.DocOutlineLabel>OUTLINE</S.DocOutlineLabel>
+      </S.DocOutlineHeader>
       <ScrollView style={{ flexGrow: 1, width: '100%' }} showScrollbar={false}>
-        <Col style={{ paddingTop: 6, paddingBottom: 10 }}>
-          {entries.map((entry) => {
-            const active = entry.id === activeId;
-            const indent = (entry.level - 1) * 10;
-            return (
-              <Pressable
-                key={entry.id}
-                onPress={onSelect ? () => onSelect(entry.id) : undefined}
-                style={{
-                  paddingLeft: 12 + indent,
-                  paddingRight: 12,
-                  paddingTop: 4,
-                  paddingBottom: 4,
-                  backgroundColor: active ? DOCUMENT_THEME.outlineActive : 'transparent',
-                  borderLeftWidth: 2,
-                  borderLeftColor: active ? DOCUMENT_THEME.accent : 'transparent',
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: entry.level === 1 ? 12 : 11,
-                    lineHeight: entry.level === 1 ? 16 : 15,
-                    fontWeight: entry.level === 1 ? '600' : '400',
-                    color: active ? DOCUMENT_THEME.outlineActiveInk : DOCUMENT_THEME.inkMuted,
-                  }}
-                >
-                  {entry.text}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </Col>
+        <S.StackX1>
+          {entries.map((entry) => (
+            <OutlineRow
+              key={entry.id}
+              entry={entry}
+              active={entry.id === activeId}
+              onSelect={onSelect}
+            />
+          ))}
+        </S.StackX1>
       </ScrollView>
-    </Col>
+    </S.DocOutline>
   );
 }

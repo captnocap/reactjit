@@ -1,0 +1,144 @@
+import { useCallback, useRef, useState } from 'react';
+import type { FlowEdge, FlowNode, FlowPendingWire } from './types';
+
+// Headless state machine for the FlowEditor. Embed this hook directly when
+// you want to drive your own UI; the <FlowEditor /> component is just a
+// view layer over this. Either pass controlled `nodes`/`edges` props (with
+// the matching setters) or rely on the seeded internal state.
+
+export type UseFlowEditorStateOptions = {
+  initialNodes?: FlowNode[];
+  initialEdges?: FlowEdge[];
+  // Used to lay out new nodes added via `addNode()`. Spiral search around
+  // the origin in (padX × padY) cells until an empty slot is found.
+  spawnPadX?: number;
+  spawnPadY?: number;
+};
+
+export type FlowEditorState = {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+  pending: FlowPendingWire;
+  selectedId: string | null;
+  setNodes: (next: FlowNode[] | ((prev: FlowNode[]) => FlowNode[])) => void;
+  setEdges: (next: FlowEdge[] | ((prev: FlowEdge[]) => FlowEdge[])) => void;
+  setPending: (next: FlowPendingWire) => void;
+  setSelectedId: (next: string | null) => void;
+  addNode: (label?: string, data?: unknown) => string;
+  moveNode: (id: string, x: number, y: number) => void;
+  removeNode: (id: string) => void;
+  tryAddEdge: (fromId: string, toId: string) => void;
+  onPortClick: (nodeId: string, side: 'in' | 'out') => void;
+  onTileClick: (id: string) => void;
+  clearAll: () => void;
+};
+
+export function useFlowEditorState(options: UseFlowEditorStateOptions = {}): FlowEditorState {
+  const padX = options.spawnPadX ?? 200;
+  const padY = options.spawnPadY ?? 96;
+  const [nodes, setNodes] = useState<FlowNode[]>(options.initialNodes ?? []);
+  const [edges, setEdges] = useState<FlowEdge[]>(options.initialEdges ?? []);
+  const [pending, setPending] = useState<FlowPendingWire>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const nodesRef = useRef(nodes); nodesRef.current = nodes;
+  const pendingRef = useRef<FlowPendingWire>(pending); pendingRef.current = pending;
+  const counterRef = useRef((options.initialNodes ?? []).length);
+  const edgeCounterRef = useRef(0);
+
+  const addNode = useCallback((label?: string, data?: unknown): string => {
+    counterRef.current += 1;
+    const id = `n${counterRef.current}_${Date.now().toString(36)}`;
+    const existing = nodesRef.current;
+    const overlaps = (x: number, y: number) =>
+      existing.some((n) => Math.abs(n.x - x) < padX && Math.abs(n.y - y) < padY);
+    let x = 0;
+    let y = 0;
+    if (existing.length > 0) {
+      let placed = false;
+      for (let r = 1; r < 30 && !placed; r += 1) {
+        for (let dy = -r; dy <= r && !placed; dy += 1) {
+          for (let dx = -r; dx <= r && !placed; dx += 1) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+            const cx = dx * padX;
+            const cy = dy * padY;
+            if (!overlaps(cx, cy)) { x = cx; y = cy; placed = true; }
+          }
+        }
+      }
+    }
+    const node: FlowNode = { id, label: label ?? `Step ${counterRef.current}`, x, y, data };
+    setNodes((prev) => [...prev, node]);
+    return id;
+  }, [padX, padY]);
+
+  const moveNode = useCallback((id: string, x: number, y: number) => {
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
+  }, []);
+
+  const tryAddEdge = useCallback((fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    edgeCounterRef.current += 1;
+    const id = `e${edgeCounterRef.current}_${Date.now().toString(36)}`;
+    setEdges((prev) =>
+      prev.some((e) => e.from === fromId && e.to === toId)
+        ? prev
+        : [...prev, { id, from: fromId, to: toId }],
+    );
+  }, []);
+
+  const onPortClick = useCallback((nodeId: string, side: 'in' | 'out') => {
+    const cur = pendingRef.current;
+    if (!cur) { setPending({ nodeId, side }); return; }
+    if (cur.nodeId === nodeId) { setPending(null); return; }
+    if (cur.side === side) { setPending({ nodeId, side }); return; }
+    if (cur.side === 'out') tryAddEdge(cur.nodeId, nodeId);
+    else tryAddEdge(nodeId, cur.nodeId);
+    setPending(null);
+  }, [tryAddEdge]);
+
+  const onTileClick = useCallback((id: string) => {
+    const cur = pendingRef.current;
+    if (cur) {
+      if (cur.nodeId !== id) {
+        if (cur.side === 'out') tryAddEdge(cur.nodeId, id);
+        else tryAddEdge(id, cur.nodeId);
+      }
+      setPending(null);
+      return;
+    }
+    setSelectedId(id);
+  }, [tryAddEdge]);
+
+  const removeNode = useCallback((id: string) => {
+    setNodes((prev) => prev.filter((n) => n.id !== id));
+    setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id));
+    setSelectedId((cur) => (cur === id ? null : cur));
+    setPending((cur) => (cur?.nodeId === id ? null : cur));
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
+    setPending(null);
+    setSelectedId(null);
+  }, []);
+
+  return {
+    nodes,
+    edges,
+    pending,
+    selectedId,
+    setNodes,
+    setEdges,
+    setPending,
+    setSelectedId,
+    addNode,
+    moveNode,
+    removeNode,
+    tryAddEdge,
+    onPortClick,
+    onTileClick,
+    clearAll,
+  };
+}

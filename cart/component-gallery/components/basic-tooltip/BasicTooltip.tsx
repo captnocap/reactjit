@@ -1,20 +1,12 @@
-import { TooltipFrame } from '../tooltip-frame/TooltipFrame';
-import { TooltipHeader } from '../tooltip-header/TooltipHeader';
+import { Tooltip, type BasicTooltipMethod, type TooltipData, type TooltipTone } from '../tooltip/Tooltip';
 
-export type BasicTooltipProps = {
-  title?: string;
-  detail?: string;
-  shortcut?: string;
+export type BasicTooltipKind = BasicTooltipMethod;
+export type BasicTooltipTone = TooltipTone;
+
+export type BasicTooltipProps = TooltipData & {
+  kind?: BasicTooltipKind;
 };
 
-export function BasicTooltip({
-  title = 'Open command palette',
-  detail = 'Quick access to actions and files.',
-  shortcut = 'Cmd K',
-}: BasicTooltipProps) {
-  return (
-    <TooltipFrame width={236}>
-      <TooltipHeader title={title} detail={detail} shortcut={shortcut} />
-    </TooltipFrame>
-  );
+export function BasicTooltip({ kind = 'command', ...data }: BasicTooltipProps) {
+  return <Tooltip type="basic" method={kind} data={data} />;
 }

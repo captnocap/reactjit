@@ -1,23 +1,16 @@
-import { classifiers as S } from '@reactjit/core';
+import { KeyValueBadge } from '../controls-specimen/KeyValueBadge';
+import type { ControlTone } from '../controls-specimen/controlsSpecimenTheme';
 
 export type TooltipDataRowProps = {
   label?: string;
   value?: string;
-  color?: string;
+  tone?: ControlTone;
 };
 
 export function TooltipDataRow({
   label = 'Latency',
   value = '42 ms',
-  color = 'theme:accent',
+  tone = 'accent',
 }: TooltipDataRowProps) {
-  return (
-    <S.InlineX5Between>
-      <S.InlineX3>
-        <S.Dot style={{ backgroundColor: color }} />
-        <S.TypeCaption style={{ color: 'theme:inkDim' }}>{label}</S.TypeCaption>
-      </S.InlineX3>
-      <S.TypeCaption style={{ color: 'theme:ink' }}>{value}</S.TypeCaption>
-    </S.InlineX5Between>
-  );
+  return <KeyValueBadge label={label} value={value} tone={tone} />;
 }

@@ -1,55 +1,49 @@
-import { Col, ScrollView } from '../../../../runtime/primitives';
+import { classifiers as S } from '@reactjit/core';
+import { ScrollView } from '../../../../runtime/primitives';
 import { DocumentBlock } from './DocumentBlock';
-import { DOCUMENT_THEME, type DocumentModel, type DocumentSize } from './documentViewerShared';
 import { DocumentPageHeader } from './DocumentPageHeader';
+import type { DocumentModel, DocumentSize } from './documentViewerShared';
 
 export type DocumentPageProps = {
   document: DocumentModel;
   size: DocumentSize;
   scroll?: boolean;
+  scrollY?: number;
+  onScroll?: (payload: any) => void;
+  onHeadingLayout?: (id: string, y: number) => void;
 };
 
-export function DocumentPage({ document, size, scroll = true }: DocumentPageProps) {
-  const padX = size === 'compact' ? 18 : 44;
-  const padY = size === 'compact' ? 16 : 36;
-  const gap = size === 'compact' ? 10 : 14;
-
+export function DocumentPage({
+  document,
+  size,
+  scroll = true,
+  scrollY,
+  onScroll,
+  onHeadingLayout,
+}: DocumentPageProps) {
   const content = (
-    <Col
-      style={{
-        paddingLeft: padX,
-        paddingRight: padX,
-        paddingTop: padY,
-        paddingBottom: padY,
-        gap,
-      }}
-    >
+    <S.DocPageContent>
       <DocumentPageHeader document={document} size={size} />
       {document.blocks.map((block, index) => (
-        <DocumentBlock key={index} block={block} size={size} />
+        <DocumentBlock key={index} block={block} size={size} onHeadingLayout={onHeadingLayout} />
       ))}
-    </Col>
+    </S.DocPageContent>
   );
 
   return (
-    <Col
-      style={{
-        flexGrow: 1,
-        flexShrink: 1,
-        backgroundColor: DOCUMENT_THEME.page,
-        borderWidth: 1,
-        borderColor: DOCUMENT_THEME.pageBorder,
-        borderRadius: size === 'compact' ? 2 : 4,
-        overflow: 'hidden',
-      }}
-    >
+    <S.DocPage>
       {scroll ? (
-        <ScrollView style={{ flexGrow: 1, width: '100%' }} showScrollbar={false}>
+        <ScrollView
+          style={{ flexGrow: 1, width: '100%' }}
+          showScrollbar={false}
+          scrollY={scrollY}
+          onScroll={onScroll}
+        >
           {content}
         </ScrollView>
       ) : (
         content
       )}
-    </Col>
+    </S.DocPage>
   );
 }

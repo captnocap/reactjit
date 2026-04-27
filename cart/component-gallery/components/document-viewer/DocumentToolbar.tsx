@@ -1,6 +1,5 @@
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
-import { DOCUMENT_THEME, type DocumentSize } from './documentViewerShared';
 import { classifiers as S } from '@reactjit/core';
+import type { DocumentSize } from './documentViewerShared';
 
 export type DocumentToolbarProps = {
   title: string;
@@ -16,34 +15,24 @@ export type DocumentToolbarProps = {
 
 function ToolbarButton({
   glyph,
-  label,
-  disabled,
+  active,
   onPress,
 }: {
   glyph: string;
-  label: string;
-  disabled?: boolean;
+  active?: boolean;
   onPress?: () => void;
 }) {
+  if (active) {
+    return (
+      <S.DocToolbarBtnActive onPress={onPress}>
+        <S.DocToolbarGlyph>{glyph}</S.DocToolbarGlyph>
+      </S.DocToolbarBtnActive>
+    );
+  }
   return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      style={{
-        width: 24,
-        height: 22,
-        borderRadius: 3,
-        borderWidth: 1,
-        borderColor: DOCUMENT_THEME.toolbarBorder,
-        backgroundColor: 'transparent',
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      <Text style={{ fontSize: 12, color: DOCUMENT_THEME.toolbarInk, fontWeight: '600' }}>
-        {glyph}
-      </Text>
-    </Pressable>
+    <S.DocToolbarBtn onPress={onPress}>
+      <S.DocToolbarGlyph>{glyph}</S.DocToolbarGlyph>
+    </S.DocToolbarBtn>
   );
 }
 
@@ -61,72 +50,25 @@ export function DocumentToolbar({
   const compact = size === 'compact';
 
   return (
-    <Row
-      style={{
-        width: '100%',
-        height: compact ? 28 : 34,
-        backgroundColor: DOCUMENT_THEME.toolbar,
-        borderBottomWidth: 1,
-        borderBottomColor: DOCUMENT_THEME.toolbarBorder,
-        paddingLeft: compact ? 8 : 12,
-        paddingRight: compact ? 8 : 12,
-        alignItems: 'center',
-        gap: 10,
-      }}
-    >
+    <S.DocToolbar>
       {canToggleOutline ? (
-        <Pressable
-          onPress={onToggleOutline}
-          style={{
-            width: 22,
-            height: 18,
-            borderRadius: 3,
-            backgroundColor: outlineVisible ? DOCUMENT_THEME.accent : 'transparent',
-            borderWidth: 1,
-            borderColor: outlineVisible ? DOCUMENT_THEME.accent : DOCUMENT_THEME.toolbarBorder,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text style={{ fontSize: 11, color: DOCUMENT_THEME.toolbarInk }}>{'≡'}</Text>
-        </Pressable>
+        <ToolbarButton glyph="≡" active={outlineVisible} onPress={onToggleOutline} />
       ) : null}
 
-      <Col style={{ flexGrow: 1, flexShrink: 1, gap: 1 }}>
-        <Text
-          style={{
-            fontSize: compact ? 11 : 12,
-            lineHeight: compact ? 14 : 15,
-            color: DOCUMENT_THEME.toolbarInk,
-            fontWeight: '600',
-          }}
-        >
-          {title}
-        </Text>
+      <S.DocToolbarTitleSlot>
+        <S.DocToolbarTitle>{title}</S.DocToolbarTitle>
         {!compact && activeSection ? (
-          <Text style={{ fontSize: 10, lineHeight: 13, color: DOCUMENT_THEME.toolbarMuted }}>
-            {activeSection.toUpperCase()}
-          </Text>
+          <S.DocToolbarSection>{activeSection.toUpperCase()}</S.DocToolbarSection>
         ) : null}
-      </Col>
+      </S.DocToolbarTitleSlot>
 
       {!compact ? (
-        <S.SectionLabel>
-          <ToolbarButton glyph="−" label="zoom out" onPress={onZoomOut} />
-          <Box
-            style={{
-              minWidth: 36,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text style={{ fontSize: 11, color: DOCUMENT_THEME.toolbarInk, fontVariant: 'tabular-nums' as any }}>
-              {`${Math.round(zoomPct)}%`}
-            </Text>
-          </Box>
-          <ToolbarButton glyph="+" label="zoom in" onPress={onZoomIn} />
-        </S.SectionLabel>
+        <S.InlineX3>
+          <ToolbarButton glyph="−" onPress={onZoomOut} />
+          <S.DocToolbarZoom>{`${Math.round(zoomPct)}%`}</S.DocToolbarZoom>
+          <ToolbarButton glyph="+" onPress={onZoomIn} />
+        </S.InlineX3>
       ) : null}
-    </Row>
+    </S.DocToolbar>
   );
 }

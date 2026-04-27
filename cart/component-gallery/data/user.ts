@@ -28,6 +28,39 @@ export type UserAccommodation = {
   note: string;
 };
 
+// ── Onboarding status ─────────────────────────────────────────────
+//
+// Tracks where the user landed in the first-run flow. Two terminal
+// states with very different downstream consequences:
+//
+//   - 'completed': all onboarding steps were filled in. Features that
+//     depend on onboarded data (display name, accommodations, default
+//     settings) can assume the data is present.
+//
+//   - 'skipped': the user explicitly bailed before finishing. Features
+//     that need onboarded data must degrade gracefully OR prompt the
+//     user inline to fill in the missing piece (e.g. "what should we
+//     call you?" before sending a message). This is treated as a
+//     distinct app-wide mode, not just "incomplete".
+//
+//   - 'pending' is the default until the user reaches a terminal state.
+//     `step` records the highest step they have advanced past, so a
+//     resume affordance can put them back where they were.
+
+export type OnboardingStatus = 'pending' | 'completed' | 'skipped';
+
+export type UserOnboarding = {
+  status: OnboardingStatus;
+  /** Highest step index reached (0-based). Used to resume mid-flow. */
+  step: number;
+  /** ISO timestamp recorded when the user first opened the app. */
+  startedAt?: string;
+  /** ISO timestamp recorded the moment the user finished all steps. */
+  completedAt?: string;
+  /** ISO timestamp recorded the moment the user pressed "Skip onboarding". */
+  skippedAt?: string;
+};
+
 export type UserPreferences = {
   responseDefault: ResponseDepth;
   elaborateOnAsk: boolean;
@@ -55,6 +88,12 @@ export type User = {
   activeSettingsId: string;
   createdAt: string;
   preferences: UserPreferences;
+  /**
+   * Onboarding state — gates app-wide conditional behavior. When
+   * status='skipped' the app runs in degraded mode: features that need
+   * onboarded data must prompt inline rather than assuming it exists.
+   */
+  onboarding: UserOnboarding;
 };
 
 export const userMockData: User[] = [
@@ -84,6 +123,31 @@ export const userMockData: User[] = [
         },
       ],
     },
+    onboarding: {
+      status: 'completed',
+      step: 4,
+      startedAt: '2026-03-01T00:00:00Z',
+      completedAt: '2026-03-01T00:05:30Z',
+    },
+  },
+  {
+    id: 'user_skipped_example',
+    email: 'skip@example.com',
+    displayName: undefined,
+    activeSettingsId: 'settings_default',
+    createdAt: '2026-04-26T18:00:00Z',
+    preferences: {
+      responseDefault: 'concise',
+      elaborateOnAsk: false,
+      emojiOk: true,
+      accommodations: [],
+    },
+    onboarding: {
+      status: 'skipped',
+      step: 0,
+      startedAt: '2026-04-26T18:00:00Z',
+      skippedAt: '2026-04-26T18:00:12Z',
+    },
   },
 ];
 
@@ -94,7 +158,7 @@ export const userSchema: JsonObject = {
   items: {
     type: 'object',
     additionalProperties: false,
-    required: ['id', 'email', 'activeSettingsId', 'createdAt', 'preferences'],
+    required: ['id', 'email', 'activeSettingsId', 'createdAt', 'preferences', 'onboarding'],
     properties: {
       id: { type: 'string' },
       email: { type: 'string' },
@@ -128,6 +192,21 @@ export const userSchema: JsonObject = {
           },
           timezone: { type: 'string' },
           terseResponses: { type: 'boolean' },
+        },
+      },
+      onboarding: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['status', 'step'],
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['pending', 'completed', 'skipped'],
+          },
+          step: { type: 'integer', minimum: 0 },
+          startedAt: { type: 'string' },
+          completedAt: { type: 'string' },
+          skippedAt: { type: 'string' },
         },
       },
     },
