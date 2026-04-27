@@ -1425,16 +1425,99 @@ if (format === 'data') {
 
   storyContent = `import { defineGallerySection, defineGalleryThemeStory } from '../types';\nimport { ${themeSystemExportName} } from '${storyThemeImport}';\n\nexport const ${exportName} = defineGallerySection({\n  id: ${jsString(slug)},\n  title: ${jsString(title)},\n  group: {\n    id: ${jsString(groupId)},\n    title: ${jsString(groupTitle)},\n  },\n  kind: 'atom',\n  stories: [\n    defineGalleryThemeStory({\n      id: ${jsString(`${slug}/theme-system`)},\n      title: ${jsString(title)},\n      source: ${jsString(targetDisplay)},\n      format: 'theme',\n      status: 'draft',\n${tagsBlock}      classifiers: ${themeSystemExportName}.classifiers,\n      globalTokens: ${themeSystemExportName}.globalTokens,\n      themes: ${themeSystemExportName}.themes,\n    }),\n  ],\n});\n`;
 } else {
+  if (!dataShape) {
+    fail('internal: component scaffolds require a resolved data-shape');
+  }
   const componentImport = relativeImport(storyPath, targetPath);
   const primitiveImport = relativeImport(targetPath, joinPath(repoRoot, 'runtime', 'primitives.tsx'));
+  const componentShapeImport = relativeImport(targetPath, dataShape.shapePath);
+  const storyShapeImport = relativeImport(storyPath, dataShape.shapePath);
   const composedOfBlock =
     kind === 'top-level'
       ? `  composedOf: [\n${composedOf.map((entry) => `    ${jsString(entry)},`).join('\n')}\n  ],\n`
       : '';
 
-  targetContent = `import { Col, Text } from '${primitiveImport}';\n\nexport type ${pascalName}Props = {};\n\nexport function ${pascalName}(_props: ${pascalName}Props) {\n  return (\n    <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8 }}>\n      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>${title}</Text>\n      <Text style={{ fontSize: 12, color: '#657185' }}>${targetDisplay}</Text>\n    </Col>\n  );\n}\n`;
+  const fieldLines = dataShape.fields.length > 0
+    ? dataShape.fields.map((f) => `//   ${f.name}${f.optional ? '?' : ''}: ${f.type}`).join('\n')
+    : '//   (could not parse — open the shape file for the row-type fields)';
+  const exportLines = [];
+  if (dataShape.mockExport) exportLines.push(`//   ${dataShape.mockExport}: ${dataShape.typeName}[]    — seeded mock rows for stories`);
+  if (dataShape.schemaExport) exportLines.push(`//   ${dataShape.schemaExport}: JsonObject    — JSON schema`);
+  if (dataShape.referencesExport) exportLines.push(`//   ${dataShape.referencesExport}: GalleryDataReference[]    — cross-shape links`);
+  if (exportLines.length === 0) exportLines.push('//   (open the shape file for available exports)');
 
-  storyContent = `import { defineGallerySection, defineGalleryStory } from '../types';\nimport { ${pascalName} } from '${componentImport}';\n\nexport const ${exportName} = defineGallerySection({\n  id: ${jsString(slug)},\n  title: ${jsString(title)},\n  group: {\n    id: ${jsString(groupId)},\n    title: ${jsString(groupTitle)},\n  },\n  kind: ${jsString(kind)},\n${composedOfBlock}  stories: [\n    defineGalleryStory({\n      id: ${jsString(`${slug}/default`)},\n      title: ${jsString(title)},\n      source: ${jsString(targetDisplay)},\n      status: 'draft',\n${tagsBlock}      variants: [\n        {\n          id: 'default',\n          name: 'Default',\n          render: () => <${pascalName} />,\n        },\n      ],\n    }),\n  ],\n});\n`;
+  const shapeHeader = `// ${pascalName} — gallery component bound to the \`${dataShape.typeName}\` data shape.
+//
+// Source of truth: ${dataShape.shapeRelative}
+//
+// Top-level fields on \`${dataShape.typeName}\`:
+${fieldLines}
+//
+// Available exports from the shape file:
+${exportLines.join('\n')}
+//
+// Rules for filling out this component:
+//   - DO NOT invent fields. Only consume \`${dataShape.typeName}\` keys
+//     listed above. If a field you want is missing, extend the shape
+//     file first — never fake it locally.
+//   - The story imports \`${dataShape.mockExport || dataShape.camel + 'MockData'}\`
+//     and renders against real seeded rows. Do not hand-roll mock
+//     props inside the story.
+//   - If this component renders a *list* of rows, change the \`row\`
+//     prop to \`rows: ${dataShape.typeName}[]\` and update the variant
+//     accordingly.
+
+`;
+
+  const mockRef = dataShape.mockExport || `${dataShape.camel}MockData`;
+  const sampleAccess = `${mockRef}[0]`;
+
+  targetContent = `${shapeHeader}import { Col, Text } from '${primitiveImport}';
+import type { ${dataShape.typeName} } from '${componentShapeImport}';
+
+export type ${pascalName}Props = {
+  row: ${dataShape.typeName};
+};
+
+export function ${pascalName}({ row }: ${pascalName}Props) {
+  return (
+    <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>${title}</Text>
+      <Text style={{ fontSize: 12, color: '#657185' }}>${dataShape.typeName}: {String((row as { id?: unknown }).id ?? '—')}</Text>
+    </Col>
+  );
+}
+`;
+
+  storyContent = `import { defineGallerySection, defineGalleryStory } from '../types';
+import { ${pascalName} } from '${componentImport}';
+import { ${mockRef} } from '${storyShapeImport}';
+
+export const ${exportName} = defineGallerySection({
+  id: ${jsString(slug)},
+  title: ${jsString(title)},
+  group: {
+    id: ${jsString(groupId)},
+    title: ${jsString(groupTitle)},
+  },
+  kind: ${jsString(kind)},
+${composedOfBlock}  stories: [
+    defineGalleryStory({
+      id: ${jsString(`${slug}/default`)},
+      title: ${jsString(title)},
+      source: ${jsString(targetDisplay)},
+      status: 'draft',
+${tagsBlock}      variants: [
+        {
+          id: 'default',
+          name: 'Default',
+          render: () => <${pascalName} row={${sampleAccess}} />,
+        },
+      ],
+    }),
+  ],
+});
+`;
 }
 
 if (!__writeFile(targetPath, targetContent)) {
@@ -1544,6 +1627,11 @@ if (storage.length > 0) {
 }
 if (format === 'data' && shapeTemplate) {
   __writeStdout(`[gallery-component] shape ${shapeTemplate.pascal}\n`);
+}
+if (format === 'component' && dataShape) {
+  __writeStdout(
+    `[gallery-component] data-shape ${dataShape.slug} (type ${dataShape.typeName}, ${dataShape.fields.length} fields${dataShape.bodyParsed ? '' : ', body unparsed — header lists exports only'})\n`
+  );
 }
 if (kind === 'top-level') {
   __writeStdout(`[gallery-component] composed-of ${composedOf.join(', ')}\n`);
