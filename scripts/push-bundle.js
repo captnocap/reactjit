@@ -1,12 +1,11 @@
-// scripts/push-bundle.js — v8cli port of scripts/push-bundle.mjs.
+// scripts/push-bundle.js — push a bundle to a running dev host.
 //
 // Usage: tools/v8cli scripts/push-bundle.js <tab-name> <bundle-path>
 //
 // Connects to /tmp/reactjit.sock (framework/dev_ipc.zig listener), sends
 // "PUSH <name> <len>\n<bundle-bytes>", waits for a line of reply.
 //
-// Exit codes mirror the .mjs version so scripts/dev's retry loop keeps
-// working unchanged:
+// Exit codes (consumed by scripts/dev's retry loop):
 //   0 — ack OK
 //   1 — protocol/host error
 //   2 — host not running (socket missing / refused) or timeout

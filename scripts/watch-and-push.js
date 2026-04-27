@@ -1,4 +1,4 @@
-// scripts/watch-and-push.js — v8cli port of scripts/watch-and-push.mjs.
+// scripts/watch-and-push.js — watch a cart and push rebuilds to the dev host.
 //
 // Usage: tools/v8cli scripts/watch-and-push.js <cart-name> <cart-file> <out-path>
 //

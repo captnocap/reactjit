@@ -1,8 +1,7 @@
-// scripts/cart-bundle.js — v8cli version of scripts/internal/cart-bundle.mjs.
+// scripts/cart-bundle.js — cart bundler (one-shot).
 //
 // Runs via: tools/v8cli scripts/cart-bundle.js <cart.tsx> --out <bundle.js>
-// Shells out to tools/esbuild (the native Go binary) with flags that mirror
-// cartEsbuildOptions from scripts/esbuild-config.mjs. No node, no bun.
+// Shells out to tools/esbuild (the native Go binary). No node, no bun.
 //
 // Non-watch only. Watch mode is handled by scripts/watch-and-push.js.
 
@@ -21,7 +20,7 @@ function ensureAbs(p) {
   return ROOT + '/' + p;
 }
 
-// ── harness gate (matches cart-bundle.mjs behavior) ───────────────────
+// ── harness gate ──────────────────────────────────────────────────────
 if (__env('BUNDLE_FROM_HARNESS') !== '1') {
   __writeStderr('[cart-bundle] REFUSING to run — this is an internal script, not an entry point.\n');
   __writeStderr('[cart-bundle]\n');
@@ -52,9 +51,6 @@ if (!entryAbs.startsWith(ROOT + '/')) die('entry must stay inside ' + ROOT, 2);
 if (!__exists(entryAbs)) die('missing entry: ' + entryArg, 2);
 
 // ── esbuild flags ─────────────────────────────────────────────────────
-// Mirror scripts/esbuild-config.mjs exactly. Any drift and the old path and
-// new path produce different bundles, which defeats the point of running
-// both in parallel during the swap window.
 const runtimeEntry = ROOT + '/runtime/index.tsx';
 // Metafile is the structured "what ended up in the bundle" record.
 // scripts/ship reads it to decide which V8 binding ingredients to

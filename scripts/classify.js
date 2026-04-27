@@ -1,7 +1,5 @@
 /**
- * scripts/classify.js — v8cli version of scripts/classify.mjs.
- *
- * Pattern extractor for the ReactJIT classifier system.
+ * scripts/classify.js — pattern extractor for the ReactJIT classifier system.
  *
  * Scans TSX files, finds repeated inline style + prop patterns on JSX
  * primitives, groups them by structural hash, applies semantic naming

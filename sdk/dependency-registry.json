@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "description": "Single source of truth for CLI-carried tools, JS packages, native libraries, and source-triggered build features.",
+  "cliPayload": {
+    "tools": {
+      "zig": {
+        "kind": "toolchain",
+        "requiredFor": ["scaffold", "build", "ship"],
+        "version": "0.15.2",
+        "payloadPath": "tools/zig/zig",
+        "supportPaths": ["tools/zig/lib", "tools/zig/cache/p"],
+        "packPolicy": "required",
+        "status": "present"
+      },
+      "v8cli": {
+        "kind": "host-tool",
+        "requiredFor": ["scaffold", "build", "ship", "scripts"],
+        "payloadPath": "tools/v8cli",
+        "packPolicy": "required",
+        "status": "present"
+      },
+      "esbuild": {
+        "kind": "bundler",
+        "requiredFor": ["build", "ship"],
+        "payloadPath": "tools/esbuild",
+        "packPolicy": "required",
+        "status": "present"
+      }
+    },
+    "jsPackages": {
+      "react": {
+        "requiredFor": ["scaffold", "build", "ship"],
+        "vendorPath": "vendor/react",
+        "packPolicy": "required"
+      },
+      "react-reconciler": {
+        "requiredFor": ["build", "ship"],
+        "vendorPath": "vendor/react-reconciler",
+        "packPolicy": "required"
+      },
+      "scheduler": {
+        "requiredFor": ["build", "ship"],
+        "vendorPath": "vendor/scheduler",
+        "packPolicy": "required"
+      },
+      "loose-envify": {
+        "requiredFor": ["build", "ship"],
+        "vendorPath": "vendor/loose-envify",
+        "packPolicy": "required"
+      },
+      "js-tokens": {
+        "requiredFor": ["build", "ship"],
+        "vendorPath": "vendor/js-tokens",
+        "packPolicy": "required"
+      },
+      "typescript": {
+        "requiredFor": ["scaffold"],
+        "vendorPath": "vendor/typescript",
+        "packPolicy": "required",
+        "note": "Vendored for tsconfig template emission by scripts/init.js. Typecheck (tsc invocation) is not wired."
+      }
+    }
+  },
+  "nativeLibraries": {
+    "v8": {
+      "kind": "static-library",
+      "payloadPath": "deps/v8-prebuilt/libc_v8.a",
+      "buildImport": "v8",
+      "linkPolicy": "engine-v8"
+    },
+    "sdl3": {
+      "kind": "dynamic-library",
+      "systemNames": ["SDL3"],
+      "linkPolicy": "feature-gated"
+    },
+    "wgpu-native": {
+      "kind": "zig-package",
+      "payloadPath": "deps/wgpu_native_zig",
+      "buildImport": "wgpu",
+      "linkPolicy": "feature-gated"
+    },
+    "freetype": {
+      "kind": "dynamic-library",
+      "systemNames": ["freetype"],
+      "includePaths": ["freetype2"],
+      "linkPolicy": "feature-gated"
+    },
+    "stb-image": {
+      "kind": "vendored-c-source",
+      "sources": ["stb/stb_image_impl.c"],
+      "linkPolicy": "feature-gated"
+    },
+    "stb-image-write": {
+      "kind": "vendored-c-source",
+      "sources": ["stb/stb_image_write_impl.c"],
+      "linkPolicy": "feature-gated"
+    },
+    "libmpv": {
+      "kind": "dynamic-library",
+      "systemNames": ["mpv"],
+      "knownPayloads": ["love2d/storybook/lib/libmpv.so.2", "love2d/web/lib/libmpv.so.2"],
+      "linkPolicy": "feature-gated"
+    },
+    "libsodium": {
+      "kind": "dynamic-library",
+      "systemNames": ["sodium"],
+      "knownPayloads": ["love2d/storybook/lib/libsodium.so", "love2d/web/lib/libsodium.so"],
+      "linkPolicy": "feature-gated"
+    },
+    "sqlite3": {
+      "kind": "dynamic-library",
+      "systemNames": ["sqlite3"],
+      "linkPolicy": "feature-gated"
+    },
+    "curl": {
+      "kind": "dynamic-library",
+      "systemNames": ["curl"],
+      "linkPolicy": "feature-gated"
+    },
+    "libvterm": {
+      "kind": "vendored-library",
+      "payloadPath": "deps/libvterm",
+      "systemNames": ["vterm"],
+      "linkPolicy": "feature-gated"
+    },
+    "box2d": {
+      "kind": "dynamic-library",
+      "systemNames": ["box2d"],
+      "linkPolicy": "feature-gated"
+    },
+    "luajit": {
+      "kind": "dynamic-library",
+      "systemNames": ["luajit-5.1"],
+      "includePaths": ["luajit-2.1"],
+      "linkPolicy": "feature-gated"
+    },
+    "tls.zig": {
+      "kind": "zig-package",
+      "payloadPath": "deps/tls.zig",
+      "buildImport": "tls",
+      "linkPolicy": "feature-gated"
+    },
+    "x11": {
+      "kind": "platform-library",
+      "platforms": ["linux"],
+      "systemNames": ["X11"],
+      "linkPolicy": "feature-gated"
+    },
+    "posix-threading": {
+      "kind": "platform-library",
+      "platforms": ["linux"],
+      "systemNames": ["m", "pthread", "dl"],
+      "linkPolicy": "feature-gated"
+    },
+    "macos-ui-frameworks": {
+      "kind": "platform-framework",
+      "platforms": ["macos"],
+      "frameworks": ["Foundation", "QuartzCore", "Metal", "Cocoa", "IOKit", "CoreVideo"],
+      "linkPolicy": "feature-gated"
+    }
+  },
+  "features": {
+    "react-runtime": {
+      "requiredFor": ["build", "ship"],
+      "jsPackages": ["react", "react-reconciler", "scheduler", "loose-envify", "js-tokens"]
+    },
+    "cli-toolchain": {
+      "requiredFor": ["scaffold", "build", "ship"],
+      "tools": ["zig", "v8cli", "esbuild"],
+      "jsPackages": ["typescript"]
+    },
+    "v8-engine": {
+      "requiredFor": ["ship"],
+      "buildOptions": ["use-v8"],
+      "nativeLibraries": ["v8"]
+    },
+    "window-runtime": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/window-runtime.ts" }
+      ],
+      "buildOptions": ["has-window-runtime"],
+      "nativeLibraries": ["sdl3", "wgpu-native", "freetype", "stb-image", "stb-image-write", "x11", "posix-threading", "macos-ui-frameworks"]
+    },
+    "canvas": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/canvas.ts" }
+      ],
+      "buildOptions": ["has-canvas"],
+      "nativeLibraries": ["wgpu-native"]
+    },
+    "graph": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/graph.ts" }
+      ],
+      "buildOptions": ["has-graph"],
+      "nativeLibraries": ["wgpu-native"]
+    },
+    "text-rendering": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/text-rendering.ts" }
+      ],
+      "buildOptions": ["has-text-rendering"],
+      "nativeLibraries": ["freetype"]
+    },
+    "image": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/image.ts" }
+      ],
+      "buildOptions": ["has-image"],
+      "nativeLibraries": ["stb-image"]
+    },
+    "video": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/video.ts" }
+      ],
+      "buildOptions": ["has-video"],
+      "nativeLibraries": ["libmpv", "wgpu-native"]
+    },
+    "audio": {
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/audio.tsx" },
+        { "kind": "featureMarker", "input": "runtime/features/audio.ts" }
+      ],
+      "buildOptions": ["has-audio"]
+    },
+    "terminal": {
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/useTerminalRecorder.ts" },
+        { "kind": "featureMarker", "input": "runtime/features/terminal.ts" }
+      ],
+      "buildOptions": ["has-terminal"],
+      "nativeLibraries": ["libvterm"]
+    },
+    "physics": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/physics.ts" }
+      ],
+      "buildOptions": ["has-physics"],
+      "nativeLibraries": ["box2d"]
+    },
+    "sqlite": {
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/sqlite.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/localstore.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useLocalStore.ts" },
+        { "kind": "metafileInputPrefix", "input": "cart/sweatshop/lib/storage/" }
+      ],
+      "buildOptions": ["has-sqlite"],
+      "nativeLibraries": ["sqlite3"]
+    },
+    "http-client": {
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/http.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/browser_page.ts" }
+      ],
+      "buildOptions": ["has-http-client"],
+      "nativeLibraries": ["curl", "tls.zig"]
+    },
+    "crypto": {
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/crypto.ts" }
+      ],
+      "buildOptions": ["has-crypto"],
+      "nativeLibraries": ["libsodium"]
+    },
+    "privacy": {
+      "shipGate": "privacy",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/usePrivacy.ts" }
+      ],
+      "buildOptions": ["has-privacy"],
+      "v8Bindings": ["privacy"],
+      "nativeLibraries": ["libsodium"]
+    },
+    "use-host": {
+      "shipGate": "useHost",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/useHost.ts" }
+      ],
+      "buildOptions": ["has-process", "has-httpsrv", "has-wssrv", "has-net"],
+      "v8Bindings": ["process", "httpsrv", "wssrv", "net"]
+    },
+    "connection": {
+      "shipGate": "useConnection",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/useConnection.ts" }
+      ],
+      "buildOptions": ["has-net", "has-tor", "has-websocket"],
+      "v8Bindings": ["net", "tor", "websocket"]
+    },
+    "fs": {
+      "shipGate": "fs",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/fs.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useFileContent.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useFileDrop.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useFileWatch.ts" }
+      ],
+      "buildOptions": ["has-fs"],
+      "v8Bindings": ["fs"]
+    },
+    "websocket": {
+      "shipGate": "websocket",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/websocket.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useConnection.ts" }
+      ],
+      "buildOptions": ["has-websocket"],
+      "v8Bindings": ["websocket"]
+    },
+    "telemetry": {
+      "shipGate": "telemetry",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/useTelemetry.ts" },
+        { "kind": "metafileInput", "input": "cart/inspector/bridge.ts" },
+        { "kind": "metafileInput", "input": "cart/sweatshop/host.ts" },
+        { "kind": "metafileInput", "input": "cart/component-gallery/components/telemetry/TelemetryPanel.tsx" },
+        { "kind": "metafileInput", "input": "cart/component-gallery/stories/telemetry-stats.story.tsx" }
+      ],
+      "buildOptions": ["has-telemetry"],
+      "v8Bindings": ["telemetry"],
+      "nativeLibraries": ["sqlite3"]
+    },
+    "zigcall": {
+      "shipGate": "zigcall",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/math.ts" }
+      ],
+      "buildOptions": ["has-zigcall"],
+      "v8Bindings": ["zigcall", "zigcall_list"]
+    },
+    "sdk": {
+      "shipGate": "sdk",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/http.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/browser_page.ts" }
+      ],
+      "buildOptions": ["has-sdk"],
+      "v8Bindings": ["sdk"],
+      "nativeLibraries": ["curl", "tls.zig"]
+    },
+    "lua-worker": {
+      "triggers": [
+        { "kind": "featureMarker", "input": "runtime/features/lua-worker.ts" }
+      ],
+      "buildOptions": ["has-lua-worker"],
+      "nativeLibraries": ["luajit"]
+    }
+  },
+  "shipGate": {
+    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk"]
+  }
+}

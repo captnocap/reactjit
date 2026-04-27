@@ -52,13 +52,23 @@ pub fn build(b: *std.Build) void {
     });
 
     // ── Build options ──────────────────────────────────────────
+    // ── Native-library feature gates ───────────────────────────
+    // These mirror sdk/dependency-registry.json. The resolver
+    // (scripts/sdk-dependency-resolve.js) inspects each cart's metafile
+    // and emits -Dhas-X=true only for features the cart's source actually
+    // triggers. Every gate here defaults to false; scripts/dev uses the
+    // resolver's --dev-zig-flags mode to force them all on for the fat
+    // dev host. Each gate must guard both the library link/include and
+    // any framework code site that references the library's symbols.
+    const has_physics = b.option(bool, "has-physics", "Link box2d + physics2d module") orelse false;
+
     const options = b.addOptions();
     options.addOption(bool, "is_lib", false);
     options.addOption([]const u8, "app_name", app_name);
     options.addOption(bool, "dev_mode", dev_mode);
     options.addOption(bool, "custom_chrome", custom_chrome);
     options.addOption(bool, "has_quickjs", true);
-    options.addOption(bool, "has_physics", true);
+    options.addOption(bool, "has_physics", has_physics);
     options.addOption(bool, "has_terminal", true);
     options.addOption(bool, "has_video", true);
     options.addOption(bool, "has_render_surfaces", true);
@@ -87,7 +97,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .prebuilt_v8_path = @as([]const u8, prebuilt_v8_path),
     }) else null;
-    if (v8_dep_opt) |v8_dep| root_mod.addImport("v8", v8_dep.module("v8"));
+    if (v8_dep_opt) |v8_dep| {
+        root_mod.addImport("v8", v8_dep.module("v8"));
+        // libc_v8.a is prebuilt and missing the SetStackLimit binding. We
+        // need it to grow V8's per-isolate stack budget past the ~700KB
+        // default (see framework/ffi/v8_stack_shim.cpp for the full why).
+        // The shim calls V8's mangled symbol directly so it doesn't need V8
+        // headers — those aren't checked into deps/zig-v8.
+        root_mod.addCSourceFile(.{
+            .file = b.path("framework/ffi/v8_stack_shim.cpp"),
+            .flags = &.{ "-O2", "-std=c++17" },
+        });
+    }
 
     const exe = b.addExecutable(.{
         .name = app_name,
@@ -155,10 +176,12 @@ pub fn build(b: *std.Build) void {
 
     // ── Framework FFI shims ────────────────────────────────────
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    if (has_physics) {
+        root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    }
 
     // ── System libraries ──────────────────────────────────────
-    exe.linkSystemLibrary("box2d");
+    if (has_physics) exe.linkSystemLibrary("box2d");
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("vterm");
     exe.linkSystemLibrary("curl");
@@ -196,6 +219,7 @@ pub fn build(b: *std.Build) void {
     const has_websocket = b.option(bool, "has-websocket", "Register __ws_* (client) bindings") orelse false;
     const has_telemetry = b.option(bool, "has-telemetry", "Register __tel_*/getFps/... bindings") orelse false;
     const has_zigcall = b.option(bool, "has-zigcall", "Register __zig_call/__zig_call_list bindings") orelse false;
+    const has_sdk = b.option(bool, "has-sdk", "Register __http_request_*/__fetch/__claude_*/__kimi_*/__localai_*/__browser_*/__ipc_*/__play_*/__rec_* bindings") orelse false;
     options.addOption(bool, "has_process", has_process);
     options.addOption(bool, "has_httpsrv", has_httpsrv);
     options.addOption(bool, "has_wssrv", has_wssrv);
@@ -205,6 +229,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_websocket", has_websocket);
     options.addOption(bool, "has_telemetry", has_telemetry);
     options.addOption(bool, "has_zigcall", has_zigcall);
+    options.addOption(bool, "has_sdk", has_sdk);
 
     // ── Allergen label: V8 binding manifest ───────────────────────────
     // Writes one file per opt-in domain to zig-out/manifest/<name>.flag
@@ -224,6 +249,7 @@ pub fn build(b: *std.Build) void {
     _ = manifest_wf.add("v8-ingredients/websocket.flag", if (has_websocket) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/telemetry.flag", if (has_telemetry) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/zigcall.flag", if (has_zigcall) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/sdk.flag", if (has_sdk) "1\n" else "0\n");
     const install_manifest = b.addInstallDirectory(.{
         .source_dir = manifest_wf.getDirectory(),
         .install_dir = .prefix,
@@ -319,7 +345,9 @@ pub fn build(b: *std.Build) void {
     });
     bridge_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
     bridge_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    bridge_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    if (has_physics) {
+        bridge_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    }
 
     if (os_tag == .linux) {
         bridge_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
@@ -385,7 +413,7 @@ pub fn build(b: *std.Build) void {
         luajit_runtime_test.linkFramework("IOKit");
         luajit_runtime_test.linkFramework("CoreVideo");
     }
-    luajit_runtime_test.linkSystemLibrary("box2d");
+    if (has_physics) luajit_runtime_test.linkSystemLibrary("box2d");
     luajit_runtime_test.linkSystemLibrary("sqlite3");
     luajit_runtime_test.linkSystemLibrary("vterm");
     luajit_runtime_test.linkSystemLibrary("curl");

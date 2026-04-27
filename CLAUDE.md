@@ -117,8 +117,8 @@ React's reconciler emits CREATE/APPEND/UPDATE mutation commands; the Zig framewo
 - **`runtime/`** — JS entry point, JSX shim, primitives, host globals, hooks.
 - **`renderer/`** — reconciler host config. Mutation command stream.
 - **`cart/`** — `.tsx` apps. `cart/sweatshop/` (was `cursor-ide`) is the active IDE cart.
-- **`scripts/build-bundle.mjs`** — esbuild bundler.
-- **`scripts/build-jsast.mjs`** — acorn JS → Lua AST literal. JSRT's input.
+- **`scripts/cart-bundle.js`** — esbuild bundler. Run via `tools/v8cli` (no node, no bun).
+- **`tools/v8cli`** — standalone V8 script host. Replaces every former `node scripts/X.mjs` invocation. The repo has zero npm/node/bun dependencies; all build-time JS scripts live in `scripts/*.js` and run under `v8cli`.
 - **`tsz/`** — FROZEN. Smith compiler + Smith-era carts. Reference only.
 - **`love2d/`** — FROZEN. The proven reconciler-on-Lua stack. Reference for any runtime pattern.
 - **`os/`** — CartridgeOS + Exodia (future).
