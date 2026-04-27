@@ -10,6 +10,7 @@
 //! updates. It does not round-trip from the current intent source yet.
 
 const std = @import("std");
+const easing_mod = @import("easing.zig");
 
 inline fn asF32(val: anytype) f32 {
     return switch (@typeInfo(@TypeOf(val))) {
@@ -137,19 +138,6 @@ pub const ColorTextSpan = struct {
 pub const ColorTextRow = struct {
     spans: []const ColorTextSpan = &.{},
 };
-
-// tslx:GEN:ROW_TYPES START
-pub const GutterRow = struct {
-    line: u32 = 0,
-    marker: ?Color = null,
-};
-
-pub const MinimapRow = struct {
-    width: f32 = 0,
-    marker: ?Color = null,
-    active: bool = false,
-};
-// tslx:GEN:ROW_TYPES END
 
 pub const MAX_INLINE_SLOTS = 8;
 pub const ImageDims = struct {
@@ -338,19 +326,6 @@ pub const Node = struct {
     input_id: ?u8 = null,
     input_paint_text: bool = true,
     input_color_rows: ?[]const ColorTextRow = null,
-    // tslx:GEN:NODE_FIELDS START
-    gutter_rows: ?[]const GutterRow = null,
-    gutter_row_height: f32 = 17,
-    gutter_cursor_line: u32 = 0,
-    gutter_active_bg: ?Color = null,
-    gutter_active_text: ?Color = null,
-    gutter_text: ?Color = null,
-    minimap_rows: ?[]const MinimapRow = null,
-    minimap_row_height: f32 = 3,
-    minimap_row_gap: f32 = 1,
-    minimap_active_color: ?Color = null,
-    minimap_inactive_color: ?Color = null,
-    // tslx:GEN:NODE_FIELDS END
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,
@@ -446,6 +421,12 @@ pub const Node = struct {
     canvas_drift_y: f32 = 0, // vertical drift speed (px/s, negative = up)
     canvas_drift_active: bool = false, // true = drift animation is running
     canvas_auto_stacked: bool = false, // true = generative layout already applied this visit
+    // Built-in grid overlay — painted under all Canvas children when grid_step > 0.
+    canvas_grid_step: f32 = 0,
+    canvas_grid_stroke: f32 = 1,
+    canvas_grid_color: ?Color = null,
+    canvas_grid_color_major: ?Color = null,
+    canvas_grid_major_every: u8 = 0, // 0 = no majors
     // Per-node theme override (0 = inherit global, 1+ = palette ID from registry)
     theme_id: u8 = 0,
     // Canvas.Node fields — position + size in parent canvas's coordinate space
@@ -480,6 +461,13 @@ pub const Node = struct {
     // Custom window chrome — borderless window drag/resize regions
     window_drag: bool = false, // true = dragging this node moves the window
     window_resize: bool = false, // true = this node is a resize edge (direction auto-detected from position)
+    // CSS-style transition config — when set, animatable visual props
+    // (opacity, scale, color, etc.) interpolate via framework/transition.zig
+    // on UPDATE mutations instead of snapping to the new value.
+    transition_active: bool = false,
+    transition_duration_ms: u16 = 300,
+    transition_delay_ms: u16 = 0,
+    transition_easing: easing_mod.EasingType = .ease_in_out,
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -883,14 +871,6 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     if (node.input_id != null) {
         return @as(f32, @floatFromInt(node.font_size)) * 1.4 + pt + pb;
     }
-    // tslx:GEN:INTRINSIC_HEIGHT START
-    if (node.gutter_rows) |gr| {
-        return @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
-    }
-    if (node.minimap_rows) |gr| {
-        return @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
-    }
-    // tslx:GEN:INTRINSIC_HEIGHT END
     if (node.children.len == 0) {
         return pt + pb;
     }
@@ -1855,15 +1835,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (h == null) {
         if (node.input_id != null) {
             h = @as(f32, @floatFromInt(node.font_size)) + pt + pb;
-        } else
-        // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK START
-        if (node.gutter_rows) |gr| {
-            h = @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
-        } else if (node.minimap_rows) |gr| {
-            h = @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
-        } else
-        // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK END
-        if (node.text != null) {
+        } else if (node.text != null) {
             const m = measureNodeTextW(node, innerW);
             h = m.height + pt + pb;
         } else if (isRow) {

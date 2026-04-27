@@ -33,6 +33,37 @@ pub fn initVM() void {
 
     var isolate = v8.Isolate.init(&g_isolate_params);
     isolate.enter();
+    // ── V8 stack budget ────────────────────────────────────────────────
+    // Without this call V8 falls back to a tiny default budget (~700KB)
+    // measured downward from whatever the C++ SP happens to be at isolate
+    // creation. Our binding surface (every INGREDIENTS row's register fn,
+    // each opening a HandleScope; comptime-unrolled inline-for in
+    // v8_app.appInit; static init for claude/kimi/local_ai/page_fetch
+    // imports) puts SP deep enough at this point that 700KB doesn't
+    // survive the 1MB+ bundle parse + React first render. V8 throws
+    // StackOverflow, and inside the throw path V8 14 (and newer) trips an
+    // IsOnCentralStack invariant. The visible failure looks like:
+    //
+    //   # Fatal error in , line 0
+    //   # Check failed: IsOnCentralStack().
+    //
+    // …which sent prior debugging in circles — bisecting INGREDIENTS to
+    // "it's the websockets binding," then to "it's the sdk binding,"
+    // when in reality any binding crosses the threshold. The fix is here,
+    // not in any binding's tickDrain. addr2line on the crashing IP lands
+    // in v8::internal::Isolate::StackOverflow → the throw-path central-
+    // stack check, not in promise/callback machinery.
+    //
+    // We allocate 64MB of OS stack (build.zig: exe.stack_size). 16MB to
+    // V8 is comfortable and still leaves headroom for native callbacks
+    // and the engine main loop's own frames.
+    //
+    // libc_v8.a doesn't ship the SetStackLimit binding; framework/ffi/
+    // v8_stack_shim.cpp provides a shim that calls V8's mangled symbol.
+    const sp_marker: u8 = 0;
+    const sp_addr = @intFromPtr(&sp_marker);
+    const STACK_BUDGET: usize = 16 * 1024 * 1024;
+    isolate.setStackLimit(sp_addr - STACK_BUDGET);
 
     g_hscope_storage.init(isolate);
     g_hscope_alive = true;
@@ -74,6 +105,13 @@ pub fn resetContextForReload() void {
     const context = v8.Context.init(iso, null, null);
     context.enter();
     g_context = context;
+
+    // Slot-keyed framework state must be cleared so the new cart's
+    // TextInputs don't pick up leftover buffers from slot ids that the
+    // previous cart happened to mount in the same order. hotstate is
+    // explicitly preserved (that's the whole point of useHotState
+    // hydration after reload).
+    @import("input.zig").clearAll();
 }
 
 pub fn teardownVM() void {
@@ -207,6 +245,11 @@ fn callGlobalWithArgs(name: [*:0]const u8, argv: []const v8.Value) void {
         logException(iso, ctx, try_catch, std.mem.span(name));
         return;
     };
+    // Explicit microtask drain (kExplicit policy set in initVM). Promises
+    // resolved during the call (fetch, async hooks) get their .then()
+    // continuations to run here on our central stack, dodging V8 14's auto-
+    // drain IsOnCentralStack check.
+    iso.performMicrotasksCheckpoint();
 }
 
 pub fn callGlobal(name: [*:0]const u8) void {

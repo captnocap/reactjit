@@ -196,7 +196,7 @@ pub const TextEngine = struct {
 
         const lm = self.lineMetrics(size_px);
         const line_h: f32 = if (line_height_override > 0) line_height_override else lm.height;
-        const wrap = self.wordWrap(text, size_px, max_width);
+        const wrap = self.wordWrap(text, size_px, max_width, letter_spacing);
         const count = if (max_lines > 0 and wrap.count > max_lines) max_lines else wrap.count;
 
         for (0..count) |li| {
@@ -278,7 +278,7 @@ pub const TextEngine = struct {
     /// Words are delimited by spaces. Newlines force a break.
     /// Words wider than max_width get their own line (no mid-word break).
     /// Iterates by UTF-8 codepoints so multi-byte characters stay intact.
-    fn wordWrap(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) WrapResult {
+    fn wordWrap(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32) WrapResult {
         var result = WrapResult{};
 
         if (text.len == 0) {
@@ -315,22 +315,28 @@ pub const TextEngine = struct {
             // Found start of a word — measure the whole word (UTF-8 aware)
             const word_start = i;
             var word_width: f32 = 0;
+            var word_chars: usize = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
                 const sentinel_len = inlineGlyphSentinelLen(text, i);
                 if (sentinel_len > 0) {
+                    if (word_chars > 0) word_width += letter_spacing;
                     word_width += @floatFromInt(size_px);
+                    word_chars += 1;
                     i += sentinel_len;
                     continue;
                 }
                 const ch = decodeUtf8(text[i..]);
+                if (word_chars > 0) word_width += letter_spacing;
                 word_width += self.cpAdvance(ch.codepoint, size_px);
+                word_chars += 1;
                 i += ch.len;
             }
             const word_end = i;
 
             // Would adding this word overflow the line?
             const need_space = (line_width > 0);
-            const with_word = line_width + (if (need_space) space_w else @as(f32, 0)) + word_width;
+            const separator_w = if (need_space) space_w + letter_spacing * 2 else @as(f32, 0);
+            const with_word = line_width + separator_w + word_width;
 
             if (need_space and with_word > max_width) {
                 // Wrap: emit current line, start new line at this word
@@ -442,18 +448,7 @@ pub const TextEngine = struct {
         const lm = self.lineMetrics(size_px);
         const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
 
-        // When letter spacing is set, reduce wrap width to account for wider chars
-        var wrap_width = max_width;
-        if (letter_spacing > 0) {
-            // Approximate: each char is wider by letter_spacing
-            const avg_adv = self.cpAdvance('M', size_px);
-            if (avg_adv > 0) {
-                const ratio = avg_adv / (avg_adv + letter_spacing);
-                wrap_width = max_width * ratio;
-            }
-        }
-
-        const wrap = self.wordWrap(text, size_px, wrap_width);
+        const wrap = self.wordWrap(text, size_px, max_width, letter_spacing);
 
         // Clamp line count
         var line_count = wrap.count;
@@ -573,7 +568,7 @@ pub const TextEngine = struct {
         const lm = self.lineMetrics(size_px);
         const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
         const wrap = if (max_width > 0)
-            self.wordWrap(text, size_px, max_width)
+            self.wordWrap(text, size_px, max_width, 0)
         else blk: {
             var w = WrapResult{};
             w.addLine(0, text.len);
@@ -651,7 +646,7 @@ pub const TextEngine = struct {
         const lm = self.lineMetrics(size_px);
         const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
         const wrap = if (max_width > 0)
-            self.wordWrap(text, size_px, max_width)
+            self.wordWrap(text, size_px, max_width, 0)
         else blk: {
             var w = WrapResult{};
             w.addLine(0, text.len);

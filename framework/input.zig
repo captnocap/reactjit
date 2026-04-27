@@ -835,6 +835,22 @@ pub fn clear(id: u8) void {
     inputs[id].last_synced_valid = false;
 }
 
+/// Wipe every slot's buffer/cursor/selection/sync-baseline and drop
+/// per-slot callbacks + focus. Called by the dev hot-reload path
+/// (v8_runtime.resetContextForReload) so the new cart's TextInputs
+/// don't inherit leftover bytes from the previous cart's slot ids —
+/// slot ids are mount-order indices, not stable across reloads.
+pub fn clearAll() void {
+    inputs = [_]InputState{.{}} ** MAX_INPUTS;
+    on_change_callbacks = [_]?*const fn () void{null} ** MAX_INPUTS;
+    on_submit_callbacks = [_]?*const fn () void{null} ** MAX_INPUTS;
+    on_focus_callbacks = [_]?*const fn () void{null} ** MAX_INPUTS;
+    on_blur_callbacks = [_]?*const fn () void{null} ** MAX_INPUTS;
+    on_key_callbacks = [_]?*const fn (key: c_int, mods: u16) void{null} ** MAX_INPUTS;
+    focused_id = null;
+    undo_input_id = null;
+}
+
 /// Set text programmatically, cursor goes to end. Use syncValue() instead
 /// from prop-update paths — this one is for explicit resets.
 pub fn setText(id: u8, text: []const u8) void {

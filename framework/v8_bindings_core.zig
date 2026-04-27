@@ -623,6 +623,7 @@ fn hostVtermIsRecording(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) 
 // 64 KB read buffer — values larger than this are truncated. JS-side
 // callers should keep entries small; for blobs use a file path.
 var g_localstore_read_buf: [64 * 1024]u8 = undefined;
+var g_localstore_keys_json_buf: [64 * 1024]u8 = undefined;
 
 fn hostLocalstoreGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
@@ -699,6 +700,62 @@ fn hostLocalstoreClear(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) v
     } else {
         localstore.clear(ns) catch {};
     }
+}
+
+fn hostLocalstoreKeysJson(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ns = argToStringAlloc(info, 0) orelse {
+        setReturnString(info, "[]");
+        return;
+    };
+    defer std.heap.c_allocator.free(ns);
+
+    var entries: [localstore.MAX_KEYS]localstore.KeyEntry = undefined;
+    const count = localstore.keys(ns, &entries) catch {
+        setReturnString(info, "[]");
+        return;
+    };
+
+    var pos: usize = 0;
+    if (pos < g_localstore_keys_json_buf.len) {
+        g_localstore_keys_json_buf[pos] = '[';
+        pos += 1;
+    }
+
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        if (i > 0) {
+            if (pos >= g_localstore_keys_json_buf.len) break;
+            g_localstore_keys_json_buf[pos] = ',';
+            pos += 1;
+        }
+        if (pos >= g_localstore_keys_json_buf.len) break;
+        g_localstore_keys_json_buf[pos] = '"';
+        pos += 1;
+
+        for (entries[i].key()) |ch| {
+            if (ch == '"' or ch == '\\') {
+                if (pos + 2 > g_localstore_keys_json_buf.len) break;
+                g_localstore_keys_json_buf[pos] = '\\';
+                pos += 1;
+            } else if (ch < 0x20) {
+                continue;
+            } else if (pos + 1 > g_localstore_keys_json_buf.len) break;
+            g_localstore_keys_json_buf[pos] = ch;
+            pos += 1;
+        }
+
+        if (pos >= g_localstore_keys_json_buf.len) break;
+        g_localstore_keys_json_buf[pos] = '"';
+        pos += 1;
+    }
+
+    if (pos < g_localstore_keys_json_buf.len) {
+        g_localstore_keys_json_buf[pos] = ']';
+        pos += 1;
+    }
+
+    setReturnString(info, g_localstore_keys_json_buf[0..pos]);
 }
 
 // ── fswatch host functions (framework/fswatch.zig) ───────────
@@ -847,6 +904,7 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__localstoreSet", hostLocalstoreSet);
     v8_runtime.registerHostFn("__localstoreDelete", hostLocalstoreDelete);
     v8_runtime.registerHostFn("__localstoreClear", hostLocalstoreClear);
+    v8_runtime.registerHostFn("__localstoreKeysJson", hostLocalstoreKeysJson);
     v8_runtime.registerHostFn("__fswatchAdd", hostFswatchAdd);
     v8_runtime.registerHostFn("__fswatchRemove", hostFswatchRemove);
     v8_runtime.registerHostFn("__fswatchDrain", hostFswatchDrain);

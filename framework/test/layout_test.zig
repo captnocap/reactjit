@@ -295,6 +295,40 @@ test "text in stretch flex detail region wraps as a control" {
     try testing.expect(label.computed.h > 11);
 }
 
+test "text primitive wrapper passes stretched width to bare text child" {
+    layout.setMeasureFn(mockMeasure);
+    defer layout.setMeasureFn(null);
+
+    var footer_text = [_]layout.Node{
+        .{ .text = "footer text should use the full tooltip content width before wrapping", .font_size = 10 },
+    };
+    var footer_wrapper = [_]layout.Node{
+        .{
+            .style = .{
+                .flex_direction = .column,
+            },
+            .children = &footer_text,
+        },
+    };
+    var root = layout.Node{
+        .style = .{
+            .width = 360,
+            .padding = 12,
+            .gap = 10,
+        },
+        .children = &footer_wrapper,
+    };
+
+    layout.markLayoutDirty();
+    layout.layout(&root, 0, 0, 360, 200);
+
+    const wrapper = &root.children[0];
+    const text = &wrapper.children[0];
+
+    try testing.expectApproxEqAbs(@as(f32, 336), wrapper.computed.w, 0.01);
+    try testing.expectApproxEqAbs(wrapper.computed.w, text.computed.w, 0.01);
+}
+
 test "row flex item with flex_basis zero keeps auto min width at exact boundary" {
     layout.setMeasureFn(mockMeasure);
     defer layout.setMeasureFn(null);

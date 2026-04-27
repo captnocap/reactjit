@@ -414,10 +414,17 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                     pen_x = 0;
                     var j: usize = line_start;
                     while (j < i) {
+                        const j_leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
                         const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); pen_x += g_letter_spacing; j += j_sentinel_len; continue; }
+                        if (j_sentinel_len > 0) {
+                            pen_x += j_leading_ls + @as(f32, @floatFromInt(size_px));
+                            j += j_sentinel_len;
+                            continue;
+                        }
                         const jch = decodeUtf8(text[j..]);
-                        if (cacheGlyph(jch.codepoint, size_px)) |g| { pen_x += g.advance; pen_x += g_letter_spacing; }
+                        if (cacheGlyph(jch.codepoint, size_px)) |g| {
+                            pen_x += j_leading_ls + g.advance;
+                        }
                         j += jch.len;
                     }
                     last_break = line_start;
@@ -475,10 +482,17 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 pen_x = 0;
                 var j: usize = line_start;
                 while (j < i) {
+                    const j_leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
                     const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                    if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
+                    if (j_sentinel_len > 0) {
+                        pen_x += j_leading_ls + @as(f32, @floatFromInt(size_px));
+                        j += j_sentinel_len;
+                        continue;
+                    }
                     const jch = decodeUtf8(text[j..]);
-                    if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += g.advance;
+                    if (cacheGlyph(jch.codepoint, size_px)) |g| {
+                        pen_x += j_leading_ls + g.advance;
+                    }
                     j += jch.len;
                 }
                 last_break = line_start;

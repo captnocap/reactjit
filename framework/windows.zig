@@ -167,7 +167,7 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
     if (is_notif or opts.borderless) flags |= c.SDL_WINDOW_BORDERLESS;
     if (is_notif or opts.always_on_top) flags |= c.SDL_WINDOW_ALWAYS_ON_TOP;
     // Notifications should not steal focus or be resizable
-    if (is_notif) flags = flags & ~@as(u64, c.SDL_WINDOW_RESIZABLE) | c.SDL_WINDOW_HIDDEN;
+    if (is_notif) flags = (flags & ~@as(u64, c.SDL_WINDOW_RESIZABLE)) | c.SDL_WINDOW_HIDDEN | c.SDL_WINDOW_NOT_FOCUSABLE | c.SDL_WINDOW_UTILITY;
 
     const window = c.SDL_CreateWindow(
         opts.title,
@@ -205,6 +205,7 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
 
     // X11 notification window type hint
     if (is_notif) setX11NotificationType(window);
+    if (is_notif) _ = c.SDL_ShowWindow(window);
 
     slots[idx] = .{
         .active = true,

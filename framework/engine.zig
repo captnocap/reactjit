@@ -1305,6 +1305,7 @@ var canvas_move_drag_offset_x: f32 = 0;
 var canvas_move_drag_offset_y: f32 = 0;
 var canvas_move_last_gx: f32 = 0;
 var canvas_move_last_gy: f32 = 0;
+var canvas_move_last_dispatch_ms: u32 = 0;
 
 // TextInput drag-select state
 var input_drag_active: bool = false;
@@ -2502,6 +2503,55 @@ noinline fn paintCanvasContainer(node: *Node) void {
     const vp_cx = r.x + r.w / 2;
     const vp_cy = r.y + r.h / 2;
     gpu.setTransform(0, 0, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, cam.scale);
+    // Built-in grid overlay — painted under children when canvas_grid_step > 0.
+    // Drawn as thin axis-aligned rects in graph space so the active gpu transform
+    // converts them to screen-space at current zoom for free.
+    if (node.canvas_grid_step > 0) {
+        const step: f32 = node.canvas_grid_step;
+        const stroke_g: f32 = if (cam.scale > 0) (node.canvas_grid_stroke / cam.scale) else node.canvas_grid_stroke;
+        const half: f32 = stroke_g * 0.5;
+        const half_w: f32 = (r.w * 0.5) / cam.scale;
+        const half_h: f32 = (r.h * 0.5) / cam.scale;
+        const gx_min: f32 = cam.cx - half_w - step;
+        const gx_max: f32 = cam.cx + half_w + step;
+        const gy_min: f32 = cam.cy - half_h - step;
+        const gy_max: f32 = cam.cy + half_h + step;
+        const minor = node.canvas_grid_color orelse layout.Color.rgba(22, 29, 39, 255);
+        const major = node.canvas_grid_color_major orelse minor;
+        const major_every: i32 = @intCast(node.canvas_grid_major_every);
+        const mr: f32 = @as(f32, @floatFromInt(minor.r)) / 255.0;
+        const mg: f32 = @as(f32, @floatFromInt(minor.g)) / 255.0;
+        const mb: f32 = @as(f32, @floatFromInt(minor.b)) / 255.0;
+        const ma: f32 = @as(f32, @floatFromInt(minor.a)) / 255.0;
+        const Mr: f32 = @as(f32, @floatFromInt(major.r)) / 255.0;
+        const Mg: f32 = @as(f32, @floatFromInt(major.g)) / 255.0;
+        const Mb: f32 = @as(f32, @floatFromInt(major.b)) / 255.0;
+        const Ma: f32 = @as(f32, @floatFromInt(major.a)) / 255.0;
+        const i_start_x: i32 = @intFromFloat(@floor(gx_min / step));
+        const i_end_x: i32 = @intFromFloat(@ceil(gx_max / step));
+        var ix: i32 = i_start_x;
+        while (ix <= i_end_x) : (ix += 1) {
+            const gx: f32 = @as(f32, @floatFromInt(ix)) * step;
+            const is_major = major_every > 0 and @rem(ix, major_every) == 0;
+            const cr = if (is_major) Mr else mr;
+            const cg = if (is_major) Mg else mg;
+            const cb = if (is_major) Mb else mb;
+            const ca = if (is_major) Ma else ma;
+            gpu.drawRect(gx - half, gy_min, stroke_g, gy_max - gy_min, cr, cg, cb, ca, 0, 0, 0, 0, 0, 0);
+        }
+        const i_start_y: i32 = @intFromFloat(@floor(gy_min / step));
+        const i_end_y: i32 = @intFromFloat(@ceil(gy_max / step));
+        var iy: i32 = i_start_y;
+        while (iy <= i_end_y) : (iy += 1) {
+            const gy: f32 = @as(f32, @floatFromInt(iy)) * step;
+            const is_major = major_every > 0 and @rem(iy, major_every) == 0;
+            const cr = if (is_major) Mr else mr;
+            const cg = if (is_major) Mg else mg;
+            const cb = if (is_major) Mb else mb;
+            const ca = if (is_major) Ma else ma;
+            gpu.drawRect(gx_min, gy - half, gx_max - gx_min, stroke_g, cr, cg, cb, ca, 0, 0, 0, 0, 0, 0);
+        }
+    }
     {
         const hovered = canvas.getHoveredNode();
         const selected = canvas.getSelectedNode();
@@ -2864,15 +2914,23 @@ pub fn run(config_in: AppConfig) !void {
                     if (event.button.button == c.SDL_BUTTON_RIGHT) {
                         const mx: f32 = event.button.x;
                         const my: f32 = event.button.y;
+                        std.debug.print("[ctxmenu] right-click at ({d},{d})\n", .{ mx, my });
                         context_menu.hide(); // dismiss any existing menu first
                         const rc_events = @import("events.zig");
                         if (rc_events.hitTestRightClick(config.root, mx, my)) |h| {
-                            if (h.handlers.on_right_click) |handler| {
+                            std.debug.print("[ctxmenu] hit node id={d} on_right_click={} ctx_items={}\n", .{ h.scroll_persist_slot, h.handlers.on_right_click != null, h.context_menu_items != null });
+                            // Prefer the native menu when items are declared — they are
+                            // the explicit opt-in. on_right_click may also be set because
+                            // the JS bridge aliases onContextMenu→onRightClick.
+                            if (h.context_menu_items) |items| {
+                                std.debug.print("[ctxmenu] showFor n_items={d}\n", .{items.len});
+                                context_menu.showFor(mx, my, items, h.scroll_persist_slot);
+                            } else if (h.handlers.on_right_click) |handler| {
                                 qjs_runtime.prepareNodeEvent(h.scroll_persist_slot);
                                 handler(mx, my);
-                            } else if (h.context_menu_items) |items| {
-                                context_menu.showFor(mx, my, items, h.scroll_persist_slot);
                             }
+                        } else {
+                            std.debug.print("[ctxmenu] no hit\n", .{});
                         }
                     }
                     // Middle-click — dispatch onMiddleClick to JSRT
@@ -3287,9 +3345,10 @@ pub fn run(config_in: AppConfig) !void {
                     if (dragging_left and canvas_move_drag_id != 0) {
                         // Canvas.Node position drag — write the new graph coords straight
                         // into the host Node pool (so next frame's materialized arena picks
-                        // them up). The React state commit happens once on mouse-up — going
-                        // through setState per motion re-renders the whole tile subtree and
-                        // floods the flush pipeline with multi-KB UPDATE batches.
+                        // them up). Also fire onMove live so the cart's React state can
+                        // track the position during the drag (e.g. for edges anchored to
+                        // node coords). Throttled to ~60 Hz to avoid flooding the flush
+                        // pipeline with multi-KB UPDATE batches.
                         if (findNodeByScrollSlot(config.root, canvas_move_drag_canvas_id)) |cn| {
                             const vp_cx = cn.computed.x + cn.computed.w / 2;
                             const vp_cy = cn.computed.y + cn.computed.h / 2;
@@ -3302,6 +3361,20 @@ pub fn run(config_in: AppConfig) !void {
                             if (findNodeByScrollSlot(config.root, canvas_move_drag_id)) |node| {
                                 node.canvas_gx = canvas_move_last_gx;
                                 node.canvas_gy = canvas_move_last_gy;
+                            }
+                            const now_ms: u32 = @intCast(c.SDL_GetTicks() & 0xFFFFFFFF);
+                            if (now_ms -% canvas_move_last_dispatch_ms >= 16) {
+                                canvas_move_last_dispatch_ms = now_ms;
+                                var mbuf: [160]u8 = undefined;
+                                if (std.fmt.bufPrintZ(&mbuf, "__dispatchCanvasMove({d},{d},{d})", .{
+                                    canvas_move_drag_id,
+                                    canvas_move_last_gx,
+                                    canvas_move_last_gy,
+                                })) |sentinel| {
+                                    js_vm.callGlobal("__beginJsEvent");
+                                    js_vm.evalExpr(sentinel);
+                                    js_vm.callGlobal("__endJsEvent");
+                                } else |_| {}
                             }
                             state_mod.markDirty();
                         }
