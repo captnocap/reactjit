@@ -17,7 +17,8 @@ const HTTP_MAX_HEADERS: usize = 16;
 
 var g_http_init_done: bool = false;
 var g_page_fetch_init_done: bool = false;
-var g_http_pending: ?std.AutoHashMap(u32, []u8) = null;
+const HttpPending = struct { rid: []u8, stream: bool };
+var g_http_pending: ?std.AutoHashMap(u32, HttpPending) = null;
 var g_page_pending: ?std.AutoHashMap(u32, []u8) = null;
 
 var g_claude_session: ?claude_sdk.Session = null;
@@ -219,8 +220,8 @@ fn httpSyncViaCurl(req: HttpReq) ![]u8 {
     return out.toOwnedSlice(alloc);
 }
 
-fn httpPending() *std.AutoHashMap(u32, []u8) {
-    if (g_http_pending == null) g_http_pending = std.AutoHashMap(u32, []u8).init(std.heap.page_allocator);
+fn httpPending() *std.AutoHashMap(u32, HttpPending) {
+    if (g_http_pending == null) g_http_pending = std.AutoHashMap(u32, HttpPending).init(std.heap.page_allocator);
     return &g_http_pending.?;
 }
 
@@ -285,7 +286,7 @@ fn claudeMessageToJs(iso: v8.Isolate, ctx: v8.Context, msg: claude_sdk.Message) 
             for (s.tools, 0..) |tname, i| {
                 _ = tools.castTo(v8.Object).setValueAtIndex(ctx, @intCast(i), v8.String.initUtf8(iso, tname));
             }
-            _ = obj.setValue(ctx, v8.String.initUtf8(iso, "tools"), tools.toValue());
+            _ = obj.setValue(ctx, v8.String.initUtf8(iso, "tools"), tools.castTo(v8.Object).toValue());
         },
         .assistant => |a| {
             setStrProp(iso, ctx, obj, "type", "assistant");
@@ -322,7 +323,7 @@ fn claudeMessageToJs(iso: v8.Isolate, ctx: v8.Context, msg: claude_sdk.Message) 
                 }
                 _ = blocks.castTo(v8.Object).setValueAtIndex(ctx, @intCast(i), b_obj.toValue());
             }
-            _ = obj.setValue(ctx, v8.String.initUtf8(iso, "content"), blocks.toValue());
+            _ = obj.setValue(ctx, v8.String.initUtf8(iso, "content"), blocks.castTo(v8.Object).toValue());
             if (text_join.items.len > 0) setStrProp(iso, ctx, obj, "text", text_join.items);
             if (thinking_join.items.len > 0) setStrProp(iso, ctx, obj, "thinking", thinking_join.items);
         },
@@ -704,8 +705,7 @@ fn hostHttpRequestSync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) v
     setReturnString(info, cx.iso, resp_json);
 }
 
-fn hostHttpRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
-    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+fn dispatchHttpRequest(info: v8.FunctionCallbackInfo, stream: bool) void {
     const cx = callbackCtx(info);
     if (info.length() < 2) return setReturnUndefined(info, cx.iso);
     const spec = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnUndefined(info, cx.iso);
@@ -723,13 +723,13 @@ fn hostHttpRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) 
     const req = parseHttpReq(&parsed) orelse return setReturnUndefined(info, cx.iso);
     const id = hashReqId(rid);
     const rid_copy = std.heap.page_allocator.dupe(u8, rid) catch return setReturnUndefined(info, cx.iso);
-    httpPending().put(id, rid_copy) catch {
+    httpPending().put(id, .{ .rid = rid_copy, .stream = stream }) catch {
         std.heap.page_allocator.free(rid_copy);
         return setReturnUndefined(info, cx.iso);
     };
 
     var hdrs_buf: [HTTP_MAX_HEADERS][2][]const u8 = undefined;
-    var opts = net_http.RequestOpts{ .url = req.url, .body = req.body };
+    var opts = net_http.RequestOpts{ .url = req.url, .body = req.body, .stream = stream };
     opts.method = if (std.ascii.eqlIgnoreCase(req.method, "POST")) .POST else if (std.ascii.eqlIgnoreCase(req.method, "PUT")) .PUT else if (std.ascii.eqlIgnoreCase(req.method, "DELETE")) .DELETE else if (std.ascii.eqlIgnoreCase(req.method, "PATCH")) .PATCH else if (std.ascii.eqlIgnoreCase(req.method, "HEAD")) .HEAD else .GET;
     if (req.headers) |hdrs| {
         var it = hdrs.iterator();
@@ -743,6 +743,38 @@ fn hostHttpRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) 
         opts.headers = hdrs_buf[0..n];
     }
     _ = net_http.request(id, opts);
+    setReturnUndefined(info, cx.iso);
+}
+
+fn hostHttpRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    dispatchHttpRequest(info, false);
+}
+
+/// Streaming variant of __http_request_async. Same JSON spec + reqId arg, but
+/// chunks emit on `http-stream:<rid>` and a terminal `http-stream-end:<rid>`
+/// fires once with `{"status":N}` (success) or `{"error":"..."}` (failure).
+fn hostHttpStreamOpen(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    dispatchHttpRequest(info, true);
+}
+
+/// JS-side `close()` symmetry. Cancellation isn't actually plumbed yet
+/// (curl_easy_perform runs to completion in the worker), so this just frees
+/// the rid mapping early so any late chunks/end events get dropped on the
+/// floor instead of firing into a stale subscriber.
+fn hostHttpStreamClose(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    if (info.length() < 1) return setReturnUndefined(info, cx.iso);
+    const rid = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnUndefined(info, cx.iso);
+    defer std.heap.page_allocator.free(rid);
+    const id = hashReqId(rid);
+    if (g_http_pending != null) {
+        if (httpPending().fetchRemove(id)) |entry| {
+            std.heap.page_allocator.free(entry.value.rid);
+        }
+    }
     setReturnUndefined(info, cx.iso);
 }
 
@@ -1372,7 +1404,7 @@ fn hostSemExport(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         setStrProp(cx.iso, cx.ctx, obj, "color", hex);
         _ = arr.castTo(v8.Object).setValueAtIndex(cx.ctx, @intCast(i), obj.toValue());
     }
-    info.getReturnValue().set(arr.toValue());
+    info.getReturnValue().set(arr.castTo(v8.Object).toValue());
 }
 
 fn hostSemSnapshot(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -1423,7 +1455,7 @@ fn hostSemSnapshot(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         setStrProp(cx.iso, cx.ctx, obj, "color", hx);
         _ = rows.castTo(v8.Object).setValueAtIndex(cx.ctx, @intCast(i), obj.toValue());
     }
-    _ = root.setValue(cx.ctx, v8.String.initUtf8(cx.iso, "rows"), rows.toValue());
+    _ = root.setValue(cx.ctx, v8.String.initUtf8(cx.iso, "rows"), rows.castTo(v8.Object).toValue());
 
     const g = v8.Object.init(cx.iso);
     setNumProp(cx.iso, cx.ctx, g, "node_count", @floatFromInt(semantic.nodeCount()));
@@ -1464,14 +1496,19 @@ fn hostSemBuildGraph(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) voi
 
 fn emitChannelPayload(channel: []const u8, payload: []const u8) void {
     const alloc = std.heap.page_allocator;
-    var out = std.ArrayList(u8){};
-    defer out.deinit(alloc);
-    out.appendSlice(alloc, "if (globalThis.__ffiEmit) __ffiEmit(") catch return;
-    jsonEscape(&out, alloc, channel) catch return;
-    out.append(alloc, ',') catch return;
-    jsonEscape(&out, alloc, payload) catch return;
-    out.appendSlice(alloc, ");") catch return;
-    v8rt.evalScript(out.items);
+    var chan_buf = std.ArrayList(u8){};
+    defer chan_buf.deinit(alloc);
+    chan_buf.appendSlice(alloc, channel) catch return;
+    chan_buf.append(alloc, 0) catch return;
+    const chan_z = chan_buf.items[0 .. chan_buf.items.len - 1 :0];
+
+    var payload_buf = std.ArrayList(u8){};
+    defer payload_buf.deinit(alloc);
+    payload_buf.appendSlice(alloc, payload) catch return;
+    payload_buf.append(alloc, 0) catch return;
+    const payload_z = payload_buf.items[0 .. payload_buf.items.len - 1 :0];
+
+    v8rt.callGlobal2Str("__ffiEmit", chan_z, payload_z);
 }
 
 // Call this from the V8 app's main loop per tick.
@@ -1481,14 +1518,46 @@ pub fn tickDrain() void {
         const n = net_http.poll(&buf);
         const alloc = std.heap.page_allocator;
         for (buf[0..n]) |resp| {
-            const rid = httpPending().fetchRemove(resp.id) orelse continue;
-            defer alloc.free(rid.value);
-            const payload = buildHttpRespJson(&resp, alloc) catch continue;
-            defer alloc.free(payload);
-
+            const pending = httpPending().get(resp.id) orelse continue;
             var ch_buf: [256]u8 = undefined;
-            const ch = std.fmt.bufPrint(&ch_buf, "http:{s}", .{rid.value}) catch continue;
-            emitChannelPayload(ch, payload);
+
+            if (!pending.stream) {
+                // Non-streaming: single full-body response → "http:<rid>"
+                const rid = httpPending().fetchRemove(resp.id) orelse continue;
+                defer alloc.free(rid.value.rid);
+                const payload = buildHttpRespJson(&resp, alloc) catch continue;
+                defer alloc.free(payload);
+                const ch = std.fmt.bufPrint(&ch_buf, "http:{s}", .{rid.value.rid}) catch continue;
+                emitChannelPayload(ch, payload);
+                continue;
+            }
+
+            // Streaming: chunks ride "http-stream:<rid>", terminal rides
+            // "http-stream-end:<rid>" carrying status or error.
+            switch (resp.response_type) {
+                .chunk => {
+                    const ch = std.fmt.bufPrint(&ch_buf, "http-stream:{s}", .{pending.rid}) catch continue;
+                    emitChannelPayload(ch, resp.bodySlice());
+                },
+                .complete => {
+                    var payload_buf: [64]u8 = undefined;
+                    const payload = std.fmt.bufPrint(&payload_buf, "{{\"status\":{d}}}", .{resp.status}) catch continue;
+                    const ch = std.fmt.bufPrint(&ch_buf, "http-stream-end:{s}", .{pending.rid}) catch continue;
+                    emitChannelPayload(ch, payload);
+                    if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                },
+                .err => {
+                    var out = std.ArrayList(u8){};
+                    defer out.deinit(alloc);
+                    out.appendSlice(alloc, "{\"error\":") catch continue;
+                    jsonEscape(&out, alloc, resp.errorSlice()) catch continue;
+                    out.append(alloc, '}') catch continue;
+                    const ch = std.fmt.bufPrint(&ch_buf, "http-stream-end:{s}", .{pending.rid}) catch continue;
+                    emitChannelPayload(ch, out.items);
+                    if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                },
+                .progress => {},
+            }
         }
     }
 
@@ -1514,6 +1583,8 @@ pub fn registerSdk(vm: anytype) void {
     v8rt.registerHostFn("__fetch", hostFetch);
     v8rt.registerHostFn("__http_request_sync", hostHttpRequestSync);
     v8rt.registerHostFn("__http_request_async", hostHttpRequestAsync);
+    v8rt.registerHostFn("__http_stream_open", hostHttpStreamOpen);
+    v8rt.registerHostFn("__http_stream_close", hostHttpStreamClose);
     v8rt.registerHostFn("__browser_page_sync", hostBrowserPageSync);
     v8rt.registerHostFn("__browser_page_async", hostBrowserPageAsync);
     v8rt.registerHostFn("__play_load", hostPlayLoad);

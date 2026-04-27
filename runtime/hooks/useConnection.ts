@@ -128,6 +128,57 @@ export interface PeerConnectionSpec extends SpecBase {
   onData?: (data: string) => void;
 }
 
+/**
+ * Streaming HTTP response — the request fires once and chunks of the body
+ * arrive on `onChunk` as they're received from the server. `onComplete`
+ * fires once with the final status when the response ends. Useful for
+ * large downloads, progressive renderers, and streaming LLM bodies that
+ * aren't formatted as SSE.
+ *
+ * Cancellation note: closing the handle stops listening but cannot abort
+ * an in-flight libcurl perform, so chunks may continue accumulating
+ * server-side until the connection naturally ends.
+ */
+export interface HttpConnectionSpec extends SpecBase {
+  kind: 'http';
+  url: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
+  headers?: Record<string, string>;
+  body?: string;
+  onChunk?: (data: string) => void;
+  onComplete?: (info: { status: number }) => void;
+  onError?: (msg: string) => void;
+}
+
+export interface SseEvent {
+  /** Event name (default: 'message'). */
+  event: string;
+  /** Payload string — joined `data:` lines without trailing newline. */
+  data: string;
+  /** Optional `id:` from the server. */
+  id?: string;
+  /** Optional retry hint in ms. */
+  retry?: number;
+}
+
+/**
+ * Server-Sent Events. Same wire as `kind:'http'` but the chunk stream is
+ * parsed into discrete events. Forces `Accept: text/event-stream`. Use
+ * this for OpenAI/Anthropic streaming endpoints, gradio progress streams,
+ * Ollama, etc.
+ */
+export interface SseConnectionSpec extends SpecBase {
+  kind: 'sse';
+  url: string;
+  headers?: Record<string, string>;
+  /** POST body, if the SSE endpoint expects one (Anthropic does). Defaults to GET when omitted. */
+  body?: string;
+  onEvent?: (ev: SseEvent) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
+  onError?: (msg: string) => void;
+}
+
 export type ConnectionSpec =
   | WsConnectionSpec
   | TcpConnectionSpec
@@ -136,7 +187,9 @@ export type ConnectionSpec =
   | TorConnectionSpec
   | Socks5ConnectionSpec
   | StunConnectionSpec
-  | PeerConnectionSpec;
+  | PeerConnectionSpec
+  | HttpConnectionSpec
+  | SseConnectionSpec;
 
 // ── Handle types (discriminated by kind) ───────────────────────────
 
@@ -193,6 +246,16 @@ export interface PeerConnectionHandle extends HandleBase {
   send(data: string): void;
 }
 
+export interface HttpConnectionHandle extends HandleBase {
+  kind: 'http';
+  /** HTTP response status. 0 until `state === 'closed'`. */
+  status: number;
+}
+
+export interface SseConnectionHandle extends HandleBase {
+  kind: 'sse';
+}
+
 export type ConnectionHandle =
   | WsConnectionHandle
   | TcpConnectionHandle
@@ -201,7 +264,9 @@ export type ConnectionHandle =
   | TorConnectionHandle
   | Socks5ConnectionHandle
   | StunConnectionHandle
-  | PeerConnectionHandle;
+  | PeerConnectionHandle
+  | HttpConnectionHandle
+  | SseConnectionHandle;
 
 // ── ID allocator ───────────────────────────────────────────────────
 
@@ -221,6 +286,8 @@ export function useConnection(spec: TorConnectionSpec): TorConnectionHandle;
 export function useConnection(spec: Socks5ConnectionSpec): Socks5ConnectionHandle;
 export function useConnection(spec: StunConnectionSpec): StunConnectionHandle;
 export function useConnection(spec: PeerConnectionSpec): PeerConnectionHandle;
+export function useConnection(spec: HttpConnectionSpec): HttpConnectionHandle;
+export function useConnection(spec: SseConnectionSpec): SseConnectionHandle;
 export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   const idRef = useRef<number>(0);
   if (idRef.current === 0) idRef.current = nextId();
@@ -231,6 +298,8 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   // Tor only — populated when bootstrap completes.
   const [torInfo, setTorInfo] = useState<{ socksPort: number; hostname: string; hsPort: number } | undefined>(undefined);
   const torInfoRef = useRef<typeof torInfo>(undefined);
+  // http / sse only — populated on .complete from http-stream-end.
+  const [httpStatus, setHttpStatus] = useState<number>(0);
 
   const specRef = useRef(spec);
   specRef.current = spec;
@@ -345,6 +414,94 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
       // SOCKS5 is a config holder — no socket opens here. The proxy is used
       // when another connection passes this handle as `via:`.
       setState('open');
+    } else if (spec.kind === 'http' || spec.kind === 'sse') {
+      const rid = `c${id}`;
+      const isSse = spec.kind === 'sse';
+      const headers: Record<string, string> = { ...(spec.headers ?? {}) };
+      if (isSse) {
+        headers['Accept'] = 'text/event-stream';
+        if (!('Cache-Control' in headers)) headers['Cache-Control'] = 'no-cache';
+      }
+      const reqJson = JSON.stringify({
+        method: ((spec as any).method ?? (((spec as SseConnectionSpec).body !== undefined && isSse) || ((spec as HttpConnectionSpec).body !== undefined && !isSse) ? 'POST' : 'GET')).toUpperCase(),
+        url: spec.url,
+        headers,
+        body: (spec as any).body,
+      });
+
+      // SSE parser state — only used when isSse, but cheap to allocate.
+      let leftover = '';
+      let evName = 'message';
+      let evData = '';
+      let evId: string | undefined;
+      let evRetry: number | undefined;
+      const dispatchSse = () => {
+        if (evData === '' && evName === 'message' && evId === undefined && evRetry === undefined) {
+          return; // empty event — ignore
+        }
+        const ev: SseEvent = { event: evName, data: evData };
+        if (evId !== undefined) ev.id = evId;
+        if (evRetry !== undefined) ev.retry = evRetry;
+        (specRef.current as SseConnectionSpec).onEvent?.(ev);
+        evName = 'message';
+        evData = '';
+        evId = undefined;
+        evRetry = undefined;
+      };
+      const feedSse = (incoming: string) => {
+        const buf = leftover + incoming;
+        // SSE allows \n, \r, or \r\n line breaks.
+        const lines = buf.split(/\r\n|\r|\n/);
+        leftover = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line === '') { dispatchSse(); continue; }
+          if (line.startsWith(':')) continue; // comment
+          const sep = line.indexOf(':');
+          const field = sep === -1 ? line : line.slice(0, sep);
+          let value = sep === -1 ? '' : line.slice(sep + 1);
+          if (value.startsWith(' ')) value = value.slice(1);
+          if (field === 'event') evName = value;
+          else if (field === 'data') evData = evData === '' ? value : `${evData}\n${value}`;
+          else if (field === 'id') evId = value;
+          else if (field === 'retry') {
+            const n = Number(value);
+            if (!Number.isNaN(n)) evRetry = n;
+          }
+        }
+      };
+
+      callHost<void>('__http_stream_open', undefined as any, reqJson, rid);
+
+      // Optimistically flip to open — server byte arrival is the real signal,
+      // but the request is in flight as soon as the host fn returns. SSE fires
+      // onOpen here too; the spec is "connection established," not "first event."
+      setState('open');
+      if (isSse) (specRef.current as SseConnectionSpec).onOpen?.();
+
+      unsubs.push(subscribe(`http-stream:${rid}`, (data: any) => {
+        if (cancelled) return;
+        const s = typeof data === 'string' ? data : String(data);
+        if (isSse) feedSse(s);
+        else (specRef.current as HttpConnectionSpec).onChunk?.(s);
+      }));
+
+      unsubs.push(subscribe(`http-stream-end:${rid}`, (raw: any) => {
+        if (cancelled) return;
+        let obj: any = {};
+        try { obj = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch {}
+        if (typeof obj.error === 'string') {
+          if (isSse) (specRef.current as SseConnectionSpec).onError?.(obj.error);
+          else (specRef.current as HttpConnectionSpec).onError?.(obj.error);
+          setError(obj.error);
+          setState('error');
+        } else {
+          if (isSse && leftover !== '') { feedSse('\n'); } // flush trailing
+          if (typeof obj.status === 'number') setHttpStatus(obj.status);
+          if (isSse) (specRef.current as SseConnectionSpec).onClose?.();
+          else (specRef.current as HttpConnectionSpec).onComplete?.({ status: obj.status ?? 0 });
+          setState('closed');
+        }
+      }));
     } else {
       // wireguard / stun / peer: no Zig backend yet. Honest error rather
       // than a silent open. When the binding lands, replace with real wiring.
@@ -360,6 +517,7 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
       else if (spec.kind === 'udp') callHost<void>('__udp_close', undefined as any, id);
       else if (spec.kind === 'tor') callHost<void>('__tor_stop', undefined as any, id);
       else if (spec.kind === 'socks5') callHost<void>('__socks5_unregister', undefined as any, id);
+      else if (spec.kind === 'http' || spec.kind === 'sse') callHost<void>('__http_stream_close', undefined as any, `c${id}`);
       setState('closed');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -378,6 +536,7 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
     if (spec.kind === 'ws') callHost<void>('__ws_close', undefined as any, id);
     else if (spec.kind === 'tcp') callHost<void>('__tcp_close', undefined as any, id);
     else if (spec.kind === 'udp') callHost<void>('__udp_close', undefined as any, id);
+    else if (spec.kind === 'http' || spec.kind === 'sse') callHost<void>('__http_stream_close', undefined as any, `c${id}`);
   };
 
   if (spec.kind === 'ws') {
@@ -418,6 +577,12 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   }
   if (spec.kind === 'stun') {
     return { kind: 'stun', id, state, error, close: closeFn };
+  }
+  if (spec.kind === 'http') {
+    return { kind: 'http', id, state, error, close: closeFn, status: httpStatus };
+  }
+  if (spec.kind === 'sse') {
+    return { kind: 'sse', id, state, error, close: closeFn };
   }
   // peer
   return {

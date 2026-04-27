@@ -39,6 +39,10 @@ pub const RequestOpts = struct {
     headers: ?[]const [2][]const u8 = null, // key-value pairs
     body: ?[]const u8 = null,
     proxy: ?[]const u8 = null,
+    /// Stream the response body as a sequence of `.chunk` Responses followed
+    /// by a terminal `.complete` (or `.err`). Each chunk carries up to
+    /// MAX_BODY bytes; cap is enforced per-libcurl-callback.
+    stream: bool = false,
 };
 
 pub const ResponseType = enum { complete, chunk, progress, err };
@@ -77,6 +81,7 @@ const Request = struct {
     body_len: usize = 0,
     proxy: [MAX_URL]u8 = undefined,
     proxy_len: usize = 0,
+    stream: bool = false,
     shutdown: bool = false, // sentinel to tell worker to exit
 };
 
@@ -147,6 +152,8 @@ pub fn request(id: u32, opts: RequestOpts) bool {
         }
     }
 
+    req.stream = opts.stream;
+
     return request_queue.push(req);
 }
 
@@ -198,6 +205,14 @@ fn workerMain() void {
 
         if (req.shutdown) return;
 
+        // Streaming requests push their own chunk + terminal Responses from
+        // inside the libcurl WRITEFUNCTION callback / post-perform; the worker
+        // must NOT push an additional summary Response after.
+        if (req.stream) {
+            executeRequest(handle, &req, null);
+            continue;
+        }
+
         // Execute the request
         var resp = Response{};
         resp.id = req.id;
@@ -209,7 +224,7 @@ fn workerMain() void {
     }
 }
 
-fn executeRequest(handle: *c.CURL, req: *const Request, resp: *Response) void {
+fn executeRequest(handle: *c.CURL, req: *const Request, resp: ?*Response) void {
     // URL (needs null terminator)
     var url_buf: [MAX_URL + 1]u8 = undefined;
     @memcpy(url_buf[0..req.url_len], req.url[0..req.url_len]);
@@ -267,24 +282,43 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: *Response) void {
     // Timeout
     _ = c.curl_easy_setopt(handle, c.CURLOPT_TIMEOUT, @as(c_long, 30));
 
-    // Write callback — accumulate response body, flag truncation
+    // Write callback — accumulating mode (resp != null) fills resp.body and
+    // flags truncation; streaming mode (resp == null) emits a chunk Response
+    // per libcurl callback, splitting if libcurl hands us more than MAX_BODY
+    // in one shot.
     const WriteCtx = struct {
-        body: [*]u8,
-        len: *usize,
-        truncated: *bool,
+        resp: ?*Response,
+        req_id: u32,
     };
-    var write_ctx = WriteCtx{ .body = &resp.body, .len = &resp.body_len, .truncated = &resp.truncated };
+    var write_ctx = WriteCtx{ .resp = resp, .req_id = req.id };
 
     const write_cb = struct {
         fn cb(data: [*c]u8, size: usize, nmemb: usize, userdata: *anyopaque) callconv(.c) usize {
             const ctx: *WriteCtx = @ptrCast(@alignCast(userdata));
             const total = size * nmemb;
-            const space = MAX_BODY - ctx.len.*;
-            const to_copy = @min(total, space);
-            if (to_copy < total) ctx.truncated.* = true;
-            if (to_copy > 0) {
-                @memcpy(ctx.body[ctx.len.*..][0..to_copy], data[0..to_copy]);
-                ctx.len.* += to_copy;
+            if (ctx.resp) |r| {
+                const space = MAX_BODY - r.body_len;
+                const to_copy = @min(total, space);
+                if (to_copy < total) r.truncated = true;
+                if (to_copy > 0) {
+                    @memcpy(r.body[r.body_len..][0..to_copy], data[0..to_copy]);
+                    r.body_len += to_copy;
+                }
+            } else {
+                var off: usize = 0;
+                while (off < total) {
+                    var chunk = Response{};
+                    chunk.id = ctx.req_id;
+                    chunk.response_type = .chunk;
+                    const remaining = total - off;
+                    const to_copy = @min(remaining, MAX_BODY);
+                    @memcpy(chunk.body[0..to_copy], data[off .. off + to_copy]);
+                    chunk.body_len = to_copy;
+                    while (!response_queue.push(chunk)) {
+                        std.Thread.sleep(1_000_000); // 1ms backoff if queue full
+                    }
+                    off += to_copy;
+                }
             }
             return total; // return total to not signal error to curl
         }
@@ -296,20 +330,44 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: *Response) void {
     // Execute
     const result = c.curl_easy_perform(handle);
 
-    if (result != c.CURLE_OK) {
-        resp.response_type = .err;
-        const err_str = c.curl_easy_strerror(result);
-        if (err_str) |es| {
-            const es_slice = std.mem.span(es);
-            const elen = @min(es_slice.len, MAX_ERROR);
-            @memcpy(resp.error_msg[0..elen], es_slice[0..elen]);
-            resp.error_len = elen;
+    if (resp) |r| {
+        if (result != c.CURLE_OK) {
+            r.response_type = .err;
+            const err_str = c.curl_easy_strerror(result);
+            if (err_str) |es| {
+                const es_slice = std.mem.span(es);
+                const elen = @min(es_slice.len, MAX_ERROR);
+                @memcpy(r.error_msg[0..elen], es_slice[0..elen]);
+                r.error_len = elen;
+            }
+        } else {
+            r.response_type = .complete;
+            var status_code: c_long = 0;
+            _ = c.curl_easy_getinfo(handle, c.CURLINFO_RESPONSE_CODE, &status_code);
+            r.status = if (status_code >= 0 and status_code <= 999) @intCast(status_code) else 0;
         }
     } else {
-        resp.response_type = .complete;
-        var status_code: c_long = 0;
-        _ = c.curl_easy_getinfo(handle, c.CURLINFO_RESPONSE_CODE, &status_code);
-        resp.status = if (status_code >= 0 and status_code <= 999) @intCast(status_code) else 0;
+        // Streaming mode — push terminal Response (.complete or .err)
+        var done = Response{};
+        done.id = req.id;
+        if (result != c.CURLE_OK) {
+            done.response_type = .err;
+            const err_str = c.curl_easy_strerror(result);
+            if (err_str) |es| {
+                const es_slice = std.mem.span(es);
+                const elen = @min(es_slice.len, MAX_ERROR);
+                @memcpy(done.error_msg[0..elen], es_slice[0..elen]);
+                done.error_len = elen;
+            }
+        } else {
+            done.response_type = .complete;
+            var status_code: c_long = 0;
+            _ = c.curl_easy_getinfo(handle, c.CURLINFO_RESPONSE_CODE, &status_code);
+            done.status = if (status_code >= 0 and status_code <= 999) @intCast(status_code) else 0;
+        }
+        while (!response_queue.push(done)) {
+            std.Thread.sleep(1_000_000);
+        }
     }
 
     // Cleanup

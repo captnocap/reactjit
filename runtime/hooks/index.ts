@@ -18,6 +18,7 @@ export * as process from './process';
 export * as localstore from './localstore';
 export * as clipboard from './clipboard';
 export * as websocket from './websocket';
+export * as media from './media';
 export * as browserPage from './browser_page';
 export { useHotState, removeHotState, clearHotState, hotStateKeys } from './useHotState';
 export { useHost } from './useHost';
@@ -58,6 +59,11 @@ export type {
   StunConnectionHandle,
   PeerConnectionSpec,
   PeerConnectionHandle,
+  HttpConnectionSpec,
+  HttpConnectionHandle,
+  SseConnectionSpec,
+  SseConnectionHandle,
+  SseEvent,
 } from './useConnection';
 export {
   fuzzyScore,
@@ -99,20 +105,25 @@ export type {
   ScalarTelemetryResult,
   JsonTelemetryResult,
 } from './useTelemetry';
+export { useCRUD } from './useCRUD';
+export { useMedia } from './useMedia';
 
 export * from '../ffi';
 
 /**
  * Install ALL browser-shim globals so copy-pasted React code works:
- *   globalThis.fetch   → http
+ *   globalThis.fetch       → http
  *   globalThis.localStorage → localstore
- *   globalThis.WebSocket → websocket
+ *   globalThis.WebSocket   → websocket
+ *   globalThis.EventSource → http (streaming SSE)
  *
  * Call once at the top of your cart entry (before <App /> mounts). Leaving
  * the shims OFF by default keeps things explicit — opt in per cart.
  */
 export function installBrowserShims(): void {
-  (require('./http') as typeof import('./http')).installFetchShim();
+  const httpMod = require('./http') as typeof import('./http');
+  httpMod.installFetchShim();
+  httpMod.installEventSourceShim();
   (require('./localstore') as typeof import('./localstore')).installLocalStorageShim();
   (require('./websocket') as typeof import('./websocket')).installWebSocketShim();
 }
