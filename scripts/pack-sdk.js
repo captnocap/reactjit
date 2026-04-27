@@ -15,11 +15,16 @@
 //   sdk/dependency-registry.json        — single source of truth
 //   build.zig v8_app.zig qjs_app.zig    — build entry points
 //   deps/v8-prebuilt/libc_v8.a          — V8 static archive (~116 MB)
-//   deps/<zig-packages>/                — wgpu-native, etc.
-//   lib/                                — bundlePolicy:always .so libs (sdl3, freetype, luajit)
+//   deps/<zig-packages>/                — wgpu-native, tls.zig, zig-v8
+//   deps/sysroot/                       — pinned headers + .so for SDL3,
+//                                          freetype, luajit, curl
 //
-// Native libs are resolved via ldconfig from the host. The output is
-// Linux-x86_64-bound. Cross-platform build is a follow-up.
+// Build artifacts (.zig-cache, zig-out, .cache, node_modules, __pycache__)
+// are pruned at copy time — see EXCLUDES — so a stray local build can never
+// bloat the release tarball. This was a real problem: deps/zig-v8/.zig-cache
+// alone was leaking 121 MB of cached build outputs into the SDK.
+//
+// Output is Linux-x86_64-bound. Cross-platform build is a follow-up.
 
 const ROOT = __cwd();
 
@@ -66,10 +71,25 @@ const STAGE = '/tmp/rjit-stage-' + Date.now();
 __mkdirp(STAGE);
 log('staging at ' + STAGE);
 
+// Anything matching these globs is dropped on the floor when staging.
+// .zig-cache and zig-out are build artifacts that have repeatedly snuck in
+// (deps/zig-v8/.zig-cache alone was 121 MB of bloat). Lock them out at the
+// source so a stray local build can never bloat a release tarball.
+const EXCLUDES = [
+  '.zig-cache', 'zig-cache', 'zig-out', '.cache',
+  'node_modules', '__pycache__', '.DS_Store',
+];
+
 function copyTree(srcAbs, destAbs, label) {
   if (!__exists(srcAbs)) die('missing payload: ' + (label || srcAbs));
   __mkdirp(destAbs.replace(/\/[^/]+$/, ''));
-  shOrDie('cp', ['-a', srcAbs, destAbs], 'cp ' + (label || srcAbs));
+  // rsync -a preserves perms/symlinks like cp -a; --exclude prunes per-name.
+  // Trailing '/' on src and dest gives us "copy contents into" semantics.
+  const args = ['-a'];
+  for (const e of EXCLUDES) args.push('--exclude=' + e);
+  args.push(srcAbs + '/', destAbs + '/');
+  __mkdirp(destAbs);
+  shOrDie('rsync', args, 'rsync ' + (label || srcAbs));
 }
 
 function copyFile(srcAbs, destAbs) {
@@ -131,20 +151,12 @@ for (const [name, spec] of Object.entries(tools)) {
   }
 }
 
-// Native libraries with bundlePolicy: always.
+// Native libraries with bundlePolicy: always — only static-library /
+// zig-package kinds need explicit copying here. The dynamic-library kinds
+// (SDL3, freetype, luajit, curl) are now carried by deps/sysroot/usr/lib/
+// already, so we don't ldconfig-mirror them into a separate lib/ dir
+// anymore — that was the source of the duplicated runtime libs.
 const nativeLibs = registry.nativeLibraries || {};
-const ldcache = sh('sh', ['-c', 'ldconfig -p 2>/dev/null'], '').stdout || '';
-function findSo(systemNames) {
-  for (const name of systemNames) {
-    // ldconfig -p lines look like:
-    //   "  libSDL3.so.0 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libSDL3.so.0"
-    const re = new RegExp('lib' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.so[^\\s]*\\s*\\([^)]+\\)\\s*=>\\s*(\\S+)');
-    const m = ldcache.match(re);
-    if (m) return m[1];
-  }
-  return null;
-}
-
 const missingLibs = [];
 for (const [name, spec] of Object.entries(nativeLibs)) {
   if (spec.bundlePolicy !== 'always') continue;
@@ -164,22 +176,9 @@ for (const [name, spec] of Object.entries(nativeLibs)) {
     else copyFile(src, STAGE + '/' + spec.payloadPath);
     continue;
   }
-  if (spec.kind === 'dynamic-library') {
-    const sysNames = spec.systemNames || [name];
-    const resolved = findSo(sysNames);
-    if (!resolved) {
-      missingLibs.push(name + ' (no ldconfig hit for ' + sysNames.join('|') + ')');
-      continue;
-    }
-    log('native ' + name + ' ← ' + resolved);
-    // Resolve symlink + carry the SONAME as the install name.
-    const realPath = sh('readlink', ['-f', resolved], '').stdout.trim() || resolved;
-    const baseName = resolved.replace(/^.*\//, '');
-    copyFile(realPath, STAGE + '/lib/' + baseName);
-    continue;
-  }
-  // vendored-c-source / platform-library / etc. — no payload to ship beyond
-  // what's already in framework/ or vendor/.
+  // dynamic-library / vendored-c-source / platform-library — handled by
+  // deps/sysroot/ (dynamic) or compiled-from-source (vendored). Nothing to
+  // copy here.
 }
 
 if (missingLibs.length) {
@@ -212,7 +211,7 @@ const WRAPPER = [
   '  touch "$CACHE/.ready"',
   'fi',
   'export RJIT_HOME="$CACHE"',
-  'export LD_LIBRARY_PATH="$CACHE/lib:${LD_LIBRARY_PATH:-}"',
+  'export LD_LIBRARY_PATH="$CACHE/deps/sysroot/usr/lib:${LD_LIBRARY_PATH:-}"',
   'case "$CMD" in',
   '  init) exec "$CACHE/tools/v8cli" "$CACHE/scripts/init.js" "$@" ;;',
   '  dev)  exec "$CACHE/scripts/dev" "$@" ;;',
