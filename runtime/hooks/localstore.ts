@@ -41,6 +41,38 @@ export function keys(): string[] {
   return callHostJson<string[]>('__store_keys_json', []);
 }
 
+// ── V8 namespaced localstore surface ───────────────────────────────
+
+/** Get a value from a namespace + key pair. Returns '' when missing. */
+export function nsGet(namespace: string, key: string): string {
+  return callHost<string>('__localstoreGet', '', namespace, key);
+}
+
+/** Return true when namespace + key exists. */
+export function nsHas(namespace: string, key: string): boolean {
+  return callHost<number>('__localstoreHas', 0, namespace, key) === 1;
+}
+
+/** Set a namespaced value. */
+export function nsSet(namespace: string, key: string, value: string): void {
+  callHost<void>('__localstoreSet', undefined as any, namespace, key, value);
+}
+
+/** Delete a namespaced key. */
+export function nsDelete(namespace: string, key: string): void {
+  callHost<void>('__localstoreDelete', undefined as any, namespace, key);
+}
+
+/** Clear one namespace, or all namespaces when empty. */
+export function nsClear(namespace: string = ''): void {
+  callHost<void>('__localstoreClear', undefined as any, namespace);
+}
+
+/** List keys inside one namespace (V8-only host). */
+export function nsKeys(namespace: string): string[] {
+  return callHostJson<string[]>('__localstoreKeysJson', [], namespace);
+}
+
 // ── Typed helpers ──────────────────────────────────────────────────
 
 /** Get a value as JSON-decoded T. Returns fallback on miss or parse failure. */

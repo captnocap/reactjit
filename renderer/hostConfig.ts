@@ -900,10 +900,27 @@ export const hostConfig: HostConfig<
     const handlersChanged = !handlersEqual(oldH, newH);
     const propsDiff = diffCleanProps(oldClean, newClean);
 
-    if (!propsDiff && !handlersChanged) return null;
+    // Closure-identity drift: same handler names but at least one fn replaced.
+    // Must still trigger commitUpdate so handlerRegistry picks up the new
+    // closure — otherwise Pressables freeze at first-commit handlers and any
+    // onPress that closes over state runs the stale capture forever.
+    // We return a no-emit sentinel so the bridge stays quiet (the original
+    // perf optimization is preserved).
+    let closuresChanged = false;
+    if (!handlersChanged) {
+      for (const k of Object.keys(newH)) {
+        if (oldH[k] !== newH[k]) { closuresChanged = true; break; }
+      }
+    }
+
+    if (!propsDiff && !handlersChanged && !closuresChanged) return null;
 
     if (!propsDiff && handlersChanged) {
       return { __handlersOnly: true };
+    }
+
+    if (!propsDiff && closuresChanged) {
+      return { __closuresOnly: true };
     }
 
     return propsDiff; // { diff, removeKeys, removeStyleKeys }
@@ -935,7 +952,7 @@ export const hostConfig: HostConfig<
     instance.props = clean;
     instance.renderCount = (instance.renderCount || 0) + 1;
 
-    if (updatePayload && !(updatePayload as any).__handlersOnly) {
+    if (updatePayload && !(updatePayload as any).__handlersOnly && !(updatePayload as any).__closuresOnly) {
       const handlerNames = Object.keys(handlers);
       const hasHandlers = handlerNames.length > 0;
       const payload = updatePayload as { diff: Record<string, any>; removeKeys: string[]; removeStyleKeys: string[] };

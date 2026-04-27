@@ -16,7 +16,19 @@
 // undefined forever. Deferring to JSX execution time (after react finishes
 // its body) resolves to the real React.
 
+function resolveIntrinsic(type: any): any {
+  if (type === 'box') return require('./primitives').Box;
+  if (type === 'text') return require('./primitives').Text;
+  if (type === 'video') return require('./primitives').Video;
+  if (type === 'canvas') return require('./primitives').Canvas;
+  if (type === 'graph') return require('./primitives').Graph;
+  if (type === 'router') return require('./router').Router;
+  if (type === 'route') return require('./router').Route;
+  return type;
+}
+
 export const __jsx = function __jsx(...a: any[]) {
+  a[0] = resolveIntrinsic(a[0]);
   return (require('react') as any).createElement(...a);
 };
 

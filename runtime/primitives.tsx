@@ -225,15 +225,6 @@ PhysicsBase.Collider = ({ shape, radius, density, friction, restitution, ...rest
   }, rest.children);
 export const Physics: any = PhysicsBase;
 
-// ── Generated bulk-rendering primitives ─────────────────────
-//
-// These are framework primitives that paint natively in Zig from a single
-// host node. Edit the source-of-truth .tslx files in framework/primitives/
-// and run `node scripts/tslx_compile.mjs --all` to regenerate. Do not edit
-// the wrappers under runtime/primitives_gen/ by hand.
-export { CodeGutter } from './primitives_gen/CodeGutter';
-export { Minimap } from './primitives_gen/Minimap';
-
 // ── Canvas — pan/zoomable node surface ──────────────────────
 
 const CanvasBase: any = (props: any) => h('Canvas', props, props.children);

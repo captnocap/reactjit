@@ -46,13 +46,18 @@ import {
   Box, Text, Image, Pressable, ScrollView, TextInput,
   Canvas, Graph, Native,
 } from './primitives';
+import { Icon } from './icons/Icon';
 
 // The renderer's actual host elements. Row/Col are JSX sugar over Box
 // with flexDirection set — they're not primitives and have no place here.
 // Classifiers express direction explicitly: type: 'Box', style: { flexDirection: 'row' }.
+//
+// Icon is a wrapper over Graph that takes `icon` (path data) / `name` /
+// `size` / `color` / `strokeWidth` as props. It earns a slot here so
+// classifiers can theme `color` via `'theme:NAME'` resolution.
 const PRIMITIVES: Record<string, any> = {
   Box, Text, Image, Pressable, ScrollView, TextInput,
-  Canvas, Graph, Native,
+  Canvas, Graph, Native, Icon,
 };
 
 const STYLE_KEYS = [
