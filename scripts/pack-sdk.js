@@ -151,6 +151,25 @@ for (const [name, spec] of Object.entries(tools)) {
   }
 }
 
+// Zig package cache — overlay the host's $ZIG_GLOBAL_CACHE_DIR/p/ on top
+// of whatever was already staged from tools/zig/cache/p/. The repo's
+// pinned cache gets pruned over time (libwgpu_native.a went missing) and
+// the only authoritative source is the dev machine's actual fetch cache.
+// Without this, off-tree builds on Whonix fail with "libwgpu_native.a:
+// file not found" because zluajit + wgpu-native-prebuilt aren't there.
+const HOST_ZIG_CACHE = (__env('HOME') || '/root') + '/.cache/zig/p';
+if (__exists(HOST_ZIG_CACHE)) {
+  log('zig pkg cache ← ' + HOST_ZIG_CACHE);
+  __mkdirp(STAGE + '/tools/zig/cache/p');
+  shOrDie('rsync', [
+    '-a',
+    '--exclude=.zig-cache', '--exclude=zig-out',
+    HOST_ZIG_CACHE + '/', STAGE + '/tools/zig/cache/p/',
+  ], 'rsync zig pkg cache');
+} else {
+  __writeStderr('[pack-sdk] WARN: ' + HOST_ZIG_CACHE + ' missing — packed SDK may fail to find zluajit/wgpu prebuilt archives offline.\n');
+}
+
 // Native libraries with bundlePolicy: always — only static-library /
 // zig-package kinds need explicit copying here. The dynamic-library kinds
 // (SDL3, freetype, luajit, curl) are now carried by deps/sysroot/usr/lib/
