@@ -69,9 +69,71 @@
       ],
       "format": "esm"
     },
-    "runtime/primitives.tsx": {
-      "bytes": 11966,
+    "runtime/primitives_gen/CodeGutter.tsx": {
+      "bytes": 543,
       "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "vendor/react/index.js",
+          "kind": "require-call",
+          "original": "react"
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/primitives_gen/Minimap.tsx": {
+      "bytes": 521,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "vendor/react/index.js",
+          "kind": "require-call",
+          "original": "react"
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/primitives.tsx": {
+      "bytes": 12472,
+      "imports": [
+        {
+          "path": "runtime/primitives_gen/CodeGutter.tsx",
+          "kind": "import-statement",
+          "original": "./primitives_gen/CodeGutter"
+        },
+        {
+          "path": "runtime/primitives_gen/Minimap.tsx",
+          "kind": "import-statement",
+          "original": "./primitives_gen/Minimap"
+        },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
           "kind": "import-statement",
@@ -302,60 +364,8 @@
       ],
       "format": "esm"
     },
-    "runtime/icons/registry.ts": {
-      "bytes": 6186,
-      "imports": [
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
-    "runtime/icons/Icon.tsx": {
-      "bytes": 3877,
-      "imports": [
-        {
-          "path": "runtime/primitives.tsx",
-          "kind": "import-statement",
-          "original": "../primitives"
-        },
-        {
-          "path": "runtime/icons/registry.ts",
-          "kind": "import-statement",
-          "original": "./registry"
-        },
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
     "runtime/classifier.tsx": {
-      "bytes": 9480,
+      "bytes": 9227,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -371,11 +381,6 @@
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
-        },
-        {
-          "path": "runtime/icons/Icon.tsx",
-          "kind": "import-statement",
-          "original": "./icons/Icon"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -448,7 +453,7 @@
       "format": "esm"
     },
     "renderer/hostConfig.ts": {
-      "bytes": 39884,
+      "bytes": 39127,
       "imports": [
         {
           "path": "renderer/errorReporter.ts",
@@ -509,8 +514,8 @@
       ],
       "format": "esm"
     },
-    "cart/hello.tsx": {
-      "bytes": 2470,
+    "cart/nested_grid.tsx": {
+      "bytes": 19567,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -658,7 +663,7 @@
           "original": "./effectContext"
         },
         {
-          "path": "cart/hello.tsx",
+          "path": "cart/nested_grid.tsx",
           "kind": "import-statement",
           "original": "@cart-entry"
         },
@@ -692,7 +697,7 @@
     }
   },
   "outputs": {
-    "bundle-hello.js": {
+    "bundle-nested_grid.js": {
       "imports": [],
       "exports": [],
       "entryPoint": "runtime/index.tsx",
@@ -709,14 +714,20 @@
         "framework/ambient.ts": {
           "bytesInOutput": 765
         },
+        "runtime/primitives_gen/CodeGutter.tsx": {
+          "bytesInOutput": 270
+        },
+        "runtime/primitives_gen/Minimap.tsx": {
+          "bytesInOutput": 255
+        },
         "runtime/primitives.tsx": {
-          "bytesInOutput": 8578
+          "bytesInOutput": 8687
         },
         "runtime/router.tsx": {
           "bytesInOutput": 5974
         },
         "runtime/jsx_shim.ts": {
-          "bytesInOutput": 920
+          "bytesInOutput": 993
         },
         "vendor/scheduler/cjs/scheduler.development.js": {
           "bytesInOutput": 17858
@@ -731,10 +742,10 @@
           "bytesInOutput": 352
         },
         "runtime/index.tsx": {
-          "bytesInOutput": 13487
+          "bytesInOutput": 13498
         },
         "renderer/hostConfig.ts": {
-          "bytesInOutput": 27783
+          "bytesInOutput": 27406
         },
         "renderer/errorReporter.ts": {
           "bytesInOutput": 444
@@ -754,11 +765,11 @@
         "runtime/effectContext.ts": {
           "bytesInOutput": 6389
         },
-        "cart/hello.tsx": {
-          "bytesInOutput": 2787
+        "cart/nested_grid.tsx": {
+          "bytesInOutput": 19433
         }
       },
-      "bytes": 898182
+      "bytes": 915260
     }
   }
 }

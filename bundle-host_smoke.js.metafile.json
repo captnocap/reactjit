@@ -1,5 +1,63 @@
 {
   "inputs": {
+    "framework/ambient_primitives.ts": {
+      "bytes": 689,
+      "imports": [
+        {
+          "path": "runtime/primitives.tsx",
+          "kind": "import-statement",
+          "original": "../runtime/primitives"
+        }
+      ],
+      "format": "esm"
+    },
+    "vendor/react/cjs/react.development.js": {
+      "bytes": 87593,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "vendor/react/index.js": {
+      "bytes": 190,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "vendor/react/cjs/react.development.js",
+          "kind": "require-call",
+          "original": "./cjs/react.development.js"
+        }
+      ],
+      "format": "cjs"
+    },
     "framework/ambient.ts": {
       "bytes": 4881,
       "imports": [
@@ -114,67 +172,55 @@
       ],
       "format": "esm"
     },
-    "framework/ambient_primitives.ts": {
-      "bytes": 689,
+    "runtime/router.tsx": {
+      "bytes": 9332,
       "imports": [
         {
-          "path": "runtime/primitives.tsx",
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
           "kind": "import-statement",
-          "original": "../runtime/primitives"
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "vendor/react/index.js",
+          "kind": "require-call",
+          "original": "react"
         }
       ],
       "format": "esm"
     },
-    "vendor/react/cjs/react.development.js": {
-      "bytes": 87593,
-      "imports": [
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "cjs"
-    },
-    "vendor/react/index.js": {
-      "bytes": 190,
-      "imports": [
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "vendor/react/cjs/react.development.js",
-          "kind": "require-call",
-          "original": "./cjs/react.development.js"
-        }
-      ],
-      "format": "cjs"
-    },
     "runtime/jsx_shim.ts": {
-      "bytes": 1451,
+      "bytes": 1782,
       "imports": [
+        {
+          "path": "runtime/primitives.tsx",
+          "kind": "require-call",
+          "original": "./primitives"
+        },
+        {
+          "path": "runtime/primitives.tsx",
+          "kind": "require-call",
+          "original": "./primitives"
+        },
+        {
+          "path": "runtime/router.tsx",
+          "kind": "require-call",
+          "original": "./router"
+        },
+        {
+          "path": "runtime/router.tsx",
+          "kind": "require-call",
+          "original": "./router"
+        },
         {
           "path": "vendor/react/index.js",
           "kind": "require-call",
@@ -474,32 +520,6 @@
       ],
       "format": "esm"
     },
-    "runtime/hooks/websocket.ts": {
-      "bytes": 2128,
-      "imports": [
-        {
-          "path": "runtime/ffi.ts",
-          "kind": "import-statement",
-          "original": "../ffi"
-        },
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
     "runtime/hooks/useHost.ts": {
       "bytes": 12332,
       "imports": [
@@ -562,8 +582,39 @@
       ],
       "format": "esm"
     },
+    "runtime/hooks/useTelemetry.ts": {
+      "bytes": 7156,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/ffi.ts",
+          "kind": "import-statement",
+          "original": "../ffi"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
     "cart/host_smoke.tsx": {
-      "bytes": 1909,
+      "bytes": 2041,
       "imports": [
         {
           "path": "react",
@@ -579,6 +630,11 @@
           "path": "runtime/hooks/useConnection.ts",
           "kind": "import-statement",
           "original": "../runtime/hooks/useConnection"
+        },
+        {
+          "path": "runtime/hooks/useTelemetry.ts",
+          "kind": "import-statement",
+          "original": "../runtime/hooks/useTelemetry"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -703,7 +759,7 @@
       "format": "cjs"
     },
     "runtime/index.tsx": {
-      "bytes": 19261,
+      "bytes": 19472,
       "imports": [
         {
           "path": "renderer/hostConfig.ts",
@@ -714,11 +770,6 @@
           "path": "runtime/effectContext.ts",
           "kind": "import-statement",
           "original": "./effectContext"
-        },
-        {
-          "path": "runtime/hooks/websocket.ts",
-          "kind": "import-statement",
-          "original": "./hooks/websocket"
         },
         {
           "path": "cart/host_smoke.tsx",
@@ -760,9 +811,6 @@
       "exports": [],
       "entryPoint": "runtime/index.tsx",
       "inputs": {
-        "framework/ambient.ts": {
-          "bytesInOutput": 765
-        },
         "framework/ambient_primitives.ts": {
           "bytesInOutput": 94
         },
@@ -772,8 +820,23 @@
         "vendor/react/index.js": {
           "bytesInOutput": 319
         },
+        "framework/ambient.ts": {
+          "bytesInOutput": 765
+        },
+        "runtime/primitives_gen/CodeGutter.tsx": {
+          "bytesInOutput": 270
+        },
+        "runtime/primitives_gen/Minimap.tsx": {
+          "bytesInOutput": 255
+        },
+        "runtime/primitives.tsx": {
+          "bytesInOutput": 8687
+        },
+        "runtime/router.tsx": {
+          "bytesInOutput": 5974
+        },
         "runtime/jsx_shim.ts": {
-          "bytesInOutput": 184
+          "bytesInOutput": 636
         },
         "vendor/scheduler/cjs/scheduler.development.js": {
           "bytesInOutput": 17858
@@ -788,10 +851,10 @@
           "bytesInOutput": 352
         },
         "runtime/index.tsx": {
-          "bytesInOutput": 13494
+          "bytesInOutput": 13487
         },
         "renderer/hostConfig.ts": {
-          "bytesInOutput": 27402
+          "bytesInOutput": 27406
         },
         "renderer/errorReporter.ts": {
           "bytesInOutput": 444
@@ -809,25 +872,25 @@
           "bytesInOutput": 201
         },
         "runtime/effectContext.ts": {
-          "bytesInOutput": 6370
-        },
-        "runtime/hooks/websocket.ts": {
-          "bytesInOutput": 1189
-        },
-        "runtime/ffi.ts": {
-          "bytesInOutput": 934
+          "bytesInOutput": 6389
         },
         "cart/host_smoke.tsx": {
-          "bytesInOutput": 1162
+          "bytesInOutput": 1259
         },
         "runtime/hooks/useHost.ts": {
-          "bytesInOutput": 6809
+          "bytesInOutput": 6807
+        },
+        "runtime/ffi.ts": {
+          "bytesInOutput": 937
         },
         "runtime/hooks/useConnection.ts": {
           "bytesInOutput": 7166
+        },
+        "runtime/hooks/useTelemetry.ts": {
+          "bytesInOutput": 2362
         }
       },
-      "bytes": 896909
+      "bytes": 914204
     }
   }
 }

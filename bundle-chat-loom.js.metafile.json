@@ -509,8 +509,102 @@
       ],
       "format": "esm"
     },
-    "cart/hello.tsx": {
-      "bytes": 2470,
+    "runtime/ffi.ts": {
+      "bytes": 3918,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/hooks/http.ts": {
+      "bytes": 4125,
+      "imports": [
+        {
+          "path": "runtime/ffi.ts",
+          "kind": "import-statement",
+          "original": "../ffi"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/intent/parser.ts": {
+      "bytes": 5558,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "runtime/intent/render.tsx": {
+      "bytes": 2949,
+      "imports": [
+        {
+          "path": "./parser",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/chat-loom.tsx": {
+      "bytes": 5672,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -518,9 +612,19 @@
           "original": "react"
         },
         {
-          "path": "runtime/primitives.tsx",
+          "path": "runtime/hooks/http.ts",
           "kind": "import-statement",
-          "original": "../runtime/primitives"
+          "original": "../runtime/hooks/http"
+        },
+        {
+          "path": "runtime/intent/parser.ts",
+          "kind": "import-statement",
+          "original": "../runtime/intent/parser"
+        },
+        {
+          "path": "runtime/intent/render.tsx",
+          "kind": "import-statement",
+          "original": "../runtime/intent/render"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -658,7 +762,7 @@
           "original": "./effectContext"
         },
         {
-          "path": "cart/hello.tsx",
+          "path": "cart/chat-loom.tsx",
           "kind": "import-statement",
           "original": "@cart-entry"
         },
@@ -692,7 +796,7 @@
     }
   },
   "outputs": {
-    "bundle-hello.js": {
+    "bundle-chat-loom.js": {
       "imports": [],
       "exports": [],
       "entryPoint": "runtime/index.tsx",
@@ -701,7 +805,7 @@
           "bytesInOutput": 94
         },
         "vendor/react/cjs/react.development.js": {
-          "bytesInOutput": 81139
+          "bytesInOutput": 81141
         },
         "vendor/react/index.js": {
           "bytesInOutput": 319
@@ -725,7 +829,7 @@
           "bytesInOutput": 331
         },
         "vendor/react-reconciler/cjs/react-reconciler.development.js": {
-          "bytesInOutput": 692361
+          "bytesInOutput": 692392
         },
         "vendor/react-reconciler/index.js": {
           "bytesInOutput": 352
@@ -754,11 +858,23 @@
         "runtime/effectContext.ts": {
           "bytesInOutput": 6389
         },
-        "cart/hello.tsx": {
-          "bytesInOutput": 2787
+        "cart/chat-loom.tsx": {
+          "bytesInOutput": 5527
+        },
+        "runtime/hooks/http.ts": {
+          "bytesInOutput": 562
+        },
+        "runtime/ffi.ts": {
+          "bytesInOutput": 937
+        },
+        "runtime/intent/parser.ts": {
+          "bytesInOutput": 4407
+        },
+        "runtime/intent/render.tsx": {
+          "bytesInOutput": 2902
         }
       },
-      "bytes": 898182
+      "bytes": 909932
     }
   }
 }

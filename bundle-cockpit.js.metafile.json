@@ -302,60 +302,8 @@
       ],
       "format": "esm"
     },
-    "runtime/icons/registry.ts": {
-      "bytes": 6186,
-      "imports": [
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
-    "runtime/icons/Icon.tsx": {
-      "bytes": 3877,
-      "imports": [
-        {
-          "path": "runtime/primitives.tsx",
-          "kind": "import-statement",
-          "original": "../primitives"
-        },
-        {
-          "path": "runtime/icons/registry.ts",
-          "kind": "import-statement",
-          "original": "./registry"
-        },
-        {
-          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
-          "kind": "import-statement",
-          "external": true
-        },
-        {
-          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
-          "kind": "import-statement",
-          "external": true
-        }
-      ],
-      "format": "esm"
-    },
     "runtime/classifier.tsx": {
-      "bytes": 9480,
+      "bytes": 9227,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -371,11 +319,6 @@
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
           "original": "./primitives"
-        },
-        {
-          "path": "runtime/icons/Icon.tsx",
-          "kind": "import-statement",
-          "original": "./icons/Icon"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -509,8 +452,60 @@
       ],
       "format": "esm"
     },
-    "cart/hello.tsx": {
-      "bytes": 2470,
+    "cart/cockpit/style_cls.tsx": {
+      "bytes": 31661,
+      "imports": [
+        {
+          "path": "runtime/classifier.tsx",
+          "kind": "import-statement",
+          "original": "../../runtime/classifier"
+        },
+        {
+          "path": "runtime/classifier.tsx",
+          "kind": "import-statement",
+          "original": "../../runtime/classifier"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/themes.ts": {
+      "bytes": 5199,
+      "imports": [
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/ChatCard.tsx": {
+      "bytes": 24432,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -520,7 +515,166 @@
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../runtime/primitives"
+          "original": "../../runtime/primitives"
+        },
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/ChatFrame.tsx": {
+      "bytes": 4806,
+      "imports": [
+        {
+          "path": "cart/cockpit/ChatCard.tsx",
+          "kind": "import-statement",
+          "original": "./ChatCard"
+        },
+        {
+          "path": "runtime/primitives.tsx",
+          "kind": "import-statement",
+          "original": "../../runtime/primitives"
+        },
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/RaidFrame.tsx": {
+      "bytes": 2017,
+      "imports": [
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/QuestLog.tsx": {
+      "bytes": 2958,
+      "imports": [
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/cockpit/index.tsx": {
+      "bytes": 57059,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/primitives.tsx",
+          "kind": "import-statement",
+          "original": "../../runtime/primitives"
+        },
+        {
+          "path": "runtime/theme.tsx",
+          "kind": "import-statement",
+          "original": "../../runtime/theme"
+        },
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "cart/cockpit/style_cls.tsx",
+          "kind": "import-statement",
+          "original": "./style_cls"
+        },
+        {
+          "path": "cart/cockpit/themes.ts",
+          "kind": "import-statement",
+          "original": "./themes"
+        },
+        {
+          "path": "cart/cockpit/ChatFrame.tsx",
+          "kind": "import-statement",
+          "original": "./ChatFrame"
+        },
+        {
+          "path": "cart/cockpit/RaidFrame.tsx",
+          "kind": "import-statement",
+          "original": "./RaidFrame"
+        },
+        {
+          "path": "cart/cockpit/QuestLog.tsx",
+          "kind": "import-statement",
+          "original": "./QuestLog"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -658,7 +812,7 @@
           "original": "./effectContext"
         },
         {
-          "path": "cart/hello.tsx",
+          "path": "cart/cockpit/index.tsx",
           "kind": "import-statement",
           "original": "@cart-entry"
         },
@@ -692,7 +846,7 @@
     }
   },
   "outputs": {
-    "bundle-hello.js": {
+    "bundle-cockpit.js": {
       "imports": [],
       "exports": [],
       "entryPoint": "runtime/index.tsx",
@@ -701,7 +855,7 @@
           "bytesInOutput": 94
         },
         "vendor/react/cjs/react.development.js": {
-          "bytesInOutput": 81139
+          "bytesInOutput": 81141
         },
         "vendor/react/index.js": {
           "bytesInOutput": 319
@@ -725,7 +879,7 @@
           "bytesInOutput": 331
         },
         "vendor/react-reconciler/cjs/react-reconciler.development.js": {
-          "bytesInOutput": 692361
+          "bytesInOutput": 692395
         },
         "vendor/react-reconciler/index.js": {
           "bytesInOutput": 352
@@ -748,17 +902,44 @@
         "runtime/tw.ts": {
           "bytesInOutput": 35055
         },
+        "runtime/classifier.tsx": {
+          "bytesInOutput": 4895
+        },
+        "runtime/theme.tsx": {
+          "bytesInOutput": 2773
+        },
+        "runtime/theme_presets.ts": {
+          "bytesInOutput": 13208
+        },
         "renderer/subscriptionManager.ts": {
           "bytesInOutput": 201
         },
         "runtime/effectContext.ts": {
           "bytesInOutput": 6389
         },
-        "cart/hello.tsx": {
-          "bytesInOutput": 2787
+        "cart/cockpit/index.tsx": {
+          "bytesInOutput": 51621
+        },
+        "cart/cockpit/style_cls.tsx": {
+          "bytesInOutput": 33867
+        },
+        "cart/cockpit/themes.ts": {
+          "bytesInOutput": 5583
+        },
+        "cart/cockpit/ChatFrame.tsx": {
+          "bytesInOutput": 5105
+        },
+        "cart/cockpit/ChatCard.tsx": {
+          "bytesInOutput": 24188
+        },
+        "cart/cockpit/RaidFrame.tsx": {
+          "bytesInOutput": 2191
+        },
+        "cart/cockpit/QuestLog.tsx": {
+          "bytesInOutput": 3092
         }
       },
-      "bytes": 898182
+      "bytes": 1042353
     }
   }
 }

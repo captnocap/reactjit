@@ -509,18 +509,13 @@
       ],
       "format": "esm"
     },
-    "cart/hello.tsx": {
-      "bytes": 2470,
+    "cart/context_menu_demo.tsx": {
+      "bytes": 3134,
       "imports": [
         {
           "path": "vendor/react/index.js",
           "kind": "import-statement",
           "original": "react"
-        },
-        {
-          "path": "runtime/primitives.tsx",
-          "kind": "import-statement",
-          "original": "../runtime/primitives"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -658,7 +653,7 @@
           "original": "./effectContext"
         },
         {
-          "path": "cart/hello.tsx",
+          "path": "cart/context_menu_demo.tsx",
           "kind": "import-statement",
           "original": "@cart-entry"
         },
@@ -692,7 +687,7 @@
     }
   },
   "outputs": {
-    "bundle-hello.js": {
+    "bundle-context_menu_demo.js": {
       "imports": [],
       "exports": [],
       "entryPoint": "runtime/index.tsx",
@@ -754,11 +749,11 @@
         "runtime/effectContext.ts": {
           "bytesInOutput": 6389
         },
-        "cart/hello.tsx": {
-          "bytesInOutput": 2787
+        "cart/context_menu_demo.tsx": {
+          "bytesInOutput": 3354
         }
       },
-      "bytes": 898182
+      "bytes": 898761
     }
   }
 }
