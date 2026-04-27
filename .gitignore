@@ -244,6 +244,9 @@ deps/tinyemu
 deps/llama.cpp.zig
 love2d/deps/love
 
+# Vendored Zig toolchain (~338MB; downloaded, not source)
+tools/zig/
+
 # V8 prebuilt library (116MB, fetched by scripts/fetch-v8-prebuilt.sh)
 deps/v8-prebuilt/*.a
 
