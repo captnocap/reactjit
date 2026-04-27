@@ -179,6 +179,65 @@ export interface SseConnectionSpec extends SpecBase {
   onError?: (msg: string) => void;
 }
 
+/**
+ * Source RCON — Valve's TCP admin protocol for GoldSrc / Source / Source 2 /
+ * Minecraft dedicated servers. The full binary handshake (auth packet, AUTH_RESPONSE,
+ * EXEC_COMMAND framing, multi-packet response merging via marker echo) happens
+ * in `framework/net/rcon.zig`. JS only sees the textual command output.
+ */
+export interface RconConnectionSpec extends SpecBase {
+  kind: 'rcon';
+  host: string;
+  port: number;
+  password: string;
+  onAuth?: (ok: boolean) => void;
+  onResponse?: (info: { requestId: number; body: string }) => void;
+  onClose?: () => void;
+  onError?: (msg: string) => void;
+}
+
+export interface A2sInfo {
+  format: 'source' | 'goldsrc';
+  protocol: number;
+  name: string;
+  map: string;
+  folder: string;
+  game: string;
+  steamAppId?: number;
+  players: number;
+  maxPlayers: number;
+  bots?: number;
+  serverType?: number;
+  environment?: number;
+  visibility?: number;
+  vac?: number;
+  version?: string;
+  address?: string;
+}
+
+export interface A2sPlayer {
+  index: number;
+  name: string;
+  score: number;
+  duration: number;
+}
+
+/**
+ * A2S Source Query — UDP server-browser protocol. Same across all Valve
+ * engines. Binary parsing (challenge handshake, IEEE 754 float decoding,
+ * cstring framing) happens in `framework/net/a2s.zig`; JS gets parsed
+ * objects via JSON.
+ */
+export interface A2sConnectionSpec extends SpecBase {
+  kind: 'a2s';
+  host: string;
+  port: number;
+  onInfo?: (info: A2sInfo) => void;
+  onPlayers?: (players: A2sPlayer[]) => void;
+  onRules?: (rules: Record<string, string>) => void;
+  onError?: (msg: string) => void;
+}
+
 export type ConnectionSpec =
   | WsConnectionSpec
   | TcpConnectionSpec
@@ -189,7 +248,9 @@ export type ConnectionSpec =
   | StunConnectionSpec
   | PeerConnectionSpec
   | HttpConnectionSpec
-  | SseConnectionSpec;
+  | SseConnectionSpec
+  | RconConnectionSpec
+  | A2sConnectionSpec;
 
 // ── Handle types (discriminated by kind) ───────────────────────────
 
@@ -256,6 +317,25 @@ export interface SseConnectionHandle extends HandleBase {
   kind: 'sse';
 }
 
+export interface RconConnectionHandle extends HandleBase {
+  kind: 'rcon';
+  /** True after AUTH_RESPONSE arrives with id != -1. */
+  authenticated: boolean;
+  /**
+   * Send a command. Returns the request id that will appear on the matching
+   * `onResponse({requestId, body})`. Calling before authentication completes
+   * fires `onError`; the command is dropped.
+   */
+  command(cmd: string): number;
+}
+
+export interface A2sConnectionHandle extends HandleBase {
+  kind: 'a2s';
+  queryInfo(): void;
+  queryPlayers(): void;
+  queryRules(): void;
+}
+
 export type ConnectionHandle =
   | WsConnectionHandle
   | TcpConnectionHandle
@@ -266,7 +346,9 @@ export type ConnectionHandle =
   | StunConnectionHandle
   | PeerConnectionHandle
   | HttpConnectionHandle
-  | SseConnectionHandle;
+  | SseConnectionHandle
+  | RconConnectionHandle
+  | A2sConnectionHandle;
 
 // ── ID allocator ───────────────────────────────────────────────────
 
@@ -288,6 +370,8 @@ export function useConnection(spec: StunConnectionSpec): StunConnectionHandle;
 export function useConnection(spec: PeerConnectionSpec): PeerConnectionHandle;
 export function useConnection(spec: HttpConnectionSpec): HttpConnectionHandle;
 export function useConnection(spec: SseConnectionSpec): SseConnectionHandle;
+export function useConnection(spec: RconConnectionSpec): RconConnectionHandle;
+export function useConnection(spec: A2sConnectionSpec): A2sConnectionHandle;
 export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   const idRef = useRef<number>(0);
   if (idRef.current === 0) idRef.current = nextId();
@@ -300,6 +384,9 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   const torInfoRef = useRef<typeof torInfo>(undefined);
   // http / sse only — populated on .complete from http-stream-end.
   const [httpStatus, setHttpStatus] = useState<number>(0);
+  // rcon only — flips on AUTH_RESPONSE.
+  const [rconAuthed, setRconAuthed] = useState<boolean>(false);
+  const rconReqSeq = useRef<number>(1);
 
   const specRef = useRef(spec);
   specRef.current = spec;
@@ -502,6 +589,73 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
           setState('closed');
         }
       }));
+    } else if (spec.kind === 'rcon') {
+      callHost<void>('__rcon_open', undefined as any, id, spec.host, spec.port, spec.password);
+      // The Zig side already framed and sent the AUTH packet. We optimistically
+      // mark connecting → 'open' (TCP up, awaiting AUTH_RESPONSE); 'authed'
+      // is tracked separately on the handle.
+      setState('open');
+      unsubs.push(subscribe(`rcon:auth:${id}`, (raw: any) => {
+        if (cancelled) return;
+        let obj: any = {};
+        try { obj = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch {}
+        const ok = !!obj.ok;
+        setRconAuthed(ok);
+        (specRef.current as RconConnectionSpec).onAuth?.(ok);
+        if (!ok) setState('error');
+      }));
+      unsubs.push(subscribe(`rcon:response:${id}`, (raw: any) => {
+        if (cancelled) return;
+        let obj: any = {};
+        try { obj = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch {}
+        (specRef.current as RconConnectionSpec).onResponse?.({
+          requestId: obj.requestId ?? 0,
+          body: obj.body ?? '',
+        });
+      }));
+      unsubs.push(subscribe(`rcon:close:${id}`, () => {
+        if (cancelled) return;
+        (specRef.current as RconConnectionSpec).onClose?.();
+        setState('closed');
+      }));
+      unsubs.push(subscribe(`rcon:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        (specRef.current as RconConnectionSpec).onError?.(m);
+        setError(m);
+        setState('error');
+      }));
+    } else if (spec.kind === 'a2s') {
+      callHost<void>('__a2s_open', undefined as any, id, spec.host, spec.port);
+      setState('open');
+      unsubs.push(subscribe(`a2s:info:${id}`, (raw: any) => {
+        if (cancelled) return;
+        try {
+          const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          (specRef.current as A2sConnectionSpec).onInfo?.(info);
+        } catch {}
+      }));
+      unsubs.push(subscribe(`a2s:players:${id}`, (raw: any) => {
+        if (cancelled) return;
+        try {
+          const players = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          (specRef.current as A2sConnectionSpec).onPlayers?.(players);
+        } catch {}
+      }));
+      unsubs.push(subscribe(`a2s:rules:${id}`, (raw: any) => {
+        if (cancelled) return;
+        try {
+          const rules = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          (specRef.current as A2sConnectionSpec).onRules?.(rules);
+        } catch {}
+      }));
+      unsubs.push(subscribe(`a2s:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        (specRef.current as A2sConnectionSpec).onError?.(m);
+        setError(m);
+        setState('error');
+      }));
     } else {
       // wireguard / stun / peer: no Zig backend yet. Honest error rather
       // than a silent open. When the binding lands, replace with real wiring.
@@ -518,6 +672,8 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
       else if (spec.kind === 'tor') callHost<void>('__tor_stop', undefined as any, id);
       else if (spec.kind === 'socks5') callHost<void>('__socks5_unregister', undefined as any, id);
       else if (spec.kind === 'http' || spec.kind === 'sse') callHost<void>('__http_stream_close', undefined as any, `c${id}`);
+      else if (spec.kind === 'rcon') callHost<void>('__rcon_close', undefined as any, id);
+      else if (spec.kind === 'a2s') callHost<void>('__a2s_close', undefined as any, id);
       setState('closed');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -537,6 +693,8 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
     else if (spec.kind === 'tcp') callHost<void>('__tcp_close', undefined as any, id);
     else if (spec.kind === 'udp') callHost<void>('__udp_close', undefined as any, id);
     else if (spec.kind === 'http' || spec.kind === 'sse') callHost<void>('__http_stream_close', undefined as any, `c${id}`);
+    else if (spec.kind === 'rcon') callHost<void>('__rcon_close', undefined as any, id);
+    else if (spec.kind === 'a2s') callHost<void>('__a2s_close', undefined as any, id);
   };
 
   if (spec.kind === 'ws') {
@@ -583,6 +741,25 @@ export function useConnection(spec: ConnectionSpec): ConnectionHandle {
   }
   if (spec.kind === 'sse') {
     return { kind: 'sse', id, state, error, close: closeFn };
+  }
+  if (spec.kind === 'rcon') {
+    return {
+      kind: 'rcon', id, state, error, close: closeFn,
+      authenticated: rconAuthed,
+      command: (cmd: string) => {
+        const reqId = rconReqSeq.current++;
+        callHost<void>('__rcon_command', undefined as any, id, reqId, cmd);
+        return reqId;
+      },
+    };
+  }
+  if (spec.kind === 'a2s') {
+    return {
+      kind: 'a2s', id, state, error, close: closeFn,
+      queryInfo: () => callHost<void>('__a2s_query', undefined as any, id, 'info'),
+      queryPlayers: () => callHost<void>('__a2s_query', undefined as any, id, 'players'),
+      queryRules: () => callHost<void>('__a2s_query', undefined as any, id, 'rules'),
+    };
   }
   // peer
   return {

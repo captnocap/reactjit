@@ -125,6 +125,14 @@ const v8_bindings_net = if (build_options.has_net) @import("framework/v8_binding
     pub fn registerNet(_: anytype) void {}
     pub fn tickDrain() void {}
 };
+// Source RCON + A2S Source Query — gated alongside has_net since they sit on
+// top of net/tcp.zig and net/udp.zig and ride the useConnection trichotomy.
+// Any cart shipping `useConnection({kind:'rcon'|'a2s'})` already trips
+// has-net via the metafile gate, so no separate ingredient flag is needed.
+const v8_bindings_gameserver = if (build_options.has_net) @import("framework/v8_bindings_gameserver.zig") else struct {
+    pub fn registerGameServer(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
 const HAS_TOR = if (@hasDecl(build_options, "has_tor")) build_options.has_tor else false;
 const v8_bindings_tor = if (HAS_TOR) @import("framework/v8_bindings_tor.zig") else struct {
     pub fn registerTor(_: anytype) void {}
@@ -165,6 +173,7 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "httpsrv",      .required = false, .grep_prefix = "__httpsrv_", .reg_fn = "registerHttpServer",  .mod = v8_bindings_httpserver },
     .{ .name = "wssrv",        .required = false, .grep_prefix = "__wssrv_",   .reg_fn = "registerWsServer",    .mod = v8_bindings_wsserver },
     .{ .name = "net",          .required = false, .grep_prefix = "__tcp_",     .reg_fn = "registerNet",         .mod = v8_bindings_net },
+    .{ .name = "gameserver",   .required = false, .grep_prefix = "__rcon_",    .reg_fn = "registerGameServer",  .mod = v8_bindings_gameserver },
     .{ .name = "tor",          .required = false, .grep_prefix = "__tor_",     .reg_fn = "registerTor",         .mod = v8_bindings_tor },
     .{ .name = "privacy",      .required = false, .grep_prefix = "__priv_",    .reg_fn = "registerPrivacy",     .mod = v8_bindings_privacy },
     .{ .name = "sdk",          .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk",         .mod = v8_bindings_sdk },
@@ -276,6 +285,25 @@ const g_tab_click_callbacks = blk: {
     for (0..MAX_TABS) |i| arr[i] = makeTabClickCallback(i);
     break :blk arr;
 };
+
+// V8 right-click dispatcher. The engine calls this with the click coords;
+// it pulls the prepared node id (set by qjs_runtime.prepareNodeEvent in the
+// engine) and dispatches __dispatchRightClick(id) into V8. The runtime-side
+// __getPreparedRightClick host fn (registered in v8_bindings_core.zig:876)
+// reads the coords back into the JS payload. qjs_runtime's own dispatcher
+// uses callGlobal which is comptime-no-op when QuickJS isn't compiled in,
+// so under V8-only builds we need this parallel path.
+fn dispatchV8RightClick(x: f32, y: f32) void {
+    const id = qjs_runtime.g_prepared_node_event_id;
+    if (id == 0) return;
+    qjs_runtime.g_prepared_node_event_id = 0;
+    qjs_runtime.g_prepared_mouse_x = x;
+    qjs_runtime.g_prepared_mouse_y = y;
+    var buf: [128]u8 = undefined;
+    const expr = std.fmt.bufPrintZ(&buf, "__dispatchRightClick({d})", .{id}) catch return;
+    v8_runtime.evalScript(expr);
+    state.markDirty();
+}
 
 // ── Context menu item trampolines ────────────────────────
 // MenuItem.handler is `*const fn () void` with no args, so a single
@@ -1498,16 +1526,6 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // into the i-th slot. Each item: {d, fill?, fillEffect?, stroke?,
             // strokeWidth?, scale?}. See framework/text.zig:40 for sentinels.
             applyInlineGlyphs(node, v);
-        } else if (std.mem.eql(u8, k, "overlayRoot")) {
-            // Marks this node as an overlay root. The main paint pass skips
-            // it; a final pass paints it with a full-viewport scissor —
-            // escaping any ancestor `overflow: hidden` clipping. Hit-testing
-            // walks overlay roots first. Use for menus, tooltips, popovers,
-            // modals — anything that must render above the layout tree.
-            if (jsonBool(v)) |b| {
-                node.is_overlay_root = b;
-                std.debug.print("[overlay] setProp node={d} is_overlay_root={}\n", .{ node.scroll_persist_slot, b });
-            }
         } else if (std.mem.eql(u8, k, "contextMenuItems")) {
             // Native context menu (framework/context_menu.zig). Items must be
             // [{ label: string }, ...]; the handler is wired automatically and
@@ -1784,7 +1802,7 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
         node.handlers.on_scroll = qjs_runtime.dispatchPreparedScroll;
     }
     if (cmdHasAnyHandlerName(cmd, &.{ "onRightClick", "onContextMenu" })) {
-        node.handlers.on_right_click = qjs_runtime.dispatchPreparedRightClick;
+        node.handlers.on_right_click = dispatchV8RightClick;
     }
     if (cmdHasAnyHandlerName(cmd, &.{"onMove"})) {
         node.canvas_move_draggable = true;

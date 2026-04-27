@@ -64,6 +64,12 @@ export type {
   SseConnectionSpec,
   SseConnectionHandle,
   SseEvent,
+  RconConnectionSpec,
+  RconConnectionHandle,
+  A2sConnectionSpec,
+  A2sConnectionHandle,
+  A2sInfo,
+  A2sPlayer,
 } from './useConnection';
 export {
   fuzzyScore,
