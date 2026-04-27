@@ -78,6 +78,11 @@ const flags = [
   '--inject:' + ROOT + '/framework/ambient.ts',
   '--inject:' + ROOT + '/framework/ambient_primitives.ts',
   '--alias:@reactjit/core=' + ROOT + '/runtime/core_stub.ts',
+  // @reactjit/runtime is the portable handle for cart code to import SDK
+  // primitives, hooks, classifiers, etc. — replaces brittle '../runtime/X'
+  // and '../../runtime/X' relative paths that only work when the cart lives
+  // inside the SDK tree. Off-tree carts (rjit-mode) need this.
+  '--alias:@reactjit/runtime=' + ROOT + '/runtime',
   '--alias:@cart-entry=' + entryAbs,
   // Vendored npm deps under vendor/. Replaces node_modules lookup so
   // bare-specifier imports (react, react-reconciler, ...) resolve without
