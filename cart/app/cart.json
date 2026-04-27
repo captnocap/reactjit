@@ -1,0 +1,7 @@
+{
+  "name": "App",
+  "description": "Real product surface — router + routes.",
+  "customChrome": true,
+  "width": 1280,
+  "height": 860
+}
