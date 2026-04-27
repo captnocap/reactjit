@@ -45,10 +45,14 @@ pub fn build(b: *std.Build) void {
     });
 
     // ── zluajit (LuaJIT worker compute) ────────────────────────
+    // .system=false → zluajit compiles LuaJIT from the source it bundles
+    // (cached at tools/zig/cache/p/zluajit-...). With .system=true, zluajit
+    // calls linkSystemLibrary("luajit") which expects a generic libluajit.so
+    // — distros only ship libluajit-5.1.so, so the link fails everywhere.
     const zluajit_dep = b.dependency("zluajit", .{
         .target = target,
         .optimize = optimize,
-        .system = true,
+        .system = false,
     });
 
     // ── Build options ──────────────────────────────────────────

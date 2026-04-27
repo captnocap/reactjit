@@ -355,13 +355,38 @@ fi
 # libfoo.so. This is what lets `rjit ship` work on a fresh distro that
 # doesn't have libsdl3-dev / libfreetype-dev / etc. installed.
 SYSROOT_FLAG=""
+SYSROOT_LIB="$RJIT_HOME/deps/sysroot/usr/lib"
 if [[ -d "$RJIT_HOME/deps/sysroot/usr/include" ]]; then
     SYSROOT_FLAG="-Dsysroot=$RJIT_HOME/deps/sysroot"
+
+    # Some libs are system-assumed (we never bundle them) but minimal distros
+    # like Whonix ship only the SONAME-versioned .so.N — they lack the
+    # unversioned dev symlink the linker needs for `-lX11`. Detect those and
+    # synthesize the dev symlink in our sysroot pointing at whatever path
+    # ldconfig reports for the system .so.
+    for sysname in X11; do
+        if [[ ! -e "$SYSROOT_LIB/lib${sysname}.so" ]]; then
+            sys_so=$(ldconfig -p 2>/dev/null | awk -v rx="lib${sysname}\\.so" '$1 ~ rx {print $NF; exit}')
+            if [[ -n "$sys_so" && -e "$sys_so" ]]; then
+                ln -sfn "$sys_so" "$SYSROOT_LIB/lib${sysname}.so"
+                echo "[ship] sysroot: linked lib${sysname}.so → $sys_so"
+            fi
+        fi
+    done
 fi
 
 echo "[ship]   zig flags: $V8_FLAG${CUSTOM_CHROME_FLAG:+ $CUSTOM_CHROME_FLAG} $OPT_FLAG${SYSROOT_FLAG:+ $SYSROOT_FLAG}${PRIVACY_FLAG:+ $PRIVACY_FLAG}${PROCESS_FLAG:+ $PROCESS_FLAG}${HTTPSRV_FLAG:+ $HTTPSRV_FLAG}${WSSRV_FLAG:+ $WSSRV_FLAG}${NET_FLAG:+ $NET_FLAG}${TOR_FLAG:+ $TOR_FLAG}${FS_FLAG:+ $FS_FLAG}${WS_FLAG:+ $WS_FLAG}${TEL_FLAG:+ $TEL_FLAG}${ZIGCALL_FLAG:+ $ZIGCALL_FLAG}${SDK_FLAG:+ $SDK_FLAG}"
 
-ZIG_GLOBAL_CACHE_DIR="$RJIT_HOME/tools/zig/cache" "$ZIG" build app -p "$CART_ROOT/zig-out" -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" -Dbundle-path="$EMBED_BUNDLE" $V8_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG $SYSROOT_FLAG $PRIVACY_FLAG $PROCESS_FLAG $HTTPSRV_FLAG $WSSRV_FLAG $NET_FLAG $TOR_FLAG $FS_FLAG $WS_FLAG $TEL_FLAG $ZIGCALL_FLAG $SDK_FLAG
+# Zig package cache override — ONLY when running off-tree (rjit-driven).
+# In rjit-driven mode the SDK ships a bundled cache at tools/zig/cache/p/
+# (overlaid from the dev host's ~/.cache/zig/p at pack-sdk time) so the
+# build is hermetic on Whonix etc. In-repo dev uses the default
+# ~/.cache/zig which is the authoritative, complete cache.
+if [[ "$CART_ROOT" != "$RJIT_HOME" ]]; then
+    export ZIG_GLOBAL_CACHE_DIR="$RJIT_HOME/tools/zig/cache"
+fi
+
+"$ZIG" build app -p "$CART_ROOT/zig-out" -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" -Dbundle-path="$EMBED_BUNDLE" $V8_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG $SYSROOT_FLAG $PRIVACY_FLAG $PROCESS_FLAG $HTTPSRV_FLAG $WSSRV_FLAG $NET_FLAG $TOR_FLAG $FS_FLAG $WS_FLAG $TEL_FLAG $ZIGCALL_FLAG $SDK_FLAG
 
 BUILD_BIN="$CART_ROOT/zig-out/bin/$NAME"
 if [[ ! -f "$BUILD_BIN" ]]; then
