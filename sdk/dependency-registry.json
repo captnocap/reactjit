@@ -66,94 +66,129 @@
       "kind": "static-library",
       "payloadPath": "deps/v8-prebuilt/libc_v8.a",
       "buildImport": "v8",
-      "linkPolicy": "engine-v8"
+      "linkPolicy": "engine-v8",
+      "bundlePolicy": "always",
+      "note": "JS engine. libc_v8.a (~116 MB) is statically linked into every V8-backed cart and into tools/v8cli. The SDK ships the .a so the dispatcher's zig-build invocations can find it."
     },
     "sdl3": {
       "kind": "dynamic-library",
       "systemNames": ["SDL3"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "always",
+      "note": "Window/input. Every cart binary opens a window. We pin our own version, so SDL3.so ships in the SDK payload."
     },
     "wgpu-native": {
       "kind": "zig-package",
       "payloadPath": "deps/wgpu_native_zig",
       "buildImport": "wgpu",
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "always",
+      "note": "Render backbone for every primitive. 241MB static archive linked into every cart. tools/v8cli and the rjit dispatcher don't carry it."
     },
     "freetype": {
       "kind": "dynamic-library",
       "systemNames": ["freetype"],
       "includePaths": ["freetype2"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "always",
+      "note": "Text rendering. Pinned + bundled."
     },
     "stb-image": {
       "kind": "vendored-c-source",
       "sources": ["stb/stb_image_impl.c"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "vendored-source",
+      "note": "Powers <Image>. Compiled into every cart from vendored C source — no .so to ship."
     },
     "stb-image-write": {
       "kind": "vendored-c-source",
       "sources": ["stb/stb_image_write_impl.c"],
-      "linkPolicy": "feature-gated"
-    },
-    "libmpv": {
-      "kind": "dynamic-library",
-      "systemNames": ["mpv"],
-      "knownPayloads": ["love2d/storybook/lib/libmpv.so.2", "love2d/web/lib/libmpv.so.2"],
-      "linkPolicy": "feature-gated"
-    },
-    "libsodium": {
-      "kind": "dynamic-library",
-      "systemNames": ["sodium"],
-      "knownPayloads": ["love2d/storybook/lib/libsodium.so", "love2d/web/lib/libsodium.so"],
-      "linkPolicy": "feature-gated"
-    },
-    "sqlite3": {
-      "kind": "dynamic-library",
-      "systemNames": ["sqlite3"],
-      "linkPolicy": "feature-gated"
-    },
-    "curl": {
-      "kind": "dynamic-library",
-      "systemNames": ["curl"],
-      "linkPolicy": "feature-gated"
-    },
-    "libvterm": {
-      "kind": "vendored-library",
-      "payloadPath": "deps/libvterm",
-      "systemNames": ["vterm"],
-      "linkPolicy": "feature-gated"
-    },
-    "box2d": {
-      "kind": "dynamic-library",
-      "systemNames": ["box2d"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "vendored-source",
+      "note": "Capture / witness screenshotting. Vendored C source."
     },
     "luajit": {
       "kind": "dynamic-library",
       "systemNames": ["luajit-5.1"],
       "includePaths": ["luajit-2.1"],
-      "linkPolicy": "feature-gated"
-    },
-    "tls.zig": {
-      "kind": "zig-package",
-      "payloadPath": "deps/tls.zig",
-      "buildImport": "tls",
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "foundational",
+      "bundlePolicy": "always",
+      "note": "Compute worker runtime. Pinned + bundled."
     },
     "x11": {
       "kind": "platform-library",
       "platforms": ["linux"],
       "systemNames": ["X11"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "system-assumed",
+      "bundlePolicy": "never",
+      "note": "Display server protocol. Linked at build time (windows.zig sets _NET_WM_WINDOW_TYPE atoms via 2 extern Xlib calls), but every Linux desktop ships libX11. Don't bundle. Wayland-only systems ship Xwayland which provides libX11 too."
     },
     "posix-threading": {
       "kind": "platform-library",
       "platforms": ["linux"],
       "systemNames": ["m", "pthread", "dl"],
-      "linkPolicy": "feature-gated"
+      "linkPolicy": "system-assumed",
+      "bundlePolicy": "never",
+      "note": "libc, libm, libpthread, libdl — present on every Linux host."
+    },
+    "libmpv": {
+      "kind": "dynamic-library",
+      "systemNames": ["mpv"],
+      "knownPayloads": ["love2d/storybook/lib/libmpv.so.2", "love2d/web/lib/libmpv.so.2"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "note": "Runtime dlopen — no link-time cost. Pack libmpv.so.2 into the SDK payload when has-video so carts can dlopen our pinned version instead of relying on the host."
+    },
+    "libsodium": {
+      "kind": "dynamic-library",
+      "systemNames": ["sodium"],
+      "knownPayloads": ["love2d/storybook/lib/libsodium.so", "love2d/web/lib/libsodium.so"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "buildFlag": "-Dhas-privacy"
+    },
+    "sqlite3": {
+      "kind": "dynamic-library",
+      "systemNames": ["sqlite3"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "buildFlag": "-Dhas-sqlite"
+    },
+    "curl": {
+      "kind": "dynamic-library",
+      "systemNames": ["curl"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "note": "build.zig still calls linkSystemLibrary unconditionally, but Zig's default --as-needed elides libcurl from carts that reference no curl_* symbols. Net effect matches feature-gating for now; a full -Dhas-http-client gate (with framework/net/http.zig becoming a dispatcher) is the next refactor."
+    },
+    "libvterm": {
+      "kind": "vendored-library",
+      "payloadPath": "deps/libvterm",
+      "systemNames": ["vterm"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "buildFlag": "-Dhas-terminal"
+    },
+    "box2d": {
+      "kind": "dynamic-library",
+      "systemNames": ["box2d"],
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "buildFlag": "-Dhas-physics"
+    },
+    "tls.zig": {
+      "kind": "zig-package",
+      "payloadPath": "deps/tls.zig",
+      "buildImport": "tls",
+      "linkPolicy": "feature-gated",
+      "bundlePolicy": "feature-gated",
+      "note": "Pulled in by http-client and sdk features."
     },
     "macos-ui-frameworks": {
       "kind": "platform-framework",
+      "linkPolicy": "system-assumed",
+      "bundlePolicy": "never",
+      "note": "Every macOS host has Foundation/QuartzCore/Metal/Cocoa/IOKit/CoreVideo. Linked, not bundled.",
       "platforms": ["macos"],
       "frameworks": ["Foundation", "QuartzCore", "Metal", "Cocoa", "IOKit", "CoreVideo"],
       "linkPolicy": "feature-gated"
@@ -179,42 +214,43 @@
         { "kind": "featureMarker", "input": "runtime/features/window-runtime.ts" }
       ],
       "buildOptions": ["has-window-runtime"],
-      "nativeLibraries": ["sdl3", "wgpu-native", "freetype", "stb-image", "stb-image-write", "x11", "posix-threading", "macos-ui-frameworks"]
+      "note": "Native libs (sdl3, wgpu-native, freetype, stb-image*, x11, posix-threading, macos-ui-frameworks) are foundational — always linked. The build option only signals intent; nothing extra is link-gated by it."
     },
     "canvas": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/canvas.ts" }
       ],
       "buildOptions": ["has-canvas"],
-      "nativeLibraries": ["wgpu-native"]
+      "note": "wgpu-native is foundational; this flag only gates Canvas-primitive Zig code."
     },
     "graph": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/graph.ts" }
       ],
       "buildOptions": ["has-graph"],
-      "nativeLibraries": ["wgpu-native"]
+      "note": "wgpu-native is foundational; this flag only gates Graph-primitive Zig code."
     },
     "text-rendering": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/text-rendering.ts" }
       ],
       "buildOptions": ["has-text-rendering"],
-      "nativeLibraries": ["freetype"]
+      "note": "freetype is foundational; this flag only gates text-rendering Zig code paths."
     },
     "image": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/image.ts" }
       ],
       "buildOptions": ["has-image"],
-      "nativeLibraries": ["stb-image"]
+      "note": "stb-image is foundational; this flag only gates Image-primitive Zig code."
     },
     "video": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/video.ts" }
       ],
       "buildOptions": ["has-video"],
-      "nativeLibraries": ["libmpv", "wgpu-native"]
+      "nativeLibraries": ["libmpv"],
+      "note": "wgpu-native is foundational. libmpv is dlopen'd at runtime — the registry entry exists so pack-sdk knows to stage libmpv.so.2 alongside the SDK payload when has-video, not because it gets link-time gated."
     },
     "audio": {
       "triggers": [
@@ -344,7 +380,7 @@
         { "kind": "featureMarker", "input": "runtime/features/lua-worker.ts" }
       ],
       "buildOptions": ["has-lua-worker"],
-      "nativeLibraries": ["luajit"]
+      "note": "luajit is foundational; this flag only gates worker-pool Zig code paths."
     }
   },
   "shipGate": {
