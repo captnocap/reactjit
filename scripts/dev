@@ -98,7 +98,15 @@ if [[ "$needs_build" -eq 1 ]]; then
         exit 1
     fi
     read -r -a DEV_FEATURE_ARGS <<< "$DEV_FEATURE_FLAGS"
-    ZIG_GLOBAL_CACHE_DIR="$RJIT_HOME/tools/zig/cache" "$ZIG" build app -p "$RJIT_HOME/zig-out" -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig "${DEV_FEATURE_ARGS[@]}" -Doptimize=ReleaseFast
+    # Only override ZIG_GLOBAL_CACHE_DIR off-tree (rjit-driven). In-repo
+    # dev uses ~/.cache/zig — that's the authoritative, complete cache.
+    # Forcing the partial repo cache here would cache the build runner
+    # against tools/zig/cache paths and break later in-repo ship runs
+    # with `tools/zig/cache/p/.../libwgpu_native.a: file not found`.
+    if [[ "$CART_ROOT" != "$RJIT_HOME" ]]; then
+        export ZIG_GLOBAL_CACHE_DIR="$RJIT_HOME/tools/zig/cache"
+    fi
+    "$ZIG" build app -p "$RJIT_HOME/zig-out" -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig "${DEV_FEATURE_ARGS[@]}" -Doptimize=ReleaseFast
 fi
 
 "$BIN" &
