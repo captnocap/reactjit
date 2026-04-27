@@ -16,6 +16,8 @@ const layout = @import("framework/layout.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
+const transition_mod = @import("framework/transition.zig");
+const easing_mod = @import("framework/easing.zig");
 const effect_ctx = @import("framework/effect_ctx.zig");
 const input = @import("framework/input.zig");
 const state = @import("framework/state.zig");
@@ -50,7 +52,6 @@ const v8_bindings_zigcall = if (build_options.has_zigcall) @import("framework/v8
     pub fn registerZigCallList(_: anytype) void {}
     pub fn tickDrain() void {}
 };
-// v8_bindings_sdk: deferred (see appInit comment).
 
 // ── INGREDIENTS — opt-in V8 binding surface per cart ────────────────
 //
@@ -132,6 +133,9 @@ const v8_bindings_tor = if (HAS_TOR) @import("framework/v8_bindings_tor.zig") el
 const v8_bindings_privacy = if (build_options.has_privacy) @import("framework/v8_bindings_privacy.zig") else struct {
     pub fn registerPrivacy(_: anytype) void {}
 };
+const v8_bindings_sdk = if (build_options.has_sdk) @import("framework/v8_bindings_sdk.zig") else struct {
+    pub fn registerSdk(_: anytype) void {}
+};
 
 const INGREDIENTS = [_]Ingredient{
     // Framework-essential (always-on). These bindings expose host fns the
@@ -163,6 +167,7 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "net",          .required = false, .grep_prefix = "__tcp_",     .reg_fn = "registerNet",         .mod = v8_bindings_net },
     .{ .name = "tor",          .required = false, .grep_prefix = "__tor_",     .reg_fn = "registerTor",         .mod = v8_bindings_tor },
     .{ .name = "privacy",      .required = false, .grep_prefix = "__priv_",    .reg_fn = "registerPrivacy",     .mod = v8_bindings_privacy },
+    .{ .name = "sdk",          .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk",         .mod = v8_bindings_sdk },
 };
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
@@ -170,10 +175,16 @@ comptime {
     if (!IS_LIB) _ = @import("framework/core.zig");
 }
 
-// Per-cart bundle. Path is `bundle-<app-name>.js` so that two parallel ships
-// (different carts) don't race on a shared `bundle.js`. If you run
-// `zig build app` directly, make sure the matching bundle file exists.
-const BUNDLE_FILE_NAME = std.fmt.comptimePrint("bundle-{s}.js", .{build_options.app_name});
+// Per-cart bundle. Default path is `bundle-<app-name>.js` (relative to
+// v8_app.zig) so that two parallel ships don't race on a shared bundle.js.
+// When -Dbundle-path=<abs> is passed (rjit-driven builds where the user's
+// cart lives outside the SDK install), @embedFile uses that absolute path
+// instead — letting the bundle sit in CART_ROOT while build.zig and
+// v8_app.zig live in RJIT_HOME.
+const BUNDLE_FILE_NAME = if (@hasDecl(build_options, "bundle_path") and build_options.bundle_path.len > 0)
+    build_options.bundle_path
+else
+    std.fmt.comptimePrint("bundle-{s}.js", .{build_options.app_name});
 const BUNDLE_BYTES = @embedFile(BUNDLE_FILE_NAME);
 
 // Window title = the build's -Dapp-name (set by scripts/ship). Falls back to
@@ -206,6 +217,7 @@ var g_child_auto_dismiss_ms: u32 = 0;
 var g_child_started_ms: i64 = 0;
 var g_root: Node = .{};
 var g_dirty: bool = true;
+var g_scroll_prop_slots: std.AutoHashMap(u32, void) = undefined;
 var g_press_expr_pool: std.ArrayList([:0]u8) = .{};
 var g_input_slot_by_node_id: std.AutoHashMap(u32, u8) = undefined;
 var g_node_id_by_input_slot: [input.MAX_INPUTS]u32 = [_]u32{0} ** input.MAX_INPUTS;
@@ -312,6 +324,7 @@ fn clearContextMenu(node_id: u32) void {
 
 fn applyContextMenuItems(node: *Node, val: std.json.Value) void {
     const node_id = node.scroll_persist_slot;
+    std.debug.print("[ctxmenu] applyContextMenuItems node={d} kind={s}\n", .{ node_id, @tagName(val) });
     clearContextMenu(node_id);
     if (val != .array) {
         node.context_menu_items = null;
@@ -319,6 +332,7 @@ fn applyContextMenuItems(node: *Node, val: std.json.Value) void {
     }
     const src = val.array.items;
     const n = @min(src.len, MAX_MENU_ITEMS);
+    std.debug.print("[ctxmenu]   n_items={d}\n", .{n});
     if (n == 0) {
         node.context_menu_items = null;
         return;
@@ -743,46 +757,11 @@ fn parseColor(s: []const u8) ?Color {
     return null;
 }
 
-// tslx:GEN:PARSERS START
-fn parseGutterRows(v: std.json.Value) ?[]const layout.GutterRow {
-    if (v != .array) return null;
-    const out = g_alloc.alloc(layout.GutterRow, v.array.items.len) catch return null;
-    for (v.array.items, 0..) |row_v, idx| {
-        var row: layout.GutterRow = .{};
-        if (row_v == .object) {
-            if (row_v.object.get("line")) |v_| {
-                if (jsonInt(v_)) |i| row.line = @intCast(@max(0, i));
-            }
-            if (row_v.object.get("marker")) |v_| {
-                if (v_ == .string) row.marker = parseColor(v_.string);
-            }
-        }
-        out[idx] = row;
+fn markScrollPropSlot(node: *Node) void {
+    if (node.scroll_persist_slot != 0) {
+        g_scroll_prop_slots.put(node.scroll_persist_slot, {}) catch {};
     }
-    return out;
 }
-
-fn parseMinimapRows(v: std.json.Value) ?[]const layout.MinimapRow {
-    if (v != .array) return null;
-    const out = g_alloc.alloc(layout.MinimapRow, v.array.items.len) catch return null;
-    for (v.array.items, 0..) |row_v, idx| {
-        var row: layout.MinimapRow = .{};
-        if (row_v == .object) {
-            if (row_v.object.get("width")) |v_| {
-                if (jsonFloat(v_)) |f| row.width = f;
-            }
-            if (row_v.object.get("marker")) |v_| {
-                if (v_ == .string) row.marker = parseColor(v_.string);
-            }
-            if (row_v.object.get("active")) |v_| {
-                if (jsonBool(v_)) |b| row.active = b;
-            }
-        }
-        out[idx] = row;
-    }
-    return out;
-}
-// tslx:GEN:PARSERS END
 
 /// Parse a linear-gradient prop from JSON:
 ///   { x1, y1, x2, y2, stops: [{ offset, color, opacity? }] }
@@ -926,7 +905,24 @@ fn parseAlignContent(s: []const u8) layout.AlignContent {
     return .stretch;
 }
 
-fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
+fn parseEasingName(s: []const u8) easing_mod.EasingType {
+    const eq = std.mem.eql;
+    if (eq(u8, s, "linear")) return .linear;
+    if (eq(u8, s, "easeIn")) return .ease_in;
+    if (eq(u8, s, "easeOut")) return .ease_out;
+    if (eq(u8, s, "easeInOut")) return .ease_in_out;
+    return .ease_in_out;
+}
+
+fn nodeTransitionConfig(node: *Node) transition_mod.TransitionConfig {
+    return .{
+        .duration_ms = node.transition_duration_ms,
+        .delay_ms = node.transition_delay_ms,
+        .easing = .{ .named = node.transition_easing },
+    };
+}
+
+fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update: bool) void {
     const eq = std.mem.eql;
     if (eq(u8, key, "width")) {
         if (jsonMaybePct(val)) |f| node.style.width = f;
@@ -1060,15 +1056,65 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
     } else if (eq(u8, key, "borderBottomLeftRadius")) {
         if (jsonFloat(val)) |f| node.style.border_bottom_left_radius = f;
     } else if (eq(u8, key, "backgroundColor")) {
-        if (val == .string) node.style.background_color = parseColor(val.string);
+        if (val == .string) {
+            const c = parseColor(val.string);
+            if (is_update and node.transition_active and c != null) {
+                transition_mod.set(node, .background_color, .{ .color = c.? }, nodeTransitionConfig(node));
+            } else {
+                node.style.background_color = c;
+            }
+        }
     } else if (eq(u8, key, "opacity")) {
-        if (jsonFloat(val)) |f| node.style.opacity = f;
+        if (jsonFloat(val)) |f| {
+            if (is_update and node.transition_active) {
+                transition_mod.set(node, .opacity, .{ .float = f }, nodeTransitionConfig(node));
+            } else {
+                node.style.opacity = f;
+            }
+        }
     } else if (eq(u8, key, "rotation")) {
-        if (jsonFloat(val)) |f| node.style.rotation = f;
+        if (jsonFloat(val)) |f| {
+            if (is_update and node.transition_active) {
+                transition_mod.set(node, .rotation, .{ .float = f }, nodeTransitionConfig(node));
+            } else {
+                node.style.rotation = f;
+            }
+        }
     } else if (eq(u8, key, "scaleX")) {
-        if (jsonFloat(val)) |f| node.style.scale_x = f;
+        if (jsonFloat(val)) |f| {
+            if (is_update and node.transition_active) {
+                transition_mod.set(node, .scale_x, .{ .float = f }, nodeTransitionConfig(node));
+            } else {
+                node.style.scale_x = f;
+            }
+        }
     } else if (eq(u8, key, "scaleY")) {
-        if (jsonFloat(val)) |f| node.style.scale_y = f;
+        if (jsonFloat(val)) |f| {
+            if (is_update and node.transition_active) {
+                transition_mod.set(node, .scale_y, .{ .float = f }, nodeTransitionConfig(node));
+            } else {
+                node.style.scale_y = f;
+            }
+        }
+    } else if (eq(u8, key, "transition")) {
+        // Renderer emits `transition: { all: { duration, easing, delay } }`
+        // (see runtime/tw.ts emit). Only the `all` shape is supported today.
+        if (val == .object) {
+            if (val.object.get("all")) |all_v| {
+                if (all_v == .object) {
+                    node.transition_active = true;
+                    if (all_v.object.get("duration")) |d| {
+                        if (jsonInt(d)) |i| node.transition_duration_ms = @intCast(@max(0, i));
+                    }
+                    if (all_v.object.get("delay")) |d| {
+                        if (jsonInt(d)) |i| node.transition_delay_ms = @intCast(@max(0, i));
+                    }
+                    if (all_v.object.get("easing")) |e| {
+                        if (e == .string) node.transition_easing = parseEasingName(e.string);
+                    }
+                }
+            }
+        }
     } else if (eq(u8, key, "zIndex")) {
         if (jsonInt(val)) |i| node.style.z_index = @intCast(i);
     } else if (eq(u8, key, "shadowOffsetX")) {
@@ -1104,10 +1150,19 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
     }
 }
 
-fn applyStyle(node: *Node, style_v: std.json.Value) void {
+fn applyStyle(node: *Node, style_v: std.json.Value, is_update: bool) void {
     if (style_v != .object) return;
+    // Process the "transition" key first so animatable property writes in this
+    // same batch see the latest config. Without ordering, a single CREATE/UPDATE
+    // that includes both `transition: {...}` and `opacity: 1` could write opacity
+    // before the transition config was visible on the node.
+    if (style_v.object.get("transition")) |t| applyStyleEntry(node, "transition", t, is_update);
     var it = style_v.object.iterator();
-    while (it.next()) |e| applyStyleEntry(node, e.key_ptr.*, e.value_ptr.*);
+    while (it.next()) |e| {
+        const k = e.key_ptr.*;
+        if (std.mem.eql(u8, k, "transition")) continue;
+        applyStyleEntry(node, k, e.value_ptr.*, is_update);
+    }
 }
 
 fn resetStyleEntry(node: *Node, key: []const u8) void {
@@ -1130,9 +1185,11 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         const k = entry.string;
         if (std.mem.eql(u8, k, "scrollY")) {
             node.scroll_y = 0;
+            markScrollPropSlot(node);
             continue;
         } else if (std.mem.eql(u8, k, "scrollX")) {
             node.scroll_x = 0;
+            markScrollPropSlot(node);
             continue;
         } else if (std.mem.eql(u8, k, "showScrollbar")) {
             node.show_scrollbar = true;
@@ -1154,12 +1211,6 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     const eq = std.mem.eql;
     if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
-        // tslx:GEN:TYPE_DEFAULTS START
-    } else if (eq(u8, type_name, "CodeGutter")) {
-        node.gutter_rows = &[_]layout.GutterRow{};
-    } else if (eq(u8, type_name, "Minimap")) {
-        node.minimap_rows = &[_]layout.MinimapRow{};
-        // tslx:GEN:TYPE_DEFAULTS END
     } else if (eq(u8, type_name, "Canvas")) {
         // Infinite pan/zoom surface. `canvas_type` is what wires engine paint,
         // hit-testing, drag-to-pan and wheel-to-zoom in events.zig / engine.zig.
@@ -1198,7 +1249,7 @@ fn openHostWindowForNode(id: u32, type_name: []const u8, props: ?std.json.Value)
     else
         5000;
 
-    const kind: windows.WindowKind = .independent;
+    const kind: windows.WindowKind = if (is_notification) .notification else .independent;
     const slot = windows.open(.{
         .title = title.ptr,
         .width = @intCast(@max(1, width)),
@@ -1306,11 +1357,15 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
     if (props != .object) return;
     const is_input = node.input_id != null or (type_name != null and isInputType(type_name.?));
     const is_terminal = node.terminal or (type_name != null and isTerminalType(type_name.?));
+    // Renderer convention: type_name is non-null on CREATE and null on UPDATE
+    // (see applyCommand). UPDATE writes to animatable visual props go through
+    // framework/transition.zig when node.transition_active is set.
+    const is_update = type_name == null;
     var it = props.object.iterator();
     while (it.next()) |e| {
         const k = e.key_ptr.*;
         const v = e.value_ptr.*;
-        if (std.mem.eql(u8, k, "style")) applyStyle(node, v) else if (std.mem.eql(u8, k, "fontSize")) {
+        if (std.mem.eql(u8, k, "style")) applyStyle(node, v, is_update) else if (std.mem.eql(u8, k, "fontSize")) {
             if (jsonInt(v)) |i| {
                 const size: u16 = @intCast(@max(i, 1));
                 if (is_terminal) node.terminal_font_size = size else node.font_size = size;
@@ -1332,34 +1387,6 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         } else if (is_input and std.mem.eql(u8, k, "colorRows")) {
             node.input_color_rows = parseColorTextRows(v);
         }
-        // tslx:GEN:PROPS START
-        // ── CodeGutter primitive props ──
-        else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
-            node.gutter_rows = parseGutterRows(v);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-            if (jsonFloat(v)) |f| node.gutter_row_height = f;
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "cursorLine")) {
-            if (jsonInt(v)) |i| node.gutter_cursor_line = @intCast(@max(0, i));
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeBg")) {
-            if (v == .string) node.gutter_active_bg = parseColor(v.string);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeText")) {
-            if (v == .string) node.gutter_active_text = parseColor(v.string);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
-            if (v == .string) node.gutter_text = parseColor(v.string);
-        }
-        // ── Minimap primitive props ──
-        else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
-            node.minimap_rows = parseMinimapRows(v);
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-            if (jsonFloat(v)) |f| node.minimap_row_height = f;
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowGap")) {
-            if (jsonFloat(v)) |f| node.minimap_row_gap = f;
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "activeColor")) {
-            if (v == .string) node.minimap_active_color = parseColor(v.string);
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "inactiveColor")) {
-            if (v == .string) node.minimap_inactive_color = parseColor(v.string);
-        }
-        // tslx:GEN:PROPS END
         else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
@@ -1471,6 +1498,16 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // into the i-th slot. Each item: {d, fill?, fillEffect?, stroke?,
             // strokeWidth?, scale?}. See framework/text.zig:40 for sentinels.
             applyInlineGlyphs(node, v);
+        } else if (std.mem.eql(u8, k, "overlayRoot")) {
+            // Marks this node as an overlay root. The main paint pass skips
+            // it; a final pass paints it with a full-viewport scissor —
+            // escaping any ancestor `overflow: hidden` clipping. Hit-testing
+            // walks overlay roots first. Use for menus, tooltips, popovers,
+            // modals — anything that must render above the layout tree.
+            if (jsonBool(v)) |b| {
+                node.is_overlay_root = b;
+                std.debug.print("[overlay] setProp node={d} is_overlay_root={}\n", .{ node.scroll_persist_slot, b });
+            }
         } else if (std.mem.eql(u8, k, "contextMenuItems")) {
             // Native context menu (framework/context_menu.zig). Items must be
             // [{ label: string }, ...]; the handler is wired automatically and
@@ -1478,9 +1515,15 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // an item is clicked. Cap MAX_MENU_ITEMS items.
             applyContextMenuItems(node, v);
         } else if (std.mem.eql(u8, k, "scrollY")) {
-            if (jsonFloat(v)) |f| node.scroll_y = f;
+            if (jsonFloat(v)) |f| {
+                node.scroll_y = f;
+                markScrollPropSlot(node);
+            }
         } else if (std.mem.eql(u8, k, "scrollX")) {
-            if (jsonFloat(v)) |f| node.scroll_x = f;
+            if (jsonFloat(v)) |f| {
+                node.scroll_x = f;
+                markScrollPropSlot(node);
+            }
         } else if (std.mem.eql(u8, k, "showScrollbar")) {
             if (jsonBool(v)) |b| node.show_scrollbar = b;
         } else if (std.mem.eql(u8, k, "scrollbarSide")) {
@@ -1563,6 +1606,19 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonFloat(v)) |f| node.canvas_drift_y = f;
         } else if (std.mem.eql(u8, k, "driftActive")) {
             if (jsonBool(v)) |b| node.canvas_drift_active = b;
+        } else if (std.mem.eql(u8, k, "gridStep")) {
+            if (jsonFloat(v)) |f| node.canvas_grid_step = if (f > 0) f else 0;
+        } else if (std.mem.eql(u8, k, "gridStroke")) {
+            if (jsonFloat(v)) |f| node.canvas_grid_stroke = if (f > 0) f else 1;
+        } else if (std.mem.eql(u8, k, "gridColor")) {
+            if (v == .string) node.canvas_grid_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "gridMajorColor")) {
+            if (v == .string) node.canvas_grid_color_major = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "gridMajorEvery")) {
+            if (jsonFloat(v)) |f| {
+                const i: i64 = @intFromFloat(@max(0, @min(f, 255)));
+                node.canvas_grid_major_every = @intCast(i);
+            }
         }
         // ── Effect props ──
         else if (std.mem.eql(u8, k, "name")) {
@@ -2073,8 +2129,10 @@ fn materializeWindowRoot(arena: std.mem.Allocator, window_node_id: u32) ?*Node {
 fn syncRenderedNodeState(node: *const Node) void {
     if (node.scroll_persist_slot != 0) {
         if (g_node_by_id.get(node.scroll_persist_slot)) |stable| {
-            stable.scroll_x = node.scroll_x;
-            stable.scroll_y = node.scroll_y;
+            if (!g_scroll_prop_slots.contains(node.scroll_persist_slot)) {
+                stable.scroll_x = node.scroll_x;
+                stable.scroll_y = node.scroll_y;
+            }
         }
     }
     for (node.children) |*child| syncRenderedNodeState(child);
@@ -2483,6 +2541,7 @@ fn clearTreeStateForReload() void {
     while (cid_it.next()) |list| list.deinit(g_alloc);
     g_children_ids.clearRetainingCapacity();
     g_window_owner_by_node_id.clearRetainingCapacity();
+    g_scroll_prop_slots.clearRetainingCapacity();
 
     // The root-child list is populated by APPEND_ROOT; clear so new React
     // mounts don't see stale IDs mixed with fresh ones.
@@ -2618,9 +2677,7 @@ fn appInit() void {
     // full contract (one row + one build option + one scripts/ship grep).
     inline for (INGREDIENTS) |ing| @field(ing.mod, ing.reg_fn)({});
     windows.setJsDispatchFn(dispatchWindowEvent);
-    // SDK bindings are still deferred; they have latent type errors from the
-    // initial port that we'll revisit after the V8 baseline settles.
-    // v8_bindings_sdk.registerSdk({});
+    v8_bindings_sdk.registerSdk({});
 
     // Polyfills — V8 has no setTimeout/setInterval/console.log. QJS path
     // installs an equivalent block from qjs_runtime.initVM; mirror the minimal
@@ -2721,6 +2778,7 @@ fn appTick(now: u32) void {
         const t2 = std.time.microTimestamp();
         layout.markLayoutDirty();
         g_dirty = false;
+        g_scroll_prop_slots.clearRetainingCapacity();
         const snap_us = t1 - t0;
         const rebuild_us = t2 - t1;
         if (snap_us > 1000 or rebuild_us > 1000) {
@@ -2808,6 +2866,7 @@ fn childTick(_: u32) void {
         });
         layout.markLayoutDirty();
         g_dirty = false;
+        g_scroll_prop_slots.clearRetainingCapacity();
     }
 }
 
@@ -2844,6 +2903,7 @@ pub fn main() !void {
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
     g_window_owner_by_node_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_window_by_node_id = std.AutoHashMap(u32, WindowBinding).init(g_alloc);
+    g_scroll_prop_slots = std.AutoHashMap(u32, void).init(g_alloc);
     g_input_slot_by_node_id = std.AutoHashMap(u32, u8).init(g_alloc);
     g_menu_items_by_node = std.AutoHashMap(u32, []context_menu.MenuItem).init(g_alloc);
     g_menu_labels_by_node = std.AutoHashMap(u32, [][]u8).init(g_alloc);

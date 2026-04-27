@@ -64,6 +64,14 @@ pub fn build(b: *std.Build) void {
     const has_sqlite = b.option(bool, "has-sqlite", "Link sqlite3 + real sqlite.zig (otherwise stub)") orelse false;
     const has_terminal = b.option(bool, "has-terminal", "Link libvterm + real vterm.zig (otherwise stub)") orelse false;
 
+    // Bundle path override. When unset, v8_app.zig falls back to embedding
+    // bundle-<app-name>.js relative to its own source directory (the
+    // in-repo case). When set (e.g. by rjit-driven builds where the user's
+    // cart lives outside the SDK install), this absolute path is used by
+    // @embedFile so the bundle can sit in CART_ROOT while build.zig and
+    // v8_app.zig live in RJIT_HOME.
+    const bundle_path = b.option([]const u8, "bundle-path", "Absolute path to the cart bundle (overrides default bundle-<app-name>.js lookup)") orelse "";
+
     const options = b.addOptions();
     options.addOption(bool, "is_lib", false);
     options.addOption([]const u8, "app_name", app_name);
@@ -73,6 +81,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_physics", has_physics);
     options.addOption(bool, "has_sqlite", has_sqlite);
     options.addOption(bool, "has_terminal", has_terminal);
+    options.addOption([]const u8, "bundle_path", bundle_path);
     options.addOption(bool, "has_video", true);
     options.addOption(bool, "has_render_surfaces", true);
     options.addOption(bool, "has_effects", true);
