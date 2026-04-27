@@ -239,119 +239,10 @@ const transition = if (HAS_TRANSITIONS) @import("transition.zig") else struct {
         return false;
     }
 };
-const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else VtermStub;
-const VtermStub = struct {
-    pub const MAX_TERMINALS: u8 = 4;
-    pub const VtColor = struct { r: u8 = 0, g: u8 = 0, b: u8 = 0 };
-    pub const Cell = struct {
-        char_buf: [4]u8 = .{ 0, 0, 0, 0 },
-        char_len: u8 = 0,
-        width: u8 = 1,
-        fg: ?VtColor = null,
-        bg: ?VtColor = null,
-        bold: bool = false,
-        italic: bool = false,
-        underline: bool = false,
-        strike: bool = false,
-        reverse: bool = false,
-    };
-    pub fn initVterm(_: u16, _: u16) void {}
-    pub fn feed(_: []const u8) void {}
-    pub fn readOutput(_: []u8) ?[]const u8 {
-        return null;
-    }
-    pub fn getRowText(_: u16) []const u8 {
-        return "";
-    }
-    pub fn getCell(_: u16, _: u16) Cell {
-        return .{};
-    }
-    pub fn getCursorRow() u16 {
-        return 0;
-    }
-    pub fn getCursorCol() u16 {
-        return 0;
-    }
-    pub fn getCursorVisible() bool {
-        return false;
-    }
-    pub fn hasDamage() bool {
-        return false;
-    }
-    pub fn clearDamageState() void {}
-    pub fn getRows() u16 {
-        return 0;
-    }
-    pub fn getCols() u16 {
-        return 0;
-    }
-    pub fn resizeVterm(_: u16, _: u16) void {}
-    pub fn deinit() void {}
-    pub fn spawnShell(_: anytype, _: u16, _: u16) void {}
-    pub fn pollPty() bool {
-        return false;
-    }
-    pub fn writePty(_: []const u8) void {}
-    pub fn ptyAlive() bool {
-        return false;
-    }
-    pub fn closePty() void {}
-    pub fn getScrollbackCell(_: u16, _: u16) Cell {
-        return .{};
-    }
-    pub fn scrollbackCount() u16 {
-        return 0;
-    }
-    pub fn scrollOffset() u16 {
-        return 0;
-    }
-    pub fn scrollUp(_: u16) void {}
-    pub fn scrollDown(_: u16) void {}
-    pub fn scrollToBottom() void {}
-    pub fn copySelectedText(_: u16, _: u16, _: u16, _: u16, _: []u8) usize {
-        return 0;
-    }
-    // Idx variants for multi-terminal support
-    pub fn spawnShellIdx(_: u8, _: anytype, _: u16, _: u16) void {}
-    pub fn pollPtyIdx(_: u8) bool {
-        return false;
-    }
-    pub fn writePtyIdx(_: u8, _: []const u8) void {}
-    pub fn getRowTextIdx(_: u8, _: u16) []const u8 {
-        return "";
-    }
-    pub fn getCellIdx(_: u8, _: u16, _: u16) Cell {
-        return .{};
-    }
-    pub fn getRowsIdx(_: u8) u16 {
-        return 0;
-    }
-    pub fn getColsIdx(_: u8) u16 {
-        return 0;
-    }
-    pub fn resizeVtermIdx(_: u8, _: u16, _: u16) void {}
-    pub fn getScrollbackCellIdx(_: u8, _: u16, _: u16) Cell {
-        return .{};
-    }
-    pub fn scrollOffsetIdx(_: u8) u16 {
-        return 0;
-    }
-    pub fn scrollUpIdx(_: u8, _: u16) void {}
-    pub fn scrollDownIdx(_: u8, _: u16) void {}
-    pub fn scrollToBottomIdx(_: u8) void {}
-    pub fn getCursorRowIdx(_: u8) u16 {
-        return 0;
-    }
-    pub fn getCursorColIdx(_: u8) u16 {
-        return 0;
-    }
-    pub fn getCursorVisibleIdx(_: u8) bool {
-        return false;
-    }
-    pub fn copySelectedTextIdx(_: u8, _: u16, _: u16, _: u16, _: u16, _: []u8) usize {
-        return 0;
-    }
-};
+// vterm.zig is self-gating: when -Dhas-terminal=false it re-exports the
+// stub set, so this import works in both modes without engine.zig
+// having to know.
+const vterm_mod = @import("vterm.zig");
 const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
     pub const BodyType = enum(c_int) { static_body = 0, kinematic = 1, dynamic = 2 };
     pub fn init(_: f32, _: f32) void {}
@@ -2249,16 +2140,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
         paintTextInput(node, id);
     }
 
-    if (node.gutter_rows != null) {
-        code_gutter_gen.paintCodeGutter(node, g_paint_opacity);
-    }
-    if (node.minimap_rows != null) {
-        minimap_gen.paintMinimap(node, g_paint_opacity);
-    }
 }
-
-const code_gutter_gen = @import("primitives/generated/code_gutter.zig");
-const minimap_gen = @import("primitives/generated/minimap.zig");
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
 fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {

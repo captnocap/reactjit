@@ -61,6 +61,8 @@ pub fn build(b: *std.Build) void {
     // dev host. Each gate must guard both the library link/include and
     // any framework code site that references the library's symbols.
     const has_physics = b.option(bool, "has-physics", "Link box2d + physics2d module") orelse false;
+    const has_sqlite = b.option(bool, "has-sqlite", "Link sqlite3 + real sqlite.zig (otherwise stub)") orelse false;
+    const has_terminal = b.option(bool, "has-terminal", "Link libvterm + real vterm.zig (otherwise stub)") orelse false;
 
     const options = b.addOptions();
     options.addOption(bool, "is_lib", false);
@@ -69,7 +71,8 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "custom_chrome", custom_chrome);
     options.addOption(bool, "has_quickjs", true);
     options.addOption(bool, "has_physics", has_physics);
-    options.addOption(bool, "has_terminal", true);
+    options.addOption(bool, "has_sqlite", has_sqlite);
+    options.addOption(bool, "has_terminal", has_terminal);
     options.addOption(bool, "has_video", true);
     options.addOption(bool, "has_render_surfaces", true);
     options.addOption(bool, "has_effects", true);
@@ -182,8 +185,8 @@ pub fn build(b: *std.Build) void {
 
     // ── System libraries ──────────────────────────────────────
     if (has_physics) exe.linkSystemLibrary("box2d");
-    exe.linkSystemLibrary("sqlite3");
-    exe.linkSystemLibrary("vterm");
+    if (has_sqlite) exe.linkSystemLibrary("sqlite3");
+    if (has_terminal) exe.linkSystemLibrary("vterm");
     exe.linkSystemLibrary("curl");
 
     // ── Privacy / libsodium (opt-in per cart) ─────────────────
@@ -414,8 +417,8 @@ pub fn build(b: *std.Build) void {
         luajit_runtime_test.linkFramework("CoreVideo");
     }
     if (has_physics) luajit_runtime_test.linkSystemLibrary("box2d");
-    luajit_runtime_test.linkSystemLibrary("sqlite3");
-    luajit_runtime_test.linkSystemLibrary("vterm");
+    if (has_sqlite) luajit_runtime_test.linkSystemLibrary("sqlite3");
+    if (has_terminal) luajit_runtime_test.linkSystemLibrary("vterm");
     luajit_runtime_test.linkSystemLibrary("curl");
     luajit_runtime_test.linkLibCpp();
 
