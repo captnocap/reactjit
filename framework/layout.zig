@@ -199,6 +199,11 @@ pub const Style = struct {
     rotation: f32 = 0,
     scale_x: f32 = 1.0,
     scale_y: f32 = 1.0,
+    // CSS transform — origin defaults to center (0.5, 0.5). Translate is post-rotation.
+    origin_x: f32 = 0.5,
+    origin_y: f32 = 0.5,
+    translate_x: f32 = 0,
+    translate_y: f32 = 0,
     border_width: f32 = 0,
     border_top_width: ?f32 = null,
     border_right_width: ?f32 = null,
@@ -315,6 +320,13 @@ pub const Node = struct {
     image_src: ?[]const u8 = null,
     video_src: ?[]const u8 = null,
     render_src: ?[]const u8 = null,
+    /// When true, the framework SIGSTOPs the feed's subprocesses (qemu /
+    /// Xvfb / app inside Xvfb) so they consume zero CPU. Last-rendered
+    /// pixels remain on the texture so the surface still paints. Toggling
+    /// back to false SIGCONTs them — VM/terminal resumes from where it left
+    /// off, no boot wait. Use for putting build/test sandbox VMs in the
+    /// background.
+    render_suspended: bool = false,
     static_surface: bool = false,
     static_surface_key: ?[]const u8 = null,
     static_surface_scale: f32 = 1,

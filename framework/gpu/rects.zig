@@ -93,18 +93,14 @@ pub fn drawRect(
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
 
-    // Apply canvas transform if active
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    // Compose canvas pan/zoom + node CSS transform stack into a single rect.
+    const tr = core.resolveRect(x, y, w, h);
 
     g_rects[g_rect_count] = .{
-        .pos_x = tx,
-        .pos_y = ty,
-        .size_w = tw,
-        .size_h = th,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
         .color_r = r,
         .color_g = g,
         .color_b = b,
@@ -118,6 +114,7 @@ pub fn drawRect(
         .radius_br = border_radius,
         .radius_bl = border_radius,
         .border_width = border_width,
+        .rotation = tr.rotation_deg,
     };
     g_rect_count += 1;
 }
@@ -132,23 +129,21 @@ pub fn drawRectCorners(
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
         .color_r = r, .color_g = g, .color_b = b, .color_a = a,
         .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
         .radius_tl = rtl, .radius_tr = rtr,
         .radius_br = rbr, .radius_bl = rbl,
         .border_width = border_width,
+        .rotation = tr.rotation_deg,
     };
     g_rect_count += 1;
 }
 
-/// Queue a rectangle with per-corner radii and per-node transform (rotation/scale).
+/// Queue a rectangle with per-corner radii and explicit per-rect rotation/scale.
+/// Composes with any active node-matrix transform.
 pub fn drawRectCornersTransformed(
     x: f32, y: f32, w: f32, h: f32,
     r: f32, g: f32, b: f32, a: f32,
@@ -159,26 +154,23 @@ pub fn drawRectCornersTransformed(
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
         .color_r = r, .color_g = g, .color_b = b, .color_a = a,
         .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
         .radius_tl = rtl, .radius_tr = rtr,
         .radius_br = rbr, .radius_bl = rbl,
         .border_width = border_width,
-        .rotation = rotation_deg,
+        .rotation = rotation_deg + tr.rotation_deg,
         .scale_x = sx,
         .scale_y = sy,
     };
     g_rect_count += 1;
 }
 
-/// Queue a rectangle with per-node transform (rotation/scale).
+/// Queue a rectangle with explicit per-rect rotation/scale. Composes with any
+/// active node-matrix transform.
 pub fn drawRectTransformed(
     x: f32, y: f32, w: f32, h: f32,
     r: f32, g: f32, b: f32, a: f32,
@@ -188,19 +180,15 @@ pub fn drawRectTransformed(
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
         .color_r = r, .color_g = g, .color_b = b, .color_a = a,
         .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
         .radius_tl = border_radius, .radius_tr = border_radius,
         .radius_br = border_radius, .radius_bl = border_radius,
         .border_width = border_width,
-        .rotation = rotation_deg,
+        .rotation = rotation_deg + tr.rotation_deg,
         .scale_x = sx,
         .scale_y = sy,
     };
@@ -218,19 +206,16 @@ pub fn drawRectShadow(
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
         .color_r = r, .color_g = g, .color_b = b, .color_a = a,
         .border_color_r = 0, .border_color_g = 0, .border_color_b = 0, .border_color_a = 0,
         .radius_tl = rtl, .radius_tr = rtr,
         .radius_br = rbr, .radius_bl = rbl,
         .border_width = 0,
         .blur_radius = blur,
+        .rotation = tr.rotation_deg,
     };
     g_rect_count += 1;
 }
@@ -248,13 +233,9 @@ pub fn drawRectGradient(
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
-    const transform = core.getTransform();
-    const tx = if (transform.active) (x - transform.ox) * transform.scale + transform.ox + transform.tx else x;
-    const ty = if (transform.active) (y - transform.oy) * transform.scale + transform.oy + transform.ty else y;
-    const tw = if (transform.active) w * transform.scale else w;
-    const th = if (transform.active) h * transform.scale else h;
+    const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tx, .pos_y = ty, .size_w = tw, .size_h = th,
+        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
         .color_r = r, .color_g = g, .color_b = b, .color_a = a,
         .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
         .radius_tl = rtl, .radius_tr = rtr,
@@ -262,6 +243,7 @@ pub fn drawRectGradient(
         .border_width = border_width,
         .grad_r = gr, .grad_g = gg, .grad_b = gb, .grad_a = ga,
         .grad_dir = dir,
+        .rotation = tr.rotation_deg,
     };
     g_rect_count += 1;
 }

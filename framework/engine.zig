@@ -198,6 +198,7 @@ const render_surfaces = if (HAS_RENDER_SURFACES) @import("render_surfaces.zig") 
     pub fn paintSurface(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
         return false;
     }
+    pub fn setSuspended(_: []const u8, _: bool) void {}
 };
 const capture = if (HAS_EFFECTS) @import("capture.zig") else struct {
     pub fn init() void {}
@@ -1605,6 +1606,27 @@ fn paintNode(node: *Node) void {
         return;
     }
 
+    // CSS transform — push onto the node-matrix stack so this node's visuals
+    // and all descendants inherit the rotation/scale/translate. Origin defaults
+    // to center (0.5, 0.5). Mirrors love2d's painter.lua applyTransform: visual
+    // only, does not affect layout positions or hit-testing.
+    const has_xform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0 or node.style.translate_x != 0 or node.style.translate_y != 0;
+    if (has_xform) {
+        const pivot_x = r.x + node.style.origin_x * r.w;
+        const pivot_y = r.y + node.style.origin_y * r.h;
+        gpu.pushNodeMatrix();
+        gpu.composeNodeTransform(
+            pivot_x,
+            pivot_y,
+            std.math.degreesToRadians(node.style.rotation),
+            node.style.scale_x,
+            node.style.scale_y,
+            node.style.translate_x,
+            node.style.translate_y,
+        );
+    }
+    defer if (has_xform) gpu.popNodeMatrix();
+
     // Apply node opacity (cascades to children via g_paint_opacity)
     const saved_opacity = g_paint_opacity;
     if (node.style.opacity < 1.0) {
@@ -1945,31 +1967,10 @@ noinline fn paintNodeVisuals(node: *Node) void {
         if (bg_raw.a > 0) {
             const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
-            const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
-            if (has_transform) {
-                gpu.drawRectCornersTransformed(
-                    r.x,
-                    r.y,
-                    r.w,
-                    r.h,
-                    @as(f32, @floatFromInt(bg.r)) / 255.0,
-                    @as(f32, @floatFromInt(bg.g)) / 255.0,
-                    @as(f32, @floatFromInt(bg.b)) / 255.0,
-                    @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.radiusTL(),
-                    node.style.radiusTR(),
-                    node.style.radiusBR(),
-                    node.style.radiusBL(),
-                    node.style.brdTop(),
-                    @as(f32, @floatFromInt(bc.r)) / 255.0,
-                    @as(f32, @floatFromInt(bc.g)) / 255.0,
-                    @as(f32, @floatFromInt(bc.b)) / 255.0,
-                    @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
-                    node.style.rotation,
-                    node.style.scale_x,
-                    node.style.scale_y,
-                );
-            } else if (node.style.gradient_color_end) |ge| {
+            // Rotation/scale/translate handled centrally via the GPU node-matrix
+            // stack pushed at the top of paintNode — drawRectCorners picks up the
+            // active matrix and decomposes it into the per-rect rotation field.
+            if (node.style.gradient_color_end) |ge| {
                 if (node.style.gradient_direction != .none) {
                     const dir: f32 = switch (node.style.gradient_direction) {
                         .vertical => 1.0,
@@ -2147,6 +2148,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
 
     // Render surface — screen capture, webcam, VM, etc.
     if (node.render_src) |src| {
+        render_surfaces.setSuspended(src, node.render_suspended);
         _ = render_surfaces.paintSurface(src, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 

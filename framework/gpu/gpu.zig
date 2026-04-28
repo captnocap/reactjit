@@ -140,6 +140,207 @@ pub fn getTransform() Transform {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// CSS-style transform stack (rotate / scale / translate around origin)
+// ════════════════════════════════════════════════════════════════════════
+// 2D affine: pos' = (a*x + c*y + tx, b*x + d*y + ty).
+// Identity = {a=1, b=0, c=0, d=1, tx=0, ty=0}.
+// Mirrors love2d/cli/runtime/lua/painter.lua applyTransform — visual only,
+// does not affect layout positions or hit testing.
+
+pub const Affine = struct {
+    a: f32 = 1,
+    b: f32 = 0,
+    c: f32 = 0,
+    d: f32 = 1,
+    tx: f32 = 0,
+    ty: f32 = 0,
+
+    pub fn identity() Affine {
+        return .{};
+    }
+
+    pub fn isIdentity(m: Affine) bool {
+        return m.a == 1 and m.b == 0 and m.c == 0 and m.d == 1 and m.tx == 0 and m.ty == 0;
+    }
+
+    /// Apply the matrix to a point.
+    pub fn applyXY(m: Affine, x: f32, y: f32) [2]f32 {
+        return .{ m.a * x + m.c * y + m.tx, m.b * x + m.d * y + m.ty };
+    }
+
+    /// Right-multiply: out = self * other (other applied first to a point).
+    pub fn mul(self: Affine, o: Affine) Affine {
+        return .{
+            .a = self.a * o.a + self.c * o.b,
+            .b = self.b * o.a + self.d * o.b,
+            .c = self.a * o.c + self.c * o.d,
+            .d = self.b * o.c + self.d * o.d,
+            .tx = self.a * o.tx + self.c * o.ty + self.tx,
+            .ty = self.b * o.tx + self.d * o.ty + self.ty,
+        };
+    }
+
+    /// Decompose into rotation (radians), scale_x, scale_y. Assumes no skew/shear.
+    pub fn decompose(m: Affine) struct { angle_rad: f32, sx: f32, sy: f32 } {
+        const sx = @sqrt(m.a * m.a + m.b * m.b);
+        const sy = @sqrt(m.c * m.c + m.d * m.d);
+        const angle = std.math.atan2(m.b, m.a);
+        return .{ .angle_rad = angle, .sx = sx, .sy = sy };
+    }
+
+    pub fn translation(dx: f32, dy: f32) Affine {
+        return .{ .tx = dx, .ty = dy };
+    }
+
+    pub fn rotation(rad: f32) Affine {
+        const c_ = @cos(rad);
+        const s_ = @sin(rad);
+        return .{ .a = c_, .b = s_, .c = -s_, .d = c_ };
+    }
+
+    pub fn scaling(sx: f32, sy: f32) Affine {
+        return .{ .a = sx, .d = sy };
+    }
+};
+
+const NODE_MATRIX_STACK_DEPTH: usize = 64;
+var g_node_matrix_stack: [NODE_MATRIX_STACK_DEPTH]Affine = [_]Affine{.{}} ** NODE_MATRIX_STACK_DEPTH;
+var g_node_matrix_top: usize = 0; // index of current top — stack[0] is identity
+var g_node_matrix_active: bool = false;
+
+/// Push the current node-transform matrix onto the stack so callers can compose
+/// new transforms and later pop back. Saturates silently at max depth.
+pub fn pushNodeMatrix() void {
+    if (g_node_matrix_top + 1 >= NODE_MATRIX_STACK_DEPTH) return;
+    g_node_matrix_top += 1;
+    g_node_matrix_stack[g_node_matrix_top] = g_node_matrix_stack[g_node_matrix_top - 1];
+}
+
+/// Pop the topmost node matrix. Saturates at depth 0.
+pub fn popNodeMatrix() void {
+    if (g_node_matrix_top == 0) return;
+    g_node_matrix_top -= 1;
+    g_node_matrix_active = !g_node_matrix_stack[g_node_matrix_top].isIdentity();
+}
+
+/// Compose the CSS-style transform onto the top of the matrix stack:
+///   M_new = M_old * T(pivot) * R(rotation) * S(sx, sy) * T(-pivot) * T(tx, ty)
+/// pivot is in the same coordinate space the caller used to position the node
+/// (typically screen pixels at the time of paint).
+pub fn composeNodeTransform(
+    pivot_x: f32,
+    pivot_y: f32,
+    rotation_rad: f32,
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+) void {
+    var m = Affine.translation(pivot_x, pivot_y)
+        .mul(Affine.rotation(rotation_rad))
+        .mul(Affine.scaling(scale_x, scale_y))
+        .mul(Affine.translation(-pivot_x, -pivot_y));
+    if (translate_x != 0 or translate_y != 0) {
+        m = m.mul(Affine.translation(translate_x, translate_y));
+    }
+    g_node_matrix_stack[g_node_matrix_top] = g_node_matrix_stack[g_node_matrix_top].mul(m);
+    g_node_matrix_active = g_node_matrix_active or !g_node_matrix_stack[g_node_matrix_top].isIdentity();
+}
+
+/// Returns the current top of the node-matrix stack.
+pub fn getNodeMatrix() Affine {
+    return g_node_matrix_stack[g_node_matrix_top];
+}
+
+/// True when a non-identity node transform is in effect.
+pub fn nodeMatrixActive() bool {
+    return g_node_matrix_active;
+}
+
+/// Apply both the canvas pan/zoom transform and the node CSS transform to a
+/// point. Order: node-matrix first (closest to local space), then canvas.
+pub fn applyXY(x: f32, y: f32) [2]f32 {
+    var p: [2]f32 = .{ x, y };
+    if (g_node_matrix_active) p = g_node_matrix_stack[g_node_matrix_top].applyXY(p[0], p[1]);
+    if (g_transform_active) {
+        const px = (p[0] - g_transform_ox) * g_transform_scale + g_transform_ox + g_transform_tx;
+        const py = (p[1] - g_transform_oy) * g_transform_scale + g_transform_oy + g_transform_ty;
+        p = .{ px, py };
+    }
+    return p;
+}
+
+/// Combined effective scale on the X axis (canvas zoom × node-matrix sx).
+pub fn effectiveScaleX() f32 {
+    var s: f32 = 1;
+    if (g_node_matrix_active) s *= @sqrt(g_node_matrix_stack[g_node_matrix_top].a * g_node_matrix_stack[g_node_matrix_top].a + g_node_matrix_stack[g_node_matrix_top].b * g_node_matrix_stack[g_node_matrix_top].b);
+    if (g_transform_active) s *= g_transform_scale;
+    return s;
+}
+
+pub fn effectiveScaleY() f32 {
+    var s: f32 = 1;
+    if (g_node_matrix_active) s *= @sqrt(g_node_matrix_stack[g_node_matrix_top].c * g_node_matrix_stack[g_node_matrix_top].c + g_node_matrix_stack[g_node_matrix_top].d * g_node_matrix_stack[g_node_matrix_top].d);
+    if (g_transform_active) s *= g_transform_scale;
+    return s;
+}
+
+/// Decomposed rotation of the active node matrix (radians). 0 if inactive.
+pub fn nodeRotationRad() f32 {
+    if (!g_node_matrix_active) return 0;
+    const m = g_node_matrix_stack[g_node_matrix_top];
+    return std.math.atan2(m.b, m.a);
+}
+
+/// Resolve a rect (top-left x/y, width, height) through the canvas pan/zoom
+/// transform AND the node matrix stack. Returns the screen-space rect plus a
+/// rotation_deg the caller should apply via the per-rect rotation field on the
+/// shader (which rotates around the rect's own center). The returned (x, y) is
+/// the unrotated top-left so that `(x + w/2, y + h/2)` is the correct rotation
+/// pivot — matching what the rect/glyph shaders expect.
+pub const TransformedRect = struct {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation_deg: f32,
+    scale_x: f32 = 1,
+    scale_y: f32 = 1,
+};
+
+pub fn resolveRect(x: f32, y: f32, w: f32, h: f32) TransformedRect {
+    var ox = x;
+    var oy = y;
+    var ow = w;
+    var oh = h;
+    var rot_deg: f32 = 0;
+
+    if (g_node_matrix_active) {
+        const m = g_node_matrix_stack[g_node_matrix_top];
+        const sx = @sqrt(m.a * m.a + m.b * m.b);
+        const sy = @sqrt(m.c * m.c + m.d * m.d);
+        const angle = std.math.atan2(m.b, m.a);
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const new_center = m.applyXY(cx, cy);
+        ow = w * sx;
+        oh = h * sy;
+        ox = new_center[0] - ow / 2;
+        oy = new_center[1] - oh / 2;
+        rot_deg = angle * 180.0 / std.math.pi;
+    }
+
+    if (g_transform_active) {
+        ox = (ox - g_transform_ox) * g_transform_scale + g_transform_ox + g_transform_tx;
+        oy = (oy - g_transform_oy) * g_transform_scale + g_transform_oy + g_transform_ty;
+        ow *= g_transform_scale;
+        oh *= g_transform_scale;
+    }
+
+    return .{ .x = ox, .y = oy, .w = ow, .h = oh, .rotation_deg = rot_deg };
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Accessors for sub-pipelines
 // ════════════════════════════════════════════════════════════════════════
 

@@ -15,6 +15,9 @@ const rects = @import("rects.zig");
 // ════════════════════════════════════════════════════════════════════════
 
 /// Per-instance glyph data — matches the text WGSL struct layout.
+/// The 2D affine matrix (m_a..m_ty) is applied to each glyph quad corner in
+/// the shader; default identity (m_a=m_d=1) is a no-op so the existing fast
+/// path for axis-aligned text remains free.
 pub const GlyphInstance = extern struct {
     pos_x: f32,
     pos_y: f32,
@@ -28,6 +31,12 @@ pub const GlyphInstance = extern struct {
     color_g: f32,
     color_b: f32,
     color_a: f32,
+    m_a: f32 = 1,
+    m_b: f32 = 0,
+    m_c: f32 = 0,
+    m_d: f32 = 1,
+    m_tx: f32 = 0,
+    m_ty: f32 = 0,
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -236,9 +245,17 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     const s = transform.scale;
     const has_transform = transform.active;
 
-    // When canvas transform is active, rasterize at scaled size for crisp text.
-    const render_size: u16 = if (has_transform)
-        @intFromFloat(@max(4, @min(200, @round(@as(f32, @floatFromInt(size_px)) * s))))
+    // Active CSS node-matrix (rotate/scale/translate). Identity unless an
+    // ancestor pushed a transform via engine.zig:paintNode.
+    const node_m = core.getNodeMatrix();
+    const node_active = core.nodeMatrixActive();
+    const matrix_scale: f32 = if (node_active) @sqrt(node_m.a * node_m.a + node_m.b * node_m.b) else 1;
+
+    // When canvas transform OR a node CSS transform with scale is active,
+    // rasterize the atlas at the effective size for crisp glyphs.
+    const effective_size = @as(f32, @floatFromInt(size_px)) * s * matrix_scale;
+    const render_size: u16 = if (has_transform or node_active)
+        @intFromFloat(@max(4, @min(200, @round(effective_size))))
     else
         size_px;
 
@@ -258,9 +275,21 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     // hinted glyphs (the hinter already snapped them to whole pixels) but
     // softens every edge of larger sizes, producing the "small is crisp,
     // big is blurry" effect.
-    var pen_x: f32 = @round(if (has_transform) (x - transform.ox) * s + transform.ox + transform.tx else x);
-    const start_y: f32 = @round(if (has_transform) (y - transform.oy) * s + transform.oy + transform.ty else y);
+    // Skip integer snapping when a node CSS transform is active — rotated
+    // glyph corners aren't pixel-aligned anyway, and snapping the line anchor
+    // jiggles rotated text against its pivot.
+    const snap = !node_active;
+    var pen_x: f32 = if (has_transform) (x - transform.ox) * s + transform.ox + transform.tx else x;
+    var start_y: f32 = if (has_transform) (y - transform.oy) * s + transform.oy + transform.ty else y;
+    if (snap) {
+        pen_x = @round(pen_x);
+        start_y = @round(start_y);
+    }
     const baseline_y = start_y + ascent;
+    // Glyph atlas pixels were rasterized at matrix_scale * canvas_scale, so
+    // divide the per-glyph advance/size/bearing by matrix_scale to keep them in
+    // the pre-matrix coordinate space the shader will multiply through `m_*`.
+    const inv_ms: f32 = if (node_active) 1.0 / matrix_scale else 1.0;
 
     var i: usize = 0;
     while (i < text.len) {
@@ -289,15 +318,17 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
         if (cacheGlyph(ch.codepoint, render_size)) |glyph| {
             if (glyph.width > 0 and glyph.height > 0) {
                 if (g_glyph_count < MAX_GLYPHS) {
-                    const gx = pen_x + @as(f32, @floatFromInt(glyph.bearing_x));
-                    const gy = baseline_y - @as(f32, @floatFromInt(glyph.bearing_y));
+                    const gx = pen_x + @as(f32, @floatFromInt(glyph.bearing_x)) * inv_ms;
+                    const gy = baseline_y - @as(f32, @floatFromInt(glyph.bearing_y)) * inv_ms;
+                    const sw = @as(f32, @floatFromInt(glyph.width)) * inv_ms;
+                    const sh = @as(f32, @floatFromInt(glyph.height)) * inv_ms;
                     // Sample effect color at glyph center if text effect is active
-                    const ecol = sampleTextEffect(gx + @as(f32, @floatFromInt(glyph.width)) / 2, gy + @as(f32, @floatFromInt(glyph.height)) / 2);
+                    const ecol = sampleTextEffect(gx + sw / 2, gy + sh / 2);
                     g_glyphs[g_glyph_count] = .{
                         .pos_x = gx,
                         .pos_y = gy,
-                        .size_w = @floatFromInt(glyph.width),
-                        .size_h = @floatFromInt(glyph.height),
+                        .size_w = sw,
+                        .size_h = sh,
                         .uv_x = glyph.uv_x,
                         .uv_y = glyph.uv_y,
                         .uv_w = glyph.uv_w,
@@ -306,11 +337,17 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                         .color_g = if (ecol) |e| e[1] else cg,
                         .color_b = if (ecol) |e| e[2] else cb,
                         .color_a = ca,
+                        .m_a = if (node_active) node_m.a else 1,
+                        .m_b = if (node_active) node_m.b else 0,
+                        .m_c = if (node_active) node_m.c else 0,
+                        .m_d = if (node_active) node_m.d else 1,
+                        .m_tx = if (node_active) node_m.tx else 0,
+                        .m_ty = if (node_active) node_m.ty else 0,
                     };
                     g_glyph_count += 1;
                 }
             }
-            pen_x += glyph.advance;
+            pen_x += glyph.advance * inv_ms;
             pen_x += g_letter_spacing;
         }
         i += ch.len;
@@ -904,6 +941,8 @@ fn initPipeline(device: *wgpu.Device) void {
         .{ .format = .float32x2, .offset = 16, .shader_location = 2 }, // uv_pos
         .{ .format = .float32x2, .offset = 24, .shader_location = 3 }, // uv_size
         .{ .format = .float32x4, .offset = 32, .shader_location = 4 }, // color
+        .{ .format = .float32x4, .offset = 48, .shader_location = 5 }, // m_abcd (linear part)
+        .{ .format = .float32x2, .offset = 64, .shader_location = 6 }, // m_txy (translation)
     };
 
     const glyph_buffer_layout = wgpu.VertexBufferLayout{

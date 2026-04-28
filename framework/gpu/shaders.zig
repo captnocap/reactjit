@@ -187,6 +187,8 @@ pub const text_wgsl =
     \\    @location(2) uv_pos: vec2f,  // atlas UV offset [0..1]
     \\    @location(3) uv_size: vec2f, // atlas UV extent [0..1]
     \\    @location(4) color: vec4f,   // text color RGBA
+    \\    @location(5) m_abcd: vec4f,  // 2x2 linear part of CSS transform: (a,b,c,d)
+    \\    @location(6) m_txy:  vec2f,  // translation of CSS transform: (tx, ty)
     \\};
     \\
     \\struct VertexOutput {
@@ -204,7 +206,14 @@ pub const text_wgsl =
     \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
     \\    let corner = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
     \\
-    \\    let pixel_pos = inst.pos + corner * inst.size;
+    \\    // Unrotated corner in screen pixels (canvas pan/zoom already applied
+    \\    // CPU-side). Then apply the per-glyph 2D affine matrix — identity by
+    \\    // default, set when a CSS transform is active on an ancestor.
+    \\    let local = inst.pos + corner * inst.size;
+    \\    let pixel_pos = vec2f(
+    \\        inst.m_abcd.x * local.x + inst.m_abcd.z * local.y + inst.m_txy.x,
+    \\        inst.m_abcd.y * local.x + inst.m_abcd.w * local.y + inst.m_txy.y,
+    \\    );
     \\    let ndc = vec2f(
     \\        pixel_pos.x / globals.screen_size.x * 2.0 - 1.0,
     \\        1.0 - pixel_pos.y / globals.screen_size.y * 2.0,

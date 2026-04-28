@@ -157,26 +157,26 @@ const INGREDIENTS = [_]Ingredient{
     // unconditionally as React reconciler scaffolding. So gating it on a
     // hook-file presence is degenerate; it's always shipped because the
     // framework boilerplate in the bundle always references it.
-    .{ .name = "core",         .required = true,  .grep_prefix = "", .reg_fn = "registerCore",         .mod = v8_bindings_core },
+    .{ .name = "core", .required = true, .grep_prefix = "", .reg_fn = "registerCore", .mod = v8_bindings_core },
     // Everything below is source-gated: scripts/ship reads the esbuild
     // metafile and only flips the matching -Dhas-X=true if a JS file
     // that calls into the binding is actually shipped.
-    .{ .name = "fs",           .required = false, .grep_prefix = "__fs_",      .reg_fn = "registerFs",           .mod = v8_bindings_fs },
-    .{ .name = "websocket",    .required = false, .grep_prefix = "__ws_",      .reg_fn = "registerWebSocket",    .mod = v8_bindings_websocket },
-    .{ .name = "telemetry",    .required = false, .grep_prefix = "__tel_",     .reg_fn = "registerTelemetry",    .mod = v8_bindings_telemetry },
-    .{ .name = "zigcall",      .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCall",      .mod = v8_bindings_zigcall },
-    .{ .name = "zigcall_list", .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCallList",  .mod = v8_bindings_zigcall },
+    .{ .name = "fs", .required = false, .grep_prefix = "__fs_", .reg_fn = "registerFs", .mod = v8_bindings_fs },
+    .{ .name = "websocket", .required = false, .grep_prefix = "__ws_", .reg_fn = "registerWebSocket", .mod = v8_bindings_websocket },
+    .{ .name = "telemetry", .required = false, .grep_prefix = "__tel_", .reg_fn = "registerTelemetry", .mod = v8_bindings_telemetry },
+    .{ .name = "zigcall", .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCall", .mod = v8_bindings_zigcall },
+    .{ .name = "zigcall_list", .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCallList", .mod = v8_bindings_zigcall },
     // Opt-in per cart — scripts/ship grep flips -Dhas-X when the bundle
     // references the matching prefix. Carts that don't order them get a
     // comptime stub (no host-fn registration, no tickDrain).
-    .{ .name = "process",      .required = false, .grep_prefix = "__proc_",    .reg_fn = "registerProcess",     .mod = v8_bindings_process },
-    .{ .name = "httpsrv",      .required = false, .grep_prefix = "__httpsrv_", .reg_fn = "registerHttpServer",  .mod = v8_bindings_httpserver },
-    .{ .name = "wssrv",        .required = false, .grep_prefix = "__wssrv_",   .reg_fn = "registerWsServer",    .mod = v8_bindings_wsserver },
-    .{ .name = "net",          .required = false, .grep_prefix = "__tcp_",     .reg_fn = "registerNet",         .mod = v8_bindings_net },
-    .{ .name = "gameserver",   .required = false, .grep_prefix = "__rcon_",    .reg_fn = "registerGameServer",  .mod = v8_bindings_gameserver },
-    .{ .name = "tor",          .required = false, .grep_prefix = "__tor_",     .reg_fn = "registerTor",         .mod = v8_bindings_tor },
-    .{ .name = "privacy",      .required = false, .grep_prefix = "__priv_",    .reg_fn = "registerPrivacy",     .mod = v8_bindings_privacy },
-    .{ .name = "sdk",          .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk",         .mod = v8_bindings_sdk },
+    .{ .name = "process", .required = false, .grep_prefix = "__proc_", .reg_fn = "registerProcess", .mod = v8_bindings_process },
+    .{ .name = "httpsrv", .required = false, .grep_prefix = "__httpsrv_", .reg_fn = "registerHttpServer", .mod = v8_bindings_httpserver },
+    .{ .name = "wssrv", .required = false, .grep_prefix = "__wssrv_", .reg_fn = "registerWsServer", .mod = v8_bindings_wsserver },
+    .{ .name = "net", .required = false, .grep_prefix = "__tcp_", .reg_fn = "registerNet", .mod = v8_bindings_net },
+    .{ .name = "gameserver", .required = false, .grep_prefix = "__rcon_", .reg_fn = "registerGameServer", .mod = v8_bindings_gameserver },
+    .{ .name = "tor", .required = false, .grep_prefix = "__tor_", .reg_fn = "registerTor", .mod = v8_bindings_tor },
+    .{ .name = "privacy", .required = false, .grep_prefix = "__priv_", .reg_fn = "registerPrivacy", .mod = v8_bindings_privacy },
+    .{ .name = "sdk", .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk", .mod = v8_bindings_sdk },
 };
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
@@ -1122,6 +1122,39 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update:
                 node.style.scale_y = f;
             }
         }
+    } else if (eq(u8, key, "transform")) {
+        // CSS-style transform: { rotate, scaleX, scaleY, translateX, translateY,
+        // originX, originY }. Mirrors love2d's painter.lua applyTransform — visual
+        // only, does not affect layout or hit-testing.
+        if (val == .object) {
+            if (val.object.get("rotate")) |v| {
+                if (jsonFloat(v)) |f| {
+                    if (is_update and node.transition_active) {
+                        transition_mod.set(node, .rotation, .{ .float = f }, nodeTransitionConfig(node));
+                    } else {
+                        node.style.rotation = f;
+                    }
+                }
+            }
+            if (val.object.get("scaleX")) |v| {
+                if (jsonFloat(v)) |f| node.style.scale_x = f;
+            }
+            if (val.object.get("scaleY")) |v| {
+                if (jsonFloat(v)) |f| node.style.scale_y = f;
+            }
+            if (val.object.get("originX")) |v| {
+                if (jsonFloat(v)) |f| node.style.origin_x = f;
+            }
+            if (val.object.get("originY")) |v| {
+                if (jsonFloat(v)) |f| node.style.origin_y = f;
+            }
+            if (val.object.get("translateX")) |v| {
+                if (jsonFloat(v)) |f| node.style.translate_x = f;
+            }
+            if (val.object.get("translateY")) |v| {
+                if (jsonFloat(v)) |f| node.style.translate_y = f;
+            }
+        }
     } else if (eq(u8, key, "transition")) {
         // Renderer emits `transition: { all: { duration, easing, delay } }`
         // (see runtime/tw.ts emit). Only the `all` shape is supported today.
@@ -1229,7 +1262,73 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         }
         if (std.mem.eql(u8, k, "fontSize")) {
             if (node.terminal) node.terminal_font_size = 13 else node.font_size = 16;
-        } else if (std.mem.eql(u8, k, "color")) node.text_color = null else if (std.mem.eql(u8, k, "letterSpacing")) node.letter_spacing = 0 else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0 else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0 else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true else if (std.mem.eql(u8, k, "colorRows")) node.input_color_rows = null else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null else if (std.mem.eql(u8, k, "value")) node.text = null else if (std.mem.eql(u8, k, "source")) node.image_src = null else if (std.mem.eql(u8, k, "renderSrc")) node.render_src = null else if (std.mem.eql(u8, k, "staticSurface")) node.static_surface = false else if (std.mem.eql(u8, k, "staticSurfaceKey")) node.static_surface_key = null else if (std.mem.eql(u8, k, "staticSurfaceScale")) node.static_surface_scale = 1 else if (std.mem.eql(u8, k, "staticSurfaceWarmupFrames")) node.static_surface_warmup_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceIntroFrames")) node.static_surface_intro_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) node.static_surface_overlay = false else if (std.mem.eql(u8, k, "d")) node.canvas_path_d = null else if (std.mem.eql(u8, k, "stroke")) node.text_color = null else if (std.mem.eql(u8, k, "strokeWidth")) node.canvas_stroke_width = 2 else if (std.mem.eql(u8, k, "strokeOpacity")) node.canvas_stroke_opacity = 1 else if (std.mem.eql(u8, k, "fill")) node.canvas_fill_color = null else if (std.mem.eql(u8, k, "fillOpacity")) node.canvas_fill_opacity = 1 else if (std.mem.eql(u8, k, "gradient")) node.canvas_fill_gradient = null else if (std.mem.eql(u8, k, "fillEffect")) node.canvas_fill_effect = null else if (std.mem.eql(u8, k, "href")) node.href = null else if (std.mem.eql(u8, k, "tooltip")) node.tooltip = null else if (std.mem.eql(u8, k, "hoverable")) node.hoverable = false else if (std.mem.eql(u8, k, "debugName")) node.debug_name = null else if (std.mem.eql(u8, k, "testID")) node.test_id = null else if (std.mem.eql(u8, k, "windowDrag")) node.window_drag = false else if (std.mem.eql(u8, k, "windowResize")) node.window_resize = false;
+        } else if (std.mem.eql(u8, k, "color")) {
+            node.text_color = null;
+        } else if (std.mem.eql(u8, k, "letterSpacing")) {
+            node.letter_spacing = 0;
+        } else if (std.mem.eql(u8, k, "lineHeight")) {
+            node.line_height = 0;
+        } else if (std.mem.eql(u8, k, "numberOfLines")) {
+            node.number_of_lines = 0;
+        } else if (std.mem.eql(u8, k, "noWrap")) {
+            node.no_wrap = false;
+        } else if (std.mem.eql(u8, k, "paintText")) {
+            node.input_paint_text = true;
+        } else if (std.mem.eql(u8, k, "colorRows")) {
+            node.input_color_rows = null;
+        } else if (std.mem.eql(u8, k, "placeholder")) {
+            node.placeholder = null;
+        } else if (std.mem.eql(u8, k, "value")) {
+            node.text = null;
+        } else if (std.mem.eql(u8, k, "source")) {
+            node.image_src = null;
+        } else if (std.mem.eql(u8, k, "renderSrc")) {
+            node.render_src = null;
+        } else if (std.mem.eql(u8, k, "renderSuspended")) {
+            node.render_suspended = false;
+        } else if (std.mem.eql(u8, k, "staticSurface")) {
+            node.static_surface = false;
+        } else if (std.mem.eql(u8, k, "staticSurfaceKey")) {
+            node.static_surface_key = null;
+        } else if (std.mem.eql(u8, k, "staticSurfaceScale")) {
+            node.static_surface_scale = 1;
+        } else if (std.mem.eql(u8, k, "staticSurfaceWarmupFrames")) {
+            node.static_surface_warmup_frames = 0;
+        } else if (std.mem.eql(u8, k, "staticSurfaceIntroFrames")) {
+            node.static_surface_intro_frames = 0;
+        } else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) {
+            node.static_surface_overlay = false;
+        } else if (std.mem.eql(u8, k, "d")) {
+            node.canvas_path_d = null;
+        } else if (std.mem.eql(u8, k, "stroke")) {
+            node.text_color = null;
+        } else if (std.mem.eql(u8, k, "strokeWidth")) {
+            node.canvas_stroke_width = 2;
+        } else if (std.mem.eql(u8, k, "strokeOpacity")) {
+            node.canvas_stroke_opacity = 1;
+        } else if (std.mem.eql(u8, k, "fill")) {
+            node.canvas_fill_color = null;
+        } else if (std.mem.eql(u8, k, "fillOpacity")) {
+            node.canvas_fill_opacity = 1;
+        } else if (std.mem.eql(u8, k, "gradient")) {
+            node.canvas_fill_gradient = null;
+        } else if (std.mem.eql(u8, k, "fillEffect")) {
+            node.canvas_fill_effect = null;
+        } else if (std.mem.eql(u8, k, "href")) {
+            node.href = null;
+        } else if (std.mem.eql(u8, k, "tooltip")) {
+            node.tooltip = null;
+        } else if (std.mem.eql(u8, k, "hoverable")) {
+            node.hoverable = false;
+        } else if (std.mem.eql(u8, k, "debugName")) {
+            node.debug_name = null;
+        } else if (std.mem.eql(u8, k, "testID")) {
+            node.test_id = null;
+        } else if (std.mem.eql(u8, k, "windowDrag")) {
+            node.window_drag = false;
+        } else if (std.mem.eql(u8, k, "windowResize")) {
+            node.window_resize = false;
+        }
     }
 }
 
@@ -1412,8 +1511,7 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.input_paint_text = b;
         } else if (is_input and std.mem.eql(u8, k, "colorRows")) {
             node.input_color_rows = parseColorTextRows(v);
-        }
-        else if (is_input and std.mem.eql(u8, k, "placeholder")) {
+        } else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
             if (dupJsonText(v)) |s| syncInputValue(node, s);
@@ -1434,6 +1532,8 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| node.image_src = s;
         } else if (std.mem.eql(u8, k, "renderSrc")) {
             if (dupJsonText(v)) |s| node.render_src = s;
+        } else if (std.mem.eql(u8, k, "renderSuspended")) {
+            if (jsonBool(v)) |b| node.render_suspended = b;
         } else if (std.mem.eql(u8, k, "staticSurface")) {
             if (jsonBool(v)) |b| node.static_surface = b;
         } else if (std.mem.eql(u8, k, "staticSurfaceKey")) {
@@ -2066,8 +2166,8 @@ fn applyCommandBatch(json_bytes: []const u8) void {
         cleanup_us >= 1000;
     if (should_log_batch) {
         std.debug.print("[batch-timing] bytes={d} cmds={d} parse={d}ms apply={d}ms cleanup={d}ms\n", .{
-            json_bytes.len,           cmd_count,
-            @divTrunc(parse_us, 1000), @divTrunc(apply_us, 1000),
+            json_bytes.len,              cmd_count,
+            @divTrunc(parse_us, 1000),   @divTrunc(apply_us, 1000),
             @divTrunc(cleanup_us, 1000),
         });
     }
