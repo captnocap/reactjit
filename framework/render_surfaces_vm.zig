@@ -58,6 +58,31 @@ pub fn vncRead(sock: posix.socket_t, buf: []u8) usize {
     return n;
 }
 
+/// Read exactly buf.len bytes, polling between reads with `timeout_ms`
+/// per chunk. Returns true on success, false on timeout or socket error.
+/// Use timeout_ms=0 for a single non-blocking poll (don't wait at all).
+///
+/// This exists because the VNC protocol parser is stateless across update()
+/// calls — once we start consuming a response we MUST read it whole, or the
+/// next call will read from the middle of a message and desync forever.
+pub fn recvExactBlocking(sock: posix.socket_t, buf: []u8, timeout_ms: i32) bool {
+    var got: usize = 0;
+    while (got < buf.len) {
+        var pfd = [_]posix.pollfd{.{ .fd = sock, .events = posix.POLL.IN, .revents = 0 }};
+        const ready = posix.poll(&pfd, timeout_ms) catch return false;
+        if (ready == 0) return false;
+        if ((pfd[0].revents & posix.POLL.IN) == 0) return false;
+        const n = posix.read(sock, buf[got..]) catch |err| {
+            if (err == error.WouldBlock) continue;
+            log.info(.render, "vnc: recvExact error: {s}", .{@errorName(err)});
+            return false;
+        };
+        if (n == 0) return false;
+        got += n;
+    }
+    return true;
+}
+
 /// Blocking-ish write to VNC socket.
 pub fn vncWrite(sock: posix.socket_t, data: []const u8) bool {
     var sent: usize = 0;
@@ -103,6 +128,7 @@ pub fn updateVnc(feed: *Feed) void {
                 return;
             }
 
+            std.debug.print("[render-vm] VNC handshake: server version received, sending RFB 003.008\n", .{});
             log.info(.render, "vnc: got server version, sending ours", .{});
             _ = vncWrite(sock, "RFB 003.008\n");
             feed.vnc_state = .wait_security_types;
@@ -116,6 +142,7 @@ pub fn updateVnc(feed: *Feed) void {
 
             const num_types = sec_buf[0];
             if (num_types == 0) {
+                std.debug.print("[render-vm] VNC handshake FAILED: server reports 0 security types\n", .{});
                 feed.vnc_state = .failed;
                 feed.status = .@"error";
                 return;
@@ -123,6 +150,7 @@ pub fn updateVnc(feed: *Feed) void {
             if (n < 1 + @as(usize, num_types)) return; // wait for full type list
 
             // Select SecurityType 1 (None) — QEMU localhost uses no auth
+            std.debug.print("[render-vm] VNC handshake: selecting None auth ({d} types offered)\n", .{num_types});
             _ = vncWrite(sock, &[_]u8{1});
             feed.vnc_state = .wait_security_result;
         },
@@ -134,12 +162,14 @@ pub fn updateVnc(feed: *Feed) void {
             if (n < 4) return;
 
             if (readU32be(&res_buf) != 0) {
+                std.debug.print("[render-vm] VNC handshake FAILED: server rejected auth\n", .{});
                 feed.vnc_state = .failed;
                 feed.status = .@"error";
                 return;
             }
 
             // ClientInit: shared = true
+            std.debug.print("[render-vm] VNC handshake: auth OK, sending ClientInit\n", .{});
             _ = vncWrite(sock, &[_]u8{1});
             feed.vnc_state = .wait_server_init;
         },
@@ -190,11 +220,14 @@ pub fn updateVnc(feed: *Feed) void {
                 };
                 feed.width = vw;
                 feed.height = vh;
-                // Invalidate wgpu texture (will be recreated)
+                // Invalidate wgpu texture (will be recreated). release()
+                // (refcount drop) rather than destroy() — destroy() marks the
+                // texture immediately destroyed so any queued draw call
+                // referencing it via a bind_group fails wgpu validation.
                 if (feed.bind_group) |bg| bg.release();
                 if (feed.sampler) |s| s.release();
                 if (feed.texture_view) |tv| tv.release();
-                if (feed.texture) |t| t.destroy();
+                if (feed.texture) |t| t.release();
                 feed.bind_group = null;
                 feed.sampler = null;
                 feed.texture_view = null;
@@ -203,37 +236,49 @@ pub fn updateVnc(feed: *Feed) void {
 
             feed.vnc_state = .ready;
             feed.status = .ready;
+            std.debug.print("[render-vm] VNC ready: framebuffer {d}x{d}\n", .{ vw, vh });
             log.info(.render, "VNC connected: {d}x{d}", .{ vw, vh });
         },
 
         .ready => {
-            // Request full framebuffer update (non-incremental)
-            const req = [_]u8{3, 0} ++ u16be(0) ++ u16be(0) ++ u16be(feed.vnc_fb_width) ++ u16be(feed.vnc_fb_height);
-            _ = vncWrite(sock, &req);
+            // Throttle: only one framebuffer-update request in flight at a
+            // time. Without this we'd issue 60 full-screen RGBA requests/sec
+            // (72MB/s for 640x480), saturate qemu's TCP send buffer in
+            // ~30 seconds, and qemu would stop generating frames entirely.
+            // After the first non-incremental request, switch to incremental.
+            if (!feed.vnc_request_in_flight) {
+                const incremental: u8 = if (feed.vnc_frames_received > 0) 1 else 0;
+                const req = [_]u8{ 3, incremental } ++ u16be(0) ++ u16be(0) ++ u16be(feed.vnc_fb_width) ++ u16be(feed.vnc_fb_height);
+                _ = vncWrite(sock, &req);
+                feed.vnc_request_in_flight = true;
+            }
 
-            // Read FramebufferUpdate response
+            // Read FramebufferUpdate response. recvExactBlocking blocks
+            // briefly (per-chunk timeout) so partial-read desync can't
+            // happen — once we start parsing a response we consume it whole.
             var msg_buf: [4]u8 = undefined;
-            const n = vncRead(sock, &msg_buf);
-            if (n == 0) return;
+            if (!recvExactBlocking(sock, &msg_buf, 0)) return; // nothing yet, retry next frame
 
             if (msg_buf[0] == 0) {
-                // FramebufferUpdate: padding(1) + numRects(2) — we already read msg_buf[0]
-                if (n < 4) return; // need at least type + padding + numRects
                 const num_rects = readU16be(msg_buf[2..4]);
+                if (!feed.diag_first_frame_logged) {
+                    std.debug.print("[render-vm] FramebufferUpdate received: {d} rects\n", .{num_rects});
+                }
 
                 var rect_i: u16 = 0;
                 while (rect_i < num_rects) : (rect_i += 1) {
-                    // Rectangle header: x(2)+y(2)+w(2)+h(2)+encoding(4) = 12 bytes
                     var rect_hdr: [12]u8 = undefined;
-                    const rn = vncRead(sock, &rect_hdr);
-                    if (rn < 12) break;
+                    if (!recvExactBlocking(sock, &rect_hdr, 200)) {
+                        std.debug.print("[render-vm] rect_hdr read timed out — connection stalled\n", .{});
+                        feed.vnc_request_in_flight = false;
+                        return;
+                    }
 
                     const rw = readU16be(rect_hdr[4..6]);
                     const rh = readU16be(rect_hdr[6..8]);
                     const encoding = readU32be(rect_hdr[8..12]);
 
                     if (encoding == 0) {
-                        // RAW encoding — read pixel data directly into feed buffer
                         const pix_size: usize = @as(usize, rw) * @as(usize, rh) * 4;
                         const rx: usize = @intCast(readU16be(rect_hdr[0..2]));
                         const ry: usize = @intCast(readU16be(rect_hdr[2..4]));
@@ -241,33 +286,31 @@ pub fn updateVnc(feed: *Feed) void {
                         const buf = feed.pixel_buf orelse break;
                         const fb_w: usize = @intCast(feed.width);
 
-                        // If full-screen rect, read directly into pixel_buf
                         if (rx == 0 and ry == 0 and rw == feed.vnc_fb_width and rh == feed.vnc_fb_height) {
-                            var read_total: usize = 0;
-                            while (read_total < pix_size) {
-                                const chunk = vncRead(sock, buf[read_total..pix_size]);
-                                if (chunk == 0) break;
-                                read_total += chunk;
+                            if (!recvExactBlocking(sock, buf[0..pix_size], 500)) {
+                                std.debug.print("[render-vm] full-frame pixel read timed out ({d} bytes)\n", .{pix_size});
+                                feed.vnc_request_in_flight = false;
+                                return;
                             }
-                            if (read_total >= pix_size) feed.dirty = true;
+                            feed.dirty = true;
+                            if (!feed.diag_first_frame_logged) {
+                                std.debug.print("[render-vm] first VNC frame received: full {d}x{d} ({d} bytes)\n", .{ rw, rh, pix_size });
+                                feed.diag_first_frame_logged = true;
+                            }
                         } else {
-                            // Partial rect — read row by row into correct position
                             const rect_w: usize = @intCast(rw);
                             const rect_h: usize = @intCast(rh);
-                            var row_buf: [8192]u8 = undefined; // max ~2048px wide
+                            var row_buf: [8192]u8 = undefined;
                             const row_bytes = rect_w * 4;
 
                             var row: usize = 0;
                             while (row < rect_h) : (row += 1) {
                                 if (row_bytes > row_buf.len) break;
-                                var row_read: usize = 0;
-                                while (row_read < row_bytes) {
-                                    const chunk = vncRead(sock, row_buf[row_read..row_bytes]);
-                                    if (chunk == 0) break;
-                                    row_read += chunk;
+                                if (!recvExactBlocking(sock, row_buf[0..row_bytes], 200)) {
+                                    std.debug.print("[render-vm] partial-rect row read timed out\n", .{});
+                                    feed.vnc_request_in_flight = false;
+                                    return;
                                 }
-                                if (row_read < row_bytes) break;
-                                // Copy into framebuffer at (rx, ry+row)
                                 const dst_off = ((ry + row) * fb_w + rx) * 4;
                                 if (dst_off + row_bytes <= buf.len) {
                                     @memcpy(buf[dst_off .. dst_off + row_bytes], row_buf[0..row_bytes]);
@@ -275,18 +318,49 @@ pub fn updateVnc(feed: *Feed) void {
                             }
                             feed.dirty = true;
                         }
-                    } else {
-                        // Unknown encoding — try to skip pixel data
-                        const skip_size: usize = @as(usize, rw) * @as(usize, rh) * 4;
-                        var skipped: usize = 0;
-                        var skip_buf: [4096]u8 = undefined;
-                        while (skipped < skip_size) {
-                            const remain = @min(skip_buf.len, skip_size - skipped);
-                            const chunk = vncRead(sock, skip_buf[0..remain]);
-                            if (chunk == 0) break;
-                            skipped += chunk;
+                    } else if (encoding == 0xFFFFFF21) {
+                        // DesktopSize pseudo-encoding (-223): rect's w,h is
+                        // the new framebuffer size. No pixel data follows.
+                        const new_w: u32 = @intCast(rw);
+                        const new_h: u32 = @intCast(rh);
+                        std.debug.print("[render-vm] DesktopSize: framebuffer resize {d}x{d} → {d}x{d}\n", .{ feed.vnc_fb_width, feed.vnc_fb_height, new_w, new_h });
+                        if (new_w > 0 and new_h > 0 and (new_w != feed.width or new_h != feed.height)) {
+                            if (feed.pixel_buf) |old| page_alloc.free(old);
+                            feed.pixel_buf = page_alloc.alloc(u8, @as(usize, new_w) * @as(usize, new_h) * 4) catch {
+                                feed.status = .@"error";
+                                return;
+                            };
+                            feed.width = new_w;
+                            feed.height = new_h;
+                            feed.vnc_fb_width = @intCast(new_w);
+                            feed.vnc_fb_height = @intCast(new_h);
+                            if (feed.bind_group) |bg| bg.release();
+                            if (feed.sampler) |s| s.release();
+                            if (feed.texture_view) |tv| tv.release();
+                            if (feed.texture) |t| t.release();
+                            feed.bind_group = null;
+                            feed.sampler = null;
+                            feed.texture_view = null;
+                            feed.texture = null;
                         }
+                    } else {
+                        // We only advertised RAW(0) in SetEncodings, so anything
+                        // else is server-bug or a pseudo-encoding we don't know
+                        // the byte shape of. Don't try to drain N bytes of real
+                        // pixel data on a guess — close cleanly.
+                        std.debug.print("[render-vm] unsupported encoding 0x{x} for {d}x{d} rect — closing VNC\n", .{ encoding, rw, rh });
+                        feed.status = .@"error";
+                        feed.vnc_request_in_flight = false;
+                        return;
                     }
+                }
+
+                feed.vnc_request_in_flight = false;
+                feed.vnc_frames_received += 1;
+
+                if (feed.vnc_frames_received -% feed.vnc_last_log_frames >= 30) {
+                    std.debug.print("[render-vm] {d} VNC frames consumed ({d}x{d})\n", .{ feed.vnc_frames_received, feed.width, feed.height });
+                    feed.vnc_last_log_frames = feed.vnc_frames_received;
                 }
             }
         },
@@ -390,12 +464,16 @@ pub fn startVM(feed: *Feed, disk_path: []const u8, memory: u32, cpus: u32) bool 
 
     var child = std.process.Child.init(argv[0..argc], page_alloc);
     child.stdout_behavior = .Ignore;
-    child.stderr_behavior = .Ignore;
+    // Inherit stderr so qemu's own error messages (missing /dev/kvm, bad ISO,
+    // etc.) reach the user terminal — without this the VM path fails silently.
+    child.stderr_behavior = .Inherit;
     child.stdin_behavior = .Ignore;
 
+    std.debug.print("[render-vm] QEMU spawning: kvm={} iso={} disk={s} mem={d}MB cpus={d} vnc=:{d}\n", .{ has_kvm, is_iso, disk_path, memory, cpus, vnc_display });
     log.info(.render, "QEMU spawning: argc={d} kvm={} iso={}", .{ argc, has_kvm, is_iso });
 
     child.spawn() catch |err| {
+        std.debug.print("[render-vm] QEMU spawn FAILED: {}\n", .{err});
         log.info(.render, "QEMU spawn failed: {}", .{err});
         return false;
     };
@@ -410,6 +488,7 @@ pub fn startVM(feed: *Feed, disk_path: []const u8, memory: u32, cpus: u32) bool 
     feed.interactive = true;
     feed.startup_wait = 120; // ~2s for QEMU to start
 
+    std.debug.print("[render-vm] QEMU spawned OK, VNC port {d}, waiting {d} frames\n", .{ vnc_port, feed.startup_wait });
     log.info(.render, "QEMU started (VNC :{d}, {d}MB, {d} CPUs)", .{ vnc_display, memory, cpus });
     return true;
 }
@@ -422,15 +501,18 @@ pub fn finalizeVM(feed: *Feed) void {
         return;
     }
 
+    std.debug.print("[render-vm] VNC dial 127.0.0.1:{d}\n", .{feed.vnc_port});
     log.info(.render, "finalizeVM: VNC connect to 127.0.0.1:{d}", .{feed.vnc_port});
 
     // Try to connect to VNC
     const sock = connectVnc("127.0.0.1", feed.vnc_port) orelse {
+        std.debug.print("[render-vm] VNC dial failed (retry in 30 frames)\n", .{});
         log.info(.render, "finalizeVM: VNC connect failed, retrying in 30 frames", .{});
         feed.startup_wait = 30;
         return;
     };
 
+    std.debug.print("[render-vm] VNC connected sock={d}\n", .{sock});
     log.info(.render, "finalizeVM: VNC connected, sock={d}", .{sock});
     feed.vnc_socket = sock;
     feed.vnc_state = .wait_version;
@@ -455,12 +537,14 @@ pub var feed_draw_rects: [parent.MAX_FEEDS]FeedRects = [_]FeedRects{.{}} ** pare
 
 /// Find which feed (if any) the screen point (mx, my) lands on.
 /// Uses the full node rect (not the contain-fit draw rect) for hit testing.
+/// Skips suspended feeds — their X server / qemu can't process input, and
+/// trying to send events would block the engine on socket flush.
 fn hitTestFeeds(mx: f32, my: f32) ?usize {
     const feed_count = parent.feed_count;
     const feeds = &parent.feeds;
     for (0..feed_count) |i| {
         const r = feed_draw_rects[i].node; // hit test against full node rect
-        if (r.w > 0 and r.h > 0 and feeds[i].interactive and feeds[i].status == .ready) {
+        if (r.w > 0 and r.h > 0 and feeds[i].interactive and feeds[i].status == .ready and !feeds[i].suspended) {
             if (mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h) {
                 return i;
             }
@@ -484,6 +568,8 @@ fn screenToFb(idx: usize, mx: f32, my: f32) struct { x: u16, y: u16 } {
 
 /// Send a key event to the feed (dispatches by backend).
 fn sendKey(feed: *Feed, down: bool, keysym: u32) void {
+    // Guard against XFlush blocking on a SIGSTOP'd Xvfb's full socket buffer.
+    if (feed.suspended) return;
     switch (feed.backend) {
         .vnc => {
             const sock = feed.vnc_socket orelse return;
@@ -524,6 +610,7 @@ fn sendKey(feed: *Feed, down: bool, keysym: u32) void {
 
 /// Send a pointer event to the feed (dispatches by backend).
 fn sendPointer(feed: *Feed, x_pos: u16, y_pos: u16, button_mask: u8, event_type: enum { down, up, move }, button: u8) void {
+    if (feed.suspended) return;
     switch (feed.backend) {
         .vnc => {
             const sock = feed.vnc_socket orelse return;
@@ -695,11 +782,11 @@ pub fn handleMouseDown(mx: f32, my: f32, button: u8) bool {
             else => 0,
         };
         vnc_button_mask |= bit_val;
-        // debug: HIT feed
+        std.debug.print("[render-vm] mouse-down HIT feed={d} backend={s} screen=({d:.0},{d:.0}) fb=({d},{d}) btn={d}\n", .{ idx, @tagName(parent.feeds[idx].backend), mx, my, pos.x, pos.y, button });
         sendPointer(&parent.feeds[idx], pos.x, pos.y, vnc_button_mask, .down, button);
         return true;
     }
-    // debug: MISS
+    std.debug.print("[render-vm] mouse-down MISS at ({d:.0},{d:.0}) — clearing focus\n", .{ mx, my });
     focused_feed = null;
     return false;
 }
@@ -708,6 +795,7 @@ pub fn handleMouseDown(mx: f32, my: f32, button: u8) bool {
 pub fn handleMouseUp(mx: f32, my: f32, button: u8) bool {
     const idx = focused_feed orelse return false;
     if (idx >= parent.feed_count) return false;
+    if (parent.feeds[idx].suspended) return false;
     const pos = screenToFb(idx, mx, my);
     const bit_val: u8 = switch (button) {
         1 => 1,
@@ -725,6 +813,7 @@ pub fn handleMouseMotion(mx: f32, my: f32) bool {
     const idx = focused_feed orelse return false;
     if (idx >= parent.feed_count) return false;
     if (!parent.feeds[idx].interactive or parent.feeds[idx].status != .ready) return false;
+    if (parent.feeds[idx].suspended) return false;
     const pos = screenToFb(idx, mx, my);
     sendPointer(&parent.feeds[idx], pos.x, pos.y, vnc_button_mask, .move, 0);
     return true;
@@ -732,9 +821,21 @@ pub fn handleMouseMotion(mx: f32, my: f32) bool {
 
 /// Handle SDL key down. Returns true if consumed by a focused render surface.
 pub fn handleKeyDown(sym: c_int) bool {
-    const idx = focused_feed orelse return false;
+    const idx = focused_feed orelse {
+        std.debug.print("[render-vm] keydown sym={d} dropped — no focused feed\n", .{sym});
+        return false;
+    };
     if (idx >= parent.feed_count) return false;
-    const keysym = sdlKeyToKeysym(sym) orelse return false;
+    if (parent.feeds[idx].suspended) {
+        // Don't claim consumption — let the cart's React tree handle this
+        // keystroke instead of dropping it into a frozen pane.
+        return false;
+    }
+    const keysym = sdlKeyToKeysym(sym) orelse {
+        std.debug.print("[render-vm] keydown sym={d} dropped — no keysym mapping\n", .{sym});
+        return false;
+    };
+    std.debug.print("[render-vm] keydown sym={d} → keysym=0x{x} → backend={s} feed={d}\n", .{ sym, keysym, @tagName(parent.feeds[idx].backend), idx });
     sendKey(&parent.feeds[idx], true, keysym);
     return true;
 }
@@ -743,6 +844,7 @@ pub fn handleKeyDown(sym: c_int) bool {
 pub fn handleKeyUp(sym: c_int) bool {
     const idx = focused_feed orelse return false;
     if (idx >= parent.feed_count) return false;
+    if (parent.feeds[idx].suspended) return false;
     const keysym = sdlKeyToKeysym(sym) orelse return false;
     sendKey(&parent.feeds[idx], false, keysym);
     return true;
@@ -752,7 +854,10 @@ pub fn handleKeyUp(sym: c_int) bool {
 /// Without this, printable keys get sent twice (once via KEYDOWN, once via TEXTINPUT).
 pub fn handleTextInput(text: [*:0]const u8) bool {
     _ = text;
-    return focused_feed != null;
+    const idx = focused_feed orelse return false;
+    if (idx >= parent.feed_count) return false;
+    if (parent.feeds[idx].suspended) return false;
+    return true;
 }
 
 /// Check if a render surface currently has focus (for engine to skip other input handling).

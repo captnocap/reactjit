@@ -316,11 +316,36 @@ pub const Feed = struct {
     // Interactive mode
     interactive: bool = false,
 
+    // SIGSTOP/SIGCONT-based suspension. Last-rendered pixels stay on the
+    // texture so paint still works while subprocesses consume zero CPU.
+    suspended: bool = false,
+
+    // One-shot diagnostic flags (printed once per feed lifetime).
+    diag_first_frame_logged: bool = false,
+    diag_first_paint_logged: bool = false,
+    diag_first_upload_logged: bool = false,
+
+    // VNC request flow control. We MUST NOT issue a new framebuffer-update
+    // request before the previous response is fully consumed — otherwise
+    // qemu generates 60 full-screen RGBA responses per second (72MB/s for
+    // 640x480) which fills its TCP send buffer in seconds and then stalls.
+    vnc_request_in_flight: bool = false,
+    vnc_frames_received: u32 = 0,
+    vnc_last_log_frames: u32 = 0,
+
+    // Y-flip scratch buffer for uploadPixels. Size matches pixel_buf;
+    // re-allocated on framebuffer resize. Kept separate so pixel_buf stays
+    // canonical top-down across VNC incremental partial-rect updates.
+    flip_buf: ?[]u8 = null,
+
     fn deinit(self: *Feed) void {
+        // release() (refcount drop) rather than destroy() — destroy()
+        // marks the texture immediately destroyed so any queued draw call
+        // referencing it via a bind_group fails wgpu validation.
         if (self.bind_group) |bg| bg.release();
         if (self.sampler) |s| s.release();
         if (self.texture_view) |tv| tv.release();
-        if (self.texture) |t| t.destroy();
+        if (self.texture) |t| t.release();
         self.bind_group = null;
         self.sampler = null;
         self.texture_view = null;
@@ -328,6 +353,8 @@ pub const Feed = struct {
 
         if (self.pixel_buf) |buf| page_alloc.free(buf);
         self.pixel_buf = null;
+        if (self.flip_buf) |buf| page_alloc.free(buf);
+        self.flip_buf = null;
 
         self.releaseXShm();
 
@@ -337,6 +364,12 @@ pub const Feed = struct {
         self.closeVnc();
         self.closeFFmpeg();
         self.killSubprocesses();
+
+        // The source string was duped into feed-owned memory by createFeed
+        // so the feed lifetime is independent of the cart-side allocation.
+        if (self.source.len > 0) page_alloc.free(self.source);
+        self.source = "";
+        self.parsed = .{};
 
         self.status = .stopped;
     }
@@ -658,33 +691,38 @@ fn uploadPixels(feed: *Feed) void {
     const queue = gpu_core.getQueue() orelse return;
     const w = feed.width;
     const h = feed.height;
-    const row_bytes = w * 4;
+    const row_bytes: usize = @as(usize, w) * 4;
+    const total_bytes: usize = row_bytes * @as(usize, h);
 
-    // Flip rows vertically before upload.
-    // The shared image shader has `1.0 - corner.y` (UV Y-flip for GL readback),
-    // but our sources (VNC, XShm, FFmpeg) produce top-down frames.
-    // Flipping here cancels the shader flip → correct orientation.
-    // Use @memcpy with a temp row buffer — much faster than XOR byte swap.
-    if (row_bytes <= 8192) {
-        var tmp: [8192]u8 = undefined;
-        const tmp_row = tmp[0..row_bytes];
-        var top: usize = 0;
-        var bot: usize = h - 1;
-        while (top < bot) {
-            const top_ptr = buf[top * row_bytes ..][0..row_bytes];
-            const bot_ptr = buf[bot * row_bytes ..][0..row_bytes];
-            @memcpy(tmp_row, top_ptr);
-            @memcpy(top_ptr, bot_ptr);
-            @memcpy(bot_ptr, tmp_row);
-            top += 1;
-            bot -= 1;
-        }
+    // Force alpha=0xff for every pixel. None of our capture sources produce
+    // semantically meaningful alpha — VNC at depth=24 leaves byte 3 as 0,
+    // XShm BGRX leaves it as 0, FFmpeg rawvideo varies. wgpu's rgba8_unorm
+    // sampler reads byte 3 as alpha, so without this the textured quad
+    // renders fully transparent and the surface behind it bleeds through.
+    var i: usize = 3;
+    while (i < buf.len) : (i += 4) buf[i] = 0xff;
+
+    // Y-flip into a scratch buffer, then upload that. An in-place flip would
+    // mutate pixel_buf, so VNC incremental partial-rect updates (which write
+    // top-down rects between uploads) would land at the wrong vertical
+    // position — every other frame appeared upside-down with cursor sprites
+    // visibly wrong. Using a separate scratch buffer keeps pixel_buf canonical.
+    if (feed.flip_buf == null or (feed.flip_buf.?.len != total_bytes)) {
+        if (feed.flip_buf) |old| page_alloc.free(old);
+        feed.flip_buf = page_alloc.alloc(u8, total_bytes) catch return;
+    }
+    const flip = feed.flip_buf.?;
+    var row: usize = 0;
+    while (row < h) : (row += 1) {
+        const src_off = row * row_bytes;
+        const dst_off = (h - 1 - row) * row_bytes;
+        @memcpy(flip[dst_off .. dst_off + row_bytes], buf[src_off .. src_off + row_bytes]);
     }
 
     queue.writeTexture(
         &.{ .texture = tex, .mip_level = 0, .origin = .{ .x = 0, .y = 0, .z = 0 }, .aspect = .all },
-        @ptrCast(buf.ptr),
-        @as(usize, w) * @as(usize, h) * 4,
+        @ptrCast(flip.ptr),
+        total_bytes,
         &.{ .offset = 0, .bytes_per_row = w * 4, .rows_per_image = h },
         &.{ .width = w, .height = h, .depth_or_array_layers = 1 },
     );
@@ -1047,6 +1085,8 @@ fn finalizeVirtualDisplay(feed: *Feed) void {
 
 fn findFeed(src: []const u8) ?*Feed {
     for (feeds[0..feed_count]) |*f| {
+        // Skip stopped slots — their source has been freed and is "" sentinel.
+        if (f.status == .stopped) continue;
         if (std.mem.eql(u8, f.source, src)) return f;
     }
     return null;
@@ -1060,12 +1100,35 @@ fn setError(feed: *Feed) void {
     feed.status = .@"error";
 }
 
-fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
+/// Pick a feed slot — prefer reusing a stopped slot, otherwise grow feeds[].
+fn acquireFeedSlot() ?*Feed {
+    for (feeds[0..feed_count]) |*f| {
+        if (f.status == .stopped) return f;
+    }
     if (feed_count >= MAX_FEEDS) return null;
+    const f = &feeds[feed_count];
+    feed_count += 1;
+    return f;
+}
 
-    const parsed = parseSource(src);
-    var feed = &feeds[feed_count];
-    feed.* = .{ .source = src, .parsed = parsed, .active = true };
+fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
+    // In headless/snapshot mode (set by scripts/ship for autotest runs)
+    // skip subprocess spawning entirely. Spawning qemu/Xvfb/kitty here
+    // leaks orphans that outlive the cart binary and inherit the ship
+    // script's flock fd, blocking every subsequent build until reaped.
+    if (std.posix.getenv("ZIGOS_HEADLESS")) |v| {
+        if (v.len > 0 and v[0] != '0') return null;
+    }
+
+    const feed = acquireFeedSlot() orelse return null;
+
+    // Own the source string. The caller passed a slice into cart-allocated
+    // memory (node.render_src) whose lifetime ends when the React node
+    // unmounts. The feed needs a stable pointer for findFeed's mem.eql and
+    // for parsed.* slices (which index INTO source).
+    const owned = page_alloc.dupe(u8, src) catch return null;
+    const parsed = parseSource(owned);
+    feed.* = .{ .source = owned, .parsed = parsed, .active = true };
 
     switch (parsed.source_type) {
         .screen => {
@@ -1073,7 +1136,6 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             if (initXShm()) {
                 const dpy = x_display orelse {
                     setError(feed);
-                    feed_count += 1;
                     return feed;
                 };
                 const sw: u32 = @intCast(x11.XDisplayWidth(dpy, x_screen));
@@ -1082,13 +1144,11 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
                 if (createXShmCapture(feed, dpy, sw, sh)) {
                     feed.pixel_buf = allocBuf(sw, sh) orelse {
                         setError(feed);
-                        feed_count += 1;
                         return feed;
                     };
                     feed.backend = .xshm;
                     feed.status = .ready;
                     log.info(.render, "XShm screen capture: {d}x{d}", .{ sw, sh });
-                    feed_count += 1;
                     return feed;
                 }
             }
@@ -1100,26 +1160,22 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             // Window capture via XShm at root window offset
             if (!initXShm()) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
             const title = parsed.title orelse {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
 
             const geom = findWindowGeometry(title) orelse {
                 log.info(.render, "window not found: {s}", .{title});
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
 
             // Clamp to screen bounds
             const dpy = x_display orelse {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
             const scr_w = x11.XDisplayWidth(dpy, x_screen);
@@ -1141,20 +1197,17 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
 
             if (ww == 0 or wh == 0) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
 
             if (!createXShmCapture(feed, dpy, ww, wh)) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
             feed.capture_ox = wx;
             feed.capture_oy = wy;
             feed.pixel_buf = allocBuf(ww, wh) orelse {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
             feed.backend = .xshm;
@@ -1186,13 +1239,15 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
         .vm => {
             // QEMU + VNC capture
             const disk = parsed.path orelse {
+                std.debug.print("[render] VM: no disk path in source\n", .{});
                 log.info(.render, "VM: no disk path in source", .{});
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
+            std.debug.print("[render] VM: creating feed for disk={s}\n", .{disk});
             log.info(.render, "VM: creating feed for disk={s}", .{disk});
             if (!vm.startVM(feed, disk, 2048, 2)) {
+                std.debug.print("[render] VM: startVM FAILED\n", .{});
                 log.info(.render, "VM: startVM FAILED", .{});
                 setError(feed);
             }
@@ -1204,14 +1259,12 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             const port = parsed.port;
             if (port == 0) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
 
             const sock = vm.connectVnc(host, port) orelse {
                 log.info(.render, "VNC connect failed: {s}:{d}", .{ host, port });
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
 
@@ -1222,7 +1275,6 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             feed.pixel_buf = allocBuf(1280, 720) orelse {
                 posix.close(sock);
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
             feed.backend = .vnc;
@@ -1236,14 +1288,12 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             // Same as screen capture but at an xrandr-defined offset
             if (!initXShm()) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
             // Use same dimensions as screen for now — xrandr integration
             // would need subprocess calls to set up the virtual monitor region
             const dpy = x_display orelse {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
             const sw: u32 = @intCast(x11.XDisplayWidth(dpy, x_screen));
@@ -1251,12 +1301,10 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
 
             if (!createXShmCapture(feed, dpy, sw, sh)) {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             }
             feed.pixel_buf = allocBuf(sw, sh) orelse {
                 setError(feed);
-                feed_count += 1;
                 return feed;
             };
             feed.backend = .xshm;
@@ -1267,7 +1315,6 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
         .unknown => setError(feed),
     }
 
-    feed_count += 1;
     return feed;
 }
 
@@ -1303,6 +1350,11 @@ pub fn update() void {
     if (_upd_dbg % 120 == 1 and feed_count > 0) log.info(.render, "update: {d} feeds", .{feed_count});
 
     for (feeds[0..feed_count]) |*feed| {
+        // When suspended, skip ALL polling — qemu/Xvfb are SIGSTOPped, so
+        // VNC server won't respond and XShm capture would just re-read
+        // stale data. Last-rendered pixels stay on the texture; paint
+        // continues to draw them.
+        if (feed.suspended) continue;
         switch (feed.status) {
             .ready => {
                 switch (feed.backend) {
@@ -1312,8 +1364,13 @@ pub fn update() void {
                 }
 
                 if (feed.dirty) {
+                    if (!feed.diag_first_upload_logged) {
+                        std.debug.print("[render] first GPU upload for backend={s} {d}x{d}\n", .{ @tagName(feed.backend), feed.width, feed.height });
+                        feed.diag_first_upload_logged = true;
+                    }
                     if (_upd_dbg % 60 == 1) log.info(.render, "frame dirty, uploading {d}x{d}", .{ feed.width, feed.height });
                     if (!ensureTexture(feed)) {
+                        std.debug.print("[render] ensureTexture FAILED for {d}x{d}\n", .{ feed.width, feed.height });
                         log.info(.render, "ensureTexture FAILED", .{});
                         continue;
                     }
@@ -1378,6 +1435,10 @@ pub fn paintSurface(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f3
     if (f.width == 0 or f.height == 0) {
         log.info(.render, "zero dimensions {d}x{d}", .{ f.width, f.height });
         return false;
+    }
+    if (!f.diag_first_paint_logged) {
+        std.debug.print("[render] first paint queued for backend={s} fb={d}x{d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ @tagName(f.backend), f.width, f.height, x, y, w, h });
+        f.diag_first_paint_logged = true;
     }
 
     // display_xshm: stretch-fill (app IS the display, fill the node rect)
@@ -1444,6 +1505,23 @@ pub fn getDimensions(src: []const u8) ?struct { w: u32, h: u32 } {
     const f = findFeed(src) orelse return null;
     if (f.width > 0 and f.height > 0) return .{ .w = f.width, .h = f.height };
     return null;
+}
+
+/// Suspend / resume the feed's subprocesses via SIGSTOP / SIGCONT. Idempotent
+/// — only acts on transitions. Skips no-op when feed doesn't exist yet.
+pub fn setSuspended(src: []const u8, suspended: bool) void {
+    const f = findFeed(src) orelse return;
+    if (f.suspended == suspended) return;
+    const sig: u8 = if (suspended) std.posix.SIG.STOP else std.posix.SIG.CONT;
+    const pids = [_]?std.process.Child{ f.qemu_child, f.x_server_child, f.app_child };
+    for (pids) |maybe_child| {
+        const child = maybe_child orelse continue;
+        std.posix.kill(child.id, sig) catch |err| {
+            std.debug.print("[render] setSuspended kill pid={d} sig={d} failed: {s}\n", .{ child.id, sig, @errorName(err) });
+        };
+    }
+    f.suspended = suspended;
+    std.debug.print("[render] feed src=\"{s}\" {s}\n", .{ src, if (suspended) "SUSPENDED" else "RESUMED" });
 }
 
 // ════════════════════════════════════════════════════════════════════════
