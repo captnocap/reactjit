@@ -1,0 +1,15 @@
+{
+  "_doc": "Transports the ifttt-bus hook fans out to. Each event is broadcast to every entry. Add an HTTP entry once a cart hosts a listener; remove the jsonl entry if you don't need durable backlog. type:'exec' pipes the JSON line to a command's stdin (e.g. for custom transports).",
+  "transports": [
+    {
+      "type": "jsonl",
+      "path": "/run/user/${UID}/claude-sessions/reactjit/.watch/ifttt-bus.log",
+      "trim_lines": 4000
+    },
+    {
+      "type": "http",
+      "url": "http://127.0.0.1:7421/claude-bus",
+      "timeout_ms": 200
+    }
+  ]
+}
