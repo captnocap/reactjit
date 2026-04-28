@@ -1,0 +1,48 @@
+import { defineGallerySection, defineGalleryStory } from '../types';
+import { LayerControlPanel } from '../components/layer-control-panel/LayerControlPanel';
+import { layerControlPanelMockData } from '../data/layer-control-panel';
+
+export const layerControlPanelSection = defineGallerySection({
+  id: 'layer-control-panel',
+  title: 'Layer Control Panel',
+  group: {
+    id: 'compositions',
+    title: 'Compositions',
+  },
+  kind: 'top-level',
+  composedOf: [
+    'cart/component-gallery/components/layer-control-panel/LayerToggleAtoms.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerThumbnail.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerRow.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerToolbar.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerBlendModeControl.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerOpacityControls.tsx',
+    'cart/component-gallery/components/layer-control-panel/LayerPropertiesPanel.tsx',
+    'cart/component-gallery/components/controls-specimen/StatusBadge.tsx',
+    'cart/component-gallery/components/controls-specimen/KeyValueBadge.tsx',
+    'cart/component-gallery/components/controls-specimen/StripBadge.tsx',
+    'cart/component-gallery/components/controls-specimen/SegmentedControl.tsx',
+    'cart/component-gallery/components/controls-specimen/FilledRailSlider.tsx',
+    'cart/component-gallery/components/controls-specimen/MeterSlider.tsx',
+    'cart/component-gallery/components/controls-specimen/RangeSlider.tsx',
+    'cart/component-gallery/components/controls-specimen/ChoiceList.tsx',
+    'cart/component-gallery/components/dex-search-bar/DexSearchBar.tsx',
+  ],
+  stories: [
+    defineGalleryStory({
+      id: 'layer-control-panel/default',
+      title: 'Layer Control Panel',
+      source: 'cart/component-gallery/components/layer-control-panel/LayerControlPanel.tsx',
+      status: 'ready',
+      summary: 'Photoshop-style layer stack with visibility, lock, blend, opacity, fill, mask range, filter, and detail controls.',
+      tags: ['panel', 'controls', 'composition'],
+      variants: [
+        {
+          id: 'full-panel',
+          name: 'Full panel',
+          render: () => <LayerControlPanel data={layerControlPanelMockData} />,
+        },
+      ],
+    }),
+  ],
+});
