@@ -1,4 +1,6 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
+import { Bot, Braces, CircleHelp, Terminal, User } from '@reactjit/runtime/icons/icons';
+import { Icon, type IconData } from '../../../sweatshop/components/icons';
 import { RailBadge, type RailBadgeName } from './RailBadge';
 import { CHAT_CARD, type ChatTone } from './tokens';
 import { classifiers as S } from '@reactjit/core';
@@ -20,12 +22,12 @@ function toneColor(tone: ChatTone): string {
   return CHAT_CARD.pink;
 }
 
-function toneLabel(tone: ChatTone): string {
-  if (tone === 'user') return 'U';
-  if (tone === 'agent') return 'A';
-  if (tone === 'thinking') return '?';
-  if (tone === 'tool') return 'T';
-  return '<>';
+function toneIcon(tone: ChatTone): IconData {
+  if (tone === 'user') return User;
+  if (tone === 'agent') return Bot;
+  if (tone === 'thinking') return CircleHelp;
+  if (tone === 'tool') return Terminal;
+  return Braces;
 }
 
 export function TurnBadge({ tone }: { tone: ChatTone }) {
@@ -44,7 +46,7 @@ export function TurnBadge({ tone }: { tone: ChatTone }) {
         borderRadius: 3,
       }}
     >
-      <S.TypeTiny>{toneLabel(tone)}</S.TypeTiny>
+      <Icon icon={toneIcon(tone)} size={10} color={color} strokeWidth={2.2} />
     </Box>
   );
 }

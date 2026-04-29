@@ -1,4 +1,4 @@
-import { Col, Row, Text, Box, ScrollView, Graph } from '../../../runtime/primitives';
+import { Col, Row, Text, Box, ScrollView, Graph } from '@reactjit/runtime/primitives';
 import { PerfSample } from '../types';
 import { COLORS, TIMING } from '../constants';
 import SectionHeader from '../components/SectionHeader';

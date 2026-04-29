@@ -6,7 +6,7 @@
 // so the surface is honest when the __gamepad_* host fns are pending.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useGamepad } from '../../lib/gamepad/useGamepad';
 import { useHaptic } from '../../lib/gamepad/useHaptic';

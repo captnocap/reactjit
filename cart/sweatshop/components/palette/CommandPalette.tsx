@@ -1,7 +1,7 @@
 // ── Command Palette ──────────────────────────────────────────────────
 
 
-import { Box, Col } from '../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { exec as hostExec, readFile as hostReadFile } from '../../host';
 

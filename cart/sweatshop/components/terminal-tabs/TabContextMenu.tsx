@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { TerminalLabelFormat, TerminalTabRecord } from './useTerminalTabs';
 

@@ -3,7 +3,7 @@
 // Source of truth: cart/component-gallery/data/code-snippet.ts
 
 import { classifiers as S } from '@reactjit/core';
-import { Pressable, Text } from '../../../../runtime/primitives';
+import { Pressable, Text } from '@reactjit/runtime/primitives';
 import type { CodeSnippet } from '../../data/code-snippet';
 
 export type CodeCopyButtonProps = {

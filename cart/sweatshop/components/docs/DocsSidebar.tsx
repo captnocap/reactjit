@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { Icon } from '../icons';
 import type { DocsFileRecord, DocsIndex, DocsTreeNode } from './hooks/useDocsIndex';

@@ -1,5 +1,5 @@
 
-import { Box, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable, Row } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 // Curated swatches spanning warm/cool/neutral/dark/bright. Users pick from

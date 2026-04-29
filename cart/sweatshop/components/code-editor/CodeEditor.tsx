@@ -1,4 +1,4 @@
-import { Row, Box, TextEditor } from '../../../../runtime/primitives';
+import { Row, Box, TextEditor } from '@reactjit/runtime/primitives';
 import { editorTokenTone } from '../../utils';
 import { COLORS } from '../../theme';
 import { useCodeTokenize } from './useCodeTokenize';

@@ -1,4 +1,4 @@
-import { Box, Row, Text } from '../../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { DiffWordDiff } from './DiffWordDiff';
 import type { DiffHunk } from '../../app/diff-helpers';

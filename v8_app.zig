@@ -1200,6 +1200,22 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update:
     // silently render at the default size.
     else if (eq(u8, key, "fontSize")) {
         if (jsonInt(val)) |i| node.font_size = @intCast(@max(i, 1));
+    } else if (eq(u8, key, "fontWeight")) {
+        // Accept either a CSS keyword ('bold', 'normal') or a numeric weight
+        // (100..900). Anything ≥600 maps to bold at paint time; everything
+        // else is regular.
+        if (val == .string) {
+            const s = val.string;
+            if (eq(u8, s, "bold") or eq(u8, s, "bolder")) {
+                node.font_weight = 700;
+            } else if (eq(u8, s, "normal") or eq(u8, s, "lighter")) {
+                node.font_weight = 400;
+            } else if (jsonInt(val)) |i| {
+                node.font_weight = @intCast(@max(@min(i, 900), 1));
+            }
+        } else if (jsonInt(val)) |i| {
+            node.font_weight = @intCast(@max(@min(i, 900), 1));
+        }
     } else if (eq(u8, key, "color")) {
         if (val == .string) node.text_color = parseColor(val.string);
     } else if (eq(u8, key, "letterSpacing")) {
@@ -1262,6 +1278,8 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         }
         if (std.mem.eql(u8, k, "fontSize")) {
             if (node.terminal) node.terminal_font_size = 13 else node.font_size = 16;
+        } else if (std.mem.eql(u8, k, "fontWeight")) {
+            node.font_weight = 400;
         } else if (std.mem.eql(u8, k, "color")) {
             node.text_color = null;
         } else if (std.mem.eql(u8, k, "letterSpacing")) {
@@ -1494,6 +1512,19 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonInt(v)) |i| {
                 const size: u16 = @intCast(@max(i, 1));
                 if (is_terminal) node.terminal_font_size = size else node.font_size = size;
+            }
+        } else if (std.mem.eql(u8, k, "fontWeight")) {
+            if (v == .string) {
+                const s = v.string;
+                if (std.mem.eql(u8, s, "bold") or std.mem.eql(u8, s, "bolder")) {
+                    node.font_weight = 700;
+                } else if (std.mem.eql(u8, s, "normal") or std.mem.eql(u8, s, "lighter")) {
+                    node.font_weight = 400;
+                } else if (jsonInt(v)) |i| {
+                    node.font_weight = @intCast(@max(@min(i, 900), 1));
+                }
+            } else if (jsonInt(v)) |i| {
+                node.font_weight = @intCast(@max(@min(i, 900), 1));
             }
         } else if (is_terminal and std.mem.eql(u8, k, "terminalFontSize")) {
             if (jsonInt(v)) |i| node.terminal_font_size = @intCast(@max(i, 1));
@@ -1961,6 +1992,7 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
     const child = g_node_by_id.get(child_id) orelse return;
     if (child.text == null) return;
     child.font_size = parent.font_size;
+    child.font_weight = parent.font_weight;
     if (parent.text_color) |c| child.text_color = c;
     child.letter_spacing = parent.letter_spacing;
     child.number_of_lines = parent.number_of_lines;

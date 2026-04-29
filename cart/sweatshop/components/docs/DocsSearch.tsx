@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { Icon } from '../icons';
 import type { DocsSearchHit } from './hooks/useDocsIndex';

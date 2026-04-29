@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { FlowEditor } from '../components/flow-editor/FlowEditor';
 import { useFlowEditorState } from '../components/flow-editor/useFlowEditorState';

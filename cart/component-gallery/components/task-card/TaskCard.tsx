@@ -39,7 +39,7 @@
 //     prop to `rows: Task[]` and update the variant
 //     accordingly.
 
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import type { Task } from '../../data/task';
 
 export type TaskCardProps = {

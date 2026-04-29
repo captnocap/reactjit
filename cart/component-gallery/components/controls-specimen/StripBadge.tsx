@@ -1,4 +1,4 @@
-import { Box, Row } from '../../../../runtime/primitives';
+import { Box, Row } from '@reactjit/runtime/primitives';
 import { Mono } from './controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from './controlsSpecimenTheme';
 
@@ -29,7 +29,7 @@ export function StripBadge({ segments }: StripBadgeProps) {
               backgroundColor: tone === 'neutral' ? CTRL.bg1 : toneSoftBackground(tone),
             }}
           >
-            <Mono color={tone === 'neutral' ? CTRL.inkDim : toneColor(tone)} fontSize={9} fontWeight="bold">
+            <Mono color={tone === 'neutral' ? CTRL.inkDim : toneColor(tone)} fontSize={9} fontWeight="bold" noWrap>
               {segment.label}
             </Mono>
           </Box>

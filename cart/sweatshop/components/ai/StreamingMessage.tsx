@@ -1,5 +1,5 @@
 
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 // Renders a live in-progress assistant stream with a blinking cursor.

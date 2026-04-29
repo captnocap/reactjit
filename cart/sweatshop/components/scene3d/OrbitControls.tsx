@@ -12,7 +12,7 @@
 // =============================================================================
 
 
-import { Pressable } from '../../../runtime/primitives';
+import { Pressable } from '@reactjit/runtime/primitives';
 import type { OrbitControlsProps, Vec3 } from './types';
 import { useScene3D } from './useScene3D';
 

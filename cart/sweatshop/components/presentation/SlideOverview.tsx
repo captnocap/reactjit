@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { ParsedSlide } from '../../lib/presentation/parseSlides';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 type SlideProps = {

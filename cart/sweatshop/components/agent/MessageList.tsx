@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useRef } from 'react';
-import { Box, Col, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { FadeIn } from '../../anim';
 import { MessageBubble } from './MessageBubble';

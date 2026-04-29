@@ -1,4 +1,4 @@
-import { Row } from '../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Tooltip } from '../components/tooltip/Tooltip';
 import { constraintMockData } from '../data/constraint';

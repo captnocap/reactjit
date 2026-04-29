@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, Mono } from './controlsSpecimenParts';
 import { useControllableNumberState, useHorizontalPercentDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
@@ -18,8 +18,8 @@ export function FilledRailSlider({
   onChange,
 }: FilledRailSliderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useHorizontalPercentDrag(current, setCurrent);
   const trackWidth = Math.max(0, width - 20);
+  const drag = useHorizontalPercentDrag(current, setCurrent, trackWidth);
   const thumbCenterX = Math.round(trackWidth * drag.ratio);
 
   return (
@@ -28,7 +28,7 @@ export function FilledRailSlider({
         <Mono>{label}</Mono>
         <Body fontSize={12}>{String(current).padStart(2, '0')}</Body>
       </S.InlineX4BetweenFull>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 28, justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 28, justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: 8, borderWidth: 1, borderColor: CTRL.ruleBright, backgroundColor: CTRL.bg1 }}>
           <Box style={{ width: thumbCenterX, height: 6, backgroundColor: CTRL.accent }} />
         </Box>
@@ -44,7 +44,8 @@ export function FilledRailSlider({
             backgroundColor: drag.dragging ? CTRL.accentHot : CTRL.bg3,
           }}
         />
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <Mono color={CTRL.inkGhost}>{drag.dragging ? 'dragging' : 'filled rail control'}</Mono>
     </AtomFrame>
   );

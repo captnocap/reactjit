@@ -1,5 +1,5 @@
-import { readFile, stat, type FsStat } from '../../../../runtime/hooks/fs';
-import { execAsync } from '../../../../runtime/hooks/process';
+import { readFile, stat, type FsStat } from '@reactjit/runtime/hooks/fs';
+import { execAsync } from '@reactjit/runtime/hooks/process';
 import type { AstContractFile } from './AstQuilt';
 
 type SpanNode = {

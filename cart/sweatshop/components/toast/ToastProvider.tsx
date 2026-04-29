@@ -1,5 +1,5 @@
 
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { ToastQueue } from './ToastQueue';
 import { ToastContext, useToastStore } from './useToast';
 

@@ -40,7 +40,7 @@
 //     prop to `rows: Goal[]` and update the variant
 //     accordingly.
 
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import type { Goal } from '../../data/goal';
 
 export type GoalCardProps = {

@@ -1,5 +1,5 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { DexGraphEdge } from '../components/dex-graph-edge/DexGraphEdge';
 

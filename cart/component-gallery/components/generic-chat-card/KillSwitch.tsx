@@ -1,4 +1,4 @@
-import { Box, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 export function KillSwitch() {

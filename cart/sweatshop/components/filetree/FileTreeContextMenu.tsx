@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface ContextMenuAction {

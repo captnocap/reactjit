@@ -6,7 +6,7 @@
 // zero (idle or unbound host) the dot sits dead-centre.
 // =============================================================================
 
-import { Box, Canvas, Col, Row, Text } from '../../../runtime/primitives';
+import { Box, Canvas, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export interface StickViewProps {

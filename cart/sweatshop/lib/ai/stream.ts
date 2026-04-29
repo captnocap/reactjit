@@ -1,6 +1,6 @@
 import type { AIConfig, Message, StreamDelta, ToolCall, ToolDefinition } from './types';
 import { getProvider } from './providers';
-import { requestAsync } from '../../../../runtime/hooks/http';
+import { requestAsync } from '@reactjit/runtime/hooks/http';
 
 // Chat request + streaming-shaped callback contract.
 //

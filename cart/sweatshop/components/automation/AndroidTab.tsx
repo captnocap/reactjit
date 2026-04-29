@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { useAndroidVM } from './hooks/useAndroidVM';
 import type { ScriptStep } from '../../lib/automation/script';

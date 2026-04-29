@@ -1,4 +1,4 @@
-import { Box, Row, Text } from '../../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import {
   DEFAULT_GENERIC_CARD_METRICS,
   GENERIC_CARD,

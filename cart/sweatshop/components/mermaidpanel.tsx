@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text, TextArea } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextArea } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { layoutMermaidDiagram } from '../mermaid/layout';
 import { parseMermaid } from '../mermaid/parser';

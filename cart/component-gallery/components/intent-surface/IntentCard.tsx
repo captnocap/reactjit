@@ -1,16 +1,8 @@
-import { Col } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Col } from '@reactjit/runtime/primitives';
 
 export function IntentCard({ children }: { children?: any }) {
-  return (
-    <Col style={{
-      gap: 8,
-      padding: 12,
-      backgroundColor: '#1e293b',
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: '#334155',
-    }}>
-      {children}
-    </Col>
-  );
+  const Card = S.Card || Col;
+  return <Card>{children}</Card>;
 }

@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { HoverPressable, Pill } from '../shared';
 import { Icon } from '../icons';

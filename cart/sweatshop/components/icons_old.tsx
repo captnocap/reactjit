@@ -1,5 +1,5 @@
 
-import { Box, Col, Row, Text, Canvas } from '../../../runtime/primitives';
+import { Box, Col, Row, Text, Canvas } from '@reactjit/runtime/primitives';
 
 export type IconName = string;
 

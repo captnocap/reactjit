@@ -1,5 +1,7 @@
-import { Col, Text } from '../../../../runtime/primitives';
-import type { Node } from '../../../../runtime/intent/parser';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Col } from '@reactjit/runtime/primitives';
+import type { Node } from '@reactjit/runtime/intent/parser';
 import type { OnAction } from './types';
 import { IntentTitle } from './IntentTitle';
 import { IntentText } from './IntentText';
@@ -23,27 +25,29 @@ import { IntentSpacer } from './IntentSpacer';
  * parser shouldn't emit any, but the surface tolerates them.
  */
 export function IntentSurface({ nodes, onAction }: { nodes: Node[]; onAction: OnAction }) {
+  const Stack = S.StackX4 || Col;
   return (
-    <Col style={{ gap: 8 }}>
+    <Stack>
       {nodes.map((n, i) => <IntentNode key={i} node={n} onAction={onAction} />)}
-    </Col>
+    </Stack>
   );
 }
 
 export function IntentNode({ node, onAction }: { node: Node; onAction: OnAction }) {
   switch (node.kind) {
     case 'text':
-      return <Text style={{ color: '#cbd5e1', fontSize: 14 }}>{node.text}</Text>;
+      return <IntentText>{node.text}</IntentText>;
 
     case 'Title':
       return <IntentTitle>{flatText(node)}</IntentTitle>;
 
     case 'Text':
       if (node.children.length > 0 && node.children.some((c) => c.kind !== 'text')) {
+        const Stack = S.StackX2 || Col;
         return (
-          <Col style={{ gap: 4 }}>
+          <Stack>
             {node.children.map((c, i) => <IntentNode key={i} node={c} onAction={onAction} />)}
-          </Col>
+          </Stack>
         );
       }
       return <IntentText>{flatText(node)}</IntentText>;

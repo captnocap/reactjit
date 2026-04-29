@@ -1,4 +1,4 @@
-import { Text } from '../../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export function MessageTimestamp(props: { time: string; visible: boolean }) {

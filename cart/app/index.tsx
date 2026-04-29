@@ -10,6 +10,7 @@ import { classifiers as S } from '@reactjit/core';
 import IndexPage from './page';
 import AboutPage from './about/page';
 import { OnboardingProvider, useOnboarding } from './onboarding/state';
+import { useAnimationTimeline } from './anim';
 
 applyGalleryTheme(getActiveGalleryThemeId());
 installBrowserShims();
@@ -47,9 +48,36 @@ function StepCubes({ step, total, onPress }: { step: number; total: number; onPr
   );
 }
 
+// Tour banner — drops into the chrome's right cluster the moment onboarding
+// completes (`tourStatus === 'pending'`). Coordinates with the home page's
+// entry timeline: the banner waits until the carryover has cleared and the
+// home content is settling in, then fades in. Yes/No flip `tourStatus` and
+// the banner unmounts (no exit animation — the answer is the action).
+const TOUR_BANNER_FADE_DELAY_MS = 1400; // matches HomeEntry T_FADE_END
+const TOUR_BANNER_FADE_MS       = 500;
+
+function TourBanner({ onAccept, onDecline }: { onAccept: () => void; onDecline: () => void }) {
+  const tl = useAnimationTimeline();
+  const op = tl.range(TOUR_BANNER_FADE_DELAY_MS, TOUR_BANNER_FADE_DELAY_MS + TOUR_BANNER_FADE_MS);
+  return (
+    <S.AppChromeTourBanner style={{ opacity: op, marginTop: (1 - op) * 4 }}>
+      <S.AppChromeTourText>Would you like a tour around?</S.AppChromeTourText>
+      <S.AppChromeTourActions>
+        <S.AppChromeTourYes onPress={onAccept}>
+          <S.AppChromeTourYesLabel>Yes</S.AppChromeTourYesLabel>
+        </S.AppChromeTourYes>
+        <S.AppChromeTourNo onPress={onDecline}>
+          <S.AppChromeTourNoLabel>No</S.AppChromeTourNoLabel>
+        </S.AppChromeTourNo>
+      </S.AppChromeTourActions>
+    </S.AppChromeTourBanner>
+  );
+}
+
 function Chrome() {
   const onb = useOnboarding();
   const onboardingActive = !onb.loading && !onb.complete;
+  const showTour = !onboardingActive && onb.tourStatus === 'pending';
 
   return (
     <S.AppChrome windowDrag={true}>
@@ -60,6 +88,9 @@ function Chrome() {
       </S.AppChromeBrandRow>
 
       <S.AppChromeRightCluster>
+        {showTour ? (
+          <TourBanner onAccept={onb.acceptTour} onDecline={onb.declineTour} />
+        ) : null}
         {onboardingActive ? (
           <StepCubes step={onb.step} total={onb.totalSteps} onPress={onb.setStep} />
         ) : (

@@ -1,4 +1,4 @@
-import { Box, Text } from '../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 export default function Badge({ text, color = COLORS.blue }: { text: string; color?: string }) {

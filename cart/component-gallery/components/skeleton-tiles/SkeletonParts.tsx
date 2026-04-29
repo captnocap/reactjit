@@ -1,4 +1,4 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { SKELETON, getSkeletonFrame, type SkeletonSize, type SkeletonTone, toneColor } from './tokens';
 
 export function TileStripeField({ tone, size }: { tone: SkeletonTone; size: SkeletonSize }) {

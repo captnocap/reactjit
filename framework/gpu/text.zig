@@ -82,6 +82,7 @@ fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
 const AtlasGlyphKey = struct {
     codepoint: u32,
     size_px: u16,
+    font_id: u8, // 0 = regular, 1 = bold
 };
 
 const AtlasGlyphInfo = struct {
@@ -182,9 +183,51 @@ var g_atlas_index: std.AutoHashMap(u64, u32) = undefined;
 // FreeType handles
 var g_ft_library: c.FT_Library = null;
 var g_ft_face: c.FT_Face = null;
+var g_ft_face_bold: c.FT_Face = null;
 var g_ft_fallbacks: [8]c.FT_Face = undefined;
 var g_ft_fallback_count: usize = 0;
 var g_ft_current_size: u16 = 0;
+var g_ft_current_size_bold: u16 = 0;
+
+// Active weight for the next draw / measure call. Mirrors the existing
+// g_letter_spacing / g_line_height_override pattern — engine.zig sets this
+// before painting/measuring a Text node, then resets to false.
+var g_use_bold: bool = false;
+
+pub fn setBold(b: bool) void {
+    g_use_bold = b;
+}
+
+/// Pick the right face for the active weight and ensure its FreeType pixel
+/// size matches `size_px`. Returns the face that subsequent FT calls should
+/// target. Tracks size per face so flipping bold on/off doesn't thrash the
+/// regular face's `FT_Set_Pixel_Sizes` cache.
+fn activeFace(size_px: u16) c.FT_Face {
+    if (g_use_bold and g_ft_face_bold != null) {
+        if (g_ft_current_size_bold != size_px) {
+            _ = c.FT_Set_Pixel_Sizes(g_ft_face_bold, 0, size_px);
+            g_ft_current_size_bold = size_px;
+        }
+        return g_ft_face_bold;
+    }
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+    return g_ft_face;
+}
+
+fn activeFontId() u8 {
+    return if (g_use_bold and g_ft_face_bold != null) 1 else 0;
+}
+
+/// Register a bold face. Optional — if absent, every weight renders regular.
+/// TextEngine.initHeadless calls this after loading the bold .ttf, mirroring
+/// how `initText` registers the regular face + fallbacks.
+pub fn setBoldFace(face_bold: c.FT_Face) void {
+    g_ft_face_bold = face_bold;
+    g_ft_current_size_bold = 0;
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // Public API
@@ -199,6 +242,7 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
         g_ft_fallbacks[i] = fallbacks[i];
     }
     g_ft_current_size = 0;
+    g_ft_current_size_bold = 0;
     g_atlas_index = std.AutoHashMap(u64, u32).init(std.heap.page_allocator);
 
     const device = core.getDevice() orelse return;
@@ -259,12 +303,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     else
         size_px;
 
-    if (g_ft_current_size != render_size) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, render_size);
-        g_ft_current_size = render_size;
-    }
-
-    const face = g_ft_face;
+    const face = activeFace(render_size);
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
 
     // Pen position: transform the starting point (when canvas is active),
@@ -356,11 +395,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
 
 fn measureTextLineWidth(text: []const u8, size_px: u16) f32 {
     if (g_ft_face == null) return 0;
-
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
+    _ = activeFace(size_px);
 
     var width: f32 = 0;
     var i: usize = 0;
@@ -408,17 +443,33 @@ pub fn drawColorTextRow(spans: []const node_layout.ColorTextSpan, x: f32, y: f32
 pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32, max_lines: u16) f32 {
     if (g_ft_face == null or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return 0;
     core.g_gpu_ops += 1;
+
+    // Diagnostic: targeted dump for the variant-button labels we're chasing.
+    // Logs incoming max_width plus full single-line width plus per-word width.
+    const dbg_match = std.mem.startsWith(u8, text, "Frames \xc2\xb7 ") or std.mem.eql(u8, text, "Live archetype gallery");
+    if (dbg_match) {
+        const full_w = measureTextLineWidth(text, size_px);
+        std.debug.print("[wrap-dbg] text=\"{s}\" max_width={d:.1} full_w={d:.1} bold={} size={d}\n", .{ text, max_width, full_w, g_use_bold, size_px });
+        var di: usize = 0;
+        var dword: usize = 0;
+        while (di < text.len) {
+            while (di < text.len and (text[di] == ' ' or text[di] == '\n')) : (di += 1) {}
+            if (di >= text.len) break;
+            const ws = di;
+            while (di < text.len and text[di] != ' ' and text[di] != '\n') : (di += 1) {}
+            const word = text[ws..di];
+            const ww = measureTextLineWidth(word, size_px);
+            std.debug.print("[wrap-dbg]   word[{d}]=\"{s}\" w={d:.1}\n", .{ dword, word, ww });
+            dword += 1;
+        }
+    }
+
     if (max_width <= 0) {
         drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
         return @as(f32, @floatFromInt(size_px));
     }
 
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
-
-    const face = g_ft_face;
+    const face = activeFace(size_px);
     const natural_line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
     const line_h: f32 = if (g_line_height_override > 0) g_line_height_override else natural_line_h;
 
@@ -554,12 +605,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
 pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, sel_start: usize, sel_end: usize) void {
     if (g_ft_face == null or sel_start >= sel_end) return;
 
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
-
-    const face = g_ft_face;
+    const face = activeFace(size_px);
     const natural_line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
     const line_h: f32 = if (g_line_height_override > 0) g_line_height_override else natural_line_h;
 
@@ -676,11 +722,8 @@ pub fn getCharAdvance(codepoint: u32, size_px: u16) f32 {
 
 /// Get the line height (ascent + descent) for a given font size.
 pub fn getLineHeight(size_px: u16) f32 {
-    const face = g_ft_face orelse return @floatFromInt(size_px);
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
+    if (g_ft_face == null) return @floatFromInt(size_px);
+    const face = activeFace(size_px);
     // Use FreeType's metrics.height (ascent + descent + line gap) to match
     // TextEngine.lineMetrics(). The old formula (ascender - descender + 2.0)
     // diverged at certain zoom-scaled font sizes where the real line gap != 2px,
@@ -690,11 +733,8 @@ pub fn getLineHeight(size_px: u16) f32 {
 
 /// Get the advance width of 'M' (monospace cell width) for a given font size.
 pub fn getCharWidth(size_px: u16) f32 {
-    const face = g_ft_face orelse return @as(f32, @floatFromInt(size_px)) * 0.6;
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
+    if (g_ft_face == null) return @as(f32, @floatFromInt(size_px)) * 0.6;
+    const face = activeFace(size_px);
     // Load 'M' glyph to get its advance width
     if (c.FT_Load_Char(face, 'M', c.FT_LOAD_DEFAULT) == 0) {
         return @as(f32, @floatFromInt(face.*.glyph.*.advance.x)) / 64.0;
@@ -719,11 +759,7 @@ pub fn drawGlyphAt(char_buf: []const u8, x: f32, y: f32, size_px: u16, cr: f32, 
     else
         size_px;
 
-    if (g_ft_current_size != render_size) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, render_size);
-        g_ft_current_size = render_size;
-    }
-    const face = g_ft_face;
+    const face = activeFace(render_size);
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
     const ch = decodeUtf8(char_buf);
 
@@ -989,13 +1025,25 @@ fn initPipeline(device: *wgpu.Device) void {
 // ════════════════════════════════════════════════════════════════════════
 
 fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
-    const packed_key = (@as(u64, codepoint) << 16) | @as(u64, size_px);
+    if (g_ft_face == null) return null;
+
+    // activeFace() picks regular or bold based on g_use_bold and ensures
+    // FT_Set_Pixel_Sizes is current. The atlas key includes font_id so
+    // bold and regular variants of the same codepoint coexist in the cache.
+    const face = activeFace(size_px);
+    const font_id = activeFontId();
+
+    // Pack codepoint(21b) + size_px(16b) + font_id(8b) into the hash key.
+    const packed_key: u64 = (@as(u64, codepoint) << 24) | (@as(u64, size_px) << 8) | @as(u64, font_id);
     // Check cache
     if (g_atlas_index.get(packed_key)) |idx| {
         return &g_atlas_vals[idx];
     }
     for (0..g_atlas_count) |i| {
-        if (g_atlas_keys[i].codepoint == codepoint and g_atlas_keys[i].size_px == size_px) {
+        if (g_atlas_keys[i].codepoint == codepoint and
+            g_atlas_keys[i].size_px == size_px and
+            g_atlas_keys[i].font_id == font_id)
+        {
             const found_idx: u32 = @intCast(i);
             g_atlas_index.put(packed_key, found_idx) catch {};
             return &g_atlas_vals[i];
@@ -1003,15 +1051,9 @@ fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
     }
     if (g_atlas_count >= MAX_ATLAS_GLYPHS) return null;
 
-    const face = g_ft_face orelse return null;
-
-    // Set size
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
-        g_ft_current_size = size_px;
-    }
-
-    // Load glyph — try primary face, then fallbacks
+    // Load glyph — try primary face, then fallbacks. Fallback faces are
+    // shared regular-only (CJK/emoji/symbols rarely have weighted variants);
+    // a missing glyph in the bold face still routes through them.
     var use_face = face;
     if (c.FT_Get_Char_Index(face, codepoint) == 0) {
         for (0..g_ft_fallback_count) |fi| {
@@ -1060,7 +1102,7 @@ fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
     }
 
     const idx = g_atlas_count;
-    g_atlas_keys[idx] = .{ .codepoint = codepoint, .size_px = size_px };
+    g_atlas_keys[idx] = .{ .codepoint = codepoint, .size_px = size_px, .font_id = font_id };
     g_atlas_vals[idx] = .{
         .uv_x = @as(f32, @floatFromInt(atlas_x)) / @as(f32, ATLAS_SIZE),
         .uv_y = @as(f32, @floatFromInt(atlas_y)) / @as(f32, ATLAS_SIZE),

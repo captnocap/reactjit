@@ -1,4 +1,4 @@
-import { Col, Row, Box, Text } from '../../../../runtime/primitives';
+import { Col, Row, Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface CodeGutterProps {

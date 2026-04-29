@@ -2,7 +2,7 @@
 // Workspace file indexing UI: index, search, stats, manage indexed files.
 
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
 import { RenamePanel } from './renamepanel';

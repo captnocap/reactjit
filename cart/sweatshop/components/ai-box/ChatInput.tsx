@@ -1,4 +1,4 @@
-import { Box, TextArea, Text, Row, Pressable } from '../../../../runtime/primitives';
+import { Box, TextArea, Text, Row, Pressable } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 const ENTER_KEY = 13;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Col, ScrollView } from '../../../../runtime/primitives';
+import { Box, Col, ScrollView } from '@reactjit/runtime/primitives';
 import { MessageBlock, type TranscriptBlock } from './MessageBlocks';
 import { SignalPopoverLayer } from './SignalPopoverLayer';
 import type { SignalHighlightProps } from './TripwireMenu';

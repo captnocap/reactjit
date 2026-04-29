@@ -161,7 +161,7 @@ pub fn paintOverlay(measure_fn: layout.MeasureTextFn, win_w: f32, win_h: f32) vo
     // Measure widest item to size the menu
     var max_text_w: f32 = 0;
     for (items_ptr) |item| {
-        const m = measure_fn(item.label, FONT_SIZE, MAX_W - PAD_H * 2, 0, 0, 0, false);
+        const m = measure_fn(item.label, FONT_SIZE, MAX_W - PAD_H * 2, 0, 0, 0, false, false);
         if (m.width > max_text_w) max_text_w = m.width;
     }
 

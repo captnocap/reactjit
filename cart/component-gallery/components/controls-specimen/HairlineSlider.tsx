@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, MeterMarks, Mono } from './controlsSpecimenParts';
 import { useControllableNumberState, useHorizontalPercentDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
@@ -18,8 +18,8 @@ export function HairlineSlider({
   onChange,
 }: HairlineSliderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useHorizontalPercentDrag(current, setCurrent);
   const trackWidth = Math.max(0, width - 20);
+  const drag = useHorizontalPercentDrag(current, setCurrent, trackWidth);
   const thumbCenterX = Math.round(trackWidth * drag.ratio);
 
   return (
@@ -28,7 +28,7 @@ export function HairlineSlider({
         <Mono>{label}</Mono>
         <Body fontSize={12}>{String(current).padStart(2, '0')}</Body>
       </S.InlineX4BetweenFull>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 24, justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 24, justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: 1, backgroundColor: CTRL.rule }} />
         <Box style={{ position: 'absolute', left: 0, top: 11, width: thumbCenterX, height: 1, backgroundColor: CTRL.accent }} />
         <Box
@@ -43,7 +43,8 @@ export function HairlineSlider({
             backgroundColor: drag.dragging ? CTRL.accent : CTRL.bg,
           }}
         />
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <MeterMarks labels={['0', '25', '50', '75', '100']} />
     </AtomFrame>
   );

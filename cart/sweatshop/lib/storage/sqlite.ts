@@ -5,7 +5,7 @@
  * Sync under the hood; exposed as async for adapter compatibility.
  */
 
-import { open, close, exec, query, lastRowId, changes, type DbHandle } from '../../../runtime/hooks/sqlite';
+import { open, close, exec, query, lastRowId, changes, type DbHandle } from '@reactjit/runtime/hooks/sqlite';
 
 export { DbHandle };
 

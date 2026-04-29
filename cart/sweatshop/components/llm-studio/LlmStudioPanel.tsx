@@ -7,7 +7,7 @@
 // file is pure orchestration.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { addColumn, useLlmStudioSession } from './hooks/useLlmStudioSession';
 import { PromptComposer } from './PromptComposer';

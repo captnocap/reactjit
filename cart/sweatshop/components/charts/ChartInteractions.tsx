@@ -11,7 +11,7 @@
 // internals.
 // =============================================================================
 
-import { Box, Canvas, Pressable } from '../../../runtime/primitives';
+import { Box, Canvas, Pressable } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { useChartZoom, type DataViewport, type DomainRect, type PlotRect } from './useChartZoom';
 import { useChartPan } from './useChartPan';

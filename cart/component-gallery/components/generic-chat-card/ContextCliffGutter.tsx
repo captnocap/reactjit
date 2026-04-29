@@ -1,4 +1,4 @@
-import { Box, Col } from '../../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 function ContextCliffSegment({ active, danger }: { active: boolean; danger: boolean }) {

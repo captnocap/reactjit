@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Col, Row, Graph, Text } from '../../../../runtime/primitives';
-import { EASINGS, EASING_NAMES, type EasingName } from '../../../../runtime/easing';
+import { Box, Col, Row, Graph, Text } from '@reactjit/runtime/primitives';
+import { EASINGS, EASING_NAMES, type EasingName } from '@reactjit/runtime/easing';
 
 const CYCLE_MS = 1800;
 const TILE_W = 160;

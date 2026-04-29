@@ -1,4 +1,4 @@
-import { Box, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, MeterMarks, Mono } from './controlsSpecimenParts';
 import { useControllableNumberState, useHorizontalPercentDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
@@ -18,9 +18,9 @@ export function BipolarSlider({
   onChange,
 }: BipolarSliderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useHorizontalPercentDrag(current, setCurrent);
   const center = 0.5;
   const trackWidth = Math.max(0, width - 20);
+  const drag = useHorizontalPercentDrag(current, setCurrent, trackWidth);
   const centerX = Math.round(trackWidth / 2);
   const thumbCenterX = Math.round(trackWidth * drag.ratio);
   const fillLeft = Math.min(centerX, thumbCenterX);
@@ -33,7 +33,7 @@ export function BipolarSlider({
         <Mono>{label}</Mono>
         <Body fontSize={12}>{current - 50 > 0 ? `+${current - 50}` : `${current - 50}`}</Body>
       </S.InlineX4BetweenFull>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 24, justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 24, justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: 4, borderWidth: 1, borderColor: CTRL.ruleBright, backgroundColor: CTRL.bg1 }} />
         <Box style={{ position: 'absolute', left: centerX, top: 7, width: 1, height: 10, backgroundColor: CTRL.inkDim }} />
         <Box style={{ position: 'absolute', left: fillLeft, top: 8, width: fillWidth, height: 6, backgroundColor: tone }} />
@@ -49,7 +49,8 @@ export function BipolarSlider({
             backgroundColor: drag.dragging ? tone : CTRL.bg3,
           }}
         />
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <MeterMarks labels={['−50', '−25', '0', '+25', '+50']} />
     </AtomFrame>
   );

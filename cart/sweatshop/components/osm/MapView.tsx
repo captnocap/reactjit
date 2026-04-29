@@ -1,4 +1,4 @@
-import { Box, Image, Text } from '../../../../runtime/primitives';
+import { Box, Image, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { tileUrl } from '../../lib/osm/tile-url';
 import { latLonToWorld, worldToLatLon } from '../../lib/osm/viewport';

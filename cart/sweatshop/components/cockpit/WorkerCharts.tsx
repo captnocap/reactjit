@@ -1,4 +1,4 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import type { Worker } from './WorkerTile';
 
 // Activity weight per status — drives heatmap brightness and tool-rate lines.

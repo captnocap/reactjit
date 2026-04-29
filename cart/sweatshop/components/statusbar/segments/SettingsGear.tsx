@@ -1,5 +1,5 @@
 
-import { Text } from '../../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../../theme';
 import { Icon } from '../../icons';
 import { StatusSegment } from '../StatusSegment';

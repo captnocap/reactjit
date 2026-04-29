@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { listCryptoHostFunctions } from '../../lib/crypto/support';
 import { HoverPressable } from '../shared';

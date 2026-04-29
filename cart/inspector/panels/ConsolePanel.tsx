@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Col, Row, Text, Pressable, ScrollView, Box, TextInput } from '../../../runtime/primitives';
+import { Col, Row, Text, Pressable, ScrollView, Box, TextInput } from '@reactjit/runtime/primitives';
 import { LogEntry } from '../types';
 import { COLORS } from '../constants';
 import { subscribeLogs, getLogHistory, clearLogs } from '../capture/console';

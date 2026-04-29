@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { getDefaultGameId, getGameDefinition } from '../../lib/game-servers/catalog';
 import { useFavorites } from './hooks/useFavorites';

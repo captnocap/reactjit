@@ -8,7 +8,7 @@
 // tweaking controls re-renders only when something actually changed.
 // =============================================================================
 
-import { Box, Canvas } from '../../../runtime/primitives';
+import { Box, Canvas } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { PerlinNoise } from '../../lib/noise/perlin';
 import { SimplexNoise } from '../../lib/noise/simplex';

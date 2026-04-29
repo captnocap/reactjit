@@ -1,5 +1,5 @@
 
-import { Box, Canvas } from '../../../../runtime/primitives';
+import { Box, Canvas } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export type MaskKind =

@@ -1,5 +1,5 @@
 
-import { Box, Col, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { CommandRow } from './CommandRow';
 import { type KeybindingMap, type KeybindingSpec } from './useKeybindStore';

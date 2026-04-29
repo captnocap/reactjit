@@ -1,4 +1,4 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { MarketRow } from './hooks/usePriceStream';
 

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Box, Effect } from '../../../../runtime/primitives';
+import { Box, Effect } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export function Waveform(props: { samples: Float32Array | null; width?: number; height?: number }) {

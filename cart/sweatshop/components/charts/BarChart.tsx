@@ -1,5 +1,5 @@
 
-import { Box, Graph, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Graph, Pressable, Row } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { Tooltip } from '../tooltip';
 import { ChartAxis } from './ChartAxis';

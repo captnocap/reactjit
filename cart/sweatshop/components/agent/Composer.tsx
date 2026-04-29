@@ -1,4 +1,4 @@
-import { Col, Row, Text, TextArea } from '../../../../runtime/primitives';
+import { Col, Row, Text, TextArea } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { HoverPressable } from '../shared';
 import { ModePicker } from './ModePicker';

@@ -1,4 +1,4 @@
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { DocumentOutline } from '../components/document-viewer/DocumentOutline';
 import {

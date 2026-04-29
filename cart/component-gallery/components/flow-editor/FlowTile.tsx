@@ -1,4 +1,4 @@
-import { Box, Canvas, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Pressable, Text } from '@reactjit/runtime/primitives';
 import type { FlowEditorTheme } from './flowEditorTheme';
 import type { FlowNode, FlowTileBodyRenderer } from './types';
 

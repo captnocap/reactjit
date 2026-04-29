@@ -2,7 +2,7 @@
 // Settings panel for managing provider API keys with obfuscated storage.
 
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
 import { listApiKeys, setApiKey, deleteApiKey, getApiKey, hasApiKey, validateApiKey } from '../api-keys';

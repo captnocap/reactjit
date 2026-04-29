@@ -1,4 +1,4 @@
-import { Box, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface FileTreeSearchProps {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Col, Image, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Image, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useNanoDiffusion } from '../../hooks/useNanoDiffusion';
 import { installHint } from '../../lib/image-gen/nano';

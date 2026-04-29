@@ -5,7 +5,7 @@
 // inside its physical arena (floor + walls).
 
 import { useCallback, useRef, useState } from 'react';
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { PhysicsWorld } from './PhysicsWorld';
 import { RigidBody, PhysicsMotion } from './RigidBody';

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
+import { ChevronDown, ChevronRight } from '@reactjit/runtime/icons/icons';
+import { Icon } from '../../../sweatshop/components/icons';
 import { MarkableLine } from './MarkableText';
 import { StepCardShell, TranscriptTurnShell } from './TranscriptFlow';
 import type { SignalHighlightProps } from './TripwireMenu';
@@ -106,9 +108,7 @@ export function ThinkingBlock({
         <Pressable onPress={() => setOpen(!open)} style={{ alignSelf: 'stretch' }}>
           <S.InlineX5Between>
             <S.InlineX3>
-              <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>
-                {open ? 'v' : '>'}
-              </Text>
+              <Icon icon={open ? ChevronDown : ChevronRight} size={12} color={CHAT_CARD.orange} strokeWidth={2.2} />
               <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>
                 {block.title}
               </Text>

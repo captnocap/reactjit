@@ -1,4 +1,4 @@
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 function CornerFrame() {

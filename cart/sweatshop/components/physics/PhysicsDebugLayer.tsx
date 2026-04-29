@@ -4,7 +4,7 @@
 // via the subscription bus.
 
 import { useEffect, useState } from 'react';
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { usePhysicsCtx } from './PhysicsContext';
 

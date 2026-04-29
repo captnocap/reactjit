@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { copyToClipboard } from '../agent/clipboard';
 import { buildPaymentRequest, compactAddress, getWalletNetwork, normalizeAddress, type WalletAccount, type WalletContact, type WalletFeeLevel } from './lib';

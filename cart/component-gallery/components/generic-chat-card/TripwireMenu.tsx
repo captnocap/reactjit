@@ -1,4 +1,6 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
+import { Check, Circle } from '@reactjit/runtime/icons/icons';
+import { Icon } from '../../../sweatshop/components/icons';
 import { CHAT_CARD } from './tokens';
 
 const OPTIONS = ['mirror-universe', 'quick-hack', 'trust-decay'];
@@ -59,9 +61,9 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
               borderRadius: 3,
             }}
           >
-            <Text style={{ width: 8, fontFamily: 'monospace', fontSize: 8, color: index === 0 ? CHAT_CARD.pink : CHAT_CARD.faint }}>
-              {index === 0 ? '*' : 'o'}
-            </Text>
+            <Box style={{ width: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon icon={index === 0 ? Check : Circle} size={8} color={index === 0 ? CHAT_CARD.pink : CHAT_CARD.faint} strokeWidth={2.4} />
+            </Box>
             <Text style={{ fontFamily: 'monospace', fontSize: 8, color: index === 0 ? CHAT_CARD.text : CHAT_CARD.muted }}>{option}</Text>
           </Row>
         ))}

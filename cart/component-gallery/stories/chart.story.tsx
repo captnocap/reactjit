@@ -1,7 +1,7 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Chart, type ChartProps } from '../components/chart/Chart';
 import { chartDemoData, PALETTE } from '../lib/chart-utils';
-import { Box, Col, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 
 const barData = chartDemoData.months.slice(0, 8).map((label, i) => ({
   label,

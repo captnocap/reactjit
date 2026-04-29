@@ -1,5 +1,5 @@
 
-import { Text } from '../../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import { exec } from '../../host';
 import { COLORS } from '../../theme';
 import { HoverPressable } from '../shared';

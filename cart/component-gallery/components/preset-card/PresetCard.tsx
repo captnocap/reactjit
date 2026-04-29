@@ -32,7 +32,7 @@
 //     prop to `rows: InferencePreset[]` and update the variant
 //     accordingly.
 
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import type { InferencePreset } from '../../data/inference-preset';
 
 export type PresetCardProps = {

@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export type ImageGenBackend = 'gradio' | 'a1111' | 'nano-local';

@@ -1,5 +1,5 @@
 import { Children } from 'react';
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { renderMaskEffect, type MaskKind } from './maskEffects';
 
 export function MaskLayer(props: {

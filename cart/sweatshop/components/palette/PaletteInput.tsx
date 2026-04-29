@@ -1,4 +1,4 @@
-import { Box, TextInput } from '../../../runtime/primitives';
+import { Box, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 interface Props {

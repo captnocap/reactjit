@@ -11,7 +11,6 @@ const pty_mod = @import("pty.zig");
 extern fn heavy_compute(n: c_long) c_long;
 extern fn heavy_compute_timed(n: c_long) c_long;
 extern fn set_compute_n(n: c_long) void;
-extern fn sqlite3_column_name(stmt: *anyopaque, N: c_int) ?[*:0]const u8;
 
 const MAX_PTYS: usize = 16;
 var g_ptys: [MAX_PTYS]?pty_mod.Pty = .{null} ** MAX_PTYS;
@@ -1024,10 +1023,8 @@ fn sqlQueryJsonCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
 
     var col_names: [64][]const u8 = undefined;
     const nc: usize = @intCast(@min(col_count, 64));
-    const raw_stmt: *anyopaque = @ptrCast(stmt.stmt);
     for (0..nc) |i| {
-        const n = sqlite3_column_name(raw_stmt, @intCast(i));
-        col_names[i] = if (n) |p| std.mem.span(p) else "";
+        col_names[i] = stmt.columnName(@intCast(i)) orelse "";
     }
 
     var out: std.ArrayList(u8) = .{};

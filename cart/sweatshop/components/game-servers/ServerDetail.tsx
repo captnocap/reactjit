@@ -1,4 +1,4 @@
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { copyToClipboard } from '../agent/clipboard';
 import { HoverPressable } from '../shared';

@@ -1,4 +1,4 @@
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { VerticalSpine } from './controlsSpecimenParts';
 import { type ControlTone } from './controlsSpecimenTheme';
 

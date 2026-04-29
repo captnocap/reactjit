@@ -1,13 +1,8 @@
-import { Box } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Box } from '@reactjit/runtime/primitives';
 
 export function IntentDivider() {
-  return (
-    <Box style={{
-      height: 1,
-      backgroundColor: '#334155',
-      alignSelf: 'stretch',
-      marginTop: 4,
-      marginBottom: 4,
-    }} />
-  );
+  const Divider = S.Divider || Box;
+  return <Divider />;
 }

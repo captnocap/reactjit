@@ -1,5 +1,5 @@
 
-import { Box, Col, Row, Text } from '../../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../../theme';
 
 export function StatsTile(props: { openFiles?: number; sessionMinutes?: number }) {

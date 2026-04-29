@@ -53,6 +53,8 @@ import { astQuiltSection } from './ast-quilt.story';
 import { easingsSection } from './easings.story';
 import { animatedTextSection } from './animated-text.story';
 import { gridSpinnersSection } from './grid-spinners.story';
+import { timeInstrumentsSection } from './time-instruments.story';
+import { conditionalGuttersSection } from './conditional-gutters.story';
 import { hairlineSliderSection } from './hairline-slider.story';
 import { filledRailSliderSection } from './filled-rail-slider.story';
 import { discreteSliderSection } from './discrete-slider.story';
@@ -94,6 +96,7 @@ import { marginaliaPanelSection } from './marginalia-panel.story';
 import { axisReadoutSection } from './axis-readout.story';
 import { fileTabCardSection } from './file-tab-card.story';
 import { scaleLabelCardSection } from './scale-label-card.story';
+import { layerControlAtomSections } from './layer-control-atoms.story';
 import { latexSection } from './latex.story';
 import { cockpitSection } from './cockpit.story';
 import { workerEventSection } from './worker-event.story';
@@ -210,6 +213,23 @@ import { codeLineNumberSection } from './code-line-number.story';
 import { syntaxHighlighterSection } from './syntax-highlighter.story';
 import { codeCopyButtonSection } from './code-copy-button.story';
 import { intentSurfaceSection } from './intent-surface.story';
+import { spreadsheetAtomSections } from './spreadsheet-atoms.story';
+import { spreadsheetSection } from './spreadsheet.story';
+import { commandComposerSection } from './command-composer.story';
+import { commandComposerAtomSections } from './command-composer-atoms.story';
+import { gitActivitySection } from './git-activity.story';
+import { gitLaneFrameSection } from './git-lane-frame.story';
+import { gitLaneGraphSection } from './git-lane-graph.story';
+import { gitCommitRailRowSection } from './git-commit-rail-row.story';
+import { gitDiffPreviewSection } from './git-diff-preview.story';
+import { gitLanesSection } from './git-lanes.story';
+import { commandComposerPanelSection } from './command-composer-panel.story';
+import { layerControlPanelSection } from './layer-control-panel.story';
+import { menuGallerySections } from './menu-gallery.story';
+import { blockFacesSection } from './block-faces.story';
+import { newsFeedPostSection } from './news-feed-post.story';
+import { newsFeedSection } from './news-feed.story';
+import { socialImageGallerySection } from './social-image-gallery.story';
 // component-gallery:imports
 
 export const storySections: GallerySection[] = [
@@ -267,6 +287,8 @@ export const storySections: GallerySection[] = [
   easingsSection,
   animatedTextSection,
   gridSpinnersSection,
+  timeInstrumentsSection,
+  conditionalGuttersSection,
   hairlineSliderSection,
   filledRailSliderSection,
   discreteSliderSection,
@@ -308,6 +330,7 @@ export const storySections: GallerySection[] = [
   axisReadoutSection,
   fileTabCardSection,
   scaleLabelCardSection,
+  ...layerControlAtomSections,
   latexSection,
   cockpitSection,
   workerEventSection,
@@ -423,5 +446,22 @@ export const storySections: GallerySection[] = [
   codeCopyButtonSection,
   intentSurfaceSection,
   flowEditorSection,
+  spreadsheetSection,
+  ...spreadsheetAtomSections,
+  commandComposerSection,
+  ...commandComposerAtomSections,
+  gitActivitySection,
+  gitLaneFrameSection,
+  gitLaneGraphSection,
+  gitCommitRailRowSection,
+  gitDiffPreviewSection,
+  gitLanesSection,
+  commandComposerPanelSection,
+  layerControlPanelSection,
+  ...menuGallerySections,
+  blockFacesSection,
+  socialImageGallerySection,
+  newsFeedPostSection,
+  newsFeedSection,
   // component-gallery:sections
 ];

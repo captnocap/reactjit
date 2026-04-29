@@ -21,6 +21,8 @@ export * as websocket from './websocket';
 export * as media from './media';
 export * as browserPage from './browser_page';
 export { useHotState, removeHotState, clearHotState, hotStateKeys } from './useHotState';
+export { useIFTTT, busOn, busEmit, getSharedState, setSharedState, dispatchClaudeEvent } from './useIFTTT';
+export type { IFTTTTrigger, IFTTTAction, IFTTTResult } from './useIFTTT';
 export { useHost } from './useHost';
 export type {
   HostSpec,

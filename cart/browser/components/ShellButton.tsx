@@ -1,4 +1,4 @@
-import { Pressable, Text } from '../../../runtime/primitives';
+import { Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 import BrowserIcon, { BrowserIconName } from './BrowserIcon';
 

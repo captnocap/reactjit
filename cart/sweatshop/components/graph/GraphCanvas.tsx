@@ -1,5 +1,5 @@
 
-import { Box, Canvas, Col, Graph, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Col, Graph, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, fileTone, inferFileType } from '../../theme';
 import { Icon } from '../icons';
 import type { GraphLayoutMode } from './GraphControls';

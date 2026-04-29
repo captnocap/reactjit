@@ -4012,8 +4012,8 @@ pub fn paintNode(renderer: *c.SDL_Renderer, te: *TextEngine, node: *Node) void {
 
 // ── Main loop ───────────────────────────────────────────────────
 
-fn measureCallback(t: []const u8, fs: u16, mw: f32, ls: f32, lh: f32, ml: u16, nw: bool) layout.TextMetrics {
-    if (g_text_engine) |te| return te.measureTextWrappedEx(t, fs, mw, ls, lh, ml, nw);
+fn measureCallback(t: []const u8, fs: u16, mw: f32, ls: f32, lh: f32, ml: u16, nw: bool, bold: bool) layout.TextMetrics {
+    if (g_text_engine) |te| return te.measureTextWrappedEx(t, fs, mw, ls, lh, ml, nw, bold);
     return .{};
 }
 fn measureImageCallback(_: []const u8) layout.ImageDims {

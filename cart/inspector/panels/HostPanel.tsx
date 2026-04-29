@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Col, Row, Text, Box } from '../../../runtime/primitives';
+import { Col, Row, Text, Box } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 import SectionHeader from '../components/SectionHeader';
 import Badge from '../components/Badge';

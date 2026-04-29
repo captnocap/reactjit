@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Col, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { BrowserToolbar } from './BrowserToolbar';
 import { BrowserView } from './BrowserView';

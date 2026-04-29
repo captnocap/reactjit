@@ -1,4 +1,4 @@
-import { Box, Row, Text, TextInput, Pressable } from '../../../../runtime/primitives';
+import { Box, Row, Text, TextInput, Pressable } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export function SettingsSearchInput(props: {

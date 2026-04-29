@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { DistroArt } from './DistroArt';
 import { ProcessesRow } from './ProcessesRow';

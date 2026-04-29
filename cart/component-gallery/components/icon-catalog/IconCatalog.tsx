@@ -1,9 +1,9 @@
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { Icon } from '../../../sweatshop/components/icons';
 import {
   getRegisteredIconNames,
   getAliasesForName,
-} from '../../../../runtime/icons/registry';
+} from '@reactjit/runtime/icons/registry';
 import { PROVIDER_ICONS } from '../model-card/providerIcons.generated';
 import { ProviderIcon } from '../model-card/ProviderIcon';
 

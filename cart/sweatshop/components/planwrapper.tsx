@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { PlanCanvas } from './plancanvas';
 import { loadPlans, createPlan, createPlanItem, type Plan } from '../plan';

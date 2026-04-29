@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../theme';
 import { Icon } from './icons';
 import { Tooltip } from './tooltip';

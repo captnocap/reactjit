@@ -1,4 +1,4 @@
-import { Box, Row, ScrollView, Text, Pressable } from '../../../../runtime/primitives';
+import { Box, Row, ScrollView, Text, Pressable } from '@reactjit/runtime/primitives';
 import type { Worker, WorkerStatus } from './WorkerTile';
 
 const DOT_COLOR: Record<WorkerStatus, string> = {

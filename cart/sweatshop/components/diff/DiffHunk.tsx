@@ -1,4 +1,4 @@
-import { Col } from '../../../../runtime/primitives';
+import { Col } from '@reactjit/runtime/primitives';
 import { DiffHunkHeader } from './DiffHunkHeader';
 import { DiffHunkSummary } from './DiffHunkSummary';
 import { DiffSideBySide } from './DiffSideBySide';

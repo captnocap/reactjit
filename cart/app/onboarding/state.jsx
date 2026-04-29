@@ -8,14 +8,24 @@ const Ctx = createContext({
   complete: false,
   loading: false,
   setStep: () => {},
+  markComplete: () => {},
   shouldPlayFirstStartAnimation: false,
   markFirstStartAnimationPlayed: () => {},
+  homeEntryPlayed: false,
+  markHomeEntryPlayed: () => {},
+  tourStatus: null,
+  acceptTour: () => {},
+  declineTour: () => {},
   name: '',
   setName: () => {},
   providerKind: null,
   setProviderKind: () => {},
   traits: [],
   setTraits: () => {},
+  configPath: '',
+  setConfigPath: () => {},
+  goal: '',
+  setGoal: () => {},
 });
 
 // Onboarding is iteration-only right now: nothing persists until the full
@@ -28,7 +38,12 @@ export function OnboardingProvider({ children }) {
   const [name, setNameState] = useState('');
   const [providerKind, setProviderKindState] = useState(null);
   const [traits, setTraitsState] = useState([]);
+  const [configPath, setConfigPathState] = useState('');
+  const [goal, setGoalState] = useState('');
   const [animationPlayedThisSession, setAnimationPlayedThisSession] = useState(false);
+  const [homeEntryPlayed, setHomeEntryPlayed] = useState(false);
+  // tourStatus: null (not offered) | 'pending' (banner showing) | 'accepted' | 'declined'
+  const [tourStatus, setTourStatusState] = useState(null);
 
   const setStep = (next) => {
     const clamped = Math.max(0, Math.min(TOTAL_STEPS - 1, next));
@@ -48,8 +63,36 @@ export function OnboardingProvider({ children }) {
     setTraitsState(Array.isArray(next) ? next : []);
   };
 
+  const setConfigPath = (next) => {
+    setConfigPathState(typeof next === 'string' ? next : '');
+  };
+
+  const setGoal = (next) => {
+    setGoalState(typeof next === 'string' ? next : '');
+  };
+
+  // Completing onboarding offers the tour banner. Returning users (already
+  // complete from disk, when persistence is wired) won't re-trigger the
+  // banner because tourStatus stays whatever it last was.
+  const markComplete = () => {
+    setComplete(true);
+    setTourStatusState((prev) => prev == null ? 'pending' : prev);
+  };
+
   const markFirstStartAnimationPlayed = () => {
     setAnimationPlayedThisSession(true);
+  };
+
+  const markHomeEntryPlayed = () => {
+    setHomeEntryPlayed(true);
+  };
+
+  const acceptTour = () => {
+    setTourStatusState('accepted');
+  };
+
+  const declineTour = () => {
+    setTourStatusState('declined');
   };
 
   const value = {
@@ -58,14 +101,24 @@ export function OnboardingProvider({ children }) {
     complete,
     loading: false,
     setStep,
+    markComplete,
     shouldPlayFirstStartAnimation: !complete && step === 0 && !animationPlayedThisSession,
     markFirstStartAnimationPlayed,
+    homeEntryPlayed,
+    markHomeEntryPlayed,
+    tourStatus,
+    acceptTour,
+    declineTour,
     name,
     setName,
     providerKind,
     setProviderKind,
     traits,
     setTraits,
+    configPath,
+    setConfigPath,
+    goal,
+    setGoal,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

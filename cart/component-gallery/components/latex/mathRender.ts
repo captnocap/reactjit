@@ -1,6 +1,6 @@
 import { createElement as h } from 'react';
 import type { ReactNode } from 'react';
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import type { MathNode, TextMode } from './useLaTeXParse';
 
 export type MathRenderOptions = {

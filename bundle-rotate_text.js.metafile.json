@@ -562,7 +562,7 @@
       "format": "esm"
     },
     "runtime/hooks/clipboard.ts": {
-      "bytes": 566,
+      "bytes": 1053,
       "imports": [
         {
           "path": "runtime/ffi.ts",

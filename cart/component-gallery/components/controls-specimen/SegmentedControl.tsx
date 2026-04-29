@@ -1,4 +1,4 @@
-import { Box, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable, Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body } from './controlsSpecimenParts';
 import { useControllableIndexState } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
-import { listDir, stat } from '../../../../runtime/hooks/fs';
-import { useFuzzySearch } from '../../../../runtime/hooks/useFuzzySearch';
+import { listDir, stat } from '@reactjit/runtime/hooks/fs';
+import { useFuzzySearch } from '@reactjit/runtime/hooks/useFuzzySearch';
 import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
 
 function log(message: string): void {

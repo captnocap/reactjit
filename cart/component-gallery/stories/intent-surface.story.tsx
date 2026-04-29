@@ -13,7 +13,7 @@ import { IntentCode } from '../components/intent-surface/IntentCode';
 import { IntentDivider } from '../components/intent-surface/IntentDivider';
 import { IntentKbd } from '../components/intent-surface/IntentKbd';
 import { IntentSpacer } from '../components/intent-surface/IntentSpacer';
-import { parseIntent } from '../../../runtime/intent/parser';
+import { parseIntent } from '@reactjit/runtime/intent/parser';
 
 const log = (msg: string) => console.log('[intent-surface story]', msg);
 

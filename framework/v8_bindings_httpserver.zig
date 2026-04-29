@@ -217,7 +217,7 @@ fn hostListen(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     var route_buf: [16]httpserver.Route = undefined;
     const rcount = parseRoutes(&entry, routes_json, &route_buf);
 
-    srv.* = httpserver.HttpServer.listen(@intCast(port), route_buf[0..rcount]) catch {
+    srv.listen(@intCast(port), route_buf[0..rcount]) catch {
         alloc.destroy(srv);
         var chan_buf: [64]u8 = undefined;
         const chan = std.fmt.bufPrint(&chan_buf, "httpsrv:error:{d}", .{id}) catch return;

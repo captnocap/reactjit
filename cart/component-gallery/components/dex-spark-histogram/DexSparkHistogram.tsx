@@ -1,4 +1,4 @@
-import { Box, Row } from '../../../../runtime/primitives';
+import { Box, Row } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexSparkHistogramProps = {

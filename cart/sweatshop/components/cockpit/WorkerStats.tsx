@@ -1,5 +1,5 @@
 
-import { Box, Col, Graph, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Graph, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface WorkerStatRow {

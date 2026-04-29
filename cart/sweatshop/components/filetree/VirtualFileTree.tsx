@@ -1,7 +1,7 @@
 // ── Virtual File Tree ────────────────────────────────────────────────
 
 
-import { Box, Col, ScrollView } from '../../../runtime/primitives';
+import { Box, Col, ScrollView } from '@reactjit/runtime/primitives';
 import { FileItemLike, rebuildVisibleFromFlat } from './FileTreeFlatten';
 import { FileTreeContextMenu } from './FileTreeContextMenu';
 import { FileTreeRow } from './FileTreeRow';

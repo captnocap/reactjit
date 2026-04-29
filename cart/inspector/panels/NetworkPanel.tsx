@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Col, Row, Text, Pressable, ScrollView, Box } from '../../../runtime/primitives';
+import { Col, Row, Text, Pressable, ScrollView, Box } from '@reactjit/runtime/primitives';
 import { NetworkEntry } from '../types';
 import { COLORS } from '../constants';
 import { subscribeNetwork, getNetworkHistory, clearNetwork, getNetworkStats } from '../capture/network';

@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { SearchResultLine } from './SearchResultLine';
 import type { SearchMatch } from './useSearchEngine';

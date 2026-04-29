@@ -1,4 +1,4 @@
-import { Col, Row, Text } from '../../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export function VariablePreview(props: { results: any[] }) {

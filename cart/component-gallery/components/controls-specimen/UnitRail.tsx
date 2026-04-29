@@ -1,4 +1,4 @@
-import { Row } from '../../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, Mono, VerticalSpine } from './controlsSpecimenParts';
 import { classifiers as S } from '@reactjit/core';
 

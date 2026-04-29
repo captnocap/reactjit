@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useAudioCapture } from '../../lib/audio-capture/hooks/useAudioCapture';
 import { useFFT } from '../../lib/audio-capture/hooks/useFFT';

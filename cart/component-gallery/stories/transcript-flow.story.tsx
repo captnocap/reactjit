@@ -1,4 +1,4 @@
-import { Box, Col, Text } from '../../../runtime/primitives';
+import { Box, Col, Text } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { StepCardShell, TranscriptTurnShell } from '../components/generic-chat-card/TranscriptFlow';
 import { CHAT_CARD } from '../components/generic-chat-card/tokens';

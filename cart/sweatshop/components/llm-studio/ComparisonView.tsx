@@ -8,7 +8,7 @@
 // LCS diff implementation.
 // =============================================================================
 
-import { Box, Col, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { LlmColumn, LlmStudioSession } from './hooks/useLlmStudioSession';
 

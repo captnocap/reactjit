@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import type { SplitNode } from './SplitLayoutEngine';
 import { createPane, splitNode, removeNode, updatePaneFilePath, resizeSplit, flattenPanes } from './SplitLayoutEngine';
 import { useSplitFocus } from './useSplitFocus';

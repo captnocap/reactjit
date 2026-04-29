@@ -2,7 +2,7 @@ import type {
   AIConfig, Message, ToolDefinition, StreamDelta,
   ProviderRequest, ProviderModule, AIProviderType,
 } from './types';
-import { requestAsync } from '../../../../runtime/hooks/http';
+import { requestAsync } from '@reactjit/runtime/hooks/http';
 
 // Unified provider adapters. OpenAI (chat/completions) + Anthropic
 // (messages). Each exposes formatRequest / parseResponse /

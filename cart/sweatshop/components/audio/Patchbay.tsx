@@ -1,5 +1,5 @@
 
-import { Box, Canvas, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { AudioRackApi } from '../../lib/audio/hooks/useAudioRack';
 import type { Connection, Module, PortSpec } from '../../lib/audio/types';

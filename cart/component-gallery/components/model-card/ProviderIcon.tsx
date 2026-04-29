@@ -1,4 +1,6 @@
-import { Box, Image, Text } from '../../../../runtime/primitives';
+import { Box, Image, Text } from '@reactjit/runtime/primitives';
+import { CircleHelp } from '@reactjit/runtime/icons/icons';
+import { Icon } from '../../../sweatshop/components/icons';
 import { PROVIDER_ICONS } from './providerIcons.generated';
 
 export type ProviderIconProps = {
@@ -19,7 +21,7 @@ export function ProviderIcon({ providerId, size = 24 }: ProviderIconProps) {
   const inner = Math.round(size * 0.78);
 
   if (!src) {
-    const letter = (providerId[0] ?? '?').toUpperCase();
+    const letter = providerId[0]?.toUpperCase();
     return (
       <Box
         style={{
@@ -31,9 +33,13 @@ export function ProviderIcon({ providerId, size = 24 }: ProviderIconProps) {
           borderRadius: radius,
         }}
       >
-        <Text style={{ fontSize: Math.round(size * 0.55), fontWeight: 'bold', color: '#14100d' }}>
-          {letter}
-        </Text>
+        {letter ? (
+          <Text style={{ fontSize: Math.round(size * 0.55), fontWeight: 'bold', color: '#14100d' }}>
+            {letter}
+          </Text>
+        ) : (
+          <Icon icon={CircleHelp} size={Math.round(size * 0.62)} color="#14100d" strokeWidth={2.2} />
+        )}
       </Box>
     );
   }

@@ -6,7 +6,7 @@
 // record, which is written by useFanOut from real request timestamps.
 // =============================================================================
 
-import { Box, Col, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { ColumnStats } from './hooks/useLlmStudioSession';
 

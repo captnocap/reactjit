@@ -9,7 +9,7 @@
 // =============================================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Canvas, Col, Text } from '../../../runtime/primitives';
+import { Box, Canvas, Col, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { MeshNode, Scene3DProps, Vec3 } from './types';
 import {

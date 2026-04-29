@@ -1,4 +1,4 @@
-import { Col } from '../../../../runtime/primitives';
+import { Col } from '@reactjit/runtime/primitives';
 import { GenericCardDataRow } from './GenericCardDataRow';
 import { GenericCardHeader } from './GenericCardHeader';
 import { GenericCardMetricBar } from './GenericCardMetricBar';

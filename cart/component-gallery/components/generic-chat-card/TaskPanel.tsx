@@ -1,4 +1,4 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { StepCardShell } from './TranscriptFlow';
 import type { RailBadgeName } from './RailBadge';
 import { CHAT_CARD } from './tokens';

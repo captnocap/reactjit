@@ -1,5 +1,5 @@
-import { Box, Col, Row, Text, Graph } from '../../../runtime/primitives';
-import { lookupIcon, getAllResolvableNames } from '../../../runtime/icons/registry';
+import { Box, Col, Row, Text, Graph } from '@reactjit/runtime/primitives';
+import { lookupIcon, getAllResolvableNames } from '@reactjit/runtime/icons/registry';
 import '../icons-boot';
 
 export type IconName = string;

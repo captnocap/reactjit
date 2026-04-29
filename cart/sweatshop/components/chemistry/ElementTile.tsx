@@ -1,4 +1,4 @@
-import { Box, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { categoryTone } from './ElementFilter';
 import { useElement, type ChemistryElement } from '../../hooks/useElement';

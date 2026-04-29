@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { getUndoStack, getRedoStack, jumpTo, clear, subscribe, getMaxDepth, setMaxDepth } from './undoStack';
 import type { UndoableAction } from './UndoableAction';

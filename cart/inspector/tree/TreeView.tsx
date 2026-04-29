@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Box, Col, Row, Text, Pressable, ScrollView, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Row, Text, Pressable, ScrollView, TextInput } from '@reactjit/runtime/primitives';
 import { InspectorNode, TreeStats } from '../types';
 import { COLORS, TREE_INDENT } from '../constants';
 import { DiffMap } from '../hooks/useTreeDiff';

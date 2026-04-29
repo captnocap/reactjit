@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, setCustomOverrides, applyTheme } from '../../theme';
 import type { CustomThemeOverrides } from '../../themes';
 import { listPresets, loadPreset, savePreset, deletePreset, renamePreset, duplicatePreset } from './useThemeDraft';

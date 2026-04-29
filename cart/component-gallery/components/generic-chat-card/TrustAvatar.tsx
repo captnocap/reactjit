@@ -1,4 +1,4 @@
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 function ThermometerBadge() {

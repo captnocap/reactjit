@@ -5,7 +5,7 @@
 // session store from useLlmStudioSession.
 // =============================================================================
 
-import { Box, Col, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { LlmColumn } from './hooks/useLlmStudioSession';
 import { ModelPicker } from './ModelPicker';

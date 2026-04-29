@@ -1,4 +1,4 @@
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexSpatialNodeProps = {

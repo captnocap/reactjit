@@ -1,4 +1,4 @@
-import { Col, Row, Text, Box } from '../../../runtime/primitives';
+import { Col, Row, Text, Box } from '@reactjit/runtime/primitives';
 import { InspectorNode } from '../types';
 import { COLORS } from '../constants';
 import { looksLikeColor } from '../utils';

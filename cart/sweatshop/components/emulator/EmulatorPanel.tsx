@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useEmulator } from '../../lib/emulator/hooks/useEmulator';
 import { useController, DEFAULT_BINDINGS } from '../../lib/emulator/hooks/useController';

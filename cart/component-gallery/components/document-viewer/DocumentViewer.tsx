@@ -60,6 +60,7 @@ export function DocumentViewer({ document = SAMPLE_DOCUMENT, initialZoom = 100 }
   const [outlineOpen, setOutlineOpen] = useState<boolean>(true);
   const [zoom, setZoom] = useState<number>(initialZoom);
   const [scrollY, setScrollY] = useState<number>(0);
+  const [contentTop, setContentTop] = useState<number | null>(null);
   const [headingY, setHeadingY] = useState<Record<string, number>>({});
 
   const outline = useMemo(() => collectOutline(document), [document]);
@@ -67,7 +68,15 @@ export function DocumentViewer({ document = SAMPLE_DOCUMENT, initialZoom = 100 }
   const size: DocumentSize = isSmall ? 'compact' : 'comfortable';
   const showOutline = !isSmall && outlineOpen && outline.length > 0;
   const estimatedHeadingY = useMemo(() => estimateHeadingY(document), [document]);
-  const headingOffsets = useMemo(() => ({ ...estimatedHeadingY, ...headingY }), [estimatedHeadingY, headingY]);
+  const measuredHeadingY = useMemo<Record<string, number>>(() => {
+    if (contentTop === null) return {};
+    const offsets: Record<string, number> = {};
+    for (const id of Object.keys(headingY)) {
+      offsets[id] = Math.max(0, headingY[id] - contentTop - SCROLL_ACTIVE_SLOP);
+    }
+    return offsets;
+  }, [contentTop, headingY]);
+  const headingOffsets = useMemo(() => ({ ...estimatedHeadingY, ...measuredHeadingY }), [estimatedHeadingY, measuredHeadingY]);
 
   const activeSection = useMemo(() => {
     if (!activeId) return outline[0]?.text ?? null;
@@ -77,6 +86,11 @@ export function DocumentViewer({ document = SAMPLE_DOCUMENT, initialZoom = 100 }
   const handleHeadingLayout = useCallback((id: string, y: number) => {
     if (!Number.isFinite(y)) return;
     setHeadingY((prev) => (prev[id] === y ? prev : { ...prev, [id]: y }));
+  }, []);
+
+  const handleContentLayout = useCallback((y: number) => {
+    if (!Number.isFinite(y)) return;
+    setContentTop((prev) => (prev === y ? prev : y));
   }, []);
 
   const selectSection = useCallback(
@@ -135,6 +149,7 @@ export function DocumentViewer({ document = SAMPLE_DOCUMENT, initialZoom = 100 }
             size={size}
             scrollY={scrollY}
             onScroll={handlePageScroll}
+            onContentLayout={handleContentLayout}
             onHeadingLayout={handleHeadingLayout}
           />
         </S.DocPageWrap>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { math } from '../../../../runtime/hooks';
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { math } from '@reactjit/runtime/hooks';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 
 // TAU is resolved at module load by calling into framework/math.zig. Keeps the
 // constant's source-of-truth in zig; also exercises the JS→Zig bridge once

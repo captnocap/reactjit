@@ -1,16 +1,10 @@
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import FirstStep from './FirstStep';
 import Step2 from './Step2';
 import Step3 from './Step3';
-
-const GENERIC_STEPS = [
-  null, // step 0 = FirstStep
-  null, // step 1 = Step2
-  null, // step 2 = Step3
-  { title: 'Step 4', body: 'Step 4 placeholder.' },
-  { title: 'Step 5', body: 'Step 5 placeholder.' },
-];
+import Step4 from './Step4';
+import Step5 from './Step5';
 
 export default function Onboarding({ step, animate, onAnimationDone }) {
   if (step === 0) {
@@ -37,14 +31,29 @@ export default function Onboarding({ step, animate, onAnimationDone }) {
     );
   }
 
-  const cur = GENERIC_STEPS[step] ?? { title: '', body: '' };
+  if (step === 3) {
+    return (
+      <S.Page>
+        <Step4 />
+      </S.Page>
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <S.Page>
+        <Step5 />
+      </S.Page>
+    );
+  }
+
   return (
     <S.Page>
       <Box style={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}>
         <S.Card>
-          <S.Caption>{`Step ${step + 1} of ${GENERIC_STEPS.length}`}</S.Caption>
-          <S.Title>{cur.title}</S.Title>
-          <S.Body>{cur.body}</S.Body>
+          <S.Caption>{`Step ${step + 1}`}</S.Caption>
+          <S.Title>Out of range</S.Title>
+          <S.Body>No screen registered for this step index.</S.Body>
         </S.Card>
       </Box>
     </S.Page>

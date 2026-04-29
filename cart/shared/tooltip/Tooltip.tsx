@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
-import { Box, Row, Text } from '../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import { useAutoFlip, type TooltipRect, type TooltipViewport } from './useAutoFlip';
 
 type TooltipSide = 'top' | 'bottom' | 'left' | 'right';

@@ -10,6 +10,8 @@ import {
   type FuzzySearchResult,
 } from '@reactjit/runtime/hooks/useFuzzySearch';
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
+import { ChevronDown, ChevronRight, Maximize, Minimize, X } from '@reactjit/runtime/icons/icons';
 import { Route, Router, useNavigate } from '@reactjit/runtime/router';
 import { findGalleryThemeOption, useGalleryTheme } from './gallery-theme';
 import { gallerySections } from './registry';
@@ -509,11 +511,11 @@ function windowClose() {
 }
 
 function WindowButton({
-  label,
+  icon,
   onPress,
   tone,
 }: {
-  label: string;
+  icon: IconData;
   onPress: () => void;
   tone: string;
 }) {
@@ -531,7 +533,7 @@ function WindowButton({
         borderColor: COLORS.border,
       }}
     >
-      <Text style={{ fontSize: 12, fontWeight: 'bold', color: tone }}>{label}</Text>
+      <Icon icon={icon} size={13} color={tone} strokeWidth={2.2} />
     </Pressable>
   );
 }
@@ -570,9 +572,9 @@ function TitleBar() {
       </Row>
 
       <Row style={{ alignItems: 'center', gap: 6 }}>
-        <WindowButton label="-" onPress={windowMinimize} tone={COLORS.warning} />
-        <WindowButton label="[]" onPress={windowMaximize} tone={COLORS.success} />
-        <WindowButton label="x" onPress={windowClose} tone="#ff7a72" />
+        <WindowButton icon={Minimize} onPress={windowMinimize} tone={COLORS.warning} />
+        <WindowButton icon={Maximize} onPress={windowMaximize} tone={COLORS.success} />
+        <WindowButton icon={X} onPress={windowClose} tone="#ff7a72" />
       </Row>
     </Row>
   );
@@ -780,7 +782,7 @@ function StoryNavGroupHeader({
             {`${count} ${count === 1 ? 'entry' : 'entries'}`}
           </Text>
         </Col>
-        <Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.faint }}>{collapsed ? '+' : '-'}</Text>
+        <Icon icon={collapsed ? ChevronRight : ChevronDown} size={13} color={COLORS.faint} strokeWidth={2.2} />
       </Row>
     </Pressable>
   );

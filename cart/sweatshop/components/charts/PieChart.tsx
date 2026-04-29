@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Graph, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Graph, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { Tooltip } from '../tooltip';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';

@@ -1,4 +1,4 @@
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexTableCellProps = {

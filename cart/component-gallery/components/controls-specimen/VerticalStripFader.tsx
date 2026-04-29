@@ -1,4 +1,4 @@
-import { Box, Pressable } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame } from './controlsSpecimenParts';
 import { FaderLabel } from './FaderLabel';
 import { useControllableNumberState, useVerticalPercentDrag } from './controlsSpecimenInteractions';
@@ -16,10 +16,10 @@ export function VerticalStripFader({
   onChange,
 }: VerticalStripFaderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useVerticalPercentDrag(current, setCurrent);
   const laneWidth = 44;
   const trackWidth = 20;
   const trackHeight = 120;
+  const drag = useVerticalPercentDrag(current, setCurrent, trackHeight);
   const trackTop = 6;
   const trackBottom = trackTop + trackHeight;
   const trackLeft = Math.round((laneWidth - trackWidth) / 2);
@@ -32,7 +32,7 @@ export function VerticalStripFader({
 
   return (
     <AtomFrame width={64} padding={10} gap={8}>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 132, alignItems: 'center', justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 132, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: trackHeight, borderWidth: 1, borderColor: CTRL.ruleBright, backgroundColor: CTRL.bg1 }} />
         {Array.from({ length: 6 }).map((_, index) => (
           <Box key={index} style={{ position: 'absolute', left: trackLeft + 4, top: 18 + index * 18, width: 12, height: 1, backgroundColor: CTRL.rule }} />
@@ -50,7 +50,8 @@ export function VerticalStripFader({
             backgroundColor: drag.dragging ? CTRL.accentHot : CTRL.bg3,
           }}
         />
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <FaderLabel label={label} accent={true} />
     </AtomFrame>
   );

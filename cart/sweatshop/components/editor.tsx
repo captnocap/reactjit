@@ -1,5 +1,5 @@
 
-import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
+import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
 import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';

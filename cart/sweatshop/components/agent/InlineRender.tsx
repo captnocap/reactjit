@@ -1,4 +1,4 @@
-import { Box, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { MarkdownNode } from './markdown';
 

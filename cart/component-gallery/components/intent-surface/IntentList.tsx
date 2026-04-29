@@ -1,11 +1,15 @@
-import { Col, Text } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Col, Text } from '@reactjit/runtime/primitives';
 
 export function IntentList({ items }: { items: string[] }) {
+  const Stack = S.StackX2 || Col;
+  const Item = S.Body || Text;
   return (
-    <Col style={{ gap: 4 }}>
+    <Stack>
       {items.map((it, i) => (
-        <Text key={i} style={{ fontSize: 14, color: '#cbd5e1' }}>{`• ${it}`}</Text>
+        <Item key={i}>{`• ${it}`}</Item>
       ))}
-    </Col>
+    </Stack>
   );
 }

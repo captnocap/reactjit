@@ -384,6 +384,7 @@ fn jsrtAppendChild(parent: *Node, child: *Node) bool {
 fn jsrtInheritTypography(parent: *Node, child: *Node) void {
     if (child.text == null) return;
     child.font_size = parent.font_size;
+    child.font_weight = parent.font_weight;
     if (parent.text_color) |c| child.text_color = c;
     child.letter_spacing = parent.letter_spacing;
     if (parent.line_height > 0) child.line_height = parent.line_height;

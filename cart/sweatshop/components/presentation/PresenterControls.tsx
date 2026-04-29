@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Box, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 function ControlButton(props: { label: string; shortcut?: string; onPress: () => void }) {

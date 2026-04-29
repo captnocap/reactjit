@@ -10,7 +10,7 @@
 // clear-to-default button. Bindings persist via __store_*.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { ButtonId, GamepadState } from '../../lib/gamepad/types';
 import {

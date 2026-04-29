@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { builtinServices, type ServiceDefinition, type ServiceCategory } from '../../lib/apis/registry';
 import { useServiceKey, setServiceKey, deleteServiceKey, isServiceEnabled } from '../../lib/apis/useServiceKey';

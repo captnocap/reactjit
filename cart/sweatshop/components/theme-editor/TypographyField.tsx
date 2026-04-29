@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 const FONT_CHOICES: Array<{ label: string; value: string }> = [

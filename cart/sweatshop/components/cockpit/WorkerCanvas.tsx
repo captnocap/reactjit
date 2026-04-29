@@ -1,4 +1,4 @@
-import { Box, Col, Row, Text, Pressable, Canvas } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text, Pressable, Canvas } from '@reactjit/runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';
 import { WorkerCharts } from './WorkerCharts';

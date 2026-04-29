@@ -1,5 +1,5 @@
 
-import { Box, Col, Graph, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Graph, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface KnobProps {

@@ -1,4 +1,4 @@
-import { Box, Col, Effect, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Effect, Row, Text } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import {
   DEFAULT_BRAILLE_PROJECTION_THEME,

@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text, Image } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, Image } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { MediaRange } from './MediaControls';
 import type { MediaItem } from './useMediaStore';

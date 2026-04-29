@@ -1,4 +1,4 @@
-import { Canvas } from '../../../../runtime/primitives';
+import { Canvas } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexCanvasEdgeProps = {

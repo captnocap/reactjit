@@ -1,4 +1,4 @@
-import { TextInput } from '../../../runtime/primitives';
+import { TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 export default function SearchInput({

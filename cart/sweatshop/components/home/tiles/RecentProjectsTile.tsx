@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, ScrollView, Text } from '../../../../../runtime/primitives';
+import { Box, Col, Pressable, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../../theme';
 
 export function RecentProjectsTile(props: { recentFiles?: any[]; onOpenPath?: (path: string) => void }) {

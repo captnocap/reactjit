@@ -146,6 +146,13 @@ pub const Statement = struct {
     pub fn columnCount(self: *const Statement) c_int {
         return sql.sqlite3_column_count(self.stmt);
     }
+
+    /// Get the name of column `idx`. Owned by sqlite (valid until step/reset).
+    pub fn columnName(self: *const Statement, idx: c_int) ?[]const u8 {
+        const ptr = sql.sqlite3_column_name(self.stmt, idx);
+        if (ptr == null) return null;
+        return std.mem.span(ptr);
+    }
 };
 
 // -- Database --

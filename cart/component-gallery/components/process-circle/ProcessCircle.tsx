@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Graph, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS, PALETTE, arcPath, polar } from '../../lib/chart-utils';
 import { useSpring } from '../../lib/useSpring';
 import { Tooltip } from '../../lib/Tooltip';

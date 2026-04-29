@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Col, Row, Text } from '../../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { MatrixProjectionSurface } from '../matrix-scaling-dashboard/MatrixScalingDashboard';
 import { BrailleProjectionSurface } from './BrailleProjectionSurface';
 import {

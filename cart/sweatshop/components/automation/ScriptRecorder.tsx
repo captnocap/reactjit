@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { summarizeStep, type AutomationKind, type Script } from '../../lib/automation/script';
 

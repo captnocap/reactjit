@@ -1,4 +1,4 @@
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 
 export default function AboutPage() {

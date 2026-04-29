@@ -1,5 +1,5 @@
 
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../../theme';
 import { StatusSegment } from '../StatusSegment';
 import { registerSegment } from '../useStatusRegistry';

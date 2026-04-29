@@ -1,4 +1,4 @@
-import { Box, Row, Text } from '../../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import { CHAT_CARD, type ConsoleMode } from './tokens';
 import { classifiers as S } from '@reactjit/core';
 

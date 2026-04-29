@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Col, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row } from '@reactjit/runtime/primitives';
 import { Icon } from '../../../sweatshop/components/icons';
 import { Body, InlinePill, Mono, VerticalSpine } from '../controls-specimen/controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from '../controls-specimen/controlsSpecimenTheme';

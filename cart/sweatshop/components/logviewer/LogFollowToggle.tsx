@@ -1,5 +1,5 @@
 
-import { Box, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface LogFollowToggleProps {

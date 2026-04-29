@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { DocsBreadcrumbs } from './DocsBreadcrumbs';
 import { DocsRenderer } from './DocsRenderer';

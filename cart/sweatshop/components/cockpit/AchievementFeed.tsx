@@ -1,5 +1,5 @@
 
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { Achievement } from './useGamifyEvents';
 

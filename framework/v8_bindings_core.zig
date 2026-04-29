@@ -9,6 +9,7 @@ comptime {
 const v8_runtime = @import("v8_runtime.zig");
 const state = @import("state.zig");
 const input = @import("input.zig");
+const selection = @import("selection.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const exec_async = @import("exec_async.zig");
 const vterm = @import("vterm.zig");
@@ -17,6 +18,7 @@ const audio = @import("audio.zig");
 const filedrop = @import("filedrop.zig");
 const localstore = @import("localstore.zig");
 const fswatch = @import("fswatch.zig");
+const system_signals = @import("system_signals.zig");
 const c = @import("c.zig").imports;
 
 var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
@@ -333,6 +335,31 @@ fn hostClipboardGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void
     }
     defer c.SDL_free(@ptrCast(clip));
     setReturnString(info, std.mem.span(clip));
+}
+
+/// __selection_get() — return the active highlighted text, mirroring what
+/// Ctrl+C would copy:
+///   focused input with a range  → that input's selected slice
+///   tree-text selection         → walked text from selection.zig
+///   neither                     → ""
+/// Carts use this to gate "Copy" menu items on real selection state.
+fn hostSelectionGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (input.getFocusedId()) |fid| {
+        const sel = input.getSelectedText(fid);
+        if (sel.len > 0) {
+            setReturnString(info, sel);
+            return;
+        }
+    }
+    var buf: [4096]u8 = undefined;
+    const n = selection.copySelectionToBuf(&buf);
+    setReturnString(info, buf[0..n]);
+}
+
+fn hostSysDropPath(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnString(info, system_signals.getDropPath());
 }
 
 fn hostPollInputSubmit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -877,6 +904,8 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__getPreparedScroll", hostGetPreparedScroll);
     v8_runtime.registerHostFn("__clipboard_set", hostClipboardSet);
     v8_runtime.registerHostFn("__clipboard_get", hostClipboardGet);
+    v8_runtime.registerHostFn("__selection_get", hostSelectionGet);
+    v8_runtime.registerHostFn("__sys_drop_path", hostSysDropPath);
     v8_runtime.registerHostFn("__exec_async", hostExecAsync);
     v8_runtime.registerHostFn("__terminal_set_cwd", hostTerminalSetCwd);
     v8_runtime.registerHostFn("__routerInit", hostRouterInit);

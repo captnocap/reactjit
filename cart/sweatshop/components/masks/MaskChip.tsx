@@ -1,4 +1,4 @@
-import { Box, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export function MaskChip(props: { label: string; active?: boolean; muted?: boolean; onPress?: () => void; disabled?: boolean }) {

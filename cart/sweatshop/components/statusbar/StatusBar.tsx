@@ -1,5 +1,5 @@
 
-import { Row } from '../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { useStatusRegistry, getSegmentDisplayState } from './useStatusRegistry';
 

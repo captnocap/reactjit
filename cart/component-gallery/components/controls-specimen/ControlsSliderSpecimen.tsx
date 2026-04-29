@@ -1,4 +1,4 @@
-import { Col, Row } from '../../../../runtime/primitives';
+import { Col, Row } from '@reactjit/runtime/primitives';
 import { SpecimenCard, SpecimenGrid, SpecimenSection } from './ControlsSpecimenShell';
 import { BipolarSlider } from './BipolarSlider';
 import { DiscreteSlider } from './DiscreteSlider';

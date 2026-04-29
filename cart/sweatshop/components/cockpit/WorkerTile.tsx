@@ -1,4 +1,4 @@
-import { Box, Row, Text, Pressable } from '../../../../runtime/primitives';
+import { Box, Row, Text, Pressable } from '@reactjit/runtime/primitives';
 import { useTransition as useAnimatedTransition } from '../../anim';
 
 export type WorkerStatus = 'idle' | 'thinking' | 'tool' | 'stuck' | 'rationalizing' | 'done';

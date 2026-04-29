@@ -1,4 +1,4 @@
-import { Col, Box } from '../../../../runtime/primitives';
+import { Col, Box } from '@reactjit/runtime/primitives';
 import { editorTokenTone } from '../../utils';
 import { Token } from './languages/ts';
 import { COLORS } from '../../theme';

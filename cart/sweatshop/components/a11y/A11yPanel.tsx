@@ -11,7 +11,7 @@
 // automatically re-layer the a11y transform on top of the new theme.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, useTheme } from '../../theme';
 import {
   reapplyOnThemeChange,

@@ -1,5 +1,7 @@
 import { useRef, useState, createContext, useContext } from 'react';
-import { Box, Col, Pressable, Text, TextInput } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Col, Pressable, Text, TextInput } from '@reactjit/runtime/primitives';
 import type { FormCtx, OnAction } from './types';
 
 const FormContext = createContext<FormCtx | null>(null);
@@ -16,18 +18,10 @@ export function IntentForm({ children, onAction }: { children?: any; onAction: O
   };
   // onAction is passed through context for nested Submit; we stash it on ctx via closure key.
   (ctx as any).onAction = onAction;
+  const FormFrame = S.Card || Col;
   return (
     <FormContext.Provider value={ctx}>
-      <Col style={{
-        gap: 8,
-        padding: 12,
-        backgroundColor: '#0f172a',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#334155',
-      }}>
-        {children}
-      </Col>
+      <FormFrame>{children}</FormFrame>
     </FormContext.Provider>
   );
 }
@@ -51,31 +45,24 @@ export function IntentField({
     seeded.current = true;
   }
   if (!ctx) {
-    return <Text style={{ fontSize: 12, color: '#fbbf24' }}>[Field outside Form]</Text>;
+    const ErrorText = S.Error || Text;
+    return <ErrorText>[Field outside Form]</ErrorText>;
   }
+  const Field = S.StackX2 || Col;
+  const Label = S.Label || Text;
+  const Input = S.AppFormInput || TextInput;
   return (
-    <Col style={{ gap: 4 }}>
-      {label ? <Text style={{ fontSize: 12, color: '#94a3b8' }}>{label}</Text> : null}
-      <TextInput
+    <Field>
+      {label ? <Label>{label}</Label> : null}
+      <Input
         value={value}
         placeholder={placeholder ?? ''}
         onChangeText={(text: string) => {
           setValue(text);
           ctx.set(name, text);
         }}
-        style={{
-          padding: 8,
-          paddingLeft: 12,
-          paddingRight: 12,
-          backgroundColor: '#1e293b',
-          color: '#f1f5f9',
-          borderWidth: 1,
-          borderColor: '#334155',
-          borderRadius: 6,
-          fontSize: 14,
-        }}
       />
-    </Col>
+    </Field>
   );
 }
 
@@ -88,7 +75,8 @@ export function IntentSubmit({
 }) {
   const ctx = useContext(FormContext);
   if (!ctx) {
-    return <Text style={{ fontSize: 12, color: '#fbbf24' }}>[Submit outside Form]</Text>;
+    const ErrorText = S.Error || Text;
+    return <ErrorText>[Submit outside Form]</ErrorText>;
   }
   const onAction: OnAction = (ctx as any).onAction;
   const press = () => {
@@ -96,19 +84,12 @@ export function IntentSubmit({
     const reply = replyTemplate ? interpolate(replyTemplate, values) : defaultReply(values);
     onAction(reply);
   };
+  const Button = S.Button || Pressable;
+  const Label = S.ButtonLabel || Text;
   return (
-    <Pressable onPress={press}>
-      <Box style={{
-        padding: 8,
-        paddingLeft: 14,
-        paddingRight: 14,
-        backgroundColor: '#16a34a',
-        borderRadius: 6,
-        alignSelf: 'flex-start',
-      }}>
-        <Text style={{ fontSize: 14, color: '#ffffff' }}>{label ?? 'Submit'}</Text>
-      </Box>
-    </Pressable>
+    <Button onPress={press} style={{ alignSelf: 'flex-start' }}>
+      <Label>{label ?? 'Submit'}</Label>
+    </Button>
   );
 }
 

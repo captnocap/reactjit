@@ -316,11 +316,13 @@ pub const Feed = struct {
     // Interactive mode
     interactive: bool = false,
 
-    // SIGSTOP/SIGCONT-based suspension. Last-rendered pixels stay on the
-    // texture so paint still works while subprocesses consume zero CPU.
+    // Suspension. When true, all spawned subprocesses (qemu, Xvfb, the
+    // app launched into Xvfb) have been SIGSTOPped — zero CPU, frozen
+    // state. Last-rendered pixels stay on the texture so paint still
+    // works. Toggling back to false SIGCONTs them — instant resume.
     suspended: bool = false,
 
-    // One-shot diagnostic flags (printed once per feed lifetime).
+    // One-shot diagnostic flags (printed once per feed lifetime)
     diag_first_frame_logged: bool = false,
     diag_first_paint_logged: bool = false,
     diag_first_upload_logged: bool = false,
@@ -334,14 +336,16 @@ pub const Feed = struct {
     vnc_last_log_frames: u32 = 0,
 
     // Y-flip scratch buffer for uploadPixels. Size matches pixel_buf;
-    // re-allocated on framebuffer resize. Kept separate so pixel_buf stays
-    // canonical top-down across VNC incremental partial-rect updates.
+    // re-allocated on framebuffer resize (DesktopSize). Kept separate so
+    // pixel_buf stays canonical top-down across incremental updates.
     flip_buf: ?[]u8 = null,
 
     fn deinit(self: *Feed) void {
-        // release() (refcount drop) rather than destroy() — destroy()
+        // Use release() (refcount drop) rather than destroy() — destroy()
         // marks the texture immediately destroyed so any queued draw call
-        // referencing it via a bind_group fails wgpu validation.
+        // referencing it via a bind_group fails wgpu validation. release()
+        // lets the refcount keep it alive until the queue submit consuming
+        // those bind_groups completes.
         if (self.bind_group) |bg| bg.release();
         if (self.sampler) |s| s.release();
         if (self.texture_view) |tv| tv.release();
@@ -367,6 +371,8 @@ pub const Feed = struct {
 
         // The source string was duped into feed-owned memory by createFeed
         // so the feed lifetime is independent of the cart-side allocation.
+        // Free it and clear the parsed slices (which point INTO source) to
+        // avoid dangling references when the slot is reused.
         if (self.source.len > 0) page_alloc.free(self.source);
         self.source = "";
         self.parsed = .{};
@@ -702,11 +708,16 @@ fn uploadPixels(feed: *Feed) void {
     var i: usize = 3;
     while (i < buf.len) : (i += 4) buf[i] = 0xff;
 
-    // Y-flip into a scratch buffer, then upload that. An in-place flip would
-    // mutate pixel_buf, so VNC incremental partial-rect updates (which write
-    // top-down rects between uploads) would land at the wrong vertical
-    // position — every other frame appeared upside-down with cursor sprites
-    // visibly wrong. Using a separate scratch buffer keeps pixel_buf canonical.
+    // Y-flip into a scratch buffer, then upload that. The previous in-place
+    // flip mutated pixel_buf, so VNC incremental updates (which write new
+    // partial rects in top-down coordinates into the SAME pixel_buf between
+    // uploads) landed at the wrong vertical position — every other frame
+    // appeared upside-down, with cursor sprites and partial rects visibly
+    // wrong. Using a separate scratch buffer keeps pixel_buf canonical
+    // (top-down) regardless of how many times uploadPixels runs.
+    //
+    // The shared image shader does `1.0 - corner.y` for GL-readback sources
+    // (mpv); we cancel that here by uploading row-reversed bytes.
     if (feed.flip_buf == null or (feed.flip_buf.?.len != total_bytes)) {
         if (feed.flip_buf) |old| page_alloc.free(old);
         feed.flip_buf = page_alloc.alloc(u8, total_bytes) catch return;
@@ -1101,6 +1112,7 @@ fn setError(feed: *Feed) void {
 }
 
 /// Pick a feed slot — prefer reusing a stopped slot, otherwise grow feeds[].
+/// Returns null if all slots are live and we're at MAX_FEEDS.
 fn acquireFeedSlot() ?*Feed {
     for (feeds[0..feed_count]) |*f| {
         if (f.status == .stopped) return f;
@@ -1136,6 +1148,7 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
             if (initXShm()) {
                 const dpy = x_display orelse {
                     setError(feed);
+                    feed_count += 1;
                     return feed;
                 };
                 const sw: u32 = @intCast(x11.XDisplayWidth(dpy, x_screen));
@@ -1144,11 +1157,13 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
                 if (createXShmCapture(feed, dpy, sw, sh)) {
                     feed.pixel_buf = allocBuf(sw, sh) orelse {
                         setError(feed);
+                        feed_count += 1;
                         return feed;
                     };
                     feed.backend = .xshm;
                     feed.status = .ready;
                     log.info(.render, "XShm screen capture: {d}x{d}", .{ sw, sh });
+                    feed_count += 1;
                     return feed;
                 }
             }
@@ -1353,7 +1368,8 @@ pub fn update() void {
         // When suspended, skip ALL polling — qemu/Xvfb are SIGSTOPped, so
         // VNC server won't respond and XShm capture would just re-read
         // stale data. Last-rendered pixels stay on the texture; paint
-        // continues to draw them.
+        // continues to draw them. Mouse/key events are silently dropped
+        // (the SIGSTOPped server can't process them anyway).
         if (feed.suspended) continue;
         switch (feed.status) {
             .ready => {
@@ -1509,6 +1525,8 @@ pub fn getDimensions(src: []const u8) ?struct { w: u32, h: u32 } {
 
 /// Suspend / resume the feed's subprocesses via SIGSTOP / SIGCONT. Idempotent
 /// — only acts on transitions. Skips no-op when feed doesn't exist yet.
+/// Sends to the whole process group via negative pid so any child of qemu
+/// (its monitor thread, etc.) gets the signal too.
 pub fn setSuspended(src: []const u8, suspended: bool) void {
     const f = findFeed(src) orelse return;
     if (f.suspended == suspended) return;

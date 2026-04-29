@@ -1,4 +1,4 @@
-import { Box, Col, Pressable } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame } from './controlsSpecimenParts';
 import { FaderLabel } from './FaderLabel';
 import { useControllableNumberState, useVerticalPercentDrag } from './controlsSpecimenInteractions';
@@ -16,10 +16,10 @@ export function VerticalThinFader({
   onChange,
 }: VerticalThinFaderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useVerticalPercentDrag(current, setCurrent);
   const laneWidth = 42;
   const trackWidth = 1;
   const trackHeight = 120;
+  const drag = useVerticalPercentDrag(current, setCurrent, trackHeight);
   const trackTop = 6;
   const trackBottom = trackTop + trackHeight;
   const trackLeft = Math.round((laneWidth - trackWidth) / 2);
@@ -30,7 +30,7 @@ export function VerticalThinFader({
 
   return (
     <AtomFrame width={62} padding={10} gap={8}>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 132, alignItems: 'center', justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 132, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: 1, height: trackHeight, backgroundColor: CTRL.rule }} />
         <Box style={{ position: 'absolute', left: trackLeft, top: trackBottom - fillHeight, width: 1, height: fillHeight, backgroundColor: CTRL.accent }} />
         <Box
@@ -45,7 +45,8 @@ export function VerticalThinFader({
             backgroundColor: drag.dragging ? CTRL.accent : CTRL.bg3,
           }}
         />
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <FaderLabel label={label} value={String(current)} accent={true} />
     </AtomFrame>
   );

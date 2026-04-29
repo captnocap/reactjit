@@ -1,6 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { GenericCardShell } from '../components/generic-card/GenericCardShell';
-import { Box, Text } from '../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 
 export const genericCardShellSection = defineGallerySection({
   id: "generic-card-shell",

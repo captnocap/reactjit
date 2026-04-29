@@ -1,5 +1,5 @@
 
-import { Pressable } from '../../../runtime/primitives';
+import { Pressable } from '@reactjit/runtime/primitives';
 import { Tooltip } from '../tooltip';
 
 export interface StatusSegmentProps {

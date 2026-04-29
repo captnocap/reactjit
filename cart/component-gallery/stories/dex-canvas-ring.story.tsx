@@ -1,5 +1,5 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
-import { Canvas } from '../../../runtime/primitives';
+import { Canvas } from '@reactjit/runtime/primitives';
 import { DexCanvasRing } from '../components/dex-canvas-ring/DexCanvasRing';
 
 export const dexCanvasRingSection = defineGallerySection({

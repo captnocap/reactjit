@@ -8,7 +8,7 @@
 // hiding a huge outlier series automatically rescales the remaining ones.
 // =============================================================================
 
-import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export interface LegendItem { id: string; name: string; color: string }

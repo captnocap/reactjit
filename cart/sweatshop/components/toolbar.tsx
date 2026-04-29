@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { closeWindow, maximizeWindow, minimizeWindow } from '../host';
 import { COLORS, TOKENS } from '../theme';
 import { Glyph, HeaderButton, HoverPressable } from './shared';

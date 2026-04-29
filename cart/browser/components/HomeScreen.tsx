@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, HOME_LINKS } from '../constants';
 import { BookmarkEntry, BrowserTab } from '../types';
 import { subtitleFromAddress } from '../utils';

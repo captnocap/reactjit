@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Canvas, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { DexBreadcrumbs } from '../dex-breadcrumbs/DexBreadcrumbs';
 import { DexCanvasEdge } from '../dex-canvas-edge/DexCanvasEdge';
 import { DexCanvasNode } from '../dex-canvas-node/DexCanvasNode';

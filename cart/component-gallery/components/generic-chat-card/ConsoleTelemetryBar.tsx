@@ -1,9 +1,9 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { KillSwitch } from './KillSwitch';
 import { ProgressMeter } from './ProgressMeter';
 import { SentimentControls } from './SentimentControls';
 import { StuckAlert } from './StuckAlert';
-import { TelemetryStats } from './TelemetryStats';
+import { TelemetryDivider, TelemetryStats } from './TelemetryStats';
 import { CHAT_CARD } from './tokens';
 import { classifiers as S } from '@reactjit/core';
 
@@ -29,7 +29,7 @@ export function ConsoleTelemetryBar({ progress, rate, time, state, alert }: Cons
       <S.CardHeader>
         <S.InlineX4Center style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7 }}>
           <ProgressMeter progress={progress} label={rate} />
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.faint }}>|</Text>
+          <TelemetryDivider />
           <StuckAlert label={alert} />
         </S.InlineX4Center>
         <Box style={{ paddingRight: 10 }}>

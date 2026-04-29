@@ -1,4 +1,4 @@
-import { Box, Row, Text, Pressable } from '../../../runtime/primitives';
+import { Box, Row, Text, Pressable } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 export default function TabButton({

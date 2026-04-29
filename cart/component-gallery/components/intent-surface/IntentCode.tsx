@@ -1,33 +1,39 @@
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { CodeBlock } from '../code-block/CodeBlock';
+import type { CodeSnippet } from '../../data/code-snippet';
 
 export function IntentCode({ lang, children }: { lang?: string; children?: any }) {
+  const language = normalizeLanguage(lang);
+  const label = lang ? lang.trim() : 'text';
   return (
-    <Col style={{
-      backgroundColor: '#0f172a',
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: '#1e293b',
-      overflow: 'hidden',
-    }}>
-      {lang ? (
-        <Row style={{
-          paddingLeft: 12,
-          paddingRight: 12,
-          paddingTop: 4,
-          paddingBottom: 4,
-          backgroundColor: '#1e293b',
-        }}>
-          <Text style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{lang}</Text>
-        </Row>
-      ) : null}
-      <Box style={{ padding: 12 }}>
-        <Text style={{
-          fontSize: 13,
-          color: '#e2e8f0',
-          fontFamily: 'monospace',
-          lineHeight: 1.5,
-        }}>{children}</Text>
-      </Box>
-    </Col>
+    <CodeBlock
+      row={{
+        id: `intent-code-${language}`,
+        title: 'Code',
+        filename: label,
+        language,
+        code: textContent(children),
+        showLineNumbers: false,
+        wrap: true,
+      }}
+    />
   );
+}
+
+function normalizeLanguage(value: string | undefined): CodeSnippet['language'] {
+  const lang = (value || '').trim().toLowerCase();
+  if (lang === 'tsx') return 'tsx';
+  if (lang === 'typescript' || lang === 'ts') return 'ts';
+  if (lang === 'javascript' || lang === 'js') return 'js';
+  if (lang === 'json') return 'json';
+  if (lang === 'zig') return 'zig';
+  if (lang === 'python' || lang === 'py') return 'python';
+  if (lang === 'shell' || lang === 'sh' || lang === 'bash') return 'shell';
+  return 'text';
+}
+
+function textContent(value: any): string {
+  if (value == null) return '';
+  if (Array.isArray(value)) return value.map(textContent).join('');
+  return String(value);
 }

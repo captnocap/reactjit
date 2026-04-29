@@ -1,4 +1,4 @@
-import { Box, Row, Text, TextInput, Pressable } from '../../../runtime/primitives';
+import { Box, Row, Text, TextInput, Pressable } from '@reactjit/runtime/primitives';
 import { InspectorNode } from '../types';
 import { COLORS } from '../constants';
 import { parseTypedInput } from '../utils';

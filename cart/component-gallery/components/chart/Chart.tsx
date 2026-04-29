@@ -1,4 +1,4 @@
-import { StaticSurface } from '../../../../runtime/primitives';
+import { StaticSurface } from '@reactjit/runtime/primitives';
 import { ChartAnimationProvider } from '../../lib/useSpring';
 import { AreaChart, type AreaChartDatum } from '../area-chart/AreaChart';
 import { BarChart, type BarChartDatum } from '../bar-chart/BarChart';

@@ -26,7 +26,6 @@ const SECTION_META: Record<string, SectionMeta> = {
     group: GROUPS.compositions,
     kind: 'top-level',
     composedOf: [
-      'cart/component-gallery/components/intent-surface/IntentSurface.tsx',
       'cart/component-gallery/components/intent-surface/IntentTitle.tsx',
       'cart/component-gallery/components/intent-surface/IntentText.tsx',
       'cart/component-gallery/components/intent-surface/IntentCard.tsx',
@@ -34,7 +33,6 @@ const SECTION_META: Record<string, SectionMeta> = {
       'cart/component-gallery/components/intent-surface/IntentCol.tsx',
       'cart/component-gallery/components/intent-surface/IntentList.tsx',
       'cart/component-gallery/components/intent-surface/IntentBtn.tsx',
-      'cart/component-gallery/components/intent-surface/IntentForm.tsx',
       'cart/component-gallery/components/intent-surface/IntentBadge.tsx',
       'cart/component-gallery/components/intent-surface/IntentCode.tsx',
       'cart/component-gallery/components/intent-surface/IntentDivider.tsx',
@@ -71,6 +69,7 @@ const SECTION_META: Record<string, SectionMeta> = {
   easings: { group: GROUPS.motion },
   'animated-text': { group: GROUPS.motion },
   'grid-spinners': { group: GROUPS.motion },
+  'time-instruments': { group: GROUPS.motion },
   'console-header': { group: GROUPS.controls },
   'transcript-flow': { group: GROUPS.controls },
   'telemetry-stats': { group: GROUPS.controls },

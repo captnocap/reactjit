@@ -1,4 +1,4 @@
-import { Box, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 import { BrowserTab } from '../types';
 import HtmlDocument from './HtmlDocument';

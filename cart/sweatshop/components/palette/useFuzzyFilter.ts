@@ -1,12 +1,12 @@
 import { PaletteCommand, PaletteSettings, GroupedCategory } from './types';
-import { fuzzyScore } from '../../../../runtime/hooks/useFuzzySearch';
-export { fuzzyScore, fuzzySearch, scoreFuzzyItem, useFuzzySearch } from '../../../../runtime/hooks/useFuzzySearch';
+import { fuzzyScore } from '@reactjit/runtime/hooks/useFuzzySearch';
+export { fuzzyScore, fuzzySearch, scoreFuzzyItem, useFuzzySearch } from '@reactjit/runtime/hooks/useFuzzySearch';
 export type {
   FuzzyMode,
   FuzzySearchCandidate,
   FuzzySearchOptions,
   FuzzySearchResult,
-} from '../../../../runtime/hooks/useFuzzySearch';
+} from '@reactjit/runtime/hooks/useFuzzySearch';
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;

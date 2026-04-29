@@ -1,5 +1,5 @@
 
-import { Col, Row } from '../../../../runtime/primitives';
+import { Col, Row } from '@reactjit/runtime/primitives';
 import { CommandList } from './CommandList';
 import { BindingCapture } from './BindingCapture';
 import { KeybindConflict } from './KeybindConflict';

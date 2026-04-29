@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { Checkpoint } from '../../checkpoint';
 

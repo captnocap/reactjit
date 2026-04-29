@@ -1,6 +1,6 @@
 
 import { exec } from '../../host';
-import { stat } from '../../../../runtime/hooks/fs';
+import { stat } from '@reactjit/runtime/hooks/fs';
 
 export type MediaImportKind = 'image' | 'video' | 'gif';
 export type MediaImportStatus = 'queued' | 'loading' | 'ready' | 'failed';

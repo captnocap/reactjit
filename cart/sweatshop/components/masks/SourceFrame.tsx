@@ -1,4 +1,4 @@
-import { Box, Image } from '../../../../runtime/primitives';
+import { Box, Image } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { MediaItem } from '../media/useMediaStore';
 

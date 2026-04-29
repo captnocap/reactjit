@@ -1,4 +1,6 @@
 import { classifiers as S } from '@reactjit/core';
+import { Minus, PanelLeft, Plus } from '@reactjit/runtime/icons/icons';
+import { Icon, type IconData } from '../../../sweatshop/components/icons';
 import type { DocumentSize } from './documentViewerShared';
 
 export type DocumentToolbarProps = {
@@ -14,24 +16,24 @@ export type DocumentToolbarProps = {
 };
 
 function ToolbarButton({
-  glyph,
+  icon,
   active,
   onPress,
 }: {
-  glyph: string;
+  icon: IconData;
   active?: boolean;
   onPress?: () => void;
 }) {
   if (active) {
     return (
       <S.DocToolbarBtnActive onPress={onPress}>
-        <S.DocToolbarGlyph>{glyph}</S.DocToolbarGlyph>
+        <Icon icon={icon} size={14} color="#0e0b09" strokeWidth={2.2} />
       </S.DocToolbarBtnActive>
     );
   }
   return (
     <S.DocToolbarBtn onPress={onPress}>
-      <S.DocToolbarGlyph>{glyph}</S.DocToolbarGlyph>
+      <Icon icon={icon} size={14} color="#f2e8dc" strokeWidth={2.2} />
     </S.DocToolbarBtn>
   );
 }
@@ -52,7 +54,7 @@ export function DocumentToolbar({
   return (
     <S.DocToolbar>
       {canToggleOutline ? (
-        <ToolbarButton glyph="≡" active={outlineVisible} onPress={onToggleOutline} />
+        <ToolbarButton icon={PanelLeft} active={outlineVisible} onPress={onToggleOutline} />
       ) : null}
 
       <S.DocToolbarTitleSlot>
@@ -64,9 +66,9 @@ export function DocumentToolbar({
 
       {!compact ? (
         <S.InlineX3>
-          <ToolbarButton glyph="−" onPress={onZoomOut} />
+          <ToolbarButton icon={Minus} onPress={onZoomOut} />
           <S.DocToolbarZoom>{`${Math.round(zoomPct)}%`}</S.DocToolbarZoom>
-          <ToolbarButton glyph="+" onPress={onZoomIn} />
+          <ToolbarButton icon={Plus} onPress={onZoomIn} />
         </S.InlineX3>
       ) : null}
     </S.DocToolbar>

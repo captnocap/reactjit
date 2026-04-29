@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { formatTimestamp, type WalletAccount } from './lib';
 import { useTxHistory } from './hooks/useTxHistory';

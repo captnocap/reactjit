@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Row, Text } from '../../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export function BeatIndicator(props: { beat: boolean; bpm: number; energy: number }) {

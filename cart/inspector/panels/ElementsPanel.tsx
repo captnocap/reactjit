@@ -1,4 +1,4 @@
-import { Row } from '../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { InspectorNode, NodeIndex, TreeStats } from '../types';
 import { DiffMap } from '../hooks/useTreeDiff';
 import TreeView from '../tree/TreeView';

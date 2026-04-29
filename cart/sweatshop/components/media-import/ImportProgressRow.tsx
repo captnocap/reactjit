@@ -1,5 +1,5 @@
 
-import { Box, Row, Text } from '../../../../runtime/primitives';
+import { Box, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { MediaImportItem } from './useMediaImport';
 

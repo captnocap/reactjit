@@ -1,4 +1,4 @@
-import { Col, Pressable, Text, Canvas } from '../../../../runtime/primitives';
+import { Col, Pressable, Text, Canvas } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexCanvasNodeProps = {

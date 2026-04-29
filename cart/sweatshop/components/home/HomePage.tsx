@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { loadRecents } from '../../lib/workspace/recents';
 import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
 import { DirectoryPicker } from './DirectoryPicker';
-import { envGet } from '../../../../runtime/hooks/process';
+import { envGet } from '@reactjit/runtime/hooks/process';
 
 function log(message: string): void {
   try {

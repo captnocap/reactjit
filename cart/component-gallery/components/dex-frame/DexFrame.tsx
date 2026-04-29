@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 
 export const DEX_COLORS = {
   bg: '#0e0b09',

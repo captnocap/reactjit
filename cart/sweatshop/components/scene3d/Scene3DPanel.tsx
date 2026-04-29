@@ -14,7 +14,7 @@
 // =============================================================================
 
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { Scene3D } from './Scene3D';
 import { Camera } from './Camera';

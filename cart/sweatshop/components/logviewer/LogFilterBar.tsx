@@ -1,5 +1,5 @@
 
-import { Box, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import type { LogLevel } from './useLogStream';
 

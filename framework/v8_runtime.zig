@@ -73,31 +73,6 @@ pub fn initVM() void {
 
     g_isolate = isolate;
     g_context = context;
-
-    installSignalHandlerStubs();
-}
-
-// Engine-side telemetry (system_signals.zig, clipboard_watch.zig) fires
-// __ifttt_onSystem*(...) into V8 every cursor move, slow frame, RAM tick,
-// etc. — unconditionally, including before any cart bundle has finished
-// evaluating. Without these stubs the dev host spams ReferenceError until
-// the cart's runtime/hooks/useIFTTT.ts side-effect import overwrites them
-// with the real bus-emitting handlers.
-fn installSignalHandlerStubs() void {
-    evalScript(
-        \\globalThis.__ifttt_onKeyDown = globalThis.__ifttt_onKeyDown || (()=>{});
-        \\globalThis.__ifttt_onKeyUp = globalThis.__ifttt_onKeyUp || (()=>{});
-        \\globalThis.__ifttt_onClipboardChange = globalThis.__ifttt_onClipboardChange || (()=>{});
-        \\globalThis.__ifttt_onSystemFocus = globalThis.__ifttt_onSystemFocus || (()=>{});
-        \\globalThis.__ifttt_onSystemDrop = globalThis.__ifttt_onSystemDrop || (()=>{});
-        \\globalThis.__ifttt_onSystemCursor = globalThis.__ifttt_onSystemCursor || (()=>{});
-        \\globalThis.__ifttt_onSystemSlowFrame = globalThis.__ifttt_onSystemSlowFrame || (()=>{});
-        \\globalThis.__ifttt_onSystemHang = globalThis.__ifttt_onSystemHang || (()=>{});
-        \\globalThis.__ifttt_onSystemRam = globalThis.__ifttt_onSystemRam || (()=>{});
-        \\globalThis.__ifttt_onSystemVram = globalThis.__ifttt_onSystemVram || (()=>{});
-        \\globalThis.__beginJsEvent = globalThis.__beginJsEvent || (()=>{});
-        \\globalThis.__endJsEvent = globalThis.__endJsEvent || (()=>{});
-    );
 }
 
 pub const deinit = teardownVM;
@@ -130,8 +105,6 @@ pub fn resetContextForReload() void {
     const context = v8.Context.init(iso, null, null);
     context.enter();
     g_context = context;
-
-    installSignalHandlerStubs();
 
     // Slot-keyed framework state must be cleared so the new cart's
     // TextInputs don't pick up leftover buffers from slot ids that the

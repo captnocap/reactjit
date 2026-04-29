@@ -1,4 +1,4 @@
-import { Box, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 import { DexTypeBadge, type DexValueType } from '../dex-type-badge/DexTypeBadge';
 

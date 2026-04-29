@@ -1,5 +1,5 @@
 
-import { Box, Canvas, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export interface PanelDef { id: string; label: string; }

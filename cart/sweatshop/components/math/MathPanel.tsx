@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, Text, TextArea, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextArea, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, useTheme } from '../../theme';
 import { LaTeX } from './LaTeX';
 

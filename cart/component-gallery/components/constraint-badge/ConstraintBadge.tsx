@@ -32,7 +32,7 @@
 //     prop to `rows: Constraint[]` and update the variant
 //     accordingly.
 
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import type { Constraint } from '../../data/constraint';
 
 export type ConstraintBadgeProps = {

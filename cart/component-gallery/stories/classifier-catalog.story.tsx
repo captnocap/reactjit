@@ -1,5 +1,5 @@
 import { classifiers } from '@reactjit/core';
-import { Box, Col, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 
 const GROUP_ORDER = ['Text', 'Row', 'Col', 'Box', 'Pressable', 'Graph'];

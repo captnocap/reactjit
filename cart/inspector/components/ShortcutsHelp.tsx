@@ -1,4 +1,4 @@
-import { Col, Row, Text, Pressable, Box } from '../../../runtime/primitives';
+import { Col, Row, Text, Pressable, Box } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 const SHORTCUTS = [

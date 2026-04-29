@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
 import { useTheme } from '../../theme';
 import { applyVesperTheme, isVesperThemeActive } from '../../lib/vesper';
 import { VESPER_PALETTE, VESPER_TOKENS, type VesperTone } from '../../lib/vesper';

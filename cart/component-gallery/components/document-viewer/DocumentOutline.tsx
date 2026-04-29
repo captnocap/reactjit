@@ -1,5 +1,5 @@
 import { classifiers as S } from '@reactjit/core';
-import { ScrollView } from '../../../../runtime/primitives';
+import { ScrollView } from '@reactjit/runtime/primitives';
 
 export type OutlineEntry = {
   id: string;

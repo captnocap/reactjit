@@ -1,4 +1,4 @@
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { ELEMENTS, type Element } from '../../lib/chemistry/elements';
 import { ElementTile } from './ElementTile';

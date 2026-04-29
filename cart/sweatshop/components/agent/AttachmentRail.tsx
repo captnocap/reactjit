@@ -1,4 +1,4 @@
-import { Row, Text } from '../../../../runtime/primitives';
+import { Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { HoverPressable } from '../shared';
 

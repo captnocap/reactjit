@@ -1,4 +1,4 @@
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export function AudioDeviceList(props: { available: boolean; devices?: string[] }) {

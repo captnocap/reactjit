@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { copyToClipboard } from '../agent/clipboard';
 import { HeadingNav } from '../markdown/HeadingNav';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer';

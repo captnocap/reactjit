@@ -1,5 +1,8 @@
-import { Text } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Text } from '@reactjit/runtime/primitives';
 
 export function IntentTitle({ children }: { children?: any }) {
-  return <Text style={{ fontSize: 18, fontWeight: 600, color: '#f8fafc' }}>{children}</Text>;
+  const Title = S.Title || Text;
+  return <Title>{children}</Title>;
 }

@@ -1,4 +1,4 @@
-import { Row } from '../../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { Mono } from './controlsSpecimenParts';
 import { type ControlTone, toneColor } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';

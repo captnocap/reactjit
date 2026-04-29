@@ -1,5 +1,5 @@
 
-import { Pressable } from '../../../../runtime/primitives';
+import { Pressable } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 const host: any = globalThis as any;

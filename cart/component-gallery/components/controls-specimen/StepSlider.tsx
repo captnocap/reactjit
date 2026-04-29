@@ -1,6 +1,6 @@
-import { Box, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable, Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, HorizontalTicks, Mono } from './controlsSpecimenParts';
-import { useControllableIndexState } from './controlsSpecimenInteractions';
+import { useControllableIndexState, useHorizontalIndexDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';
 
@@ -18,6 +18,7 @@ export function StepSlider({
   onChange,
 }: StepSliderProps) {
   const [current, setCurrent] = useControllableIndexState({ value: active, defaultValue: active, count: labels.length, onChange });
+  const drag = useHorizontalIndexDrag(current, setCurrent, labels.length, 220);
 
   return (
     <AtomFrame width={240} padding={10} gap={10}>
@@ -25,7 +26,7 @@ export function StepSlider({
         {labels.map((label, index) => {
           const selected = index === current;
           return (
-            <S.HalfPress key={label} onPress={() => setCurrent(index)}>
+            <S.HalfPress key={label} onMouseDown={() => drag.begin(index)}>
               <Box style={{ gap: 6, alignItems: 'center' }}>
                 <Body
                   fontSize={10}
@@ -40,7 +41,7 @@ export function StepSlider({
                     height: 14,
                     borderWidth: 1,
                     borderColor: selected ? CTRL.accent : CTRL.rule,
-                    backgroundColor: selected ? CTRL.accent : CTRL.bg1,
+                    backgroundColor: selected ? (drag.dragging ? CTRL.accentHot : CTRL.accent) : CTRL.bg1,
                   }}
                 />
               </Box>

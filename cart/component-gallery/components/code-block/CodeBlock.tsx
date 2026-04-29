@@ -6,7 +6,7 @@
 //   - cart/component-gallery/components/code-copy-button/CodeCopyButton.tsx
 
 import { classifiers as S } from '@reactjit/core';
-import { Box, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, ScrollView, Text } from '@reactjit/runtime/primitives';
 import type { CodeSnippet } from '../../data/code-snippet';
 import { CodeCopyButton } from '../code-copy-button/CodeCopyButton';
 import { CodeLineNumber } from '../code-line-number/CodeLineNumber';

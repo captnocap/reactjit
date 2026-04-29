@@ -1,4 +1,4 @@
-import { Text } from '../../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexValueType = 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';

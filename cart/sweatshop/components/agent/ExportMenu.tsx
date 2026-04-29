@@ -1,4 +1,4 @@
-import { Col, Row, Text } from '../../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { HoverPressable, Pill } from '../shared';
 import { exportConversation, copyToClipboard, saveConversationToFile } from '../../chat-export';

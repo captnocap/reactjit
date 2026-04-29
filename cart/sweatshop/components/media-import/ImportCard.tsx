@@ -1,4 +1,4 @@
-import { Box, Col, Image, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Image, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { HoverPressable } from '../shared';
 import type { MediaImportItem } from './useMediaImport';

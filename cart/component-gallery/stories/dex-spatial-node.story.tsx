@@ -1,5 +1,5 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { DexSpatialNode } from '../components/dex-spatial-node/DexSpatialNode';
 
 export const dexSpatialNodeSection = defineGallerySection({

@@ -1,4 +1,4 @@
-import { Box, Canvas, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Box, Canvas, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { copyToClipboard } from '../agent/clipboard';
 import { buildPaymentUri, buildQrMatrix, compactAddress, getWalletNetwork, type WalletAccount } from './lib';

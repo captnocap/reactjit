@@ -1,4 +1,4 @@
-import { Box, Canvas, Text } from '../../../runtime/primitives';
+import { Box, Canvas, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../theme';
 import { layoutMermaidDiagram, type MermaidLayoutDiagram, type MermaidLayoutEdge, type MermaidLayoutNode } from './layout';
 import { parseMermaid, type MermaidDiagram } from './parser';

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
-import { AstTile } from './AstQuilt';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
+import { AstBinaryTile, AstTile, type AstFingerprintRenderMode } from './AstQuilt';
 import { listFingerprintSamplePaths, loadRuntimeFingerprint, type FingerprintLoadResult } from './fingerprint';
 import { classifiers as S } from '@reactjit/core';
 
@@ -77,8 +77,9 @@ function EmptyPreview(props: { title: string; detail: string }) {
   );
 }
 
-export function FileFingerprintWorkbench(props: { initialPath?: string }) {
+export function FileFingerprintWorkbench(props: { initialPath?: string; previewMode?: AstFingerprintRenderMode }) {
   const initialDraftPath = props.initialPath || 'cart/component-gallery/components/ast-quilt/AstQuilt.tsx';
+  const previewMode = props.previewMode || 'treemap';
   const [samplePaths] = useState<string[]>(() => {
     const available = listFingerprintSamplePaths();
     if (available.length > 0) return available;
@@ -233,7 +234,9 @@ export function FileFingerprintWorkbench(props: { initialPath?: string }) {
           </Text>
           <Text style={{ fontSize: 10, color: '#8ea8ba' }}>
             {result?.note ||
-              'JSON files become object trees, text/code becomes line-and-token structure, binary files fall back to sampled byte windows.'}
+              (previewMode === 'binary-squares'
+                ? 'Binary preview maps each AST line span against the file average, then paints 1x1 through 9x9 bit squares.'
+                : 'JSON files become object trees, text/code becomes line-and-token structure, binary files fall back to sampled byte windows.')}
           </Text>
           <Text style={{ fontSize: 9, color: '#64839a', fontFamily: 'monospace' }}>{activePath || draftPath || 'no path selected'}</Text>
         </Col>
@@ -241,12 +244,18 @@ export function FileFingerprintWorkbench(props: { initialPath?: string }) {
 
       <S.StackX5Center>
         {result ? (
-          <AstTile file={{ ...result.file, selected: true, tagColor: tone }} tileIndex={11} />
+          previewMode === 'binary-squares' ? (
+            <AstBinaryTile file={{ ...result.file, selected: true, tagColor: tone }} tileIndex={11} />
+          ) : (
+            <AstTile file={{ ...result.file, selected: true, tagColor: tone }} tileIndex={11} />
+          )
         ) : (
           <EmptyPreview title="No File Loaded" detail="Pick a quick file or enter a path and generate a live fingerprint tile." />
         )}
         <Text style={{ width: PREVIEW_SIZE, fontSize: 10, color: '#b8a890', textAlign: 'center' }}>
-          The tile uses the same renderer as the gallery art pieces; only the file-to-tree adapter changes.
+          {previewMode === 'binary-squares'
+            ? 'Square side length is driven only by that span length versus the file average.'
+            : 'The tile uses the same renderer as the gallery art pieces; only the file-to-tree adapter changes.'}
         </Text>
       </S.StackX5Center>
     </Row>

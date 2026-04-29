@@ -1,4 +1,4 @@
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { useLocation } from './hooks/useLocation';
 import { useWeather } from './hooks/useWeather';

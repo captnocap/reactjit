@@ -1,4 +1,4 @@
-import { requestAsync } from '../../../../runtime/hooks/http';
+import { requestAsync } from '@reactjit/runtime/hooks/http';
 
 const BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
 

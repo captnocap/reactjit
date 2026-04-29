@@ -1,4 +1,4 @@
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, Body, Mono } from './controlsSpecimenParts';
 import { VerticalText } from './ControlsSpecimenShell';
 import { CTRL } from './controlsSpecimenTheme';

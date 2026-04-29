@@ -7,7 +7,7 @@
 // import so they don't need to know the store directly.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { getA11yState, setMotionReduce, useA11yState } from './hooks/useA11yState';
 

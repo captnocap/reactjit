@@ -1,4 +1,4 @@
-import { Col, Row, Text } from '../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Latex } from '../components/latex/Latex';
 

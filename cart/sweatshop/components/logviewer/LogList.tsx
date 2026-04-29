@@ -1,4 +1,4 @@
-import { Box, Col, ScrollView } from '../../../../runtime/primitives';
+import { Box, Col, ScrollView } from '@reactjit/runtime/primitives';
 import { LogRow } from './LogRow';
 import type { LogEntry } from './useLogStream';
 

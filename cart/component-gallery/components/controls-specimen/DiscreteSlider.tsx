@@ -1,6 +1,6 @@
-import { Box, Col, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, HorizontalTicks, Mono } from './controlsSpecimenParts';
-import { useControllableIndexState } from './controlsSpecimenInteractions';
+import { useControllableIndexState, useHorizontalIndexDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';
 
@@ -21,6 +21,7 @@ export function DiscreteSlider({
 }: DiscreteSliderProps) {
   const count = Math.max(2, steps);
   const [current, setCurrent] = useControllableIndexState({ value: active, defaultValue: active, count, onChange });
+  const drag = useHorizontalIndexDrag(current, setCurrent, count, 220);
 
   return (
     <AtomFrame width={240} padding={10} gap={10}>
@@ -36,14 +37,14 @@ export function DiscreteSlider({
           return (
             <Pressable
               key={index}
-              onPress={() => setCurrent(index)}
+              onMouseDown={() => drag.begin(index)}
               style={{
                 flexGrow: 1,
                 flexBasis: 0,
                 height: slot ? 16 : 12,
                 borderWidth: 1,
                 borderColor: index === current ? CTRL.accent : CTRL.rule,
-                backgroundColor: activeCell ? CTRL.accent : CTRL.bg1,
+                backgroundColor: activeCell ? (drag.dragging ? CTRL.accentHot : CTRL.accent) : CTRL.bg1,
                 justifyContent: 'center',
                 alignItems: 'center',
               }}

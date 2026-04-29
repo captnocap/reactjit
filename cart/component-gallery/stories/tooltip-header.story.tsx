@@ -1,6 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { TooltipHeader } from '../components/tooltip-header/TooltipHeader';
-import { Command } from '../../../runtime/icons/icons';
+import { Command } from '@reactjit/runtime/icons/icons';
 
 export const tooltipHeaderSection = defineGallerySection({
   id: "tooltip-header",

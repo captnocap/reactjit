@@ -1,4 +1,4 @@
-import { Row, Text, Pressable } from '../../../runtime/primitives';
+import { Row, Text, Pressable } from '@reactjit/runtime/primitives';
 import { InspectorNode } from '../types';
 import { COLORS } from '../constants';
 

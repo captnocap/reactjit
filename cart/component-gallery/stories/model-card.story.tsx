@@ -1,4 +1,4 @@
-import { Row } from '../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { ModelCard } from '../components/model-card/ModelCard';
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { DexBreadcrumbs } from '../dex-breadcrumbs/DexBreadcrumbs';
 import { DEX_COLORS, DexFrame } from '../dex-frame/DexFrame';
 import { DexSearchBar } from '../dex-search-bar/DexSearchBar';

@@ -3,7 +3,7 @@
 // Source of truth: cart/component-gallery/data/code-line.ts
 
 import { classifiers as S } from '@reactjit/core';
-import { Text } from '../../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import type { CodeLine } from '../../data/code-line';
 
 export type CodeLineNumberProps = {

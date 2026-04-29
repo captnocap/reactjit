@@ -11,22 +11,24 @@ The app is a router-driven cart with custom window chrome, an `OnboardingProvide
 ### App shell — `index.tsx` — Complete
 
 CHECKLIST:
-- Purpose: Cart entry. Boots the gallery theme, mounts the custom window chrome (titlebar + drag region + onboarding step cubes / route nav swap + window controls), wraps the route tree in `<TooltipRoot>` and `<OnboardingProvider>`, and registers the `/` and `/about` routes.
+- Purpose: Cart entry. Boots the gallery theme, mounts the custom window chrome (titlebar + drag region + onboarding step cubes / route nav swap + tour banner + window controls), wraps the route tree in `<TooltipRoot>` and `<OnboardingProvider>`, and registers the `/` and `/about` routes.
 - isRoute: FALSE
-- Route: N/A (registers `/` line 168 and `/about` line 171)
+- Route: N/A (registers `/` and `/about` inside the `<Router>`)
 - hasDatashape: FALSE
 - Datashape: consumes `onboarding/state.jsx` (`useOnboarding`)
-- exposedDatashapes: `onb.step`, `onb.totalSteps`, `onb.setStep`, `onb.complete`, `onb.loading` — read at lines 110, 143
-- Hooks: `useOnboarding` (line 109), `useNavigate` (line 28), `useRoute` (line 27)
-- Conditions: `onboardingActive = !onb.loading && !onb.complete` (line 110) → swaps step cubes (line 143) for route nav links (lines 145–148) on the right side of the chrome
-- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `Route`, `IndexPage`, `AboutPage`, `Chrome`, `NavLink`, `StepCubes`
-- Atoms: `Box`, `S.AppChrome`, `S.AppChromeBrandRow`, `S.AppChromeNavRow`, `S.AppChromeRightCluster`, `S.AppBrandSwatch`, `S.AppBrandTitle`, `S.AppBrandSub`, `S.AppNavLink` / `S.AppNavLinkActive`, `S.AppNavIcon` / `S.AppNavIconActive`, `S.AppNavLabel` / `S.AppNavLabelActive`, `S.AppStepCubeRow`, `S.AppStepCubePast` / `S.AppStepCubeCurrent` / `S.AppStepCubeFuture`, `S.AppChromeDivider`, `S.AppWindowBtn`, `S.AppWindowBtnIcon` / `S.AppWindowBtnIconClose`
+- exposedDatashapes: `onb.step`, `onb.totalSteps`, `onb.setStep`, `onb.complete`, `onb.loading`, `onb.tourStatus`, `onb.acceptTour`, `onb.declineTour`
+- Hooks: `useOnboarding`, `useNavigate`, `useRoute`, `useAnimationTimeline` (inside `TourBanner`)
+- Conditions:
+  - `onboardingActive = !onb.loading && !onb.complete` swaps step cubes for route nav links on the right side of the chrome
+  - `showTour = !onboardingActive && onb.tourStatus === 'pending'` — drops the tour banner into the right cluster (BEFORE the nav row, after the brand) once Step5 has called `markComplete()`. Banner unmounts on accept / decline (`tourStatus` flips to `'accepted'` or `'declined'`).
+- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `Route`, `IndexPage`, `AboutPage`, `Chrome`, `NavLink`, `StepCubes`, `TourBanner`
+- Atoms: `Box`, `S.AppChrome`, `S.AppChromeBrandRow`, `S.AppChromeNavRow`, `S.AppChromeRightCluster`, `S.AppBrandSwatch`, `S.AppBrandTitle`, `S.AppBrandSub`, `S.AppNavLink` / `S.AppNavLinkActive`, `S.AppNavIcon` / `S.AppNavIconActive`, `S.AppNavLabel` / `S.AppNavLabelActive`, `S.AppStepCubeRow`, `S.AppStepCubePast` / `S.AppStepCubeCurrent` / `S.AppStepCubeFuture`, `S.AppChromeDivider`, `S.AppChromeTourBanner`, `S.AppChromeTourText`, `S.AppChromeTourActions`, `S.AppChromeTourYes` / `S.AppChromeTourNo`, `S.AppChromeTourYesLabel` / `S.AppChromeTourNoLabel`, `S.AppWindowBtn`, `S.AppWindowBtnIcon` / `S.AppWindowBtnIconClose`
 - isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts`
 - hasIcons: TRUE
-- Icons: `Home` (line 17 → 147), `Info` (line 18 → 147), `Minimize` (line 152), `Maximize` (line 153), `X` (line 154)
-- hasAnimation: FALSE
-- Animations: —
-- TODO: nothing pending here
+- Icons: `Home`, `Info`, `Minimize`, `Maximize`, `X`
+- hasAnimation: TRUE (only the tour banner; the chrome itself is static)
+- Animations: `TourBanner` mounts at `markComplete()` time, holds invisible until `TOUR_BANNER_FADE_DELAY_MS = 1400ms` (so the home-page carryover dominates first), then fades in over `TOUR_BANNER_FADE_MS = 500ms`. Yes / No has no exit animation — the answer **is** the action, banner unmounts immediately.
+- TODO: when persistence is restored, the banner shouldn't re-arm on every fresh boot — `tourStatus === 'pending'` must persist its `'declined'` / `'accepted'` resolution. Once a real tour is wired, `acceptTour()` should additionally start the tour overlay (today it just hides the banner).
 - PROBLEMS: none known
 
 ---
@@ -34,22 +36,31 @@ CHECKLIST:
 ### Index page — `page.jsx` — WIP
 
 CHECKLIST:
-- Purpose: `/` route. Gates onboarding vs the eventual real home. While `onb.complete` is false, renders `<Onboarding>`; otherwise renders a placeholder home card.
+- Purpose: `/` route. Three-way gate: while `onb.complete` is false → `<Onboarding>`; on the first render after `markComplete()` (`!onb.homeEntryPlayed`) → `<HomeEntry>` which carries Step5's exit final frame ("Welcome aboard." + spinner) and dissolves it into the home card; otherwise → `<HomeStatic>` direct.
 - isRoute: TRUE
 - Route: `/`
 - hasDatashape: FALSE
 - Datashape: consumes `onboarding/state.jsx`
-- exposedDatashapes: `onb.loading` (line 8), `onb.complete` (line 10), `onb.step` (line 13), `onb.shouldPlayFirstStartAnimation` (line 14), `onb.markFirstStartAnimationPlayed` (line 15)
-- Hooks: `useOnboarding` (line 7)
-- Conditions: loading guard `if (onb.loading) return null;` (line 8); `if (!onb.complete) → <Onboarding>` (line 10)
-- Components: `Onboarding` (line 11)
-- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`
+- exposedDatashapes: `onb.loading`, `onb.complete`, `onb.step`, `onb.shouldPlayFirstStartAnimation`, `onb.markFirstStartAnimationPlayed`, `onb.homeEntryPlayed`, `onb.markHomeEntryPlayed`
+- Hooks: `useOnboarding`, `useAnimationTimeline` (inside `HomeEntry`), `useEffect`, `useRef`
+- Conditions:
+  - `if (onb.loading) return null;`
+  - `if (!onb.complete) return <Onboarding ...>;`
+  - `if (!onb.homeEntryPlayed) return <HomeEntry />;`
+  - else `return <HomeStatic />;`
+  - `HomeEntry` schedules `markHomeEntryPlayed()` at `ENTRY_DONE_MS = T_HOME_IN_END + 80 = 2030 ms` so the next render flips to `<HomeStatic />` cleanly.
+- Components: `Onboarding`, `HomeEntry`, `HomeStatic`, `SnakeSpinner`
+- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`, `S.AppStepFrame`, `S.AppStepCenter`, `S.AppStepBottomRight`, `S.AppGreet`
 - isUsingTheme: TRUE (via classifiers)
 - hasIcons: FALSE
 - Icons: —
-- hasAnimation: FALSE
-- Animations: —
-- TODO: replace the placeholder Home card (lines 20–28) with the real product surface once onboarding is locked in. Add a separate "skipped-mode" branch that runs in degraded UX when `user.onboarding.status === 'skipped'`.
+- hasAnimation: TRUE (HomeEntry only — HomeStatic is a no-animation render)
+- Animations (HomeEntry, single shared `useAnimationTimeline`):
+  - Carryover hold 0→500 ms ("Welcome aboard." + spinner at full opacity, picking up exactly where Step5 left off)
+  - Carryover fade-out 500→1400 ms (`fadeOut`)
+  - Home content fade-in + slide-up 1400→1950 ms (40 px slide)
+  - `markHomeEntryPlayed()` at 2030 ms
+- TODO: replace the placeholder Home card with the real product surface once onboarding is locked in. Add a separate "skipped-mode" branch that runs in degraded UX when `user.onboarding.status === 'skipped'`.
 - PROBLEMS: none
 
 ---
@@ -79,25 +90,25 @@ CHECKLIST:
 
 ## Onboarding
 
-### Onboarding step router — `onboarding/Onboarding.jsx` — WIP
+### Onboarding step router — `onboarding/Onboarding.jsx` — Complete
 
 CHECKLIST:
-- Purpose: Routes by `step` to the right onboarding screen. Step 0 → `<FirstStep>`, step 1 → `<Step2>`, step 2 → `<Step3>`, steps 3–4 fall back to a generic placeholder card.
+- Purpose: Routes by `step` to the right onboarding screen. Step 0 → `<FirstStep>`, step 1 → `<Step2>`, step 2 → `<Step3>`, step 3 → `<Step4>`, step 4 → `<Step5>`. An out-of-range card renders for any step index outside `[0, TOTAL_STEPS-1]`.
 - isRoute: FALSE (mounted inside `IndexPage` which owns the `/` route)
 - Route: —
 - hasDatashape: FALSE
 - Datashape: receives props from page.jsx (sourced from `onboarding/state.jsx`)
 - exposedDatashapes: `step`, `animate`, `onAnimationDone` (props)
 - Hooks: —
-- Conditions: `step === 0` → FirstStep; `step === 1` → Step2; `step === 2` → Step3; else placeholder
-- Components: `FirstStep`, `Step2`, `Step3`
+- Conditions: `step === 0` → FirstStep; `step === 1` → Step2; `step === 2` → Step3; `step === 3` → Step4; `step === 4` → Step5; else out-of-range card
+- Components: `FirstStep`, `Step2`, `Step3`, `Step4`, `Step5`
 - Atoms: `Box`, `S.Page`, `S.Card`, `S.Caption`, `S.Title`, `S.Body`
 - isUsingTheme: TRUE (via classifiers)
 - hasIcons: FALSE
 - Icons: —
 - hasAnimation: FALSE (step components own their own animations)
 - Animations: —
-- TODO: design + implement steps 4 and 5 (currently the placeholder card with `'Step N placeholder.'` body)
+- TODO: nothing pending here
 - PROBLEMS: none
 
 ---
@@ -229,9 +240,97 @@ CHECKLIST:
     - Dispatch `setStep(3)` at 1900 ms
 - TODO:
   - Replace the hardcoded `TRAITS` list with a configurable / persisted catalog when the survey grows past iteration.
-  - Wire Step4's carryover so the exit message + spinner stay visible during the Step3→Step4 hand-off (today Step4 is still a placeholder card, so the exit just snaps to that).
 - PROBLEMS:
   - Toggling traits writes to localstore on every click via `onb.setTraits` — the read-modify-write race documented on `state.jsx` could in theory clobber rapid sequential toggles. Hasn't been observed yet, but watch for it once we add adjacent steps that also write.
+
+---
+
+### Step 3 — Config path — `onboarding/Step4.jsx` — Complete
+
+CHECKLIST:
+- Purpose: Onboarding step 3. Carries over Step3's exit-final frame (the branching "We get it…" / "Somehow we already knew…" message + bottom-right spinner) when `providerKind` is set, eases everything out, fades in "Where would you like to store your config files?", slides it up, fades in a `TextInput` whose placeholder is `~/.app/config`. Bottom-right shows "Use default" (outline) until any character is typed — then the same anchor swaps to "Next" (filled accent). "Use default" commits the placeholder string `~/.app/config`; "Next" commits the trimmed input. Bottom-left "Take me back!" returns to step 2. Click forward → exit transition fades the interface out, fades in spinner bottom-right + centered "Got it." bridge message, then dispatches `setStep(4)`.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: FALSE
+- Datashape: reads/writes `onboarding/state.jsx` (`providerKind`, `traits`, `configPath`)
+- exposedDatashapes: `onb.providerKind` (carryover gate), `onb.traits` (carryover message picker), `onb.configPath`, `onb.setConfigPath`, `onb.setStep`
+- Hooks: `useAnimationTimeline`, `useOnboarding`, `useState`, `useRef`, `useEffect`
+- Conditions:
+  - `hasCarry = !!onb.providerKind` drives the carryover branch and the timeline `skip` flag
+  - `traits.length > 0` picks `CARRY_MSG_HAS_SELECTION` else `CARRY_MSG_NO_SELECTION` — keeps the Step3→Step4 message visually continuous
+  - carry message + spinner conditional render gated on `carryOp > 0.001`
+  - `hasInput = trimmedPath.length > 0` flips the bottom-right between "Use default" (outline) and "Next" (filled accent)
+  - forward commits `DEFAULT_CONFIG_PATH = '~/.app/config'` when `hasInput` is false, else the trimmed live value (read off `pathRef.current` to dodge stale closures)
+  - `exitStartT != null` gates the exit visuals + blocks forward / takeMeBack mid-transition; `setTimeout(..., EXIT_TOTAL_MS)` dispatches `onb.setStep(4)`
+- Components: `SnakeSpinner`, `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
+- Atoms: `Box`, `TextInput`
+- isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts` (`AppPromptText`, `AppGreet`, `AppExitMessage`, `AppNameInput` (reused for the path field), `AppStepFrame`, `AppStepCenter`, `AppStepCenterCol`, `AppStepBottomLeft`, `AppStepBottomRight`, `AppStepDimmable`)
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: TRUE
+- Animations (single shared `useAnimationTimeline`):
+  - Entry timeline:
+    - Carryover Step3 message hold + fade 500→1400 ms
+    - Carryover spinner fade 500→1400 ms
+    - Main prompt fade-in 1400→1950 ms
+    - Main prompt slide up 1950→2450 ms (60 px)
+    - Path input fade-in 2450→3050 ms
+    - Bottom buttons fade-in 3050→3450 ms
+    - Direct-nav fast-forward via `skip + skipOffsetMs = 1400 ms` when `providerKind` is null
+  - Exit timeline (relative to forward click; 1900 ms total):
+    - Menu / input / buttons fade out 0→380 ms (via `menuOpacityMul = 1 - exitMenuOut` cascading on the centered Col + the corner anchors)
+    - Spinner fades in 190→665 ms (bottom-right, separate render gated on `exitStartT != null`)
+    - "Got it." bridge message fades in 570→1235 ms (centered, `AppGreet`)
+    - Dispatch `setStep(4)` at 1900 ms
+- TODO:
+  - Validate / normalize the path (resolve `~` to `$HOME`, ensure absolute) before persisting once the lock-in pass restores `useCRUD`.
+  - Optionally surface a "directory exists / will be created" hint under the input.
+- PROBLEMS: none known.
+
+---
+
+### Step 4 — First goal — `onboarding/Step5.jsx` — Complete
+
+CHECKLIST:
+- Purpose: Onboarding step 4 (the last step). Carries over Step4's "Got it." + spinner when a `configPath` is set, eases everything out, fades in "What is your first goal?" with the word **goal** rendered as a tooltip-bearing hyperlink (accent color + underline; hover surfaces a popover descriptor of what a goal is). Below the prompt is a wide `TextInput` for the open-ended goal. Bottom-left "Take me back!" returns to step 3. The bottom-right cluster ("I don't know" outline + "Finish" filled) is hidden until the user types their first character — at that moment both fade in together over `FORWARD_FADE_MS`. Either button starts the exit (Finish commits `goal = trimmedGoal`; "I don't know" commits an empty goal). Exit fades the interface out, fades in a spinner bottom-right + centered "Welcome aboard." bridge, then calls `onb.markComplete()` so `IndexPage` swaps over to the home placeholder.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: FALSE
+- Datashape: reads/writes `onboarding/state.jsx` (`configPath`, `goal`, `complete`)
+- exposedDatashapes: `onb.configPath` (carryover gate), `onb.goal`, `onb.setGoal`, `onb.markComplete`, `onb.setStep`
+- Hooks: `useAnimationTimeline`, `useOnboarding`, `useState`, `useRef`, `useEffect`
+- Conditions:
+  - `hasCarry = configPath.length > 0` drives the carryover branch and the timeline `skip` flag
+  - bridge message + spinner conditional render gated on `bridgeOp > 0.001`
+  - `hasInput = trimmedGoal.length > 0` arms the forward cluster: an effect captures `forwardAtT = tl.tRef.current` on the rising edge and resets to `null` if the input goes empty again, so the Row genuinely re-fades when the user clears + retypes
+  - finish path requires a non-empty goal; "I don't know" path explicitly persists `''` so downstream code can distinguish "user said nothing" from "user is mid-type"
+  - `exitStartT != null` gates the exit visuals + blocks finish / dontKnow / takeMeBack mid-transition; `setTimeout(..., EXIT_TOTAL_MS)` calls `onb.markComplete()` (no `setStep` — `complete=true` is the terminal state)
+  - `<Tooltip>` wraps the `goal` link with `side='top'`, `delayMs={200}`, copy in `GOAL_TOOLTIP`
+- Components: `Tooltip` (`cart/shared/tooltip/Tooltip`), `SnakeSpinner`, `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
+- Atoms: `Box`, `TextInput`
+- isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts` (`AppPromptText`, `AppPromptRow`, `AppPromptLink`, `AppPromptLinkText`, `AppGreet`, `AppNameInput` (reused for the goal field), `AppStepFrame`, `AppStepCenter`, `AppStepCenterCol`, `AppStepBottomLeft`, `AppStepBottomRight`, `AppStepBottomRightRow`, `AppStepDimmable`)
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: TRUE
+- Animations (single shared `useAnimationTimeline`):
+  - Entry timeline:
+    - Carryover bridge ("Got it.") hold + fade 500→1400 ms
+    - Carryover spinner fade 500→1400 ms
+    - Main prompt + hyperlink fade-in 1400→1950 ms
+    - Main prompt slide up 1950→2450 ms (60 px)
+    - Goal input fade-in 2450→3050 ms
+    - "Take me back!" fade-in 2450→3050 ms (paired with the input phase)
+    - Forward cluster ("I don't know" + "Finish") fade-in: starts at the moment `hasInput` first goes true, 350 ms long
+    - Direct-nav fast-forward via `skip + skipOffsetMs = 1400 ms` when `configPath` is empty
+  - Exit timeline (relative to finish/dontKnow click; 1900 ms total):
+    - Menu / input / buttons fade out 0→380 ms (via `menuOpacityMul = 1 - exitMenuOut`)
+    - Spinner fades in 190→665 ms (bottom-right)
+    - "Welcome aboard." bridge fades in 570→1235 ms (centered, `AppGreet`)
+    - Dispatch `markComplete()` at 1900 ms
+- TODO:
+  - Once persistence is restored, the popover copy should live in a content file (i18n + edit-without-cart-rebuild).
+  - Optional: secondary tooltip / micro-help on the input itself if the goal vocabulary needs more handholding.
+- PROBLEMS: none known.
 
 ---
 
@@ -247,15 +346,18 @@ CHECKLIST:
 - Route: —
 - hasDatashape: FALSE (in-memory only — no datashape until lock-in)
 - Datashape:
-  - in-memory only right now: `step`, `complete`, `name`, `providerKind`, `traits`, plus session-only `animationPlayedThisSession`
+  - in-memory only right now: `step`, `complete`, `name`, `providerKind`, `traits`, `configPath`, `goal`, `tourStatus`, plus session-only `animationPlayedThisSession` and `homeEntryPlayed`
   - eventual home: `cart/component-gallery/data/user.ts` → `User.onboarding` (`UserOnboarding` type) — fields and statuses already defined there as the migration target
-- exposedDatashapes: `step`, `totalSteps`, `complete`, `loading`, `setStep`, `shouldPlayFirstStartAnimation`, `markFirstStartAnimationPlayed`, `name`, `setName`, `providerKind`, `setProviderKind`, `traits`, `setTraits`
-- Hooks: `useState` (lines 27–32), `createContext` (line 5), `useContext` (line 73)
+- exposedDatashapes: `step`, `totalSteps`, `complete`, `loading`, `setStep`, `markComplete`, `shouldPlayFirstStartAnimation`, `markFirstStartAnimationPlayed`, `homeEntryPlayed`, `markHomeEntryPlayed`, `tourStatus`, `acceptTour`, `declineTour`, `name`, `setName`, `providerKind`, `setProviderKind`, `traits`, `setTraits`, `configPath`, `setConfigPath`, `goal`, `setGoal`
+- Hooks: `useState`, `createContext`, `useContext`
 - Conditions:
-  - `setStep` clamps to `[0, TOTAL_STEPS-1]` and flips `animationPlayedThisSession` when advancing forward (lines 34–38)
-  - `shouldPlayFirstStartAnimation` derived gate: `!complete && step === 0 && !animationPlayedThisSession` (line 61)
-  - `loading` is hardcoded `false` (line 60) — `page.jsx:8` `if (onb.loading) return null;` becomes a dead branch but is left in place for the lock-in flip
-- Components: `Ctx.Provider` (line 70)
+  - `setStep` clamps to `[0, TOTAL_STEPS-1]` and flips `animationPlayedThisSession` when advancing forward
+  - `markComplete` sets `complete=true` AND offers the tour by flipping `tourStatus: null → 'pending'` (only on the first call, via a functional setter — protects the value if persistence later restores `'accepted'` / `'declined'`)
+  - `acceptTour` / `declineTour` set `tourStatus` to the corresponding terminal — banner unmounts immediately
+  - `markHomeEntryPlayed` flips the session-only `homeEntryPlayed` gate so subsequent IndexPage mounts skip the carryover animation
+  - `shouldPlayFirstStartAnimation` derived gate: `!complete && step === 0 && !animationPlayedThisSession`
+  - `loading` is hardcoded `false` — `page.jsx` `if (onb.loading) return null;` becomes a dead branch but is left in place for the lock-in flip
+- Components: `Ctx.Provider`
 - Atoms: —
 - isUsingTheme: FALSE
 - hasIcons: FALSE
@@ -263,8 +365,8 @@ CHECKLIST:
 - hasAnimation: FALSE
 - Animations: —
 - TODO:
-  - **Lock-in flip:** restore `useCRUD('onboarding', ..., { namespace: 'app' })` + the bootstrap effect, AND simultaneously migrate the persisted record into `User.onboarding`. Don't restore the cart-local record only to migrate later — do both in one pass.
-  - Add `markComplete()` (sets `complete=true`) and `markSkipped()` (sets `complete=true` + `skipped=true` + timestamp) for the FirstStep `Skip` and Step2 `Probe → forward` paths.
+  - **Lock-in flip:** restore `useCRUD('onboarding', ..., { namespace: 'app' })` + the bootstrap effect, AND simultaneously migrate the persisted record into `User.onboarding`. Don't restore the cart-local record only to migrate later — do both in one pass. Map `configPath` and `goal` into the persisted record at the same time.
+  - Add `markSkipped()` (sets `complete=true` + `skipped=true` + timestamp) for the FirstStep `Skip` path. (`markComplete()` is wired now via Step5.)
   - Re-wire `markFirstStartAnimationPlayed` to persist `firstStartAnimationSeen=true` (currently a no-op beyond the session flag) when persistence returns.
 - PROBLEMS:
   - State is wiped on every reload. This is the iteration-mode tradeoff, not a bug — see the banner above. If you want to test mid-flow without re-clicking, temporarily seed `useState` defaults at the top of the provider (e.g. `useState(2)` for step) and revert before committing.
@@ -324,5 +426,7 @@ These need a coordinated touch — not localized to a single file.
 
 - **Onboarding "lock-in" pass** — `state.jsx` is currently in-memory only (no `useCRUD`, no localstore record). Nothing about the onboarding flow persists across reloads on purpose, so iteration doesn't trap us in mid-flow carryover animations. When iteration is done: restore `useCRUD('onboarding', ..., { namespace: 'app' })` + the bootstrap effect, AND in the same pass migrate the shape directly into `User.onboarding` (`cart/component-gallery/data/user.ts`). At that point also flip `firstStartAnimationSeen`, `complete`, and the future `skipped` flag to actually persist. Don't restore the cart-local record only to migrate later — single coordinated change.
 - **Real probes for API-key + Local providers** — both `ApiKeyForm` and `LocalForm` return canned model lists. Wire `runtime/hooks/http.ts` for HTTP-shaped endpoints; keep the `.gguf`-on-disk path as a single-entry list until we have a probe that reads gguf header metadata.
-- **Step4 / Step5** — currently just generic placeholder cards in `Onboarding.jsx`. Need design + implementation, plus carryover continuity from Step3's outbound transition into Step4.
-- **Skipped-mode runtime branch** — when `user.onboarding.status === 'skipped'`, the app must run in a degraded mode. Today there's no consumer of that state; once it's persisted, IndexPage will need a third branch alongside the onboarding / complete-home split.
+- **Onboarding completion runtime** — Step5 calls `onb.markComplete()` which only flips an in-memory flag. When the lock-in pass restores persistence, ensure `complete` (plus `name`, `providerKind`, `traits`, `configPath`, `goal`, `tourStatus`) survive a reload so the home placeholder isn't regressed back to step 0 on the next boot, and so a previously-declined tour stays declined.
+- **Tour overlay** — `Chrome.TourBanner` calls `onb.acceptTour()` on Yes, but there is no actual tour overlay yet. When the tour is built, `acceptTour()` should additionally arm the overlay; the banner unmount is already handled by the `tourStatus !== 'pending'` flip. Decline path is fully wired (just hides).
+- **Skipped-mode runtime branch** — when `user.onboarding.status === 'skipped'`, the app must run in a degraded mode. Today there's no consumer of that state; once it's persisted, IndexPage will need a third branch alongside the onboarding / complete-home split. The skipped path should also bypass `tourStatus = 'pending'` (no point offering a tour to a user who chose to skip onboarding).
+- **Goal popover copy** — Step5's tooltip text lives inline in `Step5.jsx` (`GOAL_TOOLTIP`). Move to a content / i18n layer once one exists; today there's no other natural home for it.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Row } from '../../../runtime/primitives';
+import { Box, Row } from '@reactjit/runtime/primitives';
 import { usePulse } from '../anim';
 
 // ── Sparkline bar chart (vertical bars, pure divs) ───────────────────────────

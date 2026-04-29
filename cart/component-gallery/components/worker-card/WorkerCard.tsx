@@ -39,7 +39,7 @@
 //     prop to `rows: Worker[]` and update the variant
 //     accordingly.
 
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import type { Worker } from '../../data/worker';
 
 export type WorkerCardProps = {

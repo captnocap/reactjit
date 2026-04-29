@@ -1,5 +1,5 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
-import { Text } from '../../../runtime/primitives';
+import { Text } from '@reactjit/runtime/primitives';
 import { DexFrame } from '../components/dex-frame/DexFrame';
 
 export const dexFrameSection = defineGallerySection({

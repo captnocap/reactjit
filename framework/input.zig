@@ -239,6 +239,28 @@ pub fn getSelection(id: u8) struct { lo: u32, hi: u32 } {
         .{ .lo = inp.sel_end, .hi = inp.sel_start };
 }
 
+/// Bytes currently selected in input `id`, or empty slice if no selection.
+pub fn getSelectedText(id: u8) []const u8 {
+    if (id >= MAX_INPUTS) return &[_]u8{};
+    const inp = &inputs[id];
+    if (!inp.has_selection) return &[_]u8{};
+    const lo = if (inp.sel_start <= inp.sel_end) inp.sel_start else inp.sel_end;
+    const hi = if (inp.sel_start <= inp.sel_end) inp.sel_end else inp.sel_start;
+    if (hi <= lo or hi > inp.len) return &[_]u8{};
+    return inp.buf[lo..hi];
+}
+
+/// Drop has_selection on every input. Used to enforce single-global-highlight
+/// when the tree-text selection (selection.zig) takes over.
+pub fn clearAllSelections() void {
+    var i: u8 = 0;
+    while (i < MAX_INPUTS) : (i += 1) {
+        inputs[i].has_selection = false;
+        inputs[i].sel_start = inputs[i].cursor;
+        inputs[i].sel_end = inputs[i].cursor;
+    }
+}
+
 fn clearSelection(inp: *InputState) void {
     inp.has_selection = false;
     inp.sel_start = inp.cursor;

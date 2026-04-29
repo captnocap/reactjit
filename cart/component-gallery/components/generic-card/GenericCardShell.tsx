@@ -1,4 +1,4 @@
-import { Box, Col } from '../../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { GENERIC_CARD } from './genericCardShared';
 
 export type GenericCardShellProps = {

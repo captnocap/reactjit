@@ -311,6 +311,9 @@ pub const Node = struct {
     computed: LayoutRect = .{},
     text: ?[]const u8 = null,
     font_size: u16 = 16,
+    /// CSS font-weight (100..900). 400 = regular, 700 = bold. Anything ≥600
+    /// renders with the bold face when one is loaded; otherwise regular.
+    font_weight: u16 = 400,
     text_color: ?Color = null,
     letter_spacing: f32 = 0,
     line_height: f32 = 0,
@@ -488,7 +491,7 @@ pub const Node = struct {
     _cache_ih: f32 = -1,
     _cache_ih_avail: f32 = -1,
 };
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) TextMetrics;
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) TextMetrics;
 pub const MeasureImageFn = *const fn (path: []const u8) ImageDims;
 
 // ── Module state ───────────────────────────────────
@@ -695,6 +698,7 @@ const TextCacheEntry = struct {
     text_ptr: usize = 0,
     text_len: usize = 0,
     font_size: u16 = 0,
+    font_weight: u16 = 0,
     max_width_bits: u32 = 0,
     letter_spacing_bits: u32 = 0,
     line_height_bits: u32 = 0,
@@ -706,7 +710,7 @@ const TextCacheEntry = struct {
 
 var textCache: [TEXT_CACHE_SIZE]TextCacheEntry = [_]TextCacheEntry{.{}} ** TEXT_CACHE_SIZE;
 
-fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bits: u32, letter_spacing_bits: u32, line_height_bits: u32, max_lines: u16, no_wrap: bool) usize {
+fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, font_weight: u16, max_width_bits: u32, letter_spacing_bits: u32, line_height_bits: u32, max_lines: u16, no_wrap: bool) usize {
     // FNV-1a style hash
     var h: usize = 0x811c9dc5;
     h ^= text_ptr;
@@ -714,6 +718,8 @@ fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, max_width_bit
     h ^= text_len;
     h *%= 0x01000193;
     h ^= font_size;
+    h *%= 0x01000193;
+    h ^= font_weight;
     h *%= 0x01000193;
     h ^= max_width_bits;
     h *%= 0x01000193;
@@ -738,22 +744,25 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
     const mw_bits: u32 = @bitCast(@as(f32, maxWidth));
     const ls_bits: u32 = @bitCast(@as(f32, node.letter_spacing));
     const lh_bits: u32 = @bitCast(@as(f32, node.line_height));
-    const idx = textCacheHash(text_ptr, text_len, node.font_size, mw_bits, ls_bits, lh_bits, node.number_of_lines, node.no_wrap);
+    const bold = node.font_weight >= 600;
+    const idx = textCacheHash(text_ptr, text_len, node.font_size, node.font_weight, mw_bits, ls_bits, lh_bits, node.number_of_lines, node.no_wrap);
 
     const entry = &textCache[idx];
     if (entry.valid and entry.text_ptr == text_ptr and entry.text_len == text_len and
-        entry.font_size == node.font_size and entry.max_width_bits == mw_bits and
+        entry.font_size == node.font_size and entry.font_weight == node.font_weight and
+        entry.max_width_bits == mw_bits and
         entry.letter_spacing_bits == ls_bits and entry.line_height_bits == lh_bits and
         entry.max_lines == node.number_of_lines and entry.no_wrap == node.no_wrap)
     {
         return entry.result;
     }
 
-    const result = measureFn.?(txt, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap);
+    const result = measureFn.?(txt, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap, bold);
     entry.* = .{
         .text_ptr = text_ptr,
         .text_len = text_len,
         .font_size = node.font_size,
+        .font_weight = node.font_weight,
         .max_width_bits = mw_bits,
         .letter_spacing_bits = ls_bits,
         .line_height_bits = lh_bits,
@@ -1000,12 +1009,13 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
 }
 
 fn computeMinContentW(node: *Node) f32 {
+    // CSS `min-width: auto` for flex items resolves to min-content — the smallest
+    // size the content can shrink to without overflowing its own contents. The
+    // explicit `width` is a stated size, not a content floor, so it must NOT
+    // clamp here; flex-shrink is allowed to take a 200×80 empty box down to 0.
     const s = node.style;
     const pl = padLeft(s);
     const pr = padRight(s);
-    if (s.width != null) {
-        return s.width.?;
-    }
     if (node.text != null and measureFn != null) {
         var maxWordW: f32 = 0;
         var i: usize = 0;
@@ -1017,7 +1027,7 @@ fn computeMinContentW(node: *Node) f32 {
             const wordStart = i;
             while (i < node.text.?.len and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
             const word = node.text.?[@intCast(wordStart)..@intCast(i)];
-            const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false);
+            const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false, node.font_weight >= 600);
             if (m.width > maxWordW) {
                 maxWordW = m.width;
             }
@@ -1473,6 +1483,34 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             }
             const lineGaps = if (lc > 1) gap * @as(f32, @floatFromInt((lc - 1))) else 0;
             const freeSpace = mainSize - totalBasis - lineGaps - totalMainMargin;
+            // Diagnostic: layout pass for any flex container whose child OR
+            // grandchild is the variant-button Text. React wraps as Pressable →
+            // Text wrapper → __TEXT__ leaf, so we walk down two levels.
+            {
+                var dbgi = ls;
+                var dbg_hit = false;
+                while (dbgi < ls + lc) : (dbgi += 1) {
+                    const dchild = &node.children[visibleIndices[@intCast(dbgi)]];
+                    if (dchild.text) |dt| {
+                        if (std.mem.eql(u8, dt, "Frames \xc2\xb7 italianMan")) { dbg_hit = true; break; }
+                    }
+                    for (dchild.children) |*gc| {
+                        if (gc.text) |gt| {
+                            if (std.mem.eql(u8, gt, "Frames \xc2\xb7 italianMan")) { dbg_hit = true; break; }
+                        }
+                    }
+                    if (dbg_hit) break;
+                }
+                if (dbg_hit) {
+                    std.debug.print("[layout-dbg] flex isRow={} mainSize={d:.1} innerW={d:.1} totalBasis={d:.1} freeSpace={d:.1} lc={d}\n", .{ isRow, mainSize, innerW, totalBasis, freeSpace, lc });
+                    var pi = ls;
+                    while (pi < ls + lc) : (pi += 1) {
+                        const cn = &node.children[visibleIndices[@intCast(pi)]];
+                        const txt: []const u8 = cn.text orelse if (cn.children.len > 0 and cn.children[0].text != null) cn.children[0].text.? else "(no text)";
+                        std.debug.print("[layout-dbg]   child[{d}] basis={d:.1} grow={d:.2} shrink={d:.2} explicit_w={?d:.1} text=\"{s}\"\n", .{ pi, childBasis[@intCast(pi)], childGrow[@intCast(pi)], childShrink[@intCast(pi)], cn.style.width, txt });
+                    }
+                }
+            }
             if (freeSpace > 0 and totalFlex > 0) {
                 var frozen = std.mem.zeroes([MAX_CHILDREN]bool);
                 var savedBasis = std.mem.zeroes([MAX_CHILDREN]f32);
@@ -1583,6 +1621,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
+            // Diagnostic: post-resolution basis for the italianMan child.
+            {
+                var pj = ls;
+                while (pj < ls + lc) : (pj += 1) {
+                    const cn = &node.children[visibleIndices[@intCast(pj)]];
+                    if (cn.text) |dt| {
+                        if (std.mem.eql(u8, dt, "Frames \xc2\xb7 italianMan")) {
+                            std.debug.print("[layout-dbg]   POST-RESOLVE child[{d}] basis={d:.1} mainSize_used\n", .{ pj, childBasis[@intCast(pj)] });
+                        }
+                    }
+                }
+            }
             {
                 var i = ls;
                 while (i < ls + lc) : (i += 1) {
@@ -1607,7 +1657,17 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         // Column: re-estimate height at actual cross-axis width for ALL auto-height children,
                         // not just direct text nodes. Nested text may wrap at narrower widths than innerW.
                         const effAlign = resolveAlign(child.style.align_self, @"align");
-                        const finalW = resolveMaybePct(child.style.width, innerW) orelse (if (effAlign == .stretch) innerW else childCrossSize[@intCast(i)]);
+                        // CSS flex: an auto-cross-sized child can't exceed the parent's
+                        // content cross-axis (innerW) — that's what makes a long text inside
+                        // a width-constrained button wrap to multiple lines instead of
+                        // bleeding out either side. `no_wrap` (white-space: nowrap) opts
+                        // out, matching the browser. Explicit `width` always wins.
+                        const finalW = resolveMaybePct(child.style.width, innerW) orelse blk: {
+                            if (effAlign == .stretch) break :blk innerW;
+                            const natural = childCrossSize[@intCast(i)];
+                            if (child.no_wrap) break :blk natural;
+                            break :blk @min(natural, innerW);
+                        };
                         if (child.text != null) {
                             const cpl = padLeft(child.style);
                             const cpr = padRight(child.style);
@@ -1718,9 +1778,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         if (isReverse) {
                             cursor -= childMainMarginEnd[@intCast(i)] + cwFinal;
-                        } else {
-                            cursor += childMainMarginStart[@intCast(i)];
                         }
+                        // Forward: cursor sits at the child's outer-left; the
+                        // recursive layoutNode adds marLeft itself (line 1177).
+                        // Pre-adding here would double-apply the margin.
                         cx = x + pl + cursor;
                         chFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
@@ -1753,9 +1814,9 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         if (isReverse) {
                             cursor -= childMainMarginEnd[@intCast(i)] + chFinal;
-                        } else {
-                            cursor += childMainMarginStart[@intCast(i)];
                         }
+                        // Forward: cursor is the child's outer-top; layoutNode
+                        // applies marTop itself. Pre-adding here would double.
                         cy = y + pt + cursor;
                         cwFinal = childCrossSize[@intCast(i)];
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
@@ -1818,7 +1879,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     if (isReverse) {
                         cursor -= childMainMarginStart[@intCast(i)] + gap + extraGap;
                     } else {
-                        cursor += actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
+                        // Advance past the entire outer box (start margin + content + end margin).
+                        // The pre-cursor addition of marginStart was removed above so the child's
+                        // own layoutNode wouldn't double-apply it; we fold it back in here so the
+                        // next sibling's outer-left is correctly positioned.
+                        cursor += childMainMarginStart[@intCast(i)] + actualMain + childMainMarginEnd[@intCast(i)] + gap + extraGap;
                     }
                     if (isRow) {
                         const me = (child.computed.x - x) + child.computed.w + childMainMarginEnd[@intCast(i)];

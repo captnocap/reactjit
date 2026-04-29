@@ -1,4 +1,4 @@
-import { Box, Pressable } from '../../../../runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { AtomFrame, MeterMarks, Mono } from './controlsSpecimenParts';
 import { useControllableNumberState, useHorizontalPercentDrag } from './controlsSpecimenInteractions';
 import { CTRL, type ControlTone } from './controlsSpecimenTheme';
@@ -19,14 +19,14 @@ export function MeterSlider({
   onChange,
 }: MeterSliderProps) {
   const [current, setCurrent] = useControllableNumberState({ value, defaultValue: value, onChange });
-  const drag = useHorizontalPercentDrag(current, setCurrent);
   const fillColor = tone === 'warn' ? CTRL.warn : tone === 'flag' ? CTRL.flag : CTRL.accent;
   const trackWidth = Math.max(0, width - 20);
+  const drag = useHorizontalPercentDrag(current, setCurrent, trackWidth);
   const fillWidth = Math.round(trackWidth * drag.ratio);
 
   return (
     <AtomFrame width={width} padding={10} gap={8}>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 36, justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 36, justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: 18, borderWidth: 1, borderColor: CTRL.ruleBright, backgroundColor: CTRL.bg1 }}>
           <Box style={{ width: fillWidth, height: 16, backgroundColor: fillColor }} />
           {[25, 50, 75].map((mark) => (
@@ -41,7 +41,8 @@ export function MeterSlider({
             {label.replace(/^\d+/, String(current).padStart(3, '0'))}
           </Mono>
         </Box>
-      </Pressable>
+        <Pressable onMouseDown={drag.begin} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+      </Box>
       <MeterMarks labels={['0', '25', '50', '75', '100']} />
     </AtomFrame>
   );

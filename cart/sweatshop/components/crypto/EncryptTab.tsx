@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Col, Row, Text } from '../../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { type EncryptAlgorithm, type KdfAlgorithm, useDecrypt, useEncrypt } from '../../lib/crypto/encrypt';
 import { Banner, Card, Chip, Field } from './crypto-ui';

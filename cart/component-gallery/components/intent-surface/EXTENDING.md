@@ -52,7 +52,7 @@ chip.
 `cart/component-gallery/components/intent-surface/IntentPill.tsx`:
 
 ```tsx
-import { Box, Text } from '../../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 
 export function IntentPill({ color, children }: { color?: string; children?: any }) {
   return (

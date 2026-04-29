@@ -1,4 +1,4 @@
-import { Box, Pressable, Row } from '../../../../runtime/primitives';
+import { Box, Pressable, Row } from '@reactjit/runtime/primitives';
 import { AtomFrame, MeterMarks, Mono } from './controlsSpecimenParts';
 import { useControllableRangeState, useHorizontalRangeDrag } from './controlsSpecimenInteractions';
 import { CTRL } from './controlsSpecimenTheme';
@@ -23,8 +23,8 @@ export function RangeSlider({
     defaultHigh: high,
     onChange,
   });
-  const drag = useHorizontalRangeDrag(range, setRange);
   const trackWidth = Math.max(0, width - 20);
+  const drag = useHorizontalRangeDrag(range, setRange, trackWidth);
   const lowX = Math.round((range.low / 100) * trackWidth);
   const highX = Math.round((range.high / 100) * trackWidth);
 
@@ -34,7 +34,7 @@ export function RangeSlider({
         <Mono>LOW {String(range.low).padStart(2, '0')}</Mono>
         <Mono>HIGH {String(range.high).padStart(2, '0')}</Mono>
       </Row>
-      <Pressable onMouseDown={drag.begin} onLayout={drag.onLayout} style={{ width: '100%', height: 26, justifyContent: 'center' }}>
+      <Box style={{ width: '100%', height: 26, justifyContent: 'center', position: 'relative' }}>
         <Box style={{ width: trackWidth, height: 6, borderWidth: 1, borderColor: CTRL.ruleBright, backgroundColor: CTRL.bg1 }} />
         <Box
           style={{
@@ -47,21 +47,31 @@ export function RangeSlider({
           }}
         />
         {[lowX, highX].map((valueX, index) => (
-          <Box
+          <Pressable
             key={index}
+            onMouseDown={() => drag.begin(index === 0 ? 'low' : 'high')}
             style={{
               position: 'absolute',
-              left: valueX - 4,
-              top: 4,
-              width: 8,
-              height: 18,
-              borderWidth: 1,
-              borderColor: CTRL.accent,
-              backgroundColor: drag.dragging ? CTRL.accentHot : CTRL.bg3,
+              left: valueX - 9,
+              top: 0,
+              width: 18,
+              height: 26,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-          />
+          >
+            <Box
+              style={{
+                width: 8,
+                height: 18,
+                borderWidth: 1,
+                borderColor: CTRL.accent,
+                backgroundColor: drag.dragging ? CTRL.accentHot : CTRL.bg3,
+              }}
+            />
+          </Pressable>
         ))}
-      </Pressable>
+      </Box>
       <MeterMarks labels={['0', '25', '50', '75', '100']} />
     </AtomFrame>
   );

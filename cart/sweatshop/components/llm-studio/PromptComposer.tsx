@@ -7,7 +7,7 @@
 // stream.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import {
   setPrompt, setSystemPrompt, setSystemPromptEnabled,

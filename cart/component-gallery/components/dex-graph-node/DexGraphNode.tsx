@@ -1,4 +1,4 @@
-import { Graph } from '../../../../runtime/primitives';
+import { Graph } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexGraphNodeProps = {

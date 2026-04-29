@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { toBase64, toHex, utf8ToBytes } from '../../lib/crypto/encoding';
 import { type HashAlgorithm, useHash } from '../../lib/crypto/hash';

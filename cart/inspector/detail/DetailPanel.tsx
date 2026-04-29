@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Col, Row, Text, Pressable, ScrollView, Box } from '../../../runtime/primitives';
+import { Col, Row, Text, Pressable, ScrollView, Box } from '@reactjit/runtime/primitives';
 import { InspectorNode, DetailTab, TreeStats } from '../types';
 import { COLORS } from '../constants';
 import { NodeIndex } from '../types';

@@ -133,11 +133,12 @@ export function useControllableRangeState({
   return [resolved, setRange] as const;
 }
 
-export function useHorizontalPercentDrag(value: number, onChange: (next: number) => void) {
+export function useHorizontalPercentDrag(value: number, onChange: (next: number) => void, trackWidth: number) {
   const [dragging, setDragging] = useState(false);
-  const rectRef = useRef<{ left: number; width: number } | null>(null);
   const activeRef = useRef(false);
   const frameRef = useRef<any>(null);
+  const startMouseRef = useRef(0);
+  const startValueRef = useRef(value);
 
   const stopLoop = useCallback(() => {
     if (frameRef.current == null) return;
@@ -146,11 +147,10 @@ export function useHorizontalPercentDrag(value: number, onChange: (next: number)
   }, []);
 
   const setFromMouse = useCallback(() => {
-    const rect = rectRef.current;
-    if (!rect || rect.width <= 0) return;
-    const ratio = clamp01((readMouseX() - rect.left) / rect.width);
-    onChange(ratio * 100);
-  }, [onChange]);
+    if (trackWidth <= 0) return;
+    const delta = ((readMouseX() - startMouseRef.current) / trackWidth) * 100;
+    onChange(clampPercent(startValueRef.current + delta));
+  }, [onChange, trackWidth]);
 
   const tick = useCallback(() => {
     if (!activeRef.current) {
@@ -168,13 +168,14 @@ export function useHorizontalPercentDrag(value: number, onChange: (next: number)
   }, [setFromMouse, stopLoop]);
 
   const begin = useCallback(() => {
-    if (!rectRef.current) return;
+    if (trackWidth <= 0) return;
+    startMouseRef.current = readMouseX();
+    startValueRef.current = value;
     activeRef.current = true;
     setDragging(true);
-    setFromMouse();
     stopLoop();
     frameRef.current = scheduleFrame(tick);
-  }, [setFromMouse, stopLoop, tick]);
+  }, [stopLoop, tick, trackWidth, value]);
 
   useEffect(
     () => () => {
@@ -184,27 +185,19 @@ export function useHorizontalPercentDrag(value: number, onChange: (next: number)
     [stopLoop]
   );
 
-  const onLayout = useCallback((rect: any) => {
-    const left = Number.isFinite(rect?.left) ? rect.left : rect?.x;
-    const width = Number.isFinite(rect?.width) ? rect.width : rect?.w;
-    if (Number.isFinite(left) && Number.isFinite(width)) {
-      rectRef.current = { left, width };
-    }
-  }, []);
-
   return {
     dragging,
     ratio: clamp01(value / 100),
     begin,
-    onLayout,
   };
 }
 
-export function useVerticalPercentDrag(value: number, onChange: (next: number) => void) {
+export function useVerticalPercentDrag(value: number, onChange: (next: number) => void, trackHeight: number) {
   const [dragging, setDragging] = useState(false);
-  const rectRef = useRef<{ top: number; height: number } | null>(null);
   const activeRef = useRef(false);
   const frameRef = useRef<any>(null);
+  const startMouseRef = useRef(0);
+  const startValueRef = useRef(value);
 
   const stopLoop = useCallback(() => {
     if (frameRef.current == null) return;
@@ -213,11 +206,10 @@ export function useVerticalPercentDrag(value: number, onChange: (next: number) =
   }, []);
 
   const setFromMouse = useCallback(() => {
-    const rect = rectRef.current;
-    if (!rect || rect.height <= 0) return;
-    const ratio = 1 - clamp01((readMouseY() - rect.top) / rect.height);
-    onChange(ratio * 100);
-  }, [onChange]);
+    if (trackHeight <= 0) return;
+    const delta = ((startMouseRef.current - readMouseY()) / trackHeight) * 100;
+    onChange(clampPercent(startValueRef.current + delta));
+  }, [onChange, trackHeight]);
 
   const tick = useCallback(() => {
     if (!activeRef.current) {
@@ -235,13 +227,14 @@ export function useVerticalPercentDrag(value: number, onChange: (next: number) =
   }, [setFromMouse, stopLoop]);
 
   const begin = useCallback(() => {
-    if (!rectRef.current) return;
+    if (trackHeight <= 0) return;
+    startMouseRef.current = readMouseY();
+    startValueRef.current = value;
     activeRef.current = true;
     setDragging(true);
-    setFromMouse();
     stopLoop();
     frameRef.current = scheduleFrame(tick);
-  }, [setFromMouse, stopLoop, tick]);
+  }, [stopLoop, tick, trackHeight, value]);
 
   useEffect(
     () => () => {
@@ -251,28 +244,20 @@ export function useVerticalPercentDrag(value: number, onChange: (next: number) =
     [stopLoop]
   );
 
-  const onLayout = useCallback((rect: any) => {
-    const top = Number.isFinite(rect?.top) ? rect.top : rect?.y;
-    const height = Number.isFinite(rect?.height) ? rect.height : rect?.h;
-    if (Number.isFinite(top) && Number.isFinite(height)) {
-      rectRef.current = { top, height };
-    }
-  }, []);
-
   return {
     dragging,
     ratio: clamp01(value / 100),
     begin,
-    onLayout,
   };
 }
 
-export function useHorizontalRangeDrag(range: RangeValue, onChange: (next: RangeValue) => void) {
+export function useHorizontalRangeDrag(range: RangeValue, onChange: (next: RangeValue) => void, trackWidth: number) {
   const [dragging, setDragging] = useState(false);
-  const rectRef = useRef<{ left: number; width: number } | null>(null);
   const activeRef = useRef(false);
   const thumbRef = useRef<'low' | 'high'>('low');
   const frameRef = useRef<any>(null);
+  const startMouseRef = useRef(0);
+  const startRangeRef = useRef(range);
 
   const stopLoop = useCallback(() => {
     if (frameRef.current == null) return;
@@ -281,15 +266,17 @@ export function useHorizontalRangeDrag(range: RangeValue, onChange: (next: Range
   }, []);
 
   const setFromMouse = useCallback(() => {
-    const rect = rectRef.current;
-    if (!rect || rect.width <= 0) return;
-    const next = clampPercent(clamp01((readMouseX() - rect.left) / rect.width) * 100);
+    if (trackWidth <= 0) return;
+    const start = startRangeRef.current;
+    const delta = ((readMouseX() - startMouseRef.current) / trackWidth) * 100;
     if (thumbRef.current === 'low') {
-      onChange({ low: Math.min(next, range.high), high: range.high });
+      const next = clampPercent(start.low + delta);
+      onChange({ low: Math.min(next, start.high), high: start.high });
     } else {
-      onChange({ low: range.low, high: Math.max(next, range.low) });
+      const next = clampPercent(start.high + delta);
+      onChange({ low: start.low, high: Math.max(next, start.low) });
     }
-  }, [onChange, range.high, range.low]);
+  }, [onChange, trackWidth]);
 
   const tick = useCallback(() => {
     if (!activeRef.current) {
@@ -306,17 +293,16 @@ export function useHorizontalRangeDrag(range: RangeValue, onChange: (next: Range
     frameRef.current = scheduleFrame(tick);
   }, [setFromMouse, stopLoop]);
 
-  const begin = useCallback(() => {
-    const rect = rectRef.current;
-    if (!rect || rect.width <= 0) return;
-    const next = clampPercent(clamp01((readMouseX() - rect.left) / rect.width) * 100);
-    thumbRef.current = Math.abs(next - range.low) <= Math.abs(next - range.high) ? 'low' : 'high';
+  const begin = useCallback((thumb: 'low' | 'high') => {
+    if (trackWidth <= 0) return;
+    thumbRef.current = thumb;
+    startMouseRef.current = readMouseX();
+    startRangeRef.current = range;
     activeRef.current = true;
     setDragging(true);
-    setFromMouse();
     stopLoop();
     frameRef.current = scheduleFrame(tick);
-  }, [range.high, range.low, setFromMouse, stopLoop, tick]);
+  }, [range, stopLoop, tick, trackWidth]);
 
   useEffect(
     () => () => {
@@ -326,17 +312,124 @@ export function useHorizontalRangeDrag(range: RangeValue, onChange: (next: Range
     [stopLoop]
   );
 
-  const onLayout = useCallback((rect: any) => {
-    const left = Number.isFinite(rect?.left) ? rect.left : rect?.x;
-    const width = Number.isFinite(rect?.width) ? rect.width : rect?.w;
-    if (Number.isFinite(left) && Number.isFinite(width)) {
-      rectRef.current = { left, width };
-    }
-  }, []);
-
   return {
     dragging,
     begin,
-    onLayout,
   };
+}
+
+export function useHorizontalIndexDrag(value: number, onChange: (next: number) => void, count: number, trackWidth: number) {
+  const [dragging, setDragging] = useState(false);
+  const activeRef = useRef(false);
+  const frameRef = useRef<any>(null);
+  const startMouseRef = useRef(0);
+  const startValueRef = useRef(value);
+
+  const stopLoop = useCallback(() => {
+    if (frameRef.current == null) return;
+    cancelFrame(frameRef.current);
+    frameRef.current = null;
+  }, []);
+
+  const setFromMouse = useCallback(() => {
+    if (trackWidth <= 0 || count <= 1) return;
+    const stepPx = trackWidth / (count - 1);
+    const delta = Math.round((readMouseX() - startMouseRef.current) / stepPx);
+    onChange(clampIndex(startValueRef.current + delta, count));
+  }, [count, onChange, trackWidth]);
+
+  const tick = useCallback(() => {
+    if (!activeRef.current) {
+      stopLoop();
+      return;
+    }
+    if (!isMouseDown()) {
+      activeRef.current = false;
+      setDragging(false);
+      stopLoop();
+      return;
+    }
+    setFromMouse();
+    frameRef.current = scheduleFrame(tick);
+  }, [setFromMouse, stopLoop]);
+
+  const begin = useCallback((nextStart?: number) => {
+    if (trackWidth <= 0 || count <= 1) return;
+    const resolvedStart = clampIndex(typeof nextStart === 'number' ? nextStart : value, count);
+    startMouseRef.current = readMouseX();
+    startValueRef.current = resolvedStart;
+    onChange(resolvedStart);
+    activeRef.current = true;
+    setDragging(true);
+    stopLoop();
+    frameRef.current = scheduleFrame(tick);
+  }, [count, onChange, stopLoop, tick, trackWidth, value]);
+
+  useEffect(
+    () => () => {
+      activeRef.current = false;
+      stopLoop();
+    },
+    [stopLoop]
+  );
+
+  return { dragging, begin };
+}
+
+export function useVerticalIndexDrag(value: number, onChange: (next: number) => void, count: number, trackHeight: number) {
+  const [dragging, setDragging] = useState(false);
+  const activeRef = useRef(false);
+  const frameRef = useRef<any>(null);
+  const startMouseRef = useRef(0);
+  const startValueRef = useRef(value);
+
+  const stopLoop = useCallback(() => {
+    if (frameRef.current == null) return;
+    cancelFrame(frameRef.current);
+    frameRef.current = null;
+  }, []);
+
+  const setFromMouse = useCallback(() => {
+    if (trackHeight <= 0 || count <= 1) return;
+    const stepPx = trackHeight / (count - 1);
+    const delta = Math.round((startMouseRef.current - readMouseY()) / stepPx);
+    onChange(clampIndex(startValueRef.current + delta, count));
+  }, [count, onChange, trackHeight]);
+
+  const tick = useCallback(() => {
+    if (!activeRef.current) {
+      stopLoop();
+      return;
+    }
+    if (!isMouseDown()) {
+      activeRef.current = false;
+      setDragging(false);
+      stopLoop();
+      return;
+    }
+    setFromMouse();
+    frameRef.current = scheduleFrame(tick);
+  }, [setFromMouse, stopLoop]);
+
+  const begin = useCallback((nextStart?: number) => {
+    if (trackHeight <= 0 || count <= 1) return;
+    const resolvedStart = clampIndex(typeof nextStart === 'number' ? nextStart : value, count);
+    startMouseRef.current = readMouseY();
+    startValueRef.current = resolvedStart;
+    onChange(resolvedStart);
+    activeRef.current = true;
+    setDragging(true);
+    stopLoop();
+    frameRef.current = scheduleFrame(tick);
+  }, [count, onChange, stopLoop, tick, trackHeight, value]);
+
+  useEffect(
+    () => () => {
+      activeRef.current = false;
+      stopLoop();
+    },
+    [stopLoop]
+  );
+
+  return { dragging, begin };
 }

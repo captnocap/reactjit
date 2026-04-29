@@ -1,4 +1,4 @@
-import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { BrowserTabState } from '../../lib/browser/tabs';
 import type { BrowserPageState } from '../../lib/browser/navigation';

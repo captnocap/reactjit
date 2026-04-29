@@ -4,7 +4,8 @@
 //! requests, serves static files or emits events for dynamic handlers.
 //!
 //! Usage:
-//!   var server = try httpserver.listen(8080, &[_]httpserver.Route{
+//!   var server: httpserver.HttpServer = undefined;
+//!   try server.listen(8080, &[_]httpserver.Route{
 //!       .{ .path = "/static", .route_type = .static, .root = "/var/www" },
 //!       .{ .path = "/api", .route_type = .handler },
 //!   });
@@ -76,8 +77,17 @@ pub const HttpServer = struct {
     routes: [MAX_ROUTES]Route = undefined,
     route_count: usize = 0,
     event_count: usize = 0,
+    // The Route.path / Route.root slices passed into listen() are caller-owned
+    // and may dangle after listen() returns (V8 bindings build them on the stack).
+    // Copy the bytes into server-owned storage and re-point the slices here so
+    // matchRoute() never reads through a stale pointer.
+    route_path_storage: [MAX_ROUTES][512]u8 = undefined,
+    route_root_storage: [MAX_ROUTES][512]u8 = undefined,
 
-    pub fn listen(port: u16, routes: []const Route) !HttpServer {
+    /// Initialize an in-place HttpServer. Storage for routes lives inside
+    /// `self`; routes[].path slices in this struct point at self.route_path_storage,
+    /// so the struct must NOT be moved/copied after this returns.
+    pub fn listen(self: *HttpServer, port: u16, routes: []const Route) !void {
         const addr = try std.net.Address.parseIp4("0.0.0.0", port);
         const fd = try std.posix.socket(addr.any.family, std.posix.SOCK.STREAM | std.posix.SOCK.NONBLOCK, 0);
         errdefer std.posix.close(fd);
@@ -87,11 +97,25 @@ pub const HttpServer = struct {
         try std.posix.bind(fd, &addr.any, addr.getOsSockLen());
         try std.posix.listen(fd, 16);
 
-        var server = HttpServer{ .listener = fd };
+        self.* = HttpServer{ .listener = fd };
         const rcount = @min(routes.len, MAX_ROUTES);
-        for (0..rcount) |i| server.routes[i] = routes[i];
-        server.route_count = rcount;
-        return server;
+        for (0..rcount) |i| {
+            const src = routes[i];
+            const plen = @min(src.path.len, self.route_path_storage[i].len);
+            @memcpy(self.route_path_storage[i][0..plen], src.path[0..plen]);
+            var copied = Route{
+                .path = self.route_path_storage[i][0..plen],
+                .route_type = src.route_type,
+                .root = null,
+            };
+            if (src.root) |r| {
+                const rlen = @min(r.len, self.route_root_storage[i].len);
+                @memcpy(self.route_root_storage[i][0..rlen], r[0..rlen]);
+                copied.root = self.route_root_storage[i][0..rlen];
+            }
+            self.routes[i] = copied;
+        }
+        self.route_count = rcount;
     }
 
     /// Non-blocking poll. Returns event count.

@@ -1,5 +1,5 @@
-import { Box, Graph } from '../../../../runtime/primitives';
-import { Braces, Check, List, Target, Terminal } from '../../../../runtime/icons/icons';
+import { Box, Graph } from '@reactjit/runtime/primitives';
+import { Braces, Check, List, Target, Terminal } from '@reactjit/runtime/icons/icons';
 
 const VIEW = 24;
 const HALF = 12;

@@ -606,6 +606,15 @@ pub fn telemetryHasSelection() bool {
     return sel_node != null;
 }
 
+/// Copy the active tree-text selection into `buf`. Returns bytes written.
+/// Reuses the root pointer last passed through `onMouseDown`.
+/// Returns 0 if there is no selection or if the root has not been seen yet.
+pub fn copySelectionToBuf(buf: []u8) usize {
+    if (sel_node == null and !sel_all) return 0;
+    const root = pending_root orelse return 0;
+    return collectSelectedText(root, buf);
+}
+
 pub fn telemetryIsDragging() bool {
     return sel_dragging;
 }

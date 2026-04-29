@@ -1,4 +1,4 @@
-import { Box, Col, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 export function SpeakerNotes(props: {

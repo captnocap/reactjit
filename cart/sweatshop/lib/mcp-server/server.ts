@@ -1,4 +1,4 @@
-import { execAsync } from '../../../../runtime/hooks/process';
+import { execAsync } from '@reactjit/runtime/hooks/process';
 import { callTool, getCallLog, listTools } from './registry';
 import { bridgePaths, bridgeSupported, capabilityBanner, initialServerState, probeTransportCapabilities } from './transport';
 import type { McpClientRecord, McpServerState } from './types';

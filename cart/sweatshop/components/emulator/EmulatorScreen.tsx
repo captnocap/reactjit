@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Box, Effect } from '../../../../runtime/primitives';
+import { Box, Effect } from '@reactjit/runtime/primitives';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../../lib/emulator/ppu';
 import type { Bus } from '../../lib/emulator/bus';
 

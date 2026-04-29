@@ -1,9 +1,12 @@
-import { Row } from '../../../../runtime/primitives';
+import '../../components.cls';
+import { classifiers as S } from '@reactjit/core';
+import { Row } from '@reactjit/runtime/primitives';
 
 export function IntentRow({ children }: { children?: any }) {
+  const Inline = S.InlineX4Center || Row;
   return (
-    <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+    <Inline style={{ flexWrap: 'wrap' }}>
       {children}
-    </Row>
+    </Inline>
   );
 }

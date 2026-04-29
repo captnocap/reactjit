@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Col, Row } from '../../../../runtime/primitives';
-import { Activity, Bell, Bot, ChartLine, Command, Hash, Link, Shield, Target } from '../../../../runtime/icons/icons';
-import { EASINGS, type EasingName } from '../../../../runtime/easing';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
+import { Activity, Bell, Bot, ChartLine, Command, Hash, Link, Shield, Target } from '@reactjit/runtime/icons/icons';
+import { EASINGS, type EasingName } from '@reactjit/runtime/easing';
 import { Divider, Mono } from '../controls-specimen/controlsSpecimenParts';
 import { StatusBadge } from '../controls-specimen/StatusBadge';
 import type { ControlTone } from '../controls-specimen/controlsSpecimenTheme';

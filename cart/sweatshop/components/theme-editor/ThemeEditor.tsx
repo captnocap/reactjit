@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, useTheme, applyTheme } from '../../theme';
 import { THEMES, type ThemePalette, type ThemeTokens } from '../../themes';
 import { useThemeDraft } from './useThemeDraft';

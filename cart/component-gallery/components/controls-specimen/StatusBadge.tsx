@@ -1,4 +1,4 @@
-import { Box, Row } from '../../../../runtime/primitives';
+import { Box, Row } from '@reactjit/runtime/primitives';
 import { Body, Mono } from './controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from './controlsSpecimenTheme';
 

@@ -1,4 +1,4 @@
-import { Box } from '../../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { MaskLayer } from './MaskLayer';
 import { SourceFrame } from './SourceFrame';
 import type { MaskStackItem } from './maskCatalog';

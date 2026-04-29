@@ -1,4 +1,4 @@
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import { Body, Mono } from './controlsSpecimenParts';
 import { CTRL } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';

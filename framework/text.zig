@@ -69,11 +69,15 @@ const MeasureCacheKey = struct {
     letter_spacing_i: i16,
     line_height_i: i16,
     max_lines: u16,
+    bold: bool,
 };
 
 pub const TextEngine = struct {
     library: c.FT_Library,
     face: c.FT_Face,
+    /// Optional bold face. Null if no bold .ttf was found at init —
+    /// fontWeight: 'bold' then silently degrades to regular (today's behavior).
+    face_bold: c.FT_Face = null,
     fallback_faces: [8]c.FT_Face = undefined,
     fallback_count: usize = 0,
     current_size: u16,
@@ -97,6 +101,27 @@ pub const TextEngine = struct {
         var face: c.FT_Face = undefined;
         if (c.FT_New_Face(library, font_path, 0, &face) != 0) return error.FontLoadFailed;
         _ = c.FT_Set_Pixel_Sizes(face, 0, 16);
+
+        // Try to load a bold companion face. We probe a fixed set of paths
+        // matching the regular faces this codebase falls back through. First
+        // hit wins; absence is non-fatal — fontWeight: 'bold' just degrades
+        // to regular at paint time.
+        const bold_paths = [_][*:0]const u8{
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu-sans/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "C:/Windows/Fonts/segoeuib.ttf",
+        };
+        var face_bold: c.FT_Face = null;
+        for (bold_paths) |bp| {
+            var fb_bold: c.FT_Face = undefined;
+            if (c.FT_New_Face(library, bp, 0, &fb_bold) == 0) {
+                _ = c.FT_Set_Pixel_Sizes(fb_bold, 0, 16);
+                face_bold = fb_bold;
+                break;
+            }
+        }
 
         const fallback_paths = [_][*:0]const u8{
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -123,6 +148,7 @@ pub const TextEngine = struct {
         return TextEngine{
             .library = library,
             .face = face,
+            .face_bold = face_bold,
             .fallback_faces = fallbacks,
             .fallback_count = fb_count,
             .headless = true,
@@ -146,6 +172,7 @@ pub const TextEngine = struct {
         h = h *% 31 +% @as(usize, @intCast(@as(u16, @bitCast(key.letter_spacing_i))));
         h = h *% 31 +% @as(usize, @intCast(@as(u16, @bitCast(key.line_height_i))));
         h = h *% 31 +% @as(usize, key.max_lines);
+        h = h *% 31 +% @as(usize, @intFromBool(key.bold));
         return h % MCACHE_SIZE;
     }
 
@@ -170,6 +197,7 @@ pub const TextEngine = struct {
         for (0..self.fallback_count) |i| {
             _ = c.FT_Done_Face(self.fallback_faces[i]);
         }
+        if (self.face_bold != null) _ = c.FT_Done_Face(self.face_bold);
         _ = c.FT_Done_Face(self.face);
         _ = c.FT_Done_FreeType(self.library);
     }
@@ -399,6 +427,8 @@ pub const TextEngine = struct {
     }
 
     /// Measure text with extended parameters: letter spacing, line height override, max lines.
+    /// Bold-awareness: caller must set gpu_text bold via gpu_text.setBold(...) ahead of
+    /// time — the per-glyph advances flow through the gpu atlas which honours that flag.
     pub fn measureTextEx(self: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32, line_height_override: f32, _: u16) layout.TextMetrics {
         const lm = self.lineMetrics(size_px);
         const effective_lh: f32 = if (line_height_override > 0) line_height_override else lm.height;
@@ -416,11 +446,14 @@ pub const TextEngine = struct {
     /// Returns the widest wrapped line's width and total wrapped height.
     /// If max_width <= 0, falls back to unwrapped measureText.
     pub fn measureTextWrapped(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) layout.TextMetrics {
-        return self.measureTextWrappedEx(text, size_px, max_width, 0, 0, 0);
+        return self.measureTextWrappedEx(text, size_px, max_width, 0, 0, 0, false, false);
     }
 
     /// Measure text with wrapping + extended params. Uses measurement cache.
-    pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+    /// `bold` participates in the cache key so bold/regular widths don't collide;
+    /// the actual width data comes from gpu_text's atlas which the caller must
+    /// switch via gpu_text.setBold(bold) before invoking this.
+    pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16, no_wrap: bool, bold: bool) layout.TextMetrics {
         // noWrap: force single-line measurement regardless of max_width
         if (max_width <= 0 or no_wrap) {
             const m = self.measureTextEx(text, size_px, letter_spacing, line_height_override, max_lines);
@@ -440,6 +473,7 @@ pub const TextEngine = struct {
             .letter_spacing_i = @intFromFloat(letter_spacing * 10),
             .line_height_i = @intFromFloat(line_height_override * 10),
             .max_lines = max_lines,
+            .bold = bold,
         };
         if (self.measureCacheLookup(cache_key)) |cached| {
             return cached;

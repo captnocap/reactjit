@@ -1,4 +1,6 @@
-import { Col, Row } from '../../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
+import { Hash } from '@reactjit/runtime/icons/icons';
+import { Icon } from '../../../sweatshop/components/icons';
 import { Body, Mono } from './controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';
@@ -19,7 +21,7 @@ export function CountBadge({
     <S.StackX2>
       <Mono color={CTRL.inkDimmer}>{label}</Mono>
       <Row style={{ gap: 8, alignItems: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, borderWidth: 1, borderColor: color }}>
-        <Mono color={color} fontSize={9}>#</Mono>
+        <Icon icon={Hash} size={11} color={color} strokeWidth={2.2} />
         <Body fontSize={14} color={color}>{value}</Body>
       </Row>
     </S.StackX2>

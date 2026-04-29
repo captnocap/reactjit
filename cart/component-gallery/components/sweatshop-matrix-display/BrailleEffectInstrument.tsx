@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Row } from '../../../../runtime/primitives';
+import { Row } from '@reactjit/runtime/primitives';
 import {
   DEFAULT_BRAILLE_PROJECTION_THEME,
   GAIN_PRESETS,

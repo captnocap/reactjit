@@ -73,6 +73,10 @@ pub const Statement = struct {
     pub fn columnCount(_: *const Statement) c_int {
         return 0;
     }
+
+    pub fn columnName(_: *const Statement, _: c_int) ?[]const u8 {
+        return null;
+    }
 };
 
 pub const Database = struct {

@@ -1,4 +1,6 @@
-import { Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Row, Text, TextInput } from '@reactjit/runtime/primitives';
+import { Search, Slash } from '@reactjit/runtime/icons/icons';
+import { Icon } from '../../../sweatshop/components/icons';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexSearchBarProps = {
@@ -27,7 +29,7 @@ export function DexSearchBar({
         backgroundColor: DEX_COLORS.bg,
       }}
     >
-      <Text style={{ color: DEX_COLORS.accent, fontSize: 12 }}>⌕</Text>
+      <Icon icon={Search} size={13} color={DEX_COLORS.accent} strokeWidth={2.1} />
       <TextInput
         value={value}
         onChange={onChange}
@@ -40,12 +42,15 @@ export function DexSearchBar({
           borderColor: DEX_COLORS.rule,
           color: DEX_COLORS.ink,
           fontSize: 11,
+          lineHeight: 14,
           paddingLeft: 8,
           paddingRight: 8,
+          paddingTop: 1,
+          paddingBottom: 3,
         }}
       />
       <Text style={{ minWidth: 54, textAlign: 'right', color: DEX_COLORS.inkDimmer, fontSize: 10 }}>{count}</Text>
-      <Text style={{ color: DEX_COLORS.inkDimmer, fontSize: 10 }}>/</Text>
+      <Icon icon={Slash} size={10} color={DEX_COLORS.inkDimmer} strokeWidth={2.2} />
     </Row>
   );
 }

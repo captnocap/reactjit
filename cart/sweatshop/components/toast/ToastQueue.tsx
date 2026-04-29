@@ -1,5 +1,5 @@
 
-import { Box, Col, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { Toast } from './Toast';
 import { useToastStore } from './useToast';

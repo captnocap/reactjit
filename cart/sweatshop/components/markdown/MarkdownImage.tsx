@@ -1,5 +1,5 @@
 
-import { Box, Col, Image, Text } from '../../../../runtime/primitives';
+import { Box, Col, Image, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 export function MarkdownImage(props: { alt: string; src: string; width?: number; maxWidth?: number }) {

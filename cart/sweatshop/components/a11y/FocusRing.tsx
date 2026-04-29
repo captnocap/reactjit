@@ -5,7 +5,7 @@
 // read prefersBoldFocusRing() and bump their border width + colour.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { getA11yState, setFocusRingBold, useA11yState } from './hooks/useA11yState';
 

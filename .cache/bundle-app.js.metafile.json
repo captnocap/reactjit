@@ -510,7 +510,7 @@
       "format": "esm"
     },
     "cart/component-gallery/components.cls.ts": {
-      "bytes": 45759,
+      "bytes": 91151,
       "imports": [
         {
           "path": "runtime/core_stub.ts",
@@ -630,7 +630,7 @@
       "format": "esm"
     },
     "runtime/hooks/http.ts": {
-      "bytes": 4125,
+      "bytes": 9277,
       "imports": [
         {
           "path": "runtime/ffi.ts",
@@ -858,6 +858,37 @@
       ],
       "format": "esm"
     },
+    "runtime/hooks/useIFTTT.ts": {
+      "bytes": 14882,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/hooks/clipboard.ts",
+          "kind": "import-statement",
+          "original": "./clipboard"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
     "runtime/hooks/useHost.ts": {
       "bytes": 12332,
       "imports": [
@@ -890,7 +921,7 @@
       "format": "esm"
     },
     "runtime/hooks/useConnection.ts": {
-      "bytes": 15028,
+      "bytes": 28195,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1071,7 +1102,7 @@
       "format": "esm"
     },
     "runtime/hooks/index.ts": {
-      "bytes": 3310,
+      "bytes": 3828,
       "imports": [
         {
           "path": "runtime/hooks/fs.ts",
@@ -1132,6 +1163,11 @@
           "path": "runtime/hooks/useHotState.ts",
           "kind": "import-statement",
           "original": "./useHotState"
+        },
+        {
+          "path": "runtime/hooks/useIFTTT.ts",
+          "kind": "import-statement",
+          "original": "./useIFTTT"
         },
         {
           "path": "runtime/hooks/useHost.ts",
@@ -1233,7 +1269,7 @@
       "format": "esm"
     },
     "cart/shared/tooltip/Tooltip.tsx": {
-      "bytes": 15264,
+      "bytes": 15265,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1243,7 +1279,7 @@
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "cart/shared/tooltip/useAutoFlip.ts",
@@ -1518,7 +1554,7 @@
       "format": "esm"
     },
     "cart/component-gallery/gallery-theme.ts": {
-      "bytes": 6963,
+      "bytes": 6967,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1528,7 +1564,7 @@
         {
           "path": "runtime/theme.tsx",
           "kind": "import-statement",
-          "original": "../../runtime/theme"
+          "original": "@reactjit/runtime/theme"
         },
         {
           "path": "cart/component-gallery/theme-system.ts",
@@ -1559,7 +1595,7 @@
       "format": "esm"
     },
     "cart/component-gallery/components/grid-spinners/GridSpinners.tsx": {
-      "bytes": 23042,
+      "bytes": 23040,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1569,7 +1605,7 @@
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -1611,7 +1647,7 @@
       "format": "esm"
     },
     "cart/app/anim.js": {
-      "bytes": 3901,
+      "bytes": 3905,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1621,7 +1657,7 @@
         {
           "path": "runtime/easing.ts",
           "kind": "import-statement",
-          "original": "../../runtime/easing"
+          "original": "@reactjit/runtime/easing"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -1642,7 +1678,7 @@
       "format": "esm"
     },
     "cart/app/onboarding/state.jsx": {
-      "bytes": 2117,
+      "bytes": 3585,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1668,7 +1704,7 @@
       "format": "esm"
     },
     "cart/app/onboarding/FirstStep.jsx": {
-      "bytes": 7527,
+      "bytes": 7555,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1714,7 +1750,7 @@
       "format": "esm"
     },
     "cart/app/onboarding/Step2.jsx": {
-      "bytes": 22419,
+      "bytes": 22408,
       "imports": [
         {
           "path": "vendor/react/index.js",
@@ -1724,7 +1760,7 @@
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "runtime/core_stub.ts",
@@ -1734,7 +1770,7 @@
         {
           "path": "runtime/hooks/index.ts",
           "kind": "import-statement",
-          "original": "../../../runtime/hooks"
+          "original": "@reactjit/runtime/hooks"
         },
         {
           "path": "cart/component-gallery/components/grid-spinners/GridSpinners.tsx",
@@ -1815,13 +1851,110 @@
       ],
       "format": "esm"
     },
+    "cart/app/onboarding/Step4.jsx": {
+      "bytes": 6670,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/core_stub.ts",
+          "kind": "import-statement",
+          "original": "@reactjit/core"
+        },
+        {
+          "path": "cart/component-gallery/components/grid-spinners/GridSpinners.tsx",
+          "kind": "import-statement",
+          "original": "../../component-gallery/components/grid-spinners/GridSpinners"
+        },
+        {
+          "path": "cart/app/anim.js",
+          "kind": "import-statement",
+          "original": "../anim"
+        },
+        {
+          "path": "cart/app/onboarding/state.jsx",
+          "kind": "import-statement",
+          "original": "./state"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "cart/app/onboarding/Step5.jsx": {
+      "bytes": 7754,
+      "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "runtime/core_stub.ts",
+          "kind": "import-statement",
+          "original": "@reactjit/core"
+        },
+        {
+          "path": "cart/shared/tooltip/Tooltip.tsx",
+          "kind": "import-statement",
+          "original": "../../shared/tooltip/Tooltip"
+        },
+        {
+          "path": "cart/component-gallery/components/grid-spinners/GridSpinners.tsx",
+          "kind": "import-statement",
+          "original": "../../component-gallery/components/grid-spinners/GridSpinners"
+        },
+        {
+          "path": "cart/app/anim.js",
+          "kind": "import-statement",
+          "original": "../anim"
+        },
+        {
+          "path": "cart/app/onboarding/state.jsx",
+          "kind": "import-statement",
+          "original": "./state"
+        },
+        {
+          "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient.ts",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "/home/siah/creative/reactjit/framework/ambient_primitives.ts",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
     "cart/app/onboarding/Onboarding.jsx": {
-      "bytes": 1222,
+      "bytes": 1198,
       "imports": [
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "runtime/core_stub.ts",
@@ -1844,6 +1977,16 @@
           "original": "./Step3"
         },
         {
+          "path": "cart/app/onboarding/Step4.jsx",
+          "kind": "import-statement",
+          "original": "./Step4"
+        },
+        {
+          "path": "cart/app/onboarding/Step5.jsx",
+          "kind": "import-statement",
+          "original": "./Step5"
+        },
+        {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
           "kind": "import-statement",
           "external": true
@@ -1862,12 +2005,17 @@
       "format": "esm"
     },
     "cart/app/page.jsx": {
-      "bytes": 771,
+      "bytes": 3228,
       "imports": [
+        {
+          "path": "vendor/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "runtime/core_stub.ts",
@@ -1883,6 +2031,16 @@
           "path": "cart/app/onboarding/state.jsx",
           "kind": "import-statement",
           "original": "./onboarding/state"
+        },
+        {
+          "path": "cart/component-gallery/components/grid-spinners/GridSpinners.tsx",
+          "kind": "import-statement",
+          "original": "../component-gallery/components/grid-spinners/GridSpinners"
+        },
+        {
+          "path": "cart/app/anim.js",
+          "kind": "import-statement",
+          "original": "./anim"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -1903,12 +2061,12 @@
       "format": "esm"
     },
     "cart/app/about/page.jsx": {
-      "bytes": 404,
+      "bytes": 405,
       "imports": [
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "runtime/core_stub.ts",
@@ -1934,7 +2092,7 @@
       "format": "esm"
     },
     "cart/app/index.tsx": {
-      "bytes": 3697,
+      "bytes": 5226,
       "imports": [
         {
           "path": "cart/component-gallery/components.cls.ts",
@@ -1944,17 +2102,17 @@
         {
           "path": "runtime/primitives.tsx",
           "kind": "import-statement",
-          "original": "../../runtime/primitives"
+          "original": "@reactjit/runtime/primitives"
         },
         {
           "path": "runtime/router.tsx",
           "kind": "import-statement",
-          "original": "../../runtime/router"
+          "original": "@reactjit/runtime/router"
         },
         {
           "path": "runtime/hooks/index.ts",
           "kind": "import-statement",
-          "original": "../../runtime/hooks"
+          "original": "@reactjit/runtime/hooks"
         },
         {
           "path": "cart/shared/tooltip/Tooltip.tsx",
@@ -1964,12 +2122,12 @@
         {
           "path": "runtime/icons/icons.ts",
           "kind": "import-statement",
-          "original": "../../runtime/icons/icons"
+          "original": "@reactjit/runtime/icons/icons"
         },
         {
           "path": "runtime/ffi.ts",
           "kind": "import-statement",
-          "original": "../../runtime/ffi"
+          "original": "@reactjit/runtime/ffi"
         },
         {
           "path": "cart/component-gallery/gallery-theme.ts",
@@ -1995,6 +2153,11 @@
           "path": "cart/app/onboarding/state.jsx",
           "kind": "import-statement",
           "original": "./onboarding/state"
+        },
+        {
+          "path": "cart/app/anim.js",
+          "kind": "import-statement",
+          "original": "./anim"
         },
         {
           "path": "/home/siah/creative/reactjit/runtime/jsx_shim.ts",
@@ -2119,7 +2282,7 @@
       "format": "cjs"
     },
     "runtime/index.tsx": {
-      "bytes": 19472,
+      "bytes": 19885,
       "imports": [
         {
           "path": "renderer/hostConfig.ts",
@@ -2157,6 +2320,11 @@
           "original": "react"
         },
         {
+          "path": "runtime/hooks/useIFTTT.ts",
+          "kind": "require-call",
+          "original": "./hooks/useIFTTT"
+        },
+        {
           "path": "vendor/react-reconciler/index.js",
           "kind": "require-call",
           "original": "react-reconciler"
@@ -2175,7 +2343,7 @@
           "bytesInOutput": 94
         },
         "vendor/react/cjs/react.development.js": {
-          "bytesInOutput": 81146
+          "bytesInOutput": 81150
         },
         "vendor/react/index.js": {
           "bytesInOutput": 319
@@ -2196,13 +2364,19 @@
           "bytesInOutput": 1399
         },
         "runtime/hooks/http.ts": {
-          "bytesInOutput": 2207
+          "bytesInOutput": 6546
         },
         "runtime/hooks/localstore.ts": {
           "bytesInOutput": 2180
         },
+        "runtime/hooks/clipboard.ts": {
+          "bytesInOutput": 321
+        },
         "runtime/hooks/websocket.ts": {
           "bytesInOutput": 1653
+        },
+        "runtime/hooks/useIFTTT.ts": {
+          "bytesInOutput": 10704
         },
         "vendor/scheduler/cjs/scheduler.development.js": {
           "bytesInOutput": 17858
@@ -2211,13 +2385,13 @@
           "bytesInOutput": 331
         },
         "vendor/react-reconciler/cjs/react-reconciler.development.js": {
-          "bytesInOutput": 692409
+          "bytesInOutput": 692423
         },
         "vendor/react-reconciler/index.js": {
           "bytesInOutput": 352
         },
         "runtime/index.tsx": {
-          "bytesInOutput": 13494
+          "bytesInOutput": 13513
         },
         "renderer/hostConfig.ts": {
           "bytesInOutput": 27786
@@ -2256,19 +2430,19 @@
           "bytesInOutput": 6389
         },
         "cart/app/index.tsx": {
-          "bytesInOutput": 3246
+          "bytesInOutput": 4263
         },
         "cart/component-gallery/components.cls.ts": {
-          "bytesInOutput": 45802
+          "bytesInOutput": 94551
         },
         "runtime/hooks/index.ts": {
-          "bytesInOutput": 406
+          "bytesInOutput": 493
         },
         "runtime/hooks/process.ts": {
           "bytesInOutput": 2909
         },
         "cart/shared/tooltip/Tooltip.tsx": {
-          "bytesInOutput": 10220
+          "bytesInOutput": 13601
         },
         "cart/shared/tooltip/useAutoFlip.ts": {
           "bytesInOutput": 2960
@@ -2304,13 +2478,13 @@
           "bytesInOutput": 281
         },
         "cart/app/page.jsx": {
-          "bytesInOutput": 773
+          "bytesInOutput": 2595
         },
         "cart/app/onboarding/Onboarding.jsx": {
-          "bytesInOutput": 1273
+          "bytesInOutput": 1234
         },
         "cart/app/onboarding/FirstStep.jsx": {
-          "bytesInOutput": 6420
+          "bytesInOutput": 6446
         },
         "cart/component-gallery/components/grid-spinners/GridSpinners.tsx": {
           "bytesInOutput": 5323
@@ -2322,19 +2496,25 @@
           "bytesInOutput": 4845
         },
         "cart/app/onboarding/state.jsx": {
-          "bytesInOutput": 2130
+          "bytesInOutput": 3485
         },
         "cart/app/onboarding/Step2.jsx": {
-          "bytesInOutput": 22499
+          "bytesInOutput": 22530
         },
         "cart/app/onboarding/Step3.jsx": {
           "bytesInOutput": 6742
+        },
+        "cart/app/onboarding/Step4.jsx": {
+          "bytesInOutput": 5893
+        },
+        "cart/app/onboarding/Step5.jsx": {
+          "bytesInOutput": 6757
         },
         "cart/app/about/page.jsx": {
           "bytesInOutput": 456
         }
       },
-      "bytes": 1067138
+      "bytes": 1151755
     }
   }
 }

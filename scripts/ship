@@ -436,6 +436,15 @@ if [[ "$LABEL_MISMATCH" -eq 1 ]]; then
     exit 1
 fi
 
+# Release the SDK build lock. Everything past this point — packaging,
+# snapshot gate, autotest replay — writes to cart-namespaced paths
+# (zig-out/bin/<name>, /tmp/reactjit-dist-<name>) and runs the binary
+# headless. None of it touches .zig-cache or the v8-ingredients manifest,
+# so other ships can start their zig build now. Holding the lock through
+# the snapshot+autotest phases stalls every parallel ship for up to 15
+# minutes (300s snapshot timeout + 600s autotest timeout).
+exec 9>&-
+
 # ── 3. Debug short-circuit ─────────────────────────────────────────────
 # In debug mode, move the debug ELF to "$NAME-debug" so zig-out/bin/$NAME
 # stays reserved for the self-extracting wrapper.

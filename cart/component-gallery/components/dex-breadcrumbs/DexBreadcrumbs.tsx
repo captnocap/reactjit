@@ -1,4 +1,4 @@
-import { Row, Text } from '../../../../runtime/primitives';
+import { Row, Text } from '@reactjit/runtime/primitives';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexBreadcrumbsProps = {

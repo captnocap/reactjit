@@ -1,4 +1,4 @@
-import { Col, Row } from '../../../../runtime/primitives';
+import { Col, Row } from '@reactjit/runtime/primitives';
 import { AxisReadout } from './AxisReadout';
 import { ChronologyTrail } from './ChronologyTrail';
 import { FileTabCard } from './FileTabCard';

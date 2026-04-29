@@ -1,5 +1,5 @@
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { ImportConfirmFooter } from './ImportConfirmFooter';
 import { ImportDropZone } from './ImportDropZone';

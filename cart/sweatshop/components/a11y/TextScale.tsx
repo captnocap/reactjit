@@ -6,7 +6,7 @@
 // render pass. Not a preview — real app-wide zoom.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { setTextScale, useA11yState } from './hooks/useA11yState';
 

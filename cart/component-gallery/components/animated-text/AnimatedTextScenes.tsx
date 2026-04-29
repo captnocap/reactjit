@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Box, Col, Row, Text, Pressable } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text, Pressable } from '@reactjit/runtime/primitives';
 import {
   useTypewriter,
   useStreamingText,

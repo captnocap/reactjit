@@ -1,4 +1,4 @@
-import { Box, Col } from '../../../../runtime/primitives';
+import { Box, Col } from '@reactjit/runtime/primitives';
 import { InsetPanel, SkeletonBars, TileCrossOverlay, TileFooter, TileStripeField } from './SkeletonParts';
 import { SKELETON, getSkeletonFrame, type SkeletonSize, type SkeletonTone, toneColor } from './tokens';
 

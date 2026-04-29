@@ -1,4 +1,4 @@
-import { Box, Col, Row } from '../../../../runtime/primitives';
+import { Box, Col, Row } from '@reactjit/runtime/primitives';
 import { SkeletonTile } from './SkeletonTile';
 import { getSkeletonFrame, SKELETON, type SkeletonSize, type SkeletonTone } from './tokens';
 

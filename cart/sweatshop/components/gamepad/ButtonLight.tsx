@@ -2,7 +2,7 @@
 // ButtonLight — single gamepad button, lit when pressed
 // =============================================================================
 
-import { Box, Text } from '../../../runtime/primitives';
+import { Box, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { ButtonId } from '../../lib/gamepad/types';
 

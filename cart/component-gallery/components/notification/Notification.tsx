@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Box, Col, Notification as HostNotification, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
-import { AlertTriangle, BellRing, CheckCircle, CircleAlert, Clock, Info, MessageSquareText, Monitor, Pin, Send, X } from '../../../../runtime/icons/icons';
+import { Box, Col, Notification as HostNotification, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
+import { AlertTriangle, BellRing, CheckCircle, CircleAlert, Clock, Info, MessageSquareText, Monitor, Pin, Send, X } from '@reactjit/runtime/icons/icons';
 import { Icon, type IconData } from '../../../sweatshop/components/icons';
 import { Body, Divider, Mono } from '../controls-specimen/controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from '../controls-specimen/controlsSpecimenTheme';

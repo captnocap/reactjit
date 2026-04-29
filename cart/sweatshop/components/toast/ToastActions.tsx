@@ -1,5 +1,5 @@
 
-import { Pressable, Row, Text } from '../../../../runtime/primitives';
+import { Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 
 import type { ToastAction } from './useToast';

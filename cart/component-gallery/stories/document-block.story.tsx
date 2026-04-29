@@ -1,5 +1,5 @@
 import { classifiers as S } from '@reactjit/core';
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { DocumentBlock } from '../components/document-viewer/DocumentBlock';
 

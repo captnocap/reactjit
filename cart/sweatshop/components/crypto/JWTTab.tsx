@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Col, Row, Text, TextArea } from '../../../../runtime/primitives';
+import { Col, Row, Text, TextArea } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { decodeJwtToken, useJWT } from '../../lib/crypto/jwt';
 import { Banner, Card, Field } from './crypto-ui';

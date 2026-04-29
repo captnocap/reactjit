@@ -1083,16 +1083,21 @@ fn runJsHandlerExpr(expr: []const u8) void {
     state_mod.markDirty();
 }
 
-fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
-        return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
+        // gpu_text holds the active-weight flag — set it for the duration of
+        // the measurement so glyph advances pull from the right atlas face,
+        // then restore. Mirrors the paint path (drawNodeTextCommon).
+        gpu.setBold(bold);
+        defer gpu.setBold(false);
+        return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap, bold);
     }
     return .{};
 }
 
 fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
     if (g_text_engine) |te| {
-        return te.measureTextWrappedEx(t, font_size, 0, 0, 0, 1, true).width;
+        return te.measureTextWrappedEx(t, font_size, 0, 0, 0, 1, true, false).width;
     }
     return 0;
 }
@@ -1107,6 +1112,8 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     }
     if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(node.letter_spacing);
+    const bold = node.font_weight >= 600;
+    if (bold) gpu.setBold(true);
     const draw_width = if (node.no_wrap) @as(f32, 0) else max_width;
     const text_h = gpu.drawTextWrapped(
         text,
@@ -1122,6 +1129,7 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     );
     if (node.line_height > 0) gpu.setLineHeightOverride(0);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(0);
+    if (bold) gpu.setBold(false);
     if (node.inline_glyphs) |glyphs| {
         paintInlineGlyphs(glyphs, node.font_size);
     }
@@ -2292,6 +2300,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
             node.line_height,
             1,
             true,
+            node.font_weight >= 600,
         );
         if (metrics.height > 0 and inner_h > metrics.height) {
             text_y += @floor((inner_h - metrics.height) / 2);
@@ -2795,6 +2804,7 @@ pub fn run(config_in: AppConfig) !void {
     defer te.deinit();
 
     gpu.initText(te.library, te.face, te.fallback_faces, te.fallback_count);
+    if (te.face_bold != null) gpu.setBoldFace(te.face_bold);
     g_text_engine = &te;
     layout.setMeasureFn(measureCallback);
     layout.setMeasureImageFn(measureImageCallback);
@@ -3068,6 +3078,8 @@ pub fn run(config_in: AppConfig) !void {
                                 const now_ms: u32 = @intCast(c.SDL_GetTicks() & 0xFFFFFFFF);
                                 const clicks = input.trackClick(now_ms);
                                 input.focus(id);
+                                // Single-global-highlight: input took focus, drop tree highlight.
+                                selection.clear();
                                 const pl = h.style.padLeft();
                                 const pt = h.style.padTop();
                                 const pr = h.style.padRight();
@@ -3193,6 +3205,8 @@ pub fn run(config_in: AppConfig) !void {
                                 if (h.input_id) |id| {
                                     stampClickLatency();
                                     input.focus(id);
+                                    // Single-global-highlight: input took focus, drop tree highlight.
+                                    selection.clear();
                                     const pl = h.style.padLeft();
                                     const pt = h.style.padTop();
                                     const pr = h.style.padRight();
@@ -3305,6 +3319,8 @@ pub fn run(config_in: AppConfig) !void {
                                 selection.onMouseDown(config.root, mx, my, @intCast(c.SDL_GetTicks() & 0xFFFFFFFF));
                             }
                             input.unfocus();
+                            // Single-global-highlight: tree-text takes over, wipe input highlights.
+                            input.clearAllSelections();
                         }
                     }
                 },

@@ -1,4 +1,4 @@
-import { Box, Canvas, Graph } from '../../../../runtime/primitives';
+import { Box, Canvas, Graph } from '@reactjit/runtime/primitives';
 import { FLOW_EDITOR_DEFAULT_THEME, type FlowEditorTheme } from './flowEditorTheme';
 import { arrowHeadPath, bezierFor } from './bezier';
 import { FlowTile } from './FlowTile';

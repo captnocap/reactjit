@@ -2,7 +2,7 @@
 // and caches which(1) results so probing 'which adb' once per session doesn't
 // re-fire for every keystroke.
 
-import { execAsync, type ExecResult } from '../../../../runtime/hooks/process';
+import { execAsync, type ExecResult } from '@reactjit/runtime/hooks/process';
 
 export interface ExecProbe { present: boolean; path: string; stderr?: string; }
 

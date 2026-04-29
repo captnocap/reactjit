@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { Box, Graph, Pressable, Text } from '@reactjit/runtime/primitives';
 import { PALETTE } from '../../lib/chart-utils';
 import { useStagger } from '../../lib/useStagger';
 import { Tooltip } from '../../lib/Tooltip';

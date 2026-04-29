@@ -1,4 +1,4 @@
-import { Box, Col, Text } from '../../../../runtime/primitives';
+import { Box, Col, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 const ART: Record<string, string[]> = {

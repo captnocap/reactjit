@@ -1,4 +1,4 @@
-import { Box } from '../../../runtime/primitives';
+import { Box } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 
 export type BrowserIconName =

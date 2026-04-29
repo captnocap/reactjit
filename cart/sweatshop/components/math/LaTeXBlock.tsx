@@ -1,5 +1,5 @@
 
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { useTheme } from '../../theme';
 import { renderMathTree } from './mathRender';
 import { useLaTeXParse } from './useLaTeXParse';

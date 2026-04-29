@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Col, Row, Text } from '../../../../runtime/primitives';
+import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS } from '../../theme';
 import { type SigningAlgorithm, generateSigningKeys, useSign, useVerify } from '../../lib/crypto/sign';
 import { Banner, Card, Chip, Field } from './crypto-ui';

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, baseName, inferFileType } from '../../theme';
 import { readFile } from '../../host';
 import { parseSlides, type ParsedDeck } from '../../lib/presentation/parseSlides';

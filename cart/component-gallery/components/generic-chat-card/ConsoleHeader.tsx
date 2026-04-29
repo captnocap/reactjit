@@ -1,4 +1,4 @@
-import { Col, Row } from '../../../../runtime/primitives';
+import { Col, Row } from '@reactjit/runtime/primitives';
 import { IdentityBlock } from './IdentityBadges';
 import { StatusPulse } from './StatusPulse';
 import { TrustThermometerAvatar } from './TrustAvatar';

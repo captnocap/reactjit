@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, ScrollView } from '../../../runtime/primitives';
+import { Box, ScrollView } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
-import { process as processHook } from '../../../runtime/hooks';
+import { process as processHook } from '@reactjit/runtime/hooks';
 import { SnakeSpinner } from '../../component-gallery/components/grid-spinners/GridSpinners';
 import { useAnimationTimeline } from '../anim';
 import { useOnboarding } from './state';

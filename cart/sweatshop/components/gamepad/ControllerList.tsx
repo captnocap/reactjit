@@ -7,7 +7,7 @@
 // pointing at the GamepadPanel banner.
 // =============================================================================
 
-import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 
 const host: any = globalThis;

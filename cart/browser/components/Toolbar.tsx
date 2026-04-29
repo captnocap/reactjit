@@ -1,5 +1,5 @@
-import { callHost } from '../../../runtime/ffi';
-import { Box, Row, TextInput } from '../../../runtime/primitives';
+import { callHost } from '@reactjit/runtime/ffi';
+import { Box, Row, TextInput } from '@reactjit/runtime/primitives';
 import { COLORS } from '../constants';
 import { BrowserTab } from '../types';
 import BrowserIcon from './BrowserIcon';

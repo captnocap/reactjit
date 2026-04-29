@@ -1,4 +1,4 @@
-import { Box, Col, Image, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Image, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { WeatherCurrent } from '../../lib/apis';
 

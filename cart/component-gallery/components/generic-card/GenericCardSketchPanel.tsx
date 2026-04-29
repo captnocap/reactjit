@@ -1,4 +1,4 @@
-import { Col, Text } from '../../../../runtime/primitives';
+import { Col, Text } from '@reactjit/runtime/primitives';
 import {
   DEFAULT_GENERIC_CARD_SKETCH_LINES,
   GENERIC_CARD,

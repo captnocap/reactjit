@@ -1,5 +1,5 @@
 
-import { Col, Row, Box, Text, Pressable, ScrollView, TextEditor } from '../../../../runtime/primitives';
+import { Col, Row, Box, Text, Pressable, ScrollView, TextEditor } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, baseName, parentPath, languageForType } from '../../theme';
 import { Glyph, Pill } from '../shared';
 import { editorTokenTone } from '../../utils';
