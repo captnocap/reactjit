@@ -28,40 +28,50 @@ CHECKLIST:
 - Icons: `Home`, `Info`, `Minimize`, `Maximize`, `X`
 - hasAnimation: TRUE (only the tour banner; the chrome itself is static)
 - Animations: `TourBanner` mounts at `markComplete()` time, holds invisible until `TOUR_BANNER_FADE_DELAY_MS = 1400ms` (so the home-page carryover dominates first), then fades in over `TOUR_BANNER_FADE_MS = 500ms`. Yes / No has no exit animation — the answer **is** the action, banner unmounts immediately.
-- TODO: when persistence is restored, the banner shouldn't re-arm on every fresh boot — `tourStatus === 'pending'` must persist its `'declined'` / `'accepted'` resolution. Once a real tour is wired, `acceptTour()` should additionally start the tour overlay (today it just hides the banner).
+- TODO: once a real tour is wired, `acceptTour()` should additionally arm the overlay (today it just hides the banner). Banner re-arm is handled — `tourStatus` persists through `User.onboarding.tourStatus`, so a declined tour stays declined across reloads.
 - PROBLEMS: none known
 
 ---
 
-### Index page — `page.jsx` — WIP
+### Index page — `page.tsx` — WIP
 
 CHECKLIST:
-- Purpose: `/` route. Three-way gate: while `onb.complete` is false → `<Onboarding>`; on the first render after `markComplete()` (`!onb.homeEntryPlayed`) → `<HomeEntry>` which carries Step5's exit final frame ("Welcome aboard." + spinner) and dissolves it into the home card; otherwise → `<HomeStatic>` direct.
+- Purpose: `/` route. Three-way gate: while `onb.complete` is false → `<Onboarding>`; on the first render after `markComplete()` (`!onb.homeEntryPlayed`) → `<HomeEntry>` which carries Step5's exit final frame ("Welcome aboard." + spinner) and dissolves it into the staggered home surface (greeting → goal card → cartridge tile row → profile facts); otherwise → `<HomeStatic>` direct. Both Home variants render through a shared `<HomeBody>` that takes phase opacities — `HomeEntry` drives them off `useAnimationTimeline`, `HomeStatic` passes `1` for everything.
 - isRoute: TRUE
 - Route: `/`
-- hasDatashape: FALSE
-- Datashape: consumes `onboarding/state.jsx`
-- exposedDatashapes: `onb.loading`, `onb.complete`, `onb.step`, `onb.shouldPlayFirstStartAnimation`, `onb.markFirstStartAnimationPlayed`, `onb.homeEntryPlayed`, `onb.markHomeEntryPlayed`
+- hasDatashape: FALSE (consumes the onboarding-provider surface)
+- Datashape: reads `onboarding/state.jsx` (`name`, `goal`, `configPath`, `traits`) + `onboarding/traits.js` (`TRAITS_BY_ID` for the accommodations chip-list)
+- exposedDatashapes: `onb.loading`, `onb.complete`, `onb.step`, `onb.shouldPlayFirstStartAnimation`, `onb.markFirstStartAnimationPlayed`, `onb.homeEntryPlayed`, `onb.markHomeEntryPlayed`, `onb.name`, `onb.goal`, `onb.configPath`, `onb.traits`
 - Hooks: `useOnboarding`, `useAnimationTimeline` (inside `HomeEntry`), `useEffect`, `useRef`
 - Conditions:
   - `if (onb.loading) return null;`
   - `if (!onb.complete) return <Onboarding ...>;`
   - `if (!onb.homeEntryPlayed) return <HomeEntry />;`
   - else `return <HomeStatic />;`
-  - `HomeEntry` schedules `markHomeEntryPlayed()` at `ENTRY_DONE_MS = T_HOME_IN_END + 80 = 2030 ms` so the next render flips to `<HomeStatic />` cleanly.
-- Components: `Onboarding`, `HomeEntry`, `HomeStatic`, `SnakeSpinner`
-- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`, `S.AppStepFrame`, `S.AppStepCenter`, `S.AppStepBottomRight`, `S.AppGreet`
+  - `HomeEntry` schedules `markHomeEntryPlayed()` at `ENTRY_DONE_MS = T_PROFILE_END + 80 = 3280 ms` so the next render flips to `<HomeStatic />` cleanly.
+  - Goal card body branches on `hasGoal = goal.trim().length > 0` — shows the goal statement when present, falls back to a "you can set one anytime" line when not. The `User.onboarding.status === 'skipped'` branch isn't wired here yet (open thread).
+- Components: `Onboarding`, `HomeEntry`, `HomeStatic`, `HomeBody`, `CartridgeTile`, `ProfileFact`, `SnakeSpinner`
+- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`, `S.Caption`, `S.AppStepFrame`, `S.AppStepCenter`, `S.AppStepBottomRight`, `S.AppGreet`, `S.AppProviderTile`, `S.AppProviderTileTitle`, `S.AppProviderTileSubtitle`
 - isUsingTheme: TRUE (via classifiers)
 - hasIcons: FALSE
 - Icons: —
 - hasAnimation: TRUE (HomeEntry only — HomeStatic is a no-animation render)
 - Animations (HomeEntry, single shared `useAnimationTimeline`):
-  - Carryover hold 0→500 ms ("Welcome aboard." + spinner at full opacity, picking up exactly where Step5 left off)
+  - Carryover "Welcome aboard." + spinner hold 0→500 ms (picks up where Step5's exit left off)
   - Carryover fade-out 500→1400 ms (`fadeOut`)
-  - Home content fade-in + slide-up 1400→1950 ms (40 px slide)
-  - `markHomeEntryPlayed()` at 2030 ms
-- TODO: replace the placeholder Home card with the real product surface once onboarding is locked in. Add a separate "skipped-mode" branch that runs in degraded UX when `user.onboarding.status === 'skipped'`.
-- PROBLEMS: none
+  - Greet fade-in 1400→1950 ms (24 px slide)
+  - Goal card fade-in 1950→2300 ms
+  - Cartridge tile 1 fade-in 2300→2650 ms
+  - Cartridge tile 2 fade-in 2550→2820 ms (overlap by ~100 ms for staggered feel)
+  - Cartridge tile 3 fade-in 2720→2990 ms
+  - Profile fact row fade-in 2990→3200 ms
+  - `markHomeEntryPlayed()` at 3280 ms
+- TODO:
+  - Wire cartridge tile click handlers when the cartridge ABI lands in cart/app — today they're visual scaffolding (no `onPress` action). Sweatshop / Component gallery / Chatbot tiles each carry a `hint` line indicating wiring state.
+  - Add the `User.onboarding.status === 'skipped'` runtime branch so skipped users see a degraded surface and can resume / restart onboarding inline. The plumbing is half-there (state.jsx persists `'skipped'`); IndexPage just doesn't read it yet.
+  - Resolve `~` → `$HOME` in the `Config path` profile fact (currently shows the raw string).
+  - Persist a "last-active cartridge" pointer once tiles can route, so reopening the app lands on the user's last surface instead of always the selector.
+- PROBLEMS: none known.
 
 ---
 
@@ -120,10 +130,10 @@ CHECKLIST:
 - isRoute: FALSE
 - Route: —
 - hasDatashape: FALSE
-- Datashape: writes to `onboarding/state.jsx` record on dispatch (`setName`, `setStep`)
-- exposedDatashapes: `onb.step`, `onb.setName`, `onb.setStep`
+- Datashape: writes to `onboarding/state.jsx` setters on dispatch (`setName`, `setStep`, `markSkipped`)
+- exposedDatashapes: `onb.step`, `onb.setName`, `onb.setStep`, `onb.markSkipped`
 - Hooks: `useState`, `useRef`, `useEffect`, `useAnimationTimeline`, `useOnboarding`
-- Conditions: `animate` gate folds entry progress to 1 when false; name-coercion typeguard; `hasName` gates Skip/Next; exit dispatch `useEffect` only arms when both `exiting` and `exitStartT` are set; `setName` is bounded via timeout so `setStep` cannot stall indefinitely.
+- Conditions: `animate` gate folds entry progress to 1 when false; name-coercion typeguard; `hasName` gates Skip/Next; exit dispatch `useEffect` only arms when both `exiting` and `exitStartT` are set; `setName` is bounded via `Promise.race(setName(), 400ms)` so a slow disk write can't stall the step transition; the dispatch branches `exiting === 'skip'` → `onb.markSkipped()` (terminal `complete=true`, status `'skipped'`) vs `exiting === 'next'` → `onb.setStep(advanceTo)`.
 - Components: `SnakeSpinner` (line 295), `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
 - Atoms: `Box`, `Col`, `Row`, `Text`, `TextInput`
 - isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts` (`AppHello`, `AppQuestion`, `AppNameInput`, `AppGreet`, `AppStepFrame`, `AppStepCenterCol`, `AppStepCenter`, `AppStepBottomRight`, `AppStepBottomRightRow`, `AppStepDimmable`)
@@ -143,22 +153,20 @@ CHECKLIST:
     - Center text fade-out 380→912 ms
     - Greet fade-in 1045→1482 ms
     - Dispatch `setStep(1)` at 1900 ms after exit starts
-- TODO: when skipped-mode is locked in, branch the dispatch (lines 120–127) so `Skip` writes `user.onboarding.status='skipped'` instead of advancing the step
-- PROBLEMS:
-  - `firstStartAnimationSeen` is intentionally NOT persisted yet (state.jsx line 72–77) — animation replays on every fresh boot until that flip is wired.
-  - `console.log` on skip dispatch is intentional iteration scaffolding; remove when locking in.
+- TODO: nothing pending here. Skipped-mode dispatch is wired; animation re-arm is suppressed via the User-row-existence proxy in state.jsx bootstrap.
+- PROBLEMS: none known.
 
 ---
 
-### Step 1 — Provider selection — `onboarding/Step2.jsx` — WIP
+### Step 1 — Provider selection — `onboarding/Step2.jsx` — Complete
 
 CHECKLIST:
 - Purpose: Onboarding step 1. Carries over the FirstStep exit-final frame (greet + spinner) when name is persisted, eases everything out, fades in "This application requires a connection to a provider", slides it up, staggers in 3 provider tiles. Click a tile → that tile gains the active border + an inline form expands below the row. Each form has a Probe button that gates on any-input-non-empty. When the probe succeeds (and a model is picked, for API/Local) the screen-level Next button fades in bottom-right. Click Next → exit transition (menu/form fade out, spinner fades in bottom-right, "Thanks for that" fades in centered) → `setStep(2)` advances to Step3. Bottom-left "Take me back!" returns to step 0.
 - isRoute: FALSE
 - Route: —
 - hasDatashape: FALSE
-- Datashape: reads/writes `onboarding/state.jsx` (`name`, `providerKind`)
-- exposedDatashapes: `onb.name`, `onb.setProviderKind`, `onb.setStep`
+- Datashape: reads/writes `onboarding/state.jsx` (`name`, `providerKind`, `commitConnection`)
+- exposedDatashapes: `onb.name`, `onb.setProviderKind`, `onb.commitConnection`, `onb.setStep`
 - Hooks: `useAnimationTimeline`, `useOnboarding`, `useState`, `useRef`, `useEffect`, `processHook.execAsync`
 - Conditions:
   - `hasGreet = persistedName.length > 0` drives the carryover branch and the timeline `skip` flag
@@ -168,6 +176,7 @@ CHECKLIST:
   - inline form rendered only when `selected` is non-null
   - `hasAnyInput` gates each Probe button
   - `lockedIn` lifted out of the forms (each form's `useEffect` calls `setLockedIn(...)` based on its internal probe + chosen-model state) → gates the Next button render
+  - `commitPayload` lifted out of the forms in lockstep with `lockedIn` — each form bubbles `{ kind, endpoint?, apiKey?, model?, home?, path? }` so step root can hand it to `onb.commitConnection(payload)` at `onNext` (fires the actual Connection-row write + Settings.defaultConnectionId/defaultModelId patch in the background while the exit transition plays). Cleared on tile switch and form unmount.
   - `exitStartT != null` gates the exit visuals + blocks Take-me-back / pickProvider mid-transition; `setTimeout(..., EXIT_TOTAL_MS)` dispatches `onb.setStep(2)`
 - Components: `ProviderTile`, `FormShell`, `LabeledInput`, `ProbeButton`, `ProbeResult`, `ModelList`, `ApiKeyForm`, `ClaudeForm`, `LocalForm`, `SnakeSpinner`, `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
 - Atoms: `Box`, `Col`, `Row`, `Pressable`, `Text`, `TextInput`
@@ -194,15 +203,14 @@ CHECKLIST:
     - Dispatch `setStep(2)` at 1900 ms
 - TODO:
   - Replace stubbed model list in `ApiKeyForm.probe` with a real `http.getAsync` to `${endpoint}/models`.
-  - Decide what the Claude `home` field actually does. Currently it gets baked into `HOME=…` for the probe.
-  - Persist the chosen model (currently local `chosen` state is dropped when Step2 unmounts).
+  - Decide what the Claude `home` field actually does. Currently it gets baked into `HOME=…` for the probe AND stored as `Connection.credentialRef.locator` (`source: 'cli-session'`) by `commitConnection`.
 - PROBLEMS:
-  - API-key probe still returns a canned model list; local probe now does live HTTP probing (`/models`, `/v1/models`, `/api/tags`) and parses model IDs.
+  - API-key probe still returns a canned model list; local probe does live HTTP probing (`/models`, `/v1/models`, `/api/tags`) and parses model IDs. Until the API probe is real, `Settings.defaultModelId` ends up holding whichever stubbed name the user picks.
   - The Claude probe relies on `claude` being on `$PATH` of the cart's process — no fallback if it isn't.
 
 ---
 
-### Step 2 — Trait survey — `onboarding/Step3.jsx` — WIP
+### Step 2 — Trait survey — `onboarding/Step3.jsx` — Complete
 
 CHECKLIST:
 - Purpose: Onboarding step 2. Carries over the Step2 exit-final frame ("Thanks for that" + spinner) when `providerKind` is set, eases everything out, fades in "Let's get to know you a bit more", slides it up, fades in a flat shuffled grid of personality / hobby / preference traits as toggleable chips. Bottom-right shows "I'd rather not say" — once any trait is selected, the same button label flips to "Next" (and the styling switches from outline to filled). Bottom-left "Take me back!" returns to step 1. Click the forward button → exit transition fades the interface out, fades in a spinner bottom-right and a centered branching message ("We get it, onboardings suck." if no traits, "Somehow we already knew that about you…" if any), then dispatches `setStep(3)`.
@@ -239,9 +247,9 @@ CHECKLIST:
     - Branching message fades in 570→1235 ms (centered): `EXIT_MSG_NO_SELECTION` "We get it, onboardings suck." vs `EXIT_MSG_HAS_SELECTION` "Somehow we already knew that about you…" — picked at click time and stored in `exitMessage` state so it's stable across the transition
     - Dispatch `setStep(3)` at 1900 ms
 - TODO:
-  - Replace the hardcoded `TRAITS` list with a configurable / persisted catalog when the survey grows past iteration.
+  - The chip catalog now lives in `cart/app/onboarding/traits.js` (extracted so `state.jsx` can map ids→accommodation notes without a circular import). When the survey grows past hand-curation, swap to a persisted catalog row in the gallery data graph.
 - PROBLEMS:
-  - Toggling traits writes to localstore on every click via `onb.setTraits` — the read-modify-write race documented on `state.jsx` could in theory clobber rapid sequential toggles. Hasn't been observed yet, but watch for it once we add adjacent steps that also write.
+  - Toggling traits fires an async `userStore.update(USER_ID, ...)` per click. Rapid taps theoretically race read-modify-write — the `useCRUD` write path is `get → merge → set`, and two writes back-to-back can clobber each other if the second reads before the first persists. Hasn't been observed in practice; watch for it if a user mass-toggles. Possible mitigations: debounce `setTraits`, or batch into a single in-flight write with a follow-up.
 
 ---
 
@@ -283,7 +291,7 @@ CHECKLIST:
     - "Got it." bridge message fades in 570→1235 ms (centered, `AppGreet`)
     - Dispatch `setStep(4)` at 1900 ms
 - TODO:
-  - Validate / normalize the path (resolve `~` to `$HOME`, ensure absolute) before persisting once the lock-in pass restores `useCRUD`.
+  - Validate / normalize the path (resolve `~` to `$HOME`, ensure absolute) at homepage read-time. Today the raw string survives untouched into `User.configPath`.
   - Optionally surface a "directory exists / will be created" hint under the input.
 - PROBLEMS: none known.
 
@@ -328,7 +336,7 @@ CHECKLIST:
     - "Welcome aboard." bridge fades in 570→1235 ms (centered, `AppGreet`)
     - Dispatch `markComplete()` at 1900 ms
 - TODO:
-  - Once persistence is restored, the popover copy should live in a content file (i18n + edit-without-cart-rebuild).
+  - Move popover copy into a content file (i18n + edit-without-cart-rebuild) once one exists. Today it lives inline in `Step5.jsx` (`GOAL_TOOLTIP`).
   - Optional: secondary tooltip / micro-help on the input itself if the goal vocabulary needs more handholding.
 - PROBLEMS: none known.
 
@@ -383,6 +391,29 @@ CHECKLIST:
 - PROBLEMS:
   - Schemas in `cart/component-gallery/data/*.ts` are JSON Schema documents, not runtime parsers — `useCRUD`'s `Schema<T>` contract is satisfied with identity passthrough today. Validation is the writer's responsibility. Lift to ajv-backed parsers when drift becomes a problem.
   - Bootstrap reads four to five collections in sequence (User, Settings, Connection, Goal list, plus Workspace/Privacy on first-create). Cold-boot adds a few ms before the loading flag flips; tolerable for now but worth re-examining if it ever feels sluggish.
+
+---
+
+### Trait catalog — `onboarding/traits.js` — Complete
+
+CHECKLIST:
+- Purpose: Single source of truth for the Step3 chip catalog. Each entry is `{ id, label, note }` — `label` is the chip text the user clicks, `note` is the worker-facing accommodation hint that lands in `User.preferences.accommodations[]` on lock-in. Also exports the helpers `traitsToAccommodations(ids)` and `accommodationsToTraits(accommodations)` that state.jsx uses to round-trip selections through disk. Extracted so Step3 (chip render) and state.jsx (id → accommodation row mapping) can both import without a circular dep.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: TRUE (companion to `User.preferences.accommodations[]` in `cart/component-gallery/data/user.ts`)
+- Datashape: produces `UserAccommodation` rows (`{ id: 'acc_<traitId>', label, note }`) — round-trippable via the `acc_` prefix scheme.
+- exposedDatashapes: `TRAITS` (the chip array), `TRAITS_BY_ID` (lookup map), `traitsToAccommodations(ids)`, `accommodationsToTraits(accommodations)`
+- Hooks: —
+- Conditions: `accommodationsToTraits` drops entries whose `id` doesn't begin with `acc_` or whose underlying trait id isn't in the catalog — older saves where the catalog has changed degrade silently rather than crashing hydration.
+- Components: —
+- Atoms: —
+- isUsingTheme: FALSE
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO: when the survey grows past hand-curation, lift the catalog to a persisted gallery row (`accommodation-catalog.ts`?) so users / future profiles can extend it without code changes.
+- PROBLEMS: none.
 
 ---
 
