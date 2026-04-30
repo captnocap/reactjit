@@ -336,27 +336,39 @@ CHECKLIST:
 
 ## State, library, manifest
 
-### Onboarding state provider — `onboarding/state.jsx` — WIP
+### Onboarding state provider — `onboarding/state.jsx` — Complete
 
-**!! ITERATION MODE — NOTHING PERSISTS !!** Every fresh boot starts at step 0 with empty `name` / `providerKind` / `traits` and `complete=false`. This is intentional: while the onboarding flow is being designed, persistence would force a manual reset between dev runs and trap us re-entering at Step 2/3 with carryover animations firing. This file used to be `useCRUD`-backed (localstore at `app/onboarding/state`) and will return to that shape — at the same time it migrates into `User.onboarding` — once every step is locked in. If you find yourself debugging "why doesn't onboarding state survive a reload", the answer is "by design, until lock-in" — re-add `useCRUD` + the bootstrap effect (see git history for the prior shape) only as part of the lock-in pass.
+**Persistence is live.** State.jsx now writes to the gallery data graph through `useCRUD` (namespace `app`). The captured fields don't sit on `User.onboarding` as a blob — each one lands in its proper home: `name → User.displayName`, `traits → User.preferences.accommodations[]` (catalog notes from `traits.js`), `configPath → User.configPath`, `goal → Goal row`, provider pick + form values → a `Connection` row + `Settings.defaultConnectionId/defaultModelId`. `User.onboarding` keeps just the meta (status / step / timestamps / tourStatus). On bootstrap the provider follows User → Settings → Connection to recover `providerKind`, and lists Goals (workspaceId='ws_local', originActor='user') for goal text. Set `SEED_COMPLETED_USER = true` at the top of state.jsx to short-circuit a fresh boot straight into the homepage for dev iteration.
+
+The previous in-memory shape lives at `state_old.jsx` as a breadcrumb; safe to delete after the next homepage pass lands.
 
 CHECKLIST:
-- Purpose: React context provider holding the onboarding record entirely in `useState`. Exposes typed selectors / setters with a stable surface so consumers don't change when persistence is restored.
+- Purpose: React context provider holding the onboarding record. In-memory `useState` slots act as the optimistic cache; setters write through to per-collection `useCRUD` instances. Single namespace `app` so a localstore wipe clears everything cleanly.
 - isRoute: FALSE
 - Route: —
-- hasDatashape: FALSE (in-memory only — no datashape until lock-in)
+- hasDatashape: TRUE (multi-collection)
 - Datashape:
-  - in-memory only right now: `step`, `complete`, `name`, `providerKind`, `traits`, `configPath`, `goal`, `tourStatus`, plus session-only `animationPlayedThisSession` and `homeEntryPlayed`
-  - eventual home: `cart/component-gallery/data/user.ts` → `User.onboarding` (`UserOnboarding` type) — fields and statuses already defined there as the migration target
-- exposedDatashapes: `step`, `totalSteps`, `complete`, `loading`, `setStep`, `markComplete`, `shouldPlayFirstStartAnimation`, `markFirstStartAnimationPlayed`, `homeEntryPlayed`, `markHomeEntryPlayed`, `tourStatus`, `acceptTour`, `declineTour`, `name`, `setName`, `providerKind`, `setProviderKind`, `traits`, `setTraits`, `configPath`, `setConfigPath`, `goal`, `setGoal`
-- Hooks: `useState`, `createContext`, `useContext`
+  - **User** (`cart/component-gallery/data/user.ts`) — id `user_local`, holds `displayName`, `bio`, `configPath`, `preferences.accommodations[]`, `onboarding.{status,step,startedAt,completedAt,skippedAt,tourStatus}`
+  - **Settings** (`settings.ts`) — id `settings_default`, holds `defaultConnectionId` + `defaultModelId` once `commitConnection` runs
+  - **Privacy** (`privacy.ts`) — id `privacy_default`, seeded with sane defaults on first user creation
+  - **Workspace** (`workspace.ts`) — id `ws_local`, `rootPath` from `__cwd` host fn, parent of every Goal row
+  - **Connection** (`connection.ts`) — id auto-generated, kind/credentialRef derived from the Step2 form (api/claude/local pick + endpoint heuristic)
+  - **Goal** (`goal.ts`) — id auto-generated, written at Step5 finish with `originActor='user'`, `userTurnText`/`statement` set from the typed text, `scopeDuration='long-term'`, `status='open'`
+  - session-only (not persisted): `animationPlayedThisSession`, `homeEntryPlayed`
+- exposedDatashapes: `step`, `totalSteps`, `complete`, `loading`, `setStep`, `markComplete`, `markSkipped`, `shouldPlayFirstStartAnimation`, `markFirstStartAnimationPlayed`, `homeEntryPlayed`, `markHomeEntryPlayed`, `tourStatus`, `acceptTour`, `declineTour`, `name`, `setName`, `providerKind`, `setProviderKind`, `commitConnection`, `traits`, `setTraits`, `configPath`, `setConfigPath`, `goal`, `setGoal`
+- Hooks: `useCRUD` ×6, `useState`, `useEffect`, `createContext`, `useContext`, `useRef`
 - Conditions:
-  - `setStep` clamps to `[0, TOTAL_STEPS-1]` and flips `animationPlayedThisSession` when advancing forward
-  - `markComplete` sets `complete=true` AND offers the tour by flipping `tourStatus: null → 'pending'` (only on the first call, via a functional setter — protects the value if persistence later restores `'accepted'` / `'declined'`)
-  - `acceptTour` / `declineTour` set `tourStatus` to the corresponding terminal — banner unmounts immediately
-  - `markHomeEntryPlayed` flips the session-only `homeEntryPlayed` gate so subsequent IndexPage mounts skip the carryover animation
+  - Bootstrap effect on mount: `userStore.get('user_local')` → if null and `SEED_COMPLETED_USER` is true, seed a fully-onboarded record; if null otherwise, hold defaults and let the first setter create the user via `ensureUser`. If non-null, hydrate every slot (displayName, accommodations→traits, configPath, onboarding.{step,status,tourStatus}) and chase the User→Settings→Connection chain to recover `providerKind`, then list latest Goal for `goal`.
+  - `loading=true` until bootstrap resolves (or fails); `page.jsx`'s `if (onb.loading) return null;` becomes load-bearing again
+  - `setStep` clamps to `[0, TOTAL_STEPS-1]`, flips `animationPlayedThisSession` on forward advance, and patches `User.onboarding.step`
+  - `setName` / `setConfigPath` / `setTraits` patch their respective User fields; setters return promises so FirstStep's `Promise.race(setName, 400ms)` ordering still holds
+  - `setProviderKind` is in-memory only — the Connection row is created at Step2's `onNext` via `commitConnection({kind, endpoint?, apiKey?, model?, home?, path?})` so re-trying tiles doesn't churn rows
+  - `commitConnection` reuses an existing Connection row when the kind matches; deletes + recreates on kind mismatch; updates `Settings.defaultConnectionId` + `defaultModelId` to point at it
+  - `setGoal('')` is "I don't know" path — no Goal row is written; `setGoal(<text>)` updates the most recent user-origin Goal for `ws_local`, or creates one if missing (idempotent across edits)
+  - `markComplete` writes `User.onboarding.status='completed'` + `completedAt` + flips `tourStatus: null→'pending'`
+  - `markSkipped` writes `User.onboarding.status='skipped'` + `skippedAt`, leaves `tourStatus=null` (skipped users don't get a tour offer)
+  - `acceptTour` / `declineTour` patch `User.onboarding.tourStatus`
   - `shouldPlayFirstStartAnimation` derived gate: `!complete && step === 0 && !animationPlayedThisSession`
-  - `loading` is hardcoded `false` — `page.jsx` `if (onb.loading) return null;` becomes a dead branch but is left in place for the lock-in flip
 - Components: `Ctx.Provider`
 - Atoms: —
 - isUsingTheme: FALSE
@@ -365,12 +377,12 @@ CHECKLIST:
 - hasAnimation: FALSE
 - Animations: —
 - TODO:
-  - **Lock-in flip:** restore `useCRUD('onboarding', ..., { namespace: 'app' })` + the bootstrap effect, AND simultaneously migrate the persisted record into `User.onboarding`. Don't restore the cart-local record only to migrate later — do both in one pass. Map `configPath` and `goal` into the persisted record at the same time.
-  - Add `markSkipped()` (sets `complete=true` + `skipped=true` + timestamp) for the FirstStep `Skip` path. (`markComplete()` is wired now via Step5.)
-  - Re-wire `markFirstStartAnimationPlayed` to persist `firstStartAnimationSeen=true` (currently a no-op beyond the session flag) when persistence returns.
+  - Resolve `~` in `configPath` to `$HOME` at read-time when the homepage actually consumes it; today the raw string survives untouched
+  - Replace canned model lists in `ApiKeyForm.probe` with a real HTTP call so `commitConnection` doesn't write a placeholder model id
+  - When the homepage adds a "skipped mode" branch, stop hiding the tour banner via `tourStatus=null` and instead skip the offer purely via the `User.onboarding.status === 'skipped'` check
 - PROBLEMS:
-  - State is wiped on every reload. This is the iteration-mode tradeoff, not a bug — see the banner above. If you want to test mid-flow without re-clicking, temporarily seed `useState` defaults at the top of the provider (e.g. `useState(2)` for step) and revert before committing.
-  - All setters are synchronous now. FirstStep's "bounded wait before step advance" was guarding the old CRUD round-trip; safe to keep as-is until persistence returns.
+  - Schemas in `cart/component-gallery/data/*.ts` are JSON Schema documents, not runtime parsers — `useCRUD`'s `Schema<T>` contract is satisfied with identity passthrough today. Validation is the writer's responsibility. Lift to ajv-backed parsers when drift becomes a problem.
+  - Bootstrap reads four to five collections in sequence (User, Settings, Connection, Goal list, plus Workspace/Privacy on first-create). Cold-boot adds a few ms before the loading flag flips; tolerable for now but worth re-examining if it ever feels sluggish.
 
 ---
 
@@ -473,9 +485,9 @@ CHECKLIST:
 
 These need a coordinated touch — not localized to a single file.
 
-- **Onboarding "lock-in" pass** — `state.jsx` is currently in-memory only (no `useCRUD`, no localstore record). Nothing about the onboarding flow persists across reloads on purpose, so iteration doesn't trap us in mid-flow carryover animations. When iteration is done: restore `useCRUD('onboarding', ..., { namespace: 'app' })` + the bootstrap effect, AND in the same pass migrate the shape directly into `User.onboarding` (`cart/component-gallery/data/user.ts`). At that point also flip `firstStartAnimationSeen`, `complete`, and the future `skipped` flag to actually persist. Don't restore the cart-local record only to migrate later — single coordinated change.
-- **Real probes for API-key + Local providers** — both `ApiKeyForm` and `LocalForm` return canned model lists. Wire `runtime/hooks/http.ts` for HTTP-shaped endpoints; keep the `.gguf`-on-disk path as a single-entry list until we have a probe that reads gguf header metadata.
-- **Onboarding completion runtime** — Step5 calls `onb.markComplete()` which only flips an in-memory flag. When the lock-in pass restores persistence, ensure `complete` (plus `name`, `providerKind`, `traits`, `configPath`, `goal`, `tourStatus`) survive a reload so the home placeholder isn't regressed back to step 0 on the next boot, and so a previously-declined tour stays declined.
-- **Tour overlay** — `Chrome.TourBanner` calls `onb.acceptTour()` on Yes, but there is no actual tour overlay yet. When the tour is built, `acceptTour()` should additionally arm the overlay; the banner unmount is already handled by the `tourStatus !== 'pending'` flip. Decline path is fully wired (just hides).
-- **Skipped-mode runtime branch** — when `user.onboarding.status === 'skipped'`, the app must run in a degraded mode. Today there's no consumer of that state; once it's persisted, IndexPage will need a third branch alongside the onboarding / complete-home split. The skipped path should also bypass `tourStatus = 'pending'` (no point offering a tour to a user who chose to skip onboarding).
+- ~~**Onboarding "lock-in" pass**~~ — Done. `state.jsx` writes through `useCRUD` (namespace `app`) into the gallery data graph: User (id `user_local`), Settings (id `settings_default`), Privacy (id `privacy_default`), Workspace (id `ws_local`), plus per-completion Connection + Goal rows. `User.onboarding.{status,step,startedAt,completedAt,skippedAt,tourStatus}` all persist. `state_old.jsx` is the breadcrumb of the prior in-memory shape; safe to delete on the next homepage pass.
+- **Real probes for API-key + Local providers** — both `ApiKeyForm` and `LocalForm` return canned model lists. Wire `runtime/hooks/http.ts` for HTTP-shaped endpoints; keep the `.gguf`-on-disk path as a single-entry list until we have a probe that reads gguf header metadata. Until this lands, the model id `commitConnection` writes to `Settings.defaultModelId` is whatever `chosen` happened to be from the canned list.
+- **Tour overlay** — `Chrome.TourBanner` calls `onb.acceptTour()` on Yes, but there is no actual tour overlay yet. When the tour is built, `acceptTour()` should additionally arm the overlay; the banner unmount is already handled by the `tourStatus !== 'pending'` flip. Decline path is fully wired (just hides). `tourStatus` now persists so a declined tour stays declined across reloads.
+- **Skipped-mode runtime branch** — when `User.onboarding.status === 'skipped'`, the app should run in a degraded mode. State.jsx persists the status correctly today, but IndexPage still treats `complete=true` as one homogenous render path. Add a third branch (alongside onboarding / completed-home) that prompts inline for missing onboarded data when skipped users hit features that need it.
+- **Deferred clarification flow re-arm** — see the deferred-clarify section above. Now that persistence is live, a `clarification` substate on `User.onboarding` (or a sibling field) is a clean place to land `{status, firedAt, answers}` so the notification doesn't refire across reloads.
 - **Goal popover copy** — Step5's tooltip text lives inline in `Step5.jsx` (`GOAL_TOOLTIP`). Move to a content / i18n layer once one exists; today there's no other natural home for it.

@@ -3,33 +3,7 @@ import { classifiers as S } from '@reactjit/core';
 import { SnakeSpinner } from '../../component-gallery/components/grid-spinners/GridSpinners';
 import { useAnimationTimeline } from '../anim';
 import { useOnboarding } from './state';
-
-// Intertwined personality / hobby / preference set. Order is deliberately
-// shuffled so the categories blur — no visual grouping makes one trait feel
-// more or less weighty than another.
-const TRAITS = [
-  { id: 'coffee',         label: 'Coffee person' },
-  { id: 'reader',         label: 'Marathon reader' },
-  { id: 'cyclist',        label: 'Cyclist' },
-  { id: 'night_owl',      label: 'Night owl' },
-  { id: 'detail',         label: 'Detail-oriented' },
-  { id: 'vegetarian',     label: 'Vegetarian' },
-  { id: 'instrument',     label: 'Plays an instrument' },
-  { id: 'big_picture',    label: 'Big-picture thinker' },
-  { id: 'cook',           label: 'Cooking enthusiast' },
-  { id: 'tea',            label: 'Tea person' },
-  { id: 'gamer',          label: 'Gamer' },
-  { id: 'puzzles',        label: 'Loves puzzles' },
-  { id: 'hiker',          label: 'Hiker' },
-  { id: 'scifi',          label: 'Sci-fi reader' },
-  { id: 'anime',          label: 'Anime watcher' },
-  { id: 'early_riser',    label: 'Early riser' },
-  { id: 'indoor',         label: 'Indoor person' },
-  { id: 'outdoor',        label: 'Outdoor person' },
-  { id: 'rock',           label: 'Rock music' },
-  { id: 'electronic',     label: 'Electronic music' },
-  { id: 'philosophy',     label: 'Philosophy reader' },
-];
+import { TRAITS } from './traits';
 
 // Carryover timeline (when user just came from step 2's exit transition).
 const T_HOLD_END        = 500;

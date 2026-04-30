@@ -87,14 +87,15 @@ export default function FirstStep({ animate, onAnimationDone }) {
           } catch {}
         }
         try {
-          if (exiting === 'next' || exiting === 'skip') await onbRef.current.setStep(advanceTo);
+          if (exiting === 'skip') {
+            await onbRef.current.markSkipped();
+          } else if (exiting === 'next') {
+            await onbRef.current.setStep(advanceTo);
+          }
         } catch (e) {
-          console.log('[fs] setStep threw: ' + (e && e.message ? e.message : String(e)));
+          console.log('[fs] dispatch threw: ' + (e && e.message ? e.message : String(e)));
         }
       })();
-      if (exiting === 'skip') {
-        console.log('[onboarding] skip dispatched — flip to skipped mode when locked in');
-      }
     }, EXIT_TOTAL_MS);
     return () => clearTimeout(id);
   }, [exiting, exitStartT]);

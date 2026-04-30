@@ -49,6 +49,8 @@ export type UserAccommodation = {
 
 export type OnboardingStatus = 'pending' | 'completed' | 'skipped';
 
+export type TourStatus = 'pending' | 'accepted' | 'declined';
+
 export type UserOnboarding = {
   status: OnboardingStatus;
   /** Highest step index reached (0-based). Used to resume mid-flow. */
@@ -59,6 +61,13 @@ export type UserOnboarding = {
   completedAt?: string;
   /** ISO timestamp recorded the moment the user pressed "Skip onboarding". */
   skippedAt?: string;
+  /**
+   * Post-completion tour banner state. `'pending'` is set the moment
+   * `markComplete()` runs (banner shows); `'accepted'` / `'declined'`
+   * are terminal and unmount the banner permanently across reloads.
+   * Undefined when the user hasn't yet completed onboarding.
+   */
+  tourStatus?: TourStatus;
 };
 
 export type UserPreferences = {
@@ -85,6 +94,13 @@ export type User = {
    * each session. Keep it short.
    */
   bio?: string;
+  /**
+   * Filesystem home for this app's per-user config. Captured by
+   * onboarding Step3 (`cart/app/onboarding/Step4.jsx`). Identity-grain,
+   * not profile-grain — config path doesn't switch when Settings
+   * profiles do. May contain `~`; resolve at read-time.
+   */
+  configPath?: string;
   activeSettingsId: string;
   createdAt: string;
   preferences: UserPreferences;
@@ -103,6 +119,7 @@ export const userMockData: User[] = [
     displayName: 'josiah',
     bio:
       'Directs technical work through agents. Evaluates outcomes by behavior, not by reading code. Strong views on agent alignment; minimal patience for verbose prose-about-prose.',
+    configPath: '~/.app/config',
     activeSettingsId: 'settings_default',
     createdAt: '2026-03-01T00:00:00Z',
     preferences: {
@@ -164,6 +181,7 @@ export const userSchema: JsonObject = {
       email: { type: 'string' },
       displayName: { type: 'string' },
       bio: { type: 'string' },
+      configPath: { type: 'string' },
       activeSettingsId: { type: 'string' },
       createdAt: { type: 'string' },
       preferences: {
@@ -207,6 +225,10 @@ export const userSchema: JsonObject = {
           startedAt: { type: 'string' },
           completedAt: { type: 'string' },
           skippedAt: { type: 'string' },
+          tourStatus: {
+            type: 'string',
+            enum: ['pending', 'accepted', 'declined'],
+          },
         },
       },
     },

@@ -64,6 +64,12 @@ export default function Step2() {
     }
   }, [lockedIn, lockedAtT]);
 
+  // Connection payload bubbled up from the active form. Lives at step
+  // root so onNext can hand it to commitConnection without each form
+  // having to know about persistence. Cleared on tile switch (each form
+  // calls setCommitPayload(null) on unmount + when lockedIn flips off).
+  const [commitPayload, setCommitPayload] = useState(null);
+
   const [exitStartT, setExitStartT] = useState(null);
   const exitStartTRef = useRef(null);
   exitStartTRef.current = exitStartT;
@@ -80,6 +86,7 @@ export default function Step2() {
     if (exitStartTRef.current != null) return;
     setSelected(kind);
     setLockedIn(false);
+    setCommitPayload(null);
     if (selectedAtTRef.current == null) {
       setSelectedAtT(tl.tRef.current);
     }
@@ -94,6 +101,14 @@ export default function Step2() {
 
   function onNext() {
     if (!lockedIn || exitStartTRef.current != null) return;
+    // Persist the Connection row before kicking off the exit transition.
+    // commitConnection is fire-and-forget — the in-memory cache (and
+    // the visible UI) are already correct from setProviderKind; the
+    // disk write finishes in the background while the exit animation
+    // plays.
+    if (commitPayload) {
+      try { onb.commitConnection(commitPayload); } catch {}
+    }
     setExitStartT(tl.tRef.current);
   }
 
@@ -163,9 +178,9 @@ export default function Step2() {
 
         {selected ? (
           <S.AppStepDimmable style={{ opacity: formOp, marginTop: (1 - formOp) * 12 }}>
-            {selected === 'api'    ? <ApiKeyForm   setLockedIn={setLockedIn} /> : null}
-            {selected === 'claude' ? <ClaudeForm   setLockedIn={setLockedIn} /> : null}
-            {selected === 'local'  ? <LocalForm    setLockedIn={setLockedIn} /> : null}
+            {selected === 'api'    ? <ApiKeyForm   setLockedIn={setLockedIn} setCommitPayload={setCommitPayload} /> : null}
+            {selected === 'claude' ? <ClaudeForm   setLockedIn={setLockedIn} setCommitPayload={setCommitPayload} /> : null}
+            {selected === 'local'  ? <LocalForm    setLockedIn={setLockedIn} setCommitPayload={setCommitPayload} /> : null}
           </S.AppStepDimmable>
         ) : null}
       </S.AppStepCenterCol>
@@ -290,7 +305,7 @@ function ModelList({ models, selectedModel, onSelect }) {
 
 // ── 1) API-key provider ───────────────────────────────────────────────
 
-function ApiKeyForm({ setLockedIn }) {
+function ApiKeyForm({ setLockedIn, setCommitPayload }) {
   const [endpoint, setEndpoint] = useState('https://api.openai.com/v1');
   const [apiKey, setApiKey] = useState('');
   const [models, setModels] = useState(null);
@@ -308,9 +323,11 @@ function ApiKeyForm({ setLockedIn }) {
     (typeof apiKey === 'string' && apiKey.trim().length > 0);
 
   useEffect(() => {
-    setLockedIn(status === 'success' && chosen != null);
-  }, [status, chosen]);
-  useEffect(() => () => setLockedIn(false), []);
+    const ok = status === 'success' && chosen != null;
+    setLockedIn(ok);
+    setCommitPayload(ok ? { kind: 'api', endpoint, apiKey, model: chosen } : null);
+  }, [status, chosen, endpoint, apiKey]);
+  useEffect(() => () => { setLockedIn(false); setCommitPayload(null); }, []);
 
   async function probe() {
     setBusy(true);
@@ -345,7 +362,7 @@ function shellQuote(s) {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
-function ClaudeForm({ setLockedIn }) {
+function ClaudeForm({ setLockedIn, setCommitPayload }) {
   const [home, setHome] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null);
@@ -357,9 +374,11 @@ function ClaudeForm({ setLockedIn }) {
   const hasAnyInput = typeof home === 'string' && home.trim().length > 0;
 
   useEffect(() => {
-    setLockedIn(status === 'success');
-  }, [status]);
-  useEffect(() => () => setLockedIn(false), []);
+    const ok = status === 'success';
+    setLockedIn(ok);
+    setCommitPayload(ok ? { kind: 'claude', home } : null);
+  }, [status, home]);
+  useEffect(() => () => { setLockedIn(false); setCommitPayload(null); }, []);
 
   async function probe() {
     setBusy(true);
@@ -406,7 +425,7 @@ function ClaudeForm({ setLockedIn }) {
 
 // ── 3) Local models provider ──────────────────────────────────────────
 
-function LocalForm({ setLockedIn }) {
+function LocalForm({ setLockedIn, setCommitPayload }) {
   const tl = useAnimationTimeline({});
   const [path, setPath] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -430,9 +449,11 @@ function LocalForm({ setLockedIn }) {
     (typeof apiKey === 'string' && apiKey.trim().length > 0);
 
   useEffect(() => {
-    setLockedIn(status === 'success' && chosen != null);
-  }, [status, chosen]);
-  useEffect(() => () => setLockedIn(false), []);
+    const ok = status === 'success' && chosen != null;
+    setLockedIn(ok);
+    setCommitPayload(ok ? { kind: 'local', path, apiKey, model: chosen } : null);
+  }, [status, chosen, path, apiKey]);
+  useEffect(() => () => { setLockedIn(false); setCommitPayload(null); }, []);
   useEffect(() => {
     setHasProbed(false);
     setStatus(null);
