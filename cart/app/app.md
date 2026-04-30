@@ -420,6 +420,52 @@ CHECKLIST:
 
 ---
 
+## Deferred clarification flow (planned)
+
+The current shape of `onboarding-first-impression` (see `cart/app/recipes/onboarding-first-impression.tsx`) is a **synchronous** 2-turn flow that would block the user at the end of Step 5 while the model asks 3 clarifying questions, waits for answers, then writes the profile. That's friction on the most fragile boundary in the app — the moment the user finally crosses out of onboarding. The plan is to **defer the clarifying turn** so onboarding completes immediately and the clarification surfaces opportunistically once the user is settled.
+
+### Planned shape — Deferred clarification — Stub
+
+CHECKLIST:
+- Purpose: After Step 5 finishes, the user transitions into the home menu as today (no extra wait). Once they're settled in `HomeStatic`, at the next quiet moment — defined as *the model finished its current response AND the user hasn't typed for N seconds* — a small notification slides in from the side with copy like "Care to clarify?". Two responses: **No** dismisses and triggers a one-shot V1-style raw write of `first_impression.md` from the onboarding signal alone (no questions, no waiting). **Yes** expands the notification into an inline quick-respond surface: the model's 3 clarifying questions appear, the user types answers (compact, not full chat), then the V3 clarify-loop write fires and the notification collapses with a "saved" beat. Either path produces the same `first_impression.md` artifact; the path differs only in how much signal it carries.
+- isRoute: FALSE (lives inside the home shell, not a route)
+- Route: —
+- hasDatashape: TBD — likely a `clarification` substate in `User.onboarding` carrying `{ status: 'pending' | 'dismissed' | 'answered' | 'skipped', firedAt?, answeredAt?, answers?: string[] }`. Lock in alongside the onboarding lock-in pass (see Open threads).
+- Datashape: reads `OnboardingProvider` (name / traits / goal / configPath / providerKind) at fire time; writes the chosen-path artifact to `<configPath>/first_impression.md`.
+- exposedDatashapes: `clarificationStatus`, `markClarificationFired`, `markClarificationDismissed`, `markClarificationAnswered(answers[])`
+- Hooks: `useOnboarding`, `useIFTTT('system:claude:idle', ...)`, `useIFTTT('user:settled', ...)` or equivalent activity gate, a small dedicated animation timeline for the slide-in/expand notification
+- Conditions:
+  - **Fire gate:** `onb.complete && onb.homeEntryPlayed && clarificationStatus === null && claudeIsIdle && userIdleFor >= QUIET_MS` — all four must hold simultaneously. Default `QUIET_MS = ~6000` (long enough that we're not interrupting), tuned later.
+  - **Dismiss path:** No → spawn the writing model with the V1 fragment + onboarding signal alone (no question turn). Persist `clarificationStatus = 'dismissed'` so we don't refire.
+  - **Expand path:** Yes → expand the notification into the quick-respond surface, fire turn 1 of the recipe (3 clarifying questions), wait for the user's answers, fire turn 2 (write). Persist `clarificationStatus = 'answered'`.
+  - **Skipped onboarding path:** if `user.onboarding.status === 'skipped'`, the recipe never fires (no signal to clarify against). Persist `clarificationStatus = 'skipped'`.
+  - **Re-arming:** the notification fires at most once per onboarding completion. After dismiss/answered, it does not return on subsequent boots.
+- Components: `ClarifyNotification` (the slide-in card), `ClarifyExpanded` (the inline Q&A surface that grows from the notification), reuse `S.Button` / `S.ButtonOutline` for the actions, reuse `SnakeSpinner` while the writing turn runs
+- Atoms: `Box`, `TextInput` (for the answer fields), classifiers TBD (likely `AppClarifyCard`, `AppClarifyCardExpanded`, `AppClarifyQuestion`, `AppClarifyAnswerInput`, `AppClarifyActions` — add to `components.cls.ts` when the surface lands)
+- isUsingTheme: TRUE (every surface a classifier — same rule as the rest of cart/app)
+- hasIcons: TBD — probably a small bell / sparkle in the notification chrome
+- Icons: —
+- hasAnimation: TRUE
+- Animations:
+  - Slide-in (notification appears): ~400 ms ease-out, from off-screen-right to the corner
+  - Expand (Yes click): the card height + width grow to fit the Q&A surface, ~500 ms with the questions fading in 200 ms after the size change starts
+  - Collapse on dismiss (No click): card slides back out as the V1 write fires in the background; spinner momentarily replaces the card body if the write is slow
+  - Collapse on answered: card shows a one-line "saved" beat (~700 ms), then slides out
+  - Re-fire suppression: the notification never animates in again once `clarificationStatus !== null`
+- TODO:
+  - Define the activity gate (`system:claude:idle` event, plus a userActivity ref or a `useIdle(QUIET_MS)` hook against keystrokes / mouse / scroll). Likely needs a new tiny hook: `useQuietWindow(quietMs, deps)` returning a boolean.
+  - Wire the recipe two ways from the cart-side gate: the existing `onboarding-first-impression.tsx` recipe owns the prompt fragments and source kind; the cart-side gate decides whether to fire turn 1 (question turn) or skip directly to a write turn that uses the onboarding signal alone. **No changes needed to the recipe stamp itself** — only the cart-side firing logic.
+  - Decide the writing path for the **dismiss** branch: either reuse the same recipe with a third "raw" prompt fragment (cleanest), or fire `system_prompt_only(write_after_clarify)` with no answers and let the model handle it. Cleanest is to add a `frag_onboarding_write_raw` to the recipe — same shape, no "given the answers" framing — and select via the prompt composition's first-match.
+  - Persist `clarificationStatus` alongside the rest of the onboarding record in `User.onboarding`, in the same lock-in pass that restores `useCRUD`.
+  - Decide notification copy ("Care to clarify?" was the user's phrasing — likely keeps it, but worth A/B'ing once we have telemetry).
+- PROBLEMS:
+  - **Cross-cuts the lock-in pass.** The activity gate is meaningless without persistence, because every reload would refire the notification. Land this *after* the onboarding lock-in.
+  - **Activity-gate definition is the hard part.** "User has settled" is not a bright line — typing-quiet-for-N-seconds is the cheap version, but a user reading something on screen looks identical to an idle user. First version stays cheap; consider scroll/mouse signals later if false-fires are common.
+  - **Notification interrupts.** Even a soft slide-in is an interrupt. If the user is mid-thought when it appears, dismissing feels worse than not seeing it. The QUIET_MS default needs to be generous; a click anywhere outside the notification while it's animating in could pre-emptively defer it (re-arm 30s out).
+  - **Recipe changes are minimal but real.** Adding `frag_onboarding_write_raw` to the recipe stamp + a third source on the prompt composition's first-match list is a small change; do it as part of this work, not as part of the recipe authoring.
+
+---
+
 ## Open threads (cross-file)
 
 These need a coordinated touch — not localized to a single file.
