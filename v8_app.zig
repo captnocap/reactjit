@@ -144,6 +144,11 @@ const v8_bindings_privacy = if (build_options.has_privacy) @import("framework/v8
 const v8_bindings_sdk = if (build_options.has_sdk) @import("framework/v8_bindings_sdk.zig") else struct {
     pub fn registerSdk(_: anytype) void {}
 };
+const HAS_VOICE = if (@hasDecl(build_options, "has_voice")) build_options.has_voice else false;
+const v8_bindings_voice = if (HAS_VOICE) @import("framework/v8_bindings_voice.zig") else struct {
+    pub fn registerVoice(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
 
 const INGREDIENTS = [_]Ingredient{
     // Framework-essential (always-on). These bindings expose host fns the
@@ -177,6 +182,7 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "tor", .required = false, .grep_prefix = "__tor_", .reg_fn = "registerTor", .mod = v8_bindings_tor },
     .{ .name = "privacy", .required = false, .grep_prefix = "__priv_", .reg_fn = "registerPrivacy", .mod = v8_bindings_privacy },
     .{ .name = "sdk", .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk", .mod = v8_bindings_sdk },
+    .{ .name = "voice", .required = false, .grep_prefix = "__voice_", .reg_fn = "registerVoice", .mod = v8_bindings_voice },
 };
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
@@ -2188,15 +2194,7 @@ fn applyCommandBatch(json_bytes: []const u8) void {
     const parse_us = t1 - t0;
     const apply_us = t2 - t1;
     const cleanup_us = t3 - t2;
-    const verbose_batches = std.posix.getenv("REACTJIT_VERBOSE_BATCHES") != null;
-    const should_log_batch =
-        verbose_batches or
-        json_bytes.len > 100_000 or
-        cmd_count > 500 or
-        parse_us >= 1000 or
-        apply_us >= 1000 or
-        cleanup_us >= 1000;
-    if (should_log_batch) {
+    if (std.posix.getenv("REACTJIT_VERBOSE_BATCHES") != null) {
         std.debug.print("[batch-timing] bytes={d} cmds={d} parse={d}ms apply={d}ms cleanup={d}ms\n", .{
             json_bytes.len,              cmd_count,
             @divTrunc(parse_us, 1000),   @divTrunc(apply_us, 1000),
@@ -2661,8 +2659,13 @@ fn clearTreeStateForReload() void {
     for (g_press_expr_pool.items) |s| g_alloc.free(s);
     g_press_expr_pool.clearRetainingCapacity();
 
-    // pending_flush queue is owned by v8_bindings_core; draining here isn't
-    // needed for reload since bindings will also lose their queue on VM tear-down.
+    // pending_flush queue is owned by v8_bindings_core. The original code
+    // skipped this on the assumption that VM tear-down would free the queue —
+    // but reload only swaps the V8 Context, NOT the VM. Stale batches queued
+    // by the prior bundle that survive into the new bundle's eval get replayed
+    // on top of fresh React-assigned node IDs, building cycles in
+    // g_children_ids and wedging materializeChildren in infinite recursion.
+    v8_bindings_core.clearPendingFlushForReload();
 
     // Unregister every live input slot so framework/input.zig doesn't keep
     // dispatching callbacks that read into the freed Node pool.
@@ -2883,6 +2886,12 @@ fn appInit() void {
 }
 
 fn appTick(now: u32) void {
+    // ── PROBE: first-tick milestones (only first 3 ticks log) ──
+    const _probe_n = struct { var v: u32 = 0; };
+    _probe_n.v += 1;
+    const _probe = _probe_n.v <= 3;
+    if (_probe) std.debug.print("[probe-tick] #{d} entry now={d}\n", .{ _probe_n.v, now });
+
     // Dev-mode: accept incoming IPC pushes (may switch the active tab) and
     // check the active tab's disk source for mtime-triggered reloads. Either
     // path tears down the JS world and re-evals before the rest of the frame.
@@ -2890,6 +2899,7 @@ fn appTick(now: u32) void {
         dev_ipc.pollOnce();
         processIncomingPushes();
     }
+    if (_probe) std.debug.print("[probe-tick] #{d} after dev_ipc+push\n", .{_probe_n.v});
     maybeScheduleReload();
     if (g_reload_pending) {
         g_reload_pending = false;
@@ -2901,7 +2911,9 @@ fn appTick(now: u32) void {
     // in the bundle are implemented against this — see runtime/index.tsx.
     // This may append new batches to g_pending_flush via React commits triggered
     // from handlers that ran inside timers. Drain after.
+    if (_probe) std.debug.print("[probe-tick] #{d} before __jsTick\n", .{_probe_n.v});
     v8_runtime.callGlobalInt("__jsTick", @intCast(now));
+    if (_probe) std.debug.print("[probe-tick] #{d} after __jsTick\n", .{_probe_n.v});
 
     // Per-tick drains for every binding domain that defines tickDrain().
     // Required bindings (core, websocket) and opt-in bindings (httpsrv,
@@ -2911,25 +2923,31 @@ fn appTick(now: u32) void {
     // runtime/ffi.ts), so emit-during-tick is observed by JS on the NEXT
     // __jsTick — no ordering dependency vs the call above.
     inline for (INGREDIENTS) |ing| if (@hasDecl(ing.mod, "tickDrain")) ing.mod.tickDrain();
+    if (_probe) std.debug.print("[probe-tick] #{d} after tickDrain\n", .{_probe_n.v});
 
     // Apply any CMD batches that accumulated during press events since last tick.
     // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
     drainPendingFlushes();
+    if (_probe) std.debug.print("[probe-tick] #{d} after drainPendingFlushes\n", .{_probe_n.v});
     windows.tickIndependent();
     cleanupClosedHostWindows();
+    if (_probe) std.debug.print("[probe-tick] #{d} after windows+cleanup, dirty={}\n", .{ _probe_n.v, g_dirty });
 
     if (g_dirty) {
+        if (_probe) std.debug.print("[probe-tick] #{d} before snapshotRuntimeState\n", .{_probe_n.v});
         const t0 = std.time.microTimestamp();
         snapshotRuntimeState();
         const t1 = std.time.microTimestamp();
+        if (_probe) std.debug.print("[probe-tick] #{d} before rebuildTree\n", .{_probe_n.v});
         rebuildTree();
         const t2 = std.time.microTimestamp();
+        if (_probe) std.debug.print("[probe-tick] #{d} before markLayoutDirty\n", .{_probe_n.v});
         layout.markLayoutDirty();
         g_dirty = false;
         g_scroll_prop_slots.clearRetainingCapacity();
         const snap_us = t1 - t0;
         const rebuild_us = t2 - t1;
-        if (snap_us > 1000 or rebuild_us > 1000) {
+        if (std.posix.getenv("REACTJIT_VERBOSE_BATCHES") != null) {
             // Count the tree size for context.
             var node_count: usize = 0;
             var kid_it = g_children_ids.valueIterator();
@@ -2937,6 +2955,7 @@ fn appTick(now: u32) void {
             std.debug.print("[rebuild-timing] snapshot={d}us rebuildTree={d}us nodes={d} (g_node_by_id={d})\n", .{ snap_us, rebuild_us, node_count, g_node_by_id.count() });
         }
     }
+    if (_probe) std.debug.print("[probe-tick] #{d} END\n", .{_probe_n.v});
 }
 
 fn childTitle() [*:0]const u8 {

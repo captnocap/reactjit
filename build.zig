@@ -195,6 +195,33 @@ pub fn build(b: *std.Build) void {
     root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
     root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
 
+    // ── libfvad (WebRTC VAD) ─────────────────────────────────
+    // Tiny (~1500 LOC), BSD-licensed, no deps. Always linked because
+    // framework/voice.zig (mic capture + utterance state machine) is wired
+    // unconditionally into engine.run, mirroring clipboard_watch.zig. Cost:
+    // a few dozen KB of binary and zero runtime cost when no cart calls
+    // __voice_start. The has-voice gate only controls v8_bindings_voice
+    // host-fn registration, not whether the C is compiled.
+    root_mod.addIncludePath(b.path("deps/libfvad/include"));
+    root_mod.addCSourceFiles(.{
+        .root = b.path("deps/libfvad/src"),
+        .files = &.{
+            "fvad.c",
+            "signal_processing/division_operations.c",
+            "signal_processing/energy.c",
+            "signal_processing/get_scaling_square.c",
+            "signal_processing/resample_48khz.c",
+            "signal_processing/resample_by_2_internal.c",
+            "signal_processing/resample_fractional.c",
+            "signal_processing/spl_inl.c",
+            "vad/vad_core.c",
+            "vad/vad_filterbank.c",
+            "vad/vad_gmm.c",
+            "vad/vad_sp.c",
+        },
+        .flags = &.{ "-O2", "-fPIC", "-std=c11" },
+    });
+
     // ── Framework FFI shims ────────────────────────────────────
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
     if (has_physics) {
@@ -241,6 +268,7 @@ pub fn build(b: *std.Build) void {
     const has_telemetry = b.option(bool, "has-telemetry", "Register __tel_*/getFps/... bindings") orelse false;
     const has_zigcall = b.option(bool, "has-zigcall", "Register __zig_call/__zig_call_list bindings") orelse false;
     const has_sdk = b.option(bool, "has-sdk", "Register __http_request_*/__fetch/__claude_*/__kimi_*/__localai_*/__browser_*/__ipc_*/__play_*/__rec_* bindings") orelse false;
+    const has_voice = b.option(bool, "has-voice", "Register __voice_* bindings (mic + WebRTC VAD)") orelse false;
     options.addOption(bool, "has_process", has_process);
     options.addOption(bool, "has_httpsrv", has_httpsrv);
     options.addOption(bool, "has_wssrv", has_wssrv);
@@ -251,6 +279,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_telemetry", has_telemetry);
     options.addOption(bool, "has_zigcall", has_zigcall);
     options.addOption(bool, "has_sdk", has_sdk);
+    options.addOption(bool, "has_voice", has_voice);
 
     // ── Allergen label: V8 binding manifest ───────────────────────────
     // Writes one file per opt-in domain to zig-out/manifest/<name>.flag
@@ -271,6 +300,7 @@ pub fn build(b: *std.Build) void {
     _ = manifest_wf.add("v8-ingredients/telemetry.flag", if (has_telemetry) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/zigcall.flag", if (has_zigcall) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/sdk.flag", if (has_sdk) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/voice.flag", if (has_voice) "1\n" else "0\n");
     const install_manifest = b.addInstallDirectory(.{
         .source_dir = manifest_wf.getDirectory(),
         .install_dir = .prefix,

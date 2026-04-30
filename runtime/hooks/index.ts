@@ -115,6 +115,8 @@ export type {
 } from './useTelemetry';
 export { useCRUD } from './useCRUD';
 export { useMedia } from './useMedia';
+export { useVoiceInput } from './useVoiceInput';
+export type { VoiceInputOptions, VoiceInputResult } from './useVoiceInput';
 
 export * from '../ffi';
 

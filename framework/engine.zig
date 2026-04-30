@@ -22,6 +22,7 @@ const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
 const fswatch = @import("fswatch.zig");
 const clipboard_watch = @import("clipboard_watch.zig");
+const voice = @import("voice.zig");
 const system_signals = @import("system_signals.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
@@ -1115,7 +1116,9 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     const bold = node.font_weight >= 600;
     if (bold) gpu.setBold(true);
     const draw_width = if (node.no_wrap) @as(f32, 0) else max_width;
-    const text_h = gpu.drawTextWrapped(
+    // Route through the text engine so paint shares the wordWrap algorithm
+    // with measurement — single source of truth for line breaks.
+    const text_h = if (g_text_engine) |te| te.drawTextWrappedRGBA(
         text,
         x,
         y,
@@ -1126,7 +1129,9 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
         @as(f32, @floatFromInt(color.b)) / 255.0,
         final_a,
         max_lines,
-    );
+        node.letter_spacing,
+        node.line_height,
+    ) else 0;
     if (node.line_height > 0) gpu.setLineHeightOverride(0);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(0);
     if (bold) gpu.setBold(false);
@@ -2696,11 +2701,17 @@ pub fn run(config_in: AppConfig) !void {
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO)) return error.SDLInitFailed;
     defer {
+        voice.deinit();
         c.SDL_Quit();
         watchdog.markCleanExit();
         crashlog.markCleanShutdown();
     }
     log.info(.engine, "SDL initialized", .{});
+
+    // Mic-capture + WebRTC VAD scaffolding. Cheap when idle (no SDL stream
+    // opened until JS calls __voice_start). Always present so carts can
+    // useVoiceInput() without scripts/ship needing to flip a fresh -Dhas-X.
+    voice.init(std.heap.c_allocator);
 
     // Canvas system init
     canvas.init();
@@ -3889,6 +3900,7 @@ pub fn run(config_in: AppConfig) !void {
         r3d.update(dt_sec);
         fswatch.tick(dt_ms);
         clipboard_watch.tick(dt_ms);
+        voice.tick(dt_ms);
         system_signals.tick(dt_ms);
 
         // Paint (main window — wgpu)

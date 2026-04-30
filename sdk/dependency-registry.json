@@ -375,6 +375,14 @@
       "v8Bindings": ["sdk"],
       "nativeLibraries": ["curl", "tls.zig"]
     },
+    "voice": {
+      "shipGate": "voice",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/useVoiceInput.ts" }
+      ],
+      "buildOptions": ["has-voice"],
+      "v8Bindings": ["voice"]
+    },
     "lua-worker": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/lua-worker.ts" }
@@ -384,6 +392,6 @@
     }
   },
   "shipGate": {
-    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk"]
+    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk", "voice"]
   }
 }
