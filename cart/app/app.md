@@ -203,10 +203,12 @@ CHECKLIST:
     - Dispatch `setStep(2)` at 1900 ms
 - TODO:
   - Replace stubbed model list in `ApiKeyForm.probe` with a real `http.getAsync` to `${endpoint}/models`.
-  - Decide what the Claude `home` field actually does. Currently it gets baked into `HOME=…` for the probe AND stored as `Connection.credentialRef.locator` (`source: 'cli-session'`) by `commitConnection`.
+  - **Claude config-dir runtime plumbing.** The `home` field captures which Claude install to use (`~/.claude` vs `~/.claude-overflow` etc.) and `commitConnection` writes it to `Connection.credentialRef.locator`, but `framework/claude_sdk/options.zig` has no `home_dir` field — the runtime SDK inherits HOME from the cart process and ignores the locator. Wiring this requires adding a `config_dir` (or `home_dir`) option that gets baked into the spawned subprocess's env in `framework/claude_sdk/argv.zig` / `session.zig`. Onboarding capture is correct today; the rendezvous is on the runtime side.
+  - Settings UI for adding additional Connections (so a user with multiple Claude installs can register the second one without re-running onboarding) — `Settings has-many Connections` is already in the gallery shape, just no editor.
 - PROBLEMS:
   - API-key probe still returns a canned model list; local probe does live HTTP probing (`/models`, `/v1/models`, `/api/tags`) and parses model IDs. Until the API probe is real, `Settings.defaultModelId` ends up holding whichever stubbed name the user picks.
   - The Claude probe relies on `claude` being on `$PATH` of the cart's process — no fallback if it isn't.
+  - The Claude install-dir path math (`probe()` strips the basename to set HOME=parent) assumes the user enters a `*/.claude` or `*/.claude-overflow`-shape path. A custom config dir not matching that layout would still probe via the parent — usually fine, but worth tightening if it ever surfaces a confused error.
 
 ---
 

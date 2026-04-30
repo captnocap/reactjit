@@ -358,12 +358,29 @@ const CLAUDE_PROBE_PROMPT =
   "Testing connection to Claude Code SDK. If this lands, respond with 'Hey! It worked!' exactly";
 const CLAUDE_EXPECTED = "Hey! It worked!";
 
+// Curated short list. The Claude Code CLI accepts model ids via
+// `--model <id>` at runtime. Most users want one of these three; power
+// users can edit the Connection row directly via Settings later.
+const CLAUDE_MODELS = [
+  'claude-opus-4-7',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+];
+
+const CLAUDE_DEFAULT_HOME = '~/.claude';
+
 function shellQuote(s) {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
 function ClaudeForm({ setLockedIn, setCommitPayload }) {
-  const [home, setHome] = useState('');
+  // `home` is the install dir whose parent gets used as `HOME` when
+  // invoking `claude`. Most users have a single `~/.claude`; users with
+  // multiple Claude accounts (e.g. `~/.claude` + `~/.claude-overflow`)
+  // pick one here and add the others through Settings later. The
+  // runtime SDK doesn't honor this yet — see app.md TODO.
+  const [home, setHome] = useState(CLAUDE_DEFAULT_HOME);
+  const [chosen, setChosen] = useState(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState('');
@@ -374,11 +391,18 @@ function ClaudeForm({ setLockedIn, setCommitPayload }) {
   const hasAnyInput = typeof home === 'string' && home.trim().length > 0;
 
   useEffect(() => {
-    const ok = status === 'success';
+    const ok = status === 'success' && chosen != null;
     setLockedIn(ok);
-    setCommitPayload(ok ? { kind: 'claude', home } : null);
-  }, [status, home]);
+    setCommitPayload(ok ? { kind: 'claude', home, model: chosen } : null);
+  }, [status, chosen, home]);
   useEffect(() => () => { setLockedIn(false); setCommitPayload(null); }, []);
+
+  // Re-probing after editing the home field invalidates the prior
+  // success — the user might be pointing at a different install now.
+  useEffect(() => {
+    setStatus(null);
+    setMessage('');
+  }, [home]);
 
   async function probe() {
     setBusy(true);
@@ -386,8 +410,13 @@ function ClaudeForm({ setLockedIn, setCommitPayload }) {
     setMessage('');
     const homeVal = homeRef.current.trim();
     const promptArg = shellQuote(CLAUDE_PROBE_PROMPT);
+    // The user enters the install dir (e.g. `~/.claude` or
+    // `~/.claude-overflow`). The CLI looks at `$HOME/.claude/`, so we
+    // strip the install-dir basename and set HOME to its parent.
+    const expanded = homeVal.replace(/^~/, '$HOME');
+    const parent = expanded.replace(/\/[^/]+\/?$/, '') || '$HOME';
     const cmd = homeVal
-      ? `HOME=${shellQuote(homeVal.replace(/^~/, '$HOME'))} claude --print ${promptArg}`
+      ? `HOME=${shellQuote(parent)} claude --print ${promptArg}`
       : `claude --print ${promptArg}`;
     console.log(`[onboarding] claude probe: ${cmd}`);
     try {
@@ -410,15 +439,18 @@ function ClaudeForm({ setLockedIn, setCommitPayload }) {
   return (
     <FormShell>
       <LabeledInput
-        label="Claude Code home folder"
+        label="Claude config dir"
         value={home}
         onChange={setHome}
-        placeholder="~/.claude"
+        placeholder={CLAUDE_DEFAULT_HOME}
       />
       <S.AppFormButtonRow>
         <ProbeButton enabled={hasAnyInput} busy={busy} label="Probe Claude" onPress={probe} />
       </S.AppFormButtonRow>
       <ProbeResult status={status} message={message} />
+      {status === 'success' ? (
+        <ModelList models={CLAUDE_MODELS} selectedModel={chosen} onSelect={setChosen} />
+      ) : null}
     </FormShell>
   );
 }
