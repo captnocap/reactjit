@@ -568,7 +568,7 @@ fn hostProcStat(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     if (info.length() < 1) return;
     const pid = argToI32(info, 0) orelse return;
     const sample = readProcSample(pid) orelse {
-        info.getReturnValue().set(v8.Null.init(info.getIsolate()));
+        info.getReturnValue().set(v8.initNull(info.getIsolate()).toValue());
         return;
     };
     var json_buf: [256]u8 = undefined;
