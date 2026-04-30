@@ -36,18 +36,32 @@ import {
 
 // ── The two-turn contract ─────────────────────────────────────────────────
 
-const CLARIFY_INSTRUCTION = `You are about to write a first_impression.md profile of a new user, but first you need a little more signal than the bare onboarding gave you.
+const CLARIFY_INSTRUCTION = `You are about to write a first_impression.md profile of a new user, but first you need a little more signal than the bare onboarding gave you. Before writing anything, ask the user 3 short clarifying questions — questions you genuinely cannot answer from the onboarding fields alone.
 
-Before writing anything, ask the user 3 short clarifying questions about their goal and how they work — questions you genuinely cannot answer from the onboarding fields alone.
+The cart renders your response as a real UI surface using the chat-loom tagset (see cart/chat-loom.tsx for the canonical reference). Emit the three questions as a single Form so the user can answer them all at once.
 
 Output format on this turn ONLY:
-Q1: ...
-Q2: ...
-Q3: ...
 
-Do not write the profile yet. Do not call any tools yet. Just emit the three questions on three lines.`;
+Wrap the ENTIRE response in [ ... ]. Inside, use ONLY these tags:
+  <Col>                          vertical container
+  <Title>...</Title>             one short framing line above the form
+  <Text>...</Text>               (optional) one-line lead-in
+  <Form>                         wraps the questions
+    <Field name="q1" label="full question text in plain language" placeholder="short hint" />
+    <Field name="q2" label="..." placeholder="..." />
+    <Field name="q3" label="..." placeholder="..." />
+    <Submit reply="A1: {q1}\\nA2: {q2}\\nA3: {q3}">Send</Submit>
+  </Form>
 
-const WRITE_AFTER_CLARIFY_INSTRUCTION = `You now have onboarding context AND the user's answers to your clarifying questions. Write a markdown profile of this user using the Write tool, at the path the cart wired into your system prompt.
+Rules:
+- Always wrap the entire output in [ ... ].
+- Exactly 3 <Field>s named q1, q2, q3 — the next turn parses on those names.
+- The <Submit reply> attribute MUST be the exact template above. Each {qN} interpolates that field's value back into the user-turn reply.
+- Labels are the actual questions in plain language ("What does breaking even mean to you in year one?"), not field-name shorthand.
+- Placeholders are short hints — a few words.
+- No other tags. No HTML. No markdown. No tools. Do not write the profile yet.`;
+
+const WRITE_AFTER_CLARIFY_INSTRUCTION = `You now have onboarding context AND the user's answers to your clarifying questions (delivered as the user-turn message in "A1: ... / A2: ... / A3: ..." form, interpolated from the chat-loom Form you emitted last turn). Write a markdown profile of this user using the Write tool, at the path the cart wired into your system prompt.
 
 Cover:
 - Who they seem to be (synthesizing onboarding + answers)

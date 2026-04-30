@@ -20,14 +20,21 @@ Claude path).
 
 ## The two turns
 
-**Turn 1 — clarify.** The model receives the 3 onboarding
-fields and a system-prompt instruction to emit exactly 3 short
-clarifying questions about the user's goal and how they work.
-No tools, no profile yet. The cart captures the questions and
-surfaces them to the user as a short Q&A surface.
+**Turn 1 — clarify (chat-loom Form).** The model receives the
+3 onboarding fields and a system-prompt instruction to emit a
+chat-loom UI tree (see `cart/chat-loom.tsx` for the canonical
+tagset reference) — specifically a single `<Form>` with three
+`<Field>`s named `q1` / `q2` / `q3` and a `<Submit>` whose
+`reply` template is `"A1: {q1}\nA2: {q2}\nA3: {q3}"`. The cart
+parses with `runtime/intent/parser.parseIntent`, renders with
+`runtime/intent/render.RenderIntent`, and the user answers all
+three at once. On submit, the interpolated reply string ("A1:
+... / A2: ... / A3: ...") becomes the user-turn message of
+turn 2 — no custom Q&A surface to design, the model decides
+the labels and placeholders.
 
-**Turn 2 — write.** With the user's answers in hand, the model
-calls `Write` once to produce
+**Turn 2 — write.** With the interpolated answers in hand, the
+model calls `Write` once to produce
 `<config_dir>/first_impression.md`. The cart's `useIFTTT` hook
 on `system:claude:write` for that filename swaps the
 onboarding shell out and the welcome surface in.
@@ -100,3 +107,14 @@ The harness and the per-variant outputs are not checked in
 reproduce: build `bench/claude_runner` via
 `bench/build_claude_runner.sh`, then run
 `python3 /tmp/first_impressions/run.py`.
+
+**Caveat — chat-loom shape not yet end-to-end tested.** The
+variance probe ran turn 1 with plain-text `Q1: / Q2: / Q3:`
+output. The recipe's current turn-1 fragment asks for the
+chat-loom Form wrapper instead — same logical clarify-loop,
+just rendered as a real UI surface. The wrapper change should
+not affect output quality (the model still asks 3 questions,
+the user still answers, the same string format reaches turn
+2), but a re-run of the harness in the chat-loom shape would
+confirm it. Worth doing once the cart-side render path is
+wired into the home shell.
