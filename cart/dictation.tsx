@@ -31,18 +31,70 @@ const C = {
 // agreement. Dim words signal "verify this; only one model said it."
 const SHADES = ['#475569', '#94a3b8', '#cbd5e1', '#f8fafc'];
 
+// Consensus → colour mapping. Low-confidence words pop visually so the
+// reader can spot likely hallucinations at a glance.
+function consensusColor(votes: number, max: number): string {
+  const ratio = votes / max;
+  if (ratio >= 0.99) return '#f8fafc';        // full agreement → bright white
+  if (ratio >= 0.66) return '#cbd5e1';        // strong → light grey
+  if (ratio >= 0.5) return '#fbbf24';         // mid → amber (verify)
+  return '#fb7185';                           // weak → rose (probably wrong)
+}
+
+interface WordCandidate { word: string; sources: string[] }
+
+function EnsembleWordView({
+  word, votes, candidates, max, fontSize = 18,
+}: {
+  word: string;
+  votes: number;
+  candidates: WordCandidate[];
+  max: number;
+  fontSize?: number;
+}) {
+  const color = consensusColor(votes, max);
+  const isLow = votes < max;
+  // Show alternates only when the winning slot didn't sweep AND there are
+  // actually losing candidates with different words.
+  const losers = candidates.filter((c) => c.word !== word);
+  const showAlts = isLow && losers.length > 0;
+  return (
+    <Row style={{ alignItems: 'baseline', gap: 4 }}>
+      <Text fontSize={fontSize} color={color}>{word}</Text>
+      {showAlts && (
+        <Row style={{ alignItems: 'baseline', gap: 2 }}>
+          <Text fontSize={Math.max(10, fontSize - 8)} color={C.dim}>(</Text>
+          {losers.map((c, i) => (
+            <Row key={c.word + i} style={{ alignItems: 'baseline' }}>
+              {i > 0 && <Text fontSize={Math.max(10, fontSize - 8)} color={C.dim}>|</Text>}
+              <Text fontSize={Math.max(10, fontSize - 8)} color={C.dim}>{c.word}</Text>
+            </Row>
+          ))}
+          <Text fontSize={Math.max(10, fontSize - 8)} color={C.dim}>)</Text>
+        </Row>
+      )}
+    </Row>
+  );
+}
+
 const MODELS = [
   { name: 'tiny',  path: '~/.reactjit/models/ggml-tiny.en-q5_1.bin'  },
   { name: 'base',  path: '~/.reactjit/models/ggml-base.en-q5_1.bin'  },
   { name: 'small', path: '~/.reactjit/models/ggml-small.en-q5_1.bin' },
+];
+const ESCALATION = [
+  // medium.en only has q5_0 on HF, not q5_1. ~514 MB.
+  { name: 'medium', path: '~/.reactjit/models/ggml-medium.en-q5_0.bin' },
 ];
 
 interface SavedUtterance {
   id: number;
   ms: number;
   individual: Record<string, string>;
-  ensembleWords: { word: string; votes: number; sources: string[] }[];
+  ensembleWords: import('../runtime/hooks/useEnsembleTranscript').EnsembleWord[];
   anchor: string;
+  modelCount: number;
+  escalatedWith: string[];
 }
 
 export default function Dictation() {
@@ -51,6 +103,8 @@ export default function Dictation() {
 
   const e = useEnsembleTranscript({
     models: MODELS,
+    escalateTo: ESCALATION,
+    escalationThreshold: 2,
     mode: 1,
     floor: 0.333,
   });
@@ -68,6 +122,8 @@ export default function Dictation() {
       individual: { ...e.individual },
       ensembleWords: e.ensemble!.words.slice(),
       anchor: e.ensemble!.anchor,
+      modelCount: e.ensemble!.modelCount,
+      escalatedWith: e.escalatedWith.slice(),
     }, ...prev].slice(0, 6));
   }, [e.isProcessing, e.utteranceId]);
 
@@ -113,13 +169,24 @@ export default function Dictation() {
             {e.isSpeaking ? 'speaking' : 'silent'}
           </Text>
         </Box>
-        {e.isProcessing && (
+        {e.isProcessing && !e.isEscalating && (
           <Box style={{
             paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
             backgroundColor: C.warn, borderWidth: 1, borderColor: C.warn,
           }}>
             <Text fontSize={10} color="#0b1220">transcribing…</Text>
           </Box>
+        )}
+        {e.isEscalating && (
+          <Box style={{
+            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
+            backgroundColor: C.hot, borderWidth: 1, borderColor: C.hot,
+          }}>
+            <Text fontSize={10} color="#0b1220">↑ escalating to medium</Text>
+          </Box>
+        )}
+        {e.escalatedWith.length > 0 && !e.isProcessing && (
+          <Text fontSize={10} color={C.dim}>{`(escalated: ${e.escalatedWith.join(', ')})`}</Text>
         )}
         <Text fontSize={10} color={C.dim}>{`level=${e.level.toFixed(2)}`}</Text>
       </Row>
@@ -136,14 +203,17 @@ export default function Dictation() {
       }}>
         <Text fontSize={10} color={C.dim}>live</Text>
         {e.ensemble ? (
-          <Row style={{ flexWrap: 'wrap', gap: 6 }}>
-            {e.ensemble.words.map((w, i) => {
-              const max = e.ensemble!.modelCount;
-              const shade = SHADES[Math.min(SHADES.length - 1, Math.round((w.votes / max) * (SHADES.length - 1)))];
-              return (
-                <Text key={i} fontSize={18} color={shade}>{w.word}</Text>
-              );
-            })}
+          <Row style={{ flexWrap: 'wrap', gap: 8 }}>
+            {e.ensemble.words.map((w, i) => (
+              <EnsembleWordView
+                key={i}
+                word={w.word}
+                votes={w.votes}
+                candidates={w.candidates}
+                max={e.ensemble!.modelCount}
+                fontSize={18}
+              />
+            ))}
           </Row>
         ) : e.partial ? (
           <Text fontSize={18} color={SHADES[1]}>{e.partial}</Text>
@@ -190,13 +260,17 @@ export default function Dictation() {
               borderWidth: 1,
               borderColor: C.border,
             }}>
-              <Row style={{ flexWrap: 'wrap', gap: 5 }}>
-                {h.ensembleWords.map((w, i) => {
-                  const shade = SHADES[Math.min(SHADES.length - 1, Math.round((w.votes / 3) * (SHADES.length - 1)))];
-                  return (
-                    <Text key={i} fontSize={14} color={shade}>{w.word}</Text>
-                  );
-                })}
+              <Row style={{ flexWrap: 'wrap', gap: 6 }}>
+                {h.ensembleWords.map((w, i) => (
+                  <EnsembleWordView
+                    key={i}
+                    word={w.word}
+                    votes={w.votes}
+                    candidates={w.candidates}
+                    max={h.modelCount}
+                    fontSize={14}
+                  />
+                ))}
               </Row>
               <Row style={{ gap: 14, flexWrap: 'wrap' }}>
                 {Object.entries(h.individual).map(([name, text]) => (
@@ -205,7 +279,9 @@ export default function Dictation() {
                     <Text fontSize={10} color={C.dim} fontFamily="monospace">{text}</Text>
                   </Row>
                 ))}
-                <Text fontSize={9} color={C.dim}>{`#${h.id} · ${h.ms.toFixed(0)}ms · anchor=${h.anchor}`}</Text>
+                <Text fontSize={9} color={C.dim}>
+                  {`#${h.id} · ${h.ms.toFixed(0)}ms · anchor=${h.anchor}${h.escalatedWith.length ? ` · ↑${h.escalatedWith.join(',')}` : ''}`}
+                </Text>
               </Row>
             </Col>
           ))}

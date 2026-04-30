@@ -40,6 +40,10 @@ export interface EnsembleWord {
   votes: number;
   /** Models that contributed this winning word. */
   sources: string[];
+  /** All candidates at this slot — includes the winner plus losing
+   *  alternatives from other models, sorted by vote count desc. Lets
+   *  the cart show "verify: X|Y|Z" inline when confidence is low. */
+  candidates: Array<{ word: string; sources: string[] }>;
 }
 
 export interface EnsembleResult {
@@ -52,7 +56,18 @@ export interface EnsembleResult {
 }
 
 export interface UseEnsembleTranscriptOptions extends VoiceInputOptions {
+  /** Always-run base tier — fast models that handle the common case. */
   models: EnsembleModel[];
+  /** Optional escalation tier(s): only run when the base ensemble has
+   *  any word with `votes < escalationThreshold`. Models run sequentially
+   *  in order; each adds its vote and the ensemble is recomputed.
+   *  Re-runs on the same full utterance — whisper pads <30s audio to 30s
+   *  internally so a sub-clip wouldn't be faster, and full context gives
+   *  the larger model its best shot at disambiguation. */
+  escalateTo?: EnsembleModel[];
+  /** Vote count below which an ensemble word triggers escalation.
+   *  Default 2 (so any word only one model said triggers). */
+  escalationThreshold?: number;
 }
 
 export interface UseEnsembleTranscriptResult {
@@ -64,6 +79,11 @@ export interface UseEnsembleTranscriptResult {
   ensemble: EnsembleResult | null;
   /** True while any model is still transcribing. */
   isProcessing: boolean;
+  /** True while an escalation-tier model is currently running because
+   *  the base ensemble had low-confidence words. */
+  isEscalating: boolean;
+  /** Names of escalation models that ran for the current utterance. */
+  escalatedWith: string[];
   /** Pass-through from useVoiceInput so cart can render mic state. */
   isListening: boolean;
   isSpeaking: boolean;
@@ -122,18 +142,44 @@ function voteOnAnchor(
   anchorName: string,
 ): EnsembleWord[] {
   return anchor.map((word, i) => {
+    // Track all candidates seen at this slot (anchor + each non-anchor's
+    // best window match, or its position-i word if no match).
+    const candMap = new Map<string, string[]>();
+    candMap.set(word, [anchorName]);
+
     const sources = [anchorName];
     for (const t of others) {
       const lo = Math.max(0, i - ANCHOR_WINDOW);
       const hi = Math.min(t.words.length, i + ANCHOR_WINDOW + 1);
+      let matched: string | null = null;
       for (let j = lo; j < hi; j++) {
         if (t.words[j] === word) {
-          sources.push(t.name);
+          matched = t.words[j];
           break;
         }
       }
+      if (matched !== null) {
+        // Aligned to anchor word — count for the winning candidate.
+        sources.push(t.name);
+        const list = candMap.get(matched) || [];
+        if (!list.includes(t.name)) list.push(t.name);
+        candMap.set(matched, list);
+      } else {
+        // Not aligned — this t has a different word at roughly position i,
+        // record as a losing candidate so the cart can surface it.
+        const alt = t.words[i] ?? t.words[Math.min(i, t.words.length - 1)];
+        if (alt) {
+          const list = candMap.get(alt) || [];
+          if (!list.includes(t.name)) list.push(t.name);
+          candMap.set(alt, list);
+        }
+      }
     }
-    return { word, votes: sources.length, sources };
+
+    const candidates = Array.from(candMap.entries())
+      .map(([w, src]) => ({ word: w, sources: src }))
+      .sort((a, b) => b.sources.length - a.sources.length);
+    return { word, votes: sources.length, sources, candidates };
   });
 }
 
@@ -147,7 +193,12 @@ export function ensembleVote(
   // Single-model case: just echo it (every word "votes" 1 from itself).
   if (tok.length === 1) {
     return {
-      words: tok[0].words.map((word) => ({ word, votes: 1, sources: [tok[0].name] })),
+      words: tok[0].words.map((word) => ({
+        word,
+        votes: 1,
+        sources: [tok[0].name],
+        candidates: [{ word, sources: [tok[0].name] }],
+      })),
       anchor: tok[0].name,
       modelCount: 1,
     };
@@ -167,7 +218,7 @@ export function ensembleVote(
 // ── The hook ─────────────────────────────────────────────────────────
 
 export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEnsembleTranscriptResult {
-  const { models, ...voiceOpts } = opts;
+  const { models, escalateTo, escalationThreshold, ...voiceOpts } = opts;
   // We manage the buffer lifetime ourselves — multiple transcribes need
   // the PCM to survive past the first call, so override autoRelease.
   const v = useVoiceInput({ ...voiceOpts, autoRelease: false });
@@ -176,22 +227,32 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
   const [individual, setIndividual] = useState<Record<string, string>>({});
   const [ensemble, setEnsemble] = useState<EnsembleResult | null>(null);
   const [isProcessing, setProcessing] = useState(false);
+  const [isEscalating, setEscalating] = useState(false);
+  const [escalatedWith, setEscalatedWith] = useState<string[]>([]);
 
   const lastIdRef = useRef(0);
   const modelsRef = useRef(models);
   modelsRef.current = models;
+  const escalateRef = useRef(escalateTo);
+  escalateRef.current = escalateTo;
+  const thresholdRef = useRef(escalationThreshold ?? 2);
+  thresholdRef.current = escalationThreshold ?? 2;
 
   useEffect(() => {
     if (v.utteranceId === 0 || v.utteranceId === lastIdRef.current) return;
     lastIdRef.current = v.utteranceId;
     const id = v.utteranceId;
     const selected = modelsRef.current.slice();
+    const escalation = (escalateRef.current ?? []).slice();
+    const threshold = thresholdRef.current;
 
     // Reset per-utterance state.
     setPartial('');
     setIndividual({});
     setEnsemble(null);
     setProcessing(true);
+    setEscalating(false);
+    setEscalatedWith([]);
 
     (async () => {
       const G = globalThis as any;
@@ -214,6 +275,43 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
         }
       }
 
+      // Escalation: if any word in the base ensemble has fewer than
+      // `threshold` votes, run the next-tier model on the same buffer
+      // and add its vote. The full utterance gets re-transcribed because
+      // whisper internally pads <30s audio to 30s anyway, and the
+      // larger model needs full context to disambiguate technical terms.
+      if (escalation.length > 0) {
+        const baseEnsemble = ensembleVote(collected);
+        const anyLow =
+          baseEnsemble &&
+          baseEnsemble.words.some((w) => w.votes < threshold);
+        if (anyLow) {
+          setEscalating(true);
+          for (const m of escalation) {
+            try {
+              const r = await transcribe(id, m.path);
+              const text = (r.text || '').trim();
+              collected.push({ name: m.name, text });
+              setIndividual((prev) => ({ ...prev, [m.name]: text }));
+              setEscalatedWith((prev) => [...prev, m.name]);
+              setEnsemble(ensembleVote(collected));
+              // If the escalated ensemble cleared every threshold,
+              // we can stop early — no need to keep escalating.
+              const updated = ensembleVote(collected);
+              if (updated && updated.words.every((w) => w.votes >= threshold)) {
+                break;
+              }
+            } catch (e: any) {
+              setIndividual((prev) => ({
+                ...prev,
+                [m.name]: `(error: ${String(e?.message ?? e)})`,
+              }));
+            }
+          }
+          setEscalating(false);
+        }
+      }
+
       // Release the buffer now that all models are done.
       const rel = G.__voice_release_buffer;
       if (typeof rel === 'function') rel(id);
@@ -226,6 +324,8 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
     individual,
     ensemble,
     isProcessing,
+    isEscalating,
+    escalatedWith,
     isListening: v.isListening,
     isSpeaking: v.isSpeaking,
     level: v.level,

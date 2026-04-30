@@ -20,7 +20,8 @@ declare -A MODELS=(
     [tiny]="ggml-tiny.en-q5_1.bin"
     [base]="ggml-base.en-q5_1.bin"
     [small]="ggml-small.en-q5_1.bin"
-    [medium]="ggml-medium.en-q5_1.bin"
+    # medium.en doesn't have a q5_1 quant on HF (404), use q5_0 (~514 MB).
+    [medium]="ggml-medium.en-q5_0.bin"
 )
 
 # Picked default set — leave medium opt-in (it's 540MB and download is slow on
