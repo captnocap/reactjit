@@ -20,6 +20,20 @@
 // high-variance and occasionally fabricated facts; V4 reliably
 // laundered voice into a clinical report and was 1.5–2× the cost
 // of V3.
+//
+// Why the recipe ALSO ships a concern-structurer enhancer: two
+// follow-up probes (conflict-resolution with an external trigger,
+// and profile-recovery with a wrong-on-disk profile + upset
+// pushback) ran twice each through the same harness. The
+// structured-concerns enhancer reproducibly produced the best
+// downstream output in both — layered emotional reads in one,
+// system-level meta-correction ("chat sessions don't carry over;
+// the notes file does, and mine was wrong") in the other. The
+// quantification enhancer reproducibly cooled the prose AND
+// narrowed the scope of correction (only fixed what was explicitly
+// contested). So when the cart-side gate detects an upset / conflict
+// turn, it should run the concern-structurer composition first and
+// prepend its output to the writing turn's user-message.
 
 import type { RecipeDocument } from "./recipe-document";
 import {
@@ -72,6 +86,30 @@ Cover:
 
 Use the Write tool exactly once. Be specific. Don't hedge. Sign the file '— Claude (first impression)'.`;
 
+// ── Concern-structurer enhancer ───────────────────────────────────────────
+//
+// The cart fires a SEPARATE upstream Claude session with this as its
+// system prompt whenever the user's incoming message reads as upset /
+// conflict-shaped. The enhancer's output (a structured set of concerns
+// with "what addressing it looks like" guidance for each) is prepended
+// to the writing turn's user-message before it reaches the writing
+// Claude. See the companion .md for the cross-test reproducibility
+// data driving the choice of structurer over the alternative
+// quantifier shape.
+
+const STRUCTURE_INSTRUCTION = `You are a concern-structurer. The user will hand you a single message someone sent to a chat assistant. The message contains an emotional outburst alongside an actual ask, OR the user is pushing back on a mistake the assistant just made. Extract the concerns surfaced and structure them so the receiving model can address each one without conflating them.
+
+Output format (no preamble, no closing summary):
+
+Concern 1: <short label>
+- What it is:
+- Whether the assistant can act on it:
+- What addressing it looks like in the next reply:
+
+Concern 2: ...
+
+(3-5 concerns total. Crisp. One bullet per sub-line.)`;
+
 // ── Doc form ──────────────────────────────────────────────────────────────
 
 export const recipe: RecipeDocument = {
@@ -79,7 +117,7 @@ export const recipe: RecipeDocument = {
   title: "Onboarding first-impression — clarify, then write",
   sourcePath: "cart/app/recipes/onboarding-first-impression.md",
   instructions:
-    "After the 5-step onboarding lands (name, provider, traits, config, goal), spawn a 2-turn session against the model the user picked. Turn 1: ask 3 clarifying questions. Turn 2: write first_impression.md given the answers. The profile becomes the cart's welcome state.",
+    "After the 5-step onboarding lands (name, provider, traits, config, goal), spawn a 2-turn session against the model the user picked. Turn 1: ask 3 clarifying questions (rendered as a chat-loom Form). Turn 2: write first_impression.md given the answers. The recipe also ships a concern-structurer enhancer composition the cart can fire when the user's incoming message reads as upset / conflict-shaped, in onboarding or any later session.",
   sections: [
     {
       kind: "paragraph",
@@ -96,10 +134,19 @@ export const recipe: RecipeDocument = {
       ],
     },
     {
+      kind: "bullet-list",
+      title: "Why a concern-structurer enhancer (and not a quantifier)",
+      items: [
+        "Two follow-up probes (conflict-resolution with an external trigger, and profile-recovery with a wrong-on-disk profile + upset pushback) ran twice each. The structured-concerns enhancer reproducibly produced the best downstream output in both: layered emotional reads in one, system-level meta-correction in the other (\"chat sessions don't carry over; the notes file does, and mine was wrong\").",
+        "The alternative — a quantifying enhancer (intensity 0-10, displacement direction, etc.) — reproducibly cooled the prose AND narrowed the scope of correction to only what was explicitly contested. Useful when warmth doesn't matter; wrong default for an onboarding/identity context.",
+        "The structurer's outputs are instruction-shaped (\"What addressing it looks like in the next reply: ...\"), which the writing model picks up as actionable guidance rather than data to bracket.",
+      ],
+    },
+    {
       kind: "paragraph",
       title: "What's wired below",
       text:
-        "The default JSX export stamps: a new src_onboarding-signal source kind that bundles step 1+3+5, a 'who' composition pinning the signal as identity context, two prompt fragments for turn-1-clarify and turn-2-write, a prompt composition whose system slot uses first-match to swap between the fragments based on whether answers are present, an event hook on system:claude:write for first_impression.md (the cart swaps from the onboarding shell to the welcome surface when it fires), and arming recommendations for two pathologies the recipe historically tripped: scope-collapse at T1 (locks onto a stereotype on the thin first read) and premature-commitment at T2 (the model wants to skip the clarifying turn).",
+        "The default JSX export stamps: a new src_onboarding-signal source kind that bundles step 1+3+5, a 'who' composition pinning the signal as identity context, three prompt fragments (turn-1 clarify, turn-2 write, concern-structurer enhancer), a prompt composition whose system slot uses first-match to swap between the clarify/write fragments based on whether answers are present, a SECOND prompt composition (comp_concern_structurer) the cart fires as a separate upstream Claude turn when the incoming message reads as upset, an event hook on system:claude:write for first_impression.md (the cart swaps from the onboarding shell to the welcome surface when it fires), and arming recommendations for two pathologies the recipe historically tripped: scope-collapse at T1 (locks onto a stereotype on the thin first read) and premature-commitment at T2 (the model wants to skip the clarifying turn).",
     },
   ],
 };
@@ -119,6 +166,12 @@ export default function OnboardingFirstImpression() {
         id="frag_onboarding_write"
         label="Turn 2 — write first_impression.md given the answers"
         body={WRITE_AFTER_CLARIFY_INSTRUCTION}
+      />
+
+      <PromptFragment
+        id="frag_concern_structurer"
+        label="Enhancer — structure an upset/conflict-shaped message into concerns"
+        body={STRUCTURE_INSTRUCTION}
       />
 
       <CompositionSourceKind
@@ -156,6 +209,17 @@ export default function OnboardingFirstImpression() {
         <Slot name="system" composer="first-match" emptyBehavior="fail">
           <Source kind="src_prompt-fragment" ref="frag_onboarding_write" />
           <Source kind="src_prompt-fragment" ref="frag_onboarding_clarify" />
+        </Slot>
+      </Composition>
+
+      <Composition
+        id="comp_concern_structurer"
+        kind="prompt"
+        label="Concern-structurer enhancer — fires upstream of the writing turn"
+        description="Standalone single-turn prompt assembly. The cart fires this composition as a SEPARATE Claude session (no main-flow context) when the user's incoming message reads as upset / conflict-shaped. The session takes that one message as its user-turn input and emits a structured concern table. The cart prepends that table to the writing turn's user-message before it reaches the writing Claude. Three reproducible probes (first impressions / external upset / profile recovery) showed the structurer's instruction-shaped output ('What addressing it looks like in the next reply: ...') consistently produced richer downstream writes than the alternative quantifier shape."
+      >
+        <Slot name="system" composer="concat" emptyBehavior="fail">
+          <Source kind="src_prompt-fragment" ref="frag_concern_structurer" />
         </Slot>
       </Composition>
 

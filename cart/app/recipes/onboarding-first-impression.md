@@ -66,6 +66,56 @@ worth the second spawn unless input is genuinely thin
 (Maya's wasn't). V4 is reliably the wrong shape *and*
 reliably the most expensive — retired.
 
+## The concern-structurer enhancer
+
+The recipe also ships a separate single-turn composition
+(`comp_concern_structurer`) the cart fires *upstream* of the
+writing turn whenever the user's incoming message reads as
+upset / conflict-shaped. The structurer's output (a 3–5 row
+table of concerns, each with a "what addressing it looks like
+in the next reply" line) is prepended to the writing turn's
+user-message before it reaches the writing Claude. The
+writing-side composition is unchanged; the cart side gates on
+whether to run the enhancer.
+
+### Why structuring vs. quantifying
+
+Two follow-up probes ran twice each against the same harness
+(`/tmp/conflict_resolution/run.py` and
+`/tmp/profile_recovery/run.py`):
+
+- **Conflict-resolution** — the user vents about an external
+  trigger (landlord drama) mid-conversation while still asking
+  for help. Tests whether the model conflates state (transient
+  upset) with trait (permanent identity) when writing the
+  profile.
+- **Profile recovery** — a partially-wrong `profile.md` sits
+  on disk; the model references the wrong project; the user
+  pushes back, upset. Tests how the model recovers from being
+  caught wrong.
+
+Both probes ran three variants (raw / quantify / structure),
+twice each, against `bench/claude_runner`. The
+**structured-concerns enhancer reproducibly produced the best
+downstream output in both**:
+
+| | conflict-resolution finding | profile-recovery finding |
+| --- | --- | --- |
+| V1 raw | warm, observational, baseline | aggressive scrub of contaminated profile, but slight deflection ("file got corrupted") |
+| V2 quantify | **cooled the prose AND silenced the emotional moment in the opener** (both runs explicitly chose not to acknowledge the landlord) | clean ownership + answered the technical question fastest, but **kept unvalidated profile claims** that turned out to be wrong |
+| **V3 structure** | **layered emotional read** — caught "she feels guilty for taking up space with feelings" / "marshaling evidence because the accusation feels unfair" | **system-level meta-correction** — explained that chat sessions don't carry over and proposed a working agreement |
+
+The pattern: quantification is high-signal-low-coverage. It
+tells the writer about the contested moment but doesn't widen
+the lens. Structuring as concerns is action-shaped — the
+"what addressing it looks like" lines propagate cleanly into
+the writer's reply structure and prioritization.
+
+When to use which: structurer is the default for an
+identity/onboarding/conflict context. Quantifier is the right
+tool when warmth doesn't matter and you want a fast narrow
+technical answer.
+
 ## What the .tsx stamp deposits
 
 Drop `<OnboardingFirstImpression />` on the canvas and you get:
@@ -76,12 +126,15 @@ Drop `<OnboardingFirstImpression />` on the canvas and you get:
   `OnboardingProvider`.
 - **One `who` composition** — pins the signal as identity
   context.
-- **Two prompt fragments** — the turn-1 clarify instruction
-  and the turn-2 write instruction.
-- **One `prompt` composition** — system slot with
-  `composer: "first-match"`, with the write fragment ahead of
-  the clarify fragment so turn 2 wins when its inputs are
-  present.
+- **Three prompt fragments** — the turn-1 clarify
+  instruction, the turn-2 write instruction, and the
+  concern-structurer enhancer.
+- **Two `prompt` compositions** —
+  `comp_first_impression_prompt` (system slot with
+  `composer: "first-match"`, write fragment ahead of clarify
+  so turn 2 wins when answers are present) and
+  `comp_concern_structurer` (single-fragment system slot for
+  the upstream enhancer turn).
 - **One event hook** — `system:claude:write` filtered to
   `first_impression.md`, emits
   `onboarding:first-impression-ready` and marks
@@ -95,18 +148,28 @@ Drop `<OnboardingFirstImpression />` on the canvas and you get:
 
 Tested end-to-end against the live `claude` CLI through
 `bench/claude_runner` (the Zig binary that wraps
-`framework/claude_sdk/`). Two full runs of the harness against
-the same fixed sample; both runs produced V3 outputs of
-comparable size and shape, both containing the
-"answered-sideways" meta-observation. The other three variants
-were retained in the harness for documentation but not as
-recipes.
+`framework/claude_sdk/`). Three harnesses, each run twice:
 
-The harness and the per-variant outputs are not checked in
-(workspace lives at `/tmp/first_impressions_*`). To
-reproduce: build `bench/claude_runner` via
-`bench/build_claude_runner.sh`, then run
-`python3 /tmp/first_impressions/run.py`.
+- `/tmp/first_impressions/run.py` — picks the clarify-loop
+  shape over raw / enhance-once / clarify+enhance.
+- `/tmp/conflict_resolution/run.py` — picks the
+  concern-structurer enhancer over raw / quantifier when the
+  user is upset about an external trigger.
+- `/tmp/profile_recovery/run.py` — confirms the structurer
+  produces a system-level meta-correction that raw and
+  quantifier do not, when the user pushes back on a wrong
+  on-disk profile.
+
+The structurer choice is reproducible across the two
+follow-up probes (run-1 + run-2 results match in shape and
+in the specific reproducible behaviors — see the
+"Why structuring vs. quantifying" section above for the
+table). None of the harnesses or per-variant outputs are
+checked in (workspaces live under `/tmp/first_impressions_*`,
+`/tmp/conflict_resolution_*`, and `/tmp/profile_recovery_*`).
+To reproduce: build `bench/claude_runner` via
+`bench/build_claude_runner.sh`, then run any of the three
+harnesses with `python3`.
 
 **Caveat — chat-loom shape not yet end-to-end tested.** The
 variance probe ran turn 1 with plain-text `Q1: / Q2: / Q3:`
