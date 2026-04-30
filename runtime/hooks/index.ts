@@ -33,6 +33,8 @@ export {
   listIfttActions,
 } from './ifttt-registry';
 export type { IfttSource, IfttSubscription, IfttActionRunner } from './ifttt-registry';
+export { compileTrigger, isComposable, substituteAction } from './ifttt-compose';
+export type { IFTTTComposable, IFTTTLeaf } from './ifttt-compose';
 export { useHost } from './useHost';
 export type {
   HostSpec,

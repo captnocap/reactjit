@@ -68,6 +68,12 @@ import {
   dispatchAction,
   type IfttSubscription,
 } from './ifttt-registry';
+import {
+  compileTrigger,
+  isComposable,
+  substituteAction,
+  type IFTTTComposable,
+} from './ifttt-compose';
 
 // ── Bus + state store ─────────────────────────────────────────────────────
 
@@ -367,14 +373,29 @@ registerIfttAction('clipboard:', (rest, _payload) => {
 });
 
 function runStringAction(action: string, payload: any): void {
-  if (!dispatchAction(action, payload)) {
-    console.warn(`[ifttt] unknown action '${action}'`);
+  const resolved = substituteAction(action, payload);
+  if (!dispatchAction(resolved, payload)) {
+    console.warn(`[ifttt] unknown action '${resolved}'`);
   }
 }
 
 // ── Public types ──────────────────────────────────────────────────────────
 
-export type IFTTTTrigger = string | (() => boolean);
+/**
+ * Trigger shape accepted by useIFTTT.
+ *
+ * Plain forms (Phase A):
+ *   'key:ctrl+s'          string DSL — resolved through the registry
+ *   () => boolean         reactive condition — fires on false→true edge
+ *
+ * Composable forms (Phase B — see ifttt-compose.ts):
+ *   { on: trigger, when?: () => boolean }
+ *   { all: triggers[] }   AND, edge-detected
+ *   { any: triggers[] }   OR, edge-detected
+ *   { seq: triggers[], within: number }
+ *   { trigger, debounce?, throttle?, once?, cooldown? }
+ */
+export type IFTTTTrigger = IFTTTComposable;
 export type IFTTTAction = string | ((event?: any) => void);
 
 export type IFTTTResult = {
@@ -406,7 +427,11 @@ export function useIFTTT(trigger: IFTTTTrigger, action: IFTTTAction): IFTTTResul
   const fireRef = useRef(fire);
   fireRef.current = fire;
 
-  // ── Function trigger: edge-detect false → true ────────────────────────
+  // ── Function trigger: edge-detect false → true (post-render) ──────────
+  // Plain `() => boolean` triggers stay on the post-render path so existing
+  // carts keep their cadence. Function leaves used INSIDE a composable
+  // trigger are polled by the composer (see ifttt-compose.ts) and don't
+  // hit this branch.
   const isFnTrigger = typeof trigger === 'function';
   const prevCondRef = useRef(false);
   useEffect(() => {
@@ -417,16 +442,34 @@ export function useIFTTT(trigger: IFTTTTrigger, action: IFTTTAction): IFTTTResul
     prevCondRef.current = cur;
   });
 
-  // ── String trigger: resolve through the registry ──────────────────────
+  // ── Compose key: re-subscribe only when the trigger shape changes ─────
+  // For string triggers we use the spec itself. For composable triggers we
+  // serialize the structure (functions are stable references; JSON skips
+  // them, which is acceptable since composer keeps a closure over them).
+  const composeKey = (() => {
+    if (typeof trigger === 'string') return `s:${trigger}`;
+    if (typeof trigger === 'function') return null;
+    try { return `c:${JSON.stringify(trigger)}`; } catch { return null; }
+  })();
+
+  // ── String / composable trigger subscription ──────────────────────────
   useEffect(() => {
-    if (typeof trigger !== 'string') return;
-    const sub: IfttSubscription | null = resolveTrigger(trigger);
-    if (!sub) {
-      console.warn(`[ifttt] no source for trigger '${trigger}'`);
+    if (typeof trigger === 'function') return;
+    let sub: IfttSubscription | null;
+    if (typeof trigger === 'string') {
+      sub = resolveTrigger(trigger);
+      if (!sub) {
+        console.warn(`[ifttt] no source for trigger '${trigger}'`);
+        return;
+      }
+    } else if (isComposable(trigger)) {
+      sub = compileTrigger(trigger as IFTTTComposable);
+    } else {
       return;
     }
     return sub.subscribe((ev?: any) => fireRef.current(ev));
-  }, [typeof trigger === 'string' ? trigger : null]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composeKey]);
 
   return {
     fired: counterRef.current,
