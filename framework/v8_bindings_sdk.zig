@@ -17,7 +17,7 @@ const HTTP_MAX_HEADERS: usize = 16;
 
 var g_http_init_done: bool = false;
 var g_page_fetch_init_done: bool = false;
-const HttpPending = struct { rid: []u8, stream: bool };
+const HttpPending = struct { rid: []u8, stream: bool, download: bool = false };
 var g_http_pending: ?std.AutoHashMap(u32, HttpPending) = null;
 var g_page_pending: ?std.AutoHashMap(u32, []u8) = null;
 
@@ -757,6 +757,60 @@ fn hostHttpRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) 
 fn hostHttpStreamOpen(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     dispatchHttpRequest(info, true);
+}
+
+/// Download mode: stream the response body straight to a filesystem path
+/// without buffering in memory. Required for any binary larger than
+/// MAX_BODY (model files, video, datasets). Three args: JSON request
+/// spec, destination path, and a JS-supplied rid for event correlation.
+/// Events fire on:
+///   __ffiEmit('http-download-progress:<rid>', '{"d":bytesDl,"t":bytesTotal}')
+///   __ffiEmit('http-download-end:<rid>',     '{"status":N}' or '{"error":"..."}')
+fn hostHttpDownloadToFile(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    if (info.length() < 3) return setReturnUndefined(info, cx.iso);
+    const alloc = std.heap.page_allocator;
+
+    const spec = jsStringArg(alloc, info, 0) orelse return setReturnUndefined(info, cx.iso);
+    defer alloc.free(spec);
+    const dest = jsStringArg(alloc, info, 1) orelse return setReturnUndefined(info, cx.iso);
+    defer alloc.free(dest);
+    const rid = jsStringArg(alloc, info, 2) orelse return setReturnUndefined(info, cx.iso);
+    defer alloc.free(rid);
+
+    if (!g_http_init_done) {
+        net_http.init();
+        g_http_init_done = true;
+    }
+
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, spec, .{}) catch return setReturnUndefined(info, cx.iso);
+    defer parsed.deinit();
+    const req = parseHttpReq(&parsed) orelse return setReturnUndefined(info, cx.iso);
+
+    const id = hashReqId(rid);
+    const rid_copy = alloc.dupe(u8, rid) catch return setReturnUndefined(info, cx.iso);
+    httpPending().put(id, .{ .rid = rid_copy, .stream = false, .download = true }) catch {
+        alloc.free(rid_copy);
+        return setReturnUndefined(info, cx.iso);
+    };
+
+    var hdrs_buf: [HTTP_MAX_HEADERS][2][]const u8 = undefined;
+    var opts = net_http.RequestOpts{ .url = req.url, .body = req.body, .download_to = dest };
+    opts.method = if (std.ascii.eqlIgnoreCase(req.method, "POST")) .POST else if (std.ascii.eqlIgnoreCase(req.method, "PUT")) .PUT else if (std.ascii.eqlIgnoreCase(req.method, "DELETE")) .DELETE else if (std.ascii.eqlIgnoreCase(req.method, "PATCH")) .PATCH else if (std.ascii.eqlIgnoreCase(req.method, "HEAD")) .HEAD else .GET;
+    if (req.headers) |hdrs| {
+        var it = hdrs.iterator();
+        var n: usize = 0;
+        while (it.next()) |entry| {
+            if (n >= HTTP_MAX_HEADERS) break;
+            if (entry.value_ptr.* != .string) continue;
+            hdrs_buf[n] = .{ entry.key_ptr.*, entry.value_ptr.string };
+            n += 1;
+        }
+        opts.headers = hdrs_buf[0..n];
+    }
+    _ = net_http.request(id, opts);
+    setReturnUndefined(info, cx.iso);
 }
 
 /// JS-side `close()` symmetry. Cancellation isn't actually plumbed yet
@@ -1521,6 +1575,38 @@ pub fn tickDrain() void {
             const pending = httpPending().get(resp.id) orelse continue;
             var ch_buf: [256]u8 = undefined;
 
+            if (pending.download) {
+                // Download mode: progress chunks ride
+                // "http-download-progress:<rid>" with `{"d":dl,"t":total}`,
+                // terminal rides "http-download-end:<rid>" with status or
+                // error. Buffer sizes accommodate the JSON payload.
+                switch (resp.response_type) {
+                    .progress => {
+                        const ch = std.fmt.bufPrint(&ch_buf, "http-download-progress:{s}", .{pending.rid}) catch continue;
+                        emitChannelPayload(ch, resp.bodySlice());
+                    },
+                    .complete => {
+                        var payload_buf: [64]u8 = undefined;
+                        const payload = std.fmt.bufPrint(&payload_buf, "{{\"status\":{d}}}", .{resp.status}) catch continue;
+                        const ch = std.fmt.bufPrint(&ch_buf, "http-download-end:{s}", .{pending.rid}) catch continue;
+                        emitChannelPayload(ch, payload);
+                        if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                    },
+                    .err => {
+                        var out = std.ArrayList(u8){};
+                        defer out.deinit(alloc);
+                        out.appendSlice(alloc, "{\"error\":") catch continue;
+                        jsonEscape(&out, alloc, resp.errorSlice()) catch continue;
+                        out.append(alloc, '}') catch continue;
+                        const ch = std.fmt.bufPrint(&ch_buf, "http-download-end:{s}", .{pending.rid}) catch continue;
+                        emitChannelPayload(ch, out.items);
+                        if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                    },
+                    .chunk => {}, // not produced by download mode
+                }
+                continue;
+            }
+
             if (!pending.stream) {
                 // Non-streaming: single full-body response → "http:<rid>"
                 const rid = httpPending().fetchRemove(resp.id) orelse continue;
@@ -1585,6 +1671,7 @@ pub fn registerSdk(vm: anytype) void {
     v8rt.registerHostFn("__http_request_async", hostHttpRequestAsync);
     v8rt.registerHostFn("__http_stream_open", hostHttpStreamOpen);
     v8rt.registerHostFn("__http_stream_close", hostHttpStreamClose);
+    v8rt.registerHostFn("__http_download_to_file", hostHttpDownloadToFile);
     v8rt.registerHostFn("__browser_page_sync", hostBrowserPageSync);
     v8rt.registerHostFn("__browser_page_async", hostBrowserPageAsync);
     v8rt.registerHostFn("__play_load", hostPlayLoad);

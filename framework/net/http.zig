@@ -16,7 +16,11 @@
 
 const std = @import("std");
 const RingBuffer = @import("ring_buffer.zig").RingBuffer;
-const c = @cImport({ @cInclude("curl/curl.h"); });
+const c = @cImport({
+    @cInclude("curl/curl.h");
+    // stdio for the download_to path: fopen/fwrite/fclose/FILE.
+    @cInclude("stdio.h");
+});
 
 // ── Configuration ────────────────────────────────────────────────────────
 
@@ -43,6 +47,15 @@ pub const RequestOpts = struct {
     /// by a terminal `.complete` (or `.err`). Each chunk carries up to
     /// MAX_BODY bytes; cap is enforced per-libcurl-callback.
     stream: bool = false,
+    /// If non-null, write the response body directly to this filesystem path.
+    /// Skips the in-memory body buffer entirely — required for downloads
+    /// larger than MAX_BODY (model files, video, etc.). Worker fopen's the
+    /// path, curl write callback fwrites to the fd, progress is emitted as
+    /// `.progress` Responses (JSON `{"d":bytesDl,"t":bytesTotal}` in body),
+    /// and a terminal `.complete` (with HTTP status) or `.err` follows.
+    /// 30-second timeout is disabled for downloads. download_to and stream
+    /// are mutually exclusive — download_to takes precedence.
+    download_to: ?[]const u8 = null,
 };
 
 pub const ResponseType = enum { complete, chunk, progress, err };
@@ -82,6 +95,8 @@ const Request = struct {
     proxy: [MAX_URL]u8 = undefined,
     proxy_len: usize = 0,
     stream: bool = false,
+    download_path: [MAX_URL]u8 = undefined,
+    download_path_len: usize = 0,
     shutdown: bool = false, // sentinel to tell worker to exit
 };
 
@@ -154,6 +169,12 @@ pub fn request(id: u32, opts: RequestOpts) bool {
 
     req.stream = opts.stream;
 
+    if (opts.download_to) |dp| {
+        const dlen = @min(dp.len, MAX_URL);
+        @memcpy(req.download_path[0..dlen], dp[0..dlen]);
+        req.download_path_len = dlen;
+    }
+
     return request_queue.push(req);
 }
 
@@ -205,10 +226,10 @@ fn workerMain() void {
 
         if (req.shutdown) return;
 
-        // Streaming requests push their own chunk + terminal Responses from
-        // inside the libcurl WRITEFUNCTION callback / post-perform; the worker
-        // must NOT push an additional summary Response after.
-        if (req.stream) {
+        // Streaming + download requests push their own chunk/progress +
+        // terminal Responses from inside executeRequest; the worker must
+        // NOT push an additional summary Response after.
+        if (req.stream or req.download_path_len > 0) {
             executeRequest(handle, &req, null);
             continue;
         }
@@ -279,23 +300,60 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: ?*Response) void {
     _ = c.curl_easy_setopt(handle, c.CURLOPT_FOLLOWLOCATION, @as(c_long, 1));
     _ = c.curl_easy_setopt(handle, c.CURLOPT_MAXREDIRS, @as(c_long, 10));
 
-    // Timeout
-    _ = c.curl_easy_setopt(handle, c.CURLOPT_TIMEOUT, @as(c_long, 30));
+    // Timeout — disable for downloads (multi-minute on large model files);
+    // 30s default for everything else.
+    const is_download = req.download_path_len > 0;
+    _ = c.curl_easy_setopt(handle, c.CURLOPT_TIMEOUT, @as(c_long, if (is_download) 0 else 30));
 
-    // Write callback — accumulating mode (resp != null) fills resp.body and
-    // flags truncation; streaming mode (resp == null) emits a chunk Response
-    // per libcurl callback, splitting if libcurl hands us more than MAX_BODY
-    // in one shot.
+    // For downloads: open the destination fd before we hand control to
+    // libcurl. fopen-then-fwrite is ~6 lines via the C stdio (which is
+    // already linked because libcurl pulls it in).
+    var dl_fp: ?*c.FILE = null;
+    if (is_download) {
+        var path_buf: [MAX_URL + 1]u8 = undefined;
+        @memcpy(path_buf[0..req.download_path_len], req.download_path[0..req.download_path_len]);
+        path_buf[req.download_path_len] = 0;
+        dl_fp = c.fopen(@as([*c]const u8, &path_buf), "wb");
+        if (dl_fp == null) {
+            // Emit error terminal Response immediately, no curl invocation.
+            var done = Response{};
+            done.id = req.id;
+            done.response_type = .err;
+            const msg = "fopen failed (check directory exists + write perms)";
+            const elen = @min(msg.len, MAX_ERROR);
+            @memcpy(done.error_msg[0..elen], msg[0..elen]);
+            done.error_len = elen;
+            while (!response_queue.push(done)) std.Thread.sleep(1_000_000);
+            if (header_list) |hl| c.curl_slist_free_all(hl);
+            c.curl_easy_reset(handle);
+            return;
+        }
+    }
+    defer if (dl_fp) |fp| {
+        _ = c.fclose(fp);
+    };
+
+    // Write callback context — three modes share one struct:
+    //   resp != null:   accumulate into resp.body (capped at MAX_BODY)
+    //   dl_fp != null:  fwrite straight to disk, body buffer not used
+    //   else:           streaming chunk responses
     const WriteCtx = struct {
         resp: ?*Response,
         req_id: u32,
+        dl_fp: ?*c.FILE,
     };
-    var write_ctx = WriteCtx{ .resp = resp, .req_id = req.id };
+    var write_ctx = WriteCtx{ .resp = resp, .req_id = req.id, .dl_fp = dl_fp };
 
     const write_cb = struct {
         fn cb(data: [*c]u8, size: usize, nmemb: usize, userdata: *anyopaque) callconv(.c) usize {
             const ctx: *WriteCtx = @ptrCast(@alignCast(userdata));
             const total = size * nmemb;
+            // Download-to-file path takes precedence — bytes go straight
+            // to the open fd, not to the body buffer.
+            if (ctx.dl_fp) |fp| {
+                const written = c.fwrite(data, 1, total, fp);
+                return written; // short write surfaces as a curl error
+            }
             if (ctx.resp) |r| {
                 const space = MAX_BODY - r.body_len;
                 const to_copy = @min(total, space);
@@ -326,6 +384,42 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: ?*Response) void {
 
     _ = c.curl_easy_setopt(handle, c.CURLOPT_WRITEFUNCTION, write_cb);
     _ = c.curl_easy_setopt(handle, c.CURLOPT_WRITEDATA, @as(*anyopaque, @ptrCast(&write_ctx)));
+
+    // Progress callback (download mode only). libcurl invokes this often;
+    // we throttle to ~10 Hz to keep the response queue from saturating, and
+    // drop progress events when full so they never block the actual
+    // transfer.
+    const ProgCtx = struct {
+        req_id: u32,
+        last_emit_ms: i64,
+    };
+    var prog_ctx = ProgCtx{ .req_id = req.id, .last_emit_ms = 0 };
+    if (is_download) {
+        const prog_cb = struct {
+            fn cb(
+                userdata: *anyopaque,
+                dltotal: c.curl_off_t,
+                dlnow: c.curl_off_t,
+                _: c.curl_off_t,
+                _: c.curl_off_t,
+            ) callconv(.c) c_int {
+                const ctx: *ProgCtx = @ptrCast(@alignCast(userdata));
+                const now_ms = std.time.milliTimestamp();
+                if (now_ms - ctx.last_emit_ms < 100) return 0;
+                ctx.last_emit_ms = now_ms;
+                var pr = Response{};
+                pr.id = ctx.req_id;
+                pr.response_type = .progress;
+                const written = std.fmt.bufPrint(&pr.body, "{{\"d\":{d},\"t\":{d}}}", .{ dlnow, dltotal }) catch return 0;
+                pr.body_len = written.len;
+                _ = response_queue.push(pr); // drop on full — progress is best-effort
+                return 0;
+            }
+        }.cb;
+        _ = c.curl_easy_setopt(handle, c.CURLOPT_NOPROGRESS, @as(c_long, 0));
+        _ = c.curl_easy_setopt(handle, c.CURLOPT_XFERINFOFUNCTION, prog_cb);
+        _ = c.curl_easy_setopt(handle, c.CURLOPT_XFERINFODATA, @as(*anyopaque, @ptrCast(&prog_ctx)));
+    }
 
     // Execute
     const result = c.curl_easy_perform(handle);

@@ -124,6 +124,65 @@ export function requestStream(req: StreamingHttpRequest, cb: StreamingHttpCallba
   };
 }
 
+// ── download() — stream a binary response straight to a file ──────
+//
+// Required for any payload larger than the in-memory body buffer
+// (model files, video, datasets). Bytes never cross the V8 boundary —
+// Zig's curl worker fwrites directly to the destination fd. Progress
+// lands as JSON on `http-download-progress:<rid>` and the terminal
+// resolves the promise on `http-download-end:<rid>`.
+
+export interface DownloadProgress {
+  bytes: number;
+  /** Server-reported Content-Length, or 0 if unknown. */
+  total: number;
+}
+
+export interface DownloadOptions {
+  url: string;
+  destPath: string;
+  headers?: Record<string, string>;
+  /** Fires ~10 Hz while the download runs. */
+  onProgress?: (p: DownloadProgress) => void;
+}
+
+let _dlSeq = 1;
+
+export function download(opts: DownloadOptions): Promise<{ status: number }> {
+  return new Promise<{ status: number }>((resolve, reject) => {
+    const rid = `d${_dlSeq++}`;
+    const unsubProgress = subscribe(`http-download-progress:${rid}`, (raw) => {
+      if (!opts.onProgress) return;
+      try {
+        const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        opts.onProgress({ bytes: Number(obj.d) || 0, total: Number(obj.t) || 0 });
+      } catch { /* swallow */ }
+    });
+    const unsubEnd = subscribe(`http-download-end:${rid}`, (raw) => {
+      unsubProgress();
+      unsubEnd();
+      let obj: any = {};
+      try { obj = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch {}
+      if (typeof obj.error === 'string') {
+        reject(new Error(obj.error));
+        return;
+      }
+      const status = Number(obj.status) || 0;
+      if (status < 200 || status >= 300) {
+        reject(new Error(`HTTP ${status}`));
+        return;
+      }
+      resolve({ status });
+    });
+    const spec = JSON.stringify({
+      method: 'GET',
+      url: opts.url,
+      headers: opts.headers ?? {},
+    });
+    callHost<void>('__http_download_to_file', undefined as any, spec, opts.destPath, rid);
+  });
+}
+
 // ── fetch() shim ───────────────────────────────────────────────────
 // Enough of the Fetch API surface that `await fetch(url).then(r => r.json())`
 // works in copy-pasted React components.
