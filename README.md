@@ -10,6 +10,21 @@ This is an experiment. Highly experimental, active construction, rough edges eve
 
 Copy-paste a React component, ship native performance, don't ship Chromium. V8 standalone is small (~6 MB); Node bundles V8 into a ~50 MB package; CEF (Chromium Embedded) is ~200 MB. The "V8 is heavy" intuition is really "Chromium is heavy." Measure before assuming.
 
+## What's native
+
+This isn't React with a thinner browser. It's React without a browser. Behind the reconciler, the parts a browser would normally hand you are local Zig:
+
+- **Layout** — `framework/layout.zig` + `framework/engine.zig`. Custom flexbox; no Yoga, no Taffy. Sizing tiers (explicit / content / proportional fallback), hit-testing, scroll, focus, z-index scissor breakouts.
+- **Text** — `framework/text.zig` + `framework/gpu/text.zig`. Font loading, glyph cache, shaping, line-break, paint. No HarfBuzz, no Pango.
+- **GPU drawing** — `framework/gpu/{rects,capsules,curves,polys,images,procgen,shaders,text,3d}.zig` on top of wgpu-native. Canvas and Graph coordinate stacks, the static-surface VM, and the effect/material pipeline compose at this layer.
+- **Networking** — `framework/net/{tcp,udp,http,httpserver,websocket,wsserver,socks5,tor,rcon,a2s,page_fetch,ring_buffer,manager,ipc}.zig`. HTTP/1.1, WS client + server, SOCKS5, Tor (control port + onion service), RCON, A2S, IPC. The Tor + SOCKS5 transport composition (`tcp via:tor`, `tcp via:socks5`) is by design — not a passthrough to a system socks daemon.
+- **Voice + audio + whisper** — `framework/voice.zig`, `framework/audio.zig`, `framework/whisper.zig`. SDL3 mic orchestration, modular synth graph, whisper.cpp worker thread + VAD-gated buffer lifecycle.
+- **Recorder, devtools, IFTTT, watchdog, render-surfaces (suspend/resume + kitty/headless capture), classifier sheets, hot-state, dev IPC, telemetry + semantic graph, click-latency tracing, agent sessions, PTY, file watch, file drop** — every line is local code under `framework/`. ~126 .zig files at `framework/` root, plus subdirs.
+
+**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D (physics), libsodium (privacy), libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv. The dep graph is shallow on purpose — when layout misbehaves, the bug is in a file you can read in one sitting, not buried under a million lines of Blink.
+
+The line between "uses dependencies" and "is native" runs through how much of the hard parts you wrote yourself. We wrote most of them.
+
 ## Carts
 
 Applications are called **carts**. A cart is a `.tsx` file — or a directory with an `index.tsx` entry — under `cart/`. The cart name resolves as `cart/<name>/index.tsx` first, then falls back to `cart/<name>.tsx`. Anything React can express, a cart can be.
@@ -169,6 +184,25 @@ First run extracts to `~/.cache/reactjit-<name>/<sig>/` and execs through the bu
 `scripts/ship` and `scripts/dev` split `RJIT_HOME` (the SDK install) from `CART_ROOT` (the user's project). `scripts/pack-sdk.js` produces a self-contained SDK tarball; the SDK ships its own Zig, sysroot, and pkg cache so cart binaries build off-tree without root.
 
 The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.sock`. `scripts/dev` bundles to `.cache/bundle-<cart>.js` and pushes over IPC; a second `scripts/dev <other>` adds a tab to the same host. Save-to-visible is ~300 ms for TSX/TS edits. A rebuild is required for changes under `framework/`, `build.zig`, or `scripts/`. Debug builds have a pre-existing click-path issue — stick to the default `ReleaseFast` for dev work. `useHotState` is wired but state does not survive reloads today.
+
+## SDK / dependency policy
+
+`sdk/dependency-registry.json` is the build contract. Every native library has two orthogonal policies:
+
+| Axis | Values | Meaning |
+|---|---|---|
+| `linkPolicy` | `foundational` | Always linked. SDL3, freetype, wgpu-native. |
+| | `system-assumed` | Declared at link time but the host always provides it. X11, libc, macOS frameworks. |
+| | `feature-gated` | Linked only when the cart's source triggers the feature. libmpv, libsodium, libsqlite3, libvterm, box2d, libcurl, tls.zig. |
+| | `engine-v8` | V8 prebuilt static lib, selected via `-Duse-v8`. |
+| `bundlePolicy` | `always` | `pack-sdk` always copies the .so into the SDK payload. |
+| | `feature-gated` | Only copied when the feature is on. |
+| | `vendored-source` | Compiled from C in-tree; nothing to ship (stb-image*). |
+| | `never` | Host-provided, never packed. |
+
+Triggers come from the cart's esbuild metafile — a feature only links if its marker appears in `outputs[].inputs`. A cart that never imports `Video` doesn't carry libmpv; a cart that never opens a SQLite DB doesn't carry libsqlite3. The dev host is the deliberate exception: `dev-zig-flags` enables every feature so any cart can land on it after startup.
+
+`scripts/sdk-dependency-resolve.js` (run under `tools/v8cli`) reads the metafile and emits the right `-Dhas-*` flags for `zig build`. `scripts/pack-sdk.js` produces a self-contained SDK tarball — its own Zig toolchain, sysroot (glibc family + SDL3 transitive .so deps), pkg cache, vendored React, esbuild, and `v8cli`. Carts ship from outside the repo via `RJIT_HOME` (SDK install) + `CART_ROOT` (project) split.
 
 ## Layout
 
