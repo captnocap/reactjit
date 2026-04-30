@@ -222,6 +222,111 @@ pub fn build(b: *std.Build) void {
         .flags = &.{ "-O2", "-fPIC", "-std=c11" },
     });
 
+    // ── whisper.cpp + ggml (CPU) ─────────────────────────────
+    // Gated by has-whisper because it's heavy (~5MB source, ~10MB binary).
+    // Carts that don't transcribe don't pay the build-time or binary cost.
+    // Enabled by scripts/ship when the bundle imports useVoiceInput AND a
+    // transcribe call site is present (see ship-metafile-gate.js / registry).
+    //
+    // The option is hoisted up here (rather than declared with the other
+    // has-X gates further down) because the compile block needs it. Keep
+    // the options.addOption / manifest writes alongside the others below.
+    const has_whisper = b.option(bool, "has-whisper", "Compile whisper.cpp + ggml (CPU) + register __whisper_* bindings") orelse false;
+    if (has_whisper) {
+        // Build whisper + ggml-cpu as a SHARED library, not statically
+        // compiled into the cart binary. The cart's link unit pulls in
+        // libc_v8.a (V8 prebuilt) which ships its own statically-linked
+        // libstdc++ symbols (std::runtime_error et al). Compiling
+        // whisper's C++ directly produces duplicate-symbol errors at
+        // ld.lld time. As a separate .so, libwhisper resolves its own
+        // libstdc++ at load time, isolated from the main binary's
+        // copies. Cart links against the .so via -lwhisper + rpath.
+        const whisper_root = b.path("deps/whisper.cpp");
+
+        const cpu_flags = [_][]const u8{
+            "-O3", "-fPIC", "-D_GNU_SOURCE", "-DNDEBUG",
+            "-DGGML_USE_CPU",
+            "-DGGML_VERSION=\"vendored\"",
+            "-DGGML_COMMIT=\"unknown\"",
+            "-DWHISPER_VERSION=\"vendored\"",
+            "-mavx", "-mavx2", "-mfma", "-mf16c", "-msse3", "-mssse3",
+            "-pthread",
+        };
+        const c_flags_whisper = cpu_flags ++ .{ "-std=c11" };
+        const cpp_flags_whisper = cpu_flags ++ .{ "-std=c++17" };
+
+        const wmod = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
+        });
+        wmod.addIncludePath(whisper_root.path(b, "include"));
+        wmod.addIncludePath(whisper_root.path(b, "ggml/include"));
+        wmod.addIncludePath(whisper_root.path(b, "ggml/src"));
+        wmod.addIncludePath(whisper_root.path(b, "ggml/src/ggml-cpu"));
+
+        wmod.addCSourceFiles(.{
+            .root = whisper_root.path(b, "ggml/src"),
+            .files = &.{ "ggml.c", "ggml-alloc.c", "ggml-quants.c" },
+            .flags = &c_flags_whisper,
+        });
+        wmod.addCSourceFiles(.{
+            .root = whisper_root.path(b, "ggml/src"),
+            .files = &.{
+                "ggml.cpp",
+                "ggml-backend.cpp",
+                "ggml-backend-reg.cpp",
+                "ggml-backend-dl.cpp",
+                "ggml-threading.cpp",
+                "ggml-opt.cpp",
+                "gguf.cpp",
+            },
+            .flags = &cpp_flags_whisper,
+        });
+        wmod.addCSourceFiles(.{
+            .root = whisper_root.path(b, "ggml/src/ggml-cpu"),
+            .files = &.{ "ggml-cpu.c", "quants.c", "arch/x86/quants.c" },
+            .flags = &c_flags_whisper,
+        });
+        wmod.addCSourceFiles(.{
+            .root = whisper_root.path(b, "ggml/src/ggml-cpu"),
+            .files = &.{
+                "ggml-cpu.cpp",
+                "ops.cpp",
+                "binary-ops.cpp",
+                "unary-ops.cpp",
+                "vec.cpp",
+                "traits.cpp",
+                "repack.cpp",
+                "hbm.cpp",
+                "arch/x86/repack.cpp",
+                "arch/x86/cpu-feats.cpp",
+            },
+            .flags = &cpp_flags_whisper,
+        });
+        wmod.addCSourceFiles(.{
+            .root = whisper_root.path(b, "src"),
+            .files = &.{"whisper.cpp"},
+            .flags = &cpp_flags_whisper,
+        });
+
+        const whisper_lib = b.addLibrary(.{
+            .name = "whisper",
+            .root_module = wmod,
+            .linkage = .dynamic,
+        });
+        b.installArtifact(whisper_lib);
+
+        // Cart binary: include whisper.h + dynamic-link to the .so. rpath
+        // $ORIGIN so the binary finds libwhisper.so next to itself when
+        // packaged by scripts/ship (which already bundles all .so deps).
+        root_mod.addIncludePath(whisper_root.path(b, "include"));
+        root_mod.addIncludePath(whisper_root.path(b, "ggml/include"));
+        exe.linkLibrary(whisper_lib);
+        exe.addRPath(.{ .cwd_relative = "$ORIGIN" });
+    }
+
     // ── Framework FFI shims ────────────────────────────────────
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
     if (has_physics) {
@@ -269,6 +374,7 @@ pub fn build(b: *std.Build) void {
     const has_zigcall = b.option(bool, "has-zigcall", "Register __zig_call/__zig_call_list bindings") orelse false;
     const has_sdk = b.option(bool, "has-sdk", "Register __http_request_*/__fetch/__claude_*/__kimi_*/__localai_*/__browser_*/__ipc_*/__play_*/__rec_* bindings") orelse false;
     const has_voice = b.option(bool, "has-voice", "Register __voice_* bindings (mic + WebRTC VAD)") orelse false;
+    // has_whisper hoisted earlier (next to its compile block).
     options.addOption(bool, "has_process", has_process);
     options.addOption(bool, "has_httpsrv", has_httpsrv);
     options.addOption(bool, "has_wssrv", has_wssrv);
@@ -280,6 +386,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_zigcall", has_zigcall);
     options.addOption(bool, "has_sdk", has_sdk);
     options.addOption(bool, "has_voice", has_voice);
+    options.addOption(bool, "has_whisper", has_whisper);
 
     // ── Allergen label: V8 binding manifest ───────────────────────────
     // Writes one file per opt-in domain to zig-out/manifest/<name>.flag
@@ -301,6 +408,7 @@ pub fn build(b: *std.Build) void {
     _ = manifest_wf.add("v8-ingredients/zigcall.flag", if (has_zigcall) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/sdk.flag", if (has_sdk) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/voice.flag", if (has_voice) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/whisper.flag", if (has_whisper) "1\n" else "0\n");
     const install_manifest = b.addInstallDirectory(.{
         .source_dir = manifest_wf.getDirectory(),
         .install_dir = .prefix,

@@ -149,6 +149,11 @@ const v8_bindings_voice = if (HAS_VOICE) @import("framework/v8_bindings_voice.zi
     pub fn registerVoice(_: anytype) void {}
     pub fn tickDrain() void {}
 };
+const HAS_WHISPER = if (@hasDecl(build_options, "has_whisper")) build_options.has_whisper else false;
+const v8_bindings_whisper = if (HAS_WHISPER) @import("framework/v8_bindings_whisper.zig") else struct {
+    pub fn registerWhisper(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
 
 const INGREDIENTS = [_]Ingredient{
     // Framework-essential (always-on). These bindings expose host fns the
@@ -183,6 +188,7 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "privacy", .required = false, .grep_prefix = "__priv_", .reg_fn = "registerPrivacy", .mod = v8_bindings_privacy },
     .{ .name = "sdk", .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk", .mod = v8_bindings_sdk },
     .{ .name = "voice", .required = false, .grep_prefix = "__voice_", .reg_fn = "registerVoice", .mod = v8_bindings_voice },
+    .{ .name = "whisper", .required = false, .grep_prefix = "__whisper_", .reg_fn = "registerWhisper", .mod = v8_bindings_whisper },
 };
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");

@@ -23,6 +23,15 @@ const filedrop = @import("filedrop.zig");
 const fswatch = @import("fswatch.zig");
 const clipboard_watch = @import("clipboard_watch.zig");
 const voice = @import("voice.zig");
+const build_options_for_whisper = @import("build_options");
+const whisper = if (@hasDecl(build_options_for_whisper, "has_whisper") and build_options_for_whisper.has_whisper)
+    @import("whisper.zig")
+else
+    struct {
+        pub fn init(_: anytype) void {}
+        pub fn deinit() void {}
+        pub fn tick(_: u32) void {}
+    };
 const system_signals = @import("system_signals.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
@@ -2701,6 +2710,7 @@ pub fn run(config_in: AppConfig) !void {
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO)) return error.SDLInitFailed;
     defer {
+        whisper.deinit();
         voice.deinit();
         c.SDL_Quit();
         watchdog.markCleanExit();
@@ -2712,6 +2722,7 @@ pub fn run(config_in: AppConfig) !void {
     // opened until JS calls __voice_start). Always present so carts can
     // useVoiceInput() without scripts/ship needing to flip a fresh -Dhas-X.
     voice.init(std.heap.c_allocator);
+    whisper.init(std.heap.c_allocator);
 
     // Canvas system init
     canvas.init();
@@ -3901,6 +3912,7 @@ pub fn run(config_in: AppConfig) !void {
         fswatch.tick(dt_ms);
         clipboard_watch.tick(dt_ms);
         voice.tick(dt_ms);
+        whisper.tick(dt_ms);
         system_signals.tick(dt_ms);
 
         // Paint (main window — wgpu)

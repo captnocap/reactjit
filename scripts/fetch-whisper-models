@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# fetch-whisper-models — pull whisper.cpp quantised .en models into ~/.reactjit/models/
+#
+# Models from https://huggingface.co/ggerganov/whisper.cpp/tree/main
+# Q5_1 quantised .en variants: best accuracy/size tradeoff for English-only.
+#
+# Usage:
+#   ./scripts/fetch-whisper-models                # tiny + base + small (~280 MB)
+#   ./scripts/fetch-whisper-models --all          # adds medium (~820 MB total)
+#   ./scripts/fetch-whisper-models tiny base      # just the named ones
+
+set -euo pipefail
+
+DEST="${RJIT_MODELS_DIR:-$HOME/.reactjit/models}"
+mkdir -p "$DEST"
+
+BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+
+declare -A MODELS=(
+    [tiny]="ggml-tiny.en-q5_1.bin"
+    [base]="ggml-base.en-q5_1.bin"
+    [small]="ggml-small.en-q5_1.bin"
+    [medium]="ggml-medium.en-q5_1.bin"
+)
+
+# Picked default set — leave medium opt-in (it's 540MB and download is slow on
+# typical home connections; not everyone needs medium-tier accuracy).
+DEFAULT_NAMES=(tiny base small)
+
+if [[ $# -eq 0 ]]; then
+    NAMES=("${DEFAULT_NAMES[@]}")
+elif [[ "$1" == "--all" ]]; then
+    NAMES=(tiny base small medium)
+else
+    NAMES=("$@")
+fi
+
+echo "[fetch-whisper-models] dest: $DEST"
+echo "[fetch-whisper-models] selected: ${NAMES[*]}"
+echo
+
+for name in "${NAMES[@]}"; do
+    file="${MODELS[$name]:-}"
+    if [[ -z "$file" ]]; then
+        echo "[fetch-whisper-models] unknown model '$name' — known: ${!MODELS[*]}" >&2
+        continue
+    fi
+    out="$DEST/$file"
+    if [[ -f "$out" ]] && [[ -s "$out" ]]; then
+        size=$(du -h "$out" | cut -f1)
+        echo "  ✓ $name → $file ($size, already present)"
+        continue
+    fi
+    url="$BASE_URL/$file"
+    echo "  ↓ $name → $file"
+    echo "    $url"
+    # -L follow redirects, -f fail on HTTP error, -C - resume partials.
+    curl -L -f -C - --progress-bar -o "$out.partial" "$url"
+    mv "$out.partial" "$out"
+    size=$(du -h "$out" | cut -f1)
+    echo "    done ($size)"
+done
+
+echo
+echo "[fetch-whisper-models] models in $DEST:"
+ls -la "$DEST" | grep -E "\.bin$" | awk '{printf "  %s  %s\n", $5, $9}'

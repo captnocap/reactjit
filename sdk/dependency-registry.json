@@ -383,6 +383,15 @@
       "buildOptions": ["has-voice"],
       "v8Bindings": ["voice"]
     },
+    "whisper": {
+      "shipGate": "whisper",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/whisper.ts" }
+      ],
+      "buildOptions": ["has-whisper"],
+      "v8Bindings": ["whisper"],
+      "note": "Heavy: compiles deps/whisper.cpp + ggml into libwhisper.so (~20 MB) and statically pulls libstdc++ into the cart binary (~80 MB). Carts that don't import runtime/hooks/whisper.ts pay nothing."
+    },
     "lua-worker": {
       "triggers": [
         { "kind": "featureMarker", "input": "runtime/features/lua-worker.ts" }
@@ -392,6 +401,6 @@
     }
   },
   "shipGate": {
-    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk", "voice"]
+    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk", "voice", "whisper"]
   }
 }
