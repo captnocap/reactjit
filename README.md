@@ -126,7 +126,7 @@ useVoiceInput          — SDL3 mic + libfvad VAD
 useEnsembleTranscript  — multi-model whisper consensus with tier escalation
 useIFTTT               — register triggers, fire actions
 useTelemetry           — fps / gpu / nodes / state / history in one hook
-useHotState            — hot-reload-surviving state (work in progress)
+useHotState            — hot-reload-surviving state, persisted in Zig memory
 useFileContent  useFileWatch  useFileDrop  useLocalStore
 useCRUD  useMedia  useFuzzySearch  usePrivacy  useTerminalRecorder
 useContextMenu
@@ -184,7 +184,7 @@ First run extracts to `~/.cache/reactjit-<name>/<sig>/` and execs through the bu
 
 `scripts/ship` and `scripts/dev` split `RJIT_HOME` (the SDK install) from `CART_ROOT` (the user's project). `scripts/pack-sdk.js` produces a self-contained SDK tarball; the SDK ships its own Zig, sysroot, and pkg cache so cart binaries build off-tree without root.
 
-The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.sock`. `scripts/dev` bundles to `.cache/bundle-<cart>.js` and pushes over IPC; a second `scripts/dev <other>` adds a tab to the same host. Save-to-visible is ~300 ms for TSX/TS edits. A rebuild is required for changes under `framework/`, `build.zig`, or `scripts/`. Debug builds have a pre-existing click-path issue — stick to the default `ReleaseFast` for dev work. `useHotState` is wired but state does not survive reloads today.
+The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.sock`. `scripts/dev` bundles to `.cache/bundle-<cart>.js` and pushes over IPC; a second `scripts/dev <other>` adds a tab to the same host. Save-to-visible is ~300 ms for TSX/TS edits. A rebuild is required for changes under `framework/`, `build.zig`, or `scripts/`. Debug builds have a pre-existing click-path issue — stick to the default `ReleaseFast` for dev work. `useHotState` survives reloads — atoms are stored in Zig-owned memory outside the JS context that gets torn down on re-eval.
 
 ## SDK / dependency policy
 
@@ -265,7 +265,7 @@ Frozen trees are read-only reference material. The JSRT (JS-inside-Lua evaluator
 | Networking trichotomy (`useHost` / `fetch` / `useConnection`) wired for ws/tcp/udp/http/SSE/tor/socks5 | `wireguard` / `stun` / `peer` connection kinds |
 | RCON + A2S Source Query for game-server carts | No `<Audio>` React primitive — carts call `__audio*` directly |
 | Privacy / crypto stack: GPG, keyring, Noise, Shamir, steganography, audit logs, PII redaction, secure buffers | Inspector UI cart (host telemetry plumbing exists; UI sparse) |
-| Persistent dev host + IPC bundle-push + hot reload | `useHotState` state persistence across reloads |
+| Persistent dev host + IPC bundle-push + hot reload, with `useHotState` surviving re-eval | |
 | `scripts/ship` self-extracting packaging, cross-distro sysroot bundling | Video primitive end-to-end |
 | Render suspend/resume + kitty/VM/headless render surfaces | Standalone `rjit` dispatcher (templates + help present, dispatcher in progress) |
 | CSS transform stack (rotate/scale/translate via matrix), z-index scissor breakouts for context menus | Physics + 3D still cart-side integrations under `cart/sweatshop/components/`, not runtime exports |
