@@ -75,6 +75,16 @@ import {
   type IFTTTComposable,
 } from './ifttt-compose';
 
+// ── Source side-effects ───────────────────────────────────────────────
+//
+// useIFTTT is the natural entry point for any cart using the DSL, so we
+// pull in the bundled trigger/action sources here. Each module's
+// register*() calls fire on import, populating the registry before any
+// useIFTTT() subscription runs. Carts get full source coverage without
+// having to import each owning hook explicitly.
+import './process';        // proc:* triggers + actions, per-pid memory
+import './useFileWatch';   // fs:* triggers
+
 // ── Bus + state store ─────────────────────────────────────────────────────
 
 type Handler = (payload?: any) => void;

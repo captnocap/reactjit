@@ -22,7 +22,7 @@
  *   __ffiEmit('proc:exit:<pid>', { code, signal })
  */
 
-import { callHost, hasHost, subscribe } from '../ffi';
+import { callHost, callHostJson, hasHost, subscribe } from '../ffi';
 import { registerIfttSource, registerIfttAction } from './ifttt-registry';
 
 export interface SpawnOptions {
@@ -152,6 +152,60 @@ export function execAsync(cmd: string): Promise<ExecResult> {
   });
 }
 
+// ── Per-process memory + cpu sampling ─────────────────────────────
+//
+// Backed by `__proc_watch_*` and `__proc_stat` in v8_bindings_process.zig
+// (Linux-only — gracefully no-ops elsewhere). The Zig sampler emits two
+// raw channels per pid:
+//   'proc:ram:<pid>'  { pid, rss, vsize, memTotal, percent }   — fraction 0..1
+//   'proc:cpu:<pid>'  { pid, utime, stime, delta, intervalMs }
+//
+// JS-side derived triggers below add the threshold/idle predicates so
+// carts can subscribe with one line.
+
+export interface ProcStat {
+  pid: number;
+  rss: number;
+  vsize: number;
+  utime: number;
+  stime: number;
+  memTotal: number;
+  percent: number;
+}
+
+/** One-shot snapshot of a process's RSS / cpu ticks. Returns null if the
+ *  pid doesn't exist or procfs isn't available. */
+export function procStat(pid: Pid): ProcStat | null {
+  return callHostJson<ProcStat | null>('__proc_stat', null, pid);
+}
+
+const _watchRefs = new Map<number, number>();
+
+/** Arm the engine sampler for `pid`. Refcounted — call the returned fn
+ *  once to release. The IFTTT sources below auto-arm/release so carts
+ *  rarely call this directly. */
+export function watchProcess(pid: Pid, intervalMs: number = 500): () => void {
+  const cur = _watchRefs.get(pid) ?? 0;
+  _watchRefs.set(pid, cur + 1);
+  if (cur === 0) {
+    callHost<void>('__proc_watch_add', undefined as any, pid, Math.max(100, intervalMs | 0));
+  }
+  return () => {
+    const n = (_watchRefs.get(pid) ?? 1) - 1;
+    if (n <= 0) {
+      _watchRefs.delete(pid);
+      callHost<void>('__proc_watch_remove', undefined as any, pid);
+    } else {
+      _watchRefs.set(pid, n);
+    }
+  };
+}
+
+function parsePayload(raw: any): any {
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
 // ── IFTTT registration ─────────────────────────────────────────────
 //
 // `proc:stdout:<pid>` / `proc:stderr:<pid>` / `proc:exit:<pid>` are
@@ -211,4 +265,84 @@ registerIfttAction('proc:write:', (rest, _payload) => {
   const text = rest.slice(colon + 1);
   if (!pid || pid <= 0) return;
   stdinWrite(pid, text);
+});
+
+// proc:ram:<pid>           — fires on every sampled change.
+// proc:ram:<pid>:>:<frac>  — fires only when payload.percent > frac (0..1).
+// proc:ram:<pid>:<:<frac>  — fires only when payload.percent < frac.
+// Auto-arms the engine watcher on first subscribe; releases on last unsub.
+registerIfttSource('proc:ram:', {
+  match(spec) {
+    const rest = spec.slice('proc:ram:'.length);
+    const m = /^(\d+)(?::([<>]):([\d.]+))?$/.exec(rest);
+    if (!m) return null;
+    const pid = Number(m[1]);
+    const op = m[2] as '<' | '>' | undefined;
+    const frac = m[3] != null ? Number(m[3]) : null;
+    return {
+      subscribe(onFire) {
+        const release = watchProcess(pid);
+        const off = subscribe(`proc:ram:${pid}`, (raw: any) => {
+          const payload = parsePayload(raw);
+          const pct = Number(payload?.percent ?? 0);
+          if (op === '>' && !(pct > (frac as number))) return;
+          if (op === '<' && !(pct < (frac as number))) return;
+          onFire(payload);
+        });
+        return () => { off(); release(); };
+      },
+    };
+  },
+});
+
+// proc:cpu:<pid> — raw cpu ticks. Auto-arms the watcher.
+registerIfttSource('proc:cpu:', {
+  match(spec) {
+    const rest = spec.slice('proc:cpu:'.length);
+    if (!/^\d+$/.test(rest)) return null;
+    const pid = Number(rest);
+    return {
+      subscribe(onFire) {
+        const release = watchProcess(pid);
+        const off = subscribe(`proc:cpu:${pid}`, (raw: any) => onFire(parsePayload(raw)));
+        return () => { off(); release(); };
+      },
+    };
+  },
+});
+
+// proc:idle:<pid>:<ms> — fires when no cpu/stdout/stderr activity for
+// `ms` milliseconds. Re-arms on the next activity edge, so a single
+// subscription fires once per idle-period transition.
+registerIfttSource('proc:idle:', {
+  match(spec) {
+    const rest = spec.slice('proc:idle:'.length);
+    const m = /^(\d+):(\d+)$/.exec(rest);
+    if (!m) return null;
+    const pid = Number(m[1]);
+    const idleMs = Number(m[2]);
+    if (!pid || idleMs <= 0) return null;
+    return {
+      subscribe(onFire) {
+        const release = watchProcess(pid);
+        let timer: any = null;
+        const arm = () => {
+          if (timer != null) clearTimeout(timer);
+          timer = setTimeout(() => {
+            timer = null;
+            onFire({ pid, id: pid, idleMs, at: Date.now() });
+          }, idleMs);
+        };
+        arm();
+        const offCpu = subscribe(`proc:cpu:${pid}`, arm);
+        const offOut = subscribe(`proc:stdout:${pid}`, arm);
+        const offErr = subscribe(`proc:stderr:${pid}`, arm);
+        return () => {
+          if (timer != null) { clearTimeout(timer); timer = null; }
+          offCpu(); offOut(); offErr();
+          release();
+        };
+      },
+    };
+  },
 });
