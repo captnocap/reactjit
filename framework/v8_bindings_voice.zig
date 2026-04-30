@@ -44,6 +44,12 @@ fn hostSetMode(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     voice.setMode(@as(c_int, mode));
 }
 
+fn hostSetFloor(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const floor = argToI32(info, 0) orelse return;
+    voice.setFloor(floor);
+}
+
 fn hostReleaseBuffer(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const id = argToI32(info, 0) orelse return;
@@ -55,6 +61,7 @@ pub fn registerVoice(_: anytype) void {
     v8_runtime.registerHostFn("__voice_start", hostStart);
     v8_runtime.registerHostFn("__voice_stop", hostStop);
     v8_runtime.registerHostFn("__voice_set_mode", hostSetMode);
+    v8_runtime.registerHostFn("__voice_set_floor", hostSetFloor);
     v8_runtime.registerHostFn("__voice_release_buffer", hostReleaseBuffer);
 }
 

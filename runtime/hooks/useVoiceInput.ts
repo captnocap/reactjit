@@ -58,6 +58,7 @@ type Handler = (payload?: any) => void;
 
 const subs = {
   level: new Set<Handler>(),
+  vadFrame: new Set<Handler>(),
   speechStart: new Set<Handler>(),
   speechEnd: new Set<Handler>(),
   transcript: new Set<Handler>(),
@@ -74,9 +75,12 @@ function emit(set: Set<Handler>, payload?: any) {
 const G = globalThis;
 if (!G.__voice_handlers_installed) {
   G.__voice_handlers_installed = true;
-  G.__voice_onLevel = (rms_x100: number) => {
-    // Zig sends 0..10000 (×100 of 0..100). Normalise to 0..1.
+  G.__voice_onLevel = (rms_x100: number, vad_verdict?: number) => {
+    // Zig sends two args: peak-dBFS level (0..10000, ×100 of 0..100) and the
+    // raw libfvad verdict for the most recent frame (0 or 1, no debounce).
+    // Older builds may send only one arg; treat undefined as 0.
     emit(subs.level, Math.max(0, Math.min(1, rms_x100 / 10000)));
+    emit(subs.vadFrame, (vad_verdict ?? 0) === 1 ? 1 : 0);
   };
   G.__voice_onSpeechStart = () => emit(subs.speechStart);
   G.__voice_onSpeechEnd = (id: number, lenSamples: number) => {
@@ -89,11 +93,12 @@ if (!G.__voice_handlers_installed) {
 
 export interface VoiceInputResult {
   isListening: boolean;
-  isSpeaking: boolean;
-  level: number;            // 0..1
-  transcript: string;       // last finalised utterance (whisper). '' until then.
-  utteranceId: number;      // 0 until first speech-end
-  utteranceMs: number;      // duration of the last finalised utterance
+  isSpeaking: boolean;       // debounced — gated by 90ms start / 750ms end
+  vadFrame: 0 | 1;           // raw per-frame libfvad verdict, no debounce
+  level: number;             // 0..1, peak-dBFS amplitude
+  transcript: string;        // last finalised utterance (whisper). '' until then.
+  utteranceId: number;       // 0 until first speech-end
+  utteranceMs: number;       // duration of the last finalised utterance
   start: () => boolean;
   stop: () => void;
 }
@@ -101,9 +106,39 @@ export interface VoiceInputResult {
 export interface VoiceInputOptions {
   /** libfvad aggressiveness 0..3. Default 2 ("aggressive"). */
   mode?: 0 | 1 | 2 | 3;
+  /** Amplitude floor on the same 0..1 scale as `level` (peak-dBFS,
+   *  -60..0 → 0..1). Frames below this are forced to silent regardless of
+   *  libfvad's verdict. 0 = off (libfvad-only). Useful for rejecting
+   *  mid-band ambient (typing, fans) the GMM mistakes for speech.
+   *  Quick reference: -50 dBFS ≈ 0.17, -40 ≈ 0.33, -30 ≈ 0.50. */
+  floor?: number;
   /** Free the captured PCM buffer after speech-end. Default true; set false
    *  if you want to call a transcribe-by-id helper before it's freed. */
   autoRelease?: boolean;
+}
+
+/**
+ * Subscribe to raw per-frame VAD verdicts (0 or 1) — every 30ms frame, no
+ * debounce. Callback fires on the same tick the Zig side fires
+ * `__voice_onLevel`. Returns an unsubscribe function. Useful for trace-style
+ * visualisations where you want to see each individual frame.
+ *
+ * The hook's `vadFrame` field gives you the latest value but React bails out
+ * when consecutive identical values come in, so a 60-frame run of silence
+ * triggers one re-render. Subscribe directly when you need every event.
+ */
+export function subscribeRawVadFrame(fn: (v: 0 | 1) => void): () => void {
+  const wrapper: Handler = (v) => fn(v ? 1 : 0);
+  subs.vadFrame.add(wrapper);
+  return () => { subs.vadFrame.delete(wrapper); };
+}
+
+/** Subscribe to every level update (peak-dBFS, 0..1). See subscribeRawVadFrame
+ *  rationale — useful when you want the full sample stream for a trace. */
+export function subscribeRawLevel(fn: (level: number) => void): () => void {
+  const wrapper: Handler = (v) => fn(typeof v === 'number' ? v : 0);
+  subs.level.add(wrapper);
+  return () => { subs.level.delete(wrapper); };
 }
 
 // ── The hook ─────────────────────────────────────────────────────────────
@@ -111,6 +146,7 @@ export interface VoiceInputOptions {
 export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputResult {
   const [isListening, setListening] = useState(false);
   const [isSpeaking, setSpeaking] = useState(false);
+  const [vadFrame, setVadFrame] = useState<0 | 1>(0);
   const [level, setLevel] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [utterance, setUtterance] = useState({ id: 0, ms: 0 });
@@ -125,9 +161,18 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputResult {
     if (typeof fn === 'function') fn(opts.mode ?? 2);
   }, [opts.mode]);
 
+  // Amplitude floor: convert 0..1 → 0..10000 for the Zig side.
+  useEffect(() => {
+    const fn = G.__voice_set_floor;
+    if (typeof fn !== 'function') return;
+    const f = Math.max(0, Math.min(1, opts.floor ?? 0));
+    fn(Math.round(f * 10000));
+  }, [opts.floor]);
+
   // Subscribe to bridge events for this instance's lifetime.
   useEffect(() => {
     const onLevel: Handler = (v) => setLevel(v);
+    const onVadFrame: Handler = (v) => setVadFrame(v ? 1 : 0);
     const onSpeechStart: Handler = () => setSpeaking(true);
     const onSpeechEnd: Handler = (e: { id: number; lenSamples: number; durationMs: number }) => {
       setSpeaking(false);
@@ -140,11 +185,13 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputResult {
     const onTranscript: Handler = (text) => setTranscript(String(text ?? ''));
 
     subs.level.add(onLevel);
+    subs.vadFrame.add(onVadFrame);
     subs.speechStart.add(onSpeechStart);
     subs.speechEnd.add(onSpeechEnd);
     subs.transcript.add(onTranscript);
     return () => {
       subs.level.delete(onLevel);
+      subs.vadFrame.delete(onVadFrame);
       subs.speechStart.delete(onSpeechStart);
       subs.speechEnd.delete(onSpeechEnd);
       subs.transcript.delete(onTranscript);
@@ -173,6 +220,7 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputResult {
   return {
     isListening,
     isSpeaking,
+    vadFrame,
     level,
     transcript,
     utteranceId: utterance.id,

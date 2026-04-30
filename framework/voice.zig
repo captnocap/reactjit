@@ -75,6 +75,17 @@ const State = struct {
     // for cart-side level-meter visualisations.
     last_rms_x100: i32 = 0,
 
+    // Most recent libfvad per-frame verdict (no debounce). 0 = silence,
+    // 1 = speech. Useful for visualising the raw VAD vs the debounced
+    // utterance edges; reported alongside level via __voice_onLevel.
+    last_vad_verdict: i32 = 0,
+
+    // Amplitude floor: any frame below this peak-dBFS-derived level is
+    // forced to silent regardless of fvad's verdict. Stored on the same
+    // 0..10000 scale as last_rms_x100. 0 = no gate. Defaults off so a
+    // cart that doesn't care gets pure libfvad behaviour.
+    floor_x100: i32 = 0,
+
     allocator: std.mem.Allocator = undefined,
 };
 
@@ -159,6 +170,15 @@ pub fn setMode(mode: c_int) void {
     if (S.fvad_inst) |inst| _ = fvad.fvad_set_mode(inst, mode);
 }
 
+/// Sets an amplitude floor on the same 0..10000 scale the level callback
+/// fires on (peak-dBFS, -60..0 → 0..10000). Frames quieter than this are
+/// counted as silence regardless of the libfvad verdict — useful for
+/// rejecting mid-band ambient (HVAC, distant typing) that the GMM mistakes
+/// for speech. Pass 0 to disable.
+pub fn setFloor(floor_x100: i32) void {
+    S.floor_x100 = if (floor_x100 < 0) 0 else floor_x100;
+}
+
 fn resetPhase() void {
     S.phase = .idle;
     S.consec_speech = 0;
@@ -179,9 +199,18 @@ pub fn tick(_: u32) void {
         const got = c.SDL_GetAudioStreamData(stream, &S.frame, @intCast(FRAME_BYTES));
         if (got != @as(c_int, @intCast(FRAME_BYTES))) break;
 
+        // Compute peak-dBFS first — we may use it to gate the verdict below.
+        S.last_rms_x100 = computeRmsX100(&S.frame);
+
         const verdict = fvad.fvad_process(S.fvad_inst.?, &S.frame, FRAME_SAMPLES);
         // -1 == invalid frame (shouldn't happen — we always feed FRAME_SAMPLES).
-        const is_speech = verdict == 1;
+        const fvad_says_speech = verdict == 1;
+        // Amplitude floor: regardless of fvad's GMM verdict, a frame below
+        // the configured peak-dBFS floor is silence. Off by default; cart
+        // can flip it on via __voice_set_floor.
+        const above_floor = S.floor_x100 == 0 or S.last_rms_x100 >= S.floor_x100;
+        const is_speech = fvad_says_speech and above_floor;
+        S.last_vad_verdict = if (is_speech) 1 else 0;
 
         // Capture PCM whenever we're not idle so the prefix that triggered
         // start (the 90ms candidate window) is preserved in the utterance.
@@ -196,9 +225,6 @@ pub fn tick(_: u32) void {
                 continue;
             }
         }
-
-        // RMS for level meter (samples are int16, scale to 0..100 roughly).
-        S.last_rms_x100 = computeRmsX100(&S.frame);
 
         switch (S.phase) {
             .idle => if (is_speech) {
@@ -234,8 +260,16 @@ pub fn tick(_: u32) void {
     }
 
     // Level callback fires once per tick regardless of phase, throttled to
-    // whatever the engine's frame rate already is.
-    v8_runtime.callGlobalInt("__voice_onLevel", @intCast(S.last_rms_x100));
+    // whatever the engine's frame rate already is. Two args: peak-dBFS level
+    // (0..10000, ×100) and the raw libfvad verdict for the most recent
+    // frame (0/1, no debounce). The cart visualises both separately so the
+    // user can tell amplitude transients (keyboard clicks) from speech-class
+    // verdicts (the GMM saying "this looks like a vowel").
+    v8_runtime.callGlobal2Int(
+        "__voice_onLevel",
+        @intCast(S.last_rms_x100),
+        @intCast(S.last_vad_verdict),
+    );
 }
 
 fn finaliseUtterance() void {
