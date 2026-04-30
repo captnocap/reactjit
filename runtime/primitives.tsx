@@ -15,8 +15,50 @@
  * (after require_react's body finishes) resolves to the real React.
  */
 
+const THEME_PREFIX = 'theme:';
+
+function isThemeTokenValue(v: unknown): v is string {
+  return typeof v === 'string' && v.startsWith(THEME_PREFIX);
+}
+
+function hasThemeTokenValue(v: any): boolean {
+  if (isThemeTokenValue(v)) return true;
+  if (!v || typeof v !== 'object' || v instanceof Function) return false;
+  if ((v as any).$$typeof) return false;
+  if (Array.isArray(v)) return v.some(hasThemeTokenValue);
+  for (const key of Object.keys(v)) {
+    if (key === 'children' || key === 'key' || key === 'ref') continue;
+    if (hasThemeTokenValue(v[key])) return true;
+  }
+  return false;
+}
+
+function resolveThemeValue(v: any, colors: any, styles: any, resolveToken: any): any {
+  if (isThemeTokenValue(v)) return resolveToken(v, colors, styles);
+  if (!v || typeof v !== 'object' || v instanceof Function) return v;
+  if ((v as any).$$typeof) return v;
+  if (Array.isArray(v)) return v.map((item) => resolveThemeValue(item, colors, styles, resolveToken));
+
+  const out: Record<string, any> = {};
+  for (const key of Object.keys(v)) {
+    out[key] = key === 'children'
+      ? v[key]
+      : resolveThemeValue(v[key], colors, styles, resolveToken);
+  }
+  return out;
+}
+
+function useResolvedPrimitiveProps(props: any): any {
+  // Theme is required lazily for the same reason React is: primitives can be
+  // initialized while React's own module body is still bootstrapping.
+  const theme = require('./theme');
+  const snap = theme.__useClassifierSnapshot();
+  if (!props || !hasThemeTokenValue(props)) return props;
+  return resolveThemeValue(props, snap.colors, snap.styles, theme.resolveToken);
+}
+
 function h(type: any, props: any, ...children: any[]): any {
-  return require('react').createElement(type, props, ...children);
+  return require('react').createElement(type, useResolvedPrimitiveProps(props), ...children);
 }
 
 // ── Core building blocks ────────────────────────────────────
@@ -224,6 +266,36 @@ PhysicsBase.Collider = ({ shape, radius, density, friction, restitution, ...rest
     physicsRestitution: restitution ?? 0.1,
   }, rest.children);
 export const Physics: any = PhysicsBase;
+
+// ── Scene3D — React-side 3D scene graph (lifted from sweatshop) ─────────────
+//
+// Surface mirrors Physics: a base component plus typed sub-components for
+// camera / mesh / lights / orbit-controls. The actual implementation lives
+// in runtime/scene3d/ — we lazy-require it here so primitives.tsx doesn't
+// drag the whole 3D module into the init graph.
+//
+//   <Scene3D backgroundColor="#0a0e18">
+//     <Scene3D.Camera position={[3, 2, 4]} target={[0, 0, 0]} />
+//     <Scene3D.AmbientLight intensity={0.3} />
+//     <Scene3D.DirectionalLight direction={[0.5, 1, -0.3]} />
+//     <Scene3D.PointLight position={[0, 3, 0]} color="#ffc48a" />
+//     <Scene3D.Mesh geometry="sphere" material="#4aa3ff" />
+//     <Scene3D.OrbitControls />
+//   </Scene3D>
+//
+// Today the renderer is a CPU 2D perspective mockup over Canvas.Node. When
+// the host registers a wgpu-backed Scene3D primitive, the registry stays
+// the same and Scene3D.tsx swaps its paint path internally.
+const Scene3DBase: any = function Scene3D(props: any) {
+  return require('./scene3d/Scene3D').Scene3D(props);
+};
+Scene3DBase.Camera           = function Camera(props: any)           { return require('./scene3d/Camera').Camera(props); };
+Scene3DBase.Mesh             = function Mesh(props: any)             { return require('./scene3d/Mesh').Mesh(props); };
+Scene3DBase.AmbientLight     = function AmbientLight(props: any)     { return require('./scene3d/AmbientLight').AmbientLight(props); };
+Scene3DBase.DirectionalLight = function DirectionalLight(props: any) { return require('./scene3d/DirectionalLight').DirectionalLight(props); };
+Scene3DBase.PointLight       = function PointLight(props: any)       { return require('./scene3d/PointLight').PointLight(props); };
+Scene3DBase.OrbitControls    = function OrbitControls(props: any)    { return require('./scene3d/OrbitControls').OrbitControls(props); };
+export const Scene3D: any = Scene3DBase;
 
 // ── Canvas — pan/zoomable node surface ──────────────────────
 

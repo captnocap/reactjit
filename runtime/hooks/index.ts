@@ -132,6 +132,35 @@ export type { VoiceInputOptions, VoiceInputResult } from './useVoiceInput';
 export { useFileWatch, attachWatcher } from './useFileWatch';
 export type { FileWatchEvent, FileWatchOptions } from './useFileWatch';
 
+// Scene3D scene-graph hook — lives in runtime/scene3d/, surfaced through
+// the same hooks barrel so carts can pull `useScene3D` alongside the rest.
+export { useScene3D, createScene3DRegistry, DEFAULT_CAMERA, Scene3DContext } from '../scene3d/useScene3D';
+export type { Scene3DRegistry } from '../scene3d/useScene3D';
+export type {
+  Vec3 as Scene3DVec3,
+  GeometryKind,
+  CameraKind,
+  BoxGeometry,
+  SphereGeometry,
+  PlaneGeometry,
+  TorusGeometry,
+  GeometryDescriptor,
+  StandardMaterial,
+  MeshNode,
+  CameraNode,
+  AmbientLightNode,
+  DirectionalLightNode,
+  PointLightNode,
+  LightNode,
+  Scene3DProps,
+  CameraProps,
+  MeshProps,
+  AmbientLightProps,
+  DirectionalLightProps,
+  PointLightProps,
+  OrbitControlsProps,
+} from '../scene3d/types';
+
 export * from '../ffi';
 
 /**

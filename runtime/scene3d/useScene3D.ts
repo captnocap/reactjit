@@ -12,8 +12,9 @@
 //   • useScene3D()                 — hook that returns the registry
 //   • createScene3DRegistry()      — factory for Scene3D.tsx root
 //
-// Lives cart-side only. When a wgpu-backed native Scene3D primitive lands,
-// the registry shape stays; only Scene3D.tsx's renderer changes.
+// Lives in runtime/scene3d/ so any cart can `import { useScene3D } from
+// '@reactjit/runtime/hooks'`. When a wgpu-backed native Scene3D primitive
+// lands, the registry shape stays; only Scene3D.tsx's renderer changes.
 // =============================================================================
 
 

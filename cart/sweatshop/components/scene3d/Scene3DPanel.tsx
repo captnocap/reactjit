@@ -16,14 +16,14 @@
 
 import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
-import { Scene3D } from './Scene3D';
-import { Camera } from './Camera';
-import { Mesh } from './Mesh';
-import { AmbientLight } from './AmbientLight';
-import { DirectionalLight } from './DirectionalLight';
-import { PointLight } from './PointLight';
-import { OrbitControls } from './OrbitControls';
-import type { CameraKind } from './types';
+import { Scene3D } from '@reactjit/runtime/scene3d/Scene3D';
+import { Camera } from '@reactjit/runtime/scene3d/Camera';
+import { Mesh } from '@reactjit/runtime/scene3d/Mesh';
+import { AmbientLight } from '@reactjit/runtime/scene3d/AmbientLight';
+import { DirectionalLight } from '@reactjit/runtime/scene3d/DirectionalLight';
+import { PointLight } from '@reactjit/runtime/scene3d/PointLight';
+import { OrbitControls } from '@reactjit/runtime/scene3d/OrbitControls';
+import type { CameraKind } from '@reactjit/runtime/scene3d/types';
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;

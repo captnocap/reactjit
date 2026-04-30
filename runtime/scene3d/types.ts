@@ -2,11 +2,11 @@
 // Scene3D types — shared type surface for the 3D scene package
 // =============================================================================
 // Ported from love2d/storybook/reactjit/3d/src/types.ts, extended for a
-// standalone React scene graph that lives entirely in cart-side code.
-// The cart host does NOT yet have a wgpu/Scene3D primitive registered, so the
-// actual renderer lives in cart/sweatshop/components/scene3d/Scene3D.tsx and
-// paints a 2D Canvas.Node mockup. The scene graph shape is preserved so
-// children (Mesh/Camera/lights) plug in unchanged once wgpu lands.
+// standalone React scene graph that lives at runtime/scene3d/.
+// The host does NOT yet have a wgpu/Scene3D primitive registered, so the
+// actual renderer lives in runtime/scene3d/Scene3D.tsx and paints a 2D
+// Canvas.Node mockup. The scene graph shape is preserved so children
+// (Mesh/Camera/lights) plug in unchanged once wgpu lands.
 // =============================================================================
 
 /** 3D vector as [x, y, z] */
