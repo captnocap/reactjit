@@ -19,9 +19,10 @@ This isn't React with a thinner browser. It's React without a browser. Behind th
 - **GPU drawing** — `framework/gpu/{rects,capsules,curves,polys,images,procgen,shaders,text,3d}.zig` on top of wgpu-native. Canvas and Graph coordinate stacks, the static-surface VM, and the effect/material pipeline compose at this layer.
 - **Networking** — `framework/net/{tcp,udp,http,httpserver,websocket,wsserver,socks5,tor,rcon,a2s,page_fetch,ring_buffer,manager,ipc}.zig`. HTTP/1.1, WS client + server, SOCKS5, Tor (control port + onion service), RCON, A2S, IPC. The Tor + SOCKS5 transport composition (`tcp via:tor`, `tcp via:socks5`) is by design — not a passthrough to a system socks daemon.
 - **Voice + audio + whisper** — `framework/voice.zig`, `framework/audio.zig`, `framework/whisper.zig`. SDL3 mic orchestration, modular synth graph, whisper.cpp worker thread + VAD-gated buffer lifecycle.
-- **Recorder, devtools, IFTTT, watchdog, render-surfaces (suspend/resume + kitty/headless capture), classifier sheets, hot-state, dev IPC, telemetry + semantic graph, click-latency tracing, agent sessions, PTY, file watch, file drop** — every line is local code under `framework/`. ~126 .zig files at `framework/` root, plus subdirs.
 
-**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D (physics), libsodium (privacy), libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv. The dep graph is shallow on purpose — when layout misbehaves, the bug is in a file you can read in one sitting, not buried under a million lines of Blink.
+That's the load-bearing five — picked by where bugs land most often, not by importance. `ls framework/` is ~120 more `.zig` files in the same shape: read the file, fix the bug. Pointing at any single one of them is missing the point. The point is what *isn't* there: a 200MB engine being asked to pretend it's a UI runtime.
+
+**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv. The dep graph is shallow on purpose.
 
 The line between "uses dependencies" and "is native" runs through how much of the hard parts you wrote yourself. We wrote most of them.
 
