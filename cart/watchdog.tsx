@@ -100,12 +100,12 @@ function fmtTime(ts: number): string {
 
 function StatRow({ label, value, color = TEXT }: { label: string; value: string; color?: string }) {
   return (
-    <Row style={{ gap: 12, alignItems: 'center' }}>
-      <Box style={{ width: 140 }}>
+    <Row style={{ gap: 12, alignItems: 'center', height: 22 }}>
+      <Box style={{ width: 140, height: 22, justifyContent: 'center' }}>
         <Text fontSize={11} color={DIM}>{label}</Text>
       </Box>
-      <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-        <Text fontSize={12} color={color} style={{ fontWeight: 'bold' }} numberOfLines={1}>{value}</Text>
+      <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, height: 22, justifyContent: 'center' }}>
+        <Text fontSize={12} color={color} style={{ fontWeight: 'bold' }}>{value}</Text>
       </Box>
     </Row>
   );
@@ -137,9 +137,8 @@ export default function WatchdogCart() {
   const [mode, setMode] = useState<Mode>('heartbeat');
   const [threshold, setThreshold] = useState<ThresholdKey>('100MB');
 
-  const [killCount, setKillCount] = useState(0);
-  const [lastKillAt, setLastKillAt] = useState(0);
-  const [lastReason, setLastReason] = useState('—');
+  type KillEntry = { at: number; reason: string; signal: string; pid: number };
+  const [killLog, setKillLog] = useState<KillEntry[]>([]);
   const [latestSample, setLatestSample] = useState<any>(null);
   const [lastChildLine, setLastChildLine] = useState('');
 
@@ -147,16 +146,12 @@ export default function WatchdogCart() {
     kind: 'process',
     ...modeCmd(mode),
     onStdout: (line) => { setLastChildLine(line.slice(0, 80)); bump(); },
-    onExit: (r) => {
-      setLastReason((cur) => cur === '—' ? `child exited (code ${r.code})` : cur);
-      bump();
-    },
+    onExit: (_r) => { bump(); },
   });
 
   const recordKill = (reason: string, signal: 'SIGTERM' | 'SIGKILL' = 'SIGTERM') => {
-    setKillCount((n) => n + 1);
-    setLastKillAt(Date.now());
-    setLastReason(reason);
+    const entry: KillEntry = { at: Date.now(), reason, signal, pid: child.pid };
+    setKillLog((log) => [entry, ...log].slice(0, 8));
     if (child.pid > 0) child.kill?.(signal);
   };
 
@@ -174,8 +169,7 @@ export default function WatchdogCart() {
     (payload: any) => {
       setLatestSample(payload);
       const rss = fmtBytes(payload?.rss ?? 0);
-      const pct = ((payload?.percent ?? 0) * 100).toFixed(2);
-      recordKill(`ram > ${threshold} (rss=${rss}, ${pct}% of system)`);
+      recordKill(`ram > ${threshold} (rss=${rss})`);
     },
   );
 
@@ -184,7 +178,7 @@ export default function WatchdogCart() {
     `proc:idle:${child.pid}:${IDLE_MS}`,
     () => {
       if (child.state !== 'running') return;
-      recordKill(`idle > ${IDLE_MS / 1000}s (no cpu/stdout)`);
+      recordKill(`idle > ${IDLE_MS / 1000}s`);
     },
   );
 
@@ -252,12 +246,34 @@ export default function WatchdogCart() {
         <StatRow label="last stdout" value={lastChildLine || '—'} color={DIM} />
       </Col>
 
-      {/* Kill activity */}
+      {/* Kill log */}
       <Col style={{ gap: 8, padding: 16, backgroundColor: PANEL_BG, borderRadius: 8, borderWidth: 1, borderColor: BORDER }}>
-        <Text fontSize={12} color={ACCENT} style={{ fontWeight: 'bold' }}>activity</Text>
-        <StatRow label="kills" value={String(killCount)} color={killCount > 0 ? WARN : DIM} />
-        <StatRow label="last kill" value={fmtTime(lastKillAt)} />
-        <StatRow label="last reason" value={lastReason} color={killCount > 0 ? WARN : DIM} />
+        <Row style={{ alignItems: 'center', gap: 8 }}>
+          <Text fontSize={12} color={ACCENT} style={{ fontWeight: 'bold' }}>kill log</Text>
+          <Text fontSize={11} color={DIM}>({killLog.length} {killLog.length === 1 ? 'entry' : 'entries'})</Text>
+        </Row>
+        {killLog.length === 0 ? (
+          <Text fontSize={11} color={DIM}>no kills yet — pick a threshold and click "Leak 10 MB/s" to see one fire.</Text>
+        ) : (
+          <Col style={{ gap: 4 }}>
+            {killLog.map((k, i) => (
+              <Row key={k.at + ':' + i} style={{ gap: 12, alignItems: 'center', height: 22 }}>
+                <Box style={{ width: 80, height: 22, justifyContent: 'center' }}>
+                  <Text fontSize={11} color={DIM}>{fmtTime(k.at)}</Text>
+                </Box>
+                <Box style={{ width: 60, height: 22, justifyContent: 'center' }}>
+                  <Text fontSize={11} color={k.signal === 'SIGKILL' ? DANGER : WARN} style={{ fontWeight: 'bold' }}>{k.signal}</Text>
+                </Box>
+                <Box style={{ width: 60, height: 22, justifyContent: 'center' }}>
+                  <Text fontSize={10} color={DIM}>pid {k.pid}</Text>
+                </Box>
+                <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, height: 22, justifyContent: 'center' }}>
+                  <Text fontSize={11} color={TEXT}>{k.reason}</Text>
+                </Box>
+              </Row>
+            ))}
+          </Col>
+        )}
       </Col>
 
       {/* Manual signals */}
