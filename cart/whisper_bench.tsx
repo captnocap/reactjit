@@ -59,8 +59,10 @@ const C = {
 interface UtteranceRow {
   id: number;
   audioMs: number;
-  results: Map<string, TranscribeResult | { error: string }>;
-  pending: Set<string>;
+  // Plain Record + array — Set/Map lazy init doesn't survive this
+  // runtime's state serialisation cleanly. Tiny model lists; perf is fine.
+  results: Record<string, TranscribeResult | { error: string }>;
+  pending: string[];
 }
 
 // ── UI bits ───────────────────────────────────────────────────────────
@@ -83,7 +85,7 @@ function Cell({ children, color = C.text, width, monospace = false }: {
 function ChipPicker<T extends string | number>({ label, options, selected, onToggle, render }: {
   label: string;
   options: T[];
-  selected: Set<T>;
+  selected: T[];
   onToggle: (v: T) => void;
   render: (v: T) => string;
 }) {
@@ -92,7 +94,7 @@ function ChipPicker<T extends string | number>({ label, options, selected, onTog
       <Text fontSize={11} color={C.dim} style={{ width: 80 }}>{label}</Text>
       <Row style={{ gap: 6, flexWrap: 'wrap' }}>
         {options.map((opt, i) => {
-          const active = selected.has(opt);
+          const active = selected.indexOf(opt) >= 0;
           return (
             <Pressable
               key={i}
@@ -118,13 +120,15 @@ function ChipPicker<T extends string | number>({ label, options, selected, onTog
 // ── Cart root ────────────────────────────────────────────────────────
 
 export default function WhisperBench() {
-  const [active, setActive] = useState<Set<string>>(() => new Set(['tiny.en-q5_1', 'base.en-q5_1']));
+  const [active, setActive] = useState<string[]>(['tiny.en-q5_1', 'base.en-q5_1']);
   const [armed, setArmed] = useState(false);
   const [rows, setRows] = useState<UtteranceRow[]>([]);
   const lastIdRef = useRef(0);
 
   // mode 1 + -30dB floor — same calibration as voice_lab.
-  const v = useVoiceInput({ mode: 1, floor: 0.5 });
+  // autoRelease:false because we run multiple transcribes against the
+  // same PCM buffer; the cart releases manually after the loop finishes.
+  const v = useVoiceInput({ mode: 1, floor: 0.5, autoRelease: false });
 
   useEffect(() => {
     if (armed) v.start();
@@ -137,19 +141,19 @@ export default function WhisperBench() {
     lastIdRef.current = v.utteranceId;
     const id = v.utteranceId;
     const audioMs = v.utteranceMs;
-    const selected = Array.from(active);
+    const selected = active.slice();
 
-    const pending = new Set(selected.map((n) => n));
     const newRow: UtteranceRow = {
       id, audioMs,
-      results: new Map(),
-      pending,
+      results: {},
+      pending: selected.slice(),
     };
     setRows((prev) => [newRow, ...prev].slice(0, 8));
 
     // Run sequentially — whisper holds one context at a time, switching
     // models reloads ~1-3s per swap. Sequential keeps the bench honest.
     (async () => {
+      const G = globalThis as any;
       for (const name of selected) {
         const model = MODELS.find((m) => m.name === name);
         if (!model) continue;
@@ -157,23 +161,26 @@ export default function WhisperBench() {
           const result = await transcribe(id, model.path);
           setRows((prev) => prev.map((r) => {
             if (r.id !== id) return r;
-            const results = new Map(r.results);
-            results.set(name, result);
-            const pending = new Set(r.pending);
-            pending.delete(name);
-            return { ...r, results, pending };
+            return {
+              ...r,
+              results: { ...r.results, [name]: result },
+              pending: r.pending.filter((n) => n !== name),
+            };
           }));
         } catch (e: any) {
           setRows((prev) => prev.map((r) => {
             if (r.id !== id) return r;
-            const results = new Map(r.results);
-            results.set(name, { error: String(e?.message ?? e) });
-            const pending = new Set(r.pending);
-            pending.delete(name);
-            return { ...r, results, pending };
+            return {
+              ...r,
+              results: { ...r.results, [name]: { error: String(e?.message ?? e) } },
+              pending: r.pending.filter((n) => n !== name),
+            };
           }));
         }
       }
+      // All models done — release the PCM buffer in the voice subsystem.
+      const rel = G.__voice_release_buffer;
+      if (typeof rel === 'function') rel(id);
     })();
   }, [v.utteranceId]);
 
@@ -193,12 +200,9 @@ export default function WhisperBench() {
           label="Models"
           options={MODELS.map((m) => m.name)}
           selected={active}
-          onToggle={(n) => setActive((prev) => {
-            const next = new Set(prev);
-            if (next.has(n)) next.delete(n);
-            else next.add(n);
-            return next;
-          })}
+          onToggle={(n) => setActive((prev) =>
+            prev.indexOf(n) >= 0 ? prev.filter((x) => x !== n) : [...prev, n]
+          )}
           render={(n) => n}
         />
 
@@ -262,9 +266,9 @@ export default function WhisperBench() {
             </Box>
           ) : rows.map((row) => (
             <Col key={row.id} style={{ gap: 0 }}>
-              {Array.from(active).map((name, i) => {
-                const r = row.results.get(name);
-                const isPending = row.pending.has(name);
+              {active.map((name, i) => {
+                const r = row.results[name];
+                const isPending = row.pending.indexOf(name) >= 0;
                 let text = '…';
                 let inferStr = '—';
                 let rtx = '—';
