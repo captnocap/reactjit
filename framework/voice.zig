@@ -272,17 +272,29 @@ pub fn releaseBuffer(id: u32) void {
 // ── Helpers ───────────────────────────────────────────────────────────
 
 fn computeRmsX100(frame: *const [FRAME_SAMPLES]i16) i32 {
-    // sum of squares → mean → sqrt → /327.68 → 0..100. Cheap, no float div by
-    // FRAME_SAMPLES needed since constant.
-    var sum: u64 = 0;
+    // dBFS-based level meter. Linear RMS-to-percent ran way too dim
+    // (typical speech RMS ≈ 2000 against int16 max 32768 → 6%, so the
+    // meter only cleared 50% under shouting). Real audio meters are
+    // logarithmic — we scan for peak |sample| in the frame, convert to
+    // dBFS = 20·log10(peak / 32768), and map -60..0 dBFS → 0..1.
+    //
+    // Calibration points at this scale:
+    //   silence (peak ~50)        ≈ 0.07
+    //   quiet speech (peak 3k)    ≈ 0.66
+    //   normal speech (peak 8k)   ≈ 0.80
+    //   loud speech (peak 16k)    ≈ 0.90
+    //   clipping (peak 32k+)      = 1.00
+    const FLOOR_DB: f64 = -60.0;
+    var peak: u32 = 0;
     for (frame) |s| {
-        const v: i64 = s;
-        sum += @intCast(v * v);
+        const a: u32 = @intCast(@as(i32, @intCast(if (s == std.math.minInt(i16)) std.math.maxInt(i16) else @abs(s))));
+        if (a > peak) peak = a;
     }
-    const mean = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(FRAME_SAMPLES));
-    const rms = std.math.sqrt(mean);
-    const scaled: f64 = (rms / 327.68) * 100.0;
-    if (scaled >= 10000.0) return 10000;
-    if (scaled <= 0.0) return 0;
+    if (peak == 0) return 0;
+    const peak_norm: f64 = @as(f64, @floatFromInt(peak)) / 32768.0;
+    const dbfs: f64 = 20.0 * std.math.log10(peak_norm);
+    if (dbfs <= FLOOR_DB) return 0;
+    if (dbfs >= 0.0) return 10000;
+    const scaled: f64 = ((dbfs - FLOOR_DB) / -FLOOR_DB) * 10000.0;
     return @intFromFloat(scaled);
 }
