@@ -23,6 +23,16 @@ export * as browserPage from './browser_page';
 export { useHotState, removeHotState, clearHotState, hotStateKeys } from './useHotState';
 export { useIFTTT, busOn, busEmit, getSharedState, setSharedState, dispatchClaudeEvent } from './useIFTTT';
 export type { IFTTTTrigger, IFTTTAction, IFTTTResult } from './useIFTTT';
+export {
+  registerIfttSource,
+  registerIfttAction,
+  setIfttFallback,
+  resolveTrigger,
+  dispatchAction,
+  listIfttSources,
+  listIfttActions,
+} from './ifttt-registry';
+export type { IfttSource, IfttSubscription, IfttActionRunner } from './ifttt-registry';
 export { useHost } from './useHost';
 export type {
   HostSpec,

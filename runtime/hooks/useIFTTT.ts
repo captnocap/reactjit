@@ -15,6 +15,20 @@
  *   'state:<key>:<value>'    fires when shared state matches value
  *   '<event>'                any custom bus event (paired with 'send:<event>')
  *
+ * ── System triggers (pumped by Zig, subscribe like any bus event) ──
+ *   'system:clipboard'       OS clipboard text changed; payload = new text
+ *   'system:focus'           window gained focus;  payload = { at }
+ *   'system:blur'            window lost focus;    payload = { at }
+ *   'system:fileDropped'     OS drag-and-drop;     payload = path string
+ *   'system:cursor:move'     cursor moved;         payload = { x, y, dx, dy }
+ *   'system:slowFrame'       frame over budget;    payload = { ms }
+ *   'system:hang'            engine hang detected; payload = { count }
+ *   'system:ram'             RAM sample;           payload = { used, total, percent }
+ *   'system:vram'            VRAM sample;          payload = { used, total, percent }
+ *   'system:claude'          any Claude Code hook event; payload = full entry
+ *   'system:claude:<tool>'   filtered by tool name (e.g. 'system:claude:bash')
+ *   'system:claude:<phase>'  filtered by phase    (e.g. 'system:claude:pre')
+ *
  * ── String actions ──────────────────────────────────────────
  *   'state:set:<key>:<val>'  set shared state
  *   'state:toggle:<key>'     toggle boolean shared state
@@ -36,36 +50,43 @@
  *   useIFTTT(() => score > 100,   'send:victory')
  *   useIFTTT('victory',           (e) => showWin(e))
  *
- * No bridge, no Zig. Pure TS over the existing key/timer primitives plus an
- * in-process event bus and key/value store.
+ * Internals: trigger families and action verbs are registered through
+ * `ifttt-registry.ts`. Other hooks (process, voice, fs, host, …) can
+ * `registerIfttSource`/`registerIfttAction` to expose themselves through
+ * this same DSL — see Phase C of the registry rollout. The shared bus
+ * lives in `runtime/ffi.ts`; useIFTTT's `busOn`/`busEmit` are thin
+ * facades over `subscribe`/`emit` there.
  */
 import { useEffect, useRef, useState } from 'react';
 import * as clipboard from './clipboard';
+import { subscribe, emit } from '../ffi';
+import {
+  registerIfttSource,
+  registerIfttAction,
+  setIfttFallback,
+  resolveTrigger,
+  dispatchAction,
+  type IfttSubscription,
+} from './ifttt-registry';
 
-// ── Bus + state store (module singletons) ─────────────────────────────────
+// ── Bus + state store ─────────────────────────────────────────────────────
 
 type Handler = (payload?: any) => void;
 
-const bus = new Map<string, Set<Handler>>();
+/** Subscribe to a bus channel. Back-compat facade over ffi.subscribe — both
+ *  share the same listener registry, so JS- and Zig-origin events are
+ *  reachable through either API. */
+export function busOn(event: string, fn: Handler): () => void {
+  return subscribe(event, fn);
+}
+
+/** Emit on the bus synchronously. Back-compat facade over ffi.emit. */
+export function busEmit(event: string, payload?: any): void {
+  emit(event, payload);
+}
+
 const state = new Map<string, any>();
 const stateWatchers = new Map<string, Set<Handler>>();
-
-export function busOn(event: string, fn: Handler): () => void {
-  let set = bus.get(event);
-  if (!set) { set = new Set(); bus.set(event, set); }
-  set.add(fn);
-  return () => { set!.delete(fn); };
-}
-
-export function busEmit(event: string, payload?: any): void {
-  const set = bus.get(event);
-  if (!set || set.size === 0) return;
-  for (const fn of Array.from(set)) {
-    try { fn(payload); } catch (e: any) {
-      console.error(`[ifttt] handler error on '${event}':`, e?.message || e);
-    }
-  }
-}
 
 export function getSharedState(key: string): any {
   return state.get(key);
@@ -95,8 +116,8 @@ function watchSharedState(key: string, fn: Handler): () => void {
 // The framework's engine.zig already invokes __ifttt_onKeyDown(packed) and
 // __ifttt_onKeyUp(packed) on every SDL key event (regardless of focus). We
 // install handlers here that decode the packed payload (mod<<16 | sym),
-// translate the SDL keycode + modifier mask to friendly names, and fire on
-// our internal bus. Trigger subscriptions just listen on the bus.
+// translate the SDL keycode + modifier mask to friendly names, and emit on
+// the shared bus. Trigger sources subscribe to those internal channels.
 //
 // Packed format from Zig: i64 = (mod << 16) | (sym & 0xFFFF)
 //   sym  — SDL3 keycode (SDLK_*). ASCII for printable chars; specific
@@ -109,8 +130,6 @@ const SDL_KMOD_CTRL = 0x00C0;
 const SDL_KMOD_ALT = 0x0300;
 const SDL_KMOD_GUI = 0x0C00;
 
-// SDL3 keycode → friendly name. Printable ASCII falls through to
-// String.fromCharCode(sym).toLowerCase().
 const SDL_KEY_NAMES: Record<number, string> = {
   8: 'backspace', 9: 'tab', 13: 'enter', 27: 'escape', 32: 'space', 127: 'delete',
   // Arrow keys (SDL3 scancode | 0x40000000)
@@ -141,55 +160,41 @@ function decodeKey(packed: number): { key: string; ctrlKey: boolean; shiftKey: b
   };
 }
 
-// Install once. Idempotent — repeated imports won't double-fire.
 const G = globalThis as any;
 if (!G.__ifttt_handlers_installed) {
   G.__ifttt_handlers_installed = true;
-  G.__ifttt_onKeyDown = (packed: number) => {
-    const ev = decodeKey(packed);
-    busEmit('__keydown', ev);
-  };
-  G.__ifttt_onKeyUp = (packed: number) => {
-    const ev = decodeKey(packed);
-    busEmit('__keyup', ev);
-  };
-  // System clipboard watcher fires this when SDL_GetClipboardText changes.
-  // We pull the live text via the clipboard binding and emit on the bus.
+  G.__ifttt_onKeyDown = (packed: number) => emit('__keydown', decodeKey(packed));
+  G.__ifttt_onKeyUp = (packed: number) => emit('__keyup', decodeKey(packed));
   G.__ifttt_onClipboardChange = () => {
     let text = '';
     try { text = clipboard.get(); } catch { /* ignore */ }
-    busEmit('system:clipboard', text);
+    emit('system:clipboard', text);
   };
   G.__ifttt_onSystemFocus = (gained: number) => {
-    busEmit(gained ? 'system:focus' : 'system:blur', { at: Date.now() });
+    emit(gained ? 'system:focus' : 'system:blur', { at: Date.now() });
   };
   G.__ifttt_onSystemDrop = () => {
     let path = '';
     try { path = String((G.__sys_drop_path?.() ?? '')); } catch { /* ignore */ }
-    busEmit('system:fileDropped', path);
+    emit('system:fileDropped', path);
   };
   G.__ifttt_onSystemCursor = (x: number, y: number, dx: number, dy: number) => {
-    busEmit('system:cursor:move', { x, y, dx, dy });
+    emit('system:cursor:move', { x, y, dx, dy });
   };
-  G.__ifttt_onSystemSlowFrame = (ms: number) => {
-    busEmit('system:slowFrame', { ms });
-  };
-  G.__ifttt_onSystemHang = (count: number) => {
-    busEmit('system:hang', { count });
-  };
+  G.__ifttt_onSystemSlowFrame = (ms: number) => emit('system:slowFrame', { ms });
+  G.__ifttt_onSystemHang = (count: number) => emit('system:hang', { count });
   G.__ifttt_onSystemRam = (used: number, total: number) => {
     const percent = total > 0 ? (used / total) * 100 : 0;
-    busEmit('system:ram', { used, total, percent });
+    emit('system:ram', { used, total, percent });
   };
   G.__ifttt_onSystemVram = (used: number, total: number) => {
     const percent = total > 0 ? (used / total) * 100 : 0;
-    busEmit('system:vram', { used, total, percent });
+    emit('system:vram', { used, total, percent });
   };
 }
 
 // Cart-side entry point for Claude Code hook events. Cart hosts an HTTP
 // listener (e.g. via useHost) and pipes each POST body through here.
-// Accepts either a parsed object or a raw JSON string.
 export function dispatchClaudeEvent(input: string | object): void {
   let entry: any = null;
   if (typeof input === 'string') {
@@ -200,10 +205,12 @@ export function dispatchClaudeEvent(input: string | object): void {
   if (!entry || typeof entry !== 'object') return;
   const tool = String(entry.tool ?? '').toLowerCase();
   const phase = String(entry.phase ?? '').toLowerCase();
-  busEmit('system:claude', entry);
-  if (tool) busEmit(`system:claude:${tool}`, entry);
-  if (phase) busEmit(`system:claude:${phase}`, entry);
+  emit('system:claude', entry);
+  if (tool) emit(`system:claude:${tool}`, entry);
+  if (phase) emit(`system:claude:${phase}`, entry);
 }
+
+// ── Key parsing helpers ───────────────────────────────────────────────────
 
 type KeySpec = { key: string; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean };
 
@@ -230,42 +237,6 @@ function keyMatches(ev: any, spec: KeySpec): boolean {
   return true;
 }
 
-// ── Action dispatch ───────────────────────────────────────────────────────
-
-function runStringAction(action: string, payload: any): void {
-  // state:set:<key>:<value>
-  if (action.startsWith('state:set:')) {
-    const rest = action.slice('state:set:'.length);
-    const colon = rest.indexOf(':');
-    const key = colon < 0 ? rest : rest.slice(0, colon);
-    const raw = colon < 0 ? '' : rest.slice(colon + 1);
-    setSharedState(key, coerce(raw));
-    return;
-  }
-  // state:toggle:<key>
-  if (action.startsWith('state:toggle:')) {
-    const key = action.slice('state:toggle:'.length);
-    setSharedState(key, !getSharedState(key));
-    return;
-  }
-  // send:<event>
-  if (action.startsWith('send:')) {
-    busEmit(action.slice('send:'.length), payload);
-    return;
-  }
-  // log:<msg>
-  if (action.startsWith('log:')) {
-    console.log('[ifttt]', action.slice('log:'.length), payload ?? '');
-    return;
-  }
-  // clipboard:<text>
-  if (action.startsWith('clipboard:')) {
-    clipboard.set(action.slice('clipboard:'.length));
-    return;
-  }
-  console.warn(`[ifttt] unknown action '${action}'`);
-}
-
 function coerce(raw: string): any {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
@@ -276,6 +247,131 @@ function coerce(raw: string): any {
   return raw;
 }
 
+// ── Built-in trigger sources ──────────────────────────────────────────────
+
+registerIfttSource('mount', {
+  match(spec) {
+    if (spec !== 'mount') return null;
+    return {
+      subscribe(onFire) { onFire({ at: Date.now() }); return () => {}; },
+    };
+  },
+});
+
+registerIfttSource('click', {
+  match(spec) {
+    if (spec !== 'click') return null;
+    return { subscribe(onFire) { return subscribe('__click', onFire); } };
+  },
+});
+
+registerIfttSource('key:up:', {
+  match(spec) {
+    if (!spec.startsWith('key:up:')) return null;
+    const ks = parseKey(spec.slice('key:up:'.length));
+    return {
+      subscribe(onFire) {
+        return subscribe('__keyup', (ev: any) => { if (keyMatches(ev, ks)) onFire(ev); });
+      },
+    };
+  },
+});
+
+registerIfttSource('key:', {
+  match(spec) {
+    // `key:up:` is owned by the longer-prefix source above; longest-match
+    // wins so this branch is only reached for keydown specs.
+    if (!spec.startsWith('key:')) return null;
+    const ks = parseKey(spec.slice('key:'.length));
+    return {
+      subscribe(onFire) {
+        return subscribe('__keydown', (ev: any) => { if (keyMatches(ev, ks)) onFire(ev); });
+      },
+    };
+  },
+});
+
+registerIfttSource('timer:every:', {
+  match(spec) {
+    if (!spec.startsWith('timer:every:')) return null;
+    const ms = Math.max(1, Number(spec.slice('timer:every:'.length)) || 0);
+    return {
+      subscribe(onFire) {
+        const id = setInterval(() => onFire({ at: Date.now(), interval: ms }), ms);
+        return () => clearInterval(id);
+      },
+    };
+  },
+});
+
+registerIfttSource('timer:once:', {
+  match(spec) {
+    if (!spec.startsWith('timer:once:')) return null;
+    const ms = Math.max(0, Number(spec.slice('timer:once:'.length)) || 0);
+    return {
+      subscribe(onFire) {
+        const id = setTimeout(() => onFire({ at: Date.now(), delay: ms }), ms);
+        return () => clearTimeout(id);
+      },
+    };
+  },
+});
+
+registerIfttSource('state:', {
+  match(spec) {
+    if (!spec.startsWith('state:')) return null;
+    const rest = spec.slice('state:'.length);
+    const colon = rest.indexOf(':');
+    const key = colon < 0 ? rest : rest.slice(0, colon);
+    const expected = coerce(colon < 0 ? '' : rest.slice(colon + 1));
+    return {
+      subscribe(onFire) {
+        if (getSharedState(key) === expected) onFire(getSharedState(key));
+        return watchSharedState(key, (v) => { if (v === expected) onFire(v); });
+      },
+    };
+  },
+});
+
+// Fallback — any unmatched spec subscribes to a raw bus channel of that
+// name. Pairs with `send:<event>` actions and ad-hoc cart channels.
+setIfttFallback({
+  match(spec) {
+    return { subscribe(onFire) { return subscribe(spec, onFire); } };
+  },
+});
+
+// ── Built-in actions ──────────────────────────────────────────────────────
+
+registerIfttAction('state:set:', (rest, _payload) => {
+  const colon = rest.indexOf(':');
+  const key = colon < 0 ? rest : rest.slice(0, colon);
+  const raw = colon < 0 ? '' : rest.slice(colon + 1);
+  setSharedState(key, coerce(raw));
+});
+
+registerIfttAction('state:toggle:', (rest, _payload) => {
+  setSharedState(rest, !getSharedState(rest));
+});
+
+registerIfttAction('send:', (rest, payload) => {
+  emit(rest, payload);
+});
+
+registerIfttAction('log:', (rest, payload) => {
+  console.log('[ifttt]', rest, payload ?? '');
+});
+
+registerIfttAction('clipboard:', (rest, _payload) => {
+  clipboard.set(rest);
+});
+
+function runStringAction(action: string, payload: any): void {
+  if (!dispatchAction(action, payload)) {
+    console.warn(`[ifttt] unknown action '${action}'`);
+  }
+}
+
 // ── Public types ──────────────────────────────────────────────────────────
 
 export type IFTTTTrigger = string | (() => boolean);
@@ -284,7 +380,7 @@ export type IFTTTAction = string | ((event?: any) => void);
 export type IFTTTResult = {
   fired: number;
   lastEvent: any;
-  lastFiredAt: number; // Date.now() of the most recent fire (0 if never)
+  lastFiredAt: number;
   fire: (event?: any) => void;
 };
 
@@ -321,54 +417,15 @@ export function useIFTTT(trigger: IFTTTTrigger, action: IFTTTAction): IFTTTResul
     prevCondRef.current = cur;
   });
 
-  // ── String trigger subscriptions ──────────────────────────────────────
+  // ── String trigger: resolve through the registry ──────────────────────
   useEffect(() => {
     if (typeof trigger !== 'string') return;
-    const t = trigger;
-    const f = (ev?: any) => fireRef.current(ev);
-
-    if (t === 'mount') { f({ at: Date.now() }); return; }
-
-    if (t === 'click') {
-      return busOn('__click', f);
+    const sub: IfttSubscription | null = resolveTrigger(trigger);
+    if (!sub) {
+      console.warn(`[ifttt] no source for trigger '${trigger}'`);
+      return;
     }
-
-    if (t.startsWith('key:up:')) {
-      const spec = parseKey(t.slice('key:up:'.length));
-      return busOn('__keyup', (ev) => { if (keyMatches(ev, spec)) f(ev); });
-    }
-
-    if (t.startsWith('key:')) {
-      const spec = parseKey(t.slice('key:'.length));
-      return busOn('__keydown', (ev) => { if (keyMatches(ev, spec)) f(ev); });
-    }
-
-    if (t.startsWith('timer:every:')) {
-      const ms = Math.max(1, Number(t.slice('timer:every:'.length)) || 0);
-      const id = setInterval(() => f({ at: Date.now(), interval: ms }), ms);
-      return () => clearInterval(id);
-    }
-
-    if (t.startsWith('timer:once:')) {
-      const ms = Math.max(0, Number(t.slice('timer:once:'.length)) || 0);
-      const id = setTimeout(() => f({ at: Date.now(), delay: ms }), ms);
-      return () => clearTimeout(id);
-    }
-
-    if (t.startsWith('state:')) {
-      // state:<key>:<expected> — fires when shared state matches.
-      const rest = t.slice('state:'.length);
-      const colon = rest.indexOf(':');
-      const key = colon < 0 ? rest : rest.slice(0, colon);
-      const expectedRaw = colon < 0 ? '' : rest.slice(colon + 1);
-      const expected = coerce(expectedRaw);
-      // Fire once now if it already matches.
-      if (getSharedState(key) === expected) f(getSharedState(key));
-      return watchSharedState(key, (v) => { if (v === expected) f(v); });
-    }
-
-    // Fallthrough — treat as a raw bus event name.
-    return busOn(t, f);
+    return sub.subscribe((ev?: any) => fireRef.current(ev));
   }, [typeof trigger === 'string' ? trigger : null]);
 
   return {

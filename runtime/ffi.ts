@@ -59,9 +59,13 @@ export function callHostJson<T>(name: string, fallback: T, ...args: any[]): T {
 }
 
 // ── Listener registry ─────────────────────────────────────────────
-// For events the Zig side emits over time (fs watchers, subscription updates,
-// websocket frames, llama tokens). The framework calls back into JS via a
-// small shim: `globalThis.__ffiEmit(channel, payload)` fires each listener.
+// One shared registry for both Zig-origin events (fs watchers, websocket
+// frames, llama tokens, proc stdout, …) and JS-origin events (cart-side
+// `emit()` calls, useIFTTT bus). Two emit paths into the same map:
+//   - `emit(channel, payload)` — synchronous, for JS callers.
+//   - `globalThis.__ffiEmit(channel, payload)` — deferred via setTimeout(0),
+//     because Zig calls land during React commit phase and we don't want
+//     subscriber setState to re-enter the in-flight render.
 
 type FfiListener = (payload: any) => void;
 const _listeners = new Map<string, Set<FfiListener>>();
@@ -73,10 +77,23 @@ export function subscribe(channel: string, fn: FfiListener): () => void {
   return () => { set!.delete(fn); };
 }
 
-(host as any).__ffiEmit = (channel: string, payload: any): void => {
+function dispatchListeners(channel: string, payload: any): void {
   const set = _listeners.get(channel);
   if (!set || set.size === 0) return;
-  // Defer — framework callbacks often fire during commit phase. setTimeout(0)
-  // lets React finish its current work before subscriber setState runs.
-  setTimeout(() => { for (const fn of set) { try { fn(payload); } catch (e: any) { console.error(`[ffi] ${channel} listener error:`, e?.message || e); } } }, 0);
+  for (const fn of Array.from(set)) {
+    try { fn(payload); } catch (e: any) {
+      console.error(`[ffi] ${channel} listener error:`, e?.message || e);
+    }
+  }
+}
+
+/** Synchronous emit — listeners fire in the same tick. Use for JS-origin
+ *  events (UI handlers, useIFTTT bus). Zig-origin events go through
+ *  `__ffiEmit` which defers to next tick. */
+export function emit(channel: string, payload?: any): void {
+  dispatchListeners(channel, payload);
+}
+
+(host as any).__ffiEmit = (channel: string, payload: any): void => {
+  setTimeout(() => dispatchListeners(channel, payload), 0);
 };
