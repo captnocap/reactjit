@@ -161,6 +161,12 @@ export type {
   OrbitControlsProps,
 } from '../scene3d/types';
 
+// Audio — declarative wrapper around framework/audio.zig. The <Audio>
+// primitive lives in runtime/audio.tsx; useAudio() is the imperative
+// façade for note-on/note-off/setParam (events that don't fit a tree).
+export { useAudio, AUDIO_MODULE_TYPE } from '../audio';
+export type { AudioHandle, AudioModuleType } from '../audio';
+
 export * from '../ffi';
 
 /**

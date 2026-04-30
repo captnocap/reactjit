@@ -297,6 +297,27 @@ Scene3DBase.PointLight       = function PointLight(props: any)       { return re
 Scene3DBase.OrbitControls    = function OrbitControls(props: any)    { return require('./scene3d/OrbitControls').OrbitControls(props); };
 export const Scene3D: any = Scene3DBase;
 
+// ── Audio — declarative wrapper around framework/audio.zig ─────────────────
+//
+// Mirrors Physics / Scene3D: a base <Audio> root plus typed sub-components.
+// Lazy require() keeps audio.tsx out of the primitives init graph until a
+// cart actually mounts an <Audio> tree.
+//
+//   <Audio gain={0.8}>
+//     <Audio.Module id="voice1" type="pocket_voice" tone={0.5} drive={0.3} />
+//     <Audio.Module id="delay1" type="delay" feedback={0.4} time={0.25} />
+//     <Audio.Connection from="voice1" to="delay1" />
+//   </Audio>
+//
+//   const audio = useAudio();
+//   audio.noteOn('voice1', 60);
+const AudioBase: any = function Audio(props: any) {
+  return require('./audio').Audio(props);
+};
+AudioBase.Module     = function Module(props: any)     { return require('./audio').Audio.Module(props); };
+AudioBase.Connection = function Connection(props: any) { return require('./audio').Audio.Connection(props); };
+export const Audio: any = AudioBase;
+
 // ── Canvas — pan/zoomable node surface ──────────────────────
 
 const CanvasBase: any = (props: any) => h('Canvas', props, props.children);
