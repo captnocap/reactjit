@@ -23,6 +23,7 @@
  */
 
 import { callHost, hasHost, subscribe } from '../ffi';
+import { registerIfttSource, registerIfttAction } from './ifttt-registry';
 
 export interface SpawnOptions {
   cmd: string;
@@ -150,3 +151,64 @@ export function execAsync(cmd: string): Promise<ExecResult> {
     callHost<void>('__exec_async', undefined as any, cmd, rid);
   });
 }
+
+// ── IFTTT registration ─────────────────────────────────────────────
+//
+// `proc:stdout:<pid>` / `proc:stderr:<pid>` / `proc:exit:<pid>` are
+// reachable via the registry's raw-event fallback today (the channels
+// already flow through the unified ffi bus). What we register here are
+// the variants that need parsing or side-effecting host calls.
+
+// proc:line:<pid>:<regex> — fires when a stdout line matches the regex.
+// Useful for "wait until process announces it's ready", e.g.
+// useIFTTT('proc:line:1234:^READY$', 'send:engine-up').
+registerIfttSource('proc:line:', {
+  match(spec) {
+    if (!spec.startsWith('proc:line:')) return null;
+    const rest = spec.slice('proc:line:'.length);
+    const colon = rest.indexOf(':');
+    if (colon < 0) return null;
+    const pid = rest.slice(0, colon);
+    const pattern = rest.slice(colon + 1);
+    let re: RegExp;
+    try { re = new RegExp(pattern); }
+    catch { console.warn(`[ifttt] bad regex in '${spec}'`); return null; }
+    return {
+      subscribe(onFire) {
+        return subscribe(`proc:stdout:${pid}`, (line: any) => {
+          const s = typeof line === 'string' ? line : String(line);
+          const m = re.exec(s);
+          if (m) onFire({ pid: Number(pid), line: s, match: m });
+        });
+      },
+    };
+  },
+});
+
+// proc:spawn:<cmd>     — spawn a child with no args. Returns synchronously
+//                        on the action side; the resulting pid is dropped
+//                        (callers needing it should use the spawn() helper).
+// proc:kill:<pid>      — SIGTERM the pid. With $id substitution this is
+//                        the watchdog one-liner: useIFTTT(condition, 'proc:kill:$id').
+// proc:write:<pid>:<x> — write x to the child's stdin (newline appended
+//                        client-side if needed).
+
+registerIfttAction('proc:spawn:', (rest, _payload) => {
+  if (!rest) return;
+  spawn({ cmd: rest });
+});
+
+registerIfttAction('proc:kill:', (rest, _payload) => {
+  const pid = Number(rest);
+  if (!pid || pid <= 0) return;
+  kill(pid, 'SIGTERM');
+});
+
+registerIfttAction('proc:write:', (rest, _payload) => {
+  const colon = rest.indexOf(':');
+  if (colon < 0) return;
+  const pid = Number(rest.slice(0, colon));
+  const text = rest.slice(colon + 1);
+  if (!pid || pid <= 0) return;
+  stdinWrite(pid, text);
+});

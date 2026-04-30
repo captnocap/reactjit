@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { registerIfttSource } from './ifttt-registry';
 
 const host = (): any => globalThis as any;
 
@@ -82,19 +83,67 @@ export function useFileWatch(
   handlerRef.current = handler;
 
   useEffect(() => {
-    const id: number = host().__fswatchAdd?.(
-      path,
-      opts.recursive ? 1 : 0,
-      opts.intervalMs ?? 1000,
-      opts.pattern ?? '',
-    ) ?? -1;
-    if (id < 0) return;
-    listeners.set(id, (ev) => handlerRef.current(ev));
-    ensureDrainTimer();
-    return () => {
-      host().__fswatchRemove?.(id);
-      listeners.delete(id);
-      stopDrainTimerIfIdle();
-    };
+    const off = attachWatcher(path, (ev) => handlerRef.current(ev), opts);
+    return off;
   }, [path, opts.recursive, opts.intervalMs, opts.pattern]);
 }
+
+// ── Imperative attach (no React) ───────────────────────────────────
+//
+// Same singleton drain machinery, exposed for callers that don't have a
+// React render lifecycle — primarily the IFTTT registry below.
+
+export function attachWatcher(
+  path: string,
+  fn: Listener,
+  opts: FileWatchOptions = {},
+): () => void {
+  const id: number = host().__fswatchAdd?.(
+    path,
+    opts.recursive ? 1 : 0,
+    opts.intervalMs ?? 1000,
+    opts.pattern ?? '',
+  ) ?? -1;
+  if (id < 0) return () => {};
+  listeners.set(id, fn);
+  ensureDrainTimer();
+  return () => {
+    host().__fswatchRemove?.(id);
+    listeners.delete(id);
+    stopDrainTimerIfIdle();
+  };
+}
+
+// ── IFTTT registration ─────────────────────────────────────────────
+//
+// 'fs:changed:<path>'   modified events under <path> (recursive).
+// 'fs:created:<path>'   created events.
+// 'fs:deleted:<path>'   deleted events.
+// 'fs:any:<path>'       all event types.
+//
+// Path is the watch root — pass a directory for recursive watching, a
+// file for single-file. `pattern` glob is not exposed in the DSL today;
+// add `:pattern=*.tsx` later if needed without breaking the prefix.
+
+function registerFsSource(prefix: string, filter: FileWatchEvent['type'] | null): void {
+  registerIfttSource(prefix, {
+    match(spec) {
+      if (!spec.startsWith(prefix)) return null;
+      const path = spec.slice(prefix.length);
+      if (!path) return null;
+      return {
+        subscribe(onFire) {
+          return attachWatcher(path, (ev) => {
+            if (filter && ev.type !== filter) return;
+            onFire(ev);
+          }, { recursive: true });
+        },
+      };
+    },
+  });
+}
+
+registerFsSource('fs:changed:', 'modified');
+registerFsSource('fs:created:', 'created');
+registerFsSource('fs:deleted:', 'deleted');
+registerFsSource('fs:any:', null);

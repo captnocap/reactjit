@@ -129,6 +129,8 @@ export { useCRUD } from './useCRUD';
 export { useMedia } from './useMedia';
 export { useVoiceInput } from './useVoiceInput';
 export type { VoiceInputOptions, VoiceInputResult } from './useVoiceInput';
+export { useFileWatch, attachWatcher } from './useFileWatch';
+export type { FileWatchEvent, FileWatchOptions } from './useFileWatch';
 
 export * from '../ffi';
 
