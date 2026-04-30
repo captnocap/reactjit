@@ -78,9 +78,9 @@ Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Canvas'`, `'
 - **`<Canvas>`** (`Canvas.Node`, `Canvas.Path`, `Canvas.Clamp`) — pan/zoomable drawing surface with `gx/gy/gw/gh` graph-space coordinates and SVG `d`/`stroke`/`strokeWidth`/`fill` on paths. Real uses across `cart/canvas_stress`, `cart/graph_demo`, `cart/cockpit`, and many sweatshop components (mermaid renderer, chemistry molecule view, gamepad sticks, audio patchbay, noise field, graph canvas, cockpit heatmap).
 - **`<Graph>`** (`Graph.Path`, `Graph.Node`) — static-viewport polyline/path surface. Drives the chart family in `cart/component-gallery/components/` (area, bar, boxplot, bubble-*, candlestick, combination, contour, donut, fan, polar, radar, scatterplot, spline, waterfall, …) and the cart-side Lucide icon renderer.
 - **`<StaticSurface>`** suspends layout/paint inside its subtree until explicitly resumed — basis for the render-surface VM and the kitty/headless capture path.
-- **Physics.** `framework/physics2d.zig` + `framework/physics3d.zig` are bridged via `cart/sweatshop/components/physics/`: `<PhysicsWorld>`, `<RigidBody>`, `useBodyState`, `useForce`, `usePhysics`. Box2D is feature-gated. Working integration inside sweatshop, not yet a runtime-level export.
+- **Physics.** Runtime export. `<Physics.World gravityX gravityY>` owns the simulation; `<Physics.Body type="dynamic" x y bullet …>` is a rigid body; `<Physics.Collider shape="box" radius friction restitution density />` shapes it. Bridges to `framework/physics2d.zig` (Box2D, feature-gated) and `framework/physics3d.zig` directly through CREATE/UPDATE props — no host-fn glue needed.
 - **Audio.** `framework/audio.zig` exposes a modular synth graph (`__audioInit`, `__audioAddModule`, `__audioConnect`, `__audioNoteOn/Off`, `__audioSetParam`, `__audioMasterGain`). `cart/pocket_operator.tsx` is the reference cart and registers `mixer`, `delay`, and a `pocket` drum/synth voice. There is no `<Audio>` React primitive; carts call host functions directly.
-- **3D.** `cart/sweatshop/components/scene3d/` (`Scene3D`, `Mesh`, `OrbitControls`, `PointLight`, `DirectionalLight`, `StandardMaterial`, `useScene3D`) on top of the engine's wgpu primitives. Same status as physics: cart-level, not promoted to runtime.
+- **3D.** Cart-side today. `cart/sweatshop/components/scene3d/` (`Scene3D`, `Mesh`, `OrbitControls`, `PointLight`, `DirectionalLight`, `StandardMaterial`, `useScene3D`) sits on top of the engine's wgpu primitives. Not yet promoted to a runtime export.
 
 ### Voice + whisper
 
@@ -268,7 +268,7 @@ Frozen trees are read-only reference material. The JSRT (JS-inside-Lua evaluator
 | Persistent dev host + IPC bundle-push + hot reload, with `useHotState` surviving re-eval | |
 | `scripts/ship` self-extracting packaging, cross-distro sysroot bundling | Video primitive end-to-end |
 | Render suspend/resume + kitty/VM/headless render surfaces | Standalone `rjit` dispatcher (templates + help present, dispatcher in progress) |
-| CSS transform stack (rotate/scale/translate via matrix), z-index scissor breakouts for context menus | Physics + 3D still cart-side integrations under `cart/sweatshop/components/`, not runtime exports |
+| Physics runtime export (`<Physics.World/Body/Collider>`), CSS transform stack (rotate/scale/translate via matrix), z-index scissor breakouts | 3D scene API still cart-side under `cart/sweatshop/components/scene3d/`, not yet a runtime export |
 | Coding-agent host APIs: `__claude_*`, `__kimi_*`, `__localai_*` + standalone `claude_runner.zig` | macOS path: cross-compile works, native dev loop unverified recently |
 | `cart/app/` onboarding + homepage v1, 128-component gallery with theme classifiers | |
 
