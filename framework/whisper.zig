@@ -201,9 +201,11 @@ fn runJob(job: Job) void {
         S.loaded_model_path = null;
 
         var path_z: [MAX_MODEL_PATH + 1]u8 = undefined;
-        const n = @min(job.model_path.len, MAX_MODEL_PATH);
-        @memcpy(path_z[0..n], job.model_path[0..n]);
-        path_z[n] = 0;
+        const expanded = expandHome(job.model_path, &path_z) orelse {
+            postFailure(job.buf_id, job.model_path, "path too long", t_start);
+            return;
+        };
+        path_z[expanded] = 0;
 
         const new_ctx = wh.whisper_init_from_file(@ptrCast(&path_z));
         if (new_ctx == null) {
@@ -289,6 +291,27 @@ fn postResult(buf_id: u32, model_path: []const u8, text_owned: []u8, elapsed_ms:
         S.allocator.free(path_owned);
         S.allocator.free(text_owned);
     };
+}
+
+// ── Path expansion ───────────────────────────────────────────────────
+
+/// Expand a leading "~/" in `path` to $HOME and write the result into
+/// `out`. Returns the byte length written, or null if the result wouldn't
+/// fit. Carts pass paths like "~/.reactjit/models/ggml-base.en-q5_1.bin"
+/// so they don't have to know the absolute location of $HOME.
+fn expandHome(path: []const u8, out: *[MAX_MODEL_PATH + 1]u8) ?usize {
+    if (path.len >= 2 and path[0] == '~' and path[1] == '/') {
+        const home = std.posix.getenv("HOME") orelse "";
+        const tail = path[1..]; // includes the leading "/"
+        const total = home.len + tail.len;
+        if (total > MAX_MODEL_PATH) return null;
+        @memcpy(out[0..home.len], home);
+        @memcpy(out[home.len .. home.len + tail.len], tail);
+        return total;
+    }
+    if (path.len > MAX_MODEL_PATH) return null;
+    @memcpy(out[0..path.len], path);
+    return path.len;
 }
 
 // ── JSON helpers ─────────────────────────────────────────────────────
