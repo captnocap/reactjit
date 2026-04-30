@@ -267,26 +267,65 @@ registerIfttAction('proc:write:', (rest, _payload) => {
   stdinWrite(pid, text);
 });
 
-// proc:ram:<pid>           — fires on every sampled change.
-// proc:ram:<pid>:>:<frac>  — fires only when payload.percent > frac (0..1).
-// proc:ram:<pid>:<:<frac>  — fires only when payload.percent < frac.
+/**
+ * Parse a memory threshold token. Returns either a fraction-of-system or an
+ * absolute byte count, so 'proc:ram:<pid>:>:<spec>' can express both
+ * production-style ceilings (`0.80` = 80% of system RAM) and demo-friendly
+ * absolute limits (`50MB`).
+ *
+ *   '0.85'   → { kind: 'frac',  value: 0.85 }
+ *   '5%'     → { kind: 'frac',  value: 0.05 }
+ *   '50MB'   → { kind: 'bytes', value: 52428800 }
+ *   '2GB'    → { kind: 'bytes', value: 2147483648 }
+ *   '512KB'  → { kind: 'bytes', value: 524288 }
+ */
+function parseRamThreshold(s: string): { kind: 'frac' | 'bytes'; value: number } | null {
+  const m = /^(\d+(?:\.\d+)?)(%|B|KB|MB|GB)?$/i.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  const unit = (m[2] || '').toUpperCase();
+  switch (unit) {
+    case '':   return { kind: 'frac', value: n };
+    case '%':  return { kind: 'frac', value: n / 100 };
+    case 'B':  return { kind: 'bytes', value: n };
+    case 'KB': return { kind: 'bytes', value: n * 1024 };
+    case 'MB': return { kind: 'bytes', value: n * 1024 * 1024 };
+    case 'GB': return { kind: 'bytes', value: n * 1024 * 1024 * 1024 };
+  }
+  return null;
+}
+
+// proc:ram:<pid>            — fires on every sampled change.
+// proc:ram:<pid>:>:<thresh> — fires when sample crosses threshold.
+// proc:ram:<pid>:<:<thresh> — opposite direction.
+//   <thresh> is a fraction (`0.80`, `5%`) compared against payload.percent
+//   OR an absolute byte size (`50MB`, `2GB`) compared against payload.rss.
 // Auto-arms the engine watcher on first subscribe; releases on last unsub.
 registerIfttSource('proc:ram:', {
   match(spec) {
     const rest = spec.slice('proc:ram:'.length);
-    const m = /^(\d+)(?::([<>]):([\d.]+))?$/.exec(rest);
+    const m = /^(\d+)(?::([<>]):(.+))?$/.exec(rest);
     if (!m) return null;
     const pid = Number(m[1]);
     const op = m[2] as '<' | '>' | undefined;
-    const frac = m[3] != null ? Number(m[3]) : null;
+    const threshold = m[3] != null ? parseRamThreshold(m[3]) : null;
+    if (m[3] != null && !threshold) {
+      console.warn(`[ifttt] bad proc:ram threshold '${m[3]}' in '${spec}'`);
+      return null;
+    }
     return {
       subscribe(onFire) {
         const release = watchProcess(pid);
         const off = subscribe(`proc:ram:${pid}`, (raw: any) => {
           const payload = parsePayload(raw);
-          const pct = Number(payload?.percent ?? 0);
-          if (op === '>' && !(pct > (frac as number))) return;
-          if (op === '<' && !(pct < (frac as number))) return;
+          if (threshold && op) {
+            const sampled = threshold.kind === 'frac'
+              ? Number(payload?.percent ?? 0)
+              : Number(payload?.rss ?? 0);
+            if (op === '>' && !(sampled > threshold.value)) return;
+            if (op === '<' && !(sampled < threshold.value)) return;
+          }
           onFire(payload);
         });
         return () => { off(); release(); };
