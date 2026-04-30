@@ -22,7 +22,7 @@ This isn't React with a thinner browser. It's React without a browser. Behind th
 
 That's the load-bearing five — picked by where bugs land most often, not by importance. `ls framework/` is ~120 more `.zig` files in the same shape: read the file, fix the bug. Pointing at any single one of them is missing the point. The point is what *isn't* there: a 200MB engine being asked to pretend it's a UI runtime.
 
-**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv. The dep graph is shallow on purpose.
+**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv (dlopen'd at runtime — we wrote the embedding into our wgpu pipeline ourselves; we don't shell out to a separate mpv window). The dep graph is shallow on purpose.
 
 The line between "uses dependencies" and "is native" runs through how much of the hard parts you wrote yourself. We wrote most of them.
 
@@ -56,7 +56,10 @@ TextInput  TextArea  TextEditor  Terminal
 Window  Notification
 Canvas     Canvas.Node  Canvas.Path  Canvas.Clamp
 Graph      Graph.Path   Graph.Node
-Physics
+Physics    Physics.World  Physics.Body  Physics.Collider
+Audio      Audio.Module   Audio.Connection
+Scene3D    Scene3D.Mesh   Scene3D.Camera   Scene3D.OrbitControls
+           Scene3D.AmbientLight  Scene3D.DirectionalLight  Scene3D.PointLight
 Video  Cartridge  RenderTarget  StaticSurface
 Render  Effect  Native
 ```
@@ -79,8 +82,9 @@ Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Canvas'`, `'
 - **`<Graph>`** (`Graph.Path`, `Graph.Node`) — static-viewport polyline/path surface. Drives the chart family in `cart/component-gallery/components/` (area, bar, boxplot, bubble-*, candlestick, combination, contour, donut, fan, polar, radar, scatterplot, spline, waterfall, …) and the cart-side Lucide icon renderer.
 - **`<StaticSurface>`** suspends layout/paint inside its subtree until explicitly resumed — basis for the render-surface VM and the kitty/headless capture path.
 - **Physics.** Runtime export. `<Physics.World gravityX gravityY>` owns the simulation; `<Physics.Body type="dynamic" x y bullet …>` is a rigid body; `<Physics.Collider shape="box" radius friction restitution density />` shapes it. Bridges to `framework/physics2d.zig` (Box2D, feature-gated) and `framework/physics3d.zig` directly through CREATE/UPDATE props — no host-fn glue needed.
-- **Audio.** `framework/audio.zig` exposes a modular synth graph (`__audioInit`, `__audioAddModule`, `__audioConnect`, `__audioNoteOn/Off`, `__audioSetParam`, `__audioMasterGain`). `cart/pocket_operator.tsx` is the reference cart and registers `mixer`, `delay`, and a `pocket` drum/synth voice. There is no `<Audio>` React primitive; carts call host functions directly.
-- **3D.** Cart-side today. `cart/sweatshop/components/scene3d/` (`Scene3D`, `Mesh`, `OrbitControls`, `PointLight`, `DirectionalLight`, `StandardMaterial`, `useScene3D`) sits on top of the engine's wgpu primitives. Not yet promoted to a runtime export.
+- **Audio.** Runtime export. `<Audio gain={0.8}>` owns the engine and master gain; `<Audio.Module id="voice1" type="pocket_voice" tone={0.5} drive={0.3} />` adds a synth/effect node; `<Audio.Connection from="voice1" to="delay1" />` wires the graph. Notes don't fit a tree, so `useAudio()` returns `{ noteOn, noteOff, setParam }` for imperative triggering. Backed by `framework/audio.zig` (modular synth graph). `cart/pocket_operator.tsx` predates the primitive and still calls `__audio_*` host fns directly — both surfaces coexist.
+- **3D.** Runtime export. `<Scene3D>` provides the wgpu render context; `<Scene3D.Mesh geometry="box|sphere|plane|torus" {...transform}>`, `<Scene3D.Camera>`, `<Scene3D.OrbitControls>`, `<Scene3D.AmbientLight>` / `<Scene3D.DirectionalLight>` / `<Scene3D.PointLight>` populate the scene. `useScene3D()` exposes the registry. Lives at `runtime/scene3d/` on top of the engine's wgpu primitives.
+- **Video.** `<Video src={...} />` plays through `framework/videos.zig`, which `dlopen`s `libmpv.so.2` at runtime (not link-time) and uses libmpv's OpenGL render API. Hidden SDL2 GL context, `RTLD_DEEPBIND` to isolate mpv's bundled Lua 5.2, mpv renders to a private FBO, `glReadPixels` → `wgpu_queue.writeTexture()` → textured quad in our pipeline. Hardware decode + GPU colorspace conversion. Software fallback if GL context creation fails. We don't shell out to a separate mpv window; we embed the library and route every frame through our own renderer.
 
 ### Voice + whisper
 
@@ -263,12 +267,12 @@ Frozen trees are read-only reference material. The JSRT (JS-inside-Lua evaluator
 | Voice capture (SDL3 + libfvad VAD) + whisper.cpp ensemble transcription | Whisper streaming + diarization polish (see `framework/WHISPER_TODO.md`) |
 | IFTTT registry + compose, watchdog cart, `proc:*` / `fs:*` sources | More built-in IFTTT sources |
 | Networking trichotomy (`useHost` / `fetch` / `useConnection`) wired for ws/tcp/udp/http/SSE/tor/socks5 | `wireguard` / `stun` / `peer` connection kinds |
-| RCON + A2S Source Query for game-server carts | No `<Audio>` React primitive — carts call `__audio*` directly |
+| RCON + A2S Source Query for game-server carts | `<Video>` end-to-end polish (libmpv embedding lands frames; cart-facing API still rough) |
 | Privacy / crypto stack: GPG, keyring, Noise, Shamir, steganography, audit logs, PII redaction, secure buffers | Inspector UI cart (host telemetry plumbing exists; UI sparse) |
 | Persistent dev host + IPC bundle-push + hot reload, with `useHotState` surviving re-eval | |
 | `scripts/ship` self-extracting packaging, cross-distro sysroot bundling | Video primitive end-to-end |
 | Render suspend/resume + kitty/VM/headless render surfaces | Standalone `rjit` dispatcher (templates + help present, dispatcher in progress) |
-| Physics runtime export (`<Physics.World/Body/Collider>`), CSS transform stack (rotate/scale/translate via matrix), z-index scissor breakouts | 3D scene API still cart-side under `cart/sweatshop/components/scene3d/`, not yet a runtime export |
+| Physics + Audio + Scene3D runtime exports (`<Physics.*>`, `<Audio.*>` + `useAudio`, `<Scene3D.*>` + `useScene3D`), CSS transform stack, z-index scissor breakouts | |
 | Coding-agent host APIs: `__claude_*`, `__kimi_*`, `__localai_*` + standalone `claude_runner.zig` | macOS path: cross-compile works, native dev loop unverified recently |
 | `cart/app/` onboarding + homepage v1, 128-component gallery with theme classifiers | |
 
