@@ -140,6 +140,55 @@ export function useEmbed(opts: UseEmbedOpts) {
     return embed.upsert(storeRef.current, row);
   }
 
+  // ── Multi-worker ingest ─────────────────────────────────────────────
+  //
+  // The pool runs N OS threads on the zig side, sharing one model in VRAM.
+  // The cart kicks it off, polls progress every 200ms, and stops polling
+  // when the pool reports `done`. The render path stays free during ingest.
+
+  const EMPTY: embed.IngestProgress = {
+    running: false,
+    files_total: 0,
+    files_done: 0,
+    chunks_done: 0,
+    embed_ms_sum: 0,
+    current_file: '',
+    done: false,
+    cancelled: false,
+    error: '',
+  };
+  const [ingest, setIngest] = useState<embed.IngestProgress>(EMPTY);
+  const pollingRef = useRef<any>(null);
+
+  function startIngest(rootPath: string, nWorkers: number = 4, sourceType: string = 'code-chunk'): boolean {
+    const ok = embed.ingestStart(rootPath, {
+      modelPath: opts.model,
+      slug: opts.storeSlug,
+      sourceType,
+      nWorkers,
+    });
+    if (!ok) return false;
+    setIngest({ ...EMPTY, running: true });
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(() => {
+      const snap = embed.ingestProgress();
+      setIngest(snap);
+      if (snap.done || !snap.running) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }, 200);
+    return true;
+  }
+
+  function cancelIngest(): boolean {
+    return embed.ingestCancel();
+  }
+
+  useEffect(() => () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+  }, []);
+
   return {
     ready,
     error,
@@ -149,5 +198,11 @@ export function useEmbed(opts: UseEmbedOpts) {
     embedBatch: embedMany,
     query: runQuery,
     upsert,
+    /** Live snapshot of the active ingest (or empty when idle). */
+    ingest,
+    /** Kick off a multi-worker ingest. Returns false if one is already running. */
+    startIngest,
+    /** Flip the cancel flag — workers exit after their current batch. */
+    cancelIngest,
   };
 }

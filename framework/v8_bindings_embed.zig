@@ -30,6 +30,14 @@ var g_reranker: ?embed.Reranker = null;
 var g_reranker_path: []u8 = &.{};
 var g_store: ?embed.Store = null;
 
+// Multi-worker ingest state. The pool reuses a separate SharedModel from
+// the query path's Embedder (cheap VRAM tax: ~600MB extra for the 0.6B
+// quant; we trade it for a single-context query path that doesn't compete
+// with worker threads for KV cache).
+var g_shared: ?embed.SharedModel = null;
+var g_shared_path: []u8 = &.{};
+var g_ingest: ?*embed.IngestSession = null;
+
 var g_alloc_state = std.heap.GeneralPurposeAllocator(.{}){};
 
 fn allocator() std.mem.Allocator {
@@ -584,6 +592,152 @@ fn hostStoreSearch(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
     setString(info, buf.items);
 }
 
+// ── Ingest pool host fns ───────────────────────────────────────────────
+
+fn ensureSharedModel(model_path: []const u8) bool {
+    if (g_shared != null and std.mem.eql(u8, g_shared_path, model_path)) return true;
+    const a = allocator();
+    if (g_shared) |*sm| {
+        sm.deinit();
+        g_shared = null;
+    }
+    if (g_shared_path.len > 0) a.free(g_shared_path);
+    g_shared_path = &.{};
+
+    const sm = embed.SharedModel.init(model_path) catch return false;
+    g_shared = sm;
+    g_shared_path = a.dupe(u8, model_path) catch {
+        g_shared.?.deinit();
+        g_shared = null;
+        return false;
+    };
+    return true;
+}
+
+/// __embed_ingest_start(rootPath, sourceType, modelPath, slug, nWorkers) → 1 | 0
+fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+
+    const root_path = argStringAlloc(a, info, 0) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(root_path);
+    const source_type = argStringAlloc(a, info, 1) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(source_type);
+    const model_path = argStringAlloc(a, info, 2) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(model_path);
+    const slug = argStringAlloc(a, info, 3) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(slug);
+    const n_workers_i = argI32(info, 4, 4);
+    const n_workers: usize = if (n_workers_i <= 0) 1 else if (n_workers_i > 16) 16 else @intCast(n_workers_i);
+
+    // Reap a previous (finished) session so we don't leak.
+    if (g_ingest) |s| {
+        if (s.done_flag.load(.monotonic)) {
+            s.deinit();
+            g_ingest = null;
+        } else {
+            // Already running. Refuse a new one rather than racing.
+            setNumber(info, 0);
+            return;
+        }
+    }
+
+    if (!ensureSharedModel(model_path)) {
+        setNumber(info, 0);
+        return;
+    }
+    // Open / re-open the store at the right slug + dim.
+    const dim = g_shared.?.n_embd;
+    if (g_store) |*s| {
+        s.close();
+        g_store = null;
+    }
+    g_store = embed.Store.open(a, slug, dim) catch {
+        setNumber(info, 0);
+        return;
+    };
+    g_store.?.buildPartialHnsw(source_type) catch {};
+
+    // Use c_allocator for the session so its threads can use it without
+    // contention with V8's main-thread-bound GPA.
+    const sess_alloc = std.heap.c_allocator;
+    const model_id = std.fs.path.basename(model_path);
+    const sess = embed.IngestSession.start(
+        sess_alloc,
+        &g_shared.?,
+        &g_store.?,
+        root_path,
+        source_type,
+        model_id,
+        n_workers,
+    ) catch {
+        setNumber(info, 0);
+        return;
+    };
+    g_ingest = sess;
+    setNumber(info, 1);
+}
+
+/// __embed_ingest_progress(handle) → JSON snapshot
+fn hostIngestProgress(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    if (g_ingest == null) {
+        setString(info, "{\"running\":false}");
+        return;
+    }
+    const snap = g_ingest.?.snapshot();
+    var buf = std.array_list.Managed(u8).init(a);
+    defer buf.deinit();
+    buf.writer().print(
+        "{{\"running\":true,\"files_total\":{d},\"files_done\":{d},\"chunks_done\":{d},\"embed_ms_sum\":{d},\"done\":{},\"cancelled\":{},\"current_file\":",
+        .{ snap.files_total, snap.files_done, snap.chunks_done, snap.embed_ms_sum, snap.done, snap.cancelled },
+    ) catch {
+        setString(info, "{\"running\":false}");
+        return;
+    };
+    writeJsonStringEscaped(&buf, snap.current_file[0..snap.current_len]) catch {
+        setString(info, "{\"running\":false}");
+        return;
+    };
+    buf.appendSlice(",\"error\":") catch {
+        setString(info, "{\"running\":false}");
+        return;
+    };
+    writeJsonStringEscaped(&buf, snap.error_text[0..snap.error_text_len]) catch {
+        setString(info, "{\"running\":false}");
+        return;
+    };
+    buf.append('}') catch {
+        setString(info, "{\"running\":false}");
+        return;
+    };
+    setString(info, buf.items);
+}
+
+/// __embed_ingest_cancel() → bool
+fn hostIngestCancel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (g_ingest) |s| {
+        s.cancel();
+        setBool(info, true);
+        return;
+    }
+    setBool(info, false);
+}
+
 pub fn registerEmbed(_: anytype) void {
     v8_runtime.registerHostFn("__embed_load_model", hostLoadModel);
     v8_runtime.registerHostFn("__embed_free_model", hostFreeModel);
@@ -594,6 +748,9 @@ pub fn registerEmbed(_: anytype) void {
     v8_runtime.registerHostFn("__embed_store_open", hostStoreOpen);
     v8_runtime.registerHostFn("__embed_store_close", hostStoreClose);
     v8_runtime.registerHostFn("__embed_store_upsert", hostStoreUpsert);
+    v8_runtime.registerHostFn("__embed_ingest_start", hostIngestStart);
+    v8_runtime.registerHostFn("__embed_ingest_progress", hostIngestProgress);
+    v8_runtime.registerHostFn("__embed_ingest_cancel", hostIngestCancel);
     v8_runtime.registerHostFn("__embed_store_search_json", hostStoreSearch);
 }
 

@@ -190,3 +190,74 @@ export function search(
     sourceType,
   );
 }
+
+// ── Multi-worker ingest pool ───────────────────────────────────────────
+
+export interface IngestStartOpts {
+  /** Path to the .gguf the framework will load into VRAM for the workers. */
+  modelPath: string;
+  /** Sanitized slug — controls the per-model table name `chunks_<slug>`. */
+  slug: string;
+  /** Source type label written into each chunk row (e.g. 'code-chunk'). */
+  sourceType: string;
+  /** Number of OS threads in the worker pool. 1–16. */
+  nWorkers: number;
+}
+
+export interface IngestProgress {
+  running: boolean;
+  files_total: number;
+  files_done: number;
+  chunks_done: number;
+  /** Sum across workers — divide by `files_done * nWorkers` for per-chunk wall ms. */
+  embed_ms_sum: number;
+  /** Most recent file a worker started, relative to rootPath. Empty when idle. */
+  current_file: string;
+  done: boolean;
+  cancelled: boolean;
+  error: string;
+}
+
+const EMPTY_PROGRESS: IngestProgress = {
+  running: false,
+  files_total: 0,
+  files_done: 0,
+  chunks_done: 0,
+  embed_ms_sum: 0,
+  current_file: '',
+  done: false,
+  cancelled: false,
+  error: '',
+};
+
+/**
+ * Kick off a multi-worker ingest pass. Walks `rootPath` recursively, fans
+ * the file list across `nWorkers` zig threads (each with its own llama
+ * context against one shared model in VRAM), embeds in batches, upserts
+ * into the per-model store. Returns true if the pool started.
+ *
+ * Only one ingest can run at a time per cart process. Calling twice while
+ * the first is still running returns false.
+ */
+export function ingestStart(rootPath: string, opts: IngestStartOpts): boolean {
+  const ok = callHost<number>(
+    '__embed_ingest_start',
+    0,
+    rootPath,
+    opts.sourceType,
+    opts.modelPath,
+    opts.slug,
+    opts.nWorkers | 0,
+  );
+  return ok === 1;
+}
+
+/** Live snapshot of the active ingest. Cheap — atomic loads + one mutex. */
+export function ingestProgress(): IngestProgress {
+  return callHostJson<IngestProgress>('__embed_ingest_progress', EMPTY_PROGRESS);
+}
+
+/** Flip the cancel flag. Workers exit after their current batch. */
+export function ingestCancel(): boolean {
+  return callHost<boolean>('__embed_ingest_cancel', false);
+}
