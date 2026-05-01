@@ -16,6 +16,14 @@
             .url = "git+https://github.com/negrel/zluajit#86ee726416810b60e101cf19703bc2325cb19a42",
             .hash = "zluajit-0.0.0-uJQ3fjmRAgBvG9HlxU_5HiDNMvT3FQVgOB6DDfXKsgoK",
         },
+        .zuckdb = .{
+            .url = "git+https://github.com/karlseguin/zuckdb.zig?ref=zig-0.15#f98bb3868d56d695b6662ea5e6d4ee5fdd5aec30",
+            .hash = "zuckdb-0.0.0-DpSXVFzzBQC8T51_97zt_zJUF_I--HXmafV8tjFcxIax",
+        },
+        .pg = .{
+            .url = "git+https://github.com/karlseguin/pg.zig?ref=zig-0.15#a4351154a00488d26740b4378872be03bd562d27",
+            .hash = "pg-0.0.0-Wp_7gdNpBgBWiq6RQguwbekGA0sbYvjgZd4sNG_CyT0f",
+        },
     },
     .paths = .{"."},
 }

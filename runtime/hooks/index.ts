@@ -12,6 +12,8 @@ export * as fs from './fs';
 export { math, listZigCallable } from './math';
 export type { Vec2, Vec3, BBox2, BBox3, SmoothDampResult } from './math';
 export * as sqlite from './sqlite';
+export * as pg from './pg';
+export * as embed from './embed';
 export * as http from './http';
 export * as crypto from './crypto';
 export * as process from './process';
@@ -130,6 +132,10 @@ export { useMedia } from './useMedia';
 export { useVoiceInput } from './useVoiceInput';
 export type { VoiceInputOptions, VoiceInputResult } from './useVoiceInput';
 export { useFileWatch, attachWatcher } from './useFileWatch';
+export { useEmbed } from './useEmbed';
+export type { UseEmbedOpts, QueryOpts as EmbedQueryOpts, EmbedHit } from './useEmbed';
+export { usePostgres } from './usePostgres';
+export type { UsePostgresOpts } from './usePostgres';
 export type { FileWatchEvent, FileWatchOptions } from './useFileWatch';
 
 // Scene3D scene-graph hook — lives in runtime/scene3d/, surfaced through

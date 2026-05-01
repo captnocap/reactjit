@@ -108,6 +108,16 @@ pub fn build(b: *std.Build) void {
     root_mod.addImport("tls", tls_mod);
     root_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
 
+    // ── pg.zig (Postgres client) ────────────────────────────────
+    // Used by framework/pg.zig (and via that, framework/embed.zig). Always
+    // imported so the comptime-stub paths in v8_app.zig still resolve when
+    // -Dhas-pg=false; the dep itself doesn't link any C and is cheap to compile.
+    const pg_dep = b.dependency("pg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.addImport("pg", pg_dep.module("pg"));
+
     const v8_dep_opt = if (use_v8) b.dependency("v8", .{
         .target = target,
         .optimize = optimize,
@@ -327,6 +337,20 @@ pub fn build(b: *std.Build) void {
         exe.addRPath(.{ .cwd_relative = "$ORIGIN" });
     }
 
+    // ── llama.cpp via libllama_ffi.so (has_embed) ──────────────
+    // Wraps the embedding + reranker work that experiments/embed-bench
+    // validated. Pre-built .so lives at tsz/zig-out/lib/libllama_ffi.so
+    // (same path the bench used). $ORIGIN rpath so scripts/ship can
+    // bundle the .so next to the cart binary.
+    const has_pg = b.option(bool, "has-pg", "Register __pg_* bindings (pg.zig client + embedded postgres)") orelse false;
+    const has_embed = b.option(bool, "has-embed", "Register __embed_* bindings (llama.cpp + pgvector store; implies has-pg)") orelse false;
+    if (has_embed) {
+        const llama_lib_dir = b.path("tsz/zig-out/lib");
+        root_mod.addLibraryPath(llama_lib_dir);
+        exe.linkSystemLibrary("llama_ffi");
+        exe.addRPath(.{ .cwd_relative = "$ORIGIN" });
+    }
+
     // ── Framework FFI shims ────────────────────────────────────
     root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
     if (has_physics) {
@@ -374,7 +398,7 @@ pub fn build(b: *std.Build) void {
     const has_zigcall = b.option(bool, "has-zigcall", "Register __zig_call/__zig_call_list bindings") orelse false;
     const has_sdk = b.option(bool, "has-sdk", "Register __http_request_*/__fetch/__claude_*/__kimi_*/__localai_*/__browser_*/__ipc_*/__play_*/__rec_* bindings") orelse false;
     const has_voice = b.option(bool, "has-voice", "Register __voice_* bindings (mic + WebRTC VAD)") orelse false;
-    // has_whisper hoisted earlier (next to its compile block).
+    // has_whisper, has_pg, has_embed hoisted earlier (next to their compile/link blocks).
     options.addOption(bool, "has_process", has_process);
     options.addOption(bool, "has_httpsrv", has_httpsrv);
     options.addOption(bool, "has_wssrv", has_wssrv);
@@ -386,6 +410,8 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "has_zigcall", has_zigcall);
     options.addOption(bool, "has_sdk", has_sdk);
     options.addOption(bool, "has_voice", has_voice);
+    options.addOption(bool, "has_pg", has_pg or has_embed);
+    options.addOption(bool, "has_embed", has_embed);
     options.addOption(bool, "has_whisper", has_whisper);
 
     // ── Allergen label: V8 binding manifest ───────────────────────────
@@ -408,6 +434,8 @@ pub fn build(b: *std.Build) void {
     _ = manifest_wf.add("v8-ingredients/zigcall.flag", if (has_zigcall) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/sdk.flag", if (has_sdk) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/voice.flag", if (has_voice) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/pg.flag", if (has_pg or has_embed) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/embed.flag", if (has_embed) "1\n" else "0\n");
     _ = manifest_wf.add("v8-ingredients/whisper.flag", if (has_whisper) "1\n" else "0\n");
     const install_manifest = b.addInstallDirectory(.{
         .source_dir = manifest_wf.getDirectory(),

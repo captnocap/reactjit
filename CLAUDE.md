@@ -23,7 +23,7 @@ The following directories are READ-ONLY and FROZEN:
 
 # HARD RULE: V8 IS THE DEFAULT RUNTIME
 
-The default JS runtime is **V8** (embedded via zig-v8). `scripts/ship` builds V8. `--qjs` is legacy opt-in. `--jsrt` is the LuaJIT evaluator alternate path.
+The default JS runtime is **V8** (embedded via zig-v8). `scripts/ship` builds V8. `--qjs` is legacy opt-in.
 
 The "V8 has baggage" myth is fake. The baggage is Chromium (~200MB CEF), not V8 itself (~6MB standalone). We measured it.
 
@@ -80,22 +80,6 @@ No Task / Agent / Explore tool calls. Supervisor goes blind when a worker spawns
 
 ---
 
-# HARD RULE: JSRT — JS INSIDE LUA, NOT JS TURNING INTO LUA
-
-JSRT at `framework/lua/jsrt/` is a JavaScript evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage. There is no tool anywhere in the pipeline that translates JS to Lua.
-
-**The distinction that matters is scope.** The evaluator implements ECMAScript semantics (var/let/const, closures, prototype chain, this, try/catch, Map/Set/WeakMap, Symbol, iterators, destructuring). It does NOT know about React, hooks, JSX, components, or reconcilers. esbuild lowers JSX to `React.createElement(...)` before the evaluator ever sees a bundle. If you catch yourself writing evaluator code that names `useState`, `hook`, `fiber`, `component`, or any React concept — STOP. That's the trap.
-
-Live files: `framework/lua/jsrt/` — see `README.md` for the manifesto and `TARGET.md` for the 13 ordered milestones. Progress check:
-
-```bash
-./framework/lua/jsrt/test/run_targets.sh
-```
-
-When asked "where are we on JSRT," run that — don't guess.
-
----
-
 ## Who Maintains This
 
 **You do.** Bugs are from other versions of yourself in parallel instances. If a bug from another Claude is blocking you, fix it — it is your code. All of it.
@@ -108,12 +92,11 @@ When asked "where are we on JSRT," run that — don't guess.
 
 ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild.
 
-**Cart runtime:** V8 is default. JSRT is the alternate LuaJIT path. QJS is legacy maintenance-only.
+**Cart runtime:** V8 is default. QJS is legacy maintenance-only.
 
 React's reconciler emits CREATE/APPEND/UPDATE mutation commands; the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes them.
 
 - **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows.
-- **`framework/lua/jsrt/`** — JSRT evaluator. Alternate path, not the default.
 - **`runtime/`** — JS entry point, JSX shim, primitives, host globals, hooks.
 - **`renderer/`** — reconciler host config. Mutation command stream.
 - **`cart/`** — `.tsx` apps. `cart/sweatshop/` (was `cursor-ide`) is the active IDE cart.

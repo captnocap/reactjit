@@ -154,6 +154,16 @@ const v8_bindings_whisper = if (HAS_WHISPER) @import("framework/v8_bindings_whis
     pub fn registerWhisper(_: anytype) void {}
     pub fn tickDrain() void {}
 };
+const HAS_PG = if (@hasDecl(build_options, "has_pg")) build_options.has_pg else false;
+const v8_bindings_pg = if (HAS_PG) @import("framework/v8_bindings_pg.zig") else struct {
+    pub fn registerPg(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const HAS_EMBED = if (@hasDecl(build_options, "has_embed")) build_options.has_embed else false;
+const v8_bindings_embed = if (HAS_EMBED) @import("framework/v8_bindings_embed.zig") else struct {
+    pub fn registerEmbed(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
 
 const INGREDIENTS = [_]Ingredient{
     // Framework-essential (always-on). These bindings expose host fns the
@@ -189,6 +199,8 @@ const INGREDIENTS = [_]Ingredient{
     .{ .name = "sdk", .required = false, .grep_prefix = "__http_request_", .reg_fn = "registerSdk", .mod = v8_bindings_sdk },
     .{ .name = "voice", .required = false, .grep_prefix = "__voice_", .reg_fn = "registerVoice", .mod = v8_bindings_voice },
     .{ .name = "whisper", .required = false, .grep_prefix = "__whisper_", .reg_fn = "registerWhisper", .mod = v8_bindings_whisper },
+    .{ .name = "pg", .required = false, .grep_prefix = "__pg_", .reg_fn = "registerPg", .mod = v8_bindings_pg },
+    .{ .name = "embed", .required = false, .grep_prefix = "__embed_", .reg_fn = "registerEmbed", .mod = v8_bindings_embed },
 };
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");

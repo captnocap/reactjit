@@ -1,0 +1,600 @@
+//! V8 host bindings for runtime/hooks/embed.ts + useEmbed.
+//!
+//! Single-instance design: one `Embedder`, one `Reranker`, one `Store` per
+//! cart process. The TS layer's "handle" arg is currently ignored — we
+//! always operate on the global slot. Multi-handle support can come later
+//! if a cart needs to mix two embedding models.
+//!
+//! Exposed (mirrors runtime/hooks/embed.ts):
+//!   __embed_load_model(path)                       → 1 | 0
+//!   __embed_free_model(_)                          → void
+//!   __embed_n_dim(_)                               → integer
+//!   __embed_text(_, text)                          → JSON [v…] | "null"
+//!   __embed_batch(_, textsJson)                    → JSON [[v…],[v…]…]
+//!   __embed_rerank(rerankerPath, query, candsJson) → JSON [s, s, …]
+//!   __embed_store_open(slug, dim)                  → 1 | 0
+//!   __embed_store_close(_)                         → void
+//!   __embed_store_upsert(_, rowJson)               → bool
+//!   __embed_store_search_json(_, qvecJson, n, srcType) → JSON SearchHit[]
+//!
+//! All JSON args are plain UTF-8 strings; the TS side uses JSON.stringify
+//! before calling and JSON.parse after. Keeps the binding ABI tiny.
+
+const std = @import("std");
+const v8 = @import("v8");
+const v8_runtime = @import("v8_runtime.zig");
+const embed = @import("embed.zig");
+
+var g_embedder: ?embed.Embedder = null;
+var g_reranker: ?embed.Reranker = null;
+var g_reranker_path: []u8 = &.{};
+var g_store: ?embed.Store = null;
+
+var g_alloc_state = std.heap.GeneralPurposeAllocator(.{}){};
+
+fn allocator() std.mem.Allocator {
+    return g_alloc_state.allocator();
+}
+
+// ── arg helpers ────────────────────────────────────────────────────────
+
+fn argStringAlloc(alloc: std.mem.Allocator, info: v8.FunctionCallbackInfo, idx: u32) ?[]u8 {
+    if (info.length() <= idx) return null;
+    const iso = info.getIsolate();
+    const ctx = iso.getCurrentContext();
+    const str = info.getArg(idx).toString(ctx) catch return null;
+    const len = str.lenUtf8(iso);
+    const buf = alloc.alloc(u8, len) catch return null;
+    _ = str.writeUtf8(iso, buf);
+    return buf;
+}
+
+fn argI32(info: v8.FunctionCallbackInfo, idx: u32, fallback: i32) i32 {
+    if (info.length() <= idx) return fallback;
+    const ctx = info.getIsolate().getCurrentContext();
+    return @as(i32, @intCast(info.getArg(idx).toI32(ctx) catch return fallback));
+}
+
+fn setNumber(info: v8.FunctionCallbackInfo, n: i64) void {
+    info.getReturnValue().set(v8.Number.init(info.getIsolate(), @floatFromInt(n)));
+}
+
+fn setBool(info: v8.FunctionCallbackInfo, b: bool) void {
+    info.getReturnValue().set(v8.Boolean.init(info.getIsolate(), b));
+}
+
+fn setString(info: v8.FunctionCallbackInfo, s: []const u8) void {
+    info.getReturnValue().set(v8.String.initUtf8(info.getIsolate(), s));
+}
+
+// ── JSON helpers ───────────────────────────────────────────────────────
+
+fn writeFloatArrayJson(buf: *std.array_list.Managed(u8), v: []const f32) !void {
+    try buf.append('[');
+    for (v, 0..) |x, i| {
+        if (i > 0) try buf.append(',');
+        try buf.writer().print("{d}", .{x});
+    }
+    try buf.append(']');
+}
+
+fn writeJsonStringEscaped(buf: *std.array_list.Managed(u8), s: []const u8) !void {
+    try buf.append('"');
+    for (s) |ch| switch (ch) {
+        '"' => try buf.appendSlice("\\\""),
+        '\\' => try buf.appendSlice("\\\\"),
+        '\n' => try buf.appendSlice("\\n"),
+        '\r' => try buf.appendSlice("\\r"),
+        '\t' => try buf.appendSlice("\\t"),
+        0x00...0x08, 0x0B, 0x0C, 0x0E...0x1F => try buf.writer().print("\\u{x:0>4}", .{ch}),
+        else => try buf.append(ch),
+    };
+    try buf.append('"');
+}
+
+/// Parse a JSON array of strings into a slice of owned strings.
+fn parseStringArray(alloc: std.mem.Allocator, json: []const u8) ![][]const u8 {
+    var parsed = try std.json.parseFromSlice(std.json.Value, alloc, json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .array) return error.NotAnArray;
+    const arr = parsed.value.array;
+    var out = try alloc.alloc([]const u8, arr.items.len);
+    for (arr.items, 0..) |item, i| {
+        if (item != .string) {
+            out[i] = try alloc.dupe(u8, "");
+        } else {
+            out[i] = try alloc.dupe(u8, item.string);
+        }
+    }
+    return out;
+}
+
+fn freeStringArray(alloc: std.mem.Allocator, arr: [][]const u8) void {
+    for (arr) |s| alloc.free(s);
+    alloc.free(arr);
+}
+
+/// Parse a JSON array of numbers into a []f32.
+fn parseFloatArray(alloc: std.mem.Allocator, json: []const u8) ![]f32 {
+    var parsed = try std.json.parseFromSlice(std.json.Value, alloc, json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .array) return error.NotAnArray;
+    const arr = parsed.value.array;
+    var out = try alloc.alloc(f32, arr.items.len);
+    for (arr.items, 0..) |item, i| {
+        out[i] = switch (item) {
+            .float => |f| @floatCast(f),
+            .integer => |n| @floatFromInt(n),
+            else => 0.0,
+        };
+    }
+    return out;
+}
+
+// ── Embedder host fns ──────────────────────────────────────────────────
+
+fn hostLoadModel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    const path = argStringAlloc(a, info, 0) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(path);
+    if (g_embedder != null) {
+        // Already loaded — release before reload.
+        g_embedder.?.deinit();
+        g_embedder = null;
+    }
+    g_embedder = embed.Embedder.init(path) catch {
+        setNumber(info, 0);
+        return;
+    };
+    setNumber(info, 1);
+}
+
+fn hostFreeModel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    _ = info;
+    if (g_embedder) |*e| {
+        e.deinit();
+        g_embedder = null;
+    }
+}
+
+fn hostNDim(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (g_embedder) |e| {
+        setNumber(info, @intCast(e.n_embd));
+    } else {
+        setNumber(info, 0);
+    }
+}
+
+fn hostEmbedText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    if (g_embedder == null) {
+        setString(info, "null");
+        return;
+    }
+    const text = argStringAlloc(a, info, 1) orelse {
+        setString(info, "null");
+        return;
+    };
+    defer a.free(text);
+
+    const vec = g_embedder.?.embedText(a, text) catch {
+        setString(info, "null");
+        return;
+    };
+    defer a.free(vec);
+
+    var buf = std.array_list.Managed(u8).init(a);
+    defer buf.deinit();
+    writeFloatArrayJson(&buf, vec) catch {
+        setString(info, "null");
+        return;
+    };
+    setString(info, buf.items);
+}
+
+fn hostEmbedBatch(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    if (g_embedder == null) {
+        setString(info, "[]");
+        return;
+    }
+    const json = argStringAlloc(a, info, 1) orelse {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(json);
+
+    const texts = parseStringArray(a, json) catch {
+        setString(info, "[]");
+        return;
+    };
+    defer freeStringArray(a, texts);
+
+    const vectors = g_embedder.?.embedBatch(a, texts) catch {
+        setString(info, "[]");
+        return;
+    };
+    defer {
+        for (vectors) |v| a.free(v);
+        a.free(vectors);
+    }
+
+    var buf = std.array_list.Managed(u8).init(a);
+    defer buf.deinit();
+    buf.append('[') catch {
+        setString(info, "[]");
+        return;
+    };
+    for (vectors, 0..) |v, i| {
+        if (i > 0) buf.append(',') catch {
+            setString(info, "[]");
+            return;
+        };
+        writeFloatArrayJson(&buf, v) catch {
+            setString(info, "[]");
+            return;
+        };
+    }
+    buf.append(']') catch {
+        setString(info, "[]");
+        return;
+    };
+    setString(info, buf.items);
+}
+
+// ── Reranker host fn ───────────────────────────────────────────────────
+
+fn ensureReranker(path: []const u8) bool {
+    if (g_reranker != null and std.mem.eql(u8, g_reranker_path, path)) return true;
+    const a = allocator();
+    if (g_reranker) |*r| {
+        r.deinit();
+        g_reranker = null;
+        if (g_reranker_path.len > 0) a.free(g_reranker_path);
+        g_reranker_path = &.{};
+    }
+    g_reranker = embed.Reranker.init(path) catch return false;
+    g_reranker_path = a.dupe(u8, path) catch {
+        g_reranker.?.deinit();
+        g_reranker = null;
+        return false;
+    };
+    return true;
+}
+
+fn hostRerank(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    const path = argStringAlloc(a, info, 0) orelse {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(path);
+    const query = argStringAlloc(a, info, 1) orelse {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(query);
+    const cands_json = argStringAlloc(a, info, 2) orelse {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(cands_json);
+
+    if (!ensureReranker(path)) {
+        setString(info, "[]");
+        return;
+    }
+    const cands = parseStringArray(a, cands_json) catch {
+        setString(info, "[]");
+        return;
+    };
+    defer freeStringArray(a, cands);
+
+    var buf = std.array_list.Managed(u8).init(a);
+    defer buf.deinit();
+    buf.append('[') catch {
+        setString(info, "[]");
+        return;
+    };
+    for (cands, 0..) |doc, i| {
+        if (i > 0) buf.append(',') catch {
+            setString(info, "[]");
+            return;
+        };
+        const s = g_reranker.?.score(a, query, doc) catch 0.0;
+        buf.writer().print("{d}", .{s}) catch {
+            setString(info, "[]");
+            return;
+        };
+    }
+    buf.append(']') catch {
+        setString(info, "[]");
+        return;
+    };
+    setString(info, buf.items);
+}
+
+// ── Store host fns ─────────────────────────────────────────────────────
+
+fn hostStoreOpen(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    const slug = argStringAlloc(a, info, 0) orelse {
+        setNumber(info, 0);
+        return;
+    };
+    defer a.free(slug);
+    const dim_i = argI32(info, 1, 0);
+    if (dim_i <= 0) {
+        setNumber(info, 0);
+        return;
+    }
+    if (g_store) |*s| {
+        s.close();
+        g_store = null;
+    }
+    g_store = embed.Store.open(a, slug, @intCast(dim_i)) catch {
+        setNumber(info, 0);
+        return;
+    };
+    // Eager partial-HNSW for the canonical kinds. Cheap if they exist.
+    g_store.?.buildPartialHnsw("chat-log-chunk") catch {};
+    g_store.?.buildPartialHnsw("code-chunk") catch {};
+    g_store.?.buildPartialHnsw("document-chunk") catch {};
+    setNumber(info, 1);
+}
+
+fn hostStoreClose(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    _ = info;
+    if (g_store) |*s| {
+        s.close();
+        g_store = null;
+    }
+}
+
+const RowParse = struct {
+    id: []const u8,
+    source_type: []const u8,
+    source_id: []const u8,
+    chunk_index: i32,
+    display_text: []const u8,
+    text_preview: []const u8,
+    metadata_json: []const u8,
+    model: []const u8,
+    text_sha: []const u8,
+    vector: []f32,
+};
+
+fn parseChunkRow(a: std.mem.Allocator, json: []const u8, out_vec: *[]f32) !RowParse {
+    var parsed = try std.json.parseFromSlice(std.json.Value, a, json, .{});
+    // We hold parsed alive until we've duped strings.
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.NotAnObject;
+    const obj = parsed.value.object;
+
+    const get_str = struct {
+        fn s(o: std.json.ObjectMap, k: []const u8) []const u8 {
+            const v = o.get(k) orelse return "";
+            return switch (v) {
+                .string => |str| str,
+                else => "",
+            };
+        }
+    }.s;
+
+    const get_i32 = struct {
+        fn n(o: std.json.ObjectMap, k: []const u8) i32 {
+            const v = o.get(k) orelse return 0;
+            return switch (v) {
+                .integer => |i| @intCast(i),
+                .float => |f| @intFromFloat(f),
+                else => 0,
+            };
+        }
+    }.n;
+
+    // Strings (dup so they outlive `parsed`).
+    const id = try a.dupe(u8, get_str(obj, "id"));
+    errdefer a.free(id);
+    const source_type = try a.dupe(u8, get_str(obj, "source_type"));
+    errdefer a.free(source_type);
+    const source_id = try a.dupe(u8, get_str(obj, "source_id"));
+    errdefer a.free(source_id);
+    const display_text = try a.dupe(u8, get_str(obj, "display_text"));
+    errdefer a.free(display_text);
+    const text_preview = try a.dupe(u8, get_str(obj, "text_preview"));
+    errdefer a.free(text_preview);
+    const metadata_json = try a.dupe(u8, get_str(obj, "metadata_json"));
+    errdefer a.free(metadata_json);
+    const model = try a.dupe(u8, get_str(obj, "model"));
+    errdefer a.free(model);
+    const text_sha = try a.dupe(u8, get_str(obj, "text_sha"));
+    errdefer a.free(text_sha);
+
+    // vector
+    const vec_v = obj.get("vector") orelse return error.MissingVector;
+    if (vec_v != .array) return error.VectorNotArray;
+    const arr = vec_v.array;
+    var vec = try a.alloc(f32, arr.items.len);
+    errdefer a.free(vec);
+    for (arr.items, 0..) |item, i| {
+        vec[i] = switch (item) {
+            .float => |f| @floatCast(f),
+            .integer => |n| @floatFromInt(n),
+            else => 0.0,
+        };
+    }
+
+    out_vec.* = vec;
+    return .{
+        .id = id,
+        .source_type = source_type,
+        .source_id = source_id,
+        .chunk_index = get_i32(obj, "chunk_index"),
+        .display_text = display_text,
+        .text_preview = text_preview,
+        .metadata_json = metadata_json,
+        .model = model,
+        .text_sha = text_sha,
+        .vector = vec,
+    };
+}
+
+fn freeRow(a: std.mem.Allocator, r: RowParse) void {
+    a.free(r.id);
+    a.free(r.source_type);
+    a.free(r.source_id);
+    a.free(r.display_text);
+    a.free(r.text_preview);
+    a.free(r.metadata_json);
+    a.free(r.model);
+    a.free(r.text_sha);
+    a.free(r.vector);
+}
+
+fn hostStoreUpsert(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    if (g_store == null) {
+        setBool(info, false);
+        return;
+    }
+    const json = argStringAlloc(a, info, 1) orelse {
+        setBool(info, false);
+        return;
+    };
+    defer a.free(json);
+
+    var vec_holder: []f32 = &.{};
+    const row = parseChunkRow(a, json, &vec_holder) catch {
+        setBool(info, false);
+        return;
+    };
+    defer freeRow(a, row);
+
+    g_store.?.upsert(
+        row.id,
+        row.source_type,
+        row.source_id,
+        row.chunk_index,
+        row.display_text,
+        row.text_preview,
+        row.metadata_json,
+        row.model,
+        row.text_sha,
+        row.vector,
+    ) catch {
+        setBool(info, false);
+        return;
+    };
+    setBool(info, true);
+}
+
+fn hostStoreSearch(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const a = allocator();
+    if (g_store == null) {
+        setString(info, "[]");
+        return;
+    }
+    const qvec_json = argStringAlloc(a, info, 1) orelse {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(qvec_json);
+    const n_i = argI32(info, 2, 5);
+    const n: usize = if (n_i <= 0) 5 else @intCast(n_i);
+    const src = argStringAlloc(a, info, 3) orelse "";
+    defer if (src.len > 0) a.free(src);
+
+    const qvec = parseFloatArray(a, qvec_json) catch {
+        setString(info, "[]");
+        return;
+    };
+    defer a.free(qvec);
+
+    const hits = g_store.?.searchTopNFiltered(a, qvec, n, src) catch {
+        setString(info, "[]");
+        return;
+    };
+    defer embed.freeHits(a, hits);
+
+    var buf = std.array_list.Managed(u8).init(a);
+    defer buf.deinit();
+    buf.append('[') catch {
+        setString(info, "[]");
+        return;
+    };
+    for (hits, 0..) |h, i| {
+        if (i > 0) buf.append(',') catch {
+            setString(info, "[]");
+            return;
+        };
+        buf.appendSlice("{\"id\":") catch {
+            setString(info, "[]");
+            return;
+        };
+        writeJsonStringEscaped(&buf, h.id) catch {
+            setString(info, "[]");
+            return;
+        };
+        buf.appendSlice(",\"source_id\":") catch {
+            setString(info, "[]");
+            return;
+        };
+        writeJsonStringEscaped(&buf, h.source_id) catch {
+            setString(info, "[]");
+            return;
+        };
+        buf.writer().print(",\"chunk_index\":{d},\"text_preview\":", .{h.chunk_index}) catch {
+            setString(info, "[]");
+            return;
+        };
+        writeJsonStringEscaped(&buf, h.text_preview) catch {
+            setString(info, "[]");
+            return;
+        };
+        buf.appendSlice(",\"display_text\":") catch {
+            setString(info, "[]");
+            return;
+        };
+        writeJsonStringEscaped(&buf, h.display_text) catch {
+            setString(info, "[]");
+            return;
+        };
+        buf.writer().print(",\"dense_score\":{d}}}", .{h.dense_score}) catch {
+            setString(info, "[]");
+            return;
+        };
+    }
+    buf.append(']') catch {
+        setString(info, "[]");
+        return;
+    };
+    setString(info, buf.items);
+}
+
+pub fn registerEmbed(_: anytype) void {
+    v8_runtime.registerHostFn("__embed_load_model", hostLoadModel);
+    v8_runtime.registerHostFn("__embed_free_model", hostFreeModel);
+    v8_runtime.registerHostFn("__embed_n_dim", hostNDim);
+    v8_runtime.registerHostFn("__embed_text", hostEmbedText);
+    v8_runtime.registerHostFn("__embed_batch", hostEmbedBatch);
+    v8_runtime.registerHostFn("__embed_rerank", hostRerank);
+    v8_runtime.registerHostFn("__embed_store_open", hostStoreOpen);
+    v8_runtime.registerHostFn("__embed_store_close", hostStoreClose);
+    v8_runtime.registerHostFn("__embed_store_upsert", hostStoreUpsert);
+    v8_runtime.registerHostFn("__embed_store_search_json", hostStoreSearch);
+}
+
+pub fn tickDrain() void {}

@@ -398,9 +398,31 @@
       ],
       "buildOptions": ["has-lua-worker"],
       "note": "luajit is foundational; this flag only gates worker-pool Zig code paths."
+    },
+    "pg": {
+      "shipGate": "pg",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/pg.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/usePostgres.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/embed.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useEmbed.ts" }
+      ],
+      "buildOptions": ["has-pg"],
+      "v8Bindings": ["pg"],
+      "note": "Postgres client (pg.zig) + auto-spawn of embedded postgres at ~/.cache/reactjit-embed/embed-pg/. Free side effect of useEmbed since embedding storage rides the same socket."
+    },
+    "embed": {
+      "shipGate": "embed",
+      "triggers": [
+        { "kind": "metafileInput", "input": "runtime/hooks/embed.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useEmbed.ts" }
+      ],
+      "buildOptions": ["has-embed"],
+      "v8Bindings": ["embed"],
+      "note": "Local embedding + retrieval. Links libllama_ffi.so from tsz/zig-out/lib + pgvector store. Implies has-pg (framework/embed.zig pulls framework/pg.zig)."
     }
   },
   "shipGate": {
-    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk", "voice", "whisper"]
+    "flagOrder": ["privacy", "useHost", "useConnection", "fs", "websocket", "telemetry", "zigcall", "sdk", "voice", "whisper", "pg", "embed"]
   }
 }
