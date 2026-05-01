@@ -1,14 +1,102 @@
 # reactjit
 
-A native runtime for React. Write plain `.tsx`, bundle with esbuild, get a single-file binary. No DOM, no CSS engine, no browser, no Chromium, no Node.
+A native runtime for React. Write plain `.tsx`, ship a single-file binary. No DOM, no CSS engine, no browser, no Node.
 
-React's reconciler emits CREATE/APPEND/UPDATE/REMOVE mutation commands (host config in `renderer/hostConfig.ts`). Those commands drive a Zig-owned node tree. Layout (flexbox), paint, hit-testing, events, input, text, audio, voice, networking, and GPU are native Zig sitting on V8 and wgpu. JSX, hooks, standard HTML tag names, Tailwind via `className`, and CSS transforms (rotate / scale / translate via 2D matrix) all work — the host shims what needs shimming and the reconciler translates the rest.
+Layout, paint, hit-testing, text, networking, audio, video, voice — all native Zig on top of V8 and wgpu. The reconciler handles standard React: JSX, hooks, HTML tag names, Tailwind via `className`, CSS transforms. The hard parts are ours, not a wrapped engine.
 
-This is an experiment. Highly experimental, active construction, rough edges everywhere. The shape of the project keeps moving.
+Highly experimental. Rough edges everywhere. The shape keeps moving.
 
-## Why
+## Make a cart
 
-Copy-paste a React component, ship native performance, don't ship Chromium. V8 standalone is small (~6 MB); Node bundles V8 into a ~50 MB package; CEF (Chromium Embedded) is ~200 MB. The "V8 is heavy" intuition is really "Chromium is heavy." Measure before assuming.
+A cart is a `.tsx` file under `cart/` that exports a default React component:
+
+```tsx
+// cart/hello.tsx
+export default function Hello() {
+  return (
+    <Box className="p-4 bg-zinc-900 h-full w-full items-center justify-center">
+      <Text className="text-2xl text-white">hello</Text>
+    </Box>
+  );
+}
+```
+
+Ship it:
+
+```bash
+./scripts/ship hello
+```
+
+You get `zig-out/bin/hello` — a self-extracting native binary with bundled glibc family + transitive `.so` deps. Runs on fresh Linux distros (Whonix, Debian, Ubuntu, Fedora) with no system toolchain, no `apt install`, no LD_LIBRARY_PATH gymnastics.
+
+> **Don't use `node`, `bun`, or `npm`.** Build-time JS runs under `tools/v8cli` (a standalone V8 script host). The repo has zero npm/node/bun dependencies — `tools/zig/` and `tools/esbuild/` are vendored too. `scripts/fetch-zig.sh` populates the toolchain on a fresh clone.
+>
+> **Don't write `.jsx` or `.js` cart files.** `.tsx` and `.ts` only.
+>
+> **Cart resolution:** `cart/<name>/index.tsx` first, then `cart/<name>.tsx`. Single-file or directory, both fine. A directory cart can have a `cart.json` with `name` / `description` / `customChrome` / `width` / `height`.
+
+## Iterate
+
+Use the persistent dev host instead of rebuilding for every change:
+
+```bash
+./scripts/dev hello
+```
+
+A long-lived `ReleaseFast` binary listens on `/tmp/reactjit.sock`. Save a `.tsx` or `.ts` file, the bundler re-bundles and pushes the new bundle over IPC. Save-to-visible: ~300 ms. Run `./scripts/dev <other>` in a second terminal — same host, gets a new tab.
+
+> **Stick to `ReleaseFast` (the default).** Debug builds have a pre-existing click-path issue.
+>
+> **Rebuild required for `framework/`, `build.zig`, or `scripts/` changes.** TSX/TS edits hot-reload. Zig edits need a fresh `./scripts/dev` (which rebuilds the host).
+>
+> **State across reloads:** `useHotState('key', initial)` survives re-eval — atoms persist in Zig-owned memory outside the JS context that gets torn down. Values must be JSON-serializable.
+
+## Primitives
+
+Standard React works. These are the type-string primitives the reconciler emits to the Zig host:
+
+```
+Box  Row  Col  Text  Image  Pressable  ScrollView
+TextInput  TextArea  TextEditor  Terminal
+Window  Notification
+Canvas  Canvas.Node  Canvas.Path  Canvas.Clamp
+Graph   Graph.Path   Graph.Node
+Physics      Physics.World      Physics.Body         Physics.Collider
+Audio        Audio.Module       Audio.Connection
+Scene3D      Scene3D.Mesh       Scene3D.Camera       Scene3D.OrbitControls
+             Scene3D.AmbientLight  Scene3D.DirectionalLight  Scene3D.PointLight
+Video  Cartridge  RenderTarget  StaticSurface
+Render  Effect  Native
+```
+
+Standard HTML tag names work too — `div`/`section`/`a`/`button` etc. → `View`; `h1`–`h6`/`p`/`span` → `Text`; `img` → `Image`; `input` → `TextInput`; `textarea` → `TextEditor`; `video` → `Video`. ARIA / `data-*` / HTML-only props are stripped at the bridge.
+
+Tailwind via `className` is parsed by `tw()` at CREATE time. CSS `transform: rotate(...) scale(...) translate(...)` composes into a 2D matrix that paint, hit-test, and clipping all honor.
+
+`<Native type="X" />` is the universal escape hatch — emits CREATE with that string for the Zig host to handle.
+
+## What you can build with it
+
+| Capability | API |
+|---|---|
+| 2D drawing surface (pan/zoom, SVG paths) | `<Canvas>` + `Canvas.Node` / `.Path` / `.Clamp` |
+| Static-viewport graphs | `<Graph>` + `Graph.Path` / `.Node` |
+| 3D scene | `<Scene3D>` + `.Mesh` / `.Camera` / `.OrbitControls` / lights, `useScene3D()` |
+| 2D + 3D physics | `<Physics.World>` + `.Body` + `.Collider` (Box2D, feature-gated) |
+| Modular synth + audio routing | `<Audio>` + `Audio.Module` / `.Connection`, `useAudio()` for note triggering |
+| Video playback | `<Video src>` — libmpv embedded via `dlopen` + GL render API + `glReadPixels` → wgpu texture. Not a separate mpv window. |
+| Voice + transcription | `useVoiceInput` (SDL3 mic + libfvad VAD), `useEnsembleTranscript` (whisper.cpp ensemble) |
+| Networking | `useHost` (be a server) / `fetch` (one-shot) / `useConnection` (long-lived). Kinds: ws, tcp, udp, http, SSE. Transports composable via `via:` (Tor, SOCKS5). |
+| Game-server protocols | RCON, A2S Source Query (built into `useConnection`) |
+| Persistent state | `useHotState` (Zig memory, hot-reload-safe), `useLocalStore`, sqlite via `runtime/hooks/sqlite.ts`, DuckDB via `__db_query` |
+| Filesystem | `useFileContent`, `useFileWatch`, `useFileDrop`, plus low-level `runtime/hooks/fs.ts` |
+| If-this-then-that | `useIFTTT` + compositional triggers from `proc:*` / `fs:*` / clipboard / signal sources. `cart/watchdog.tsx` is the reference. |
+| Render suspend/resume | `<StaticSurface>`, kitty-protocol + headless capture |
+| Privacy / crypto | `usePrivacy` — sha256/hmac/hkdf/xchacha20, GPG, keyring, Noise protocol, Shamir, audit log, PII redact, secure buffers |
+| Coding agents | `__claude_*` / `__kimi_*` / `__localai_*` host bindings + standalone `claude_runner.zig` CLI |
+| Inspector telemetry | `useTelemetry` over `__tel_*` / `__sem_*` (frame, gpu, layout, input, net, state, history, semantic graph) |
+
+For shape and exact prop names, see `runtime/primitives.tsx`, `runtime/hooks/`, and the cart roster in [Reference](#reference).
 
 ## What's native
 
@@ -16,83 +104,24 @@ This isn't React with a thinner browser. It's React without a browser. Behind th
 
 - **Layout** — `framework/layout.zig` + `framework/engine.zig`. Custom flexbox; no Yoga, no Taffy. Sizing tiers (explicit / content / proportional fallback), hit-testing, scroll, focus, z-index scissor breakouts.
 - **Text** — `framework/text.zig` + `framework/gpu/text.zig`. Font loading, glyph cache, shaping, line-break, paint. No HarfBuzz, no Pango.
-- **GPU drawing** — `framework/gpu/{rects,capsules,curves,polys,images,procgen,shaders,text,3d}.zig` on top of wgpu-native. Canvas and Graph coordinate stacks, the static-surface VM, and the effect/material pipeline compose at this layer.
-- **Networking** — `framework/net/{tcp,udp,http,httpserver,websocket,wsserver,socks5,tor,rcon,a2s,page_fetch,ring_buffer,manager,ipc}.zig`. HTTP/1.1, WS client + server, SOCKS5, Tor (control port + onion service), RCON, A2S, IPC. The Tor + SOCKS5 transport composition (`tcp via:tor`, `tcp via:socks5`) is by design — not a passthrough to a system socks daemon.
-- **Voice + audio + whisper** — `framework/voice.zig`, `framework/audio.zig`, `framework/whisper.zig`. SDL3 mic orchestration, modular synth graph, whisper.cpp worker thread + VAD-gated buffer lifecycle.
+- **GPU drawing** — `framework/gpu/{rects,capsules,curves,polys,images,procgen,shaders,text,3d}.zig` on top of wgpu-native.
+- **Networking** — `framework/net/{tcp,udp,http,httpserver,websocket,wsserver,socks5,tor,rcon,a2s,page_fetch,ipc}.zig`. HTTP/1.1, WS client+server, SOCKS5, Tor (control port + onion service), RCON, A2S. The `tcp via:tor` and `tcp via:socks5` composition is by design — not a passthrough to a system socks daemon.
+- **Voice + audio + whisper** — `framework/voice.zig` (SDL3 + libfvad), `framework/audio.zig` (modular synth graph), `framework/whisper.zig` (whisper.cpp on a worker thread + VAD-gated buffer lifecycle).
+- **Video** — `framework/videos.zig`. `dlopen("libmpv.so.2")` with `RTLD_DEEPBIND` to isolate mpv's bundled Lua 5.2; mpv renders into a private GL FBO; we `glReadPixels` and upload to a wgpu texture. Hand-rolled embedding, not a process spawn.
 
-That's the load-bearing five — picked by where bugs land most often, not by importance. `ls framework/` is ~120 more `.zig` files in the same shape: read the file, fix the bug. Pointing at any single one of them is missing the point. The point is what *isn't* there: a 200MB engine being asked to pretend it's a UI runtime.
+That's the load-bearing five — picked by where bugs land most often, not by importance. `ls framework/` is ~120 more `.zig` files in the same shape: read the file, fix the bug.
 
-**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv (dlopen'd at runtime — we wrote the embedding into our wgpu pipeline ourselves; we don't shell out to a separate mpv window). The dep graph is shallow on purpose.
+**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv (`dlopen`'d, embedding hand-rolled). The dep graph is shallow on purpose. When layout misbehaves, the bug is in a file you can read in one sitting, not buried under a million lines of Blink.
 
 The line between "uses dependencies" and "is native" runs through how much of the hard parts you wrote yourself. We wrote most of them.
 
-## Carts
+## Why
 
-Applications are called **carts**. A cart is a `.tsx` file — or a directory with an `index.tsx` entry — under `cart/`. The cart name resolves as `cart/<name>/index.tsx` first, then falls back to `cart/<name>.tsx`. Anything React can express, a cart can be.
+V8 standalone is ~6 MB. Node bundles V8 into ~50 MB. CEF (Chromium Embedded) is ~200 MB. The "V8 is heavy" intuition is really "Chromium is heavy." Copy-paste a React component, ship native performance, don't ship a browser.
 
-The carts that pull the most weight today:
+---
 
-| Cart | What it is |
-|---|---|
-| `cart/app/` | The product surface in progress. Router, homepage, onboarding flow (greeting → goal → cartridge selector → clarify → write), recipe-driven Claude integration. |
-| `cart/sweatshop/` | The IDE reactjit develops itself inside. Editor + chat + git + indexer + agents + charts + scene3d + physics. One cart among many — not the framework. |
-| `cart/component-gallery/` | 128 documented gallery components: charts, menus, dex graph/spatial/tree explorers, tooltips, code blocks, command-composer, time-instruments, social UIs. The closest thing this repo has to a Storybook. |
-| `cart/cockpit/`, `cart/effects/`, `cart/browser/`, `cart/inspector/` | Bigger reference carts. |
-| `cart/dictation.tsx`, `cart/voice_lab.tsx`, `cart/whisper_bench.tsx`, `cart/pocket_operator.tsx` | Voice / VAD / whisper / synth. |
-| `cart/watchdog.tsx`, `cart/ifttt_test.tsx` | IFTTT registry + per-process memory/CPU watcher demos. |
-| `cart/chat-loom.tsx`, `cart/flow_editor.tsx`, `cart/card_grid.tsx`, `cart/nested_grid.tsx`, `cart/tile_drag.tsx`, `cart/context_menu_demo.tsx`, `cart/clipboard_menu_test.tsx`, `cart/rotate_text.tsx` | Standalone UX experiments. |
-
-Everything else (`hello*`, `host_smoke`, `host_test`, `render-test`, `shadow_test`, `transparency_test`, `tooltip_test`, `text_chop_test`, `input_lab`, `router_probe`, `load_via_*`, `spinner`, `braille_graph`, `d152`, `canvas_stress`, `hello_stress`, `graph_demo`) is smoke / regression / contract carts.
-
-A cart manifest is a small `cart.json` next to the entry: `name`, `description`, `customChrome`, `width`, `height`. That's the whole format.
-
-## Primitives
-
-Exported from `runtime/primitives.tsx`:
-
-```
-Box  Row  Col  Text  Image  Pressable  ScrollView
-TextInput  TextArea  TextEditor  Terminal
-Window  Notification
-Canvas     Canvas.Node  Canvas.Path  Canvas.Clamp
-Graph      Graph.Path   Graph.Node
-Physics    Physics.World  Physics.Body  Physics.Collider
-Audio      Audio.Module   Audio.Connection
-Scene3D    Scene3D.Mesh   Scene3D.Camera   Scene3D.OrbitControls
-           Scene3D.AmbientLight  Scene3D.DirectionalLight  Scene3D.PointLight
-Video  Cartridge  RenderTarget  StaticSurface
-Render  Effect  Native
-```
-
-Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Canvas'`, `'Window'`, `'Cartridge'`, …) that the reconciler host passes into the Zig runtime.
-
-**HTML tag remapping** (`renderer/hostConfig.ts`): `div`/`section`/`article`/`aside`/`main`/`nav`/`header`/`footer`/`form`/`a`/`button`/`details`/`summary`/`dialog`/`menu`/list and table tags → `View`; `h1`–`h6`, `p`, `span`, `label`, `strong`/`em`/`b`/`i`, `code`/`small`/`mark`/`abbr`/`cite`/`q`/`time`/`sub`/`sup` → `Text`; `img` → `Image`; `video` → `Video`; `input` → `TextInput`; `textarea` → `TextEditor`; `pre` → `CodeBlock`; `math` → `Math`. `aria-*`, `data-*`, and HTML-only props are stripped at the bridge.
-
-**Tailwind via `className`** — parsed by `tw()` in `runtime/tw.ts` at CREATE time, merged into `style`.
-
-**CSS transform stack** is real: `transform: rotate(...) scale(...) translate(...)` composes into a 2D matrix consumed by paint, hit-test, and clipping.
-
-**Theme tokens** — props can carry `'theme:NAME'` strings; primitives resolve them against the active classifier snapshot. Hex/rgba literals belong only in theme files.
-
-`Native` is the universal escape hatch — `<Native type="X" />` emits CREATE with that type string and the Zig host handles it.
-
-### Drawing, graphs, physics, audio, 3D
-
-- **`<Canvas>`** (`Canvas.Node`, `Canvas.Path`, `Canvas.Clamp`) — pan/zoomable drawing surface with `gx/gy/gw/gh` graph-space coordinates and SVG `d`/`stroke`/`strokeWidth`/`fill` on paths. Real uses across `cart/canvas_stress`, `cart/graph_demo`, `cart/cockpit`, and many sweatshop components (mermaid renderer, chemistry molecule view, gamepad sticks, audio patchbay, noise field, graph canvas, cockpit heatmap).
-- **`<Graph>`** (`Graph.Path`, `Graph.Node`) — static-viewport polyline/path surface. Drives the chart family in `cart/component-gallery/components/` (area, bar, boxplot, bubble-*, candlestick, combination, contour, donut, fan, polar, radar, scatterplot, spline, waterfall, …) and the cart-side Lucide icon renderer.
-- **`<StaticSurface>`** suspends layout/paint inside its subtree until explicitly resumed — basis for the render-surface VM and the kitty/headless capture path.
-- **Physics.** Runtime export. `<Physics.World gravityX gravityY>` owns the simulation; `<Physics.Body type="dynamic" x y bullet …>` is a rigid body; `<Physics.Collider shape="box" radius friction restitution density />` shapes it. Bridges to `framework/physics2d.zig` (Box2D, feature-gated) and `framework/physics3d.zig` directly through CREATE/UPDATE props — no host-fn glue needed.
-- **Audio.** Runtime export. `<Audio gain={0.8}>` owns the engine and master gain; `<Audio.Module id="voice1" type="pocket_voice" tone={0.5} drive={0.3} />` adds a synth/effect node; `<Audio.Connection from="voice1" to="delay1" />` wires the graph. Notes don't fit a tree, so `useAudio()` returns `{ noteOn, noteOff, setParam }` for imperative triggering. Backed by `framework/audio.zig` (modular synth graph). `cart/pocket_operator.tsx` predates the primitive and still calls `__audio_*` host fns directly — both surfaces coexist.
-- **3D.** Runtime export. `<Scene3D>` provides the wgpu render context; `<Scene3D.Mesh geometry="box|sphere|plane|torus" {...transform}>`, `<Scene3D.Camera>`, `<Scene3D.OrbitControls>`, `<Scene3D.AmbientLight>` / `<Scene3D.DirectionalLight>` / `<Scene3D.PointLight>` populate the scene. `useScene3D()` exposes the registry. Lives at `runtime/scene3d/` on top of the engine's wgpu primitives.
-- **Video.** `<Video src={...} />` plays through `framework/videos.zig`, which `dlopen`s `libmpv.so.2` at runtime (not link-time) and uses libmpv's OpenGL render API. Hidden SDL2 GL context, `RTLD_DEEPBIND` to isolate mpv's bundled Lua 5.2, mpv renders to a private FBO, `glReadPixels` → `wgpu_queue.writeTexture()` → textured quad in our pipeline. Hardware decode + GPU colorspace conversion. Software fallback if GL context creation fails. We don't shell out to a separate mpv window; we embed the library and route every frame through our own renderer.
-
-### Voice + whisper
-
-`framework/voice.zig` opens an SDL3 mic stream and runs libfvad's WebRTC VAD over it; `useVoiceInput` (`runtime/hooks/useVoiceInput.ts`) exposes per-frame VAD trace, peak-dBFS level, and confirmed utterance buffers. `whisper.cpp` is vendored at `deps/whisper.cpp/` (CPU-only, dynamic-linked `libwhisper.so`); `framework/whisper.zig` runs `whisper_full` on a worker thread, transcripts return via `__voice_onTranscript`. `useEnsembleTranscript` runs tier-escalating whisper passes with inline candidate proposals and consensus voting. Models are fetched with `scripts/fetch-whisper-models`. Reference carts: `voice_lab` (tuning surface), `dictation` (consumer), `whisper_bench` (timing harness). Plan in `framework/WHISPER_TODO.md`.
-
-### IFTTT + watchdog
-
-`framework/ifttt.zig` (with `framework/lua/ifttt.lua`) is a registry + bus that folds compositional triggers from registered sources (`proc:*`, `fs:*`, clipboard, signals) into rule-driven actions, with payload substitution. The cart-side hook is `runtime/hooks/useIFTTT.ts` (plus `ifttt-compose.ts` and `ifttt-registry.ts`). `framework/watchdog.zig` is the per-process memory/CPU watcher. `cart/watchdog.tsx` is the live demo (kill-log, leak-on-demand, absolute-byte thresholds); `cart/ifttt_test.tsx` is the rule-bus smoke cart.
+# Reference
 
 ## Host bindings
 
@@ -105,10 +134,10 @@ The V8 host registers **338 functions** on the JS global, split across 16 bindin
 | `core` | 56 | input / clipboard / window, audio graph, classifier, hot-state, kv store, JS eval, frame timers (`getFps`, `getTickUs`, `getLayoutUs`, `getPaintUs`), `__nowMs`, `__sleepMs`, `__exit` |
 | `telemetry` | 48 | `__tel_frame/gpu/layout/input/net/state/system/canvas/history/nodes/node*`, `__sem_*` semantic graph, PTY, kvstore |
 | `fs` | 42 | `__fs_read/write/readfile/writefile/exists/list_json/scandir/stat_json/mkdir/remove`, media index, watchers, file-drop |
-| `cli` | 23 | `__argv`, `__cwd`, `__readFile`, `__spawn`/`__spawnSync`, unix-socket client, exit, telemetry counters. Used by `tools/v8cli` for build-time scripts |
+| `cli` | 23 | `__argv`, `__cwd`, `__readFile`, `__spawn`/`__spawnSync`, unix-socket client. Used by `tools/v8cli` for build-time scripts |
 | `net` | 8 | `__tcp_*`, `__udp_*`, `__socks5_register/unregister` |
 | `process` | 7 | `__proc_spawn`, `__proc_kill`, `__proc_stat`, `__proc_stdin_write/close`, `__proc_watch_add/remove` (watchdog source) |
-| `gameserver` | 6 | `__rcon_open/command/close`, `__a2s_open/query/close` (Source-engine RCON + A2S query) |
+| `gameserver` | 6 | `__rcon_open/command/close`, `__a2s_open/query/close` |
 | `voice` | 5 | `__voice_start/stop/set_mode/set_floor/release_buffer` |
 | `wsserver` | 4 | `__wssrv_listen/send/broadcast/close` |
 | `websocket` | 3 | `__ws_open/send/close` |
@@ -117,78 +146,9 @@ The V8 host registers **338 functions** on the JS global, split across 16 bindin
 | `zigcall` | 2 | `__zig_call`, `__zig_call_list` (generic Zig FFI) |
 | `whisper` | 1 | `__whisper_transcribe` |
 
-TypeScript wrappers and React hooks under `runtime/hooks/`:
+TS hook wrappers live under `runtime/hooks/`. `runtime/hooks/index.ts:installBrowserShims()` installs `fetch`, `localStorage`, and a no-op `WebSocket` stub for paste-compatibility.
 
-```
-fs.ts  http.ts  sqlite.ts  crypto.ts  clipboard.ts  process.ts
-localstore.ts  websocket.ts  browser_page.ts  media.ts  whisper.ts
-math.ts  ifttt-registry.ts  ifttt-compose.ts
-
-useConnection          — streaming HTTP / SSE / WS / TCP / UDP, kind+via composition
-useHost                — declarative HTTP / WS / TCP server inside a cart
-useVoiceInput          — SDL3 mic + libfvad VAD
-useEnsembleTranscript  — multi-model whisper consensus with tier escalation
-useIFTTT               — register triggers, fire actions
-useTelemetry           — fps / gpu / nodes / state / history in one hook
-useHotState            — hot-reload-surviving state, persisted in Zig memory
-useFileContent  useFileWatch  useFileDrop  useLocalStore
-useCRUD  useMedia  useFuzzySearch  usePrivacy  useTerminalRecorder
-useContextMenu
-```
-
-`runtime/hooks/index.ts:installBrowserShims()` installs `fetch`, `localStorage`, and a no-op `WebSocket` stub for paste-compatibility.
-
-### Networking trichotomy
-
-All networking funnels through three hooks split by **direction**, with a `kind` for protocol and `via:` for transport composition:
-
-| Hook | Direction |
-|------|-----------|
-| `useHost`       | I bind a port / I own a process. Server-side. |
-| `fetch()`       | One-shot outbound request, no persistent state. SSE supported. |
-| `useConnection` | Persistent outbound channel I don't own the other end of. |
-
-Wired today: `ws`, `tcp`, `udp`, `http`/SSE, `tor` (real bootstrap), `socks5`, `tcp via:tor`, `tcp via:socks5`. `wireguard`/`stun`/`peer` are typed and reserved but not yet implemented. RCON + A2S Source Query bindings exist for game-server carts.
-
-### Coding agents
-
-`__claude_*`, `__kimi_*`, `__localai_*` host bindings drive long-running agent sessions. Standalone `claude_runner.zig` ships a Zig CLI wrapper around `framework/claude_sdk/`.
-
-### Render surfaces
-
-`framework/render_surfaces.zig` + `render_surfaces_vm.zig` provide a render suspend/resume pipeline (kitty/VM/headless) with clipboard and signal watchers — useful for the dev host and for headless capture.
-
-### Not available (no browser context)
-
-`window`/`document`/`navigator` in any meaningful sense, `sessionStorage`, `IndexedDB`, cookies, `Blob`, `FormData`, `FileReader`, `XMLHttpRequest`, CSS Grid, media queries, pseudo-classes, inline SVG, blob URLs. Closer to React Native than browser React.
-
-## Getting started
-
-Prerequisites: Linux (macOS path exists, Linux is the daily driver). The repo is **node-free** — `tools/v8cli` is the standalone V8 script host that runs every build-time `.js` script (no npm, no bun, no node). A pinned Zig toolchain ships under `tools/zig/` (fetched by `scripts/fetch-zig.sh`) so a fresh clone bootstraps without a system Zig.
-
-```bash
-./scripts/ship  <cart-name>        # bundle + zig build + self-extracting binary (release)
-./scripts/ship  <cart-name> -d     # debug ELF, skips packaging
-./scripts/run   <cart-name>        # launch a previously-built binary
-./scripts/dev   <cart-name>        # push cart into the persistent dev host
-./scripts/init  <directory>        # scaffold a new cart from a template
-./scripts/help                     # subcommand help
-```
-
-`scripts/ship` always builds against V8 (`-Duse-v8=true`). The QJS host (`qjs_app.zig`) is still in the tree but no longer reachable from the ship path — maintenance-only legacy. Do not build new features against it.
-
-What `ship` does:
-
-1. `scripts/cart-bundle.js` (run under `tools/v8cli`) bundles `cart/<name>.tsx` (or `cart/<name>/index.tsx`) → `bundle-<name>.js`.
-2. The metafile resolver inspects esbuild's output and selects `-Dhas-*` feature flags from `sdk/dependency-registry.json` (gates libsqlite3, libvterm, libwhisper, libfvad, box2d, duckdb, etc.).
-3. `zig build app -Duse-v8=true -Dbundle-path=...` → `zig-out/bin/<name>` (ELF, dynamic-linked, bundle embedded via `@embedFile`).
-4. `ldd`-walk + bundled `ld-linux` + glibc family + the cart's transitive `.so`s tarballed under a self-extracting shell wrapper.
-
-First run extracts to `~/.cache/reactjit-<name>/<sig>/` and execs through the bundled `ld-linux`. Cross-distro: `deps/sysroot/` ships glibc family + SDL3 transitive deps so the binary runs on fresh Whonix / Debian / Ubuntu / Fedora without a system toolchain or shared-library install.
-
-`scripts/ship` and `scripts/dev` split `RJIT_HOME` (the SDK install) from `CART_ROOT` (the user's project). `scripts/pack-sdk.js` produces a self-contained SDK tarball; the SDK ships its own Zig, sysroot, and pkg cache so cart binaries build off-tree without root.
-
-The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.sock`. `scripts/dev` bundles to `.cache/bundle-<cart>.js` and pushes over IPC; a second `scripts/dev <other>` adds a tab to the same host. Save-to-visible is ~300 ms for TSX/TS edits. A rebuild is required for changes under `framework/`, `build.zig`, or `scripts/`. Debug builds have a pre-existing click-path issue — stick to the default `ReleaseFast` for dev work. `useHotState` survives reloads — atoms are stored in Zig-owned memory outside the JS context that gets torn down on re-eval.
+**Not available** (no browser): real `window`/`document`/`navigator`, `sessionStorage`, IndexedDB, cookies, `Blob`, `FormData`, `FileReader`, `XMLHttpRequest`, CSS Grid, media queries, pseudo-classes, inline SVG, blob URLs.
 
 ## SDK / dependency policy
 
@@ -202,84 +162,94 @@ The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.so
 | | `engine-v8` | V8 prebuilt static lib, selected via `-Duse-v8`. |
 | `bundlePolicy` | `always` | `pack-sdk` always copies the .so into the SDK payload. |
 | | `feature-gated` | Only copied when the feature is on. |
-| | `vendored-source` | Compiled from C in-tree; nothing to ship (stb-image*). |
+| | `vendored-source` | Compiled from C in-tree (stb-image\*). |
 | | `never` | Host-provided, never packed. |
 
-Triggers come from the cart's esbuild metafile — a feature only links if its marker appears in `outputs[].inputs`. A cart that never imports `Video` doesn't carry libmpv; a cart that never opens a SQLite DB doesn't carry libsqlite3. The dev host is the deliberate exception: `dev-zig-flags` enables every feature so any cart can land on it after startup.
+Triggers come from the cart's esbuild metafile — a feature only links if its marker appears in `outputs[].inputs`. A cart that never imports `<Video>` doesn't carry libmpv. The dev host is the deliberate exception: `dev-zig-flags` enables every feature so any cart can land on it after startup.
 
-`scripts/sdk-dependency-resolve.js` (run under `tools/v8cli`) reads the metafile and emits the right `-Dhas-*` flags for `zig build`. `scripts/pack-sdk.js` produces a self-contained SDK tarball — its own Zig toolchain, sysroot (glibc family + SDL3 transitive .so deps), pkg cache, vendored React, esbuild, and `v8cli`. Carts ship from outside the repo via `RJIT_HOME` (SDK install) + `CART_ROOT` (project) split.
+`scripts/sdk-dependency-resolve.js` (under `tools/v8cli`) reads the metafile and emits the right `-Dhas-*` flags. `scripts/pack-sdk.js` produces a self-contained SDK tarball — its own Zig, sysroot (glibc family + SDL3 transitive .so deps), pkg cache, vendored React, esbuild, and `v8cli`. Carts ship from outside the repo via `RJIT_HOME` (SDK install) + `CART_ROOT` (project) split.
 
-## Layout
+## File layout
 
 ```
-cart/                 .tsx carts (single-file or directory-based with index.tsx)
-runtime/              JS entry (runtime/index.tsx), primitives.tsx, classifier.tsx,
-                      tw.ts, JSX shim, host shims, hook wrappers under runtime/hooks/,
-                      router, theme, icons, intent system.
-renderer/             react-reconciler host config + mutation command stream.
+cart/                 .tsx carts (single-file or directory-based)
+runtime/              JS entry, primitives, classifier, theme, tw, JSX shim,
+                      hooks/, scene3d/, audio.tsx, router, intent system
+renderer/             react-reconciler host config + mutation command stream
 framework/            Zig runtime
   layout/engine/text/gpu       — flexbox, paint, fonts, wgpu
-  audio/voice/whisper          — synth graph, SDL3 mic + libfvad, whisper.cpp wrapper
-  physics2d/physics3d          — Box2D (feature-gated) + 3D shim
-  net/                         — http(s) client + streaming, websocket, ws-server,
-                                 http-server, tcp/udp, socks5, tor, RCON, A2S, IPC
+  audio/voice/whisper/videos   — synth, mic+VAD, whisper.cpp, libmpv embedding
+  physics2d/physics3d          — Box2D + 3D shim
+  net/                         — http(s), websocket, ws-server, http-server,
+                                 tcp/udp, socks5, tor, RCON, A2S, IPC
   ifttt/watchdog/process       — composable triggers + per-proc/fs sources
   claude_sdk/                  — long-running coding-agent sessions
-  render_surfaces*             — suspend/resume render pipeline (vm, kitty, headless)
-  v8_bindings_*.zig            — 338 host fns across 16 modules (cli/core/fs/
-                                 gameserver/httpserver/net/privacy/process/sdk/
-                                 telemetry/tor/voice/websocket/whisper/wsserver/zigcall)
-  lua/ifttt.lua                — IFTTT compose helper (only Lua left in the active stack)
+  render_surfaces*             — suspend/resume render pipeline
+  v8_bindings_*.zig            — 338 host fns across 16 modules
+  lua/ifttt.lua                — IFTTT compose helper (only Lua left in stack)
 sdk/                  dependency-registry.json — feature → -D flags + bundle policy
 scripts/              ship, run, dev, init.js, help.js, cart-bundle.js,
-                      push-bundle.js, pack-sdk.js, sdk-dependency-resolve.js,
-                      fetch-zig.sh, fetch-whisper-models, fetch-v8-prebuilt.sh,
-                      autotest, classify, watchdog.sh.
+                      pack-sdk.js, sdk-dependency-resolve.js, fetch-zig.sh,
+                      fetch-whisper-models, autotest, classify, watchdog.sh
 tools/v8cli           Standalone V8 script host. Replaces every former
                       `node scripts/X.mjs` invocation. Zero npm/node/bun deps.
-tools/zig/            Pinned Zig toolchain (populated by scripts/fetch-zig.sh).
-deps/                 Vendored: zig-v8, wgpu_native_zig, vello_ffi, libfvad,
-                      whisper.cpp, llama.cpp.zig, libvterm, duckdb, tls.zig,
-                      sysroot, v8-prebuilt.
-vendor/               Pinned react, react-reconciler, scheduler, typescript.
-build.zig             Root build.
+tools/zig/            Pinned Zig toolchain (populated by scripts/fetch-zig.sh)
+deps/                 zig-v8, wgpu_native_zig, vello_ffi, libfvad,
+                      whisper.cpp, llama.cpp.zig, libvterm, duckdb,
+                      tls.zig, sysroot, v8-prebuilt
+vendor/               react, react-reconciler, scheduler, typescript
+build.zig             Root build
 
-v8_app.zig            Default cart host. Embeds V8 via deps/zig-v8.
-qjs_app.zig           Legacy QuickJS host. Maintenance-only, not on the ship path.
+v8_app.zig            Cart host. Embeds V8 via deps/zig-v8.
+qjs_app.zig           Legacy QuickJS host. Maintenance-only, not on ship path.
 v8_hello.zig          Minimal V8 smoke-test host.
 v8_cli.zig            Backing host for tools/v8cli.
 claude_runner.zig     Standalone Zig CLI around framework/claude_sdk/.
 
 tsz/                  FROZEN. Smith-era AOT-compile-.tsz-to-Zig experiment.
-love2d/               FROZEN. The reconciler-on-Lua predecessor stack.
+love2d/               FROZEN. Reconciler-on-Lua predecessor stack.
 archive/              FROZEN. Earlier compiler iterations.
 os/                   Speculative (CartridgeOS). Mostly stubs.
 ```
 
-Frozen trees are read-only reference material. The JSRT (JS-inside-Lua evaluator) experiment is gone; the only Lua left in the active stack is `framework/lua/ifttt.lua` and a small `tsl_stdlib.lua` support file.
+Frozen trees are reference-only — read for porting patterns, do not modify.
 
 ## Status
 
-| Working | Incomplete / pending |
+| Working | Pending |
 |---|---|
 | V8 host (default), single ship path | QJS host kept around but not on the ship path |
-| Every primitive listed above, HTML remap, Tailwind, CSS transforms | Multi-window orchestration beyond `__window_*` / `__openWindow` |
-| Voice capture (SDL3 + libfvad VAD) + whisper.cpp ensemble transcription | Whisper streaming + diarization polish (see `framework/WHISPER_TODO.md`) |
+| Every primitive listed above; HTML remap; Tailwind; CSS transforms | Multi-window orchestration beyond `__window_*` / `__openWindow` |
+| Voice (SDL3 + libfvad VAD) + whisper.cpp ensemble transcription | Whisper streaming + diarization polish (see `framework/WHISPER_TODO.md`) |
 | IFTTT registry + compose, watchdog cart, `proc:*` / `fs:*` sources | More built-in IFTTT sources |
-| Networking trichotomy (`useHost` / `fetch` / `useConnection`) wired for ws/tcp/udp/http/SSE/tor/socks5 | `wireguard` / `stun` / `peer` connection kinds |
-| RCON + A2S Source Query for game-server carts | `<Video>` end-to-end polish (libmpv embedding lands frames; cart-facing API still rough) |
+| Networking trichotomy (`useHost` / `fetch` / `useConnection`) for ws/tcp/udp/http/SSE/tor/socks5 | `wireguard` / `stun` / `peer` connection kinds |
+| RCON + A2S Source Query | `<Video>` cart-facing API polish (libmpv embedding lands frames) |
 | Privacy / crypto stack: GPG, keyring, Noise, Shamir, steganography, audit logs, PII redaction, secure buffers | Inspector UI cart (host telemetry plumbing exists; UI sparse) |
-| Persistent dev host + IPC bundle-push + hot reload, with `useHotState` surviving re-eval | |
-| `scripts/ship` self-extracting packaging, cross-distro sysroot bundling | Video primitive end-to-end |
+| Persistent dev host + IPC bundle-push + hot reload, `useHotState` survives re-eval | |
+| `scripts/ship` self-extracting packaging, cross-distro sysroot bundling | |
 | Render suspend/resume + kitty/VM/headless render surfaces | Standalone `rjit` dispatcher (templates + help present, dispatcher in progress) |
-| Physics + Audio + Scene3D runtime exports (`<Physics.*>`, `<Audio.*>` + `useAudio`, `<Scene3D.*>` + `useScene3D`), CSS transform stack, z-index scissor breakouts | |
-| Coding-agent host APIs: `__claude_*`, `__kimi_*`, `__localai_*` + standalone `claude_runner.zig` | macOS path: cross-compile works, native dev loop unverified recently |
-| `cart/app/` onboarding + homepage v1, 128-component gallery with theme classifiers | |
+| Physics + Audio + Scene3D runtime exports, CSS transforms, z-index scissor breakouts | |
+| Coding-agent host APIs + standalone `claude_runner.zig` | macOS path: cross-compile works, native dev loop unverified recently |
+| `cart/app/` onboarding + homepage, 128-component gallery | |
+
+## Carts in this repo
+
+| Cart | What it is |
+|---|---|
+| `cart/app/` | Product surface. Router, homepage, onboarding flow, recipe-driven Claude integration. |
+| `cart/sweatshop/` | The IDE reactjit develops itself inside. Editor + chat + git + indexer + agents + charts + physics. One cart among many. |
+| `cart/component-gallery/` | 128 documented gallery components. Closest thing to a Storybook. |
+| `cart/cockpit/`, `cart/effects/`, `cart/browser/`, `cart/inspector/` | Larger reference carts. |
+| `cart/dictation.tsx`, `cart/voice_lab.tsx`, `cart/whisper_bench.tsx`, `cart/pocket_operator.tsx` | Voice / VAD / whisper / synth. |
+| `cart/watchdog.tsx`, `cart/ifttt_test.tsx` | IFTTT registry + per-process memory/CPU watcher demos. |
+| `cart/chat-loom.tsx`, `cart/flow_editor.tsx`, `cart/card_grid.tsx`, `cart/nested_grid.tsx`, `cart/tile_drag.tsx`, `cart/context_menu_demo.tsx`, `cart/clipboard_menu_test.tsx`, `cart/rotate_text.tsx` | Standalone UX experiments. |
+
+Everything else (`hello*`, `host_smoke`, `host_test`, `render-test`, `shadow_test`, `transparency_test`, `tooltip_test`, `text_chop_test`, `input_lab`, `router_probe`, `load_via_*`, `spinner`, `braille_graph`, `d152`, `canvas_stress`, `hello_stress`, `graph_demo`) is smoke / regression / contract carts.
 
 ## Pointers
 
 - [`AGENTS.md`](AGENTS.md) — contributor conventions for AI/agent work.
-- [`CLAUDE.md`](CLAUDE.md) — Claude Code-specific rules (frozen trees, git discipline, hard bans, V8-is-default reminder, banned shell commands).
-- [`framework/WHISPER_TODO.md`](framework/WHISPER_TODO.md) — voice → whisper integration plan.
+- [`CLAUDE.md`](CLAUDE.md) — Claude Code-specific rules (frozen trees, git discipline, hard bans, banned shell commands).
+- [`framework/WHISPER_TODO.md`](framework/WHISPER_TODO.md) — voice / whisper integration plan.
 - `sdk/dependency-registry.json` — single source of truth for tools, vendored packages, native libs, feature flags.
-- `git log` — the real story of how this got here. Prior eras (react-love → iLoveReact → multi-target ReactJIT → SDL2/Love2D → Smith/.tsz → JSRT-evaluator detour → current Zig+V8 cart runtime) are all in there.
+- `git log` — the real story. Prior eras (react-love → iLoveReact → multi-target ReactJIT → SDL2/Love2D → Smith/.tsz → JSRT detour → current Zig+V8 cart runtime) all live in there.
