@@ -23,7 +23,10 @@ const DEFAULT_MODEL =
   '/home/siah/.lmstudio/models/Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
 const DEFAULT_SLUG = 'qwen3-embedding-0-6b-q8_0';
 const DEFAULT_PATH = '/home/siah/.claude/projects/-home-siah-creative-reactjit';
-const DEFAULT_WORKERS = 4;
+// 2 is a safe default on a display-driving GPU. Each agent costs ~900 MB
+// KV + ~1.3 GB compute scratch on top of the shared model. Push higher
+// if your GPU is not also driving displays.
+const DEFAULT_WORKERS = 2;
 
 const C = {
   bg: '#0d1117',

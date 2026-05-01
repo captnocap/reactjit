@@ -25,17 +25,17 @@ const v8 = @import("v8");
 const v8_runtime = @import("v8_runtime.zig");
 const embed = @import("embed.zig");
 
-var g_embedder: ?embed.Embedder = null;
 var g_reranker: ?embed.Reranker = null;
 var g_reranker_path: []u8 = &.{};
 var g_store: ?embed.Store = null;
 
-// Multi-worker ingest state. The pool reuses a separate SharedModel from
-// the query path's Embedder (cheap VRAM tax: ~600MB extra for the 0.6B
-// quant; we trade it for a single-context query path that doesn't compete
-// with worker threads for KV cache).
+// One model in VRAM, shared by both query and ingest paths.
+// `g_query_ctx` is lazily created on the first __embed_text/__embed_batch
+// call so just sitting on the cart costs only the ~600 MB model weights.
+// Ingest workers spawn additional WorkerCtxs from the same SharedModel.
 var g_shared: ?embed.SharedModel = null;
 var g_shared_path: []u8 = &.{};
+var g_query_ctx: ?embed.WorkerCtx = null;
 var g_ingest: ?*embed.IngestSession = null;
 
 var g_alloc_state = std.heap.GeneralPurposeAllocator(.{}){};
@@ -141,6 +141,23 @@ fn parseFloatArray(alloc: std.mem.Allocator, json: []const u8) ![]f32 {
 
 // ── Embedder host fns ──────────────────────────────────────────────────
 
+/// Ensure g_query_ctx exists. Lazy-creates from g_shared on first use so
+/// just having the cart open doesn't allocate ~900 MB of KV cache for a
+/// query path the user may never exercise.
+fn ensureQueryCtx() bool {
+    if (g_query_ctx != null) return true;
+    if (g_shared == null) return false;
+    g_query_ctx = g_shared.?.newWorker(8192) catch return false;
+    return true;
+}
+
+fn freeQueryCtx() void {
+    if (g_query_ctx) |*c| {
+        c.deinit();
+        g_query_ctx = null;
+    }
+}
+
 fn hostLoadModel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const a = allocator();
@@ -149,31 +166,32 @@ fn hostLoadModel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         return;
     };
     defer a.free(path);
-    if (g_embedder != null) {
-        // Already loaded — release before reload.
-        g_embedder.?.deinit();
-        g_embedder = null;
-    }
-    g_embedder = embed.Embedder.init(path) catch {
+    // Drop the query ctx — it'll be lazy-recreated against the new model.
+    freeQueryCtx();
+    if (!ensureSharedModel(path)) {
         setNumber(info, 0);
         return;
-    };
+    }
     setNumber(info, 1);
 }
 
 fn hostFreeModel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     _ = info;
-    if (g_embedder) |*e| {
-        e.deinit();
-        g_embedder = null;
+    freeQueryCtx();
+    if (g_shared) |*sm| {
+        sm.deinit();
+        g_shared = null;
     }
+    const a = allocator();
+    if (g_shared_path.len > 0) a.free(g_shared_path);
+    g_shared_path = &.{};
 }
 
 fn hostNDim(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    if (g_embedder) |e| {
-        setNumber(info, @intCast(e.n_embd));
+    if (g_shared) |sm| {
+        setNumber(info, @intCast(sm.n_embd));
     } else {
         setNumber(info, 0);
     }
@@ -182,7 +200,7 @@ fn hostNDim(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
 fn hostEmbedText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const a = allocator();
-    if (g_embedder == null) {
+    if (!ensureQueryCtx()) {
         setString(info, "null");
         return;
     }
@@ -192,7 +210,7 @@ fn hostEmbedText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     };
     defer a.free(text);
 
-    const vec = g_embedder.?.embedText(a, text) catch {
+    const vec = g_query_ctx.?.embedText(a, text) catch {
         setString(info, "null");
         return;
     };
@@ -210,7 +228,7 @@ fn hostEmbedText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
 fn hostEmbedBatch(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const a = allocator();
-    if (g_embedder == null) {
+    if (!ensureQueryCtx()) {
         setString(info, "[]");
         return;
     }
@@ -226,7 +244,7 @@ fn hostEmbedBatch(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     };
     defer freeStringArray(a, texts);
 
-    const vectors = g_embedder.?.embedBatch(a, texts) catch {
+    const vectors = g_query_ctx.?.embedBatch(a, texts) catch {
         setString(info, "[]");
         return;
     };
@@ -658,6 +676,13 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         setNumber(info, 0);
         return;
     }
+    // Free the query ctx for the duration of the ingest. The cart's UI
+    // hides the query panel while ingesting, so an idle ~2.2 GB of KV +
+    // compute buffer just sits there competing with the worker pool for
+    // host-visible Vulkan memory. Lazily recreated when the user types
+    // their first query after ingest finishes.
+    freeQueryCtx();
+
     // Open / re-open the store at the right slug + dim.
     const dim = g_shared.?.n_embd;
     if (g_store) |*s| {
