@@ -410,13 +410,13 @@ function ClaudeForm({ setLockedIn, setCommitPayload }) {
     setMessage('');
     const homeVal = homeRef.current.trim();
     const promptArg = shellQuote(CLAUDE_PROBE_PROMPT);
-    // The user enters the install dir (e.g. `~/.claude` or
-    // `~/.claude-overflow`). The CLI looks at `$HOME/.claude/`, so we
-    // strip the install-dir basename and set HOME to its parent.
+    // The Claude CLI honors `CLAUDE_CONFIG_DIR` and treats it as the
+    // absolute path of the config dir (no `/.claude` suffix appended).
+    // So `~/.claude-overflow` → `CLAUDE_CONFIG_DIR=$HOME/.claude-overflow`
+    // straight through. We don't strip basenames or massage parents.
     const expanded = homeVal.replace(/^~/, '$HOME');
-    const parent = expanded.replace(/\/[^/]+\/?$/, '') || '$HOME';
     const cmd = homeVal
-      ? `HOME=${shellQuote(parent)} claude --print ${promptArg}`
+      ? `CLAUDE_CONFIG_DIR=${shellQuote(expanded)} claude --print ${promptArg}`
       : `claude --print ${promptArg}`;
     console.log(`[onboarding] claude probe: ${cmd}`);
     try {

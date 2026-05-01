@@ -60,4 +60,14 @@ pub const SessionOptions = struct {
 
     /// Forward subprocess stderr to the parent. Useful for auth failure diagnosis.
     inherit_stderr: bool = false,
+
+    /// Override CLAUDE_CONFIG_DIR for the spawned subprocess. The CLI
+    /// reads its credentials, sessions, and project state from this
+    /// directory; setting it lets a single cart talk to multiple
+    /// Claude installs (e.g. `~/.claude` vs `~/.claude-overflow`).
+    /// When null, the subprocess inherits the parent's environment
+    /// unchanged. The path is taken literally — no `~` expansion or
+    /// `/.claude` suffix; pass an absolute path or a `~`-prefixed
+    /// path the caller has already resolved.
+    config_dir: ?[]const u8 = null,
 };

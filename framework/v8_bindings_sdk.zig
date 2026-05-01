@@ -993,6 +993,7 @@ fn hostClaudeInit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     defer std.heap.page_allocator.free(cwd);
     var model: ?[]const u8 = null;
     var resume_session: ?[]const u8 = null;
+    var config_dir: ?[]const u8 = null;
     if (info.length() >= 2) model = jsStringArg(std.heap.page_allocator, info, 1) orelse null;
     defer if (model) |m| std.heap.page_allocator.free(m);
     if (info.length() >= 3) {
@@ -1005,11 +1006,22 @@ fn hostClaudeInit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         }
     }
     defer if (resume_session) |sid| std.heap.page_allocator.free(sid);
+    if (info.length() >= 4) {
+        config_dir = jsStringArg(std.heap.page_allocator, info, 3) orelse null;
+        if (config_dir) |cd| {
+            if (cd.len == 0) {
+                std.heap.page_allocator.free(cd);
+                config_dir = null;
+            }
+        }
+    }
+    defer if (config_dir) |cd| std.heap.page_allocator.free(cd);
 
     const opts = claude_sdk.SessionOptions{
         .cwd = cwd,
         .model = model,
         .resume_session = resume_session,
+        .config_dir = config_dir,
         .verbose = true,
         .permission_mode = .bypass_permissions,
         .inherit_stderr = true,

@@ -49,6 +49,20 @@ pub const Session = struct {
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = if (opts.inherit_stderr) .Inherit else .Ignore;
 
+        // When config_dir is set, fork the parent's env, override
+        // CLAUDE_CONFIG_DIR, and hand it to the child. The map must
+        // outlive child.spawn() but can be torn down right after —
+        // spawn() copies env into the new process before returning.
+        var env_overlay: ?std.process.EnvMap = null;
+        defer if (env_overlay) |*m| m.deinit();
+        if (opts.config_dir) |cd| {
+            var em = try std.process.getEnvMap(allocator);
+            errdefer em.deinit();
+            try em.put("CLAUDE_CONFIG_DIR", cd);
+            env_overlay = em;
+            child.env_map = &env_overlay.?;
+        }
+
         child.spawn() catch |err| {
             std.log.err("claude_sdk: spawn failed: {s}", .{@errorName(err)});
             return error.SpawnFailed;
