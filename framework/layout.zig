@@ -876,7 +876,17 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     // appear as tall as its content, which pushes flex siblings (in a Row,
     // cross-axis is height) to grow past the viewport. Real browsers don't
     // do this — scroll boxes use their own explicit/min height, not content.
-    if (s.overflow == .scroll or s.overflow == .auto or s.overflow == .hidden) {
+    //
+    // Exception: when the box has a max_height, we DO sum children (the
+    // outer estimateIntrinsicHeight wrapper then clamps to max_height). A
+    // bare short-circuit here returns just padding, which a flex parent
+    // uses for sibling-space allocation — but the actual layout pass
+    // measures content and clamps to max_height, so the parent thinks
+    // the box is ~28px tall while the box paints at ~max_height. Result:
+    // siblings overlap the box. With max_height in play, both passes
+    // need to agree on min(content, max_height).
+    if ((s.overflow == .scroll or s.overflow == .auto or s.overflow == .hidden)
+        and s.max_height == null) {
         const mh = s.min_height orelse 0;
         const mhResolved = if (mh >= 0) mh else 0;
         return mhResolved + padTop(s) + padBottom(s);
