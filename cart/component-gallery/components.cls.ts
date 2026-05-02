@@ -20,6 +20,7 @@
  *     lilac / blue                    auxiliary
  *     sys / ctx / usr / ast / atch    data channels
  *     tool / wnd / pin
+ *     transparent
  *     gridDot / gridDotStrong         decorative
  *     fontMono / fontSans             font families (string)
  *
@@ -45,6 +46,13 @@
 
 import { classifier } from '@reactjit/core';
 
+// Natural height of the app's bottom input bar. Used by the
+// AppBottomInputBar classifier (its explicit height) and re-exported so
+// cart/app can match its routes paddingBottom to it without owning a
+// duplicate fallback constant. Single source of truth: change once here
+// and both the slot and the page reflow stay in sync.
+export const APP_BOTTOM_BAR_H = 226;
+
 classifier({
 
   // ══════════════════════════════════════════════════════════════
@@ -55,6 +63,9 @@ classifier({
   Page: { type: 'Box', style: {
     width: '100%', height: '100%',
     backgroundColor: 'theme:bg',
+  }, variants: {
+    light: { style: { backgroundColor: 'theme:paper' } },
+    dark: { style: { backgroundColor: 'theme:bg' } },
   }},
 
   // Pinned top: icon + title + badge + spacer + subtitle.
@@ -66,6 +77,23 @@ classifier({
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX6', paddingBottom: 'theme:spaceX6',
     gap: 'theme:spaceX7',
+  }, variants: {
+    light: { style: {
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      backgroundColor: 'theme:paper',
+      borderBottomWidth: 2,
+      borderColor: 'theme:paperRule',
+      gap: 'theme:spaceX3',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderBottomWidth: 2,
+      borderColor: 'theme:accentHot',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+      gap: 'theme:spaceX5',
+    } },
   }},
 
   // Pinned bottom: breadcrumb path.
@@ -77,6 +105,113 @@ classifier({
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
     gap: 'theme:spaceX6',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderTopWidth: 2,
+      borderColor: 'theme:paperRule',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderTopWidth: 2,
+      borderColor: 'theme:ruleBright',
+      paddingTop: 'theme:spaceX2',
+      paddingBottom: 'theme:spaceX2',
+    } },
+  }},
+
+  // Standard gallery display wrapper. This is the target chrome for examples
+  // that need normalized viewport, scale, and identification.
+  GalleryDisplayFrame: { type: 'Box', style: {
+    flexDirection: 'column',
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: 'theme:ruleBright',
+    borderRadius: 'theme:radiusMd',
+    backgroundColor: 'theme:bg',
+    overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderColor: 'theme:accentHot',
+    } },
+  }},
+  GalleryDisplayTopBar: { type: 'Box', style: { flexDirection: 'row',
+    height: 22,
+    flexShrink: 0,
+    alignItems: 'center',
+    gap: 'theme:spaceX4',
+    paddingLeft: 'theme:spaceX4',
+    paddingRight: 'theme:spaceX4',
+    backgroundColor: 'theme:bg1',
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+  GalleryDisplayCode: { type: 'Text', size: 'theme:typeCaption', bold: true,
+    color: 'theme:accentHot',
+    numberOfLines: 1,
+    style: { fontFamily: 'theme:fontMono', letterSpacing: 1.2 },
+  },
+  GalleryDisplayTitle: { type: 'Text', size: 'theme:typeBody', bold: true,
+    color: 'theme:ink',
+    numberOfLines: 1,
+  },
+  GalleryDisplayMeta: { type: 'Text', size: 'theme:typeTiny',
+    color: 'theme:inkDimmer',
+    numberOfLines: 1,
+    style: { fontFamily: 'theme:fontMono', letterSpacing: 0.8 },
+  },
+  GalleryDisplayFooter: { type: 'Box', style: { flexDirection: 'row',
+    height: 18,
+    flexShrink: 0,
+    alignItems: 'center',
+    gap: 'theme:spaceX3',
+    paddingLeft: 'theme:spaceX4',
+    paddingRight: 'theme:spaceX4',
+    backgroundColor: 'theme:bg1',
+    borderTopWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+  GalleryDisplayBarcode: { type: 'Box', style: { flexDirection: 'row',
+    alignItems: 'stretch',
+    height: 12,
+    gap: 1,
+  }},
+  GalleryDisplayBarcodeBar: { type: 'Box', style: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'theme:inkDim',
+  }},
+  GalleryDisplayBarcodeHot: { type: 'Box', style: {
+    width: 2,
+    height: 12,
+    backgroundColor: 'theme:accentHot',
+  }},
+  GalleryDisplayStage: { type: 'Box', style: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: 'theme:bg2',
+  }},
+  GalleryDisplayBody: { type: 'Box', style: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+  }},
+  GalleryDisplayCenter: { type: 'Box', style: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+    minHeight: 0,
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -90,6 +225,21 @@ classifier({
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX7', paddingBottom: 'theme:spaceX7',
     gap: 'theme:spaceX4',
+  }, variants: {
+    light: { style: {
+      borderLeftWidth: 0,
+      borderTopWidth: 4,
+      backgroundColor: 'theme:paperAlt',
+      borderColor: 'theme:accent',
+      borderRadius: 'theme:radiusXl',
+    } },
+    dark: { style: {
+      borderLeftWidth: 6,
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:accentHot',
+      paddingTop: 'theme:spaceX5',
+      paddingBottom: 'theme:spaceX5',
+    } },
   }},
 
   // Two-column band (zigzag layout row).
@@ -97,6 +247,20 @@ classifier({
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX7', paddingBottom: 'theme:spaceX7',
     gap: 'theme:spaceX7',
+  }, variants: {
+    light: { style: {
+      flexDirection: 'column',
+      backgroundColor: 'theme:paper',
+      borderRadius: 'theme:radiusXl',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      flexDirection: 'row',
+      gap: 'theme:spaceX5',
+      paddingTop: 'theme:spaceX5',
+      paddingBottom: 'theme:spaceX5',
+    } },
   }},
 
   // One side of a Band (50/50 split).
@@ -116,6 +280,21 @@ classifier({
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX7', paddingBottom: 'theme:spaceX7',
     gap: 'theme:spaceX4',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderRadius: 'theme:radiusXl',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      gap: 'theme:spaceX6',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg1',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX3',
+    } },
   }},
 
   // Highlighted insight strip.
@@ -127,6 +306,20 @@ classifier({
     paddingTop: 'theme:spaceX6', paddingBottom: 'theme:spaceX6',
     gap: 'theme:spaceX4',
     alignItems: 'center',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderLeftWidth: 0,
+      borderWidth: 1,
+      borderColor: 'theme:blue',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderLeftWidth: 4,
+      borderColor: 'theme:blue',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   // Warning band.
@@ -138,6 +331,20 @@ classifier({
     paddingTop: 'theme:spaceX6', paddingBottom: 'theme:spaceX6',
     gap: 'theme:spaceX4',
     alignItems: 'center',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderLeftWidth: 0,
+      borderWidth: 1,
+      borderColor: 'theme:warn',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderLeftWidth: 4,
+      borderColor: 'theme:warn',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   // Horizontal divider.
@@ -163,6 +370,23 @@ classifier({
     backgroundColor: 'theme:bg1',
     borderRadius: 'theme:radiusLg',
     gap: 'theme:spaceX4',
+  }, variants: {
+    light: { style: {
+      padding: 'theme:spaceX8',
+      backgroundColor: 'theme:paper',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+      gap: 'theme:spaceX5',
+    } },
+    dark: { style: {
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 1,
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX3',
+    } },
   }},
 
   // Card header row: title + spacer + badge.
@@ -181,6 +405,21 @@ classifier({
     padding: 'theme:spaceX6',
     backgroundColor: 'theme:bg2',
     borderRadius: 'theme:radiusMd',
+  }, variants: {
+    light: { style: {
+      padding: 'theme:spaceX7',
+      backgroundColor: 'theme:paperAlt',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   // Alternate-tier surface (paperAlt-style).
@@ -188,6 +427,21 @@ classifier({
     padding: 'theme:spaceX6',
     backgroundColor: 'theme:bg1',
     borderRadius: 'theme:radiusMd',
+  }, variants: {
+    light: { style: {
+      padding: 'theme:spaceX7',
+      backgroundColor: 'theme:paper',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 1,
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   // Elevated demo well — for interactive previews.
@@ -196,6 +450,23 @@ classifier({
     backgroundColor: 'theme:bg1',
     borderRadius: 'theme:radiusLg',
     gap: 'theme:spaceX5',
+  }, variants: {
+    light: { style: {
+      padding: 'theme:spaceX8',
+      backgroundColor: 'theme:paper',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+      gap: 'theme:spaceX6',
+    } },
+    dark: { style: {
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 1,
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX4',
+    } },
   }},
 
   // Recessed input area for displaying values.
@@ -203,6 +474,21 @@ classifier({
     backgroundColor: 'theme:bg2',
     borderRadius: 'theme:radiusSm',
     padding: 'theme:spaceX3',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusMd',
+      padding: 'theme:spaceX4',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      borderRadius: 'theme:radiusSm',
+      padding: 'theme:spaceX3',
+    } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -211,20 +497,42 @@ classifier({
 
   Section: { type: 'Box', style: {
     gap: 'theme:spaceX6',
+  }, variants: {
+    light: { style: { gap: 'theme:spaceX7' } },
+    dark: { style: { gap: 'theme:spaceX4' } },
   }},
 
   SectionBody: { type: 'Box', style: {
     gap: 'theme:spaceX4',
+  }, variants: {
+    light: { style: { gap: 'theme:spaceX5' } },
+    dark: { style: { gap: 'theme:spaceX3' } },
   }},
 
   SectionLabel: { type: 'Box', style: { flexDirection: 'row',
     alignItems: 'center',
     gap: 'theme:spaceX3',
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX2',
+      borderBottomWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX2',
+      paddingLeft: 'theme:spaceX3',
+      borderLeftWidth: 2,
+      borderColor: 'theme:accentHot',
+    } },
   }},
 
   KV: { type: 'Box', style: { flexDirection: 'row',
     gap: 'theme:spaceX3',
     alignItems: 'flex-start',
+  }, variants: {
+    light: { style: { gap: 'theme:spaceX4' } },
+    dark: { style: { gap: 'theme:spaceX2' } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -236,6 +544,21 @@ classifier({
     paddingTop: 'theme:spaceX4', paddingBottom: 'theme:spaceX4',
     borderRadius: 'theme:radiusMd',
     backgroundColor: 'theme:accent',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:accent',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:accentHot',
+      borderWidth: 1,
+      borderColor: 'theme:accentHot',
+    } },
   }},
 
   ButtonOutline: { type: 'Pressable', style: {
@@ -243,6 +566,21 @@ classifier({
     paddingTop: 'theme:spaceX4', paddingBottom: 'theme:spaceX4',
     borderRadius: 'theme:radiusMd',
     borderWidth: 1, borderColor: 'theme:rule',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+      borderRadius: 'theme:radiusRound',
+      borderColor: 'theme:accent',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusSm',
+      borderColor: 'theme:ruleBright',
+      backgroundColor: 'theme:bg2',
+    } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -254,6 +592,21 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:paperAlt',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+    } },
   }},
 
   BadgeAccent: { type: 'Box', style: {
@@ -261,6 +614,16 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:accent',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:accentHot',
+    } },
   }},
 
   BadgeSuccess: { type: 'Box', style: {
@@ -268,6 +631,13 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:ok',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: { borderRadius: 'theme:radiusSm' } },
   }},
 
   BadgeError: { type: 'Box', style: {
@@ -275,6 +645,13 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:flag',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: { borderRadius: 'theme:radiusSm' } },
   }},
 
   BadgeWarning: { type: 'Box', style: {
@@ -282,6 +659,13 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:warn',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: { borderRadius: 'theme:radiusSm' } },
   }},
 
   BadgeInfo: { type: 'Box', style: {
@@ -289,6 +673,13 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:blue',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: { borderRadius: 'theme:radiusSm' } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -300,6 +691,21 @@ classifier({
     borderRadius: 'theme:radiusSm',
     paddingLeft: 'theme:spaceX3', paddingRight: 'theme:spaceX3',
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderRadius: 'theme:radiusRound',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+    } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -315,6 +721,11 @@ classifier({
     borderWidth: 1,
     borderColor: 'theme:accentHot',
     overflow: 'hidden',
+  }, bp: {
+    // Compact mode — header and footer are JSX-suppressed at sm by the
+    // host (cart/app/InputStrip.tsx). Drop the frame's reserved space so
+    // it doesn't keep claiming room for chrome that isn't rendered.
+    sm: { style: { minHeight: 80 } },
   }},
 
   CommandComposerTopbar: { type: 'Box', style: { flexDirection: 'row',
@@ -616,7 +1027,91 @@ classifier({
     backgroundColor: 'theme:bg2',
   }},
 
-  SpreadsheetGridSurface: { type: 'Native', style: {
+  SpreadsheetGridSurface: { type: 'Box', style: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    minWidth: 0,
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  SpreadsheetGridContent: { type: 'Box', style: {
+    flexDirection: 'column',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+  }},
+
+  SpreadsheetGridRow: { type: 'Box', style: {
+    flexDirection: 'row',
+    flexShrink: 0,
+  }},
+
+  SpreadsheetCornerCell: { type: 'Box', style: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'theme:bg1',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+
+  SpreadsheetColumnHeaderCell: { type: 'Box', style: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'theme:bg1',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+
+  SpreadsheetRowHeaderCell: { type: 'Box', style: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'theme:bg1',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+
+  SpreadsheetCell: { type: 'Pressable', style: {
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingLeft: 'theme:spaceX3',
+    paddingRight: 'theme:spaceX3',
+    backgroundColor: 'theme:bg2',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+
+  SpreadsheetCellAlt: { type: 'Pressable', style: {
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingLeft: 'theme:spaceX3',
+    paddingRight: 'theme:spaceX3',
+    backgroundColor: 'theme:bg1',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+
+  SpreadsheetCellSelected: { type: 'Pressable', style: {
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingLeft: 'theme:spaceX3',
+    paddingRight: 'theme:spaceX3',
+    backgroundColor: 'theme:bg1',
+    borderWidth: 1,
+    borderColor: 'theme:accent',
+  }},
+
+  SpreadsheetNativeGridSurface: { type: 'Native', style: {
     flexGrow: 1,
     flexShrink: 1,
     minHeight: 0,
@@ -709,6 +1204,14 @@ classifier({
                         style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
   SpreadsheetValueText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:ink',
                           style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
+  SpreadsheetCellText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:ink',
+                         style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
+  SpreadsheetCellNumberText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:ink',
+                               style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre', textAlign: 'right' } },
+  SpreadsheetCellFormulaText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:accent',
+                                style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre', textAlign: 'right' } },
+  SpreadsheetCellHeaderText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim',
+                               style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
   SpreadsheetMetricAccent: { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:accent',
                              style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
   SpreadsheetErrorText: { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:flag',
@@ -939,6 +1442,21 @@ classifier({
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
     borderRadius: 'theme:radiusSm',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusRound',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      backgroundColor: 'theme:bg',
+    } },
   }},
 
   NavPillActive: { type: 'Pressable', style: {
@@ -946,12 +1464,28 @@ classifier({
     paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:accent',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 1,
+      borderColor: 'theme:accentHot',
+    } },
   }},
 
   Dot: { type: 'Box', style: {
     width: 'theme:spaceX3', height: 'theme:spaceX3',
     borderRadius: 'theme:radiusSm',
     flexShrink: 0,
+  }, variants: {
+    light: { style: { borderRadius: 'theme:radiusRound' } },
+    dark: { style: { borderRadius: 'theme:radiusSm' } },
   }},
 
   // Progress track.
@@ -959,6 +1493,17 @@ classifier({
     width: '100%', height: 'theme:spaceX2',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:paperAlt',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg',
+    } },
   }},
 
   // Progress fill.
@@ -966,6 +1511,9 @@ classifier({
     height: 'theme:spaceX2',
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:accent',
+  }, variants: {
+    light: { style: { borderRadius: 'theme:radiusRound' } },
+    dark: { style: { borderRadius: 'theme:radiusSm', backgroundColor: 'theme:accentHot' } },
   }},
 
   // ══════════════════════════════════════════════════════════════
@@ -1017,6 +1565,17 @@ classifier({
     borderColor: 'theme:rule',
     borderRadius: 'theme:radiusLg',
     overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   CodeBlockHeader: { type: 'Box', style: { flexDirection: 'row',
@@ -1028,6 +1587,19 @@ classifier({
     borderColor: 'theme:rule',
     paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
     paddingTop: 'theme:spaceX4', paddingBottom: 'theme:spaceX4',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderColor: 'theme:paperRule',
+      paddingTop: 'theme:spaceX5',
+      paddingBottom: 'theme:spaceX5',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:accentHot',
+      paddingTop: 'theme:spaceX3',
+      paddingBottom: 'theme:spaceX3',
+    } },
   }},
 
   CodeBlockMeta: { type: 'Box', style: {
@@ -1043,12 +1615,38 @@ classifier({
     paddingLeft: 'theme:spaceX3', paddingRight: 'theme:spaceX3',
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      borderColor: 'theme:accent',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      borderColor: 'theme:accentHot',
+      backgroundColor: 'theme:bg',
+    } },
   }},
 
   CodeBlockBody: { type: 'Box', style: {
     paddingLeft: 'theme:spaceX5', paddingRight: 'theme:spaceX5',
     paddingTop: 'theme:spaceX5', paddingBottom: 'theme:spaceX5',
     gap: 'theme:spaceX1',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX7',
+      paddingRight: 'theme:spaceX7',
+      paddingTop: 'theme:spaceX7',
+      paddingBottom: 'theme:spaceX7',
+      gap: 'theme:spaceX2',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX4',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+      gap: 'theme:spaceX0',
+    } },
   }},
 
   CodeBlockScroll: { type: 'ScrollView', showScrollbar: true, style: {
@@ -1062,6 +1660,17 @@ classifier({
     minHeight: 16,
     minWidth: 0,
     borderRadius: 'theme:radiusSm',
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX5',
+      minHeight: 20,
+      borderRadius: 'theme:radiusMd',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX3',
+      minHeight: 14,
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
 
   CodeLineEmphasis: { type: 'Box', style: { flexDirection: 'row',
@@ -1071,6 +1680,19 @@ classifier({
     minWidth: 0,
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:bg1',
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX5',
+      minHeight: 20,
+      borderRadius: 'theme:radiusMd',
+      backgroundColor: 'theme:paperAlt',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX3',
+      minHeight: 14,
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg2',
+    } },
   }},
 
   CodeLineNumber: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDimmer',
@@ -1090,6 +1712,17 @@ classifier({
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      borderColor: 'theme:paperRule',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      borderColor: 'theme:accentHot',
+      backgroundColor: 'theme:bg',
+    } },
   }},
   CodeBlockCopyText: { type: 'Text', size: 'theme:typeTiny', color: 'theme:inkDim',
                        style: { fontFamily: 'theme:fontMono', whiteSpace: 'pre' } },
@@ -1445,6 +2078,19 @@ classifier({
     backgroundColor: 'theme:bg2',
     borderRadius: 'theme:radiusSm',
     overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderRadius: 'theme:radiusXl',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:ruleBright',
+    } },
   }},
 
   // Top toolbar strip.
@@ -1457,6 +2103,21 @@ classifier({
     paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
     gap: 'theme:spaceX5',
     flexShrink: 0,
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      height: 'theme:chromeStrip',
+      paddingLeft: 'theme:spaceX7',
+      paddingRight: 'theme:spaceX7',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:accentHot',
+      height: 'theme:chromeStrip',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+    } },
   }},
 
   // Toolbar slot for the title block (grows to fill).
@@ -1473,6 +2134,17 @@ classifier({
     borderRadius: 'theme:radiusSm',
     borderWidth: 1, borderColor: 'theme:rule',
     alignItems: 'center', justifyContent: 'center',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      borderColor: 'theme:paperRule',
+      backgroundColor: 'theme:paperAlt',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      borderColor: 'theme:ruleBright',
+      backgroundColor: 'theme:bg',
+    } },
   }},
   DocToolbarBtnActive: { type: 'Pressable', style: {
     paddingLeft: 'theme:spaceX3', paddingRight: 'theme:spaceX3',
@@ -1480,6 +2152,15 @@ classifier({
     borderRadius: 'theme:radiusSm',
     backgroundColor: 'theme:accent',
     alignItems: 'center', justifyContent: 'center',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:accent',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:accentHot',
+    } },
   }},
 
   // Document body (toolbar | content split).
@@ -1487,6 +2168,9 @@ classifier({
     flexDirection: 'row',
     flexGrow: 1, flexShrink: 1,
     width: '100%',
+  }, variants: {
+    light: { style: { gap: 'theme:spaceX5', padding: 'theme:spaceX5' } },
+    dark: { style: { gap: 0, padding: 0 } },
   }},
 
   // Paper-cream sidebar outline.
@@ -1496,6 +2180,21 @@ classifier({
     flexShrink: 0,
     backgroundColor: 'theme:paper',
     borderRightWidth: 1, borderColor: 'theme:paperRule',
+  }, variants: {
+    light: { style: {
+      width: 240,
+      borderRightWidth: 0,
+      borderRadius: 'theme:radiusLg',
+      backgroundColor: 'theme:paper',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+    } },
+    dark: { style: {
+      width: 180,
+      backgroundColor: 'theme:bg2',
+      borderRightWidth: 1,
+      borderColor: 'theme:rule',
+    } },
   }},
   DocOutlineHeader: { type: 'Box', style: {
     paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
@@ -1519,6 +2218,16 @@ classifier({
     flexGrow: 1, flexShrink: 1,
     padding: 'theme:spaceX6',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      padding: 'theme:spaceX7',
+      backgroundColor: 'theme:paperAlt',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      padding: 'theme:spaceX4',
+      backgroundColor: 'theme:bg',
+    } },
   }},
   // Page surface — cream paper.
   DocPage: { type: 'Box', style: {
@@ -1528,12 +2237,38 @@ classifier({
     borderWidth: 1, borderColor: 'theme:paperRule',
     borderRadius: 'theme:radiusSm',
     overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusLg',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRuleBright',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
   // Inner padded content column inside the page.
   DocPageContent: { type: 'Box', style: {
     paddingLeft: 'theme:spaceX8', paddingRight: 'theme:spaceX8',
     paddingTop: 'theme:spaceX8', paddingBottom: 'theme:spaceX8',
     gap: 'theme:spaceX5',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+      paddingTop: 'theme:spaceX8',
+      paddingBottom: 'theme:spaceX8',
+      gap: 'theme:spaceX6',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX6',
+      paddingRight: 'theme:spaceX6',
+      paddingTop: 'theme:spaceX6',
+      paddingBottom: 'theme:spaceX6',
+      gap: 'theme:spaceX4',
+    } },
   }},
 
   // Code block (recessed dark surface).
@@ -1541,6 +2276,21 @@ classifier({
     backgroundColor: 'theme:bg2',
     borderRadius: 'theme:radiusSm',
     padding: 'theme:spaceX5',
+  }, variants: {
+    light: { style: {
+      backgroundColor: 'theme:paperAlt',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusMd',
+      padding: 'theme:spaceX6',
+    } },
+    dark: { style: {
+      backgroundColor: 'theme:bg',
+      borderWidth: 1,
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+      padding: 'theme:spaceX4',
+    } },
   }},
 
   // Quote (vertical accent bar + content row).
@@ -1553,6 +2303,9 @@ classifier({
     backgroundColor: 'theme:paperRuleBright',
     borderRadius: 'theme:radiusSm',
     alignSelf: 'stretch',
+  }, variants: {
+    light: { style: { width: 4, borderRadius: 'theme:radiusRound' } },
+    dark: { style: { width: 2, borderRadius: 'theme:radiusSm', backgroundColor: 'theme:accentHot' } },
   }},
 
   // Paper-rule horizontal divider.
@@ -1609,6 +2362,23 @@ classifier({
     paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX3',
     backgroundColor: 'theme:bg1',
     borderBottomWidth: 1, borderColor: 'theme:rule',
+  }, variants: {
+    light: { style: {
+      height: 'theme:chromeTopbar',
+      backgroundColor: 'theme:paper',
+      borderBottomWidth: 1,
+      borderColor: 'theme:paperRule',
+      paddingLeft: 'theme:spaceX7',
+      paddingRight: 'theme:spaceX5',
+    } },
+    dark: { style: {
+      height: 'theme:chromeTopbar',
+      backgroundColor: 'theme:bg2',
+      borderBottomWidth: 2,
+      borderColor: 'theme:accentHot',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX3',
+    } },
   }},
   AppChromeBrandRow: { type: 'Box', style: {
     flexDirection: 'row',
@@ -1626,9 +2396,13 @@ classifier({
     gap: 'theme:spaceX2',
   }},
   AppBrandSwatch: { type: 'Box', style: {
-    width: 14, height: 14,
+    width: 18, height: 18,
     borderRadius: 'theme:radiusSm',
-    backgroundColor: 'theme:accent',
+    backgroundColor: 'theme:accentHot',
+    borderWidth: 1, borderColor: 'theme:ruleBright',
+  }, variants: {
+    light: { style: { borderRadius: 'theme:radiusRound' } },
+    dark: { style: {} },
   }},
   AppBrandTitle: { type: 'Text', size: 'theme:typeBase', bold: true, color: 'theme:ink' },
   AppBrandSub:   { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
@@ -1663,17 +2437,17 @@ classifier({
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     borderRadius: 'theme:radiusRound',
-    backgroundColor: 'theme:accent',
+    backgroundColor: 'theme:accentHot',
   }},
   AppChromeTourNo: { type: 'Pressable', style: {
     paddingTop: 'theme:spaceX1', paddingBottom: 'theme:spaceX1',
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     borderRadius: 'theme:radiusRound',
-    backgroundColor: 'transparent',
+    backgroundColor: 'theme:transparent',
     borderWidth: 1, borderColor: 'theme:rule',
   }},
-  AppChromeTourYesLabel: { type: 'Text', size: 'theme:typeMeta', bold: true, color: 'theme:bg' },
-  AppChromeTourNoLabel:  { type: 'Text', size: 'theme:typeMeta', color: 'theme:inkDim' },
+  AppChromeTourYesLabel: { type: 'Text', size: 'theme:typeMeta', bold: true, color: 'theme:paper' },
+  AppChromeTourNoLabel:  { type: 'Text', size: 'theme:typeMeta', color: 'theme:ink' },
 
   // ── Nav links (chrome route nav) ────────────────────────────
   AppNavLink: { type: 'Pressable', style: {
@@ -1683,7 +2457,24 @@ classifier({
     paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     borderRadius: 'theme:radiusMd',
-    backgroundColor: 'transparent',
+    backgroundColor: 'theme:transparent',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusRound',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX3',
+      paddingRight: 'theme:spaceX3',
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      backgroundColor: 'theme:bg',
+    } },
   }},
   AppNavLinkActive: { type: 'Pressable', style: {
     flexDirection: 'row',
@@ -1693,11 +2484,34 @@ classifier({
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     borderRadius: 'theme:radiusMd',
     backgroundColor: 'theme:bg2',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:accent',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX3',
+      paddingRight: 'theme:spaceX3',
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 1,
+      borderColor: 'theme:accentHot',
+    } },
   }},
   AppNavIcon:       { type: 'Icon', size: 14, strokeWidth: 2, color: 'theme:inkDim' },
-  AppNavIconActive: { type: 'Icon', size: 14, strokeWidth: 2, color: 'theme:ink' },
+  AppNavIconActive: { type: 'Icon', size: 14, strokeWidth: 2, color: 'theme:ink',
+                      variants: {
+                        light: { color: 'theme:bg' },
+                        dark: { color: 'theme:accentHot' },
+                      } },
   AppNavLabel:       { type: 'Text', size: 'theme:typeBase', color: 'theme:inkDim' },
-  AppNavLabelActive: { type: 'Text', size: 'theme:typeBase', color: 'theme:ink' },
+  AppNavLabelActive: { type: 'Text', size: 'theme:typeBase', color: 'theme:ink',
+                       variants: {
+                         light: { color: 'theme:bg' },
+                         dark: { color: 'theme:accentHot' },
+                       } },
 
   // ── Step cubes (onboarding progress in chrome) ──────────────
   AppStepCubePast:    { type: 'Pressable', style: { width: 14, height: 14, backgroundColor: 'theme:inkDim' } },
@@ -1710,6 +2524,23 @@ classifier({
     width: 26, height: 22,
     alignItems: 'center', justifyContent: 'center',
     borderRadius: 'theme:radiusSm',
+  }, variants: {
+    light: { style: {
+      width: 30,
+      height: 26,
+      borderRadius: 'theme:radiusRound',
+      borderWidth: 1,
+      borderColor: 'theme:paperRule',
+      backgroundColor: 'theme:paper',
+    } },
+    dark: { style: {
+      width: 24,
+      height: 20,
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:rule',
+      backgroundColor: 'theme:bg',
+    } },
   }},
   AppWindowBtnIcon:      { type: 'Icon', size: 14, strokeWidth: 2, color: 'theme:inkDim' },
   AppWindowBtnIconClose: { type: 'Icon', size: 14, strokeWidth: 2, color: 'theme:flag' },
@@ -1798,6 +2629,25 @@ classifier({
     borderRadius: 'theme:radiusXl',
     gap: 'theme:spaceX4',
     justifyContent: 'center',
+  }, variants: {
+    light: { style: {
+      width: 280,
+      minHeight: 140,
+      padding: 'theme:spaceX8',
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+      gap: 'theme:spaceX5',
+    } },
+    dark: { style: {
+      width: 220,
+      minHeight: 104,
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:rule',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX3',
+    } },
   }},
   AppProviderTileActive: { type: 'Pressable', style: {
     width: 240,
@@ -1808,6 +2658,27 @@ classifier({
     borderRadius: 'theme:radiusXl',
     gap: 'theme:spaceX4',
     justifyContent: 'center',
+  }, variants: {
+    light: { style: {
+      width: 280,
+      minHeight: 140,
+      padding: 'theme:spaceX8',
+      backgroundColor: 'theme:paper',
+      borderWidth: 2,
+      borderColor: 'theme:accent',
+      borderRadius: 'theme:radiusXl',
+      gap: 'theme:spaceX5',
+    } },
+    dark: { style: {
+      width: 220,
+      minHeight: 104,
+      padding: 'theme:spaceX5',
+      backgroundColor: 'theme:bg2',
+      borderWidth: 2,
+      borderColor: 'theme:accentHot',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX3',
+    } },
   }},
   AppProviderTileTitle:       { type: 'Text', size: 'theme:typeStrong', bold: true, color: 'theme:ink' },
   AppProviderTileTitleActive: { type: 'Text', size: 'theme:typeStrong', bold: true, color: 'theme:accent' },
@@ -1822,6 +2693,34 @@ classifier({
     backgroundColor: 'theme:bg1',
     borderWidth: 1, borderColor: 'theme:rule',
     borderRadius: 'theme:radiusXl',
+  }, variants: {
+    light: { style: {
+      width: 540,
+      padding: 'theme:spaceX8',
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+      gap: 'theme:spaceX7',
+    } },
+    dark: { style: {
+      width: 440,
+      padding: 'theme:spaceX6',
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+      gap: 'theme:spaceX5',
+    } },
+  }, bp: {
+    // At sm the form shell drops its fixed width and fills the parent
+    // column. variants get explicit overrides because variant.style would
+    // otherwise win the merge against bp.style.
+    sm: {
+      style: { width: '100%' },
+      variants: {
+        light: { style: { width: '100%' } },
+        dark: { style: { width: '100%' } },
+      },
+    },
   }},
   AppFormFieldCol: { type: 'Box', style: {
     flexDirection: 'column',
@@ -1886,6 +2785,21 @@ classifier({
     borderRadius: 'theme:radiusRound',
     backgroundColor: 'theme:bg1',
     borderWidth: 1, borderColor: 'theme:rule',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg',
+      borderColor: 'theme:rule',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+    } },
   }},
   AppTraitChipActive: { type: 'Pressable', style: {
     paddingLeft: 'theme:spaceX7', paddingRight: 'theme:spaceX7',
@@ -1893,6 +2807,21 @@ classifier({
     borderRadius: 'theme:radiusRound',
     backgroundColor: 'theme:bg2',
     borderWidth: 1, borderColor: 'theme:accentHot',
+  }, variants: {
+    light: { style: {
+      borderRadius: 'theme:radiusRound',
+      backgroundColor: 'theme:accent',
+      borderColor: 'theme:accent',
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+    } },
+    dark: { style: {
+      borderRadius: 'theme:radiusSm',
+      backgroundColor: 'theme:bg2',
+      borderColor: 'theme:accentHot',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+    } },
   }},
   AppTraitChipText:       { type: 'Text', size: 'theme:typeMeta', color: 'theme:ink' },
   AppTraitChipTextActive: { type: 'Text', size: 'theme:typeMeta', bold: true, color: 'theme:accentHot' },
@@ -1933,6 +2862,25 @@ classifier({
     borderWidth: 1, borderColor: 'theme:rule',
     borderRadius: 'theme:radiusLg',
     overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      width: 620,
+      minWidth: 620,
+      height: 470,
+      minHeight: 470,
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+    } },
+    dark: { style: {
+      width: 520,
+      minWidth: 520,
+      height: 390,
+      minHeight: 390,
+      backgroundColor: 'theme:bg',
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
   MenuTileSquare: { type: 'Box', style: {
     flexDirection: 'column',
@@ -1943,6 +2891,25 @@ classifier({
     borderWidth: 1, borderColor: 'theme:rule',
     borderRadius: 'theme:radiusLg',
     overflow: 'hidden',
+  }, variants: {
+    light: { style: {
+      width: 460,
+      minWidth: 460,
+      height: 460,
+      minHeight: 460,
+      backgroundColor: 'theme:paper',
+      borderColor: 'theme:paperRule',
+      borderRadius: 'theme:radiusXl',
+    } },
+    dark: { style: {
+      width: 390,
+      minWidth: 390,
+      height: 390,
+      minHeight: 390,
+      backgroundColor: 'theme:bg',
+      borderColor: 'theme:ruleBright',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
   MenuTileChrome: { type: 'Box', style: { flexDirection: 'row',
     alignItems: 'center',
@@ -1952,6 +2919,25 @@ classifier({
     borderBottomWidth: 1, borderBottomColor: 'theme:rule',
     backgroundColor: 'theme:bg1',
     flexShrink: 0,
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX6',
+      paddingLeft: 'theme:spaceX7',
+      paddingRight: 'theme:spaceX7',
+      paddingTop: 'theme:spaceX5',
+      paddingBottom: 'theme:spaceX5',
+      borderBottomColor: 'theme:paperRule',
+      backgroundColor: 'theme:paperAlt',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX4',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      paddingTop: 'theme:spaceX3',
+      paddingBottom: 'theme:spaceX3',
+      borderBottomColor: 'theme:accentHot',
+      backgroundColor: 'theme:bg2',
+    } },
   }},
   MenuTileId:    { type: 'Text', size: 'theme:typeBody',  bold: true, color: 'theme:accent',
                    numberOfLines: 1,
@@ -1968,6 +2954,9 @@ classifier({
     flex: 1, flexGrow: 1,
     position: 'relative', overflow: 'hidden',
     backgroundColor: 'theme:bg',
+  }, variants: {
+    light: { style: { backgroundColor: 'theme:paper' } },
+    dark: { style: { backgroundColor: 'theme:bg' } },
   }},
 
   // ── Shared text rungs ────────────────────────────────────────
@@ -1979,7 +2968,11 @@ classifier({
                       style: { fontFamily: 'theme:fontMono' } },
   MenuLabelActive:  { type: 'Text', size: 'theme:typeBase',    color: 'theme:accent',
                       numberOfLines: 1,
-                      style: { fontFamily: 'theme:fontMono' } },
+                      style: { fontFamily: 'theme:fontMono' },
+                      variants: {
+                        light: { color: 'theme:accent' },
+                        dark: { color: 'theme:accentHot' },
+                      } },
   MenuLabelStrong:  { type: 'Text', size: 'theme:typeStrong',  color: 'theme:ink',
                       numberOfLines: 1,
                       style: { fontFamily: 'theme:fontMono' } },
@@ -2012,6 +3005,21 @@ classifier({
     paddingLeft: 'theme:spaceX7', paddingRight: 'theme:spaceX7',
     paddingTop: 'theme:spaceX6', paddingBottom: 'theme:spaceX6',
     gap: 'theme:spaceX1',
+  }, variants: {
+    light: { style: {
+      paddingLeft: 'theme:spaceX8',
+      paddingRight: 'theme:spaceX8',
+      paddingTop: 'theme:spaceX7',
+      paddingBottom: 'theme:spaceX7',
+      gap: 'theme:spaceX2',
+    } },
+    dark: { style: {
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+      gap: 'theme:spaceX0',
+    } },
   }},
   MenuListRow: { type: 'Pressable', style: { flexDirection: 'row',
     alignItems: 'center',
@@ -2019,6 +3027,23 @@ classifier({
     paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
     paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
     borderRadius: 'theme:radiusSm',
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX6',
+      paddingLeft: 'theme:spaceX5',
+      paddingRight: 'theme:spaceX5',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX3',
+      paddingLeft: 'theme:spaceX3',
+      paddingRight: 'theme:spaceX3',
+      paddingTop: 'theme:spaceX2',
+      paddingBottom: 'theme:spaceX2',
+      borderRadius: 'theme:radiusSm',
+    } },
   }},
   MenuListRowActive: { type: 'Pressable', style: { flexDirection: 'row',
     alignItems: 'center',
@@ -2027,6 +3052,27 @@ classifier({
     paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
     backgroundColor: 'theme:bg2',
     borderRadius: 'theme:radiusSm',
+  }, variants: {
+    light: { style: {
+      gap: 'theme:spaceX6',
+      paddingLeft: 'theme:spaceX7',
+      paddingRight: 'theme:spaceX5',
+      paddingTop: 'theme:spaceX4',
+      paddingBottom: 'theme:spaceX4',
+      backgroundColor: 'theme:paperAlt',
+      borderRadius: 'theme:radiusRound',
+    } },
+    dark: { style: {
+      gap: 'theme:spaceX3',
+      paddingLeft: 'theme:spaceX4',
+      paddingRight: 'theme:spaceX3',
+      paddingTop: 'theme:spaceX2',
+      paddingBottom: 'theme:spaceX2',
+      backgroundColor: 'theme:bg2',
+      borderRadius: 'theme:radiusSm',
+      borderWidth: 1,
+      borderColor: 'theme:accentHot',
+    } },
   }},
   MenuListLabelCol: { type: 'Box', style: { flex: 1 }},
 
@@ -2581,5 +3627,47 @@ classifier({
   MenuStatusDotMute: { type: 'Box', style: {
     width: 6, height: 6, borderRadius: 'theme:radiusPill',
     backgroundColor: 'theme:inkDimmer',
+  }},
+
+  // ──────────────────────────────────────────────────────────────
+  //   Input slot containers — morph-driven layout
+  // ──────────────────────────────────────────────────────────────
+  //
+  // Two slot containers wrap the persistent <InputStrip> in cart/app.
+  // The cart drives their dimensions per render via local style
+  // overrides (paddingRight on BottomInputBar; width on SideMenuInput;
+  // height on BottomInputBar) so the layout can interpolate smoothly
+  // instead of snapping via display:none.
+  //
+  // Variant ('side' vs null) controls input PLACEMENT only — JSX
+  // conditional renders the input inside whichever container's natural
+  // home it currently is. Visibility is purely a function of the
+  // morph values applied as inline styles.
+  AppBottomInputBar: { type: 'Box', style: {
+    width: '100%',
+    height: APP_BOTTOM_BAR_H,
+    flexShrink: 0,
+    overflow: 'hidden',
+    // Anchor the input to the bar's bottom — the classifier height is
+    // a slight over-estimate of CommandComposerFrame's natural height,
+    // so without flex-end the input would float a few pixels above the
+    // floor. The over-allocated gap above the input fills with theme:bg
+    // (matches the page bg).
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppSideMenuInput: { type: 'Box', style: {
+    width: 0,
+    height: '100%',
+    flexShrink: 0,
+    flexDirection: 'column',
+    overflow: 'hidden',
+    // Match the page bg so there's no visible color split where the
+    // side menu meets the rest of the app. Once menu items land, they
+    // can carry their own surfaces.
+    backgroundColor: 'theme:bg',
+    justifyContent: 'flex-end',
   }},
 });
