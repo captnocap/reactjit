@@ -51,3 +51,35 @@ export function useInputFocal(): [boolean, (v: boolean) => void] {
   const value = React.useSyncExternalStore(_subscribe, _getFocal);
   return [value, setInputFocal];
 }
+
+// ── HUD insets ───────────────────────────────────────────────────────
+//
+// Shell publishes the animated bottom (BottomInputBar reserved height)
+// and left (SideMenuInput reserved width) insets each render tick. Pages
+// consume `useHudInsets()` to apply matching internal padding so their
+// content stays clear of the HUD overlays while their bg paints
+// edge-to-edge underneath. This is what lets the bar carry transparent
+// bg without flashing during the full→side morph — the page bg shows
+// through the bar's vacated area.
+
+interface HudInsets { bottom: number; left: number }
+
+let _insets: HudInsets = { bottom: 0, left: 0 };
+const _insetSubs = new Set<() => void>();
+
+export function setHudInsets(bottom: number, left: number): void {
+  if (_insets.bottom === bottom && _insets.left === left) return;
+  _insets = { bottom, left };
+  for (const s of _insetSubs) s();
+}
+
+function _subscribeInsets(fn: () => void): () => void {
+  _insetSubs.add(fn);
+  return () => { _insetSubs.delete(fn); };
+}
+
+function _getInsets(): HudInsets { return _insets; }
+
+export function useHudInsets(): HudInsets {
+  return React.useSyncExternalStore(_subscribeInsets, _getInsets);
+}

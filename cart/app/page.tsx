@@ -3,6 +3,7 @@ import { Box } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import Onboarding from './onboarding/Onboarding';
 import { useOnboarding } from './onboarding/state';
+import { useHudInsets } from './shell';
 import { TRAITS_BY_ID } from './onboarding/traits';
 import { useAnimationTimeline } from './anim';
 import { SnakeSpinner } from '../component-gallery/components/grid-spinners/GridSpinners';
@@ -191,6 +192,7 @@ function HomeBody({
   profileOp: number;
 }) {
   const onb = useOnboarding();
+  const insets = useHudInsets();
   const name = (typeof onb.name === 'string' && onb.name.trim().length > 0)
     ? onb.name.trim()
     : 'there';
@@ -209,6 +211,7 @@ function HomeBody({
         gap: 28,
         paddingLeft: 32,
         paddingRight: 32,
+        paddingBottom: insets.bottom,
       }}
     >
       {/* Greeting */}

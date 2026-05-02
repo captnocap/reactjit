@@ -19,7 +19,7 @@ import SweatshopPage from './sweatshop/page';
 import { OnboardingProvider, useOnboarding } from './onboarding/state';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
-import { useInputFocal } from './shell';
+import { useInputFocal, setHudInsets } from './shell';
 import { AssistantChat } from './chat/AssistantChat';
 import type { ChatShape } from './chat/types';
 
@@ -434,6 +434,16 @@ function ShellBody() {
   // collapses to 0 in side mode. Animates so the page-extends-down /
   // page-retracts step is smooth.
   const paddingBottom = (1 - bottomMorph) * APP_BOTTOM_BAR_H;
+
+  // Publish HUD insets so pages can apply matching internal padding
+  // while keeping their backgrounds full-bleed. The bar paints
+  // transparent over whatever the page rendered beneath it (no shell-
+  // level color in the strip area), and the page's own padding keeps
+  // its content above the bar's footprint. paddingLeft stays on the
+  // routes wrapper for now (rail is opaque chrome — its bg fully
+  // covers whatever the page paints behind it, no visible difference).
+  setHudInsets(paddingBottom, 0);
+
   return (
     <Box style={{
       width: '100%', height: '100%',
@@ -460,10 +470,16 @@ function ShellBody() {
                 pushing BottomInputBar's left edge — keeps the input
                 anchored at x=0 throughout the morph. */}
             <Box style={{ flexGrow: 1, position: 'relative', flexDirection: 'column' }}>
+              {/* Iframe wrapper — full-bleed in the bottom axis so each
+                  page's bg paints all the way to the viewport bottom.
+                  The bar overlays this area with a transparent bg, and
+                  pages apply their own internal paddingBottom via
+                  useHudInsets() to keep content above the bar's
+                  footprint. paddingLeft stays here for the side rail
+                  (rail is opaque chrome). */}
               <Box style={{
                 flexGrow: 1,
                 paddingLeft: sideWidth,
-                paddingBottom: paddingBottom,
               }}>
                 <Route path="/">
                   <IndexPage />
@@ -521,6 +537,12 @@ function ShellBody() {
                   position: 'absolute', left: 0, right: 0, bottom: 0,
                   paddingRight,
                   display: 'flex',
+                  // Transparent so the bar's vacated area (right side
+                  // grows during phase 1 of shrink) reveals whatever
+                  // page bg is rendered beneath it. The classifier's
+                  // theme:bg default forced a single color across the
+                  // strip and clashed with multi-bg pages (/settings).
+                  backgroundColor: 'theme:transparent',
                 }}>
                   <ConditionalInputStrip />
                 </S.AppBottomInputBar>

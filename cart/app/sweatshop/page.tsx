@@ -9,17 +9,18 @@
 // just enough surface to exercise the shell's B↔C transitions.
 
 import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
-import { useInputFocal } from '../shell';
+import { useInputFocal, useHudInsets } from '../shell';
 
 const WORKERS = ['weft', 'warp', 'shuttle', 'loom', 'reed', 'heddle'];
 
 export default function SweatshopPage() {
   const [focal, setFocal] = useInputFocal();
+  const insets = useHudInsets();
   return (
     <Box style={{
       flexGrow: 1,
       paddingLeft: 32, paddingRight: 32,
-      paddingTop: 32, paddingBottom: 32,
+      paddingTop: 32, paddingBottom: 32 + insets.bottom,
       gap: 20,
       flexDirection: 'column',
     }}>

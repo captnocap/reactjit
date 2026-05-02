@@ -56,6 +56,7 @@ import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
+import { useHudInsets } from '../shell';
 import { TRAITS } from '../onboarding/traits';
 
 const NS = 'app';
@@ -125,6 +126,7 @@ const DB_ENGINES = [
 
 export default function SettingsPage() {
   const onb = useOnboarding();
+  const insets = useHudInsets();
   const userStore       = useCRUD('user',       passthrough, { namespace: NS });
   const settingsStore   = useCRUD('settings',   passthrough, { namespace: NS });
   const privacyStore    = useCRUD('privacy',    passthrough, { namespace: NS });
@@ -173,7 +175,7 @@ export default function SettingsPage() {
           <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
             <Box style={{
               flexDirection: 'column',
-              paddingTop: 32, paddingBottom: 64,
+              paddingTop: 32, paddingBottom: 64 + insets.bottom,
               paddingLeft: 32, paddingRight: 32,
             }}>
               <Box style={{ width: 760, maxWidth: '100%', flexDirection: 'column', gap: 16 }}>
