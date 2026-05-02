@@ -527,7 +527,7 @@ function ShellBody() {
               <S.AppSideMenuInput style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: sideWidth,
               }}>
-                {isSettings ? <SettingsNav height={subnavMaxH} /> : null}
+                {isSettings ? <SettingsNav maxHeight={subnavMaxH} /> : null}
                 {chatShape === 'side' ? (
                   <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
                 ) : null}
