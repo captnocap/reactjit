@@ -56,7 +56,7 @@ import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
-import { useHudInsets, useSettingsSection, RAIL_SUBNAV_MAX_PCT } from '../shell';
+import { useHudInsets, useSettingsSection } from '../shell';
 import { TRAITS } from '../onboarding/traits';
 
 const NS = 'app';
@@ -200,16 +200,18 @@ export default function SettingsPage() {
 
 // SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
 // render it at the top of the assistant rail (same column as the
-// chat). Capped at RAIL_SUBNAV_MAX_PCT of the rail height so the cap
-// scales with the rail (a fixed-pixel cap on a short rail crowded the
-// InputStrip off the bottom). flexShrink:1 so when the rail tightens
+// chat). The shell measures the viewport and computes a numeric
+// maxHeight (RAIL_SUBNAV_MAX_FRAC of viewport_h), then passes it as
+// `maxHeight` here — '%'-string max-heights on flex children of the
+// rail collapse under the framework's layout engine, taking the nav
+// with them. flexShrink:1 (default) so when the rail tightens
 // further, the nav yields before the chat or input do.
-export function SettingsNav() {
+export function SettingsNav({ maxHeight }) {
   const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
       width: '100%',
-      maxHeight: RAIL_SUBNAV_MAX_PCT,
+      maxHeight,
       overflow: 'hidden',
       flexDirection: 'column',
       borderBottomWidth: 1, borderBottomColor: 'theme:rule',

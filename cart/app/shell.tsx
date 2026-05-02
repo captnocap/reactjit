@@ -84,14 +84,14 @@ export function useHudInsets(): HudInsets {
   return React.useSyncExternalStore(_subscribeInsets, _getInsets);
 }
 
-// Max share of the assistant rail that a HUD-promoted page sub-nav
-// (settings nav, etc.) can claim at the top of the column. Expressed
-// as a CSS height-percentage string so the cap *scales with the rail*
-// — a fixed pixel cap on a short rail would push the chat + input
-// past the rail's available height, and the InputStrip below would
-// disappear off the bottom edge. Pair this with flexShrink:0 on the
-// InputStrip so the chat absorbs the squeeze, not the input.
-export const RAIL_SUBNAV_MAX_PCT = '40%';
+// Max fraction of the assistant rail that a HUD-promoted page sub-nav
+// (settings nav, etc.) can claim at the top of the column. The shell
+// resolves this to a pixel height (= viewport_h * fraction) and passes
+// it as a prop to the nav — '%'-string maxHeight on a flex child of
+// `S.AppSideMenuInput` doesn't resolve through the framework's layout
+// engine and the nav collapses to 0. Pair with flexShrink:0 on the
+// InputStrip so the chat absorbs any leftover squeeze, not the input.
+export const RAIL_SUBNAV_MAX_FRAC = 0.4;
 
 // ── Settings active section ──────────────────────────────────────────
 //

@@ -19,7 +19,7 @@ import SweatshopPage from './sweatshop/page';
 import { OnboardingProvider, useOnboarding } from './onboarding/state';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
-import { useInputFocal, setHudInsets } from './shell';
+import { useInputFocal, setHudInsets, RAIL_SUBNAV_MAX_FRAC } from './shell';
 import { AssistantChat } from './chat/AssistantChat';
 import type { ChatShape } from './chat/types';
 
@@ -249,6 +249,18 @@ function getViewportW(): number {
   return 1280;
 }
 
+function getViewportH(): number {
+  const g: any = globalThis;
+  try {
+    if (typeof g.__viewport_height === 'function') {
+      const v = Number(g.__viewport_height()) || 0;
+      if (v > 0) return v;
+    }
+  } catch { /* ignore */ }
+  if (typeof g.innerHeight === 'number' && g.innerHeight > 0) return g.innerHeight;
+  return 800;
+}
+
 const easeMorph = (p: number) => (EASINGS as any).easeInOutCubic(p);
 
 // Three resolved shell states. Derived from (active route's mode,
@@ -430,6 +442,12 @@ function ShellBody() {
 
   // Map morphs to slot dimensions.
   const vw = getViewportW();
+  const vh = getViewportH();
+  // Numeric pixel cap for any HUD-promoted page sub-nav (settings, …)
+  // — passed as a prop into the nav component so it gets a value the
+  // framework's layout engine can size against. '%' max-heights on a
+  // flex child of the rail collapse and take the nav with them.
+  const subnavMaxH = Math.round(vh * RAIL_SUBNAV_MAX_FRAC);
   // paddingRight on AppBottomInputBar — input width shrinks/grows.
   const paddingRight = Math.max(0, inputMorph * (vw - SIDE_W));
   // SideMenuInput width grows in / shrinks out from the left edge.
@@ -509,7 +527,7 @@ function ShellBody() {
               <S.AppSideMenuInput style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: sideWidth,
               }}>
-                {isSettings ? <SettingsNav /> : null}
+                {isSettings ? <SettingsNav maxHeight={subnavMaxH} /> : null}
                 {chatShape === 'side' ? (
                   <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
                 ) : null}
