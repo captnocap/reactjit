@@ -84,14 +84,14 @@ export function useHudInsets(): HudInsets {
   return React.useSyncExternalStore(_subscribeInsets, _getInsets);
 }
 
-// Max pixel height a HUD-promoted page sub-nav (settings nav, etc.)
-// can claim at the top of the assistant rail. The remainder always
-// belongs to the chat + InputStrip — so the rail can't be hijacked
-// by a long page nav and the chat stays usable. Numeric (not %)
-// because the framework's ScrollView is excluded from proportional
-// fallback (see /home/siah/creative/reactjit/CLAUDE.md → Layout
-// Rules), so nested scroll inside a %-sized parent collapses to 0.
-export const RAIL_SUBNAV_MAX_H = 360;
+// Max share of the assistant rail that a HUD-promoted page sub-nav
+// (settings nav, etc.) can claim at the top of the column. Expressed
+// as a CSS height-percentage string so the cap *scales with the rail*
+// — a fixed pixel cap on a short rail would push the chat + input
+// past the rail's available height, and the InputStrip below would
+// disappear off the bottom edge. Pair this with flexShrink:0 on the
+// InputStrip so the chat absorbs the squeeze, not the input.
+export const RAIL_SUBNAV_MAX_PCT = '40%';
 
 // ── Settings active section ──────────────────────────────────────────
 //

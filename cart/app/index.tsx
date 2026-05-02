@@ -513,7 +513,15 @@ function ShellBody() {
                 {chatShape === 'side' ? (
                   <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
                 ) : null}
-                {isSide ? <ConditionalInputStrip /> : null}
+                {/* InputStrip is pinned with flexShrink:0 so a tall
+                    sub-nav or chat history can never push it past the
+                    rail's bottom edge — the chat (flexGrow:1, minHeight:0)
+                    absorbs every pixel of squeeze before this does. */}
+                {isSide ? (
+                  <Box style={{ flexShrink: 0, width: '100%' }}>
+                    <ConditionalInputStrip />
+                  </Box>
+                ) : null}
               </S.AppSideMenuInput>
               {/* Full-mode chat overlay — fills the activity content
                   area, leaves space for the side rail (left: sideWidth)

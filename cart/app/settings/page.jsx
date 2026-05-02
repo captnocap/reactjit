@@ -56,7 +56,7 @@ import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
-import { useHudInsets, useSettingsSection, RAIL_SUBNAV_MAX_H } from '../shell';
+import { useHudInsets, useSettingsSection, RAIL_SUBNAV_MAX_PCT } from '../shell';
 import { TRAITS } from '../onboarding/traits';
 
 const NS = 'app';
@@ -199,17 +199,17 @@ export default function SettingsPage() {
 }
 
 // SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
-// render it at the top of the assistant rail (same column as the chat).
-// Capped at RAIL_SUBNAV_MAX_H pixels so a long sub-nav can't crowd
-// out the chat. No nested ScrollView — the cap is large enough for
-// the current item count, and ScrollView in a maxHeight-only parent
-// collapses to 0 (proportional fallback rule).
+// render it at the top of the assistant rail (same column as the
+// chat). Capped at RAIL_SUBNAV_MAX_PCT of the rail height so the cap
+// scales with the rail (a fixed-pixel cap on a short rail crowded the
+// InputStrip off the bottom). flexShrink:1 so when the rail tightens
+// further, the nav yields before the chat or input do.
 export function SettingsNav() {
   const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
-      width: '100%', flexShrink: 0,
-      maxHeight: RAIL_SUBNAV_MAX_H,
+      width: '100%',
+      maxHeight: RAIL_SUBNAV_MAX_PCT,
       overflow: 'hidden',
       flexDirection: 'column',
       borderBottomWidth: 1, borderBottomColor: 'theme:rule',
