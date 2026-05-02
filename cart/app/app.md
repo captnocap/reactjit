@@ -82,7 +82,7 @@ Three resolved shell states. The persistent `<InputStrip>` morphs between them v
 - `AppBottomInputBar`'s height comes from the classifier, not from the cart. The framework's layout engine treats absolute boxes without explicit dimensions as 0-tall.
 - BottomInputBar leaves the React tree (outer conditional `{isSide ? null : (...)}`) on variant flip. Don't try to animate its height collapse instead — it covers SideMenuInput's input from the top down as it shrinks (the "rollout from the top" regression).
 - Inside the conditional, `display: 'flex'` is set explicitly. The framework treated `display: undefined` as `display: none`, leaving the bar invisible.
-- `App` outer Box, `AppBottomInputBar`, and `AppSideMenuInput` all carry `backgroundColor: 'theme:bg'`. The first matches the bg behind any vacated area; the second covers the gap above the input (over-allocated height vs strip natural); the third blends the side panel with the page so the empty rail doesn't show as a colored split.
+- `App` outer Box and `AppSideMenuInput` carry `backgroundColor: 'theme:bg'`. `AppBottomInputBar` is overridden to `theme:transparent` in the inline style — the bar is a HUD overlay over per-page bg, not a colored band of its own. See **Animation principles → HUD / iframe split** below for why.
 
 **Named regressions** to grep for if anyone breaks this:
 - "input invisible in full mode"
@@ -93,6 +93,45 @@ Three resolved shell states. The persistent `<InputStrip>` morphs between them v
 - "B→C feels like a 1s delay before the input animates" → the TO BAR branch must be parallel; sequencing puts the visible animation behind the subtle one.
 
 If you hit any of those, `git log --grep GOLDEN` finds the canonical reference.
+
+---
+
+### HUD / iframe split (`cart/app/index.tsx` + `cart/app/shell.tsx`, 2026-05-02)
+
+The shell is a HUD wrapping an iframe — not a shell with side panels and a bar. The HUD owns chrome (top), the assistant rail (left), and the input bar (bottom); the iframe is the page content slot. The bar is `theme:transparent`, sitting over whatever the page paints beneath it. This is what kept multi-bg pages (most visibly `/settings`) from flashing a `theme:bg` strip across their content during the full→side morph.
+
+**Mental model:**
+
+```
+[ HUD chrome (top) ]
+[ HUD rail (left, sideWidth)        | iframe (page) ]
+[ HUD bar (bottom, transparent overlay over the iframe) ]
+```
+
+The bar is *transparent*. The page bg is what shows where the bar's input doesn't reach (right side during phase 1 of shrink, the whole strip the rest of the time). The bar's only visible element is the InputStrip itself.
+
+**Page contract:**
+
+- Each page paints its bg edge-to-edge (full height of the iframe slot — the routes wrapper has no `paddingBottom`).
+- Each page consumes `useHudInsets()` from `cart/app/shell.tsx` and applies `insets.bottom` as **internal** padding on its content layout (NOT on its bg layer). The bg fills the area; only content moves up to clear the bar.
+- The shell publishes the insets each render tick via `setHudInsets(bottom, left)`. Today only `bottom` is non-zero — the rail is opaque chrome and the routes wrapper still applies `paddingLeft: sideWidth` directly. If a future feature needs page-side awareness of the rail width, plumb it through `insets.left` and pages can opt in.
+
+**Sub-nav promotion (Phase B):**
+
+Routes that previously held an in-page sub-nav (settings: Profile / Preferences / Providers / Defaults / Voice / Embedding / Database / Privacy / Onboarding) now lift that sub-nav into the HUD. The sub-nav stacks at the top of the same column as the assistant rail — settings nav above, AssistantChat in the middle (`flexGrow:1`), InputStrip pinned to the bottom — so the left side of the screen reads as one continuous chrome instead of "assistant + adjacent column."
+
+Active section is a shell-level store: `useSettingsSection()` in `cart/app/shell.tsx` (mirrors the `useInputFocal` pattern). The page reads it; the HUD-rendered `<SettingsNav />` reads + writes it.
+
+The pattern is reusable. To promote another route's sub-nav:
+1. Add a `useFooSection()` store to `shell.tsx` (copy `useSettingsSection`).
+2. Refactor the page to read `active` from the store, drop the in-page nav column.
+3. Export a self-contained `<FooNav />` component from the page module.
+4. In `ShellBody`, render `{isFoo ? <FooNav /> : null}` inside `S.AppSideMenuInput` before the chat.
+
+**Named regressions** for HUD / iframe split:
+- "bar bg flashes during morph" — the bar's classifier `theme:bg` is leaking. The override `backgroundColor: 'theme:transparent'` must stay in the bar's inline style (`index.tsx`).
+- "page content gets covered by the bar" — page didn't apply `paddingBottom: useHudInsets().bottom` on its content layout. Add it; don't put it on the bg layer.
+- "two-color split where assistant rail meets sub-nav" — the sub-nav was rendered as a separate slot instead of inside `S.AppSideMenuInput`. Stack it inside the rail at the top.
 
 ---
 
@@ -123,7 +162,7 @@ CHECKLIST:
 - hasAnimation: TRUE — three RAF-driven snapshot tweens (`inputMorph` / `sideMorph` / `bottomMorph`) coordinate with the variant flip per the GOLDEN section. Tour banner uses its own animation timeline (separate machinery).
 - Animations: see **Animation principles → Input-strip shell morph (GOLDEN)**. Tour banner: mounts at `markComplete()`, holds invisible until `TOUR_BANNER_FADE_DELAY_MS = 1400ms`, then fades in over `TOUR_BANNER_FADE_MS = 500ms`.
 - TODO:
-  - Replace the temporary "SWEATSHOP →" / "FOCUS / UNFOCUS" debug toggles at top:60, left:60 with real triggers (chat-message-sent, grid-tile click, @-token via the bus).
+  - Real triggers are wired: `@sweatshop` token (`tokens.ts`) routes to the activity via `app:navigate`; the chat header glyph (`↗`/`↘` in `AssistantChat`) drives B↔C focal flips; sweatshop's worker tiles call `setInputFocal(true)`. The temporary debug overlay (`SWEATSHOP →` / `FOCUS / UNFOCUS` at top:60, left:60) was removed once those triggers existed. Home tile clicks → activity routes are still TBD (see Planned work → Side menu + activity host).
   - Once a real tour is wired, `acceptTour()` should arm the overlay; today it just hides the banner.
   - Decide whether `ConditionalInputStrip` should render in onboarding's later steps. Today it's all-or-nothing on `complete`.
 - PROBLEMS:
@@ -244,32 +283,28 @@ CHECKLIST:
 
 ---
 
-### Settings page — `settings/page.jsx` — Stub
+### Settings page — `settings/page.jsx` — WIP
 
 CHECKLIST:
-- Purpose: `/settings` route. Placeholder settings surface attached to the same top chrome nav as Home and About. Shows the current onboarding-backed shell/profile facts that exist today: config path, tour status, and whether the bottom `InputStrip` is enabled.
+- Purpose: `/settings` route. Mode `'side'` — the route enters HUD state B (assistant rail visible). The page is now single-column `theme:bg1` content; the section sub-nav (Profile / Preferences / Providers / Defaults / Voice / Embedding / Database / Privacy / Onboarding) is rendered by the shell at the top of the assistant rail (see **Animation principles → HUD / iframe split** for the pattern). Each section reads/writes the gallery data graph through `useCRUD` against the `app` namespace (User, Settings, Privacy, Connection rows).
 - isRoute: TRUE
 - Route: `/settings`
-- hasDatashape: FALSE (consumes the onboarding-provider surface)
-- Datashape: reads `onboarding/state.jsx` (`configPath`, `tourStatus`, `complete`)
-- exposedDatashapes: `onb.configPath`, `onb.tourStatus`, `onb.complete`
-- Hooks: `useOnboarding`
+- hasDatashape: TRUE (consumes/writes User, Settings, Privacy, Connection via `useCRUD`)
+- Datashape: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Connection rows scoped by `settingsId === SETTINGS_ID`; consumes onboarding state for the Onboarding section.
+- exposedDatashapes: `SettingsNav` (named export — rendered by `index.tsx`'s ShellBody at the top of the assistant rail), `SettingsPage` (default export — single-column content)
+- Hooks: `useOnboarding`, `useSettingsSection` (shell-level active-section store), `useHudInsets` (page applies `insets.bottom` to its scroll content's `paddingBottom`), `useCRUD` (one per row type), `useState`, `useEffect`, `useMemo`, `useRef`
 - Conditions:
-  - `configPath` falls back to `Default config path` when unset/blank
-  - `tourStatus` falls back to `pending` when not a string
-  - Input strip row reports `Enabled` only once onboarding is complete; otherwise `Hidden during onboarding`
-- Components: `SettingRow`
-- Atoms: `Box`, `S.Page`, `S.Card`, `S.Caption`, `S.Title`, `S.Body`
-- isUsingTheme: TRUE (via classifiers)
+  - Active section comes from `useSettingsSection()` (shell-level store) — page reads, `SettingsNav` reads + writes via `setActive`
+  - Each section dispatches off `active === '<id>'` for its render
+- Components: `SettingsNav` (HUD rail entry), `ProfileSection`, `PreferencesSection`, `ProvidersSection`, `DefaultsSection`, `VoiceSection`, `EmbeddingSection`, `DatabaseSection`, `PrivacySection`, `OnboardingSection`
+- Atoms: `Box`, `Pressable`, `ScrollView`, `S.Caption`, `S.Title`, `S.Body`, `S.NavPill`, `S.NavPillActive`
+- isUsingTheme: TRUE — page wrapper paints `theme:bg1` edge-to-edge into the iframe slot; nav paints `theme:bg` (matches the rail above)
 - hasIcons: FALSE (route nav icon comes from `index.tsx`, not the page body)
 - Icons: —
 - hasAnimation: FALSE
 - Animations: —
-- TODO:
-  - Replace the stub facts with real editable Settings rows once the gallery `Settings` / `Connection` data shapes get editor components.
-  - Add controls for default provider/model, router connection, privacy policy, budgets, and profile switching.
-  - Decide whether Settings should be a full route or eventually an activity-mode panel once the two-mode shell lands.
-- PROBLEMS: none
+- TODO: see open threads — real probes for API / Local providers; UX for default provider/model selection per connection.
+- PROBLEMS: none specific to this file. The page is no longer the stub it was — the stub doc here was preserved verbatim while the actual page grew; this rewrite catches the doc up to the HUD-rail split (2026-05-02) but the section-by-section CHECKLISTs for each panel are still owed.
 
 ---
 
@@ -616,25 +651,28 @@ CHECKLIST:
 
 ---
 
-### Shell focal state — `shell.tsx` — Complete
+### Shell stores — `shell.tsx` — Complete
 
 CHECKLIST:
-- Purpose: One bit of shell-level UI state — `inputFocal: boolean` — exposed via `useInputFocal()` (returns `[focal, setFocal]` like useState) and the imperative `setInputFocal(value)` / `getInputFocal()` callers. Activities call `setInputFocal(true)` to take the persistent `<InputStrip>` into focal mode (state C in the GOLDEN shell state machine); `setInputFocal(false)` to release (back to state B). State PERSISTS across route changes — only the activity that took focus knows when it's done with it. The shell never auto-resets it on navigation.
+- Purpose: Module-level subscribe stores that the shell publishes and other parts of the cart consume. All follow the same `React.useSyncExternalStore` pattern (mirrors `runtime/theme.tsx`'s variant store).
+  - **`inputFocal: boolean`** — `useInputFocal()` / `setInputFocal()` / `getInputFocal()`. Activities call `setInputFocal(true)` to take the persistent `<InputStrip>` into focal mode (state C in the GOLDEN shell state machine); `setInputFocal(false)` to release (state B). State PERSISTS across route changes — only the activity that took focus knows when it's done with it.
+  - **`hudInsets: { bottom, left }`** — `useHudInsets()` / `setHudInsets(bottom, left)`. The shell publishes the animated bar reservation (and side rail width if/when pages opt in) each render tick from `ShellBody` (see **Animation principles → HUD / iframe split**). Pages consume `useHudInsets()` to apply matching internal padding so their bg paints edge-to-edge while their content stays clear of the HUD overlays.
+  - **`settingsSection: string`** — `useSettingsSection()` / `setSettingsSection()` / `getSettingsSection()`. The active /settings sub-section. The shell-rendered `<SettingsNav />` (top of the assistant rail) and the `<SettingsPage />` content body both subscribe; promoting the sub-nav to the HUD means active section can't live as page-local state anymore.
 - isRoute: FALSE
 - Route: —
-- hasDatashape: FALSE (just a boolean module-level flag; no schema)
+- hasDatashape: FALSE (each store is a plain JS value at module scope)
 - Datashape: —
-- exposedDatashapes: `useInputFocal(): [boolean, (v: boolean) => void]`, `setInputFocal(v: boolean)`, `getInputFocal(): boolean`
-- Hooks: `React.useSyncExternalStore` internally
-- Conditions: `setInputFocal` is a no-op when the new value equals the current value (avoids re-notifying subscribers)
+- exposedDatashapes: `useInputFocal(): [boolean, (v: boolean) => void]`, `setInputFocal(v: boolean)`, `getInputFocal(): boolean`, `useHudInsets(): { bottom: number; left: number }`, `setHudInsets(bottom: number, left: number)`, `useSettingsSection(): [string, (v: string) => void]`, `setSettingsSection(v: string)`, `getSettingsSection(): string`
+- Hooks: `React.useSyncExternalStore` internally for each store
+- Conditions: each setter is a no-op when the new value equals the current value (avoids re-notifying subscribers)
 - Components: —
 - Atoms: —
 - isUsingTheme: FALSE
 - hasIcons: FALSE
 - Icons: —
-- hasAnimation: FALSE (drives the shell's morph indirectly via `headingTo` derivation in `index.tsx`)
+- hasAnimation: FALSE (the HUD insets store is *driven by* the GOLDEN morph in `index.tsx`, but it's a publishing channel, not an animator)
 - Animations: —
-- TODO: persist alongside the rest of `User.shell` (planned `useCRUD` slot) so reload doesn't drop focal state. See **Planned work → Side menu + activity host (remaining work)** for the full plan.
+- TODO: persist `inputFocal` and `settingsSection` alongside the rest of `User.shell` (planned `useCRUD` slot) so reload doesn't drop them. See **Planned work → Side menu + activity host (remaining work)** for the full plan.
 - PROBLEMS: module-level state doesn't survive Zig hot-reload; tolerable today since onboarding-complete users land in state A on reload anyway, but rebuilds during an activity drop the user out of focal mid-task.
 
 ---
@@ -804,6 +842,97 @@ CHECKLIST:
 
 ---
 
+### Persistent assistant chat (full ↔ side fluid surface) — Stub
+
+The supervisor chat lives **above** the InputStrip and is present in every window. It has two visible shapes — `full` (page-area panel; concept image #2) and `side` (docked rail above the side input; concept image #1) — and the same conversation continues across the swap. The chat is one logical surface that re-parents between two slots; the InputStrip already migrates between the same two slots via the GOLDEN morph (A bar / B docked / C bar-with-side-rail), so the chat rides the same axes.
+
+**This is the natural fill for the "chat-history list" half of the side menu mentioned in `Side menu + activity host → Side menu content`** — that bullet stops being aspirational once this lands.
+
+**Driver axes (already exist — reuse, don't duplicate):**
+- `headingTo` from `index.tsx` (`'home' | 'activity-docked' | 'activity-focal'`) — derived from `(routeMode, inputFocal)`.
+- The chat shape is `'side'` whenever `headingTo === 'activity-docked'`, `'full'` whenever `headingTo === 'activity-focal'`, and **hidden** when `headingTo === 'home'` (home page stays clean — chat reappears the moment any activity is entered, and persists across activity navigations).
+- The morph is **the InputStrip's morph**, not a second one. The chat panel pins to the top of `AppSideMenuInput` in side mode and to the activity content area in full mode; both already exist as positioned slots, so the chat just renders into whichever is active.
+
+**Identity continuity.** The chat is a single React subtree with a stable key, NOT two trees that swap. Re-parenting between full and side slots is what carries the scroll position, the streaming token buffer, and any open surface-card local state across the morph. This is the same pattern the InputStrip already uses (the input element itself stays mounted; only its slot wrapper flips). For the chat: turns animate via the existing **list building** rules from Animation principles (spring-in for new turns, FLIP-tween for reorder, opacity+scale shrink for removal). The morph itself is a fade — the *contents* of a container that itself isn't moving.
+
+**Composition (existing classifiers / atoms — reuse first):**
+
+The footer of the chat panel ("ROUTING ▸ [TIER-1 ONLY] + NAV   ATTACHED ▸" + tag-shortcut row + composer) is the InputStrip surface as it stands today — `S.CommandComposerFrame` / `S.CommandComposerTopbar` / `S.CommandComposerFooter` / `S.CommandComposerPromptRows` / `S.CommandComposerActionRow` / `S.CommandComposerShortcutGroup` / `S.CommandComposerSend` / `S.CommandComposerKeycap` / `S.CommandComposerChip{,Accent,Success}` / `S.CommandComposerPromptText` / `S.CommandComposerActionText` / `S.CommandComposerIconText` / `S.CommandComposerIconButton` are **already wired in `InputStrip.tsx` and morph between slots via the GOLDEN machinery**. The chat's footer is literally that same `<InputStrip>` — it does not get a second composer.
+
+The transcript above the composer (turns + surface-cards) is what's net-new. Surface-card chrome is a near-perfect fit for the gallery's `GenericCardShell` (continuous-flow border-dash already used as the "this card is alive" affordance per Animation principles → Drawing an element outwards → Card / box borders → Continuous marching flow). That keeps the read-only/audit/fleet cards visually consistent with the rest of the cart without inventing card chrome.
+
+The "01 ASSISTANT" / "DOCKED" header pill is shaped like the `S.AppNavLink` / `S.AppNavLinkActive` family — same border, same accent dot, same monospace caption — so the active/inactive variant pattern from the route nav is reusable here.
+
+The lift / surface tags (`SURFACE`, `READ-ONLY`, `LIFT`, `IDLE` / `TOOL` / `STUCK` / `RAT`) and the timestamp captions (`asst 14:03:03`, `you 14:03:30`) are token-shaped in spirit and could reuse `S.CommandComposerChip` / `S.CommandComposerChipAccent` / `S.CommandComposerChipSuccess` / `S.CommandComposerMetaText` directly — same font / size / accent / chip border as the InputStrip already establishes. Re-skinning these as new classifiers risks color drift; the chip family is intentionally right.
+
+The `$ swarm audit --readers 3 --depth full` command preview that surfaces only in full mode is the gallery's `code-block` component (or a `S.CommandComposer*Mono` riff) — terminal-shaped, mono, theme-tinted. Pick `code-block` first; only fall back to a new mono classifier if the existing one carries chrome we don't want.
+
+**New classifiers needed (`cart/component-gallery/components.cls.ts` — do NOT inline):**
+
+Only what isn't covered by the above. Naming follows the `App<Surface>` convention already used by every other cart/app surface:
+
+- `AppChatPanel` — outer frame around the whole chat (header + transcript + footer-slot). `position: relative`, theme:bg, theme:rule border, identical in side/full save for width.
+- `AppChatPanelHeader`, `AppChatPanelHeaderRow`, `AppChatPanelHeaderTitle`, `AppChatPanelHeaderState` (the `DOCKED` chip), `AppChatPanelHeaderToggle` (the expand/collapse glyph button).
+- `AppChatPanelSubline` (the small `PERSISTENT · 14 TURNS · DRAG ANY SURFACE TO CART` caption — visible only in side mode per concept image).
+- `AppChatTranscript` — scrolling container; `flexGrow: 1`, `overflow: 'hidden'`, gap from theme.
+- `AppChatTurn`, `AppChatTurnHeaderRow`, `AppChatTurnAuthor` (asst / you variant), `AppChatTurnTime` (caption), `AppChatTurnLiftAffordance` (the `▸ LIFT` tail caption — full-mode only).
+- `AppChatTurnBody` — the prose Text classifier; `theme:ink`, `theme:typeBase`, line-height from theme.
+- `AppChatYouTurn` — the framed user-message row (concept shows a thin left-border + caret prefix). Variant of `AppChatTurn` rather than a separate atom.
+- `AppChatSurfaceSlot` — wrapper for embedded surface-cards inside a turn; passes the dashed-border affordance via `GenericCardShell`'s existing props. The slot only handles spacing.
+- `AppChatStatusPill` / `AppChatStatusPillHot` / `AppChatStatusPillOk` / `AppChatStatusPillWarn` — pill styling for `IDLE` / `TOOL` / `STUCK` / `RAT`. **Try `S.CommandComposerChip{,Accent,Success,Warn}` first** — if those are already the right size/inset, skip these new classifiers entirely.
+- `AppChatTagRow` — the `# TAG FILE  {} VARIABLE  /  COMMAND` strip that sits below the composer in full mode. (`InputStrip` already advertises this in its left-shortcuts; if that surface is the same row, no new classifier — wire it.)
+
+**Datashape (TBD — sketch, not lock-in):**
+- `AssistantThread` — id, turns, model id, started/last-touched timestamps, optional anchored-activity id (so a thread can be "the sweatshop conversation").
+- `AssistantTurn` — `{ id, threadId, author: 'asst' | 'user', timestamp, body, surfaces?: ChatSurface[] }`. `body` is plain prose; surfaces are structured renders.
+- `ChatSurface` — discriminated union: `{ kind: 'audit' | 'fleet' | ... , props }`. Surfaces are the inline-form / card embeds the assistant emits — `IntentSurface` from `cart/component-gallery/components/intent-surface/` is the existing primitive for this and should be the renderer of choice (matches the deferred-clarify section's stance — emit chat-loom-shaped trees, parse via `runtime/intent/parser`, render via `runtime/intent/render`).
+- Persistence: `useCRUD` row(s) under namespace `app`, sibling to the onboarding row. Same pattern as `Goal`. Single canonical `AssistantThread` per cart instance (the "supervisor session"); switching activities does NOT spawn new threads — the same conversation continues.
+
+**Datashape decision: ONE thread or MANY?** Concept image text says "PERSISTENT · 14 TURNS" — a single rolling supervisor thread. v1 ships one. Multi-thread (per-activity / per-worker scoping) is a follow-up; the side-menu's "chat-history list" bullet implies it eventually, but v1 is one thread visible across all windows.
+
+**Driving the model.** Today the `useLocalChat` hook (recently landed, see Recently landed) plus the `claude_runner` framework path are the two generation surfaces. The supervisor chat picks one based on `Settings.defaultConnectionId` (Claude SDK route → claude_runner; local route → useLocalChat). Wire this through a thin `useAssistantChat()` hook that mirrors `useLocalChat`'s phase / streaming surface but routes by connection. **Do not couple the chat UI to either backend directly** — the hook is the seam.
+
+**Triggers / submit path.**
+- The InputStrip's `submit()` already parses `@`-tokens (route / app / command). For the assistant chat, anything that ISN'T a token-only input becomes a turn (`assistant:turn` IFTTT event with the typed text, model id, attachments). The supervisor session subscribes once and pushes a turn into the active `AssistantThread`.
+- Token-only input still routes (existing behavior); mixed input ("@sweatshop check the fleet") fires both — navigate AND seed the next assistant turn with the original text. Decide order: navigate first (chat surface needs to mount its target slot), seed second.
+- Surface-card actions (`run audit`, `kill frank-04`, `inspect`) are parsed-intent actions emitted by `IntentSurface` — wired to `onAction` callbacks per the `intent-surface` EXTENDING.md contract. Each action becomes a new user-turn (effectively the user clicking "yes do that").
+
+**Conditions / state machine:**
+- `chatShape = headingTo === 'home' ? 'hidden' : (headingTo === 'activity-docked' ? 'side' : 'full')`.
+- `chatShape === 'hidden'` → return `null` from the chat panel; the home surface owns the page.
+- `chatShape === 'side'` → render inside `AppSideMenuInput`, ABOVE the docked InputStrip. Header shows `DOCKED` pill + collapse glyph; subline visible.
+- `chatShape === 'full'` → render in the activity content area, ABOVE the bottom InputStrip. Header shows expand-glyph (no `DOCKED` pill, no subline); LIFT affordances visible on each turn.
+- Identity-continuity invariant: the chat root mounts ONCE inside the shell and re-parents via the same slot dance the InputStrip uses — see GOLDEN section for the slot pattern. Do NOT mount a second copy in the side rail vs the activity content; that breaks the streaming buffer mid-morph.
+
+**Animation tie-in (use existing principles, no new machinery):**
+- Turn add → Animation principles → List building → Adding items (spring, 380ms, 60ms stagger if batched).
+- Turn remove → List building → Removing items (opacity+scale, 240ms).
+- Reorder (e.g. surface card lifts to top on `▸ LIFT` click) → List building → Reordering (FLIP tween).
+- Mode swap (full ↔ side) → fade on the panel chrome only; transcript content keeps its identity. The InputStrip's GOLDEN morph already handles the geometry; the chat panel just rides whichever slot is winning.
+- Surface-card "alive" state → continuous border-dash flow per Animation principles → Card / box borders → Continuous marching flow.
+
+**Open problems (anticipated, not yet hit):**
+- **Composer ownership.** InputStrip is shared by `home` (no chat) and `activity-*` (chat present). When the chat exists, the composer's submit must dual-fire (navigate token + seed assistant turn); when it doesn't, only the navigate path runs. Today `InputStrip.submit()` only does the navigate path. Add a subscriber-shaped seam (`assistant:available` flag or a new IFTTT event) so the chat can opt in without `InputStrip` knowing about chat.
+- **Persistence size.** `AssistantThread` rows can grow large (tokens × turns); `useCRUD` writes the whole row on each turn. v1 is fine because turn counts are small; consider a turn-append append-only log if a thread gets past ~200 turns and writes start showing up in the morph budget.
+- **Side-mode panel sizing in 360w.** Same root cause as the InputStrip 360w note (`useBreakpoint` is window-scoped, not container-scoped). The chat panel will need a `compact` prop the shell sets explicitly when docked, mirroring the InputStrip fix.
+- **Theme purity for surface-card content.** `IntentSurface` / `intent-surface/*.tsx` MUST be classifier-routed — no hex literals — for the same reason the deferred-clarify section flags. Audit before adopting.
+- **No-color-drift trap.** The status pills (`IDLE` / `TOOL` / `STUCK` / `RAT`) tempt hardcoded color values per state. Resist — extend `theme:` tokens (`theme:ok` / `theme:warn` / `theme:flag` already exist; if a fifth state is needed, add a token, do NOT inline a hex).
+- **Onboarding gate.** During onboarding the chat must NOT render — the shell is in state A regardless. Same `!onb.complete` short-circuit the InputStrip already uses.
+
+**Scope split (what ships in this pass vs follows):**
+- **In scope (v1):** the visual surface and its full ↔ side morph, with mock turns from a fixture. No real model wiring, no persistence. Surface-cards rendered via `IntentSurface` with hand-authored fixtures. Goal: prove the morph and identity-continuity work with the GOLDEN shell.
+- **Follow-up:** wire `useAssistantChat()` (Claude or local based on connection), persistence via `useCRUD`, surface-card actions through `IntentSurface.onAction`, the `assistant:available` seam in `InputStrip`. Each is an independent commit that doesn't reshape the surface.
+
+**Files (proposed; nothing has landed yet):**
+- `cart/app/chat/AssistantChat.tsx` — the chat panel root component. Reads `headingTo`, picks `chatShape`, mounts header + transcript + (no composer — InputStrip owns that).
+- `cart/app/chat/AssistantTurn.tsx` — one turn render. Picks `AppChatTurn` vs `AppChatYouTurn`. Hosts `AssistantSurface` slots.
+- `cart/app/chat/AssistantSurface.tsx` — surface-card wrapper around `IntentSurface` / `GenericCardShell`. Owns the lift / read-only chrome.
+- `cart/app/chat/useAssistantChat.ts` — connection-router hook (follow-up commit).
+- `cart/app/chat/fixtures.ts` — v1 mock turns to drive the visual.
+- `cart/component-gallery/components.cls.ts` — new `AppChat*` classifiers per the list above.
+
+---
+
 ## Open threads (cross-file)
 
 These need a coordinated touch — not localized to a single file.
@@ -813,6 +942,7 @@ These need a coordinated touch — not localized to a single file.
 - **Skipped-mode runtime branch** — when `User.onboarding.status === 'skipped'`, the app should run in a degraded mode. State.jsx persists the status correctly today, but IndexPage still treats `complete=true` as one homogenous render path. Add a third branch (alongside onboarding / completed-home) that prompts inline for missing onboarded data when skipped users hit features that need it.
 - **Deferred clarification flow re-arm** — see the deferred-clarify section above. Now that persistence is live, a `clarification` substate on `User.onboarding` (or a sibling field) is a clean place to land `{status, firedAt, answers}` so the notification doesn't refire across reloads.
 - **Goal popover copy** — Step5's tooltip text lives inline in `Step5.jsx` (`GOAL_TOOLTIP`). Move to a content / i18n layer once one exists; today there's no other natural home for it.
+- **Local chat path verification** — `framework/local_ai_runtime.zig` was just refactored from runtime dlopen to link-time `extern "c"` (mirrors `framework/embed.zig`). Needs a clean rebuild + an end-to-end run of `cart/manifest_gate/` to confirm gemma-4 finishes loading on Vulkan instead of cancelling at the offload boundary. Once that's green, the new `cart/app/recipes/gemma-line-gate-for-claude-edits.{md,ts}` recipe stops being aspirational and gets a "validated" line; until then it's a design doc.
 
 ### Recently landed
 
@@ -820,3 +950,11 @@ A short rolling log so cross-file work doesn't keep getting re-planned. Trim ent
 
 - **Onboarding "lock-in" pass** (2026-04-29) — `state.jsx` writes through `useCRUD` (namespace `app`) into the gallery data graph: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Workspace (`ws_local`), plus per-completion Connection + Goal rows. `User.onboarding.{status, step, startedAt, completedAt, skippedAt, tourStatus}` all persist.
 - **Three-state shell + input morph** (commits `3bad2f07d` → `6aa1cd24c`, 2026-05-01) — A/B/C state machine, route+focal driver axes, smoke-and-mirrors variant flip, GOLDEN regression list. Canonical reference: **Animation principles → Input-strip shell morph (GOLDEN)**. `git log --grep GOLDEN`.
+- **HUD / iframe split + settings sub-nav promotion** (commits `25910df18` (Phase A) → `0e49af62f` (Phase B), 2026-05-02) — fixed the `/settings` morph-flash regression. Phase A: bar bg → `theme:transparent`, routes wrapper drops `paddingBottom`, pages own internal `paddingBottom` via the new `useHudInsets()` store in `cart/app/shell.tsx`. Phase B: `SettingsNav` lifts out of the page tree and renders inside `S.AppSideMenuInput` at the top of the assistant rail, reading active section from a new `useSettingsSection()` shell store. Canonical reference: **Animation principles → HUD / iframe split**. Covers `cart/app/{index.tsx,shell.tsx,page.tsx,about/page.jsx,settings/page.jsx,sweatshop/page.tsx}`.
+- **Local chat hook (`useLocalChat`) + manifest-gate cart + extern-link refactor** (2026-05-02) — net-new generation path through the framework's Vulkan llama runtime, alongside the existing embedding path. Pieces:
+  - `runtime/hooks/useLocalChat.ts` — wraps `__localai_init` / `_send` / `_poll` / `_close` with React state. Exposes `phase` (`init` / `loading` / `loaded` / `generating` / `idle` / `failed`), a `pulse` heartbeat counter, `lastStatus`, and `streaming` (assistant tokens accumulated mid-`ask`). Defaults `persistAcrossUnmount: true` so dev hot-reload doesn't tear down the session and cancel the model load. New 4th arg to `__localai_init` plumbs `n_ctx` through (Zig-side `hostLocalAiInit` in `framework/v8_bindings_sdk.zig`).
+  - `cart/manifest_gate/{index.tsx,cart.json}` — Round-2 of the line-manifest benchmark. Reads `experiments/manifest_check/target.py` + `manifest.md` via `runtime/hooks/fs`, walks claims sequentially, asks Gemma-4 for a `TRUE`/`FALSE` verdict per line, writes the preamble to `experiments/manifest_check/results/round2_preamble.txt`. UI: pulsing heartbeat dot, phase label, live token-stream panel, active-row highlight in the verdicts list. Triggers `has-embed=true` at ship time via the `useLocalChat` import (registered in `sdk/dependency-registry.json` as a second trigger of the existing `embed` gate).
+  - `cart/app/recipes/gemma-line-gate-for-claude-edits.{md,ts}` — recipe file pair documenting the two-round benchmark (Claude SDK casual review, then local Gemma-4 TRUE/FALSE preamble feeding back into Claude). Uses `useLocalChat` and references `framework/local_ai_runtime.zig` + `framework/llama_exports.zig` as the bake-in path.
+  - `framework/local_ai_runtime.zig` — dropped `std.DynLib` + the dlopen candidate-path search. Replaced `Fn*` typedefs with `extern "c"` declarations at module scope (link-time bound against `libllama_ffi.so`, same .so already linked by `framework/embed.zig`). `LlamaApi` struct kept as a thin wrapper of function pointers defaulting to `&llama_foo` so the 33 `api.foo(...)` call sites are unchanged. Reason: a second runtime dlopen of the same llama.cpp build re-initialized `ggml-vulkan` on a worker thread, contending with the renderer's already-active `VkInstance` and cancelling the model load mid-offload (matches the clippy pattern that originally went to LuaJIT FFI for the same reason). The link-time path shares one `VkInstance` across embed + chat.
+  - `build.zig` — when `has-embed=true`, prefers root `zig-out/lib/libllama_ffi.so` over `tsz/zig-out/lib/...` so a newer .so dropped at the root wins (current setup symlinks LMS Vulkan 2.14.0 there for gemma-4 architecture support, which the Apr-18 frozen tsz build pre-dates). Adds `$ORIGIN/../lib` rpath so the binary at `zig-out/bin/` resolves the .so at runtime without `LD_LIBRARY_PATH`.
+  - Open: end-to-end gemma-4 run still needs to be observed completing (see Open threads above).
