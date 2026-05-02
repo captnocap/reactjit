@@ -78,6 +78,17 @@ export function useClaudeChat(opts: UseClaudeChatOpts = {}) {
     reject: ((e: any) => void) | null;
     onPart: ((s: string) => void) | null;
   }>({ buf: '', resolve: null, reject: null, onPart: null });
+  // A send queued before the session reached 'loaded' — the SDK's
+  // claude_send fails (returns false) if the CLI subprocess hasn't yet
+  // accepted stdin, which happens for the first ~half-second after
+  // __claude_init. We hold the request here and dispatch it from the
+  // poll loop on the system→loaded transition.
+  const pendingRef = useRef<{
+    text: string;
+    resolve: (s: string) => void;
+    reject: (e: any) => void;
+    onPart: ((s: string) => void) | null;
+  } | null>(null);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -116,6 +127,21 @@ export function useClaudeChat(opts: UseClaudeChatOpts = {}) {
           if (phaseRef.current === 'loading' || phaseRef.current === 'init') {
             phaseRef.current = 'loaded';
             setPhase('loaded');
+            // Session is hot — drain any send queued during loading.
+            if (pendingRef.current) {
+              const p = pendingRef.current;
+              pendingRef.current = null;
+              askBufRef.current = { buf: '', resolve: p.resolve, reject: p.reject, onPart: p.onPart };
+              setStreaming('');
+              const sent = callHost<boolean>('__claude_send', false, p.text);
+              if (!sent) {
+                askBufRef.current = { buf: '', resolve: null, reject: null, onPart: null };
+                p.reject(new Error('claude_send returned false (post-load)'));
+              } else {
+                phaseRef.current = 'generating';
+                setPhase('generating');
+              }
+            }
           }
         } else if (evt.type === 'assistant') {
           if (typeof evt.text === 'string' && evt.text.length > 0) {
@@ -167,13 +193,23 @@ export function useClaudeChat(opts: UseClaudeChatOpts = {}) {
     if (askBufRef.current.resolve !== null) {
       return Promise.reject(new Error('claude: ask() already in flight; await the previous one'));
     }
+    if (pendingRef.current !== null) {
+      return Promise.reject(new Error('claude: a previous send is queued; await it first'));
+    }
+    if (phaseRef.current === 'failed') {
+      return Promise.reject(new Error('claude: session failed'));
+    }
     return new Promise<string>((resolve, reject) => {
-      askBufRef.current = {
-        buf: '',
-        resolve,
-        reject,
-        onPart: askOpts.onPart ?? null,
-      };
+      const onPart = askOpts.onPart ?? null;
+      // If the session hasn't reached 'loaded' yet, queue the send and
+      // dispatch on the system→loaded transition (poll loop handles
+      // that). Without this, the SDK's send() throws because the CLI
+      // subprocess hasn't accepted stdin yet.
+      if (phaseRef.current === 'init' || phaseRef.current === 'loading') {
+        pendingRef.current = { text, resolve, reject, onPart };
+        return;
+      }
+      askBufRef.current = { buf: '', resolve, reject, onPart };
       setStreaming('');
       const sent = callHost<boolean>('__claude_send', false, text);
       if (!sent) {
