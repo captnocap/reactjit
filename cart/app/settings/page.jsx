@@ -200,18 +200,19 @@ export default function SettingsPage() {
 
 // SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
 // render it at the top of the assistant rail (same column as the
-// chat). The shell measures the viewport and computes a numeric
-// maxHeight (RAIL_SUBNAV_MAX_FRAC of viewport_h), then passes it as
-// `maxHeight` here — '%'-string max-heights on flex children of the
-// rail collapse under the framework's layout engine, taking the nav
-// with them. flexShrink:1 (default) so when the rail tightens
-// further, the nav yields before the chat or input do.
-export function SettingsNav({ maxHeight }) {
+// chat). The shell computes a numeric pixel height (RAIL_SUBNAV_MAX_FRAC
+// × viewport_h) and passes it as `height` so the layout engine has a
+// firm number to size against — `maxHeight` (with or without flex-end
+// on the rail) was ambiguous enough that either the nav or the input
+// would disappear depending on which constraint resolved first.
+// flexShrink:0 because the height IS the size, no negotiation.
+export function SettingsNav({ height }) {
   const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
       width: '100%',
-      maxHeight,
+      height,
+      flexShrink: 0,
       overflow: 'hidden',
       flexDirection: 'column',
       borderBottomWidth: 1, borderBottomColor: 'theme:rule',
