@@ -12,10 +12,13 @@
 // is the simplest version of this that doesn't fight the renderer.
 
 import * as React from 'react';
-import { INITIAL_TURNS } from './fixtures';
 import type { AssistantTurn } from './types';
 
-let _turns: AssistantTurn[] = INITIAL_TURNS;
+// Empty by default — turns flow in via `appendTurn` from the
+// AssistantChatProvider as the user submits and Claude replies. The
+// fixture transcript (./fixtures.ts) stays in the tree as a visual
+// reference but is no longer the seed.
+let _turns: AssistantTurn[] = [];
 const _subs = new Set<() => void>();
 
 function _notify(): void {
