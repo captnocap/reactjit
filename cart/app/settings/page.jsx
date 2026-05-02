@@ -56,7 +56,7 @@ import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
-import { useHudInsets } from '../shell';
+import { useHudInsets, useSettingsSection } from '../shell';
 import { TRAITS } from '../onboarding/traits';
 
 const NS = 'app';
@@ -132,7 +132,10 @@ export default function SettingsPage() {
   const privacyStore    = useCRUD('privacy',    passthrough, { namespace: NS });
   const connectionStore = useCRUD('connection', passthrough, { namespace: NS });
 
-  const [active, setActive] = useState('profile');
+  // Active section lives in the shell-level store — the sub-nav is now
+  // a HUD rail rendered by ShellBody, so the page reads but doesn't own
+  // the active id.
+  const [active] = useSettingsSection();
   const [user, setUser] = useState(null);
   const [settings, setSettings] = useState(null);
   const [privacy, setPrivacy] = useState(null);
@@ -163,44 +166,48 @@ export default function SettingsPage() {
     reload,
   };
 
+  // Single-column page now — the SettingsNav is rendered by the shell
+  // as a HUD rail (see ShellBody in ../index.tsx). The page paints
+  // theme:bg1 edge-to-edge into the iframe slot the shell reserves.
   return (
-    <S.Page>
-      <Box style={{ flexDirection: 'row', flexGrow: 1, height: '100%' }}>
-        <SettingsNav active={active} onSelect={setActive} />
+    <Box style={{
+      flexGrow: 1, flexDirection: 'column',
+      backgroundColor: 'theme:bg1',
+      height: '100%', width: '100%', minWidth: 0,
+    }}>
+      <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
         <Box style={{
-          flexGrow: 1, flexDirection: 'column',
-          backgroundColor: 'theme:bg1',
-          height: '100%', minWidth: 0,
+          flexDirection: 'column',
+          paddingTop: 32, paddingBottom: 64 + insets.bottom,
+          paddingLeft: 32, paddingRight: 32,
         }}>
-          <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
-            <Box style={{
-              flexDirection: 'column',
-              paddingTop: 32, paddingBottom: 64 + insets.bottom,
-              paddingLeft: 32, paddingRight: 32,
-            }}>
-              <Box style={{ width: 760, maxWidth: '100%', flexDirection: 'column', gap: 16 }}>
-                {active === 'profile'     && <ProfileSection {...ctx} />}
-                {active === 'preferences' && <PreferencesSection {...ctx} />}
-                {active === 'providers'   && <ProvidersSection {...ctx} />}
-                {active === 'defaults'    && <DefaultsSection {...ctx} />}
-                {active === 'voice'       && <VoiceSection {...ctx} />}
-                {active === 'embedding'   && <EmbeddingSection {...ctx} />}
-                {active === 'database'    && <DatabaseSection {...ctx} />}
-                {active === 'privacy'     && <PrivacySection {...ctx} />}
-                {active === 'onboarding'  && <OnboardingSection {...ctx} />}
-              </Box>
-            </Box>
-          </ScrollView>
+          <Box style={{ width: 760, maxWidth: '100%', flexDirection: 'column', gap: 16 }}>
+            {active === 'profile'     && <ProfileSection {...ctx} />}
+            {active === 'preferences' && <PreferencesSection {...ctx} />}
+            {active === 'providers'   && <ProvidersSection {...ctx} />}
+            {active === 'defaults'    && <DefaultsSection {...ctx} />}
+            {active === 'voice'       && <VoiceSection {...ctx} />}
+            {active === 'embedding'   && <EmbeddingSection {...ctx} />}
+            {active === 'database'    && <DatabaseSection {...ctx} />}
+            {active === 'privacy'     && <PrivacySection {...ctx} />}
+            {active === 'onboarding'  && <OnboardingSection {...ctx} />}
+          </Box>
         </Box>
-      </Box>
-    </S.Page>
+      </ScrollView>
+    </Box>
   );
 }
 
-function SettingsNav({ active, onSelect }) {
+// SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
+// render it as a HUD rail beside the assistant rail. Reads/writes the
+// active section from the shell-level store; takes no props.
+export const SETTINGS_NAV_W = 220;
+
+export function SettingsNav() {
+  const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
-      width: 220, flexShrink: 0, height: '100%',
+      width: SETTINGS_NAV_W, flexShrink: 0, height: '100%',
       flexDirection: 'column',
       borderRightWidth: 1, borderRightColor: 'theme:rule',
       backgroundColor: 'theme:bg',
@@ -215,7 +222,7 @@ function SettingsNav({ active, onSelect }) {
             const isActive = item.id === active;
             const Pill = isActive ? S.NavPillActive : S.NavPill;
             return (
-              <Pill key={item.id} onPress={() => onSelect(item.id)}>
+              <Pill key={item.id} onPress={() => setActive(item.id)}>
                 <S.Body>{item.label}</S.Body>
               </Pill>
             );

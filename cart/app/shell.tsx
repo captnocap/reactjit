@@ -83,3 +83,32 @@ function _getInsets(): HudInsets { return _insets; }
 export function useHudInsets(): HudInsets {
   return React.useSyncExternalStore(_subscribeInsets, _getInsets);
 }
+
+// ── Settings active section ──────────────────────────────────────────
+//
+// /settings is now multi-section but stays on a single route path. The
+// sub-nav (Profile, Preferences, Providers, …) lives at the HUD level —
+// it's rendered as a shell-owned rail beside the assistant rail, not
+// inside the iframe — so the active section needs a shell-level store
+// the page and the HUD nav can both read/write.
+
+let _settingsSection = 'profile';
+const _sectionSubs = new Set<() => void>();
+
+export function setSettingsSection(value: string): void {
+  if (_settingsSection === value) return;
+  _settingsSection = value;
+  for (const s of _sectionSubs) s();
+}
+
+export function getSettingsSection(): string { return _settingsSection; }
+
+function _subscribeSection(fn: () => void): () => void {
+  _sectionSubs.add(fn);
+  return () => { _sectionSubs.delete(fn); };
+}
+
+export function useSettingsSection(): [string, (v: string) => void] {
+  const value = React.useSyncExternalStore(_subscribeSection, getSettingsSection);
+  return [value, setSettingsSection];
+}
